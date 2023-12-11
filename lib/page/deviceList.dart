@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'conversation.dart';
+
 class DeviceListScreen extends StatelessWidget {
   final bool isServer = true;
   final List<Map<String, dynamic>> devices = [
@@ -44,8 +46,8 @@ class DeviceListScreen extends StatelessWidget {
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     SizedBox(width: 2),
-                    Icon(Icons.wifi_rounded, size: isServer ? 14 : 0,
-                        color: Colors.lightBlue)
+                    Icon(Icons.wifi_rounded,
+                        size: isServer ? 14 : 0, color: Colors.lightBlue)
                   ],
                 )
               ],
@@ -54,9 +56,14 @@ class DeviceListScreen extends StatelessWidget {
         ),
         // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
-          CupertinoButton( // 使用CupertinoButton
+          CupertinoButton(
+            // 使用CupertinoButton
             padding: EdgeInsets.zero,
-            child: Icon(Icons.settings, size: 30, color: Colors.black45,),
+            child: Icon(
+              Icons.settings,
+              size: 30,
+              color: Colors.black45,
+            ),
             onPressed: () {
               Navigator.push(
                 context,
@@ -77,13 +84,20 @@ class DeviceListScreen extends StatelessWidget {
             subtitle: Row(
               children: [
                 Text(device['ip']),
-                SizedBox(width: 4,),
+                SizedBox(
+                  width: 4,
+                ),
                 device['isServer']
-                    ? Icon(Icons.desktop_mac, size: 18,
-                    color: device['isConnected'] ? Colors.lightBlue : Colors
-                        .grey) // Server 图标
-                    : Icon(Icons.phone_android, size: 18,
-                    color: device['isConnected'] ? Colors.lightBlue : Colors.grey),
+                    ? Icon(Icons.desktop_mac,
+                        size: 18,
+                        color: device['isConnected']
+                            ? Colors.lightBlue
+                            : Colors.grey) // Server 图标
+                    : Icon(Icons.phone_android,
+                        size: 18,
+                        color: device['isConnected']
+                            ? Colors.lightBlue
+                            : Colors.grey),
                 // Client 图标
               ],
             ),
@@ -91,9 +105,12 @@ class DeviceListScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: device['isConnected'] ? Icon(
-                    Icons.wifi_rounded, color: Colors.lightBlue,) : Icon(
-                      Icons.wifi_off_rounded), // 连接/断开 图标
+                  icon: device['isConnected']
+                      ? Icon(
+                          Icons.wifi_rounded,
+                          color: Colors.lightBlue,
+                        )
+                      : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
                     if (device['isConnected']) {
@@ -110,7 +127,8 @@ class DeviceListScreen extends StatelessWidget {
                             context,
                             title: 'Loading',
                             description: 'Please wait...',
-                            isLoading: true, // 是否显示加载指示器
+                            isLoading: true,
+                            // 是否显示加载指示器
                             icon: CupertinoActivityIndicator(),
                             cancelButtonText: 'Cancel',
                             onCancel: () {
@@ -120,9 +138,13 @@ class DeviceListScreen extends StatelessWidget {
                                 context,
                                 title: 'Loading',
                                 description: 'Please wait...',
-                                isLoading: true, // 是否显示加载指示器
+                                isLoading: true,
+                                // 是否显示加载指示器
                                 showCancel: false,
-                                icon: Icon(Icons.error_rounded, color: Colors.red,),
+                                icon: Icon(
+                                  Icons.error_rounded,
+                                  color: Colors.red,
+                                ),
                                 cancelButtonText: 'Cancel',
                                 onCancel: () {
                                   // 处理取消操作
@@ -130,16 +152,23 @@ class DeviceListScreen extends StatelessWidget {
                                 },
                                 task: (VoidCallback onCancel) async {
                                   // 执行需要进行的任务
-                                  await Future.delayed(Duration(seconds: 1)); // 模拟加载过程
+                                  await Future.delayed(
+                                      Duration(seconds: 1)); // 模拟加载过程
                                   onCancel(); // 任务完成后关闭对话框
                                   // 点击跳转到详情页面
-
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => SendMessageScreen(),
+                                    ),
+                                  );
                                 },
                               );
                             },
                             task: (VoidCallback onCancel) async {
                               // 执行需要进行的任务
-                              await Future.delayed(Duration(seconds: 1)); // 模拟加载过程
+                              await Future.delayed(
+                                  Duration(seconds: 1)); // 模拟加载过程
                               onCancel(); // 任务完成后关闭对话框
                             },
                           );
@@ -164,7 +193,8 @@ class DeviceListScreen extends StatelessWidget {
                     context,
                     title: 'Loading',
                     description: 'Please wait...',
-                    isLoading: true, // 是否显示加载指示器
+                    isLoading: true,
+                    // 是否显示加载指示器
                     icon: CupertinoActivityIndicator(),
                     cancelButtonText: 'Cancel',
                     onCancel: () {
@@ -179,12 +209,12 @@ class DeviceListScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => DeviceDetailsScreen(device: device),
+                          builder: (context) =>
+                              DeviceDetailsScreen(device: device),
                         ),
                       );
                     },
                   );
-
 
                   // // 点击跳转到详情页面
                   // Navigator.push(
@@ -258,67 +288,84 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: CupertinoNavigationBarBackButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          color: Colors.lightBlue, // 设置返回按钮图标的颜色
+        appBar: AppBar(
+          leading: CupertinoNavigationBarBackButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            color: Colors.lightBlue, // 设置返回按钮图标的颜色
+          ),
+          title: Text('Settings'),
         ),
-        title: Text('Settings'),
-      ),
-      body: SafeArea(
-        child: Material(
-          child: ListView(
-            padding: EdgeInsets.all(16.0), // 添加内边距以改善外观
-    children: [
-    Card(
-    elevation: 2.0, // 设置卡片的阴影
-        color: Colors.white,
-    shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(12.0), // 圆角边框
-    ),
-    child: Column(
-    children: [
-    _buildSettingItem(
-    '开启监听',
-    Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
-    CupertinoSwitch(
-    value: true,
-    onChanged: (bool value) {},
-    ),
-    ),
-    _buildSettingItem(
-    '自动通过新设备',
-    Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
-    CupertinoSwitch(
-    value: true,
-    onChanged: (bool value) {},
-    ),
-    ),
-    _buildSettingItem(
-    '允许读取剪切板',
-    Icon(Icons.copy, color: CupertinoColors.systemGrey),
-    CupertinoSwitch(
-    value: true,
-    onChanged: (bool value) {},
-    ),
-    ),
-    _buildSettingItem(
-    '允许写入剪切板',
-    Icon(Icons.create_rounded, color: CupertinoColors.systemGrey,),
-    CupertinoSwitch(
-    value: true,
-    onChanged: (bool value) {},
-    ),
-    showDivider: false
-    ),
-    ],
-    ))
-    ],
-        ),
-      ),
-    ));
+        body: SafeArea(
+          child: Material(
+            child: ListView(
+              padding: EdgeInsets.all(16.0), // 添加内边距以改善外观
+              children: [
+                Card(
+                    elevation: 2.0, // 设置卡片的阴影
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0), // 圆角边框
+                    ),
+                    child: Column(
+                      children: [
+                        _buildSettingItem(
+                          '开启监听',
+                          Icon(
+                            Icons.wifi_rounded,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                          CupertinoSwitch(
+                            value: true,
+                            onChanged: (bool value) {},
+                          ),
+                        ),
+                        _buildSettingItem(
+                          '加密传输',
+                          Icon(
+                            Icons.lock,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                          CupertinoSwitch(
+                            value: true,
+                            onChanged: (bool value) {},
+                          ),
+                        ),
+                        _buildSettingItem(
+                          '自动通过新设备',
+                          Icon(Icons.lock_open,
+                              color: CupertinoColors.systemGrey),
+                          CupertinoSwitch(
+                            value: true,
+                            onChanged: (bool value) {},
+                          ),
+                        ),
+                        _buildSettingItem(
+                          '允许读取剪切板',
+                          Icon(Icons.copy, color: CupertinoColors.systemGrey),
+                          CupertinoSwitch(
+                            value: true,
+                            onChanged: (bool value) {},
+                          ),
+                        ),
+                        _buildSettingItem(
+                            '允许写入剪切板',
+                            Icon(
+                              Icons.create_rounded,
+                              color: CupertinoColors.systemGrey,
+                            ),
+                            CupertinoSwitch(
+                              value: true,
+                              onChanged: (bool value) {},
+                            ),
+                            showDivider: false),
+                      ],
+                    ))
+              ],
+            ),
+          ),
+        ));
   }
 
   Widget _buildSettingItem(String title, Icon icon, Widget trailing,
@@ -344,7 +391,8 @@ class SettingsScreen extends StatelessWidget {
                         fontSize: 17.0,
                         color: CupertinoColors.black,
                         fontWeight: FontWeight.w500, // 尝试更轻的字重
-                        fontFamily: 'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
+                        fontFamily:
+                            'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
                       ),
                       // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
@@ -353,47 +401,54 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
-            if (showDivider)
-              Divider(height: 1, color: Colors.white38), // 分割线
+            if (showDivider) Divider(height: 1, color: Colors.white38), // 分割线
           ],
         ),
       ),
     );
   }
-
-
 }
 
 void showConfirmationDialog(
-    BuildContext context, {
-      required String title,
-      required String description,
-      required String confirmButtonText,
-      required String cancelButtonText,
-      required VoidCallback onConfirm,
-    }) {
+  BuildContext context, {
+  required String title,
+  required String description,
+  required String confirmButtonText,
+  required String cancelButtonText,
+  required VoidCallback onConfirm,
+}) {
   showCupertinoDialog(
     context: context,
     builder: (BuildContext context) {
       return CupertinoAlertDialog(
         title: Text(title),
-        content: Column(children: [
-          SizedBox(height: 14,),
-          Text(description),
-        ],),
+        content: Column(
+          children: [
+            SizedBox(
+              height: 14,
+            ),
+            Text(description),
+          ],
+        ),
         actions: <Widget>[
           CupertinoDialogAction(
-            child: Text(cancelButtonText, style: TextStyle(
-              color: Colors.red, // 自定义取消按钮文本颜色
-            ),),
+            child: Text(
+              cancelButtonText,
+              style: TextStyle(
+                color: Colors.red, // 自定义取消按钮文本颜色
+              ),
+            ),
             onPressed: () {
               Navigator.of(context).pop();
             },
           ),
           CupertinoDialogAction(
-            child: Text(confirmButtonText, style: TextStyle(
-              color: Colors.lightBlue, // 自定义取消按钮文本颜色
-            ),),
+            child: Text(
+              confirmButtonText,
+              style: TextStyle(
+                color: Colors.lightBlue, // 自定义取消按钮文本颜色
+              ),
+            ),
             onPressed: () {
               Navigator.of(context).pop();
               onConfirm();
@@ -405,16 +460,15 @@ void showConfirmationDialog(
   );
 }
 
-
 void showInputAlertDialog(
-    BuildContext context, {
-      required String title,
-      required String description,
-      required List<String> inputHints,
-      required String confirmButtonText,
-      required String cancelButtonText,
-      required Function(List<String>) onConfirm,
-    }) {
+  BuildContext context, {
+  required String title,
+  required String description,
+  required List<String> inputHints,
+  required String confirmButtonText,
+  required String cancelButtonText,
+  required Function(List<String>) onConfirm,
+}) {
   List<TextEditingController> controllers = [];
   List<Widget> inputFields = [];
 
@@ -449,19 +503,26 @@ void showInputAlertDialog(
         ),
         actions: <Widget>[
           CupertinoDialogAction(
-            child: Text(cancelButtonText, style: TextStyle(
-              color: Colors.red, // 自定义取消按钮文本颜色
-            ),),
+            child: Text(
+              cancelButtonText,
+              style: TextStyle(
+                color: Colors.red, // 自定义取消按钮文本颜色
+              ),
+            ),
             onPressed: () {
               Navigator.of(context).pop();
             },
           ),
           CupertinoDialogAction(
-            child: Text(confirmButtonText, style: TextStyle(
-              color: Colors.lightBlue, // 自定义取消按钮文本颜色
-            ),),
+            child: Text(
+              confirmButtonText,
+              style: TextStyle(
+                color: Colors.lightBlue, // 自定义取消按钮文本颜色
+              ),
+            ),
             onPressed: () {
-              List<String> inputValues = controllers.map((controller) => controller.text).toList();
+              List<String> inputValues =
+                  controllers.map((controller) => controller.text).toList();
               onConfirm(inputValues);
               Navigator.of(context).pop();
             },
@@ -472,19 +533,17 @@ void showInputAlertDialog(
   );
 }
 
-
-
 void showLoadingDialog(
-    BuildContext context, {
-      required String title,
-      required String description,
-      required bool isLoading,
-      required Widget icon,
-      required String cancelButtonText,
-      bool showCancel=true,
-      required VoidCallback onCancel,
-      required Function(VoidCallback onCancel) task,
-    }) async {
+  BuildContext context, {
+  required String title,
+  required String description,
+  required bool isLoading,
+  required Widget icon,
+  required String cancelButtonText,
+  bool showCancel = true,
+  required VoidCallback onCancel,
+  required Function(VoidCallback onCancel) task,
+}) async {
   showDialog(
     context: context,
     barrierDismissible: false, // 不能通过点击外部来关闭对话框
@@ -494,18 +553,25 @@ void showLoadingDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(height: 12,),
+            SizedBox(
+              height: 12,
+            ),
             if (isLoading) icon, // 显示加载指示器
-            SizedBox(height: 8,),
+            SizedBox(
+              height: 8,
+            ),
             Text(description),
           ],
         ),
         actions: <Widget>[
           if (isLoading && showCancel) // 如果正在加载，显示取消按钮
             CupertinoDialogAction(
-              child: Text(cancelButtonText, style: TextStyle(
-                color: Colors.red, // 自定义取消按钮文本颜色
-              ),),
+              child: Text(
+                cancelButtonText,
+                style: TextStyle(
+                  color: Colors.red, // 自定义取消按钮文本颜色
+                ),
+              ),
               onPressed: onCancel,
             ),
         ],
