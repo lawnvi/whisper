@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:whisper/socket/helper.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shelf/shelf_io.dart' as shelf_io;
 
 class SocketServerManager {
   ServerSocket? _serverSocket;
@@ -13,7 +15,7 @@ class SocketServerManager {
   bool get isRunning => _serverSocket != null;
   late Socket _client;
 
-  Future<String> startServer(var callback) async {
+  Future<String> startSvr(var callback) async {
     if (_serverSocket != null) return _host; // 如果服务器已经在运行，则直接返回
 
     try {
@@ -71,6 +73,21 @@ class SocketServerManager {
     }
 
     return _host;
+  }
+
+  Future<void> startServer(var callback) async {
+    var handler = webSocketHandler((webSocket) {
+
+      print("new client: ${webSocket}");
+      webSocket.stream.listen((message) {
+        print("$message");
+        webSocket.sink.add("echo $message");
+      });
+    });
+
+    shelf_io.serve(handler, '0.0.0.0', 4567, shared: true).then((server) {
+      print('Serving at ws://${server.address.host}:${server.port}');
+    });
   }
 
   void prepareRecvFile(String info) async {

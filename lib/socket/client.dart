@@ -4,13 +4,14 @@ import 'dart:async';
 
 import 'package:path_provider/path_provider.dart';
 
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'helper.dart';
 
 class SocketClientManager {
   late Socket socket;
   IOSink? sink;
 
-  Future<void> connectToServer(String host, var callback) async {
+  Future<void> connectToServer2(String host, var callback) async {
     try {
       socket = await Socket.connect(host, 4567);
       socket.listen((List<int> data) {
@@ -43,8 +44,24 @@ class SocketClientManager {
     }
   }
 
+  late WebSocketChannel channel;
+  Future<void> connectToServer(String host, var callback) async {
+    final wsUrl = Uri.parse('ws://$host:4567');
+    channel = WebSocketChannel.connect(wsUrl);
+
+    await channel.ready;
+
+    channel.stream.listen((message) {
+      print(message);
+      // channel.sink.add('received!');
+      // channel.sink.close(status.goingAway);
+    });
+  }
+
+
   void sendMessage(String message) {
-    socket.add(utf8.encode(message));
+    // socket.add(utf8.encode(message));
+    channel.sink.add(utf8.encode(message));
   }
 
   void prepareRecvFile(String name) async {
