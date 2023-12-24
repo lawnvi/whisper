@@ -60,7 +60,7 @@ class DeviceListScreen extends StatelessWidget {
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
             child: Icon(
-              Icons.settings,
+              Icons.settings_outlined,
               size: 30,
               color: Colors.black45,
             ),

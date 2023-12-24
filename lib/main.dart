@@ -1,16 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:hive/hive.dart';
+import 'package:system_tray/system_tray.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/newMain.dart';
 import 'package:whisper/socket/client.dart';
-import 'package:whisper/socket/helper.dart';
 import 'package:whisper/socket/server.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:whisper/socket/helper.dart';
 
 void main() {
   runApp(MyApp());
@@ -21,6 +22,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: HomeScreen(),
+      builder: EasyLoading.init(),
     );
   }
 }
@@ -47,6 +49,46 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermission();
+    var path = kIsWeb? "": Directory.current.path;
+    Hive.init(path);
+      // ..registerAdapter(PersonAdapter());
+    if (!kIsWeb && (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+      initSystemTray();
+    }
+  }
+
+  Future<void> initSystemTray() async {
+    String path = Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
+
+    final AppWindow appWindow = AppWindow();
+    final SystemTray systemTray = SystemTray();
+
+    // We first init the systray menu
+    await systemTray.initSystemTray(
+      title: "whisper",
+      iconPath: "",
+    );
+
+    // create context menu
+    final Menu menu = Menu();
+    await menu.buildFrom([
+      MenuItemLabel(label: 'Show', onClicked: (menuItem) => appWindow.show()),
+      MenuItemLabel(label: 'Hide', onClicked: (menuItem) => appWindow.hide()),
+      MenuItemLabel(label: 'Exit', onClicked: (menuItem) => appWindow.close()),
+    ]);
+
+    // set context menu
+    await systemTray.setContextMenu(menu);
+
+    // handle system tray event
+    systemTray.registerSystemTrayEventHandler((eventName) {
+      debugPrint("eventName: $eventName");
+      if (eventName == kSystemTrayEventClick) {
+        Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
+      } else if (eventName == kSystemTrayEventRightClick) {
+        Platform.isWindows ? systemTray.popUpContextMenu() : appWindow.show();
+      }
+    });
   }
 
   Future<void> _requestPermission() async {
@@ -180,10 +222,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Switch(
               value: isRotating,
               onChanged: (value) async {
-                String localhost = await getLocalIpAddress();
+                // String localhost = await getLocalIpAddress();
                 setState(() {
                   isRotating = value;
-                  _localhost = localhost;
+                  // _localhost = localhost;
                 });
                 if (value) {
                   socketServer.startServer((String message){
@@ -242,15 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // 添加一个辅助方法来显示 Toast
 void _showToast(String message) {
-  Fluttertoast.showToast(
-    msg: message,
-    toastLength: Toast.LENGTH_SHORT,
-    gravity: ToastGravity.BOTTOM,
-    timeInSecForIosWeb: 1,
-    backgroundColor: Colors.black54,
-    textColor: Colors.white,
-    fontSize: 16.0,
-  );
+  EasyLoading.showToast(message);
 }
 
 Future<String?> _getClipboardData() async {
