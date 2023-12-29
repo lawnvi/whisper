@@ -1,66 +1,61 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:shelf/shelf.dart' as shelf;
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
-
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 abstract class ISocketEvent {
   void onError();
 
-  void onMessage();
-
-  void onClose();
-}
-
-abstract class IServerEvent {
-  ISocketEvent onNewClient((bool ok, ISocketEvent event) callback);
+  void onMessage(String message);
 
   void onClose();
 
-  void onError();
-
-  void onListen(String host);
+  void onConnect();
 }
 
 class WsSvrManager {
-  final Map _clientMap = {};
-  IServerEvent? serverEvent;
+  late WebSocketSink? _sink;
+  late ISocketEvent? _event;
 
+  void setEvent(ISocketEvent event) {
+    _event = event;
+  }
 
-  Future<void> startServer(IServerEvent event) async {
+  Future<void> startServer(int port) async {
     var handler = webSocketHandler((webSocket) {
-      event.onNewClient((bool ok, ISocketEvent e){
-        if(ok) {
-          // _clientMap[]
-        }
-      } as (bool, ISocketEvent));
-
-      print("new client");
+      _sink = webSocket.sink;
       webSocket.stream.listen((message) {
-        print("$message");
-        webSocket.sink.add("echo $message");
+        _listen(message);
       });
     });
 
-    shelf_io.serve(handler, '0.0.0.0', 4567, shared: true).then((server) {
-    var host = "${server.address.host}:${server.port}";
-    print('Serving at ws://$host');
-    event.onListen(host);
+    shelf_io.serve(handler, '0.0.0.0', port, shared: true).then((server) {
+      var host = "${server.address.host}:${server.port}";
+      print('Serving at ws://$host');
     });
   }
-}
 
-// 身份验证中间件
-  shelf.Handler authenticationMiddleware(shelf.Handler innerHandler) {
-    return (shelf.Request request) {
-      // 在这里添加你的身份验证逻辑
-      var isValid = request.headers['Authorization'] == 'Bearer YourToken';
-
-      if (!isValid) {
-        return shelf.Response.forbidden('Authentication failed');
-      }
-
-      return innerHandler(request);
-    };
+  Future<void> connectToServer(String host, var callback) async {
+    final wsUrl = Uri.parse('ws://$host');
+    WebSocketChannel channel = WebSocketChannel.connect(wsUrl);
+    await channel.ready;
+    _sink = channel.sink;
+    channel.stream.listen((message) {
+      _listen(message);
+    });
   }
+
+  void close() {
+    _sink?.close();
+  }
+
+  void sendMessage(String message) {
+    _sink?.add(utf8.encode(message));
+  }
+
+  void _listen(Uint8List data) {
+    _event?.onMessage(utf8.decode(data));
+  }
+}
