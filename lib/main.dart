@@ -6,12 +6,11 @@ import 'package:hive/hive.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/newMain.dart';
-import 'package:whisper/socket/client.dart';
-import 'package:whisper/socket/server.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:whisper/socket/svrmanager.dart';
 
 void main() {
   runApp(MyApp());
@@ -32,16 +31,40 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
+class SocketEvent extends ISocketEvent {
+  @override
+  void onClose() {
+    // TODO: implement onClose
+  }
+
+  @override
+  void onConnect() {
+    // TODO: implement onConnect
+  }
+
+  @override
+  void onError() {
+    // TODO: implement onError
+  }
+
+  @override
+  void onMessage(String message) {
+    print(message);
+  }
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   bool isRotating = false; // 控制光团旋转的开关状态
-  final socketServer = SocketServerManager();
-  final socketClient = SocketClientManager();
+  // final socketServer = SocketServerManager();
+  // final socketClient = SocketClientManager();
+  final socketManager = WsSvrManager();
   String _localhost = "";
   String _host = "192.168.4.87";
   String _pass = "";
   String _msg = "hhh";
 
-  final TextEditingController _hostController = TextEditingController(text: "192.168.4.87");
+  final TextEditingController _hostController =
+      TextEditingController(text: "192.168.4.87");
 
   late PermissionStatus _status;
 
@@ -49,16 +72,24 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermission();
-    var path = kIsWeb? "": Directory.current.path;
+    var path = kIsWeb ? "" : Directory.current.path;
     Hive.init(path);
-      // ..registerAdapter(PersonAdapter());
-    if (!kIsWeb && (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+    // ..registerAdapter(PersonAdapter());
+    if (!kIsWeb &&
+        (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
       initSystemTray();
     }
+
+
+
+    var event = SocketEvent();
+
+    socketManager.setEvent(event);
   }
 
   Future<void> initSystemTray() async {
-    String path = Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
+    String path =
+        Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
 
     final AppWindow appWindow = AppWindow();
     final SystemTray systemTray = SystemTray();
@@ -146,12 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       TextButton(
                         onPressed: () {
                           // TODO: 处理用户输入的IP地址和密码，建立socket连接
-                          socketClient.connectToServer(_host, (message) {
+                          socketManager.connectToServer(_host, (message) {
                             // _showToast(message);
                             setState(() {
                               _msg = message;
                             });
                           });
+
                           Navigator.pop(context);
                         },
                         child: Text('确定'),
@@ -205,16 +237,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: isRotating
                     ? RotationTransition(
-                  turns: const AlwaysStoppedAnimation(0.5),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [Colors.green, Colors.lightBlue],
-                      ),
-                    ),
-                  ),
-                )
+                        turns: const AlwaysStoppedAnimation(0.5),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [Colors.green, Colors.lightBlue],
+                            ),
+                          ),
+                        ),
+                      )
                     : Container(),
               ),
             ),
@@ -228,42 +260,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   // _localhost = localhost;
                 });
                 if (value) {
-                  socketServer.startServer((String message){
-                    setState(() {
-                      _msg = message;
-                    });
-                    if (message.startsWith("COPY: ")) {
-                      String temp = message.substring(6);
-                      print("TEMP: $temp");
-                      _copyToClipboard(temp);
-                    }
-                  });
+                  socketManager.startServer(4567);
                   _showToast('开始监听');
-                }else {
-                  socketServer.stopServer();
+                } else {
+                  socketManager.close();
                   _showToast('停止监听');
                 }
               },
             ),
             ElevatedButton(
               onPressed: () {
-                print("server is running: ${socketServer.isRunning}\n");
-                socketServer.sendMessageToClient('server Test message from button! ${DateTime.now().microsecond}'); // 按钮点击时发送消息
+                // print("server is running: ${socketServer.isRunning}\n");
+                socketManager.sendMessage(
+                    'server Test message from button! ${DateTime.now().microsecond}'); // 按钮点击时发送消息
               },
               child: Text('server'),
             ),
             ElevatedButton(
               onPressed: () {
                 print("client is running\n");
-                socketClient.sendMessage('client Test message from button! ${DateTime.now().microsecond}'); // 按钮点击时发送消息
+                socketManager.sendMessage(
+                    'client Test message from button! ${DateTime.now().microsecond}'); // 按钮点击时发送消息
               },
               child: Text('client'),
             ),
             ElevatedButton(
               onPressed: () async {
-                String copy = await _getClipboardData()?? "NO COPY";
+                String copy = await _getClipboardData() ?? "NO COPY";
                 print("copy: $copy\n");
-                socketClient.sendMessage('COPY: $copy'); // 按钮点击时发送消息
+                socketManager.sendMessage('COPY: $copy'); // 按钮点击时发送消息
               },
               child: const Text('client copy'),
             ),
@@ -280,7 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
 
 // 添加一个辅助方法来显示 Toast
 void _showToast(String message) {
