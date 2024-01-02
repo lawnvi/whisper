@@ -1,25 +1,18 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 
 import 'conversation.dart';
 
-class DeviceListScreen extends StatelessWidget {
+class DeviceListScreen extends StatefulWidget {
+  @override
+  _DeviceListScreen createState() => _DeviceListScreen();
+}
+
+class _DeviceListScreen extends State<DeviceListScreen> {
   final bool isServer = true;
-  final List<Map<String, dynamic>> devices = [
-    {
-      'name': 'Device 1',
-      'ip': '192.168.1.101',
-      'isServer': true,
-      'isConnected': true
-    },
-    {
-      'name': 'Device 2',
-      'ip': '192.168.1.102',
-      'isServer': false,
-      'isConnected': false
-    },
-    // Add more devices here...
-  ];
+  final db = LocalDatabase();
+  List<DeviceData> devices = [];
 
   @override
   Widget build(BuildContext context) {
@@ -80,22 +73,22 @@ class DeviceListScreen extends StatelessWidget {
         itemBuilder: (context, index) {
           final device = devices[index];
           return ListTile(
-            title: Text(device['name']),
+            title: Text(device.name.toString()),
             subtitle: Row(
               children: [
-                Text(device['ip']),
+                Text(device.host.toString()),
                 SizedBox(
                   width: 4,
                 ),
-                device['isServer']
+                device.isServer as bool
                     ? Icon(Icons.desktop_mac,
                         size: 18,
-                        color: device['isConnected']
+                        color: device.online == true
                             ? Colors.lightBlue
                             : Colors.grey) // Server 图标
                     : Icon(Icons.phone_android,
                         size: 18,
-                        color: device['isConnected']
+                        color: device.online == true
                             ? Colors.lightBlue
                             : Colors.grey),
                 // Client 图标
@@ -105,7 +98,7 @@ class DeviceListScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: device['isConnected']
+                  icon: device.online == true
                       ? Icon(
                           Icons.wifi_rounded,
                           color: Colors.lightBlue,
@@ -113,7 +106,7 @@ class DeviceListScreen extends StatelessWidget {
                       : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
-                    if (device['isConnected']) {
+                    if (device.online == true) {
                       showConfirmationDialog(
                         context,
                         title: 'Confirmation',
@@ -239,9 +232,23 @@ class DeviceListScreen extends StatelessWidget {
             inputHints: ['Username', 'Email'],
             confirmButtonText: 'Confirm',
             cancelButtonText: 'Cancel',
-            onConfirm: (List<String> inputValues) {
+            onConfirm: (List<String> inputValues) async {
               // 处理输入框的内容
               print('Entered values: $inputValues');
+
+              // await db.delete(db.device).go();
+
+              await db.into(db.device).insert(DeviceCompanion.insert(name: '123' + DateTime.now().millisecond.toString()));
+
+              var arr = await db.fetchAllDevice();
+              print("object");
+              print(arr.length);
+              print(arr);
+
+              setState(() {
+                devices = arr;
+              });
+
             },
           );
         },
@@ -255,7 +262,7 @@ class DeviceListScreen extends StatelessWidget {
 }
 
 class DeviceDetailsScreen extends StatelessWidget {
-  final Map<String, dynamic> device;
+  final DeviceData device;
 
   DeviceDetailsScreen({required this.device});
 
@@ -263,7 +270,7 @@ class DeviceDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(device['name']),
+        title: Text(device.name.toString()),
         centerTitle: true,
       ),
       body: Center(
@@ -271,9 +278,9 @@ class DeviceDetailsScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('Device Name: ${device['name']}'),
-            Text('IP Address: ${device['ip']}'),
-            device['isServer']
+            Text('Device Name: ${device.name.toString()}'),
+            Text('IP Address: ${device.host.toString()}'),
+            device.isServer as bool
                 ? Icon(Icons.desktop_mac) // Server 图标
                 : Icon(Icons.phone_android), // Client 图标
             // 其他设备详情信息...

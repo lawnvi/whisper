@@ -39,19 +39,22 @@ dependencies:
   path_provider: ^2.1.1
   permission_handler: ^11.0.1
   path: ^1.8.3
-  sqflite: ^2.3.0
-  sqflite_common_ffi: ^2.3.0+4
   file_picker: ^6.1.1
   flutter_spinkit: ^5.2.0
   web_socket_channel: ^2.4.0
   shelf_web_socket: ^1.0.4
   system_tray: ^2.0.3
   flutter_easyloading: ^3.0.5
-  hive: ^2.2.3
+  shared_preferences: ^2.2.2
+  sqlite3_flutter_libs: ^0.5.0
+  drift: ^2.14.1
+  sqlite3: ^2.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  drift_dev: ^2.14.1
+  build_runner: ^2.4.7
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

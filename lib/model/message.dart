@@ -1,30 +1,16 @@
-// class Message {
-//   int id = 0;
-//   int type = 0;
-//   int size = 0;
-//   String sender = "";
-//   String receiver = "";
-//   String name = "";
-//   String content = "";
-// }
-//
-// enum MessageType {
-//   unknown,
-//   text,
-//   image,
-//   video,
-//   file,
-//   copy
-// }
+import 'package:drift/drift.dart';
+import 'package:whisper/model/device.dart';
 
-
-class Message {
-  String sender = "";
-  String receiver = "";
-  MessageEnum type = MessageEnum.Heartbeat;
-  int size = 0;
-  String name = "";
-  bool clipboard = false;
+class Message extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get deviceId => integer().named("device_id").nullable().references(Device, #id)();
+  TextColumn get sender => text().withDefault(const Constant(""))();
+  TextColumn get receiver => text().withDefault(const Constant(""))();
+  TextColumn get name => text().withDefault(const Constant(""))();
+  TextColumn get platform => text().withDefault(const Constant(""))();
+  BoolColumn get clipboard => boolean().withDefault(const Constant(false))();
+  IntColumn get size => integer().withDefault(const Constant(0))();
+  IntColumn get type => intEnum<MessageEnum>().withDefault(const Constant(0))();
 }
 
 enum MessageEnum {

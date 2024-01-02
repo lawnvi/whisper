@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:hive/hive.dart';
+// import 'package:hive/hive.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/newMain.dart';
@@ -72,8 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermission();
-    var path = kIsWeb ? "" : Directory.current.path;
-    Hive.init(path);
     // ..registerAdapter(PersonAdapter());
     if (!kIsWeb &&
         (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
