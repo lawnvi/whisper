@@ -28,21 +28,19 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
   static const VerificationMeta _hostMeta = const VerificationMeta('host');
   @override
   late final GeneratedColumn<String> host = GeneratedColumn<String>(
       'host', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(""));
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _portMeta = const VerificationMeta('port');
   @override
   late final GeneratedColumn<int> port = GeneratedColumn<int>(
       'port', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
+      type: DriftSqlType.int, requiredDuringInsert: true);
   static const VerificationMeta _platformMeta =
       const VerificationMeta('platform');
   @override
@@ -64,11 +62,30 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
   static const VerificationMeta _onlineMeta = const VerificationMeta('online');
   @override
   late final GeneratedColumn<bool> online = GeneratedColumn<bool>(
-      'online', aliasedName, true,
+      'online', aliasedName, false,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("online" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _clipboardMeta =
+      const VerificationMeta('clipboard');
+  @override
+  late final GeneratedColumn<bool> clipboard = GeneratedColumn<bool>(
+      'clipboard', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("clipboard" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _authMeta = const VerificationMeta('auth');
+  @override
+  late final GeneratedColumn<bool> auth = GeneratedColumn<bool>(
+      'auth', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("auth" IN (0, 1))'),
       defaultValue: const Constant(false));
   static const VerificationMeta _lastTimeMeta =
       const VerificationMeta('lastTime');
@@ -79,8 +96,19 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, uid, name, host, port, platform, isServer, online, lastTime];
+  List<GeneratedColumn> get $columns => [
+        id,
+        uid,
+        name,
+        host,
+        port,
+        platform,
+        isServer,
+        online,
+        clipboard,
+        auth,
+        lastTime
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -101,16 +129,18 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
     if (data.containsKey('name')) {
       context.handle(
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
-    } else if (isInserting) {
-      context.missing(_nameMeta);
     }
     if (data.containsKey('host')) {
       context.handle(
           _hostMeta, host.isAcceptableOrUnknown(data['host']!, _hostMeta));
+    } else if (isInserting) {
+      context.missing(_hostMeta);
     }
     if (data.containsKey('port')) {
       context.handle(
           _portMeta, port.isAcceptableOrUnknown(data['port']!, _portMeta));
+    } else if (isInserting) {
+      context.missing(_portMeta);
     }
     if (data.containsKey('platform')) {
       context.handle(_platformMeta,
@@ -123,6 +153,14 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
     if (data.containsKey('online')) {
       context.handle(_onlineMeta,
           online.isAcceptableOrUnknown(data['online']!, _onlineMeta));
+    }
+    if (data.containsKey('clipboard')) {
+      context.handle(_clipboardMeta,
+          clipboard.isAcceptableOrUnknown(data['clipboard']!, _clipboardMeta));
+    }
+    if (data.containsKey('auth')) {
+      context.handle(
+          _authMeta, auth.isAcceptableOrUnknown(data['auth']!, _authMeta));
     }
     if (data.containsKey('last_time')) {
       context.handle(_lastTimeMeta,
@@ -152,7 +190,11 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       isServer: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_server'])!,
       online: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}online']),
+          .read(DriftSqlType.bool, data['${effectivePrefix}online'])!,
+      clipboard: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}clipboard'])!,
+      auth: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}auth'])!,
       lastTime: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}last_time'])!,
     );
@@ -172,7 +214,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
   final int port;
   final String platform;
   final bool isServer;
-  final bool? online;
+  final bool online;
+  final bool clipboard;
+  final bool auth;
   final int lastTime;
   const DeviceData(
       {required this.id,
@@ -182,7 +226,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       required this.port,
       required this.platform,
       required this.isServer,
-      this.online,
+      required this.online,
+      required this.clipboard,
+      required this.auth,
       required this.lastTime});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -194,9 +240,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
     map['port'] = Variable<int>(port);
     map['platform'] = Variable<String>(platform);
     map['is_server'] = Variable<bool>(isServer);
-    if (!nullToAbsent || online != null) {
-      map['online'] = Variable<bool>(online);
-    }
+    map['online'] = Variable<bool>(online);
+    map['clipboard'] = Variable<bool>(clipboard);
+    map['auth'] = Variable<bool>(auth);
     map['last_time'] = Variable<int>(lastTime);
     return map;
   }
@@ -210,8 +256,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       port: Value(port),
       platform: Value(platform),
       isServer: Value(isServer),
-      online:
-          online == null && nullToAbsent ? const Value.absent() : Value(online),
+      online: Value(online),
+      clipboard: Value(clipboard),
+      auth: Value(auth),
       lastTime: Value(lastTime),
     );
   }
@@ -227,7 +274,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       port: serializer.fromJson<int>(json['port']),
       platform: serializer.fromJson<String>(json['platform']),
       isServer: serializer.fromJson<bool>(json['isServer']),
-      online: serializer.fromJson<bool?>(json['online']),
+      online: serializer.fromJson<bool>(json['online']),
+      clipboard: serializer.fromJson<bool>(json['clipboard']),
+      auth: serializer.fromJson<bool>(json['auth']),
       lastTime: serializer.fromJson<int>(json['lastTime']),
     );
   }
@@ -242,7 +291,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       'port': serializer.toJson<int>(port),
       'platform': serializer.toJson<String>(platform),
       'isServer': serializer.toJson<bool>(isServer),
-      'online': serializer.toJson<bool?>(online),
+      'online': serializer.toJson<bool>(online),
+      'clipboard': serializer.toJson<bool>(clipboard),
+      'auth': serializer.toJson<bool>(auth),
       'lastTime': serializer.toJson<int>(lastTime),
     };
   }
@@ -255,7 +306,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           int? port,
           String? platform,
           bool? isServer,
-          Value<bool?> online = const Value.absent(),
+          bool? online,
+          bool? clipboard,
+          bool? auth,
           int? lastTime}) =>
       DeviceData(
         id: id ?? this.id,
@@ -265,7 +318,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
         port: port ?? this.port,
         platform: platform ?? this.platform,
         isServer: isServer ?? this.isServer,
-        online: online.present ? online.value : this.online,
+        online: online ?? this.online,
+        clipboard: clipboard ?? this.clipboard,
+        auth: auth ?? this.auth,
         lastTime: lastTime ?? this.lastTime,
       );
   @override
@@ -279,14 +334,16 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           ..write('platform: $platform, ')
           ..write('isServer: $isServer, ')
           ..write('online: $online, ')
+          ..write('clipboard: $clipboard, ')
+          ..write('auth: $auth, ')
           ..write('lastTime: $lastTime')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, uid, name, host, port, platform, isServer, online, lastTime);
+  int get hashCode => Object.hash(id, uid, name, host, port, platform, isServer,
+      online, clipboard, auth, lastTime);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -299,6 +356,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           other.platform == this.platform &&
           other.isServer == this.isServer &&
           other.online == this.online &&
+          other.clipboard == this.clipboard &&
+          other.auth == this.auth &&
           other.lastTime == this.lastTime);
 }
 
@@ -310,7 +369,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   final Value<int> port;
   final Value<String> platform;
   final Value<bool> isServer;
-  final Value<bool?> online;
+  final Value<bool> online;
+  final Value<bool> clipboard;
+  final Value<bool> auth;
   final Value<int> lastTime;
   const DeviceCompanion({
     this.id = const Value.absent(),
@@ -321,19 +382,24 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.platform = const Value.absent(),
     this.isServer = const Value.absent(),
     this.online = const Value.absent(),
+    this.clipboard = const Value.absent(),
+    this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
   });
   DeviceCompanion.insert({
     this.id = const Value.absent(),
     this.uid = const Value.absent(),
-    required String name,
-    this.host = const Value.absent(),
-    this.port = const Value.absent(),
+    this.name = const Value.absent(),
+    required String host,
+    required int port,
     this.platform = const Value.absent(),
     this.isServer = const Value.absent(),
     this.online = const Value.absent(),
+    this.clipboard = const Value.absent(),
+    this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
-  }) : name = Value(name);
+  })  : host = Value(host),
+        port = Value(port);
   static Insertable<DeviceData> custom({
     Expression<int>? id,
     Expression<String>? uid,
@@ -343,6 +409,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     Expression<String>? platform,
     Expression<bool>? isServer,
     Expression<bool>? online,
+    Expression<bool>? clipboard,
+    Expression<bool>? auth,
     Expression<int>? lastTime,
   }) {
     return RawValuesInsertable({
@@ -354,6 +422,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       if (platform != null) 'platform': platform,
       if (isServer != null) 'is_server': isServer,
       if (online != null) 'online': online,
+      if (clipboard != null) 'clipboard': clipboard,
+      if (auth != null) 'auth': auth,
       if (lastTime != null) 'last_time': lastTime,
     });
   }
@@ -366,7 +436,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       Value<int>? port,
       Value<String>? platform,
       Value<bool>? isServer,
-      Value<bool?>? online,
+      Value<bool>? online,
+      Value<bool>? clipboard,
+      Value<bool>? auth,
       Value<int>? lastTime}) {
     return DeviceCompanion(
       id: id ?? this.id,
@@ -377,6 +449,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       platform: platform ?? this.platform,
       isServer: isServer ?? this.isServer,
       online: online ?? this.online,
+      clipboard: clipboard ?? this.clipboard,
+      auth: auth ?? this.auth,
       lastTime: lastTime ?? this.lastTime,
     );
   }
@@ -408,6 +482,12 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     if (online.present) {
       map['online'] = Variable<bool>(online.value);
     }
+    if (clipboard.present) {
+      map['clipboard'] = Variable<bool>(clipboard.value);
+    }
+    if (auth.present) {
+      map['auth'] = Variable<bool>(auth.value);
+    }
     if (lastTime.present) {
       map['last_time'] = Variable<int>(lastTime.value);
     }
@@ -425,6 +505,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
           ..write('platform: $platform, ')
           ..write('isServer: $isServer, ')
           ..write('online: $online, ')
+          ..write('clipboard: $clipboard, ')
+          ..write('auth: $auth, ')
           ..write('lastTime: $lastTime')
           ..write(')'))
         .toString();

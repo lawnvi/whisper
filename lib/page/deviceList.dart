@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
+import '../helper/local.dart';
+import '../socket/svrmanager.dart';
 import 'conversation.dart';
 
 class DeviceListScreen extends StatefulWidget {
@@ -10,9 +15,33 @@ class DeviceListScreen extends StatefulWidget {
 }
 
 class _DeviceListScreen extends State<DeviceListScreen> {
-  final bool isServer = true;
   final db = LocalDatabase();
+  final socketManager = WsSvrManager();
+  DeviceData? device;
   List<DeviceData> devices = [];
+
+  @override
+  void initState() {
+    _initializeData();
+    _refreshDevice();
+    super.initState();
+  }
+
+  Future<void> _initializeData() async {
+    // 数据加载完成后更新状态
+    var arr = await db.fetchAllDevice();
+    setState(() {
+      devices = arr;
+    });
+  }
+
+  Future<void> _refreshDevice() async {
+    // 数据加载完成后更新状态
+    var temp = await LocalSetting().instance();
+    setState(() {
+      device = temp;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,16 +60,16 @@ class _DeviceListScreen extends State<DeviceListScreen> {
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Username'), // 替换为实际昵称
+                Text(device?.name?? "localhost"), // 替换为实际昵称
                 Row(
                   children: [
                     Text(
-                      '192.168.1.2', // 替换为实际 IP 地址
+                      "${device?.host??"127.0.0.1"}:${device?.port??10002}", // 替换为实际 IP 地址
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
-                    SizedBox(width: 2),
+                    SizedBox(width: 4),
                     Icon(Icons.wifi_rounded,
-                        size: isServer ? 14 : 0, color: Colors.lightBlue)
+                        size: socketManager.started ? 14 : 0, color: Colors.lightBlue)
                   ],
                 )
               ],
@@ -53,17 +82,30 @@ class _DeviceListScreen extends State<DeviceListScreen> {
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
             child: Icon(
+              Icons.send_rounded,
+              size: 30,
+              color: Colors.black45,
+            ),
+            onPressed: () async {
+              socketManager.sendMessage("hello");
+            },
+          ),
+          CupertinoButton(
+            // 使用CupertinoButton
+            padding: EdgeInsets.zero,
+            child: Icon(
               Icons.settings_outlined,
               size: 30,
               color: Colors.black45,
             ),
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => SettingsScreen(),
                 ),
               );
+              _refreshDevice();
             },
           ),
         ],
@@ -106,7 +148,7 @@ class _DeviceListScreen extends State<DeviceListScreen> {
                       : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
-                    if (device.online == true) {
+                    if (device.online == null) {
                       showConfirmationDialog(
                         context,
                         title: 'Confirmation',
@@ -225,20 +267,57 @@ class _DeviceListScreen extends State<DeviceListScreen> {
       floatingActionButton: CupertinoButton(
         onPressed: () {
           // 处理悬浮按钮点击事件
+          // 作为服务端
+          if (device?.isServer == true) {
+            if (socketManager.started) {
+              socketManager.close();
+              setState(() {
+                socketManager.started = false;
+              });
+            }else {
+              _startServer();
+            }
+            return;
+          }
+          // 作为客户端
           showInputAlertDialog(
             context,
-            title: 'Input',
-            description: 'Please enter the following information:',
-            inputHints: ['Username', 'Email'],
-            confirmButtonText: 'Confirm',
-            cancelButtonText: 'Cancel',
+            title: '连接主机',
+            description: '输入对方局域网地址与端口',
+            inputHints: [{"host": false}, {"port": true}],
+            confirmButtonText: '连接',
+            cancelButtonText: '取消',
             onConfirm: (List<String> inputValues) async {
               // 处理输入框的内容
               print('Entered values: $inputValues');
+              // var host
+
+              socketManager.connectToServer("${inputValues[0]}:${inputValues[1]}", (ok, message) {
+                // _showToast(message);
+                if (!ok) {
+                  showLoadingDialog(
+                    context,
+                    title: '连接失败',
+                    description: "$message",
+                    isLoading: true,
+                    // 是否显示加载指示器
+                    icon: Icon(Icons.warning_rounded, color: Colors.red,),
+                    cancelButtonText: 'Cancel',
+                    onCancel: () {
+                      // 处理取消操作
+                      Navigator.of(context).pop(); // 关闭对话框
+                    },
+                    task: (VoidCallback onCancel) async {
+
+                    },
+                  );
+                  return;
+                }
+              });
 
               // await db.delete(db.device).go();
 
-              await db.into(db.device).insert(DeviceCompanion.insert(name: '123' + DateTime.now().millisecond.toString()));
+              // await db.into(db.device).insert(DeviceCompanion.insert(name: '123' + DateTime.now().millisecond.toString()));
 
               var arr = await db.fetchAllDevice();
               print("object");
@@ -248,16 +327,41 @@ class _DeviceListScreen extends State<DeviceListScreen> {
               setState(() {
                 devices = arr;
               });
-
             },
           );
         },
-        child: Icon(Icons.add, size: 32),
-        color: Colors.lightBlue,
+        child: Icon(device?.isServer==true?Icons.wifi_rounded:Icons.add, size: 32),
+        color: device?.isServer==true && socketManager.started?Colors.lightBlue: Colors.grey,
         padding: EdgeInsets.all(16),
         borderRadius: BorderRadius.circular(50), // 调整圆角以获得更圆的按钮
       ),
     );
+  }
+
+  void _startServer() {
+    socketManager.startServer(device?.port?? 10002, (ok, msg) {
+      setState(() {
+        socketManager.started = ok;
+        if (!ok) {
+          showLoadingDialog(
+            context,
+            title: '服务启动失败',
+            description: "error: $msg",
+            isLoading: true,
+            // 是否显示加载指示器
+            icon: Icon(Icons.warning_rounded, color: Colors.red,),
+            cancelButtonText: 'Cancel',
+            onCancel: () {
+              // 处理取消操作
+              Navigator.of(context).pop(); // 关闭对话框
+            },
+            task: (VoidCallback onCancel) async {
+
+            },
+          );
+        }
+      });
+    });
   }
 }
 
@@ -291,7 +395,28 @@ class DeviceDetailsScreen extends StatelessWidget {
   }
 }
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
+  @override
+  _SettingsScreen createState() => _SettingsScreen();
+}
+
+class _SettingsScreen extends State<SettingsScreen> {
+  DeviceData? device;
+
+  @override
+  void initState() {
+    _refreshDevice();
+    super.initState();
+  }
+
+  Future<void> _refreshDevice() async {
+    // 数据加载完成后更新状态
+    var temp = await LocalSetting().instance();
+    setState(() {
+      device = temp;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,12 +427,12 @@ class SettingsScreen extends StatelessWidget {
             },
             color: Colors.lightBlue, // 设置返回按钮图标的颜色
           ),
-          title: Text('Settings'),
+          title: const Text('设置'),
         ),
         body: SafeArea(
           child: Material(
             child: ListView(
-              padding: EdgeInsets.all(16.0), // 添加内边距以改善外观
+              padding: const EdgeInsets.all(16.0), // 添加内边距以改善外观
               children: [
                 Card(
                     elevation: 2.0, // 设置卡片的阴影
@@ -318,55 +443,107 @@ class SettingsScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '开启监听',
-                          Icon(
+                          '本机名称 ${device?.name??""}',
+                          const Icon(
+                            Icons.verified_user,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                          IconButton(
+                              icon: const Icon(
+                                Icons.send_rounded,
+                                color: Colors.lightBlue,
+                              ),
+                              onPressed: () {
+                                showInputAlertDialog(
+                                  context,
+                                  title: '昵称',
+                                  description: '请输入昵称',
+                                  inputHints: [{device?.name ?? "localhost": false}],
+                                  confirmButtonText: '确定',
+                                  cancelButtonText: '取消',
+                                  onConfirm: (List<String> inputValues) async {
+                                    // 处理输入框的内容
+                                    if (inputValues[0].isNotEmpty) {
+                                      LocalSetting().updateNickname(inputValues[0]);
+                                      _refreshDevice();
+                                    }
+                                  },
+                                );
+                              }),
+                        ),
+                        _buildSettingItem(
+                          '服务端口 ${device?.port}',
+                          const Icon(
+                            Icons.verified_user,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                          IconButton(
+                              icon: const Icon(
+                                Icons.send_rounded,
+                                color: Colors.lightBlue,
+                              ),
+                              onPressed: () {
+                                showInputAlertDialog(
+                                  context,
+                                  title: '服务端口',
+                                  description: '请输入服务端口 [1000, 65535]',
+                                  inputHints: [{'${device?.port ?? "10002"}': true}],
+                                  confirmButtonText: '确定',
+                                  cancelButtonText: '取消',
+                                  onConfirm: (List<String> inputValues) async {
+                                    // 处理输入框的内容
+                                    try {
+                                      var port = int.parse(inputValues[0]);
+                                      if (port > 1000 && port <= 65535) {
+                                        LocalSetting().updatePort(port);
+                                        _refreshDevice();
+                                      }
+                                    }on Exception catch (_, e) {
+
+                                    }
+                                  },
+                                );
+                              }),
+                        ),
+                        _buildSettingItem(
+                          '作为服务端',
+                          const Icon(
                             Icons.wifi_rounded,
                             color: CupertinoColors.systemGrey,
                           ),
                           CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
-                          ),
-                        ),
-                        _buildSettingItem(
-                          '加密传输',
-                          Icon(
-                            Icons.lock,
-                            color: CupertinoColors.systemGrey,
-                          ),
-                          CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
+                            value: device?.isServer ?? false,
+                            onChanged: (bool value) {
+                              LocalSetting().updateServer(value);
+                              WsSvrManager().close();
+                              _refreshDevice();
+                            },
                           ),
                         ),
                         _buildSettingItem(
                           '自动通过新设备',
-                          Icon(Icons.lock_open,
+                          const Icon(Icons.lock_open,
                               color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
+                            value: device?.auth ?? false,
+                            onChanged: (bool value) {
+                              LocalSetting().updateNoAuth(value);
+                              _refreshDevice();
+                            },
                           ),
                         ),
                         _buildSettingItem(
-                          '允许读取剪切板',
-                          Icon(Icons.copy, color: CupertinoColors.systemGrey),
+                          '允许访问剪切板',
+                          const Icon(Icons.copy,
+                              color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
+                            value: device?.clipboard ?? false,
+                            onChanged: (bool value) {
+                              LocalSetting().updateClipboard(value);
+                              _refreshDevice();
+                            },
                           ),
                         ),
-                        _buildSettingItem(
-                            '允许写入剪切板',
-                            Icon(
-                              Icons.create_rounded,
-                              color: CupertinoColors.systemGrey,
-                            ),
-                            CupertinoSwitch(
-                              value: true,
-                              onChanged: (bool value) {},
-                            ),
-                            showDivider: false),
                       ],
                     ))
               ],
@@ -471,7 +648,7 @@ void showInputAlertDialog(
   BuildContext context, {
   required String title,
   required String description,
-  required List<String> inputHints,
+  required List<Map<String, bool>> inputHints,
   required String confirmButtonText,
   required String cancelButtonText,
   required Function(List<String>) onConfirm,
@@ -489,7 +666,10 @@ void showInputAlertDialog(
           SizedBox(height: 8), // 间隔
           CupertinoTextField(
             controller: controller,
-            placeholder: inputHints[i],
+            placeholder: inputHints[i].keys.first,
+            inputFormatters: inputHints[i].values.first?<TextInputFormatter>[
+              FilteringTextInputFormatter.digitsOnly,
+            ]:null,
           ),
         ],
       ),
@@ -503,7 +683,11 @@ void showInputAlertDialog(
         title: Text(title),
         content: Column(
           children: [
-            Text(description),
+            SizedBox(height: 6),
+            Text(description,
+              style: TextStyle(
+                color: Colors.grey, // 自定义取消按钮文本颜色
+            ),),
             SizedBox(height: 8),
             ...inputFields,
           ],

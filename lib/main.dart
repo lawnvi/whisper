@@ -258,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // _localhost = localhost;
                 });
                 if (value) {
-                  socketManager.startServer(4567);
+                  socketManager.startServer(4567, null);
                   _showToast('开始监听');
                 } else {
                   socketManager.close();
