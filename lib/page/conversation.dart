@@ -209,7 +209,7 @@ class ClientSettingsScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '允许自动接入',
+                          '自动接入',
                           Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
                           CupertinoSwitch(
                             value: true,
@@ -217,7 +217,7 @@ class ClientSettingsScreen extends StatelessWidget {
                           ),
                         ),
                         _buildSettingItem(
-                          '允许写入剪切板',
+                          '写入剪切板',
                           Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
                             value: true,
