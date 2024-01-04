@@ -25,17 +25,17 @@ class LocalDatabase extends _$LocalDatabase {
   // TODO: implement schemaVersion
   int get schemaVersion => 1;
 
-  Future<void> insertDevice(DeviceData data) {
-    return into(device).insert(data);
+  Future<void> insertMessage(MessageData data) {
+    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp)));
   }
 
   Future<void> upsertDevice(DeviceData data) async {
     if (data.uid.isEmpty) {
       return;
     }
-    var temp = await (select(device)..where((t) => t.uid.equals(data.uid))).getSingle();
-    if (temp.id == 0) {
-      into(device).insert(data);
+    var temp = await (select(device)..where((t) => t.uid.equals(data.uid))).getSingleOrNull();
+    if (temp == null) {
+      into(device).insert(DeviceCompanion.insert(uid: Value(data.uid), name: Value(data.name), host: data.host, port: data.port, platform: Value(data.platform), isServer: Value(data.isServer), online: Value(data.online), clipboard: Value(data.clipboard), auth: Value(data.auth), lastTime: Value(data.lastTime)));
       return;
     }
     (update(device)..where((t) => t.uid.equals(data.uid))).write(
@@ -43,6 +43,7 @@ class LocalDatabase extends _$LocalDatabase {
           host: Value(data.host),
           port: Value(data.port),
           name: Value(data.name),
+          online: Value(data.online),
           lastTime: Value(DateTime.now().second)
       ),
     );
@@ -52,6 +53,15 @@ class LocalDatabase extends _$LocalDatabase {
     return (select(device)
           ..orderBy(
               [(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)]))
+        .get();
+  }
+
+  Future<List<MessageData>> fetchMessageList(String uid) {
+    print("device: $uid");
+    return (select(message)
+      ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+      ..orderBy(
+          [(t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc)]))
         .get();
   }
 }

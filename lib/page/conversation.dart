@@ -1,58 +1,126 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/helper/local.dart';
+import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/message.dart';
+import 'package:whisper/page/deviceList.dart';
+import 'package:whisper/socket/svrmanager.dart';
 
-class SendMessageScreen extends StatelessWidget {
+import '../helper/helper.dart';
+
+class SendMessageScreen extends StatefulWidget {
+  final DeviceData device;
+  SendMessageScreen({required this.device});
+
+  @override
+  _SendMessageScreen createState() => _SendMessageScreen(device);
+}
+
+class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEvent {
+  final db = LocalDatabase();
+  final socketManager = WsSvrManager();
+  final DeviceData device;
+  late DeviceData self;
+  List<MessageData> messageList = [];
+  final TextEditingController _textController = TextEditingController();
+  bool isInputEmpty = true;
+
+  _SendMessageScreen(this.device);
+
+  @override
+  void initState() {
+    socketManager.registerEvent(this);
+    _refreshMessage(onlyMessage: false);
+    _textController.addListener(() {
+      setState(() {
+        isInputEmpty = _textController.text.isEmpty;
+      });
+    });
+    super.initState();
+  }
+
+  void _refreshMessage({bool onlyMessage=true}) async {
+    print("current device: ${device.uid}, $onlyMessage");
+    var me = await LocalSetting().instance();
+    var arr = await LocalDatabase().fetchMessageList(device.uid);
+    print("current device: ${device.uid} message size: ${arr.length} ----- ${arr[0].sender}");
+    setState(() {
+      self = me;
+      messageList = arr;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CupertinoNavigationBar(
-        leading: GestureDetector(
-          onTap: () {
-            Navigator.pop(context); // 返回按钮
+      appBar: AppBar(
+        leading: CupertinoNavigationBarBackButton(
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DeviceListScreen(),
+              ),
+            ); // 返回按钮
           },
-          child: Icon(CupertinoIcons.back),
+          // color: Colors.lightBlue, // 设置返回按钮图标的颜色
         ),
-        middle: Column(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('Device Name'), // 设备名称
-            Text(
-              'Device IP', // 设备 IP 地址
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(device.name), // 设备名称
+                Text(
+                  "${device.host}:${device.port}", // 设备 IP 地址
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
             ),
           ],
         ),
-        trailing: GestureDetector(
-          onTap: () {
-            // 设置按钮操作
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ClientSettingsScreen(),
-              ),
-            );
-          },
-          child: Icon(CupertinoIcons.settings), // 设置按钮
-        ),
+        // automaticallyImplyLeading: true, // 隐藏返回按钮
+        actions: [
+          CupertinoButton(
+            // 使用CupertinoButton
+            padding: EdgeInsets.zero,
+            child: Icon(
+              Icons.settings_outlined,
+              size: 30,
+              color: Colors.black45,
+            ),
+            onPressed: () async {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ClientSettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
             child: ListView.builder(
-              itemCount: 20, // 消息数量
+              itemCount: messageList.length, // 消息数量
               itemBuilder: (BuildContext context, int index) {
                 // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
-                bool isOpponent = index.isEven;
+                var message = messageList[index];
+                bool isOpponent = message.sender == self.uid;
 
-                // 消息类型假设为文本和文件两种
-                bool isTextMessage = index % 4 == 0; // 每第 4 条消息是文本消息
+                print("sdjghk: ${message.content}");
 
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: isTextMessage
-                      ? _buildTextMessage(isOpponent)
-                      : _buildFileMessage(isOpponent),
+                  child: message.type == MessageEnum.Text
+                      ? _buildTextMessage(message, isOpponent)
+                      : _buildFileMessage(message, isOpponent),
                 );
               },
             ),
@@ -63,13 +131,13 @@ class SendMessageScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white, // 背景颜色设置为白色
             ),
-
             child: Row(
               children: [
                 SizedBox(height: 50,),
                 Expanded(
                   child: CupertinoTextField(
-                    autofocus: true,
+                    controller: _textController,
+                    autofocus: false,
                     autocorrect: true,
                     maxLines: 4,
                     minLines: 1,
@@ -78,11 +146,21 @@ class SendMessageScreen extends StatelessWidget {
                 ),
                 CupertinoButton(
                   padding: EdgeInsets.all(6.0),
-                  onPressed: () {
-                    // 发送按钮操作
+                  onPressed: () async {
+                    if (_textController.text.isEmpty) {
+                      FilePickerResult? result = await FilePicker.platform.pickFiles();
+                      if (result != null) {
+                        socketManager.sendFile(result.files.first.path??"");
+                      }
+                    }else {
+                      print("input: ${_textController.text}");
+                      // 发送按钮操作
+                      socketManager.sendMessage(_textController.text, false);
+                      _textController.text = "";
+                    }
                   },
                   child: Icon(
-                    Icons.send, // 发送按钮图标
+                    isInputEmpty?Icons.add:Icons.send, // 发送按钮图标
                     color: Colors.lightBlue, // 发送按钮颜色
                   ),
                 ),
@@ -94,36 +172,80 @@ class SendMessageScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextMessage(bool isOpponent) {
-    return Container(
-      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment: isOpponent
-            ? CrossAxisAlignment.start
-            : CrossAxisAlignment.end,
-        children: [
-          Card(
-            color: isOpponent ? Colors.grey[300] : Colors.blue,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                'Text message content', // 文本消息内容
-                style: TextStyle(
-                  color: isOpponent ? Colors.black : Colors.white,
+  void showCustomPopupMenu(BuildContext context) async {
+    final RenderBox overlay = Overlay.of(context)!.context.findRenderObject() as RenderBox;
+    final Offset targetPosition = Offset.zero; // 这里可以根据需要设置菜单的位置
+
+    await showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(targetPosition.dx, targetPosition.dy, 0, 0),
+      items: [
+        PopupMenuItem(
+          child: Text('Option 1'),
+          value: 1,
+        ),
+        PopupMenuItem(
+          child: Text('Option 2'),
+          value: 2,
+        ),
+        // 添加更多菜单项...
+      ],
+      // 处理菜单项点击事件
+      initialValue: null,
+    ).then((value) {
+      // 处理菜单项点击事件
+      if (value == 1) {
+        // 处理 Option 1 的操作
+      } else if (value == 2) {
+        // 处理 Option 2 的操作
+      }
+      // 处理更多菜单项...
+    });
+  }
+
+  Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
+    return GestureDetector(
+      onLongPress: () {
+        if (messageData.content?.isNotEmpty == true){
+          copyToClipboard(messageData.content!);
+        };
+      },
+      child: Container(
+        alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+        child: Column(
+          crossAxisAlignment: isOpponent
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.end,
+          children: [
+            Card(
+              color: isOpponent ? Colors.grey[300] : Colors.blue,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Text(
+                  messageData.content??"", // 文本消息内容
+                  style: TextStyle(
+                    color: isOpponent ? Colors.black : Colors.white,
+                  ),
                 ),
               ),
             ),
-          ),
-          Text(
-            '11:30 AM', // 发送时间
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: 10,),
+                Text(
+                  '2024/01/04 11:30:26', // 发送时间
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFileMessage(bool isOpponent) {
+  Widget _buildFileMessage(MessageData message, bool isOpponent) {
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       child: Column(
@@ -135,48 +257,88 @@ class SendMessageScreen extends StatelessWidget {
             constraints: BoxConstraints(maxWidth: 400), // 控制消息宽度
             decoration: BoxDecoration(
               color: isOpponent ? Colors.grey[300] : Colors.grey[300],
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(12.0),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.insert_drive_file,
                     color: Colors.white,
+                    size: 42,
                   ),
-                  SizedBox(width: 10),
+                  SizedBox(width: 8),
                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'File Name', // 文件名
+                        'sdhgdskfhgkdfhgjkhhhb.jpg', // 文件名
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
+                        maxLines: 2,
+                          softWrap: true,
                       ),
-                      SizedBox(height: 4),
+                      SizedBox(height: 7),
                       Text(
-                        'File Size', // 文件大小
+                        '18.2 KB', // 文件大小
                         style: TextStyle(color: Colors.black, fontSize: 12),
                       ),
                     ],
                   ),
-                  SizedBox(width: 30)
+                  // SizedBox(width: 30)
                 ],
               ),
             ),
           ),
-          SizedBox(height: 4),
-          Text(
-            '11:30 AM', // 发送时间
-            style: TextStyle(color: Colors.grey),
+          SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '2024/01/04 11:30:26', // 发送时间
+                style: TextStyle(color: Colors.grey),
+              ),
+              SizedBox(width: 10,)
+            ],
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void onAuth(DeviceData? deviceData, String msg, var callback) {
+    // TODO: implement onAuth
+  }
+
+  @override
+  void onClose() {
+    // TODO: implement onClose
+  }
+
+  @override
+  void onConnect() {
+    // TODO: implement onConnect
+  }
+
+  @override
+  void onError() {
+    // TODO: implement onError
+  }
+
+  @override
+  void onMessage(MessageData messageData) {
+    print("收到消息: ${messageData.type} content: ${messageData.content}");
+    _refreshMessage();
+  }
+
+  @override
+  void onProgress(int size, length) {
+    // TODO: implement onProgress
   }
 
 

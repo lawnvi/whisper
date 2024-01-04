@@ -41,6 +41,14 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
   late final GeneratedColumn<int> port = GeneratedColumn<int>(
       'port', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _passwordMeta =
+      const VerificationMeta('password');
+  @override
+  late final GeneratedColumn<String> password = GeneratedColumn<String>(
+      'password', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
   static const VerificationMeta _platformMeta =
       const VerificationMeta('platform');
   @override
@@ -102,6 +110,7 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
         name,
         host,
         port,
+        password,
         platform,
         isServer,
         online,
@@ -141,6 +150,10 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
           _portMeta, port.isAcceptableOrUnknown(data['port']!, _portMeta));
     } else if (isInserting) {
       context.missing(_portMeta);
+    }
+    if (data.containsKey('password')) {
+      context.handle(_passwordMeta,
+          password.isAcceptableOrUnknown(data['password']!, _passwordMeta));
     }
     if (data.containsKey('platform')) {
       context.handle(_platformMeta,
@@ -185,6 +198,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
           .read(DriftSqlType.string, data['${effectivePrefix}host'])!,
       port: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}port'])!,
+      password: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}password']),
       platform: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}platform'])!,
       isServer: attachedDatabase.typeMapping
@@ -212,6 +227,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
   final String name;
   final String host;
   final int port;
+  final String? password;
   final String platform;
   final bool isServer;
   final bool online;
@@ -224,6 +240,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       required this.name,
       required this.host,
       required this.port,
+      this.password,
       required this.platform,
       required this.isServer,
       required this.online,
@@ -238,6 +255,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
     map['name'] = Variable<String>(name);
     map['host'] = Variable<String>(host);
     map['port'] = Variable<int>(port);
+    if (!nullToAbsent || password != null) {
+      map['password'] = Variable<String>(password);
+    }
     map['platform'] = Variable<String>(platform);
     map['is_server'] = Variable<bool>(isServer);
     map['online'] = Variable<bool>(online);
@@ -254,6 +274,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       name: Value(name),
       host: Value(host),
       port: Value(port),
+      password: password == null && nullToAbsent
+          ? const Value.absent()
+          : Value(password),
       platform: Value(platform),
       isServer: Value(isServer),
       online: Value(online),
@@ -272,6 +295,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       name: serializer.fromJson<String>(json['name']),
       host: serializer.fromJson<String>(json['host']),
       port: serializer.fromJson<int>(json['port']),
+      password: serializer.fromJson<String?>(json['password']),
       platform: serializer.fromJson<String>(json['platform']),
       isServer: serializer.fromJson<bool>(json['isServer']),
       online: serializer.fromJson<bool>(json['online']),
@@ -289,6 +313,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       'name': serializer.toJson<String>(name),
       'host': serializer.toJson<String>(host),
       'port': serializer.toJson<int>(port),
+      'password': serializer.toJson<String?>(password),
       'platform': serializer.toJson<String>(platform),
       'isServer': serializer.toJson<bool>(isServer),
       'online': serializer.toJson<bool>(online),
@@ -304,6 +329,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           String? name,
           String? host,
           int? port,
+          Value<String?> password = const Value.absent(),
           String? platform,
           bool? isServer,
           bool? online,
@@ -316,6 +342,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
         name: name ?? this.name,
         host: host ?? this.host,
         port: port ?? this.port,
+        password: password.present ? password.value : this.password,
         platform: platform ?? this.platform,
         isServer: isServer ?? this.isServer,
         online: online ?? this.online,
@@ -331,6 +358,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           ..write('name: $name, ')
           ..write('host: $host, ')
           ..write('port: $port, ')
+          ..write('password: $password, ')
           ..write('platform: $platform, ')
           ..write('isServer: $isServer, ')
           ..write('online: $online, ')
@@ -342,8 +370,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
   }
 
   @override
-  int get hashCode => Object.hash(id, uid, name, host, port, platform, isServer,
-      online, clipboard, auth, lastTime);
+  int get hashCode => Object.hash(id, uid, name, host, port, password, platform,
+      isServer, online, clipboard, auth, lastTime);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -353,6 +381,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           other.name == this.name &&
           other.host == this.host &&
           other.port == this.port &&
+          other.password == this.password &&
           other.platform == this.platform &&
           other.isServer == this.isServer &&
           other.online == this.online &&
@@ -367,6 +396,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   final Value<String> name;
   final Value<String> host;
   final Value<int> port;
+  final Value<String?> password;
   final Value<String> platform;
   final Value<bool> isServer;
   final Value<bool> online;
@@ -379,6 +409,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.name = const Value.absent(),
     this.host = const Value.absent(),
     this.port = const Value.absent(),
+    this.password = const Value.absent(),
     this.platform = const Value.absent(),
     this.isServer = const Value.absent(),
     this.online = const Value.absent(),
@@ -392,6 +423,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.name = const Value.absent(),
     required String host,
     required int port,
+    this.password = const Value.absent(),
     this.platform = const Value.absent(),
     this.isServer = const Value.absent(),
     this.online = const Value.absent(),
@@ -406,6 +438,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     Expression<String>? name,
     Expression<String>? host,
     Expression<int>? port,
+    Expression<String>? password,
     Expression<String>? platform,
     Expression<bool>? isServer,
     Expression<bool>? online,
@@ -419,6 +452,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       if (name != null) 'name': name,
       if (host != null) 'host': host,
       if (port != null) 'port': port,
+      if (password != null) 'password': password,
       if (platform != null) 'platform': platform,
       if (isServer != null) 'is_server': isServer,
       if (online != null) 'online': online,
@@ -434,6 +468,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       Value<String>? name,
       Value<String>? host,
       Value<int>? port,
+      Value<String?>? password,
       Value<String>? platform,
       Value<bool>? isServer,
       Value<bool>? online,
@@ -446,6 +481,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       name: name ?? this.name,
       host: host ?? this.host,
       port: port ?? this.port,
+      password: password ?? this.password,
       platform: platform ?? this.platform,
       isServer: isServer ?? this.isServer,
       online: online ?? this.online,
@@ -472,6 +508,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     }
     if (port.present) {
       map['port'] = Variable<int>(port.value);
+    }
+    if (password.present) {
+      map['password'] = Variable<String>(password.value);
     }
     if (platform.present) {
       map['platform'] = Variable<String>(platform.value);
@@ -502,6 +541,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
           ..write('name: $name, ')
           ..write('host: $host, ')
           ..write('port: $port, ')
+          ..write('password: $password, ')
           ..write('platform: $platform, ')
           ..write('isServer: $isServer, ')
           ..write('online: $online, ')
@@ -558,14 +598,6 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(""));
-  static const VerificationMeta _platformMeta =
-      const VerificationMeta('platform');
-  @override
-  late final GeneratedColumn<String> platform = GeneratedColumn<String>(
-      'platform', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(""));
   static const VerificationMeta _clipboardMeta =
       const VerificationMeta('clipboard');
   @override
@@ -591,9 +623,44 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
               requiredDuringInsert: false,
               defaultValue: const Constant(0))
           .withConverter<MessageEnum>($MessageTable.$convertertype);
+  static const VerificationMeta _contentMeta =
+      const VerificationMeta('content');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, deviceId, sender, receiver, name, platform, clipboard, size, type];
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+      'content', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
+  static const VerificationMeta _messageMeta =
+      const VerificationMeta('message');
+  @override
+  late final GeneratedColumn<String> message = GeneratedColumn<String>(
+      'message', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
+  static const VerificationMeta _timestampMeta =
+      const VerificationMeta('timestamp');
+  @override
+  late final GeneratedColumn<int> timestamp = GeneratedColumn<int>(
+      'timestamp', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        deviceId,
+        sender,
+        receiver,
+        name,
+        clipboard,
+        size,
+        type,
+        content,
+        message,
+        timestamp
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -623,10 +690,6 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       context.handle(
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
     }
-    if (data.containsKey('platform')) {
-      context.handle(_platformMeta,
-          platform.isAcceptableOrUnknown(data['platform']!, _platformMeta));
-    }
     if (data.containsKey('clipboard')) {
       context.handle(_clipboardMeta,
           clipboard.isAcceptableOrUnknown(data['clipboard']!, _clipboardMeta));
@@ -636,6 +699,18 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
           _sizeMeta, size.isAcceptableOrUnknown(data['size']!, _sizeMeta));
     }
     context.handle(_typeMeta, const VerificationResult.success());
+    if (data.containsKey('content')) {
+      context.handle(_contentMeta,
+          content.isAcceptableOrUnknown(data['content']!, _contentMeta));
+    }
+    if (data.containsKey('message')) {
+      context.handle(_messageMeta,
+          message.isAcceptableOrUnknown(data['message']!, _messageMeta));
+    }
+    if (data.containsKey('timestamp')) {
+      context.handle(_timestampMeta,
+          timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta));
+    }
     return context;
   }
 
@@ -655,14 +730,18 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
           .read(DriftSqlType.string, data['${effectivePrefix}receiver'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
-      platform: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}platform'])!,
       clipboard: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}clipboard'])!,
       size: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}size'])!,
       type: $MessageTable.$convertertype.fromSql(attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}type'])!),
+      content: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content']),
+      message: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}message']),
+      timestamp: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}timestamp'])!,
     );
   }
 
@@ -681,20 +760,24 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final String sender;
   final String receiver;
   final String name;
-  final String platform;
   final bool clipboard;
   final int size;
   final MessageEnum type;
+  final String? content;
+  final String? message;
+  final int timestamp;
   const MessageData(
       {required this.id,
       this.deviceId,
       required this.sender,
       required this.receiver,
       required this.name,
-      required this.platform,
       required this.clipboard,
       required this.size,
-      required this.type});
+      required this.type,
+      this.content,
+      this.message,
+      required this.timestamp});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -705,12 +788,18 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     map['sender'] = Variable<String>(sender);
     map['receiver'] = Variable<String>(receiver);
     map['name'] = Variable<String>(name);
-    map['platform'] = Variable<String>(platform);
     map['clipboard'] = Variable<bool>(clipboard);
     map['size'] = Variable<int>(size);
     {
       map['type'] = Variable<int>($MessageTable.$convertertype.toSql(type));
     }
+    if (!nullToAbsent || content != null) {
+      map['content'] = Variable<String>(content);
+    }
+    if (!nullToAbsent || message != null) {
+      map['message'] = Variable<String>(message);
+    }
+    map['timestamp'] = Variable<int>(timestamp);
     return map;
   }
 
@@ -723,10 +812,16 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       sender: Value(sender),
       receiver: Value(receiver),
       name: Value(name),
-      platform: Value(platform),
       clipboard: Value(clipboard),
       size: Value(size),
       type: Value(type),
+      content: content == null && nullToAbsent
+          ? const Value.absent()
+          : Value(content),
+      message: message == null && nullToAbsent
+          ? const Value.absent()
+          : Value(message),
+      timestamp: Value(timestamp),
     );
   }
 
@@ -739,11 +834,13 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       sender: serializer.fromJson<String>(json['sender']),
       receiver: serializer.fromJson<String>(json['receiver']),
       name: serializer.fromJson<String>(json['name']),
-      platform: serializer.fromJson<String>(json['platform']),
       clipboard: serializer.fromJson<bool>(json['clipboard']),
       size: serializer.fromJson<int>(json['size']),
       type: $MessageTable.$convertertype
           .fromJson(serializer.fromJson<int>(json['type'])),
+      content: serializer.fromJson<String?>(json['content']),
+      message: serializer.fromJson<String?>(json['message']),
+      timestamp: serializer.fromJson<int>(json['timestamp']),
     );
   }
   @override
@@ -755,10 +852,12 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'sender': serializer.toJson<String>(sender),
       'receiver': serializer.toJson<String>(receiver),
       'name': serializer.toJson<String>(name),
-      'platform': serializer.toJson<String>(platform),
       'clipboard': serializer.toJson<bool>(clipboard),
       'size': serializer.toJson<int>(size),
       'type': serializer.toJson<int>($MessageTable.$convertertype.toJson(type)),
+      'content': serializer.toJson<String?>(content),
+      'message': serializer.toJson<String?>(message),
+      'timestamp': serializer.toJson<int>(timestamp),
     };
   }
 
@@ -768,20 +867,24 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           String? sender,
           String? receiver,
           String? name,
-          String? platform,
           bool? clipboard,
           int? size,
-          MessageEnum? type}) =>
+          MessageEnum? type,
+          Value<String?> content = const Value.absent(),
+          Value<String?> message = const Value.absent(),
+          int? timestamp}) =>
       MessageData(
         id: id ?? this.id,
         deviceId: deviceId.present ? deviceId.value : this.deviceId,
         sender: sender ?? this.sender,
         receiver: receiver ?? this.receiver,
         name: name ?? this.name,
-        platform: platform ?? this.platform,
         clipboard: clipboard ?? this.clipboard,
         size: size ?? this.size,
         type: type ?? this.type,
+        content: content.present ? content.value : this.content,
+        message: message.present ? message.value : this.message,
+        timestamp: timestamp ?? this.timestamp,
       );
   @override
   String toString() {
@@ -791,17 +894,19 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('sender: $sender, ')
           ..write('receiver: $receiver, ')
           ..write('name: $name, ')
-          ..write('platform: $platform, ')
           ..write('clipboard: $clipboard, ')
           ..write('size: $size, ')
-          ..write('type: $type')
+          ..write('type: $type, ')
+          ..write('content: $content, ')
+          ..write('message: $message, ')
+          ..write('timestamp: $timestamp')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, deviceId, sender, receiver, name, platform, clipboard, size, type);
+  int get hashCode => Object.hash(id, deviceId, sender, receiver, name,
+      clipboard, size, type, content, message, timestamp);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -811,10 +916,12 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.sender == this.sender &&
           other.receiver == this.receiver &&
           other.name == this.name &&
-          other.platform == this.platform &&
           other.clipboard == this.clipboard &&
           other.size == this.size &&
-          other.type == this.type);
+          other.type == this.type &&
+          other.content == this.content &&
+          other.message == this.message &&
+          other.timestamp == this.timestamp);
 }
 
 class MessageCompanion extends UpdateCompanion<MessageData> {
@@ -823,20 +930,24 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
   final Value<String> sender;
   final Value<String> receiver;
   final Value<String> name;
-  final Value<String> platform;
   final Value<bool> clipboard;
   final Value<int> size;
   final Value<MessageEnum> type;
+  final Value<String?> content;
+  final Value<String?> message;
+  final Value<int> timestamp;
   const MessageCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.sender = const Value.absent(),
     this.receiver = const Value.absent(),
     this.name = const Value.absent(),
-    this.platform = const Value.absent(),
     this.clipboard = const Value.absent(),
     this.size = const Value.absent(),
     this.type = const Value.absent(),
+    this.content = const Value.absent(),
+    this.message = const Value.absent(),
+    this.timestamp = const Value.absent(),
   });
   MessageCompanion.insert({
     this.id = const Value.absent(),
@@ -844,10 +955,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.sender = const Value.absent(),
     this.receiver = const Value.absent(),
     this.name = const Value.absent(),
-    this.platform = const Value.absent(),
     this.clipboard = const Value.absent(),
     this.size = const Value.absent(),
     this.type = const Value.absent(),
+    this.content = const Value.absent(),
+    this.message = const Value.absent(),
+    this.timestamp = const Value.absent(),
   });
   static Insertable<MessageData> custom({
     Expression<int>? id,
@@ -855,10 +968,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     Expression<String>? sender,
     Expression<String>? receiver,
     Expression<String>? name,
-    Expression<String>? platform,
     Expression<bool>? clipboard,
     Expression<int>? size,
     Expression<int>? type,
+    Expression<String>? content,
+    Expression<String>? message,
+    Expression<int>? timestamp,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -866,10 +981,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       if (sender != null) 'sender': sender,
       if (receiver != null) 'receiver': receiver,
       if (name != null) 'name': name,
-      if (platform != null) 'platform': platform,
       if (clipboard != null) 'clipboard': clipboard,
       if (size != null) 'size': size,
       if (type != null) 'type': type,
+      if (content != null) 'content': content,
+      if (message != null) 'message': message,
+      if (timestamp != null) 'timestamp': timestamp,
     });
   }
 
@@ -879,20 +996,24 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       Value<String>? sender,
       Value<String>? receiver,
       Value<String>? name,
-      Value<String>? platform,
       Value<bool>? clipboard,
       Value<int>? size,
-      Value<MessageEnum>? type}) {
+      Value<MessageEnum>? type,
+      Value<String?>? content,
+      Value<String?>? message,
+      Value<int>? timestamp}) {
     return MessageCompanion(
       id: id ?? this.id,
       deviceId: deviceId ?? this.deviceId,
       sender: sender ?? this.sender,
       receiver: receiver ?? this.receiver,
       name: name ?? this.name,
-      platform: platform ?? this.platform,
       clipboard: clipboard ?? this.clipboard,
       size: size ?? this.size,
       type: type ?? this.type,
+      content: content ?? this.content,
+      message: message ?? this.message,
+      timestamp: timestamp ?? this.timestamp,
     );
   }
 
@@ -914,9 +1035,6 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
-    if (platform.present) {
-      map['platform'] = Variable<String>(platform.value);
-    }
     if (clipboard.present) {
       map['clipboard'] = Variable<bool>(clipboard.value);
     }
@@ -926,6 +1044,15 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     if (type.present) {
       map['type'] =
           Variable<int>($MessageTable.$convertertype.toSql(type.value));
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (message.present) {
+      map['message'] = Variable<String>(message.value);
+    }
+    if (timestamp.present) {
+      map['timestamp'] = Variable<int>(timestamp.value);
     }
     return map;
   }
@@ -938,10 +1065,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
           ..write('sender: $sender, ')
           ..write('receiver: $receiver, ')
           ..write('name: $name, ')
-          ..write('platform: $platform, ')
           ..write('clipboard: $clipboard, ')
           ..write('size: $size, ')
-          ..write('type: $type')
+          ..write('type: $type, ')
+          ..write('content: $content, ')
+          ..write('message: $message, ')
+          ..write('timestamp: $timestamp')
           ..write(')'))
         .toString();
   }
