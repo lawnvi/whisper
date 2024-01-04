@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +17,41 @@ Future<String> localUUID() async {
     sp.setString("_uuid", uuid);
   }
   return uuid;
+}
+
+String formatSize(int size) {
+  var tb = size / (1024*1024*1024*1024);
+  if (tb > 10) {
+    return "${tb.toStringAsFixed(1)} TB";
+  }
+  if (tb >= 0.9) {
+    return "${tb.toStringAsFixed(2)} TB";
+  }
+  var gb = size / (1024*1024*1024);
+  if (gb > 10) {
+    return "${gb.toStringAsFixed(1)} GB";
+  }
+  if (gb >= 0.9) {
+    return "${gb.toStringAsFixed(2)} GB";
+  }
+  var mb = size / (1024*1024);
+  if (mb > 10) {
+    return "${mb.toStringAsFixed(1)} MB";
+  }
+  if (mb >= 0.9) {
+    return "${mb.toStringAsFixed(2)} MB";
+  }
+  var kb = size / 1024;
+  if (kb > 1) {
+    return "${kb.toStringAsFixed(2)} KB";
+  }
+  return "$size B";
+}
+
+String formatTimestamp(int timestamp) {
+  DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+  // 使用 DateFormat 格式化时间
+  return DateFormat('yyyy/MM/dd HH:mm:ss').format(dateTime);
 }
 
 Future<String> deviceName() async {

@@ -5,7 +5,9 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -38,9 +40,12 @@ class WsSvrManager {
     return _singleton;
   }
 
+  Uuid uuid = const Uuid();
+
   late HttpServer? _server = null;
   late WebSocketSink? _sink = null;
   late ISocketEvent? _event = null;
+  late ISocketEvent? _eventBak = null;
   IOSink? _ioSink = null;
   int _currentSize = 0;
   bool started = false;
@@ -56,6 +61,9 @@ class WsSvrManager {
   }
 
   void registerEvent(ISocketEvent event, {String uid = ""}) {
+    if (_eventBak == null && _event != null) {
+      _eventBak = _event;
+    }
     _event = event;
     if (uid.isNotEmpty) {
       sender = uid;
@@ -63,7 +71,12 @@ class WsSvrManager {
   }
 
   void unregisterEvent() {
-    _event = null;
+    if (_eventBak != null) {
+      _event = _eventBak;
+      _eventBak = null;
+    }else {
+      _eventBak = _event;
+    }
   }
 
   void startServer(int port, var callback) {
@@ -72,7 +85,7 @@ class WsSvrManager {
       if (_sink != null) {
         var device = await LocalSetting().instance();
         var message = _buildMessage(MessageEnum.Auth, device.toJsonString(), "服务占线", "", 0, false);
-        await webSocket.sink.add(utf8.encode(message));
+        await webSocket.sink.add(utf8.encode(message.toJsonString()));
         return;
       }
       _sink = webSocket.sink;
@@ -126,11 +139,11 @@ class WsSvrManager {
     _sink?.add(utf8.encode(message));
   }
 
-  void _listen(Uint8List data) {
-    String str;
-    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().second);
+  Future<void> _listen(Uint8List data) async {
+    String str = "";
+    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().second, uuid: '', acked: false);
     try {
-      str= utf8.decode(data);
+      str = utf8.decode(data);
       Map<String, dynamic> json = jsonDecode(str);
       message = MessageData.fromJson(json);
     }on Exception {
@@ -157,10 +170,23 @@ class WsSvrManager {
         });
         break;
       }
+      case MessageEnum.Ack: {
+        print("收到ACK消息: ${message.uuid} ${message.type}\n${str}");
+        var msg = await LocalDatabase().ackMessage(message);
+        if (msg != null) {
+          _event?.onMessage(msg);
+        }
+        break;
+      }
       case MessageEnum.Text: {
         print("收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
-        _event?.onMessage(message);
         LocalDatabase().insertMessage(message);
+        _ackMessage(message);
+        if (message.clipboard) {
+          copyToClipboard(message.content??"");
+        }
+        _event?.onMessage(message);
+        print("文本消息：$str");
         break;
       }
       case MessageEnum.Heartbeat:
@@ -170,6 +196,8 @@ class WsSvrManager {
         print("收到文件：${message.name} size: ${message.size}");
         LocalDatabase().insertMessage(message);
         _prepareIOSink(message);
+        _ackMessage(message);
+        _event?.onMessage(message);
         break;
       }
       default: {
@@ -182,25 +210,36 @@ class WsSvrManager {
             _ioSink = null;
             print("recv over");
           }
+        }else {
+          print("未知消息：$str");
         }
       }
     }
   }
 
-  String _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard) {
-    var message = MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000);
-    return message.toJsonString();
+  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard) {
+    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uuid.v4());
   }
 
   Future<void> _auth(bool allow) async {
     var device = await LocalSetting().instance(online: true);
     var message = _buildMessage(MessageEnum.Auth, device.toJsonString(), allow?"":"拒绝连接", "", 0, false);
-    _send(message);
+    _send(message.toJsonString());
+  }
+
+  void _ackMessage(MessageData data) {
+    var json = data.toJson();
+    json["type"] = MessageEnum.Ack.index;
+    json["acked"] = true;
+    print("ack消息, uuid: ${data.uuid}");
+    _send(MessageData.fromJson(json).toJsonString());
   }
 
   void sendMessage(String content, bool clipboard) {
     var message = _buildMessage(MessageEnum.Text, content, "", "", 0, clipboard);
-    _send(message);
+    LocalDatabase().insertMessage(message);
+    print("创建新消息, uuid: ${message.uuid}");
+    _send(message.toJsonString());
   }
 
   void sendFile(String path) async {
@@ -210,7 +249,8 @@ class WsSvrManager {
     final fileName = p.basename(path);
 
     var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false);
-    _send(message);
+    LocalDatabase().insertMessage(message);
+    _send(message.toJsonString());
     var start = DateTime.now().millisecond;
     print("start send $fileName, size: $size");
     await for (var data in fs) {
