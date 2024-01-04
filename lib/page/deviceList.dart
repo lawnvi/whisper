@@ -207,7 +207,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               ],
             ),
             onTap: () {
-              Navigator.pushReplacement(
+              Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => SendMessageScreen(device: device),
@@ -330,14 +330,14 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       showConfirmationDialog(
         context,
         title: '新设备',
-        description: '是否同意接入新设备: ${deviceData?.name}?',
+        description: '接入新设备: ${deviceData?.name}?',
         confirmButtonText: '同意',
         cancelButtonText: '拒绝',
         onConfirm: () {
           db.upsertDevice(deviceData!);
           callback(true);
           // 在确认后执行的逻辑
-          Navigator.pushReplacement(
+          Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => SendMessageScreen(device: deviceData,),
@@ -353,7 +353,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     }else {
       callback(true);
       db.upsertDevice(deviceData!);
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => SendMessageScreen(device: deviceData!,),

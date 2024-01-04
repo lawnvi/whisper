@@ -26,7 +26,19 @@ class LocalDatabase extends _$LocalDatabase {
   int get schemaVersion => 1;
 
   Future<void> insertMessage(MessageData data) {
-    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp)));
+    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp), acked: const Value(false), uuid: Value(data.uuid)));
+  }
+
+  Future<MessageData?> ackMessage(MessageData data) async {
+    if (data.uuid.isEmpty) {
+      return null;
+    }
+    (update(message)..where((t) => t.uuid.equals(data.uuid))).write(
+      const MessageCompanion(
+          acked: Value(true),
+      ),
+    );
+    return await (select(message)..where((t) => t.uuid.equals(data.uuid))).getSingleOrNull();
   }
 
   Future<void> upsertDevice(DeviceData data) async {

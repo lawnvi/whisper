@@ -647,6 +647,22 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _uuidMeta = const VerificationMeta('uuid');
+  @override
+  late final GeneratedColumn<String> uuid = GeneratedColumn<String>(
+      'uuid', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
+  static const VerificationMeta _ackedMeta = const VerificationMeta('acked');
+  @override
+  late final GeneratedColumn<bool> acked = GeneratedColumn<bool>(
+      'acked', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("acked" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -659,7 +675,9 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
         type,
         content,
         message,
-        timestamp
+        timestamp,
+        uuid,
+        acked
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -711,6 +729,14 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       context.handle(_timestampMeta,
           timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta));
     }
+    if (data.containsKey('uuid')) {
+      context.handle(
+          _uuidMeta, uuid.isAcceptableOrUnknown(data['uuid']!, _uuidMeta));
+    }
+    if (data.containsKey('acked')) {
+      context.handle(
+          _ackedMeta, acked.isAcceptableOrUnknown(data['acked']!, _ackedMeta));
+    }
     return context;
   }
 
@@ -742,6 +768,10 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
           .read(DriftSqlType.string, data['${effectivePrefix}message']),
       timestamp: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}timestamp'])!,
+      uuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}uuid'])!,
+      acked: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}acked'])!,
     );
   }
 
@@ -766,6 +796,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final String? content;
   final String? message;
   final int timestamp;
+  final String uuid;
+  final bool acked;
   const MessageData(
       {required this.id,
       this.deviceId,
@@ -777,7 +809,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       required this.type,
       this.content,
       this.message,
-      required this.timestamp});
+      required this.timestamp,
+      required this.uuid,
+      required this.acked});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -800,6 +834,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       map['message'] = Variable<String>(message);
     }
     map['timestamp'] = Variable<int>(timestamp);
+    map['uuid'] = Variable<String>(uuid);
+    map['acked'] = Variable<bool>(acked);
     return map;
   }
 
@@ -822,6 +858,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ? const Value.absent()
           : Value(message),
       timestamp: Value(timestamp),
+      uuid: Value(uuid),
+      acked: Value(acked),
     );
   }
 
@@ -841,6 +879,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       content: serializer.fromJson<String?>(json['content']),
       message: serializer.fromJson<String?>(json['message']),
       timestamp: serializer.fromJson<int>(json['timestamp']),
+      uuid: serializer.fromJson<String>(json['uuid']),
+      acked: serializer.fromJson<bool>(json['acked']),
     );
   }
   @override
@@ -858,6 +898,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'content': serializer.toJson<String?>(content),
       'message': serializer.toJson<String?>(message),
       'timestamp': serializer.toJson<int>(timestamp),
+      'uuid': serializer.toJson<String>(uuid),
+      'acked': serializer.toJson<bool>(acked),
     };
   }
 
@@ -872,7 +914,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           MessageEnum? type,
           Value<String?> content = const Value.absent(),
           Value<String?> message = const Value.absent(),
-          int? timestamp}) =>
+          int? timestamp,
+          String? uuid,
+          bool? acked}) =>
       MessageData(
         id: id ?? this.id,
         deviceId: deviceId.present ? deviceId.value : this.deviceId,
@@ -885,6 +929,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         content: content.present ? content.value : this.content,
         message: message.present ? message.value : this.message,
         timestamp: timestamp ?? this.timestamp,
+        uuid: uuid ?? this.uuid,
+        acked: acked ?? this.acked,
       );
   @override
   String toString() {
@@ -899,14 +945,16 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('type: $type, ')
           ..write('content: $content, ')
           ..write('message: $message, ')
-          ..write('timestamp: $timestamp')
+          ..write('timestamp: $timestamp, ')
+          ..write('uuid: $uuid, ')
+          ..write('acked: $acked')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, deviceId, sender, receiver, name,
-      clipboard, size, type, content, message, timestamp);
+      clipboard, size, type, content, message, timestamp, uuid, acked);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -921,7 +969,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.type == this.type &&
           other.content == this.content &&
           other.message == this.message &&
-          other.timestamp == this.timestamp);
+          other.timestamp == this.timestamp &&
+          other.uuid == this.uuid &&
+          other.acked == this.acked);
 }
 
 class MessageCompanion extends UpdateCompanion<MessageData> {
@@ -936,6 +986,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
   final Value<String?> content;
   final Value<String?> message;
   final Value<int> timestamp;
+  final Value<String> uuid;
+  final Value<bool> acked;
   const MessageCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -948,6 +1000,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.content = const Value.absent(),
     this.message = const Value.absent(),
     this.timestamp = const Value.absent(),
+    this.uuid = const Value.absent(),
+    this.acked = const Value.absent(),
   });
   MessageCompanion.insert({
     this.id = const Value.absent(),
@@ -961,6 +1015,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.content = const Value.absent(),
     this.message = const Value.absent(),
     this.timestamp = const Value.absent(),
+    this.uuid = const Value.absent(),
+    this.acked = const Value.absent(),
   });
   static Insertable<MessageData> custom({
     Expression<int>? id,
@@ -974,6 +1030,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     Expression<String>? content,
     Expression<String>? message,
     Expression<int>? timestamp,
+    Expression<String>? uuid,
+    Expression<bool>? acked,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -987,6 +1045,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       if (content != null) 'content': content,
       if (message != null) 'message': message,
       if (timestamp != null) 'timestamp': timestamp,
+      if (uuid != null) 'uuid': uuid,
+      if (acked != null) 'acked': acked,
     });
   }
 
@@ -1001,7 +1061,9 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       Value<MessageEnum>? type,
       Value<String?>? content,
       Value<String?>? message,
-      Value<int>? timestamp}) {
+      Value<int>? timestamp,
+      Value<String>? uuid,
+      Value<bool>? acked}) {
     return MessageCompanion(
       id: id ?? this.id,
       deviceId: deviceId ?? this.deviceId,
@@ -1014,6 +1076,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       content: content ?? this.content,
       message: message ?? this.message,
       timestamp: timestamp ?? this.timestamp,
+      uuid: uuid ?? this.uuid,
+      acked: acked ?? this.acked,
     );
   }
 
@@ -1054,6 +1118,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     if (timestamp.present) {
       map['timestamp'] = Variable<int>(timestamp.value);
     }
+    if (uuid.present) {
+      map['uuid'] = Variable<String>(uuid.value);
+    }
+    if (acked.present) {
+      map['acked'] = Variable<bool>(acked.value);
+    }
     return map;
   }
 
@@ -1070,7 +1140,9 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
           ..write('type: $type, ')
           ..write('content: $content, ')
           ..write('message: $message, ')
-          ..write('timestamp: $timestamp')
+          ..write('timestamp: $timestamp, ')
+          ..write('uuid: $uuid, ')
+          ..write('acked: $acked')
           ..write(')'))
         .toString();
   }

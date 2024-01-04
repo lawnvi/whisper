@@ -13,10 +13,13 @@ class Message extends Table {
   TextColumn get content => text().nullable().withDefault(const Constant(""))();
   TextColumn get message => text().nullable().withDefault(const Constant(""))();
   IntColumn get timestamp => integer().withDefault(const Constant(0))();
+  TextColumn get uuid => text().withDefault(const Constant(""))();
+  BoolColumn get acked => boolean().withDefault(const Constant(false))();
 }
 
 enum MessageEnum {
   UNKONWN,
+  Ack,
   Auth,
   Heartbeat,
   Text,

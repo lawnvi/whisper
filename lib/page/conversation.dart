@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +25,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final DeviceData device;
   late DeviceData self;
   List<MessageData> messageList = [];
+  final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   bool isInputEmpty = true;
 
@@ -31,7 +34,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void initState() {
     socketManager.registerEvent(this);
-    _refreshMessage(onlyMessage: false);
+    _loadMessages();
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -40,15 +43,43 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     super.initState();
   }
 
-  void _refreshMessage({bool onlyMessage=true}) async {
-    print("current device: ${device.uid}, $onlyMessage");
+  @override
+  void dispose() {
+    socketManager.unregisterEvent();
+    super.dispose();
+  }
+
+  void _loadMessages() async {
+    print("current device: ${device.uid}");
     var me = await LocalSetting().instance();
     var arr = await LocalDatabase().fetchMessageList(device.uid);
-    print("current device: ${device.uid} message size: ${arr.length} ----- ${arr[0].sender}");
     setState(() {
       self = me;
       messageList = arr;
     });
+    Future.delayed(const Duration(milliseconds: 200), () {
+      _scrollToBottom(isFirst: true);
+    });
+  }
+
+  void _addMessage(MessageData message) {
+    setState(() {
+      messageList.add(message);
+    });
+  }
+
+  void _ackMessage(MessageData message) {
+    setState(() {
+      messageList.add(message);
+    });
+  }
+
+  void _scrollToBottom({bool isFirst=false}) async {
+    await _scrollController.animateTo(
+      isFirst?_scrollController.position.extentTotal: _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -56,13 +87,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     return Scaffold(
       appBar: AppBar(
         leading: CupertinoNavigationBarBackButton(
+          color: Colors.grey,
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DeviceListScreen(),
-              ),
-            ); // 返回按钮
+            Navigator.pop(context);
           },
           // color: Colors.lightBlue, // 设置返回按钮图标的颜色
         ),
@@ -108,13 +135,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               itemCount: messageList.length, // 消息数量
               itemBuilder: (BuildContext context, int index) {
                 // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
                 var message = messageList[index];
-                bool isOpponent = message.sender == self.uid;
+                bool isOpponent = message.receiver == self.uid;
 
-                print("sdjghk: ${message.content}");
+                print("渲染: ${message.content}********${message.acked}*******${message.uuid}");
 
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
@@ -133,6 +161,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             ),
             child: Row(
               children: [
+                CupertinoButton(
+                  padding: EdgeInsets.all(6.0),
+                  onPressed: () async {
+                    var str = await getClipboardData()??"";
+                    if (str.isNotEmpty) {
+                      socketManager.sendMessage(str, true);
+                    }
+                  },
+                  child: Icon(
+                    Icons.copy, // 发送按钮图标
+                    color: Colors.grey, // 发送按钮颜色
+                  ),
+                ),
                 SizedBox(height: 50,),
                 Expanded(
                   child: CupertinoTextField(
@@ -232,9 +273,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(width: 10,),
+                SizedBox(width: 12, height: 0,),
                 Text(
-                  '2024/01/04 11:30:26', // 发送时间
+                  formatTimestamp(messageData.timestamp), // 发送时间
                   style: TextStyle(color: Colors.grey),
                 ),
               ],
@@ -254,37 +295,46 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             : CrossAxisAlignment.end,
         children: [
           Container(
-            constraints: BoxConstraints(maxWidth: 400), // 控制消息宽度
+            constraints: BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
             decoration: BoxDecoration(
               color: isOpponent ? Colors.grey[300] : Colors.grey[300],
               borderRadius: BorderRadius.circular(8),
             ),
+            // width: 400,
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.insert_drive_file,
-                    color: Colors.white,
-                    size: 42,
-                  ),
-                  SizedBox(width: 8),
                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        'sdhgdskfhgkdfhgjkhhhb.jpg', // 文件名
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        maxLines: 2,
-                          softWrap: true,
+                      Icon(
+                        Icons.insert_drive_file,
+                        color: Colors.white,
+                        size: 42,
                       ),
-                      SizedBox(height: 7),
+                    ],
+                  ),
+                  SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        constraints: BoxConstraints(maxWidth: 260, minWidth: 80), // 控制消息宽度
+                        child: Text(
+                          message.name, // 文件名
+                          overflow: TextOverflow.clip, // 溢出时的处理方式
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 4,
+                          softWrap: true,
+                        ),
+                      ),
+                      SizedBox(height: 4),
                       Text(
-                        '18.2 KB', // 文件大小
+                        formatSize(message.size), // 文件大小
                         style: TextStyle(color: Colors.black, fontSize: 12),
                       ),
                     ],
@@ -299,10 +349,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '2024/01/04 11:30:26', // 发送时间
+                formatTimestamp(message.timestamp), // 发送时间
                 style: TextStyle(color: Colors.grey),
               ),
-              SizedBox(width: 10,)
+              SizedBox(width: 12,)
             ],
           ),
         ],
@@ -333,15 +383,20 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onMessage(MessageData messageData) {
     print("收到消息: ${messageData.type} content: ${messageData.content}");
-    _refreshMessage();
+    if (messageData.receiver == device.uid && messageData.acked) {
+      _ackMessage(messageData);
+    }else {
+      _addMessage(messageData);
+    }
+    Future.delayed(const Duration(milliseconds: 200), () {
+      _scrollToBottom();
+    });
   }
 
   @override
   void onProgress(int size, length) {
     // TODO: implement onProgress
   }
-
-
 }
 
 class ClientSettingsScreen extends StatelessWidget {
