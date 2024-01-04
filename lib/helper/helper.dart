@@ -70,7 +70,7 @@ Future<String> getLocalIpAddress() async {
   return completer.future;
 }
 
-Future<String?> _getClipboardData() async {
+Future<String?> getClipboardData() async {
   return await Clipboard.getData(Clipboard.kTextPlain).then((value) {
     if (value != null && value.text != null) {
       return value.text;
@@ -83,13 +83,13 @@ Future<String?> _getClipboardData() async {
   });
 }
 
-void _copyToClipboard(String content) {
+void copyToClipboard(String content) {
   Clipboard.setData(ClipboardData(text: content))
       .then((value) => print('Text copied to clipboard: $content'))
       .catchError((error) => print('Error copying to clipboard: $error'));
 }
 
-void pickFile() async {
+void pickFile(var callback) async {
   // 打开文件选择器
   FilePickerResult? result = await FilePicker.platform.pickFiles();
 
@@ -98,6 +98,7 @@ void pickFile() async {
     print('选择的文件路径: ${file.path}');
     print('选择的文件名: ${file.name}');
     print('选择的文件大小: ${file.size}');
+    callback(file.path);
   } else {
     // 用户取消了文件选择
     print('用户取消了文件选择');

@@ -24,9 +24,10 @@ class LocalSetting {
   final String _isServer = "_is_server";
   final String _clipboard = "_clipboard";
   final String _noAuth = "_no_auth";
+  final String _password = "_password";
 
 
-  Future<DeviceData> instance() async {
+  Future<DeviceData> instance({bool online=false}) async {
     return DeviceData(id: 0,
         uid: await getSPDefault(_uuid, const Uuid().v4()),
         name: await getSPDefault(_name, await deviceName()),
@@ -34,8 +35,9 @@ class LocalSetting {
         port: await getSPDefault(_port, 10002),
         platform: Platform.operatingSystem,
         isServer: await getSPDefault(_isServer, false),
-        lastTime: 0,
-        online: false,
+        lastTime: DateTime.now().millisecondsSinceEpoch~/1000,
+        online: online,
+        password: await getSPDefault(_password, ""),
         clipboard: await getSPDefault(_clipboard, false),
         auth: await getSPDefault(_noAuth, false),
     );
@@ -95,5 +97,9 @@ class LocalSetting {
 
   void updateNoAuth(bool allow) async {
     _setSP(_noAuth, allow);
+  }
+
+  void updatePassword(String password) async {
+    _setSP(_password, password);
   }
 }

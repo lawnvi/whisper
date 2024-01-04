@@ -1,8 +1,10 @@
 import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:system_tray/system_tray.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
 import '../helper/local.dart';
@@ -14,7 +16,7 @@ class DeviceListScreen extends StatefulWidget {
   _DeviceListScreen createState() => _DeviceListScreen();
 }
 
-class _DeviceListScreen extends State<DeviceListScreen> {
+class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData? device;
@@ -22,24 +24,71 @@ class _DeviceListScreen extends State<DeviceListScreen> {
 
   @override
   void initState() {
-    _initializeData();
-    _refreshDevice();
+    if (!kIsWeb &&
+        (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+      initSystemTray();
+    }
+    _requestPermission();
     super.initState();
   }
 
-  Future<void> _initializeData() async {
-    // 数据加载完成后更新状态
-    var arr = await db.fetchAllDevice();
-    setState(() {
-      devices = arr;
+  @override
+  void didChangeDependencies() {
+    print("我又回来了");
+    _refreshDevice();
+    socketManager.registerEvent(this, uid: device?.uid??"");
+    super.didChangeDependencies();
+  }
+
+  Future<void> _requestPermission() async {
+    if (Platform.isAndroid) {
+      PermissionStatus status = await Permission.storage.request();
+    }
+  }
+
+  Future<void> initSystemTray() async {
+    String path =
+    Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
+
+    final AppWindow appWindow = AppWindow();
+    final SystemTray systemTray = SystemTray();
+
+    // We first init the systray menu
+    await systemTray.initSystemTray(
+      title: "whisper",
+      iconPath: "",
+    );
+
+    // create context menu
+    final Menu menu = Menu();
+    await menu.buildFrom([
+      MenuItemLabel(label: 'Show', onClicked: (menuItem) => appWindow.show()),
+      MenuItemLabel(label: 'Hide', onClicked: (menuItem) => appWindow.hide()),
+      MenuItemLabel(label: 'Exit', onClicked: (menuItem) => appWindow.close()),
+    ]);
+
+    // set context menu
+    await systemTray.setContextMenu(menu);
+
+    // handle system tray event
+    systemTray.registerSystemTrayEventHandler((eventName) {
+      debugPrint("eventName: $eventName");
+      if (eventName == kSystemTrayEventClick) {
+        Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
+      } else if (eventName == kSystemTrayEventRightClick) {
+        Platform.isWindows ? systemTray.popUpContextMenu() : appWindow.show();
+      }
     });
   }
 
   Future<void> _refreshDevice() async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
+    var arr = await db.fetchAllDevice();
+    socketManager.setSender(temp.uid);
     setState(() {
       device = temp;
+      devices = arr;
     });
   }
 
@@ -47,12 +96,12 @@ class _DeviceListScreen extends State<DeviceListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: CupertinoNavigationBarBackButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          color: Colors.lightBlue, // 设置返回按钮图标的颜色
-        ),
+        // leading: CupertinoNavigationBarBackButton(
+        //   onPressed: () {
+        //     Navigator.of(context).pop();
+        //   },
+        //   color: Colors.lightBlue, // 设置返回按钮图标的颜色
+        // ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -82,18 +131,6 @@ class _DeviceListScreen extends State<DeviceListScreen> {
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
             child: Icon(
-              Icons.send_rounded,
-              size: 30,
-              color: Colors.black45,
-            ),
-            onPressed: () async {
-              socketManager.sendMessage("hello");
-            },
-          ),
-          CupertinoButton(
-            // 使用CupertinoButton
-            padding: EdgeInsets.zero,
-            child: Icon(
               Icons.settings_outlined,
               size: 30,
               color: Colors.black45,
@@ -110,7 +147,7 @@ class _DeviceListScreen extends State<DeviceListScreen> {
           ),
         ],
       ),
-      body: ListView.builder(
+      body: devices.isEmpty? const Text("来个人啊"):ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
           final device = devices[index];
@@ -125,12 +162,12 @@ class _DeviceListScreen extends State<DeviceListScreen> {
                 device.isServer as bool
                     ? Icon(Icons.desktop_mac,
                         size: 18,
-                        color: device.online == true
+                        color: device.uid == socketManager.receiver
                             ? Colors.lightBlue
                             : Colors.grey) // Server 图标
                     : Icon(Icons.phone_android,
                         size: 18,
-                        color: device.online == true
+                        color: device.uid == socketManager.receiver
                             ? Colors.lightBlue
                             : Colors.grey),
                 // Client 图标
@@ -140,7 +177,7 @@ class _DeviceListScreen extends State<DeviceListScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: device.online == true
+                  icon: device.uid == socketManager.receiver
                       ? Icon(
                           Icons.wifi_rounded,
                           color: Colors.lightBlue,
@@ -148,65 +185,20 @@ class _DeviceListScreen extends State<DeviceListScreen> {
                       : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
-                    if (device.online == null) {
+                    if (this.device?.isServer != true || device.uid == socketManager.receiver) {
                       showConfirmationDialog(
                         context,
-                        title: 'Confirmation',
-                        description: 'Are you sure you want to proceed?',
-                        confirmButtonText: 'Confirm',
-                        cancelButtonText: 'Cancel',
+                        title: device.uid == socketManager.receiver? "断开连接": "连接设备",
+                        description: '${device.uid == socketManager.receiver? "断开": "连接到"} ${device.name}',
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
                         onConfirm: () {
-                          // 在确认后执行的逻辑
-
-                          showLoadingDialog(
-                            context,
-                            title: 'Loading',
-                            description: 'Please wait...',
-                            isLoading: true,
-                            // 是否显示加载指示器
-                            icon: CupertinoActivityIndicator(),
-                            cancelButtonText: 'Cancel',
-                            onCancel: () {
-                              // 处理取消操作
-                              Navigator.of(context).pop(); // 关闭对话框
-                              showLoadingDialog(
-                                context,
-                                title: 'Loading',
-                                description: 'Please wait...',
-                                isLoading: true,
-                                // 是否显示加载指示器
-                                showCancel: false,
-                                icon: Icon(
-                                  Icons.error_rounded,
-                                  color: Colors.red,
-                                ),
-                                cancelButtonText: 'Cancel',
-                                onCancel: () {
-                                  // 处理取消操作
-                                  Navigator.of(context).pop(); // 关闭对话框
-                                },
-                                task: (VoidCallback onCancel) async {
-                                  // 执行需要进行的任务
-                                  await Future.delayed(
-                                      Duration(seconds: 1)); // 模拟加载过程
-                                  onCancel(); // 任务完成后关闭对话框
-                                  // 点击跳转到详情页面
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SendMessageScreen(),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                            task: (VoidCallback onCancel) async {
-                              // 执行需要进行的任务
-                              await Future.delayed(
-                                  Duration(seconds: 1)); // 模拟加载过程
-                              onCancel(); // 任务完成后关闭对话框
-                            },
-                          );
+                          if (device.uid == socketManager.receiver) {
+                            socketManager.close(closeServer: !device.isServer);
+                            _refreshDevice();
+                          }else {
+                            _connectServer("${device.host}:${device.port}");
+                          }
                         },
                       );
                     }
@@ -215,50 +207,11 @@ class _DeviceListScreen extends State<DeviceListScreen> {
               ],
             ),
             onTap: () {
-              showConfirmationDialog(
+              Navigator.pushReplacement(
                 context,
-                title: 'Confirmation',
-                description: 'Are you sure you want to proceed?',
-                confirmButtonText: 'Confirm',
-                cancelButtonText: 'Cancel',
-                onConfirm: () {
-                  // 在确认后执行的逻辑
-
-                  showLoadingDialog(
-                    context,
-                    title: 'Loading',
-                    description: 'Please wait...',
-                    isLoading: true,
-                    // 是否显示加载指示器
-                    icon: CupertinoActivityIndicator(),
-                    cancelButtonText: 'Cancel',
-                    onCancel: () {
-                      // 处理取消操作
-                      Navigator.of(context).pop(); // 关闭对话框
-                    },
-                    task: (VoidCallback onCancel) async {
-                      // 执行需要进行的任务
-                      await Future.delayed(Duration(seconds: 1)); // 模拟加载过程
-                      onCancel(); // 任务完成后关闭对话框
-                      // 点击跳转到详情页面
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              DeviceDetailsScreen(device: device),
-                        ),
-                      );
-                    },
-                  );
-
-                  // // 点击跳转到详情页面
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder: (context) => DeviceDetailsScreen(device: device),
-                  //   ),
-                  // );
-                },
+                MaterialPageRoute(
+                  builder: (context) => SendMessageScreen(device: device),
+                ),
               );
             },
           );
@@ -288,45 +241,7 @@ class _DeviceListScreen extends State<DeviceListScreen> {
             confirmButtonText: '连接',
             cancelButtonText: '取消',
             onConfirm: (List<String> inputValues) async {
-              // 处理输入框的内容
-              print('Entered values: $inputValues');
-              // var host
-
-              socketManager.connectToServer("${inputValues[0]}:${inputValues[1]}", (ok, message) {
-                // _showToast(message);
-                if (!ok) {
-                  showLoadingDialog(
-                    context,
-                    title: '连接失败',
-                    description: "$message",
-                    isLoading: true,
-                    // 是否显示加载指示器
-                    icon: Icon(Icons.warning_rounded, color: Colors.red,),
-                    cancelButtonText: 'Cancel',
-                    onCancel: () {
-                      // 处理取消操作
-                      Navigator.of(context).pop(); // 关闭对话框
-                    },
-                    task: (VoidCallback onCancel) async {
-
-                    },
-                  );
-                  return;
-                }
-              });
-
-              // await db.delete(db.device).go();
-
-              // await db.into(db.device).insert(DeviceCompanion.insert(name: '123' + DateTime.now().millisecond.toString()));
-
-              var arr = await db.fetchAllDevice();
-              print("object");
-              print(arr.length);
-              print(arr);
-
-              setState(() {
-                devices = arr;
-              });
+              _connectServer("${inputValues[0]}:${inputValues[1]}");
             },
           );
         },
@@ -336,6 +251,31 @@ class _DeviceListScreen extends State<DeviceListScreen> {
         borderRadius: BorderRadius.circular(50), // 调整圆角以获得更圆的按钮
       ),
     );
+  }
+
+  void _connectServer(String host) {
+    socketManager.connectToServer(host, (ok, message) {
+      // _showToast(message);
+      if (!ok) {
+        showLoadingDialog(
+          context,
+          title: '连接失败',
+          description: "$message",
+          isLoading: true,
+          // 是否显示加载指示器
+          icon: Icon(Icons.warning_rounded, color: Colors.red,),
+          cancelButtonText: 'Cancel',
+          onCancel: () {
+            // 处理取消操作
+            Navigator.of(context).pop(); // 关闭对话框
+          },
+          task: (VoidCallback onCancel) async {
+
+          },
+        );
+        return;
+      }
+    });
   }
 
   void _startServer() {
@@ -362,6 +302,90 @@ class _DeviceListScreen extends State<DeviceListScreen> {
         }
       });
     });
+  }
+
+  @override
+  void onAuth(DeviceData? deviceData, String msg, var callback) {
+    if (msg.isNotEmpty) {
+      showLoadingDialog(
+        context,
+        title: '连接失败',
+        description: "${deviceData?.name} $msg",
+        isLoading: true,
+        // 是否显示加载指示器
+        icon: const Icon(Icons.warning_rounded, color: Colors.red,),
+        cancelButtonText: '确定',
+        onCancel: () {
+          // 处理取消操作
+          callback(false);
+          Navigator.of(context).pop(); // 关闭对话框
+        },
+        task: (VoidCallback onCancel) async {
+
+        },
+      );
+      return;
+    }
+    if (device?.isServer == true) {
+      showConfirmationDialog(
+        context,
+        title: '新设备',
+        description: '是否同意接入新设备: ${deviceData?.name}?',
+        confirmButtonText: '同意',
+        cancelButtonText: '拒绝',
+        onConfirm: () {
+          db.upsertDevice(deviceData!);
+          callback(true);
+          // 在确认后执行的逻辑
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SendMessageScreen(device: deviceData,),
+            ),
+          );
+          _refreshDevice();
+        },
+        onCancel: () {
+          print("拒绝连接");
+          callback(false);
+        }
+      );
+    }else {
+      callback(true);
+      db.upsertDevice(deviceData!);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SendMessageScreen(device: deviceData!,),
+        ),
+      );
+      _refreshDevice();
+    }
+  }
+
+  @override
+  void onClose() {
+    // TODO: implement onClose
+  }
+
+  @override
+  void onConnect() {
+    // TODO: implement onConnect
+  }
+
+  @override
+  void onError() {
+    // TODO: implement onError
+  }
+
+  @override
+  void onMessage(MessageData messageData) {
+    // TODO: implement onMessage
+  }
+
+  @override
+  void onProgress(int size, length) {
+    // TODO: implement onProgress
   }
 }
 
@@ -600,6 +624,7 @@ void showConfirmationDialog(
   required String confirmButtonText,
   required String cancelButtonText,
   required VoidCallback onConfirm,
+  VoidCallback? onCancel,
 }) {
   showCupertinoDialog(
     context: context,
@@ -623,6 +648,9 @@ void showConfirmationDialog(
               ),
             ),
             onPressed: () {
+              if (onCancel != null) {
+                onCancel();
+              }
               Navigator.of(context).pop();
             },
           ),

@@ -6,6 +6,7 @@ class Device extends Table {
   TextColumn get name => text().withDefault(const Constant(""))();
   TextColumn get host => text()();
   IntColumn get port => integer()();
+  TextColumn get password => text().nullable().withDefault(const Constant(""))();
   TextColumn get platform => text().withDefault(const Constant(""))();
   BoolColumn get isServer => boolean().withDefault(const Constant(false))();
   BoolColumn get online => boolean().withDefault(const Constant(false))();
