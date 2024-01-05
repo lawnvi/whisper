@@ -56,9 +56,37 @@ class LocalDatabase extends _$LocalDatabase {
           port: Value(data.port),
           name: Value(data.name),
           online: Value(data.online),
+          auth: Value(data.auth),
+          clipboard: Value(data.clipboard),
           lastTime: Value(DateTime.now().second)
       ),
     );
+  }
+
+  Future<void> authDevice(String uid, bool auth) async {
+    if (uid.isEmpty) {
+      return;
+    }
+    (update(device)..where((t) => t.uid.equals(uid))).write(
+      DeviceCompanion(
+        auth: Value(auth),
+      ),
+    );
+  }
+
+  Future<void> clipboardDevice(String uid, bool clipboard) async {
+    if (uid.isEmpty) {
+      return;
+    }
+    (update(device)..where((t) => t.uid.equals(uid))).write(
+      DeviceCompanion(
+        clipboard: Value(clipboard),
+      ),
+    );
+  }
+
+  Future<DeviceData?> fetchDevice(String uid) {
+    return (select(device)..where((t) => t.uid.equals(uid))).getSingleOrNull();
   }
 
   Future<List<DeviceData>> fetchAllDevice() {
