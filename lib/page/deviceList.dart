@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:system_tray/system_tray.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
 import '../helper/local.dart';
@@ -35,7 +36,6 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   @override
   void didChangeDependencies() {
-    print("我又回来了");
     _refreshDevice();
     socketManager.registerEvent(this, uid: device?.uid??"");
     super.didChangeDependencies();
@@ -462,28 +462,23 @@ class _SettingsScreen extends State<SettingsScreen> {
                             Icons.verified_user,
                             color: CupertinoColors.systemGrey,
                           ),
-                          IconButton(
-                              icon: const Icon(
-                                Icons.send_rounded,
-                                color: Colors.lightBlue,
-                              ),
-                              onPressed: () {
-                                showInputAlertDialog(
-                                  context,
-                                  title: '昵称',
-                                  description: '请输入昵称',
-                                  inputHints: [{device?.name ?? "localhost": false}],
-                                  confirmButtonText: '确定',
-                                  cancelButtonText: '取消',
-                                  onConfirm: (List<String> inputValues) async {
-                                    // 处理输入框的内容
-                                    if (inputValues[0].isNotEmpty) {
-                                      LocalSetting().updateNickname(inputValues[0]);
-                                      _refreshDevice();
-                                    }
-                                  },
-                                );
-                              }),
+                          onTap: () {
+                            showInputAlertDialog(
+                              context,
+                              title: '昵称',
+                              description: '请输入昵称',
+                              inputHints: [{device?.name ?? "localhost": false}],
+                              confirmButtonText: '确定',
+                              cancelButtonText: '取消',
+                              onConfirm: (List<String> inputValues) async {
+                                // 处理输入框的内容
+                                if (inputValues[0].isNotEmpty) {
+                                  LocalSetting().updateNickname(inputValues[0]);
+                                  _refreshDevice();
+                                }
+                              },
+                            );
+                          }
                         ),
                         _buildSettingItem(
                           '服务端口 ${device?.port}',
@@ -491,33 +486,28 @@ class _SettingsScreen extends State<SettingsScreen> {
                             Icons.verified_user,
                             color: CupertinoColors.systemGrey,
                           ),
-                          IconButton(
-                              icon: const Icon(
-                                Icons.send_rounded,
-                                color: Colors.lightBlue,
-                              ),
-                              onPressed: () {
-                                showInputAlertDialog(
-                                  context,
-                                  title: '服务端口',
-                                  description: '请输入服务端口 [1000, 65535]',
-                                  inputHints: [{'${device?.port ?? "10002"}': true}],
-                                  confirmButtonText: '确定',
-                                  cancelButtonText: '取消',
-                                  onConfirm: (List<String> inputValues) async {
-                                    // 处理输入框的内容
-                                    try {
-                                      var port = int.parse(inputValues[0]);
-                                      if (port > 1000 && port <= 65535) {
-                                        LocalSetting().updatePort(port);
-                                        _refreshDevice();
-                                      }
-                                    }on Exception catch (_, e) {
+                          onTap: () {
+                            showInputAlertDialog(
+                              context,
+                              title: '服务端口',
+                              description: '请输入服务端口 [1000, 65535]',
+                              inputHints: [{'${device?.port ?? "10002"}': true}],
+                              confirmButtonText: '确定',
+                              cancelButtonText: '取消',
+                              onConfirm: (List<String> inputValues) async {
+                                // 处理输入框的内容
+                                try {
+                                  var port = int.parse(inputValues[0]);
+                                  if (port > 1000 && port <= 65535) {
+                                    LocalSetting().updatePort(port);
+                                    _refreshDevice();
+                                  }
+                                }on Exception catch (_, e) {
 
-                                    }
-                                  },
-                                );
-                              }),
+                                }
+                              },
+                            );
+                          }
                         ),
                         _buildSettingItem(
                           '作为服务端',
@@ -525,7 +515,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                             Icons.wifi_rounded,
                             color: CupertinoColors.systemGrey,
                           ),
-                          CupertinoSwitch(
+                          trailing: CupertinoSwitch(
                             value: device?.isServer ?? false,
                             onChanged: (bool value) {
                               LocalSetting().updateServer(value);
@@ -538,7 +528,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           '自动通过新设备',
                           const Icon(Icons.lock_open,
                               color: CupertinoColors.systemGrey),
-                          CupertinoSwitch(
+                          trailing: CupertinoSwitch(
                             value: device?.auth ?? false,
                             onChanged: (bool value) {
                               LocalSetting().updateNoAuth(value);
@@ -550,7 +540,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           '允许访问剪切板',
                           const Icon(Icons.copy,
                               color: CupertinoColors.systemGrey),
-                          CupertinoSwitch(
+                          trailing: CupertinoSwitch(
                             value: device?.clipboard ?? false,
                             onChanged: (bool value) {
                               LocalSetting().updateClipboard(value);
@@ -559,10 +549,17 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          '存储位置: $path',
+                          '存储位置 $path',
                           const Icon(Icons.file_download_outlined,
                               color: CupertinoColors.systemGrey),
-                          SizedBox()
+                        ),
+                        _buildSettingItem(
+                            'v1.0.0',
+                            const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
+                            onTap: () async {
+                              final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper');
+                              _launchInBrowser(toLaunch);
+                            }
                         ),
                       ],
                     ))
@@ -572,12 +569,19 @@ class _SettingsScreen extends State<SettingsScreen> {
         ));
   }
 
-  Widget _buildSettingItem(String title, Icon icon, Widget trailing,
-      {bool showDivider = true}) {
+  Future<void> _launchInBrowser(Uri url) async {
+    if (!await launchUrl(
+      url,
+      mode: LaunchMode.externalApplication,
+    )) {
+      throw Exception('Could not launch $url');
+    }
+  }
+
+  Widget _buildSettingItem(String title, Icon icon,
+      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap}) {
     return GestureDetector(
-      onTap: () {
-        // 处理点击设置项
-      },
+      onTap: onTap,
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
@@ -605,7 +609,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                       // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
                   ),
-                  trailing,
+                  if (trailing != null) trailing,
                 ],
               ),
             ),
