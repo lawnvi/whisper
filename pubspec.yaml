@@ -56,7 +56,6 @@ dependencies:
   url_launcher: ^6.2.2
   file_manager: ^1.0.2
   open_file: ^3.3.2
-  android_intent_plus: ^4.0.3
   open_dir: ^0.0.1+5
   crypto: ^3.0.3
 
