@@ -13,6 +13,8 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:path/path.dart' as p;
 
+import '../helper/file.dart';
+
 abstract class ISocketEvent {
   void onError();
 
@@ -142,7 +144,7 @@ class WsSvrManager {
 
   Future<void> _listen(Uint8List data) async {
     String str = "";
-    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().second, uuid: '', acked: false);
+    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().second, uuid: '', acked: false, path: '', md5: '');
     try {
       str = utf8.decode(data);
       Map<String, dynamic> json = jsonDecode(str);
@@ -176,6 +178,9 @@ class WsSvrManager {
         var msg = await LocalDatabase().ackMessage(message);
         if (msg != null) {
           _event?.onMessage(msg);
+          if (msg.type == MessageEnum.File) {
+            _sendFile(msg);
+          }
         }
         break;
       }
@@ -197,22 +202,23 @@ class WsSvrManager {
         print("收到文件：${message.name} size: ${message.size}");
         LocalDatabase().insertMessage(message);
         _prepareIOSink(message);
-        _ackMessage(message);
         _event?.onMessage(message);
+        _ackMessage(message);
         break;
       }
       default: {
-        if (_currentLen < _currentSize && _ioSink != null) {
+        if (_currentSize > 0 && _ioSink != null) {
           _ioSink?.add(data);
           _currentLen += data.length;
+          print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
           _event?.onProgress(_currentSize, _currentLen);
-          print("recv ${data.length}, recved: $_currentLen");
           if (_currentSize == _currentLen) {
             _ioSink?.close();
             _ioSink = null;
             _currentLen = 0;
             _currentSize = 0;
             print("recv over");
+            // fileMD5
           }
         }else {
           print("未知消息：$str");
@@ -221,8 +227,8 @@ class WsSvrManager {
     }
   }
 
-  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard) {
-    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uuid.v4());
+  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path=""}) {
+    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uuid.v4(), path: path, md5: md5);
   }
 
   Future<void> _auth(bool allow) async {
@@ -248,14 +254,20 @@ class WsSvrManager {
 
   void sendFile(String path) async {
     final file = File(path);
-    final fs = file.openRead();
     final size = file.lengthSync();
     final fileName = p.basename(path);
-
-    var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false);
+    // final md5 = await fileMD5(file);
+    var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false, path: path, md5: "");
     LocalDatabase().insertMessage(message);
     _send(message.toJsonString());
-    var start = DateTime.now().millisecond;
+  }
+
+  void _sendFile(MessageData message) async {
+    final file = File(message.path);
+    final size = file.lengthSync();
+    final fileName = p.basename(message.path);
+    final fs = file.openRead();
+    var start = DateTime.now().millisecondsSinceEpoch;
     print("start send $fileName, size: $size");
     var sendLen = 0;
     await for (var data in fs) {
@@ -263,13 +275,26 @@ class WsSvrManager {
       sendLen += data.length;
       _event?.onProgress(size, sendLen);
     }
-    print("send $fileName, size: $size use time: ${DateTime.now().millisecond - start}ms");
+    print("send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
   }
 
-  void _prepareIOSink(MessageData message) async {
+  Future<String> _prepareIOSink(MessageData message) async {
     var appDir = await getApplicationDocumentsDirectory();
     _currentSize = message.size;
     File file = File('${appDir.path}/${message.name}');
+    var idx = 1;
+    var arr = message.name.split(".");
+    var before = message.name;
+    var dot = "";
+    if (arr.length > 1) {
+      dot = arr[arr.length-1];
+      before = message.name.substring(0, message.name.length - 1 - dot.length);
+    }
+    while (file.existsSync()) {
+      file = File('${appDir.path}/$before-$idx.$dot');
+      idx++;
+    }
     _ioSink = file.openWrite();
+    return file.path;
   }
 }

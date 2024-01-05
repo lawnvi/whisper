@@ -663,6 +663,20 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("acked" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+      'path', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
+  static const VerificationMeta _md5Meta = const VerificationMeta('md5');
+  @override
+  late final GeneratedColumn<String> md5 = GeneratedColumn<String>(
+      'md5', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(""));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -677,7 +691,9 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
         message,
         timestamp,
         uuid,
-        acked
+        acked,
+        path,
+        md5
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -737,6 +753,14 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       context.handle(
           _ackedMeta, acked.isAcceptableOrUnknown(data['acked']!, _ackedMeta));
     }
+    if (data.containsKey('path')) {
+      context.handle(
+          _pathMeta, path.isAcceptableOrUnknown(data['path']!, _pathMeta));
+    }
+    if (data.containsKey('md5')) {
+      context.handle(
+          _md5Meta, md5.isAcceptableOrUnknown(data['md5']!, _md5Meta));
+    }
     return context;
   }
 
@@ -772,6 +796,10 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
           .read(DriftSqlType.string, data['${effectivePrefix}uuid'])!,
       acked: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}acked'])!,
+      path: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}path'])!,
+      md5: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}md5'])!,
     );
   }
 
@@ -798,6 +826,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final int timestamp;
   final String uuid;
   final bool acked;
+  final String path;
+  final String md5;
   const MessageData(
       {required this.id,
       this.deviceId,
@@ -811,7 +841,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       this.message,
       required this.timestamp,
       required this.uuid,
-      required this.acked});
+      required this.acked,
+      required this.path,
+      required this.md5});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -836,6 +868,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     map['timestamp'] = Variable<int>(timestamp);
     map['uuid'] = Variable<String>(uuid);
     map['acked'] = Variable<bool>(acked);
+    map['path'] = Variable<String>(path);
+    map['md5'] = Variable<String>(md5);
     return map;
   }
 
@@ -860,6 +894,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       timestamp: Value(timestamp),
       uuid: Value(uuid),
       acked: Value(acked),
+      path: Value(path),
+      md5: Value(md5),
     );
   }
 
@@ -881,6 +917,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       timestamp: serializer.fromJson<int>(json['timestamp']),
       uuid: serializer.fromJson<String>(json['uuid']),
       acked: serializer.fromJson<bool>(json['acked']),
+      path: serializer.fromJson<String>(json['path']),
+      md5: serializer.fromJson<String>(json['md5']),
     );
   }
   @override
@@ -900,6 +938,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'timestamp': serializer.toJson<int>(timestamp),
       'uuid': serializer.toJson<String>(uuid),
       'acked': serializer.toJson<bool>(acked),
+      'path': serializer.toJson<String>(path),
+      'md5': serializer.toJson<String>(md5),
     };
   }
 
@@ -916,7 +956,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           Value<String?> message = const Value.absent(),
           int? timestamp,
           String? uuid,
-          bool? acked}) =>
+          bool? acked,
+          String? path,
+          String? md5}) =>
       MessageData(
         id: id ?? this.id,
         deviceId: deviceId.present ? deviceId.value : this.deviceId,
@@ -931,6 +973,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         timestamp: timestamp ?? this.timestamp,
         uuid: uuid ?? this.uuid,
         acked: acked ?? this.acked,
+        path: path ?? this.path,
+        md5: md5 ?? this.md5,
       );
   @override
   String toString() {
@@ -947,14 +991,30 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('message: $message, ')
           ..write('timestamp: $timestamp, ')
           ..write('uuid: $uuid, ')
-          ..write('acked: $acked')
+          ..write('acked: $acked, ')
+          ..write('path: $path, ')
+          ..write('md5: $md5')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, deviceId, sender, receiver, name,
-      clipboard, size, type, content, message, timestamp, uuid, acked);
+  int get hashCode => Object.hash(
+      id,
+      deviceId,
+      sender,
+      receiver,
+      name,
+      clipboard,
+      size,
+      type,
+      content,
+      message,
+      timestamp,
+      uuid,
+      acked,
+      path,
+      md5);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -971,7 +1031,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.message == this.message &&
           other.timestamp == this.timestamp &&
           other.uuid == this.uuid &&
-          other.acked == this.acked);
+          other.acked == this.acked &&
+          other.path == this.path &&
+          other.md5 == this.md5);
 }
 
 class MessageCompanion extends UpdateCompanion<MessageData> {
@@ -988,6 +1050,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
   final Value<int> timestamp;
   final Value<String> uuid;
   final Value<bool> acked;
+  final Value<String> path;
+  final Value<String> md5;
   const MessageCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -1002,6 +1066,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.timestamp = const Value.absent(),
     this.uuid = const Value.absent(),
     this.acked = const Value.absent(),
+    this.path = const Value.absent(),
+    this.md5 = const Value.absent(),
   });
   MessageCompanion.insert({
     this.id = const Value.absent(),
@@ -1017,6 +1083,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.timestamp = const Value.absent(),
     this.uuid = const Value.absent(),
     this.acked = const Value.absent(),
+    this.path = const Value.absent(),
+    this.md5 = const Value.absent(),
   });
   static Insertable<MessageData> custom({
     Expression<int>? id,
@@ -1032,6 +1100,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     Expression<int>? timestamp,
     Expression<String>? uuid,
     Expression<bool>? acked,
+    Expression<String>? path,
+    Expression<String>? md5,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1047,6 +1117,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       if (timestamp != null) 'timestamp': timestamp,
       if (uuid != null) 'uuid': uuid,
       if (acked != null) 'acked': acked,
+      if (path != null) 'path': path,
+      if (md5 != null) 'md5': md5,
     });
   }
 
@@ -1063,7 +1135,9 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       Value<String?>? message,
       Value<int>? timestamp,
       Value<String>? uuid,
-      Value<bool>? acked}) {
+      Value<bool>? acked,
+      Value<String>? path,
+      Value<String>? md5}) {
     return MessageCompanion(
       id: id ?? this.id,
       deviceId: deviceId ?? this.deviceId,
@@ -1078,6 +1152,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       timestamp: timestamp ?? this.timestamp,
       uuid: uuid ?? this.uuid,
       acked: acked ?? this.acked,
+      path: path ?? this.path,
+      md5: md5 ?? this.md5,
     );
   }
 
@@ -1124,6 +1200,12 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     if (acked.present) {
       map['acked'] = Variable<bool>(acked.value);
     }
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (md5.present) {
+      map['md5'] = Variable<String>(md5.value);
+    }
     return map;
   }
 
@@ -1142,7 +1224,9 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
           ..write('message: $message, ')
           ..write('timestamp: $timestamp, ')
           ..write('uuid: $uuid, ')
-          ..write('acked: $acked')
+          ..write('acked: $acked, ')
+          ..write('path: $path, ')
+          ..write('md5: $md5')
           ..write(')'))
         .toString();
   }
