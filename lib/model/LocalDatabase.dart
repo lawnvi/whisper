@@ -26,7 +26,7 @@ class LocalDatabase extends _$LocalDatabase {
   int get schemaVersion => 1;
 
   Future<void> insertMessage(MessageData data) {
-    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp), acked: const Value(false), uuid: Value(data.uuid)));
+    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp), acked: const Value(false), uuid: Value(data.uuid), path: Value(data.path), md5: Value(data.md5)));
   }
 
   Future<MessageData?> ackMessage(MessageData data) async {

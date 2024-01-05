@@ -25,6 +25,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.11.3"
+  android_intent_plus:
+    dependency: "direct main"
+    description:
+      name: android_intent_plus
+      sha256: e1c62bb41c90e15083b7fb84dc327fe90396cc9c1445b55ff1082144fabfb4d9
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.3"
   args:
     dependency: transitive
     description:
@@ -194,7 +202,7 @@ packages:
     source: hosted
     version: "3.1.1"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: ff625774173754681d66daaf4a448684fb04b78f902da9cb3d308c19cc5e8bab
@@ -464,6 +472,54 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.4"
+  open_dir:
+    dependency: "direct main"
+    description:
+      name: open_dir
+      sha256: "3a810aa12994ad443adaf11d84f2b0cc4197ef1c7bb3a55677b065c90e281f04"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+5"
+  open_dir_linux:
+    dependency: transitive
+    description:
+      name: open_dir_linux
+      sha256: "018287c9d3ecc4dcbb2f299fc704e33908ea9d570b8cf1d2af6a9b57a1af6426"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+2"
+  open_dir_macos:
+    dependency: transitive
+    description:
+      name: open_dir_macos
+      sha256: f35d85cc20872bf6eb79623d6559b82f98115fed2ec4fe4fbb4539dd0d3f007c
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+2"
+  open_dir_platform_interface:
+    dependency: transitive
+    description:
+      name: open_dir_platform_interface
+      sha256: "405a6f89849af379c3de7ad5a2551fab219da36089d14623b1469550dcd7d8c9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+2"
+  open_dir_windows:
+    dependency: transitive
+    description:
+      name: open_dir_windows
+      sha256: c77f7713d37931538994633a3f6373830dae2894f8a91577c70cff58a67196bd
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1+2"
+  open_file:
+    dependency: "direct main"
+    description:
+      name: open_file
+      sha256: a5a32d44acb7c899987d0999e1e3cbb0a0f1adebbf41ac813ec6d2d8faa0af20
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.2"
   package_config:
     dependency: transitive
     description:

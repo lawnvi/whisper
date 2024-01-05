@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  open_dir_windows
   permission_handler_windows
   sqlite3_flutter_libs
   system_tray

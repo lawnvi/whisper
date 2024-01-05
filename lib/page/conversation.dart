@@ -1,11 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
+import '../helper/file.dart';
 import '../helper/helper.dart';
 
 class SendMessageScreen extends StatefulWidget {
@@ -25,6 +27,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   bool isInputEmpty = true;
+  double percent = 0;
 
   _SendMessageScreen(this.device);
 
@@ -44,6 +47,13 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   void dispose() {
     socketManager.unregisterEvent();
     super.dispose();
+  }
+
+  void _updatePercent(double num) {
+    print("percent: ${(100*num).toStringAsFixed(2)}%");
+    setState(() {
+      percent = num;
+    });
   }
 
   void _loadMessages() async {
@@ -132,6 +142,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       body: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          if (percent > 0 && percent < 1) LinearProgressIndicator(value: percent, color: Colors.lightGreen,),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -205,40 +216,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ],
             ),
           ),
+          SizedBox(height: 6,)
         ],
       ),
     );
-  }
-
-  void showCustomPopupMenu(BuildContext context) async {
-    final RenderBox overlay = Overlay.of(context)!.context.findRenderObject() as RenderBox;
-    final Offset targetPosition = Offset.zero; // 这里可以根据需要设置菜单的位置
-
-    await showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(targetPosition.dx, targetPosition.dy, 0, 0),
-      items: [
-        PopupMenuItem(
-          child: Text('Option 1'),
-          value: 1,
-        ),
-        PopupMenuItem(
-          child: Text('Option 2'),
-          value: 2,
-        ),
-        // 添加更多菜单项...
-      ],
-      // 处理菜单项点击事件
-      initialValue: null,
-    ).then((value) {
-      // 处理菜单项点击事件
-      if (value == 1) {
-        // 处理 Option 1 的操作
-      } else if (value == 2) {
-        // 处理 Option 2 的操作
-      }
-      // 处理更多菜单项...
-    });
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
@@ -288,7 +269,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       child: GestureDetector(
         onTap: (){
-
+          openDir(name: message.name);
         },
         child: Column(
           crossAxisAlignment: isOpponent
@@ -399,6 +380,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onProgress(int size, length) {
     // TODO: implement onProgress
+    _updatePercent(length/size);
   }
 }
 
