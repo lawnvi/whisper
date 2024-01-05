@@ -1,12 +1,9 @@
-import 'dart:math';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
-import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
 import '../helper/helper.dart';
@@ -57,9 +54,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       self = me;
       messageList = arr;
     });
-    Future.delayed(const Duration(milliseconds: 200), () {
-      _scrollToBottom(isFirst: true);
-    });
+    if (arr.length > 8) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _scrollToBottom(isFirst: true);
+      });
+    }
   }
 
   void _addMessage(MessageData message) {
@@ -123,7 +122,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ClientSettingsScreen(),
+                  builder: (context) => ClientSettingsScreen(device: device,),
                 ),
               );
             },
@@ -141,8 +140,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
                 var message = messageList[index];
                 bool isOpponent = message.receiver == self.uid;
-
-                print("渲染: ${message.content}********${message.acked}*******${message.uuid}");
 
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
@@ -289,73 +286,79 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment: isOpponent
-            ? CrossAxisAlignment.start
-            : CrossAxisAlignment.end,
-        children: [
-          Container(
-            constraints: BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
-            decoration: BoxDecoration(
-              color: isOpponent ? Colors.grey[300] : Colors.grey[300],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            // width: 400,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Column(
-                    children: [
-                      Icon(
-                        Icons.insert_drive_file,
-                        color: Colors.white,
-                        size: 42,
-                      ),
-                    ],
-                  ),
-                  SizedBox(width: 6),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        constraints: BoxConstraints(maxWidth: 260, minWidth: 80), // 控制消息宽度
-                        child: Text(
-                          message.name, // 文件名
-                          overflow: TextOverflow.clip, // 溢出时的处理方式
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 4,
-                          softWrap: true,
+      child: GestureDetector(
+        onTap: (){
+
+        },
+        child: Column(
+          crossAxisAlignment: isOpponent
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.end,
+          children: [
+            Container(
+              constraints: BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
+              decoration: BoxDecoration(
+                color: isOpponent ? Colors.grey[300] : Colors.grey[300],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              // width: 400,
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Column(
+                      children: [
+                        Icon(
+                          Icons.insert_drive_file,
+                          color: Colors.white,
+                          size: 42,
                         ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        formatSize(message.size), // 文件大小
-                        style: TextStyle(color: Colors.black, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  // SizedBox(width: 30)
-                ],
+                      ],
+                    ),
+                    SizedBox(width: 6),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          constraints: BoxConstraints(maxWidth: 260, minWidth: 80), // 控制消息宽度
+                          child: Text(
+                            message.name, // 文件名
+                            overflow: TextOverflow.clip, // 溢出时的处理方式
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                            maxLines: 4,
+                            softWrap: true,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          formatSize(message.size), // 文件大小
+                          style: TextStyle(color: Colors.black, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    // SizedBox(width: 30)
+                    SizedBox(width: 6),
+                  ],
+                ),
               ),
             ),
-          ),
-          SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                formatTimestamp(message.timestamp), // 发送时间
-                style: TextStyle(color: Colors.grey),
-              ),
-              SizedBox(width: 12,)
-            ],
-          ),
-        ],
+            SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  formatTimestamp(message.timestamp), // 发送时间
+                  style: TextStyle(color: Colors.grey),
+                ),
+                SizedBox(width: 12,)
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -399,7 +402,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 }
 
-class ClientSettingsScreen extends StatelessWidget {
+class ClientSettingsScreen extends StatefulWidget {
+  final DeviceData device;
+  ClientSettingsScreen({required this.device});
+
+  @override
+  _ClientSettingsScreen createState() => _ClientSettingsScreen(device);
+}
+
+class _ClientSettingsScreen extends State<ClientSettingsScreen> {
+  DeviceData device;
+
+  _ClientSettingsScreen(this.device);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -429,16 +444,28 @@ class ClientSettingsScreen extends StatelessWidget {
                           '自动接入',
                           Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
                           CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
+                            value: device.auth,
+                            onChanged: (bool value) async {
+                              LocalDatabase().authDevice(device.uid, value);
+                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
+                            },
                           ),
                         ),
                         _buildSettingItem(
                           '写入剪切板',
                           Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
-                            value: true,
-                            onChanged: (bool value) {},
+                            value: device.clipboard,
+                            onChanged: (bool value) async {
+                              LocalDatabase().clipboardDevice(device.uid, value);
+                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
+                            },
                           ),
                         ),
                       ],

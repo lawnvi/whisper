@@ -47,7 +47,8 @@ class WsSvrManager {
   late ISocketEvent? _event = null;
   late ISocketEvent? _eventBak = null;
   IOSink? _ioSink = null;
-  int _currentSize = 0;
+  int _currentSize = 0; // 大小
+  int _currentLen = 0; // 已接收长度
   bool started = false;
   String receiver = "";
   String sender = "";
@@ -201,13 +202,16 @@ class WsSvrManager {
         break;
       }
       default: {
-        if (_currentSize > 0 && _ioSink != null) {
+        if (_currentLen < _currentSize && _ioSink != null) {
           _ioSink?.add(data);
-          _currentSize -= data.length;
-          print("recv ${data.length}, left: $_currentSize");
-          if (_currentSize == 0) {
+          _currentLen += data.length;
+          _event?.onProgress(_currentSize, _currentLen);
+          print("recv ${data.length}, recved: $_currentLen");
+          if (_currentSize == _currentLen) {
             _ioSink?.close();
             _ioSink = null;
+            _currentLen = 0;
+            _currentSize = 0;
             print("recv over");
           }
         }else {
@@ -253,8 +257,11 @@ class WsSvrManager {
     _send(message.toJsonString());
     var start = DateTime.now().millisecond;
     print("start send $fileName, size: $size");
+    var sendLen = 0;
     await for (var data in fs) {
       _sink?.add(data);
+      sendLen += data.length;
+      _event?.onProgress(size, sendLen);
     }
     print("send $fileName, size: $size use time: ${DateTime.now().millisecond - start}ms");
   }

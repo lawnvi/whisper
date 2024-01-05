@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -96,12 +97,36 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // leading: CupertinoNavigationBarBackButton(
-        //   onPressed: () {
-        //     Navigator.of(context).pop();
-        //   },
-        //   color: Colors.lightBlue, // 设置返回按钮图标的颜色
-        // ),
+        leading: IconButton(
+          onPressed: () {
+            // 处理悬浮按钮点击事件
+            // 作为服务端
+            if (device?.isServer == true) {
+              if (socketManager.started) {
+                socketManager.close();
+                setState(() {
+                  socketManager.started = false;
+                });
+              }else {
+                _startServer();
+              }
+              return;
+            }
+            // 作为客户端
+            showInputAlertDialog(
+              context,
+              title: '连接主机',
+              description: '输入对方局域网地址与端口',
+              inputHints: [{"host": false}, {"port": true}],
+              confirmButtonText: '连接',
+              cancelButtonText: '取消',
+              onConfirm: (List<String> inputValues) async {
+                _connectServer("${inputValues[0]}:${inputValues[1]}");
+              },
+            );
+          },
+          color: device?.isServer==true && socketManager.started?Colors.redAccent: Colors.grey, icon: Icon(device?.isServer==true?Icons.power_settings_new:Icons.add, size: 32), // 调整圆角以获得更圆的按钮
+        ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -147,29 +172,24 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
           ),
         ],
       ),
-      body: devices.isEmpty? const Text("来个人啊"):ListView.builder(
+      body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
           final device = devices[index];
           return ListTile(
-            title: Text(device.name.toString()),
+            title: Text(device.name),
             subtitle: Row(
               children: [
-                Text(device.host.toString()),
+                Text(device.host),
                 SizedBox(
                   width: 4,
                 ),
-                device.isServer as bool
-                    ? Icon(Icons.desktop_mac,
+                 Icon(device.platform.toLowerCase() == "android"?Icons.android_rounded:
+                      device.platform.toLowerCase() == "macos" || device.platform.toLowerCase() == "ios"? Icons.apple_rounded: Icons.laptop_windows_rounded,
                         size: 18,
                         color: device.uid == socketManager.receiver
                             ? Colors.lightBlue
                             : Colors.grey) // Server 图标
-                    : Icon(Icons.phone_android,
-                        size: 18,
-                        color: device.uid == socketManager.receiver
-                            ? Colors.lightBlue
-                            : Colors.grey),
                 // Client 图标
               ],
             ),
@@ -216,39 +236,6 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
             },
           );
         },
-      ),
-      floatingActionButton: CupertinoButton(
-        onPressed: () {
-          // 处理悬浮按钮点击事件
-          // 作为服务端
-          if (device?.isServer == true) {
-            if (socketManager.started) {
-              socketManager.close();
-              setState(() {
-                socketManager.started = false;
-              });
-            }else {
-              _startServer();
-            }
-            return;
-          }
-          // 作为客户端
-          showInputAlertDialog(
-            context,
-            title: '连接主机',
-            description: '输入对方局域网地址与端口',
-            inputHints: [{"host": false}, {"port": true}],
-            confirmButtonText: '连接',
-            cancelButtonText: '取消',
-            onConfirm: (List<String> inputValues) async {
-              _connectServer("${inputValues[0]}:${inputValues[1]}");
-            },
-          );
-        },
-        child: Icon(device?.isServer==true?Icons.wifi_rounded:Icons.add, size: 32),
-        color: device?.isServer==true && socketManager.started?Colors.lightBlue: Colors.grey,
-        padding: EdgeInsets.all(16),
-        borderRadius: BorderRadius.circular(50), // 调整圆角以获得更圆的按钮
       ),
     );
   }
@@ -426,6 +413,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreen extends State<SettingsScreen> {
   DeviceData? device;
+  String path = "";
 
   @override
   void initState() {
@@ -436,8 +424,10 @@ class _SettingsScreen extends State<SettingsScreen> {
   Future<void> _refreshDevice() async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
+    var p = await getApplicationDocumentsDirectory();
     setState(() {
       device = temp;
+      path = p.path;
     });
   }
 
@@ -568,6 +558,12 @@ class _SettingsScreen extends State<SettingsScreen> {
                             },
                           ),
                         ),
+                        _buildSettingItem(
+                          '存储位置: $path',
+                          const Icon(Icons.file_download_outlined,
+                              color: CupertinoColors.systemGrey),
+                          SizedBox()
+                        ),
                       ],
                     ))
               ],
@@ -587,20 +583,24 @@ class _SettingsScreen extends State<SettingsScreen> {
         child: Column(
           children: [
             Container(
-              height: 56.0, // 增加高度以适应 iOS 设置样式
+              constraints: BoxConstraints(minHeight: 56),
+              // height: 56.0, // 增加高度以适应 iOS 设置样式
               child: Row(
                 children: [
                   icon, // 设置项的图标
-                  SizedBox(width: 16.0), // 图标与文字之间的间距
+                  SizedBox(width: 8.0), // 图标与文字之间的间距
                   Expanded(
                     child: Text(
                       title,
+                      softWrap: true,
+                      // overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 17.0,
                         color: CupertinoColors.black,
                         fontWeight: FontWeight.w500, // 尝试更轻的字重
                         fontFamily:
                             'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
+
                       ),
                       // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
