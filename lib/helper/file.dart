@@ -4,8 +4,10 @@ import 'package:open_dir/open_dir.dart';
 import 'package:path_provider/path_provider.dart';
 
 void openDir({String name=""}) async {
-  var dir = await getApplicationDocumentsDirectory();
+  var dir = await downloadDir();
   var path = dir.path;
+
+  print("打开文件: $path");
   if (Platform.isMacOS) {
     openFinder(path);
   }else if (Platform.isAndroid) {
@@ -34,4 +36,14 @@ void openFinder(String path) async {
 Future<String> fileMD5(File file) async {
   var md5 = sha1.convert(await file.readAsBytes());
   return md5.toString();
+}
+
+Future<Directory> downloadDir() async {
+  if (Platform.isIOS || Platform.isMacOS) {
+    return getApplicationDocumentsDirectory();
+  }else if (Platform.isAndroid) {
+    return Directory("/sdcard/Download");
+  }
+
+  return await getDownloadsDirectory()?? await getApplicationDocumentsDirectory();
 }

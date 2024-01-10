@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
@@ -201,7 +202,8 @@ class WsSvrManager {
       case MessageEnum.File: {
         print("收到文件：${message.name} size: ${message.size}");
         LocalDatabase().insertMessage(message);
-        _prepareIOSink(message);
+        var path = await _prepareIOSink(message);
+        print("保存文件: $path");
         _event?.onMessage(message);
         _ackMessage(message);
         break;
@@ -279,7 +281,7 @@ class WsSvrManager {
   }
 
   Future<String> _prepareIOSink(MessageData message) async {
-    var appDir = await getApplicationDocumentsDirectory();
+    var appDir = await downloadDir();
     _currentSize = message.size;
     File file = File('${appDir.path}/${message.name}');
     var idx = 1;

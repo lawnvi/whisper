@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+    <string>Save Files</string>
 </dict>
 </plist>
