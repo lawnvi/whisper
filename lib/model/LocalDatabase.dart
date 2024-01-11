@@ -47,7 +47,7 @@ class LocalDatabase extends _$LocalDatabase {
     }
     var temp = await (select(device)..where((t) => t.uid.equals(data.uid))).getSingleOrNull();
     if (temp == null) {
-      into(device).insert(DeviceCompanion.insert(uid: Value(data.uid), name: Value(data.name), host: data.host, port: data.port, platform: Value(data.platform), isServer: Value(data.isServer), online: Value(data.online), clipboard: Value(data.clipboard), auth: Value(data.auth), lastTime: Value(data.lastTime)));
+      into(device).insert(DeviceCompanion.insert(uid: Value(data.uid), name: Value(data.name), host: data.host, port: data.port, platform: Value(data.platform), isServer: Value(data.isServer), online: Value(data.online), clipboard: const Value(true), auth: const Value(false), lastTime: Value(data.lastTime)));
       return;
     }
     (update(device)..where((t) => t.uid.equals(data.uid))).write(
@@ -56,8 +56,6 @@ class LocalDatabase extends _$LocalDatabase {
           port: Value(data.port),
           name: Value(data.name),
           online: Value(data.online),
-          auth: Value(data.auth),
-          clipboard: Value(data.clipboard),
           lastTime: Value(DateTime.now().second)
       ),
     );
