@@ -321,6 +321,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         confirmButtonText: '同意',
         cancelButtonText: '拒绝',
         onConfirm: () {
+          db.upsertDevice(device!);
           callback(true);
         },
         onCancel: () {
@@ -329,6 +330,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         }
       );
     }else {
+      db.upsertDevice(device!);
       callback(true);
     }
   }
