@@ -163,15 +163,13 @@ class WsSvrManager {
           device = DeviceData.fromJson(jsonDecode(message.content??""));
         }
 
-        DeviceData? localTemp;
         if (_server != null) {
-          localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
+          var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
           var self = await LocalSetting().instance();
           if ((self.auth || localTemp != null && localTemp.auth)) {
             await _auth(true);
             receiver = device?.uid??"";
-            localTemp = await LocalDatabase().fetchDevice(device?.uid??"")?? device;
-            _event?.afterAuth(true, localTemp);
+            _event?.afterAuth(true, device);
             return;
           }
         }
@@ -183,12 +181,11 @@ class WsSvrManager {
             await _auth(allow);
           }
           if (allow) {
-            localTemp = await LocalDatabase().fetchDevice(device?.uid??"")?? device;
             receiver = device?.uid??"";
           }else {
             close(closeServer: false);
           }
-          _event?.afterAuth(allow, localTemp);
+          _event?.afterAuth(allow, device);
         });
         break;
       }
