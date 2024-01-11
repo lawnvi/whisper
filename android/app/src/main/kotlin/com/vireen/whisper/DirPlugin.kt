@@ -48,7 +48,7 @@ class DirPlugin() : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwar
 
     private fun openDir(path: String) {
         val intent = Intent(Intent.ACTION_VIEW)
-        intent.setDataAndType(Uri.parse(path), "resource/folder")
+        intent.setDataAndType(Uri.parse(path), "*/*")
 //        intent.setDataAndType(Uri.parse(path), "*/*")
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         context.startActivity(intent)

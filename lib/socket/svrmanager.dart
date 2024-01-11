@@ -163,12 +163,17 @@ class WsSvrManager {
           device = DeviceData.fromJson(jsonDecode(message.content??""));
         }
 
-        var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
-        if (_server != null && localTemp != null && localTemp.auth) {
-          await _auth(true);
+        DeviceData? localTemp;
+        if (_server != null) {
           localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
-          _event?.afterAuth(true, localTemp);
-          return;
+          var self = await LocalSetting().instance();
+          if ((self.auth || localTemp != null && localTemp.auth)) {
+            await _auth(true);
+            receiver = device?.uid??"";
+            localTemp = await LocalDatabase().fetchDevice(device?.uid??"")?? device;
+            _event?.afterAuth(true, localTemp);
+            return;
+          }
         }
 
         print("AUTH message: ${message.message}");
@@ -178,7 +183,7 @@ class WsSvrManager {
             await _auth(allow);
           }
           if (allow) {
-            localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
+            localTemp = await LocalDatabase().fetchDevice(device?.uid??"")?? device;
             receiver = device?.uid??"";
           }else {
             close(closeServer: false);
@@ -203,7 +208,9 @@ class WsSvrManager {
         LocalDatabase().insertMessage(message);
         _ackMessage(message);
         if (message.clipboard) {
-          copyToClipboard(message.content??"");
+          if ((await LocalSetting().instance()).clipboard) {
+            copyToClipboard(message.content??"");
+          }
         }
         _event?.onMessage(message);
         print("文本消息：$str");
