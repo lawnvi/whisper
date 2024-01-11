@@ -175,19 +175,19 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
-          final device = devices[index];
+          final deviceItem = devices[index];
           return ListTile(
-            title: Text(device.name),
+            title: Text(deviceItem.name),
             subtitle: Row(
               children: [
-                Text(device.host),
+                Text(deviceItem.host),
                 SizedBox(
                   width: 4,
                 ),
-                 Icon(device.platform.toLowerCase() == "android"?Icons.android_rounded:
-                      device.platform.toLowerCase() == "macos" || device.platform.toLowerCase() == "ios"? Icons.apple_rounded: Icons.laptop_windows_rounded,
+                 Icon(deviceItem.platform.toLowerCase() == "android"?Icons.android_rounded:
+                 deviceItem.platform.toLowerCase() == "macos" || deviceItem.platform.toLowerCase() == "ios"? Icons.apple_rounded: Icons.laptop_windows_rounded,
                         size: 18,
-                        color: device.uid == socketManager.receiver
+                        color: deviceItem.uid == socketManager.receiver
                             ? Colors.lightBlue
                             : Colors.grey) // Server 图标
                 // Client 图标
@@ -197,7 +197,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: device.uid == socketManager.receiver
+                  icon: deviceItem.uid == socketManager.receiver
                       ? Icon(
                           Icons.wifi_rounded,
                           color: Colors.lightBlue,
@@ -205,19 +205,19 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                       : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
-                    if (this.device?.isServer != true || device.uid == socketManager.receiver) {
+                    if (device?.isServer != true || deviceItem.uid == socketManager.receiver) {
                       showConfirmationDialog(
                         context,
-                        title: device.uid == socketManager.receiver? "断开连接": "连接设备",
-                        description: '${device.uid == socketManager.receiver? "断开": "连接到"} ${device.name}',
+                        title: deviceItem.uid == socketManager.receiver? "断开连接": "连接设备",
+                        description: '${deviceItem.uid == socketManager.receiver? "断开": "连接到"} ${deviceItem.name}',
                         confirmButtonText: '确定',
                         cancelButtonText: '取消',
                         onConfirm: () {
-                          if (device.uid == socketManager.receiver) {
-                            socketManager.close(closeServer: !device.isServer);
+                          if (deviceItem.uid == socketManager.receiver) {
+                            socketManager.close(closeServer: device?.isServer != true);
                             _refreshDevice();
                           }else {
-                            _connectServer("${device.host}:${device.port}");
+                            _connectServer("${deviceItem.host}:${deviceItem.port}");
                           }
                         },
                       );
@@ -230,7 +230,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SendMessageScreen(device: device),
+                  builder: (context) => SendMessageScreen(device: deviceItem),
                 ),
               );
             },

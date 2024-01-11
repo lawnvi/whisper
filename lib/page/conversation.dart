@@ -21,7 +21,7 @@ class SendMessageScreen extends StatefulWidget {
 class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEvent {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
-  final DeviceData device;
+  DeviceData device;
   DeviceData? self = null;
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
@@ -59,9 +59,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   void _loadMessages() async {
     print("current device: ${device.uid}");
     var me = await LocalSetting().instance();
+    var temp = await LocalDatabase().fetchDevice(device.uid);
     var arr = await LocalDatabase().fetchMessageList(device.uid);
     setState(() {
       self = me;
+      device = temp!;
       messageList = arr;
     });
     if (arr.length > 8) {
