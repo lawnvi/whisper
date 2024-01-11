@@ -164,11 +164,10 @@ class WsSvrManager {
         }
 
         var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
-        if (localTemp != null && localTemp.auth) {
-          if (_server != null) {
-            await _auth(true);
-          }
-          _event?.afterAuth(true, device);
+        if (_server != null && localTemp != null && localTemp.auth) {
+          await _auth(true);
+          localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
+          _event?.afterAuth(true, localTemp);
           return;
         }
 
@@ -179,11 +178,12 @@ class WsSvrManager {
             await _auth(allow);
           }
           if (allow) {
+            localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
             receiver = device?.uid??"";
           }else {
             close(closeServer: false);
           }
-          _event?.afterAuth(allow, device);
+          _event?.afterAuth(allow, localTemp);
         });
         break;
       }
