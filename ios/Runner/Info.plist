@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSFileProviderDomainAllVolumes</key>
+    <true/>
+    <key>NSDocumentPickerUsageDescription</key>
+    <string>Allow access to your files</string>
+    <key>UIFileSharingEnabled</key>
+    <true/>
 </dict>
 </plist>
