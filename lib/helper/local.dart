@@ -38,7 +38,7 @@ class LocalSetting {
         lastTime: DateTime.now().millisecondsSinceEpoch~/1000,
         online: online,
         password: await getSPDefault(_password, ""),
-        clipboard: await getSPDefault(_clipboard, false),
+        clipboard: await getSPDefault(_clipboard, true),
         auth: await getSPDefault(_noAuth, false),
     );
   }

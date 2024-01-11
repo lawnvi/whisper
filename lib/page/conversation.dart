@@ -22,7 +22,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   final DeviceData device;
-  late DeviceData self;
+  DeviceData? self = null;
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
@@ -150,7 +150,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               itemBuilder: (BuildContext context, int index) {
                 // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
                 var message = messageList[index];
-                bool isOpponent = message.receiver == self.uid;
+                bool isOpponent = message.receiver == self?.uid;
 
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
@@ -169,7 +169,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             ),
             child: Row(
               children: [
-                CupertinoButton(
+                if (self?.clipboard == true) CupertinoButton(
                   padding: EdgeInsets.all(6.0),
                   onPressed: () async {
                     var str = await getClipboardData()??"";
@@ -227,7 +227,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       onLongPress: () {
         if (messageData.content?.isNotEmpty == true && device.clipboard){
           copyToClipboard(messageData.content!);
-        };
+        }
       },
       child: Container(
         alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -346,7 +346,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void onAuth(DeviceData? deviceData, String msg, var callback) {
-    // TODO: implement onAuth
+    callback(true);
   }
 
   @override
