@@ -28,6 +28,8 @@ abstract class ISocketEvent {
   void onConnect();
 
   void onAuth(DeviceData? deviceData, String msg, var callback);
+
+  void afterAuth(bool allow, DeviceData? device);
 }
 
 class WsSvrManager {
@@ -160,6 +162,16 @@ class WsSvrManager {
         if (message.content != null) {
           device = DeviceData.fromJson(jsonDecode(message.content??""));
         }
+
+        var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
+        if (localTemp != null && localTemp.auth) {
+          if (_server != null) {
+            await _auth(true);
+          }
+          _event?.afterAuth(true, device);
+          return;
+        }
+
         print("AUTH message: ${message.message}");
         _event?.onAuth(device, message.message??"", (allow) async {
           print("AUTH message: ${message.message} ||| ${allow} ${_server == null}");
@@ -171,6 +183,7 @@ class WsSvrManager {
           }else {
             close(closeServer: false);
           }
+          _event?.afterAuth(allow, device);
         });
         break;
       }

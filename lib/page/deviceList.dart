@@ -321,16 +321,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         confirmButtonText: '同意',
         cancelButtonText: '拒绝',
         onConfirm: () {
-          db.upsertDevice(deviceData!);
           callback(true);
-          // 在确认后执行的逻辑
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SendMessageScreen(device: deviceData,),
-            ),
-          );
-          _refreshDevice();
         },
         onCancel: () {
           print("拒绝连接");
@@ -339,15 +330,23 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       );
     }else {
       callback(true);
-      db.upsertDevice(deviceData!);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SendMessageScreen(device: deviceData!,),
-        ),
-      );
-      _refreshDevice();
     }
+  }
+
+  @override
+  void afterAuth(bool allow, DeviceData? device) {
+    if (!allow) {
+      return;
+    }
+    db.upsertDevice(device!);
+    // 在确认后执行的逻辑
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SendMessageScreen(device: device,),
+      ),
+    );
+    _refreshDevice();
   }
 
   @override

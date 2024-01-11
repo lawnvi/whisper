@@ -225,7 +225,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
     return GestureDetector(
       onLongPress: () {
-        if (messageData.content?.isNotEmpty == true){
+        if (messageData.content?.isNotEmpty == true && device.clipboard){
           copyToClipboard(messageData.content!);
         };
       },
@@ -362,6 +362,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onError() {
     // TODO: implement onError
+  }
+
+  @override
+  void afterAuth(bool allow, DeviceData? device) {
+
   }
 
   @override
