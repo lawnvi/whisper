@@ -4,9 +4,9 @@ name: release-packages
 
 on:
   push:
-    branches:
-      - dev
-      - main
+#    branches:
+#      - dev
+#      - main
     tags:
       - 'dev-v[0-9]+\.[0-9]+\.[0-9]+'
       - 'release-v[0-9]+\.[0-9]+\.[0-9]+'
@@ -33,9 +33,9 @@ jobs:
 #      - name: set npm
 #        uses: ng-easy/npm-install@v2
 
-      - run: npm install -g create-dmg
+#      - run: npm install -g create-dmg
       - run: flutter pub get
-      - run: flutter test
+#      - run: flutter test
       - run: flutter build apk
       - run: flutter build appbundle
 

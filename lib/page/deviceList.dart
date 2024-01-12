@@ -3,9 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:system_tray/system_tray.dart';
+// import 'package:system_tray/system_tray.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -48,40 +47,40 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     }
   }
 
-  Future<void> initSystemTray() async {
-    String path =
-    Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
-
-    final AppWindow appWindow = AppWindow();
-    final SystemTray systemTray = SystemTray();
-
-    // We first init the systray menu
-    await systemTray.initSystemTray(
-      // title: "whisper",
-      iconPath: path,
-    );
-
-    // create context menu
-    final Menu menu = Menu();
-    await menu.buildFrom([
-      MenuItemLabel(label: 'Show', onClicked: (menuItem) => appWindow.show()),
-      MenuItemLabel(label: 'Hide', onClicked: (menuItem) => appWindow.hide()),
-      MenuItemLabel(label: 'Exit', onClicked: (menuItem) => appWindow.close()),
-    ]);
-
-    // set context menu
-    await systemTray.setContextMenu(menu);
-
-    // handle system tray event
-    systemTray.registerSystemTrayEventHandler((eventName) {
-      debugPrint("eventName: $eventName");
-      if (eventName == kSystemTrayEventClick) {
-        Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
-      } else if (eventName == kSystemTrayEventRightClick) {
-        Platform.isWindows ? systemTray.popUpContextMenu() : appWindow.show();
-      }
-    });
-  }
+  // Future<void> initSystemTray() async {
+  //   String path =
+  //   Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png';
+  //
+  //   final AppWindow appWindow = AppWindow();
+  //   final SystemTray systemTray = SystemTray();
+  //
+  //   // We first init the systray menu
+  //   await systemTray.initSystemTray(
+  //     // title: "whisper",
+  //     iconPath: path,
+  //   );
+  //
+  //   // create context menu
+  //   final Menu menu = Menu();
+  //   await menu.buildFrom([
+  //     MenuItemLabel(label: 'Show', onClicked: (menuItem) => appWindow.show()),
+  //     MenuItemLabel(label: 'Hide', onClicked: (menuItem) => appWindow.hide()),
+  //     MenuItemLabel(label: 'Exit', onClicked: (menuItem) => appWindow.close()),
+  //   ]);
+  //
+  //   // set context menu
+  //   await systemTray.setContextMenu(menu);
+  //
+  //   // handle system tray event
+  //   systemTray.registerSystemTrayEventHandler((eventName) {
+  //     debugPrint("eventName: $eventName");
+  //     if (eventName == kSystemTrayEventClick) {
+  //       Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
+  //     } else if (eventName == kSystemTrayEventRightClick) {
+  //       Platform.isWindows ? systemTray.popUpContextMenu() : appWindow.show();
+  //     }
+  //   });
+  // }
 
   Future<void> _refreshDevice() async {
     // 数据加载完成后更新状态

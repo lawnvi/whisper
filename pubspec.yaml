@@ -42,7 +42,7 @@ dependencies:
   file_picker: ^6.1.1
   web_socket_channel: ^2.4.0
   shelf_web_socket: ^1.0.4
-  system_tray: ^2.0.3
+#  system_tray: ^2.0.3
   flutter_easyloading: ^3.0.5
   shared_preferences: ^2.2.2
   sqlite3_flutter_libs: ^0.5.0
