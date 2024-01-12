@@ -1,0 +1,101 @@
+# This is a GitHub Actions configuration file
+
+name: release-packages
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+    tags:
+      - 'dev-v[0-9]+\.[0-9]+\.[0-9]+'
+      - 'release-v[0-9]+\.[0-9]+\.[0-9]+'
+
+jobs:
+  build-on-macos:
+    name: Android, iOS, MacOS
+    runs-on: macos-latest
+    steps:
+      - name: check code
+        uses: actions/checkout@v3
+
+      - name: set java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: '11'
+
+      - name: set flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+#          flutter-version: '3.16.5'
+#      - name: set npm
+#        uses: ng-easy/npm-install@v2
+
+      - run: npm install -g create-dmg
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build apk
+      - run: flutter build appbundle
+
+      # Flutter ios ipa build command.
+      - run: |
+          flutter build ios --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          cd Payload
+          ln -s ../Runner.app
+          cd ..
+          zip -r app.ipa Payload
+
+      - run: flutter build macos
+      - run: |
+          hdiutil create -format UDZO -srcfolder \
+            build/macos/Build/Products/Release/whisper.app \
+            build/macos/Build/Products/Release/whisper.dmg
+
+      # Upload assets to release
+      - name: Push to Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/macos/Build/Products/Release/whisper.dmg,build/app/outputs/flutter-apk/*,build/ios/iphoneos/app.ipa,build/app/outputs/bundle/release/app-release.aab"
+          tag: ${{ github.ref_name }}
+          token: ${{ secrets.TOKEN }}
+
+  build-on-windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - name: check code
+        uses: actions/checkout@v3
+      - name: set flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: flutter config --enable-windows-desktop
+      - run: flutter build windows
+
+      - name: Push to Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/windows/x64/runner/Release"
+          tag: ${{ github.ref_name }}
+          token: ${{ secrets.TOKEN }}
+
+  build-on-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: check code
+        uses: actions/checkout@v3
+      - name: set flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev
+      - run: flutter config --enable-linux-desktop
+      - run: flutter build linux
+
