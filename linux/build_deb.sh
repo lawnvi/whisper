@@ -2,7 +2,7 @@
 
 # 定义版本和架构
 VERSION=$1
-ARCHITECTURE="amd64"
+ARCHITECTURE=$2
 
 echo "build deb version: ${VERSION}"
 
