@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:whisper/helper/file.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
 import '../helper/local.dart';
@@ -26,10 +27,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   @override
   void initState() {
-    if (!kIsWeb &&
-        (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
-      initSystemTray();
-    }
+    // if (!kIsWeb &&
+    //     (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+    //   initSystemTray();
+    // }
     _requestPermission();
     super.initState();
   }
@@ -56,8 +57,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
     // We first init the systray menu
     await systemTray.initSystemTray(
-      title: "whisper",
-      iconPath: "",
+      // title: "whisper",
+      iconPath: path,
     );
 
     // create context menu
@@ -423,7 +424,7 @@ class _SettingsScreen extends State<SettingsScreen> {
   Future<void> _refreshDevice() async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
-    var p = await getApplicationDocumentsDirectory();
+    var p = await downloadDir();
     setState(() {
       device = temp;
       path = p.path;
