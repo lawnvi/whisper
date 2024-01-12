@@ -12,7 +12,7 @@ on:
       - 'release-v[0-9]+\.[0-9]+\.[0-9]+'
 
 jobs:
-  build-on-macos-x64:
+  build-on-macos:
     name: Android, iOS, MacOS
     runs-on: macos-latest
     steps:
@@ -51,35 +51,6 @@ jobs:
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
 
-  build-on-macos-arm64:
-    name: Android, iOS, MacOS
-    runs-on: macos-latest
-    steps:
-      - name: check code
-        uses: actions/checkout@v3
-
-      - name: set flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          architecture: arm64
-      - run: flutter pub get
-
-      - run: flutter build macos
-      - run: |
-          hdiutil create -format UDZO -srcfolder \
-            build/macos/Build/Products/Release/whisper.app \
-            build/macos/Build/Products/Release/whisper-arm64.dmg
-
-      # Upload assets to release
-      - name: Push to Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "build/macos/Build/Products/Release/whisper-arm64.dmg"
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.TOKEN }}
-          allowUpdates: true
-
   build-on-windows:
     name: Windows
     runs-on: windows-latest
@@ -109,8 +80,7 @@ jobs:
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
 
-
-  build-on-linux-x86:
+  build-on-linux:
     name: Linux
     runs-on: ubuntu-latest
     steps:
@@ -132,58 +102,36 @@ jobs:
       - run: |
           sudo apt-get update -y
           sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y alien
       - run: flutter config --enable-linux-desktop
       - run: flutter build linux
 
+      - name: set variable cur_version
+        run: echo "cur_version=$(echo '${{github.ref_name}}' | cut -d'-' -f2 | sed 's/^v//')" >> $GITHUB_ENV
+
       # New step to compress the release bundle
       - name: build deb package
-        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh ${{github.ref_name}} amd64
+        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh $cur_version amd64
+      - run: ls build/linux/deb
+      - name: build rpm package
+        run: sudo alien -r build/linux/deb/whisper-${cur_version}-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-${cur_version}.x86_64.rpm
 
+      - run: echo "build deb/rpm finish"
+      - run: pwd
+      - run: ls build/linux/deb
       - run: flutter build apk
       - run: flutter build appbundle
+
+      - run: echo "build apl/aar finish"
+      - run: pwd
+      - run: ls build/linux/deb
 
       # Modified Push to Release step to upload the tar.gz file
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "build/linux/deb/whisper_${{ github.ref_name }}_amd64.deb,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.TOKEN }}
-          allowUpdates: true
-
-  build-on-linux-arm64:
-    name: Linux
-    runs-on: ubuntu-latest
-    steps:
-      - name: check code
-        uses: actions/checkout@v3
-
-      - name: set flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          architecture: arm64 # optional, x64 or arm64
-
-      - run: |
-          sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev
-      - run: flutter config --enable-linux-desktop
-      - run: flutter build linux
-
-      # New step to compress the release bundle
-      - name: build deb package
-        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh ${{github.ref_name}} arm64
-
-      - run: flutter build apk
-      - run: flutter build appbundle
-
-      # Modified Push to Release step to upload the tar.gz file
-      - name: Push to Release
-        uses: ncipollo/release-action@v1
-        with:
-          # Specify the path to the tar.gz file instead of the folder
-          artifacts: "build/linux/deb/whisper_${{ github.ref_name }}_arm64.deb"
+          artifacts: "whisper-${{ env.cur_version }}.x86_64.rpm,build/linux/deb/whisper-${{ env.cur_version }}-amd64.deb,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true

@@ -3,7 +3,7 @@
 # 定义版本和架构
 VERSION=$1
 ARCHITECTURE=$2
-
+pwd
 echo "build deb version: ${VERSION}"
 
 # 定义你的Flutter项目的根目录
@@ -20,7 +20,6 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
 # 编译Flutter项目为Linux应用程序
-cd "${FLUTTER_PROJECT_DIR}"
 flutter build linux
 
 # 创建DEBIAN控制文件所需的目录结构
@@ -70,8 +69,9 @@ mkdir -p "${APPLICATION_DIR}"
 cp -r "${FLUTTER_PROJECT_DIR}/build/linux/x64/release/bundle/." "${APPLICATION_DIR}"
 
 # 创建.deb包
-DEB_PACKAGE_NAME="${APPLICATION_NAME}_${VERSION}_${ARCHITECTURE}.deb"
+DEB_PACKAGE_NAME="${APPLICATION_NAME}-${VERSION}-${ARCHITECTURE}.deb"
 dpkg-deb --build "${BUILD_DIR}" "${OUTPUT_DIR}/${DEB_PACKAGE_NAME}"
 
+pwd
 echo "Deb package created at: ${OUTPUT_DIR}/${DEB_PACKAGE_NAME}"
 
