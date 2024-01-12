@@ -26,7 +26,11 @@ jobs:
           architecture: x64 # optional, x64 or arm64
       - run: flutter pub get
 
-      # Flutter ios ipa build command.
+      - name: install create-dmg
+        run: npm install --global create-dmg
+
+      # Flutter macos/ios ipa build command.
+      - run: flutter build macos
       - run: |
           flutter build ios --no-codesign
           cd build/ios/iphoneos
@@ -36,17 +40,23 @@ jobs:
           cd ..
           zip -r app.ipa Payload
 
-      - run: flutter build macos
-      - run: |
-          hdiutil create -format UDZO -srcfolder \
-            build/macos/Build/Products/Release/whisper.app \
-            build/macos/Build/Products/Release/whisper-x86_64.dmg
+      - name: package as dmg
+        run: create-dmg build/macos/Build/Products/Release/whisper.app
+        continue-on-error: true
+
+      - name: rename dmg
+        run: mv whisper*.dmg whisper-x86_64.dmg
+
+#      - run: |
+#          hdiutil create -format UDZO -srcfolder \
+#            build/macos/Build/Products/Release/whisper.app \
+#            build/macos/Build/Products/Release/whisper-x86_64.dmg
 
       # Upload assets to release
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "build/macos/Build/Products/Release/whisper-x86_64.dmg,build/ios/iphoneos/app.ipa"
+          artifacts: "whisper-x86_64.dmg,build/ios/iphoneos/app.ipa"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
@@ -55,27 +65,40 @@ jobs:
     name: Windows
     runs-on: windows-latest
     steps:
-      - name: check code
+      - name: Check out code
         uses: actions/checkout@v3
 
-      - name: set flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
+      # New step to install NSIS
+      - name: Install NSIS
+        run: choco install nsis
+
       - run: flutter config --enable-windows-desktop
       - run: flutter build windows
 
-      # New step to compress the build directory
-      - name: Compress Release Build
-        run: 7z a windows-release.zip ./build/windows/x64/runner/Release/*
+      # New step to create the installer using NSIS
+      - name: Create EXE Installer
+        run: makensis windows\installer.nsi
 
-      # Modified Push to Release step to upload the zip file
+      # New step to verify the EXE installer exists
+      - name: Check if file exists
+        run: |
+          $path = "windows\whisper-windows-x86_64.exe"
+          if (Test-Path $path) {
+            Write-Host "File exists"
+          } else {
+            Write-Host "File does not exist"
+          }
+
+      # Modified Push to Release step to upload the EXE installer
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          # Specify the path to the zip file instead of the folder
-          artifacts: "windows-release.zip"
+          artifacts: "windows/whisper-windows-x86_64.exe"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
@@ -111,10 +134,10 @@ jobs:
 
       # New step to compress the release bundle
       - name: build deb package
-        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh $cur_version amd64
+        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh $cur_version x86_64
       - run: ls build/linux/deb
       - name: build rpm package
-        run: sudo alien -r build/linux/deb/whisper-${cur_version}-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-${cur_version}.x86_64.rpm
+        run: sudo alien -r build/linux/deb/whisper-${cur_version}-x86_64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-${cur_version}.x86_64.rpm
 
       - run: echo "build deb/rpm finish"
       - run: pwd
@@ -131,7 +154,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "whisper-${{ env.cur_version }}.x86_64.rpm,build/linux/deb/whisper-${{ env.cur_version }}-amd64.deb,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
+          artifacts: "whisper-${{ env.cur_version }}.x86_64.rpm,build/linux/deb/whisper-${{ env.cur_version }}-x86_64.deb,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
