@@ -105,8 +105,8 @@ jobs:
       - run: flutter build linux
 
       # New step to compress the release bundle
-      - name: Compress Release Bundle
-        run: tar -czvf release-linux-bundle.tar.gz -C build/linux/x64/release/bundle
+      - name: build deb package
+        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh ${{github.ref_name}}
 
       - run: flutter build apk
       - run: flutter build appbundle
@@ -116,7 +116,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "release-linux-bundle.tar.gz,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
+          artifacts: "build/linux/deb/*,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
