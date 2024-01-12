@@ -556,7 +556,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                             'v1.0.0',
                             const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
                             onTap: () async {
-                              final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper');
+                              final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper/releases');
                               _launchInBrowser(toLaunch);
                             }
                         ),
