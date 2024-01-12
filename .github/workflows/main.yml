@@ -19,25 +19,11 @@ jobs:
       - name: check code
         uses: actions/checkout@v3
 
-      - name: set java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'zulu'
-          java-version: '11'
-
       - name: set flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-#          flutter-version: '3.16.5'
-#      - name: set npm
-#        uses: ng-easy/npm-install@v2
-
-#      - run: npm install -g create-dmg
       - run: flutter pub get
-#      - run: flutter test
-      - run: flutter build apk
-      - run: flutter build appbundle
 
       # Flutter ios ipa build command.
       - run: |
@@ -59,9 +45,10 @@ jobs:
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "build/macos/Build/Products/Release/whisper.dmg,build/app/outputs/flutter-apk/*,build/ios/iphoneos/app.ipa,build/app/outputs/bundle/release/app-release.aab"
+          artifacts: "build/macos/Build/Products/Release/whisper.dmg,build/ios/iphoneos/app.ipa"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
+          allowUpdates: true
 
   build-on-windows:
     name: Windows
@@ -90,6 +77,7 @@ jobs:
           artifacts: "windows-release.zip"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
+          allowUpdates: true
 
 
   build-on-linux:
@@ -98,6 +86,12 @@ jobs:
     steps:
       - name: check code
         uses: actions/checkout@v3
+
+      - name: set java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: '11'
 
       - name: set flutter
         uses: subosito/flutter-action@v2
@@ -112,13 +106,17 @@ jobs:
 
       # New step to compress the release bundle
       - name: Compress Release Bundle
-        run: tar -czvf release-linux-bundle.tar.gz -C build/linux/x64/runner/release/bundle
+        run: tar -czvf release-linux-bundle.tar.gz -C build/linux/x64/release/bundle
+
+      - run: flutter build apk
+      - run: flutter build appbundle
 
       # Modified Push to Release step to upload the tar.gz file
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "release-linux-bundle.tar.gz"
+          artifacts: "release-linux-bundle.tar.gz,build/app/outputs/flutter-apk/*,build/app/outputs/bundle/release/app-release.aab"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
+          allowUpdates: true
