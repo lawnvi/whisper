@@ -10,6 +10,9 @@
 !define APP_VERSION "0.0.1"
 Outfile "${APP_NAME}-windows-x86_64.exe"
 
+; Default installation directory
+InstallDir "$ProgramFiles\${APP_NAME}"
+
 ; Default section
 Section
 
@@ -56,4 +59,5 @@ SectionEnd
 ; Set installer attributes
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "English"
