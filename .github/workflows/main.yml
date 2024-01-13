@@ -139,20 +139,17 @@ jobs:
       - name: build rpm package
         run: sudo alien -r build/linux/deb/whisper-${cur_version}-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-${cur_version}.x86_64.rpm
 
-      - name: build android packages
-        run: flutter build apk --split-per-abi
-
-      - name: Sign APK
-        run: |
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore ./keystore/whisper.keystore -storepass ${{ secrets.STORE_PASSWORD }} -keypass ${{ secrets.KEY_PASSWORD }} build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk whisper
-          jarsigner -verify -verbose -certs build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore ./keystore/whisper.keystore -storepass ${{ secrets.STORE_PASSWORD }} -keypass ${{ secrets.KEY_PASSWORD }} build/app/outputs/flutter-apk/app-arm64-v8a-release.apk whisper
-          jarsigner -verify -verbose -certs build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore ./keystore/whisper.keystore -storepass ${{ secrets.STORE_PASSWORD }} -keypass ${{ secrets.KEY_PASSWORD }} build/app/outputs/flutter-apk/app-x86_64-release.apk whisper
-          jarsigner -verify -verbose -certs build/app/outputs/flutter-apk/app-x86_64-release.apk
+      - name: prepare for sign
+        run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+
+      - name: build android common package
+        run: flutter build apk
+
+      - name: build android packages with platform
+        run: flutter build apk --split-per-abi
 
 
       # Modified Push to Release step to upload the tar.gz file
