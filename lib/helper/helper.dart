@@ -90,21 +90,26 @@ Future<String> deviceName() async {
 }
 
 Future<String> getLocalIpAddress() async {
+  var sb = StringBuffer();
   Completer<String> completer = Completer<String>();
 
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {
         if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
-          completer.complete(addr.address);
-          return completer.future;
+          // completer.complete(addr.address);
+          if (sb.isNotEmpty) {
+            sb.write("/");
+          }
+          sb.write(addr.address);
+          // return completer.future;
         }
       }
     }
-    completer.completeError('No local IP address found');
   } catch (e) {
     completer.completeError('Error getting local IP address: $e');
   }
+  completer.complete(sb.toString());
 
   return completer.future;
 }
