@@ -50,11 +50,12 @@ dependencies:
   sqlite3: ^2.3.0
   uuid: ^3.0.7
   device_info_plus: ^9.1.1
-  intl: ^0.17.0
+  intl: ^0.18.0
   url_launcher: ^6.2.2
   file_manager: ^1.0.2
   open_dir: ^0.0.1+5
   crypto: ^3.0.3
+#  ftpconnect: ^2.0.5
 
 
 dev_dependencies:

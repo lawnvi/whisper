@@ -28,18 +28,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final TextEditingController _textController = TextEditingController();
   bool isInputEmpty = true;
   double percent = 0;
+  final keyPressedMap = {};
 
   _SendMessageScreen(this.device);
 
   @override
   void initState() {
     socketManager.registerEvent(this);
-    _loadMessages();
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
       });
     });
+    _loadMessages();
     super.initState();
   }
 
@@ -67,8 +68,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       messageList = arr;
     });
     if (arr.length > 8) {
-      Future.delayed(const Duration(milliseconds: 200), () {
-        _scrollToBottom(isFirst: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // 滚动到最后一条消息
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _scrollToBottom(isFirst: true);
+        });
       });
     }
   }
@@ -86,11 +90,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   void _scrollToBottom({bool isFirst=false}) async {
-    await _scrollController.animateTo(
-      isFirst?_scrollController.position.extentTotal: _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    if (isFirst) {
+      _scrollController.animateTo(
+        2*_scrollController.position.extentTotal,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+      );
+    }else {
+      await _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -155,7 +167,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 bool isOpponent = message.receiver == self?.uid;
 
                 return Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                   child: message.type == MessageEnum.Text
                       ? _buildTextMessage(message, isOpponent)
                       : _buildFileMessage(message, isOpponent),
@@ -172,31 +184,52 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             child: Row(
               children: [
                 if (self?.clipboard == true) CupertinoButton(
-                  padding: EdgeInsets.all(6.0),
+                  padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
                   onPressed: () async {
                     var str = await getClipboardData()??"";
                     if (str.isNotEmpty) {
                       socketManager.sendMessage(str, true);
                     }
                   },
-                  child: Icon(
-                    Icons.copy, // 发送按钮图标
-                    color: Colors.grey, // 发送按钮颜色
+                  child: const Icon(
+                    Icons.copy, // 按钮图标
+                    color: Colors.grey, // 按钮颜色
                   ),
                 ),
-                SizedBox(height: 50,),
+                const SizedBox(height: 50,),
                 Expanded(
-                  child: CupertinoTextField(
-                    controller: _textController,
-                    autofocus: false,
-                    autocorrect: true,
-                    maxLines: 4,
-                    minLines: 1,
-                    placeholder: 'Type your message...', // 输入框提示文字
-                  ),
+                  child: RawKeyboardListener(
+                    focusNode: FocusNode(),
+                    onKey: (RawKeyEvent event) {
+                      if(event.logicalKey == LogicalKeyboardKey.shiftLeft || event.logicalKey == LogicalKeyboardKey.shiftRight) {
+                        keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
+                      }else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                        keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
+                        if (event is RawKeyDownEvent && keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true) {
+                            socketManager.sendMessage(_textController.text, false);
+                            // FocusScope.of(context).unfocus();
+                            _textController.text = "";
+                        }
+                      }
+                    },
+                    child: CupertinoTextField(
+                      controller: _textController,
+                      cursorColor: Colors.black87,
+                      autofocus: true,
+                      autocorrect: true,
+                      maxLines: 4,
+                      minLines: 1,
+                      placeholder: 'Type your message...', // 输入框提示文字
+                      onChanged: (value) {
+                        if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
+                          _textController.text = "";
+                        }
+                      },
+                    ),
+                  )
                 ),
                 CupertinoButton(
-                  padding: EdgeInsets.all(6.0),
+                  padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
                   onPressed: () async {
                     if (_textController.text.isEmpty) {
                       FilePickerResult? result = await FilePicker.platform.pickFiles();
@@ -204,7 +237,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                         socketManager.sendFile(result.files.first.path??"");
                       }
                     }else {
-                      print("input: ${_textController.text}");
                       // 发送按钮操作
                       socketManager.sendMessage(_textController.text, false);
                       _textController.text = "";
@@ -226,11 +258,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
     return GestureDetector(
-      onLongPress: () {
-        if (messageData.content?.isNotEmpty == true && device.clipboard){
-          copyToClipboard(messageData.content!);
-        }
-      },
       child: Container(
         alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
         child: Column(
@@ -241,23 +268,54 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             Card(
               color: isOpponent ? Colors.grey[300] : Colors.blue,
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Text(
-                  messageData.content??"", // 文本消息内容
-                  style: TextStyle(
-                    color: isOpponent ? Colors.black : Colors.white,
-                  ),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: SelectableText(messageData.content??"", // 文本消息内容
+                    style: TextStyle(
+                      color: isOpponent ? Colors.black : Colors.white,
+                    ),
+                    contextMenuBuilder: (context, editableTextState) {
+                      return AdaptiveTextSelectionToolbar(
+                        anchors: editableTextState.contextMenuAnchors,
+                        children: AdaptiveTextSelectionToolbar.getAdaptiveButtons(
+                          context,
+                          editableTextState.contextMenuButtonItems,
+                        ).toList(),
+                      );
+                    },
                 ),
               ),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Stack(
               children: [
-                SizedBox(width: 12, height: 0,),
-                Text(
-                  formatTimestamp(messageData.timestamp), // 发送时间
-                  style: TextStyle(color: Colors.grey),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isOpponent) SizedBox(width: 20,),
+                    Text(
+                      formatTimestamp(messageData.timestamp), // 发送时间
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    if (isOpponent) SizedBox(width: 20,),
+                  ],
                 ),
+                Positioned(
+                    left: isOpponent? null: -14,
+                    right: isOpponent?-14: null,
+                    top: -12,
+                    child: IconButton(
+                      hoverColor: Colors.grey.withOpacity(0),
+                      focusColor: Colors.grey,
+                      highlightColor: Colors.transparent,
+                      icon: const Icon(Icons.copy, size: 14, color: Colors.grey,),
+                      onPressed: () {
+                        if (messageData.content?.isNotEmpty == true){
+                          copyToClipboard(messageData.content!);
+                        }
+                      },
+                    ),
+                )
+
+
               ],
             ),
           ],
@@ -286,11 +344,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ),
               // width: 400,
               child: Padding(
-                padding: const EdgeInsets.all(10.0),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Column(
+                    const Column(
                       children: [
                         Icon(
                           Icons.insert_drive_file,
