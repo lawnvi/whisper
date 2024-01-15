@@ -551,6 +551,9 @@ class _SettingsScreen extends State<SettingsScreen> {
                           '存储位置 $path',
                           const Icon(Icons.file_download_outlined,
                               color: CupertinoColors.systemGrey),
+                          onTap: () {
+                            openDir();
+                          }
                         ),
                         _buildSettingItem(
                             'v1.0.0',

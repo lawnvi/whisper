@@ -9,6 +9,14 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+bool isDesktop() {
+  return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
+}
+
+bool isMobile() {
+  return Platform.isAndroid || Platform.isIOS;
+}
+
 Future<String> localUUID() async {
   final SharedPreferences sp = await SharedPreferences.getInstance();
   var uuid = sp.getString("_uuid")?? "";
@@ -129,8 +137,8 @@ Future<String?> getClipboardData() async {
 
 void copyToClipboard(String content) {
   Clipboard.setData(ClipboardData(text: content))
-      .then((value) => print('Text copied to clipboard: $content'))
-      .catchError((error) => print('Error copying to clipboard: $error'));
+      .then((value) => {})
+      .catchError((error) => {});
 }
 
 void pickFile(var callback) async {

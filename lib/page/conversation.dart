@@ -62,18 +62,42 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     var me = await LocalSetting().instance();
     var temp = await LocalDatabase().fetchDevice(device.uid);
     var arr = await LocalDatabase().fetchMessageList(device.uid);
+    arr = arr.reversed.toList();
     setState(() {
       self = me;
       device = temp!;
       messageList = arr;
     });
-    if (arr.length > 8) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // 滚动到最后一条消息
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _scrollToBottom(isFirst: true);
-        });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 滚动到最后一条消息
+      if (_scrollController.position.extentTotal > _scrollController.position.viewportDimension) {
+        _scrollToBottom(isFirst: true);
+      }
+    });
+
+    _scrollController.addListener(_scrollListener);
+  }
+
+  void _scrollListener() async {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      // 用户滑动到了ListView的底部
+      // 在这里执行你的操作
+      print('滑倒底部了！');
+    }
+    if (_scrollController.position.pixels < 10) {
+      // 用户滑动到了ListView的顶部
+      // 在这里执行你的操作
+      print('滑倒顶部了！${messageList[0].id}');
+      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList[0].id);
+      if (arr.isEmpty) {
+        return;
+      }
+      arr = arr.reversed.toList();
+      setState(() {
+        messageList.insertAll(0, arr);
       });
+      print('滑倒顶部了2！${messageList[0].id}, ${arr[0]}');
     }
   }
 
@@ -91,10 +115,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   void _scrollToBottom({bool isFirst=false}) async {
     if (isFirst) {
-      _scrollController.animateTo(
-        2*_scrollController.position.extentTotal,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
+      _scrollController.jumpTo(
+        _scrollController.position.maxScrollExtent,
+        // duration: const Duration(milliseconds: 200),
+        // curve: Curves.easeOut,
       );
     }else {
       await _scrollController.animateTo(
@@ -215,7 +239,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                     child: CupertinoTextField(
                       controller: _textController,
                       cursorColor: Colors.black87,
-                      autofocus: true,
+                      autofocus: isDesktop(),
                       autocorrect: true,
                       maxLines: 4,
                       minLines: 1,
