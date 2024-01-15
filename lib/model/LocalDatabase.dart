@@ -94,13 +94,21 @@ class LocalDatabase extends _$LocalDatabase {
         .get();
   }
 
-  Future<List<MessageData>> fetchMessageList(String uid) {
-    print("device: $uid");
-    return (select(message)
-      ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
-      ..orderBy(
-          [(t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc)]))
-        .get();
+  Future<List<MessageData>> fetchMessageList(String uid, {int beforeId=0}) {
+    print("device: $uid, msgid: $beforeId");
+    if (beforeId > 0) {
+      return (select(message)
+        ..where((t) => (t.sender.equals(uid) | t.receiver.equals(uid)) & t.id.isSmallerThanValue(beforeId))
+        ..orderBy([(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)])
+        ..limit(8)
+      ).get();
+    }else {
+      return (select(message)
+        ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+        ..orderBy([(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)])
+        ..limit(8)
+      ).get();
+    }
   }
 }
 
