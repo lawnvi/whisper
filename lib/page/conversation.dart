@@ -289,11 +289,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ? CrossAxisAlignment.start
               : CrossAxisAlignment.end,
           children: [
-            Card(
-              color: isOpponent ? Colors.grey[300] : Colors.blue,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: SelectableText(messageData.content??"", // 文本消息内容
+            Container(
+              alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+              constraints: const BoxConstraints(maxWidth: 540), // 控制消息宽度
+              child: Card(
+                color: isOpponent ? Colors.grey[300] : Colors.blue,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: SelectableText(messageData.content??"", // 文本消息内容
                     style: TextStyle(
                       color: isOpponent ? Colors.black : Colors.white,
                     ),
@@ -306,6 +309,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                         ).toList(),
                       );
                     },
+                  ),
                 ),
               ),
             ),
@@ -361,7 +365,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               : CrossAxisAlignment.end,
           children: [
             Container(
-              constraints: BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
+              constraints: const BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
               decoration: BoxDecoration(
                 color: isOpponent ? Colors.grey[300] : Colors.grey[300],
                 borderRadius: BorderRadius.circular(8),
