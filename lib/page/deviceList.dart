@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
+import '../global.dart';
 import '../helper/local.dart';
 import '../socket/svrmanager.dart';
 import 'conversation.dart';
@@ -556,7 +557,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           }
                         ),
                         _buildSettingItem(
-                            'v1.0.0',
+                            version,
                             const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
                             onTap: () async {
                               final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper/releases');
