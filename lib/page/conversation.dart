@@ -1,3 +1,4 @@
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -131,7 +132,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    var widget = Scaffold(
       appBar: AppBar(
         leading: CupertinoNavigationBarBackButton(
           color: Colors.grey,
@@ -222,35 +223,35 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 ),
                 const SizedBox(height: 50,),
                 Expanded(
-                  child: RawKeyboardListener(
-                    focusNode: FocusNode(),
-                    onKey: (RawKeyEvent event) {
-                      if(event.logicalKey == LogicalKeyboardKey.shiftLeft || event.logicalKey == LogicalKeyboardKey.shiftRight) {
-                        keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
-                      }else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                        keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
-                        if (event is RawKeyDownEvent && keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true) {
+                    child: RawKeyboardListener(
+                      focusNode: FocusNode(),
+                      onKey: (RawKeyEvent event) {
+                        if(event.logicalKey == LogicalKeyboardKey.shiftLeft || event.logicalKey == LogicalKeyboardKey.shiftRight) {
+                          keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
+                        }else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                          keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
+                          if (event is RawKeyDownEvent && keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true) {
                             socketManager.sendMessage(_textController.text, false);
                             // FocusScope.of(context).unfocus();
                             _textController.text = "";
-                        }
-                      }
-                    },
-                    child: CupertinoTextField(
-                      controller: _textController,
-                      cursorColor: Colors.black87,
-                      autofocus: isDesktop(),
-                      autocorrect: true,
-                      maxLines: 4,
-                      minLines: 1,
-                      placeholder: 'Type your message...', // 输入框提示文字
-                      onChanged: (value) {
-                        if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
-                          _textController.text = "";
+                          }
                         }
                       },
-                    ),
-                  )
+                      child: CupertinoTextField(
+                        controller: _textController,
+                        cursorColor: Colors.black87,
+                        autofocus: isDesktop(),
+                        autocorrect: true,
+                        maxLines: 4,
+                        minLines: 1,
+                        placeholder: 'Type your message...', // 输入框提示文字
+                        onChanged: (value) {
+                          if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
+                            _textController.text = "";
+                          }
+                        },
+                      ),
+                    )
                 ),
                 CupertinoButton(
                   padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
@@ -277,6 +278,27 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           SizedBox(height: 6,)
         ],
       ),
+    );
+
+    if (isMobile()) {
+      return widget;
+    }
+
+    return DropTarget(
+      onDragDone: (detail) async {
+        if (detail.files.isEmpty) {
+          return;
+        }
+        // todo 多文件发送
+        socketManager.sendFile(detail.files.first.path);
+      },
+      onDragEntered: (detail) {
+
+      },
+      onDragExited: (detail) {
+
+      },
+      child: widget,
     );
   }
 

@@ -45,16 +45,17 @@ dependencies:
 #  system_tray: ^2.0.3
   flutter_easyloading: ^3.0.5
   shared_preferences: ^2.2.2
-  sqlite3_flutter_libs: ^0.5.0
+  sqlite3_flutter_libs: ^0.5.19+1
   drift: ^2.14.1
   sqlite3: ^2.3.0
-  uuid: ^3.0.7
+  uuid: ^4.3.3
   device_info_plus: ^9.1.1
-  intl: ^0.18.0
+  intl: ^0.19.0
   url_launcher: ^6.2.2
   file_manager: ^1.0.2
   open_dir: ^0.0.1+5
   crypto: ^3.0.3
+  desktop_drop: ^0.4.4
 #  ftpconnect: ^2.0.5
 
 
