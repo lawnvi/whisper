@@ -98,7 +98,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       setState(() {
         messageList.insertAll(0, arr);
       });
-      print('滑倒顶部了2！${messageList[0].id}, ${arr[0]}');
     }
   }
 
@@ -202,8 +201,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           ),
           // Divider(height: 0.2, color: Colors.grey), // 分割线
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 10.0),
-            decoration: BoxDecoration(
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            decoration: const BoxDecoration(
               color: Colors.white, // 背景颜色设置为白色
             ),
             child: Row(
@@ -303,6 +302,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
+    double screenWidth = 0.618*MediaQuery.of(context).size.width;
     return GestureDetector(
       child: Container(
         alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -313,7 +313,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           children: [
             Container(
               alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-              constraints: const BoxConstraints(maxWidth: 540), // 控制消息宽度
+              constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
               child: Card(
                 color: isOpponent ? Colors.grey[300] : Colors.blue,
                 child: Padding(
@@ -375,6 +375,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
+    // double screenWidth = 0.382*MediaQuery.of(context).size.width;
+    double screenWidth = 360;
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       child: GestureDetector(
@@ -387,7 +389,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               : CrossAxisAlignment.end,
           children: [
             Container(
-              constraints: const BoxConstraints(maxWidth: 360, minWidth: 200), // 控制消息宽度
+              width: screenWidth,
+              // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
               decoration: BoxDecoration(
                 color: isOpponent ? Colors.grey[300] : Colors.grey[300],
                 borderRadius: BorderRadius.circular(8),
@@ -398,21 +401,18 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Column(
-                      children: [
-                        Icon(
-                          Icons.insert_drive_file,
-                          color: Colors.white,
-                          size: 42,
-                        ),
-                      ],
+                    const Icon(
+                      Icons.insert_drive_file,
+                      color: Colors.white,
+                      size: 42,
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          constraints: BoxConstraints(maxWidth: 260, minWidth: 80), // 控制消息宽度
+                          width: screenWidth-100,
+                          // constraints: BoxConstraints(maxWidth: screenWidth-100, minWidth: 80), // 控制消息宽度
                           child: Text(
                             message.name, // 文件名
                             overflow: TextOverflow.clip, // 溢出时的处理方式
@@ -424,28 +424,28 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                             softWrap: true,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           formatSize(message.size), // 文件大小
-                          style: TextStyle(color: Colors.black, fontSize: 12),
+                          style: const TextStyle(color: Colors.black, fontSize: 12),
                         ),
                       ],
                     ),
                     // SizedBox(width: 30)
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                   ],
                 ),
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   formatTimestamp(message.timestamp), // 发送时间
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
-                SizedBox(width: 12,)
+                const SizedBox(width: 12,)
               ],
             ),
           ],
