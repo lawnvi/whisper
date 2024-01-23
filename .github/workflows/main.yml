@@ -31,14 +31,14 @@ jobs:
 
       # Flutter macos/ios ipa build command.
       - run: flutter build macos
-#      - run: |
-#          flutter build ios --no-codesign
-#          cd build/ios/iphoneos
-#          mkdir Payload
-#          cd Payload
-#          ln -s ../Runner.app
-#          cd ..
-#          zip -r app.ipa Payload
+      - run: |
+          flutter build ios --no-codesign
+          cd build/ios/iphoneos
+          mkdir Payload
+          cd Payload
+          ln -s ../Runner.app
+          cd ..
+          zip -r app.ipa Payload
 
       - name: package as dmg
         run: create-dmg build/macos/Build/Products/Release/whisper.app
@@ -56,8 +56,7 @@ jobs:
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-#          artifacts: "whisper-x86_64.dmg,build/ios/iphoneos/app.ipa"
-          artifacts: "whisper-x86_64.dmg"
+          artifacts: "whisper-x86_64.dmg,build/ios/iphoneos/app.ipa"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
