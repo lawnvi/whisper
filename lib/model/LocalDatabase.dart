@@ -90,7 +90,7 @@ class LocalDatabase extends _$LocalDatabase {
   Future<List<DeviceData>> fetchAllDevice() {
     return (select(device)
           ..orderBy(
-              [(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)]))
+              [(t) => OrderingTerm(expression: t.lastTime, mode: OrderingMode.desc)]))
         .get();
   }
 
