@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
 import '../helper/file.dart';
@@ -530,7 +531,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
               padding: EdgeInsets.all(16.0), // 添加内边距以改善外观
               children: [
                 Card(
-                    elevation: 2.0, // 设置卡片的阴影
+                    elevation: 1.2, // 设置卡片的阴影
                     color: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12.0), // 圆角边框
@@ -566,6 +567,29 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           ),
                         ),
                       ],
+                    )),
+                const SizedBox(height: 8,),
+                Card(
+                    elevation: 2.0, // 设置卡片的阴影
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0), // 圆角边框
+                    ),
+                    child: Column(
+                      children: [
+                        _buildSettingItem(
+                          '删除连接',
+                          const Icon(Icons.delete_rounded, color: CupertinoColors.destructiveRed,),
+                          null,
+                          onTap: () {
+                            showConfirmationDialog(context, title: "删除${device.name}", description: "删除后消息会全部清理，不可恢复", confirmButtonText: "确定", cancelButtonText: "取消", onConfirm: (){
+                              LocalDatabase().clearDevices([device.uid]);
+                              Navigator.pop(context);
+                              Navigator.pop(context);
+                            });
+                          }
+                        ),
+                      ],
                     ))
               ],
             ),
@@ -573,11 +597,12 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
         ));
   }
 
-  Widget _buildSettingItem(String title, Icon icon, Widget trailing,
-      {bool showDivider = true}) {
+  Widget _buildSettingItem(String title, Icon icon, Widget? trailing,
+      {bool showDivider = true, onTap}) {
     return GestureDetector(
       onTap: () {
         // 处理点击设置项
+        onTap();
       },
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16.0),
@@ -601,7 +626,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                       // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
                   ),
-                  trailing,
+                  if (trailing != null) trailing,
                 ],
               ),
             ),

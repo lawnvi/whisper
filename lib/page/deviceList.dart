@@ -230,13 +230,14 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                 ),
               ],
             ),
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => SendMessageScreen(device: deviceItem),
                 ),
               );
+              _refreshDevice();
             },
           );
         },
