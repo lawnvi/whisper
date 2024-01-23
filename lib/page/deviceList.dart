@@ -37,7 +37,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   @override
   void didChangeDependencies() {
-    _refreshDevice();
+    _refreshDevice(isFirst: true);
     socketManager.registerEvent(this, uid: device?.uid??"");
     super.didChangeDependencies();
   }
@@ -83,7 +83,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   //   });
   // }
 
-  Future<void> _refreshDevice() async {
+  Future<void> _refreshDevice({isFirst=false}) async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
@@ -92,6 +92,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       device = temp;
       devices = arr;
     });
+    if (isFirst && temp.isServer) {
+      _startServer();
+    }
   }
 
   @override
@@ -118,7 +121,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               context,
               title: '连接主机',
               description: '输入对方局域网地址与端口',
-              inputHints: [{"host": false}, {"port": true}],
+              inputHints: [{device?.host??"192.168.1.1": false}, {"10002": true}],
               confirmButtonText: '连接',
               cancelButtonText: '取消',
               onConfirm: (List<String> inputValues) async {
@@ -692,7 +695,7 @@ void showInputAlertDialog(
   List<Widget> inputFields = [];
 
   for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller = TextEditingController();
+    TextEditingController controller = TextEditingController(text: inputHints[i].keys.first);
     controllers.add(controller);
 
     inputFields.add(
