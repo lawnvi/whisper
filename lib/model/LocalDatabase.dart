@@ -110,6 +110,14 @@ class LocalDatabase extends _$LocalDatabase {
       ).get();
     }
   }
+
+  Future<void> clearDevices(List<String> uids) async {
+    if (uids.isEmpty) {
+      return;
+    }
+    (delete(message)..where((t) => t.sender.isIn(uids) | t.receiver.isIn(uids))).go();
+    (delete(device)..where((t) => t.uid.isIn(uids))).go();
+  }
 }
 
 LazyDatabase _openConnection() {
