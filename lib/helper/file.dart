@@ -42,13 +42,22 @@ Future<String> fileMD5(File file) async {
 }
 
 Future<Directory> downloadDir() async {
+  Directory? dir;
   if (Platform.isIOS || Platform.isMacOS) {
-    return getApplicationDocumentsDirectory();
+    return await getApplicationDocumentsDirectory();
   }else if (Platform.isAndroid) {
-    return Directory("/sdcard/Download");
+    dir = Directory("/sdcard/Download/whisper");
+  }else {
+    dir = await getDownloadsDirectory();
+    if (dir == null) {
+      return await getApplicationDocumentsDirectory();
+    }
+    dir = Directory("${dir.path}/whisper");
   }
-
-  return await getDownloadsDirectory()?? await getApplicationDocumentsDirectory();
+  if (!dir.existsSync()) {
+    dir.createSync();
+  }
+  return dir;
 }
 
 Future<bool> openAndroidDir(String path) async {
