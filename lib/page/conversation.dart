@@ -192,7 +192,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 bool isOpponent = message.receiver == self?.uid;
 
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                   child: message.type == MessageEnum.Text
                       ? _buildTextMessage(message, isOpponent)
                       : _buildFileMessage(message, isOpponent),
@@ -303,7 +303,12 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
-    double screenWidth = 0.618*MediaQuery.of(context).size.width;
+    double screenWidth = MediaQuery.of(context).size.width;
+    if (isDesktop()) {
+      screenWidth *= 0.618;
+    }else {
+      screenWidth *= 0.8;
+    }
     return GestureDetector(
       child: Container(
         alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -341,18 +346,18 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (!isOpponent) SizedBox(width: 20,),
+                    if (!isOpponent) const SizedBox(width: 20,),
                     Text(
-                      formatTimestamp(messageData.timestamp), // 发送时间
-                      style: TextStyle(color: Colors.grey),
+                      " ${formatTimestamp(messageData.timestamp)} ", // 发送时间
+                      style: const TextStyle(color: Colors.grey),
                     ),
-                    if (isOpponent) SizedBox(width: 20,),
+                    if (isOpponent) const SizedBox(width: 20,),
                   ],
                 ),
                 Positioned(
-                    left: isOpponent? null: -14,
-                    right: isOpponent?-14: null,
-                    top: -12,
+                    left: isOpponent? null: -12,
+                    right: isOpponent?-12: null,
+                    top: -14,
                     child: IconButton(
                       hoverColor: Colors.grey.withOpacity(0),
                       focusColor: Colors.grey,
@@ -365,8 +370,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                       },
                     ),
                 )
-
-
               ],
             ),
           ],
@@ -378,6 +381,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
     // double screenWidth = 0.382*MediaQuery.of(context).size.width;
     double screenWidth = 360;
+    if (isMobile()) {
+      screenWidth = 0.618*MediaQuery.of(context).size.width;
+    }
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       child: GestureDetector(
@@ -411,8 +417,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: screenWidth-100,
+                        SizedBox(
+                          width: screenWidth-80,
                           // constraints: BoxConstraints(maxWidth: screenWidth-100, minWidth: 80), // 控制消息宽度
                           child: Text(
                             message.name, // 文件名
