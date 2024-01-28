@@ -20,7 +20,7 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
 # 编译Flutter项目为Linux应用程序
-flutter build linux
+#flutter build linux
 
 # 创建DEBIAN控制文件所需的目录结构
 DEBIAN_DIR="${BUILD_DIR}/DEBIAN"
@@ -35,9 +35,8 @@ Version: ${VERSION}
 Section: base
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libc6 (>= 2.28), libgcc1 (>= 1:3.0), libstdc++6 (>= 5.2)
-Maintainer: Your Name <youremail@example.com>
-Description: Your application description
+Maintainer: vireen
+Description: transfer files in local network
 EOF
 
 # 创建桌面条目文件夹
