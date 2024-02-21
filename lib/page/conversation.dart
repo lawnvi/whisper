@@ -87,11 +87,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       // 在这里执行你的操作
       print('滑倒底部了！');
     }
-    if (_scrollController.position.pixels < 10) {
+    if (_scrollController.position.pixels == 0) {
       // 用户滑动到了ListView的顶部
       // 在这里执行你的操作
       print('滑倒顶部了！${messageList[0].id}');
-      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList[0].id);
+      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList[0].id, limit: 12);
       if (arr.isEmpty) {
         return;
       }
