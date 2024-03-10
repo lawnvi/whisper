@@ -302,7 +302,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     );
   }
 
-  Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
+  Widget _buildTextMessage(MessageData messageData, bool isOpponent, {showTime=false}) {
     double screenWidth = MediaQuery.of(context).size.width;
     if (isDesktop()) {
       screenWidth *= 0.618;
@@ -380,7 +380,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
     // double screenWidth = 0.382*MediaQuery.of(context).size.width;
-    double screenWidth = 360;
+    double screenWidth = 300;
     if (isMobile()) {
       screenWidth = 0.618*MediaQuery.of(context).size.width;
     }
@@ -399,7 +399,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               width: screenWidth,
               // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
               decoration: BoxDecoration(
-                color: isOpponent ? Colors.grey[300] : Colors.grey[300],
+                color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(8),
               ),
               // width: 400,
@@ -560,7 +560,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         ),
                         _buildSettingItem(
                           '写入剪切板',
-                          Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
+                          Icon(Icons.copy, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
                             value: device.clipboard,
                             onChanged: (bool value) async {
