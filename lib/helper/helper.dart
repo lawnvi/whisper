@@ -117,7 +117,7 @@ Future<String> getLocalIpAddress() async {
   } catch (e) {
     completer.completeError('Error getting local IP address: $e');
   }
-  // completer.complete(sb.toString());
+  completer.complete("127.0.0.1");
 
   return completer.future;
 }
