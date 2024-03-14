@@ -31,6 +31,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   bool isInputEmpty = true;
   double percent = 0;
   final keyPressedMap = {};
+  final key = GlobalKey<AnimatedListState>();
 
   _SendMessageScreen(this.device);
 
@@ -67,8 +68,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     setState(() {
       self = me;
       device = temp!;
-      messageList = arr;
+      // messageList = arr;
     });
+
+    _insertItems(0, arr);
 
     _scrollController.addListener(_scrollListener);
   }
@@ -79,14 +82,12 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
       print('滑倒顶部了！${messageList[0].id}');
-      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList.last.id, limit: 8);
+      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList.last.id, limit: 12);
       if (arr.isEmpty) {
         return;
       }
-      // arr = arr.reversed.toList();
-      setState(() {
-        messageList.addAll(arr);
-      });
+
+      _insertItems(messageList.length, arr);
     }
     if (_scrollController.position.pixels == 0) {
       // 用户滑动到了ListView的顶部
@@ -95,16 +96,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     }
   }
 
-  void _addMessage(MessageData message) {
-    setState(() {
-      messageList.insert(0, message);
-    });
+  _insertItem(index, item) {
+    messageList.insert(index, item);
+    key.currentState?.insertItem(index, duration: Duration(milliseconds: 500));
   }
 
-  void _ackMessage(MessageData message) {
-    setState(() {
-      messageList.insert(0, message);
-    });
+  _insertItems(index, items) {
+    messageList.insertAll(index, items);
+    key.currentState?.insertAllItems(index, items.length, duration: Duration(milliseconds: 500));
   }
 
   @Deprecated("use list view reverse")
@@ -117,7 +116,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       );
     }else {
       await _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -183,22 +182,23 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           Expanded(
             child: Align(
               alignment: Alignment.topCenter,
-              child: ListView.builder(
+              child: AnimatedList(
+                key: key,
                 controller: _scrollController,
-                itemCount: messageList.length, // 消息数量
+                initialItemCount: messageList.length, // 消息数量
                 reverse: true,
                 shrinkWrap: true,
-                itemBuilder: (BuildContext context, int index) {
+                itemBuilder: (context, index, animation) {
                   // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
                   var message = messageList[index];
                   bool isOpponent = message.receiver == self?.uid;
 
-                  return Padding(
+                  return FadeTransition(opacity: animation, child: Padding(
                     padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                     child: message.type == MessageEnum.Text
                         ? _buildTextMessage(message, isOpponent)
                         : _buildFileMessage(message, isOpponent),
-                  );
+                  ));
                 },
               ),
           ),),
@@ -492,13 +492,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   void onMessage(MessageData messageData) {
     print("收到消息: ${messageData.type} content: ${messageData.content}");
     if (messageData.receiver == device.uid && messageData.acked) {
-      _ackMessage(messageData);
+      // _ackMessage(messageData);
     }else {
-      _addMessage(messageData);
+      // _addMessage(messageData);
     }
-    // Future.delayed(const Duration(milliseconds: 200), () {
-    //   _scrollToBottom();
-    // });
+    _insertItem(0, messageData);
   }
 
   @override
