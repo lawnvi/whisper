@@ -63,18 +63,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     print("current device: ${device.uid}");
     var me = await LocalSetting().instance();
     var temp = await LocalDatabase().fetchDevice(device.uid);
-    var arr = await LocalDatabase().fetchMessageList(device.uid);
-    arr = arr.reversed.toList();
+    var arr = await LocalDatabase().fetchMessageList(device.uid, limit: 20);
     setState(() {
       self = me;
       device = temp!;
       messageList = arr;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 滚动到最后一条消息
-      if (_scrollController.position.extentTotal > _scrollController.position.viewportDimension) {
-        _scrollToBottom(isFirst: true);
-      }
     });
 
     _scrollController.addListener(_scrollListener);
@@ -85,35 +78,36 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         _scrollController.position.maxScrollExtent) {
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
-      print('滑倒底部了！');
+      print('滑倒顶部了！${messageList[0].id}');
+      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList.last.id, limit: 8);
+      if (arr.isEmpty) {
+        return;
+      }
+      // arr = arr.reversed.toList();
+      setState(() {
+        messageList.addAll(arr);
+      });
     }
     if (_scrollController.position.pixels == 0) {
       // 用户滑动到了ListView的顶部
       // 在这里执行你的操作
-      print('滑倒顶部了！${messageList[0].id}');
-      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList[0].id, limit: 12);
-      if (arr.isEmpty) {
-        return;
-      }
-      arr = arr.reversed.toList();
-      setState(() {
-        messageList.insertAll(0, arr);
-      });
+      print('滑倒底部了！');
     }
   }
 
   void _addMessage(MessageData message) {
     setState(() {
-      messageList.add(message);
+      messageList.insert(0, message);
     });
   }
 
   void _ackMessage(MessageData message) {
     setState(() {
-      messageList.add(message);
+      messageList.insert(0, message);
     });
   }
 
+  @Deprecated("use list view reverse")
   void _scrollToBottom({bool isFirst=false}) async {
     if (isFirst) {
       _scrollController.jumpTo(
@@ -181,25 +175,33 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       body: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (percent > 0 && percent < 1) LinearProgressIndicator(value: percent, color: Colors.lightGreen,),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: messageList.length, // 消息数量
-              itemBuilder: (BuildContext context, int index) {
-                // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
-                var message = messageList[index];
-                bool isOpponent = message.receiver == self?.uid;
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                  child: message.type == MessageEnum.Text
-                      ? _buildTextMessage(message, isOpponent)
-                      : _buildFileMessage(message, isOpponent),
-                );
-              },
+          if (percent > 0 && percent < 1)
+            LinearProgressIndicator(
+              value: percent,
+              color: Colors.lightGreen,
             ),
-          ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ListView.builder(
+                controller: _scrollController,
+                itemCount: messageList.length, // 消息数量
+                reverse: true,
+                shrinkWrap: true,
+                itemBuilder: (BuildContext context, int index) {
+                  // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
+                  var message = messageList[index];
+                  bool isOpponent = message.receiver == self?.uid;
+
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                    child: message.type == MessageEnum.Text
+                        ? _buildTextMessage(message, isOpponent)
+                        : _buildFileMessage(message, isOpponent),
+                  );
+                },
+              ),
+          ),),
           // Divider(height: 0.2, color: Colors.grey), // 分割线
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10.0),
@@ -494,9 +496,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     }else {
       _addMessage(messageData);
     }
-    Future.delayed(const Duration(milliseconds: 200), () {
-      _scrollToBottom();
-    });
+    // Future.delayed(const Duration(milliseconds: 200), () {
+    //   _scrollToBottom();
+    // });
   }
 
   @override
