@@ -32,6 +32,13 @@ jobs:
       - name: Clear Flutter Cache
         run: flutter clean
 
+      - name: update cocoapods
+        run: |
+          cd macos
+          gem install activesupport -v 6.1.7.7
+          gem install cocoapods
+          cd ..
+
       # Flutter macos/ios ipa build command.
       - run: flutter build macos
       - run: |
