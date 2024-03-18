@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  bonsoir_windows
   desktop_drop
   open_dir_windows
   permission_handler_windows

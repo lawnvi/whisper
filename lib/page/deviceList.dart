@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 // import 'package:system_tray/system_tray.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/helper.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
 import '../global.dart';
@@ -24,6 +26,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   final socketManager = WsSvrManager();
   DeviceData? device;
   List<DeviceData> devices = [];
+  BonsoirBroadcast? _broadcast;
+  BonsoirDiscovery? _discovery;
+  final serviceName = "whisper";
+  final serviceType = "_whisper._tcp";
+  bool discovering = false;
 
   @override
   void initState() {
@@ -36,7 +43,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   }
 
   @override
-  void didChangeDependencies() {
+  void didChangeDependencies() async {
     _refreshDevice(isFirst: true);
     socketManager.registerEvent(this, uid: device?.uid??"");
     super.didChangeDependencies();
@@ -83,6 +90,127 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   //   });
   // }
 
+  Future<void> _broadcastService() async {
+    final wifiIP = await getLocalIpAddress();
+
+    print("wifi ip: $wifiIP");
+
+    if (wifiIP == "127.0.0.1") {
+      return;
+    }
+
+    BonsoirService service = BonsoirService(
+      name: serviceName,
+      type: serviceType,
+      port: 10004,
+      attributes: {
+        'host': wifiIP,
+        'port': (device?.port??10002).toString(),
+        'name': await deviceName(),
+        'platform': device?.platform?? "未知",
+        'uid': device?.uid?? "",
+      },
+    );
+
+    // And now we can broadcast it :
+    _broadcast = BonsoirBroadcast(service: service);
+    await _broadcast!.ready;
+
+    _broadcast!.eventStream!.listen((event) {
+      debugPrint('Broadcast event : ${event.type}');
+    });
+
+    await _broadcast!.start();
+    discovering = true;
+  }
+
+  Future<void> _stopBroadcast() async {
+    await _broadcast?.stop();
+  }
+
+  Future<void> _discoverService() async {
+    // This is the type of service we're looking for :
+
+    // Once defined, we can start the discovery :
+    _discovery = BonsoirDiscovery(type: serviceType, printLogs: true);
+    await _discovery!.ready;
+
+    // If you want to listen to the discovery :
+    _discovery?.eventStream!.listen((event) async {
+      debugPrint('Discovery event : ${event.type}');
+      // `eventStream` is not null as the discovery instance is "ready" !
+      final service = event.service;
+      if (service != null) {
+        if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
+          print("event type: ${event.type}, service name: $serviceName ${service.name}");
+          if (service.name.startsWith(serviceName)) {
+            await event.service!.resolve(_discovery!.serviceResolver);
+          }
+        } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceResolved) {
+          final resolvedService = service as ResolvedBonsoirService;
+
+          if (service.attributes.containsKey('uid')) {
+            final host = resolvedService.attributes["host"];
+            final port = int.tryParse(resolvedService.attributes["port"]??"10002")?? 10002;
+            final uid = resolvedService.attributes["uid"];
+            final name = resolvedService.attributes["name"];
+            final platform = resolvedService.attributes["platform"];
+            print("本地设备uid: $uid");
+            print("本地设备name: $name");
+            print("本地设备host: $host");
+            print("本地设备port: $port");
+            print("本地设备platform: $platform");
+            if (uid == null || uid == device?.uid) {
+              return;
+            }
+            var index = -1;
+            for (var item in devices) {
+              if (item.uid == uid) {
+                index = devices.indexOf(item);
+                break;
+              }
+            }
+
+            setState(() {
+              if (index >= 0) {
+                devices.removeAt(index);
+              }
+              devices.insert(0, buildDevice(
+                uid: uid, name: name, port: port, host: host, platform: platform
+              ));
+            });
+          }
+        } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceLost) {
+          debugPrint('Service lost : ${service.toJson()}');
+        }
+      }
+    });
+
+    // Start discovery **after** having listened to discovery events :
+    await _discovery?.start();
+  }
+
+  Future<void> _stopDiscovery() async {
+    await _discovery?.stop();
+  }
+
+  DeviceData buildDevice({uid="", name="", host="", port=10002, platform="", around=true}) {
+    return DeviceData(id: 0,
+      uid: uid,
+      name: name,
+      host: host,
+      port: port,
+      platform: platform,
+      isServer: false,
+      lastTime: DateTime.now().millisecondsSinceEpoch~/1000,
+      online: false,
+      password: "",
+      clipboard: false,
+      auth: false,
+      around: around
+    );
+  }
+
   Future<void> _refreshDevice({isFirst=false}) async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
@@ -94,6 +222,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     });
     if (isFirst && temp.isServer) {
       _startServer();
+    }
+    if (!discovering) {
+      _broadcastService();
+      if (isFirst) {
+        _discoverService();
+      }
     }
   }
 
@@ -193,8 +327,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                         size: 18,
                         color: deviceItem.uid == socketManager.receiver
                             ? Colors.lightBlue
-                            : Colors.grey) // Server 图标
+                            : Colors.grey), // Server 图标
                 // Client 图标
+                if (deviceItem.around == true) SizedBox(width: 6,),
+                if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
               ],
             ),
             trailing: Row(
