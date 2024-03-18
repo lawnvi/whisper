@@ -103,6 +103,15 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _aroundMeta = const VerificationMeta('around');
+  @override
+  late final GeneratedColumn<bool> around = GeneratedColumn<bool>(
+      'around', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("around" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -116,7 +125,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
         online,
         clipboard,
         auth,
-        lastTime
+        lastTime,
+        around
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -179,6 +189,10 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       context.handle(_lastTimeMeta,
           lastTime.isAcceptableOrUnknown(data['last_time']!, _lastTimeMeta));
     }
+    if (data.containsKey('around')) {
+      context.handle(_aroundMeta,
+          around.isAcceptableOrUnknown(data['around']!, _aroundMeta));
+    }
     return context;
   }
 
@@ -212,6 +226,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
           .read(DriftSqlType.bool, data['${effectivePrefix}auth'])!,
       lastTime: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}last_time'])!,
+      around: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}around']),
     );
   }
 
@@ -234,6 +250,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
   final bool clipboard;
   final bool auth;
   final int lastTime;
+  final bool? around;
   const DeviceData(
       {required this.id,
       required this.uid,
@@ -246,7 +263,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       required this.online,
       required this.clipboard,
       required this.auth,
-      required this.lastTime});
+      required this.lastTime,
+      this.around});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -264,6 +282,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
     map['clipboard'] = Variable<bool>(clipboard);
     map['auth'] = Variable<bool>(auth);
     map['last_time'] = Variable<int>(lastTime);
+    if (!nullToAbsent || around != null) {
+      map['around'] = Variable<bool>(around);
+    }
     return map;
   }
 
@@ -283,6 +304,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       clipboard: Value(clipboard),
       auth: Value(auth),
       lastTime: Value(lastTime),
+      around:
+          around == null && nullToAbsent ? const Value.absent() : Value(around),
     );
   }
 
@@ -302,6 +325,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       clipboard: serializer.fromJson<bool>(json['clipboard']),
       auth: serializer.fromJson<bool>(json['auth']),
       lastTime: serializer.fromJson<int>(json['lastTime']),
+      around: serializer.fromJson<bool?>(json['around']),
     );
   }
   @override
@@ -320,6 +344,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       'clipboard': serializer.toJson<bool>(clipboard),
       'auth': serializer.toJson<bool>(auth),
       'lastTime': serializer.toJson<int>(lastTime),
+      'around': serializer.toJson<bool?>(around),
     };
   }
 
@@ -335,7 +360,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           bool? online,
           bool? clipboard,
           bool? auth,
-          int? lastTime}) =>
+          int? lastTime,
+          Value<bool?> around = const Value.absent()}) =>
       DeviceData(
         id: id ?? this.id,
         uid: uid ?? this.uid,
@@ -349,6 +375,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
         clipboard: clipboard ?? this.clipboard,
         auth: auth ?? this.auth,
         lastTime: lastTime ?? this.lastTime,
+        around: around.present ? around.value : this.around,
       );
   @override
   String toString() {
@@ -364,14 +391,15 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           ..write('online: $online, ')
           ..write('clipboard: $clipboard, ')
           ..write('auth: $auth, ')
-          ..write('lastTime: $lastTime')
+          ..write('lastTime: $lastTime, ')
+          ..write('around: $around')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, uid, name, host, port, password, platform,
-      isServer, online, clipboard, auth, lastTime);
+      isServer, online, clipboard, auth, lastTime, around);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -387,7 +415,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           other.online == this.online &&
           other.clipboard == this.clipboard &&
           other.auth == this.auth &&
-          other.lastTime == this.lastTime);
+          other.lastTime == this.lastTime &&
+          other.around == this.around);
 }
 
 class DeviceCompanion extends UpdateCompanion<DeviceData> {
@@ -403,6 +432,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   final Value<bool> clipboard;
   final Value<bool> auth;
   final Value<int> lastTime;
+  final Value<bool?> around;
   const DeviceCompanion({
     this.id = const Value.absent(),
     this.uid = const Value.absent(),
@@ -416,6 +446,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.clipboard = const Value.absent(),
     this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
+    this.around = const Value.absent(),
   });
   DeviceCompanion.insert({
     this.id = const Value.absent(),
@@ -430,6 +461,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.clipboard = const Value.absent(),
     this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
+    this.around = const Value.absent(),
   })  : host = Value(host),
         port = Value(port);
   static Insertable<DeviceData> custom({
@@ -445,6 +477,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     Expression<bool>? clipboard,
     Expression<bool>? auth,
     Expression<int>? lastTime,
+    Expression<bool>? around,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -459,6 +492,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       if (clipboard != null) 'clipboard': clipboard,
       if (auth != null) 'auth': auth,
       if (lastTime != null) 'last_time': lastTime,
+      if (around != null) 'around': around,
     });
   }
 
@@ -474,7 +508,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       Value<bool>? online,
       Value<bool>? clipboard,
       Value<bool>? auth,
-      Value<int>? lastTime}) {
+      Value<int>? lastTime,
+      Value<bool?>? around}) {
     return DeviceCompanion(
       id: id ?? this.id,
       uid: uid ?? this.uid,
@@ -488,6 +523,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       clipboard: clipboard ?? this.clipboard,
       auth: auth ?? this.auth,
       lastTime: lastTime ?? this.lastTime,
+      around: around ?? this.around,
     );
   }
 
@@ -530,6 +566,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     if (lastTime.present) {
       map['last_time'] = Variable<int>(lastTime.value);
     }
+    if (around.present) {
+      map['around'] = Variable<bool>(around.value);
+    }
     return map;
   }
 
@@ -547,7 +586,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
           ..write('online: $online, ')
           ..write('clipboard: $clipboard, ')
           ..write('auth: $auth, ')
-          ..write('lastTime: $lastTime')
+          ..write('lastTime: $lastTime, ')
+          ..write('around: $around')
           ..write(')'))
         .toString();
   }

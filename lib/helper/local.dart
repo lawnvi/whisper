@@ -40,6 +40,7 @@ class LocalSetting {
         password: await getSPDefault(_password, ""),
         clipboard: await getSPDefault(_clipboard, true),
         auth: await getSPDefault(_noAuth, false),
+        around: false
     );
   }
 
