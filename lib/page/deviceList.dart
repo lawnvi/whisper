@@ -141,20 +141,29 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
       if (service != null) {
-        if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
-          print("event type: ${event.type}, service name: $serviceName ${service.name}");
-          if (service.name.startsWith(serviceName)) {
-            await event.service!.resolve(_discovery!.serviceResolver);
-          }
-        } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceResolved) {
-          final resolvedService = service as ResolvedBonsoirService;
-
-          if (service.attributes.containsKey('uid')) {
-            final host = resolvedService.attributes["host"];
-            final port = int.tryParse(resolvedService.attributes["port"]??"10002")?? 10002;
-            final uid = resolvedService.attributes["uid"];
-            final name = resolvedService.attributes["name"];
-            final platform = resolvedService.attributes["platform"];
+        switch(event.type) {
+          case BonsoirDiscoveryEventType.discoveryServiceFound:
+            print("event type: ${event.type}, service name: $serviceName ${service.name}");
+            if (service.name.startsWith(serviceName)) {
+              await event.service!.resolve(_discovery!.serviceResolver);
+            }
+            break;
+          case BonsoirDiscoveryEventType.discoveryStarted:
+            print("event type: ${event.type}, service name: ${service.name} start");
+            break;
+          case BonsoirDiscoveryEventType.discoveryServiceResolved || BonsoirDiscoveryEventType.discoveryServiceLost:
+            final svr = service as ResolvedBonsoirService;
+            if (!svr.attributes.containsKey('uid')) {
+              print("event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
+              return;
+            }
+            var isLost = event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+            final host = svr.attributes["host"];
+            final port = int.tryParse(svr.attributes["port"]??"10002")?? 10002;
+            final uid = svr.attributes["uid"];
+            final name = svr.attributes["name"];
+            final platform = svr.attributes["platform"];
+            print("${isLost?'丢失': '发现'}本地设备");
             print("本地设备uid: $uid");
             print("本地设备name: $name");
             print("本地设备host: $host");
@@ -170,18 +179,33 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                 break;
               }
             }
-
+            var temp = await LocalDatabase().fetchDevice(uid);
             setState(() {
               if (index >= 0) {
                 devices.removeAt(index);
+                if (isLost && temp != null) {
+                  for (var idx = 0; idx < devices.length; idx++) {
+                    if (devices[idx].around == true) {
+                      continue;
+                    }
+                    devices.insert(idx, temp);
+                    break;
+                  }
+                }
               }
-              devices.insert(0, buildDevice(
-                uid: uid, name: name, port: port, host: host, platform: platform
-              ));
+              if (!isLost) {
+                devices.insert(0, buildDevice(
+                    uid: uid, name: name, port: port, host: host, platform: platform
+                ));
+              }
             });
-          }
-        } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceLost) {
-          debugPrint('Service lost : ${service.toJson()}');
+            break;
+          case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
+            // TODO: Handle this case.
+          case BonsoirDiscoveryEventType.discoveryStopped:
+            // TODO: Handle this case.
+          case BonsoirDiscoveryEventType.unknown:
+            // TODO: Handle this case.
         }
       }
     });
@@ -215,10 +239,26 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
+    var newArr = <DeviceData>[];
+    var aroundIds = <String>{};
+    for(var item in devices) {
+      if (item.around == true) {
+        newArr.add(item);
+        aroundIds.add(item.uid);
+      }
+    }
+
+    for(var item in arr) {
+      if (aroundIds.contains(item.uid)) {
+        continue;
+      }
+      newArr.add(item);
+    }
+
     socketManager.setSender(temp.uid);
     setState(() {
       device = temp;
-      devices = arr;
+      devices = newArr;
     });
     if (isFirst && temp.isServer) {
       _startServer();
