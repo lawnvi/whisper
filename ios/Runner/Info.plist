@@ -51,5 +51,12 @@
     <string>Allow access to your files</string>
     <key>UIFileSharingEnabled</key>
     <true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>discovery around devices</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_whisper._tcp</string>
+        <!-- Add more here -->
+    </array>
 </dict>
 </plist>
