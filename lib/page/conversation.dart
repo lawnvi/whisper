@@ -189,7 +189,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 reverse: true,
                 shrinkWrap: true,
                 itemBuilder: (context, index, animation) {
-                  // 假设 index 为偶数是对面设备发送的消息，奇数是本机发送的消息
                   var message = messageList[index];
                   bool isOpponent = message.receiver == self?.uid;
 

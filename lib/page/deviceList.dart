@@ -355,28 +355,28 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         itemBuilder: (context, index) {
           final deviceItem = devices[index];
           return ListTile(
+            leading: Icon(deviceItem.platform.toLowerCase() == "android"? Icons.android_rounded:
+            deviceItem.platform.toLowerCase() == "macos"? Icons.laptop_mac_rounded:
+            deviceItem.platform.toLowerCase() == "ios"? Icons.apple_rounded:
+            deviceItem.platform.toLowerCase() == "windows"? Icons.laptop_windows_rounded: Icons.laptop_rounded,
+                size: 28,
+                color: deviceItem.uid == socketManager.receiver || deviceItem.around == true
+                    ? Colors.lightBlue
+                    : Colors.grey), // Server 图标,
             title: Text(deviceItem.name),
             subtitle: Row(
               children: [
                 Text(deviceItem.host),
-                SizedBox(
-                  width: 4,
-                ),
-                 Icon(deviceItem.platform.toLowerCase() == "android"?Icons.android_rounded:
-                 deviceItem.platform.toLowerCase() == "macos" || deviceItem.platform.toLowerCase() == "ios"? Icons.apple_rounded: Icons.laptop_windows_rounded,
-                        size: 18,
-                        color: deviceItem.uid == socketManager.receiver
-                            ? Colors.lightBlue
-                            : Colors.grey), // Server 图标
+                // const SizedBox(width: 4,),
                 // Client 图标
-                if (deviceItem.around == true) SizedBox(width: 6,),
-                if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
+                // if (deviceItem.around == true) SizedBox(width: 6,),
+                // if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
               ],
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
+                if (deviceItem.uid == socketManager.receiver || device?.isServer == false && socketManager.receiver.isEmpty) IconButton(
                   icon: deviceItem.uid == socketManager.receiver
                       ? Icon(
                           Icons.wifi_rounded,
@@ -639,7 +639,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         _buildSettingItem(
                           '本机名称 ${device?.name??""}',
                           const Icon(
-                            Icons.verified_user,
+                            Icons.verified_user_rounded,
                             color: CupertinoColors.systemGrey,
                           ),
                           onTap: () {
@@ -663,7 +663,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         _buildSettingItem(
                           '服务端口 ${device?.port}',
                           const Icon(
-                            Icons.verified_user,
+                            Icons.wifi_tethering,
                             color: CupertinoColors.systemGrey,
                           ),
                           onTap: () {
