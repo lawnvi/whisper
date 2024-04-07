@@ -118,6 +118,10 @@ class LocalDatabase extends _$LocalDatabase {
     (delete(message)..where((t) => t.sender.isIn(uids) | t.receiver.isIn(uids))).go();
     (delete(device)..where((t) => t.uid.isIn(uids))).go();
   }
+
+  Future<void> deleteMessage(int id) async {
+    (delete(message)..where((t) => t.id.equals(id))).go();
+  }
 }
 
 LazyDatabase _openConnection() {

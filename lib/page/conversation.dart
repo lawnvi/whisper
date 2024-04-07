@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -106,6 +108,33 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     key.currentState?.insertAllItems(index, items.length, duration: Duration(milliseconds: 500));
   }
 
+  _deleteItem(id) {
+    var index = -1;
+    for (var i = 0; i < messageList.length; i++) {
+      if (messageList[i].id == id) {
+        index = i;
+        break;
+      }
+    }
+    if (index == -1) {
+      return;
+    }
+
+    setState(() {
+      // 删除过程执行的是反向动画，animation.value 会从1变为0
+      key.currentState?.removeItem(index, (context, animation) {
+        //注意先 build 然后再去删除
+        messageList.removeAt(index);
+        return FadeTransition(
+          opacity: animation,
+          child: null,
+        );
+      }, duration: const Duration(milliseconds: 500));
+    }); //解决快速删除bug 重置flag
+
+    LocalDatabase().deleteMessage(id);
+  }
+
   @Deprecated("use list view reverse")
   void _scrollToBottom({bool isFirst=false}) async {
     if (isFirst) {
@@ -194,9 +223,78 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
                   return FadeTransition(opacity: animation, child: Padding(
                     padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                    child: message.type == MessageEnum.Text
-                        ? _buildTextMessage(message, isOpponent)
-                        : _buildFileMessage(message, isOpponent),
+                    child: Column(
+                      crossAxisAlignment: isOpponent
+                          ? CrossAxisAlignment.start
+                          : CrossAxisAlignment.end,
+                      children: [
+                        GestureDetector(
+                          child: Container(
+                            alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+                            child: message.type == MessageEnum.Text
+                                ? _buildTextMessage(message, isOpponent)
+                                : _buildFileMessage(message, isOpponent),
+                          ),
+                          onTap: (){
+                            if (message.type == MessageEnum.File) {
+                              openDir(name: message.name);
+                            }
+                          },
+                          onDoubleTap: () {
+                            _deleteItem(message.id);
+                          },
+                          onLongPress: () {
+                            showConfirmationDialog(
+                              context,
+                              title: "删除消息",
+                              description: "确定删除此消息吗？",
+                              confirmButtonText: "确定",
+                              cancelButtonText: "取消",
+                              onConfirm: () async {
+                                _deleteItem(message.id);
+                                if (isOpponent && message.type == MessageEnum.File) {
+                                  var path = "${(await downloadDir()).path}/${message.name}";
+                                  print("delete $path");
+                                  File(path).delete();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        SizedBox(height: message.type == MessageEnum.File? 4: 2,),
+                        Stack(
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(width: isOpponent? isMobile()? 10:0 : 20,),
+                                Text(
+                                  " ${formatTimestamp(message.timestamp)} ", // 发送时间
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                                SizedBox(width: isOpponent? 20: isMobile()? 10:0,),
+                              ],
+                            ),
+                            if (message.type == MessageEnum.Text) Positioned(
+                              left: isOpponent? null: -12,
+                              right: isOpponent?-12: null,
+                              top: Platform.isMacOS? -12.2: -14,
+                              child: IconButton(
+                                hoverColor: Colors.grey.withOpacity(0),
+                                focusColor: Colors.grey,
+                                highlightColor: Colors.transparent,
+                                icon: Icon(Icons.copy, size: (isMobile()? 16: 18), color: Colors.grey,),
+                                onPressed: () {
+                                  if (message.content?.isNotEmpty == true){
+                                    copyToClipboard(message.content!);
+                                  }
+                                },
+                              ),
+                            )
+                          ],
+                        ),
+                      ],
+                    ),
                   ));
                 },
               ),
@@ -303,77 +401,34 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     );
   }
 
-  Widget _buildTextMessage(MessageData messageData, bool isOpponent, {showTime=false}) {
+  Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
     double screenWidth = MediaQuery.of(context).size.width;
     if (isDesktop()) {
       screenWidth *= 0.618;
     }else {
       screenWidth *= 0.8;
     }
-    return GestureDetector(
-      child: Container(
-        alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-        child: Column(
-          crossAxisAlignment: isOpponent
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.end,
-          children: [
-            Container(
-              alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-              constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
-              child: Card(
-                color: isOpponent ? Colors.grey[300] : Colors.blue,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: SelectableText(messageData.content??"", // 文本消息内容
-                    style: TextStyle(
-                      color: isOpponent ? Colors.black : Colors.white,
-                    ),
-                    contextMenuBuilder: (context, editableTextState) {
-                      return AdaptiveTextSelectionToolbar(
-                        anchors: editableTextState.contextMenuAnchors,
-                        children: AdaptiveTextSelectionToolbar.getAdaptiveButtons(
-                          context,
-                          editableTextState.contextMenuButtonItems,
-                        ).toList(),
-                      );
-                    },
-                  ),
-                ),
-              ),
+    return Container(
+      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+      constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
+      child: Card(
+        color: isOpponent ? Colors.grey[300] : Colors.blue,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: SelectableText(messageData.content??"", // 文本消息内容
+            style: TextStyle(
+              color: isOpponent ? Colors.black : Colors.white,
             ),
-            Stack(
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isOpponent) const SizedBox(width: 20,),
-                    Text(
-                      " ${formatTimestamp(messageData.timestamp)} ", // 发送时间
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                    if (isOpponent) const SizedBox(width: 20,),
-                  ],
-                ),
-                Positioned(
-                    left: isOpponent? null: -12,
-                    right: isOpponent?-12: null,
-                    top: -14,
-                    child: IconButton(
-                      hoverColor: Colors.grey.withOpacity(0),
-                      focusColor: Colors.grey,
-                      highlightColor: Colors.transparent,
-                      icon: const Icon(Icons.copy, size: 14, color: Colors.grey,),
-                      onPressed: () {
-                        if (messageData.content?.isNotEmpty == true){
-                          copyToClipboard(messageData.content!);
-                        }
-                      },
-                    ),
-                )
-              ],
-            ),
-          ],
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar(
+                anchors: editableTextState.contextMenuAnchors,
+                children: AdaptiveTextSelectionToolbar.getAdaptiveButtons(
+                  context,
+                  editableTextState.contextMenuButtonItems,
+                ).toList(),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -386,76 +441,50 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       screenWidth = 0.618*MediaQuery.of(context).size.width;
     }
     return Container(
-      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      child: GestureDetector(
-        onTap: (){
-          openDir(name: message.name);
-        },
-        child: Column(
-          crossAxisAlignment: isOpponent
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.end,
+      width: screenWidth,
+      // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      // width: 400,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: screenWidth,
-              // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              // width: 400,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.insert_drive_file,
-                      color: Colors.white,
-                      size: 42,
-                    ),
-                    const SizedBox(width: 6),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: screenWidth-80,
-                          // constraints: BoxConstraints(maxWidth: screenWidth-100, minWidth: 80), // 控制消息宽度
-                          child: Text(
-                            message.name, // 文件名
-                            overflow: TextOverflow.clip, // 溢出时的处理方式
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                            maxLines: 4,
-                            softWrap: true,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          formatSize(message.size), // 文件大小
-                          style: const TextStyle(color: Colors.black, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    // SizedBox(width: 30)
-                    const SizedBox(width: 6),
-                  ],
-                ),
-              ),
+            const Icon(
+              Icons.insert_drive_file,
+              color: Colors.white,
+              size: 42,
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  formatTimestamp(message.timestamp), // 发送时间
-                  style: const TextStyle(color: Colors.grey),
+                SizedBox(
+                  width: screenWidth-80,
+                  // constraints: BoxConstraints(maxWidth: screenWidth-100, minWidth: 80), // 控制消息宽度
+                  child: Text(
+                    message.name, // 文件名
+                    overflow: TextOverflow.clip, // 溢出时的处理方式
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 4,
+                    softWrap: true,
+                  ),
                 ),
-                const SizedBox(width: 12,)
+                const SizedBox(height: 2),
+                Text(
+                  formatSize(message.size), // 文件大小
+                  style: const TextStyle(color: Colors.black, fontSize: 12),
+                ),
               ],
             ),
+            // SizedBox(width: 30)
+            const SizedBox(width: 6),
           ],
         ),
       ),
