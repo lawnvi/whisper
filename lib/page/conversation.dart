@@ -311,8 +311,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                   padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
                   onPressed: () async {
                     var str = await getClipboardData()??"";
-                    if (str.isNotEmpty) {
-                      socketManager.sendMessage(str, true);
+                    if (str.trim().isNotEmpty) {
+                      socketManager.sendMessage(str.trimRight(), true);
                     }
                   },
                   child: const Icon(
