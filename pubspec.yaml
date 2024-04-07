@@ -59,6 +59,7 @@ dependencies:
 #  ftpconnect: ^2.0.5
   bonsoir: ^5.1.9
 #  network_info_plus: ^4.1.0+1
+  flutter_swipe_action_cell: ^3.1.3
 
 
 dev_dependencies:

@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:permission_handler/permission_handler.dart';
 // import 'package:system_tray/system_tray.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -353,8 +354,77 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
-          final deviceItem = devices[index];
-          return ListTile(
+          return _buildDeviceItem(index);
+        },
+      ),
+    );
+  }
+
+  Widget _buildDeviceItem(int index) {
+    final deviceItem = devices[index];
+    return SwipeActionCell(
+      key: ValueKey(devices[index]),
+      trailingActions: [
+        SwipeAction(
+          widthSpace: 140,
+            nestedAction: SwipeNestedAction(
+              /// 自定义你nestedAction 的内容
+              content: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.red,
+                ),
+                width: 120,
+                height: 40,
+                child: const OverflowBox(
+                  maxWidth: double.infinity,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.delete,
+                        color: Colors.white,
+                      ),
+                      Text('确认删除 ', style: TextStyle(color: Colors.white, fontSize: 18)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            /// 将原本的背景设置为透明，因为要用你自己的背景
+            color: Colors.transparent,
+
+            /// 设置了content就不要设置title和icon了
+            content: _getIconButton(Colors.red, Icons.delete),
+            onTap: (handler) {
+              if (socketManager.receiver == deviceItem.uid) {
+                showLoadingDialog(
+                  context,
+                  title: '警告',
+                  description: "连接正在使用，禁止快速删除",
+                  isLoading: true,
+                  // 是否显示加载指示器
+                  icon: Icon(Icons.warning_rounded, color: Colors.red,),
+                  cancelButtonText: '关闭',
+                  onCancel: () {
+                    // 处理取消操作
+                    Navigator.of(context).pop(); // 关闭对话框
+                  },
+                  task: (VoidCallback onCancel) async {
+
+                  },
+                );
+                return;
+              }
+              LocalDatabase().clearDevices([deviceItem.uid]);
+              devices.removeAt(index);
+              setState(() {});
+            }),
+      ],
+
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(15.0, 0, 15.0, 0),
+        child: ListTile(
             leading: Icon(deviceItem.platform.toLowerCase() == "android"? Icons.android_rounded:
             deviceItem.platform.toLowerCase() == "macos"? Icons.laptop_mac_rounded:
             deviceItem.platform.toLowerCase() == "ios"? Icons.apple_rounded:
@@ -379,9 +449,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                 if (deviceItem.uid == socketManager.receiver || device?.isServer == false && socketManager.receiver.isEmpty) IconButton(
                   icon: deviceItem.uid == socketManager.receiver
                       ? Icon(
-                          Icons.wifi_rounded,
-                          color: Colors.lightBlue,
-                        )
+                    Icons.wifi_rounded,
+                    color: Colors.lightBlue,
+                  )
                       : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
@@ -415,11 +485,28 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               );
               _refreshDevice();
             },
-          );
-        },
+          ),
+        ),
+      );
+  }
+
+  Widget _getIconButton(color, icon) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        /// 设置你自己的背景
+        color: color,
+      ),
+      child: Icon(
+        icon,
+        color: Colors.white,
       ),
     );
   }
+
+
 
   void _connectServer(String host) {
     socketManager.connectToServer(host, (ok, message) {
