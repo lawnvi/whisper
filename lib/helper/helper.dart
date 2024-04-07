@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,6 +62,13 @@ String formatTimestamp(int timestamp) {
   DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
   // 使用 DateFormat 格式化时间
   return DateFormat('yyyy/MM/dd HH:mm:ss').format(dateTime);
+}
+
+IconData platformIcon(platform) {
+  return platform.toLowerCase() == "android"? Icons.android_rounded:
+  platform.toLowerCase() == "macos"? Icons.laptop_mac_rounded:
+  platform.toLowerCase() == "ios"? Icons.apple_rounded:
+  platform.toLowerCase() == "windows"? Icons.laptop_windows_rounded: Icons.laptop_rounded;
 }
 
 Future<String> deviceName() async {

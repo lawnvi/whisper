@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 // import 'package:system_tray/system_tray.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -425,10 +426,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       child: Padding(
         padding: const EdgeInsets.fromLTRB(15.0, 0, 15.0, 0),
         child: ListTile(
-            leading: Icon(deviceItem.platform.toLowerCase() == "android"? Icons.android_rounded:
-            deviceItem.platform.toLowerCase() == "macos"? Icons.laptop_mac_rounded:
-            deviceItem.platform.toLowerCase() == "ios"? Icons.apple_rounded:
-            deviceItem.platform.toLowerCase() == "windows"? Icons.laptop_windows_rounded: Icons.laptop_rounded,
+            leading: Icon(platformIcon(deviceItem.platform),
                 size: 28,
                 color: deviceItem.uid == socketManager.receiver || deviceItem.around == true
                     ? Colors.lightBlue
@@ -681,6 +679,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreen extends State<SettingsScreen> {
   DeviceData? device;
   String path = "";
+  PackageInfo? _packageInfo;
 
   @override
   void initState() {
@@ -692,9 +691,11 @@ class _SettingsScreen extends State<SettingsScreen> {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var p = await downloadDir();
+    var pkg = await PackageInfo.fromPlatform();
     setState(() {
       device = temp;
       path = p.path;
+      _packageInfo = pkg;
     });
   }
 
@@ -724,9 +725,9 @@ class _SettingsScreen extends State<SettingsScreen> {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '本机名称 ${device?.name??""}',
-                          const Icon(
-                            Icons.verified_user_rounded,
+                          device?.name??"",
+                          Icon(
+                            platformIcon(device?.platform?? ""),
                             color: CupertinoColors.systemGrey,
                           ),
                           onTap: () {
@@ -739,10 +740,11 @@ class _SettingsScreen extends State<SettingsScreen> {
                               cancelButtonText: '取消',
                               onConfirm: (List<String> inputValues) async {
                                 // 处理输入框的内容
-                                if (inputValues[0].isNotEmpty) {
-                                  LocalSetting().updateNickname(inputValues[0]);
-                                  _refreshDevice();
+                                if (inputValues[0].isEmpty) {
+                                  inputValues[0] = await deviceName();
                                 }
+                                LocalSetting().updateNickname(inputValues[0]);
+                                _refreshDevice();
                               },
                             );
                           }
@@ -824,7 +826,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           }
                         ),
                         _buildSettingItem(
-                            version,
+                            _packageInfo?.version?? "UNKNOWN",
                             const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
                             onTap: () async {
                               final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper/releases');
@@ -849,32 +851,31 @@ class _SettingsScreen extends State<SettingsScreen> {
   }
 
   Widget _buildSettingItem(String title, Icon icon,
-      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap}) {
+      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap, String desc = ""}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
           children: [
             Container(
-              constraints: BoxConstraints(minHeight: 56),
+              constraints: const BoxConstraints(minHeight: 56),
               // height: 56.0, // 增加高度以适应 iOS 设置样式
               child: Row(
                 children: [
                   icon, // 设置项的图标
-                  SizedBox(width: 8.0), // 图标与文字之间的间距
+                  const SizedBox(width: 8.0), // 图标与文字之间的间距
                   Expanded(
                     child: Text(
                       title,
                       softWrap: true,
                       // overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 17.0,
                         color: CupertinoColors.black,
                         fontWeight: FontWeight.w500, // 尝试更轻的字重
                         fontFamily:
                             'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
-
                       ),
                       // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
@@ -883,7 +884,17 @@ class _SettingsScreen extends State<SettingsScreen> {
                 ],
               ),
             ),
-            if (showDivider) Divider(height: 1, color: Colors.white38), // 分割线
+            if (desc.isNotEmpty) Text(desc,
+              softWrap: true,
+              // overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.0,
+                color: CupertinoColors.black,
+                fontWeight: FontWeight.w500, // 尝试更轻的字重
+                fontFamily:
+                'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
+              ),),
+            if (showDivider) const Divider(height: 1, color: Colors.white38), // 分割线
           ],
         ),
       ),
