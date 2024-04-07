@@ -4,9 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
 import 'package:path_provider/path_provider.dart';
 
-void openDir({String name=""}) async {
+void openDir({String name="", String realPath = ""}) async {
   var dir = await downloadDir();
   var path = dir.path;
+
+  if (realPath.isNotEmpty) {
+    var file = File(realPath);
+    if (file.existsSync()) {
+      path = file.parent.path;
+    }
+  }
 
   print("打开文件: $path/$name");
   if (Platform.isMacOS) {

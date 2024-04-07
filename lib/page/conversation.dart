@@ -237,7 +237,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           ),
                           onTap: (){
                             if (message.type == MessageEnum.File) {
-                              openDir(name: message.name);
+                              openDir(name: message.name, realPath: message.path);
                             }
                           },
                           onDoubleTap: () {
