@@ -446,7 +446,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       width: screenWidth,
       // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
       decoration: BoxDecoration(
-        color: message.acked? Colors.grey[200]: Colors.redAccent,
+        color: isOpponent || message.acked? Colors.grey[200]: Colors.redAccent,
         borderRadius: BorderRadius.circular(8),
       ),
       // width: 400,
