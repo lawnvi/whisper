@@ -45,7 +45,7 @@ jobs:
         continue-on-error: true
 
       - name: rename dmg
-        run: mv whisper*.dmg whisper-x86_64.dmg
+        run: mv whisper*.dmg whisper.dmg
 
 #      - run: |
 #          hdiutil create -format UDZO -srcfolder \
@@ -56,7 +56,7 @@ jobs:
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "whisper-x86_64.dmg,build/ios/iphoneos/app.ipa"
+          artifacts: "whisper.dmg,build/ios/iphoneos/app.ipa"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
@@ -159,7 +159,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "whisper-${{ env.cur_version }}.x86_64.rpm,build/linux/deb/whisper-${{ env.cur_version }}-amd64.deb,build/app/outputs/flutter-apk/*"
+          artifacts: "whisper-${{ env.cur_version }}.x86_64.rpm,build/linux/deb/whisper-${{ env.cur_version }}-amd64.deb,build/app/outputs/flutter-apk/*.apk"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
