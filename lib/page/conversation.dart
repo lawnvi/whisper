@@ -184,7 +184,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
-            child: Icon(
+            child: const Icon(
               Icons.settings_outlined,
               size: 30,
               color: Colors.black45,
@@ -329,10 +329,12 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
                         }else if (event.logicalKey == LogicalKeyboardKey.enter) {
                           keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
-                          if (event is RawKeyDownEvent && keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true) {
-                            socketManager.sendMessage(_textController.text, false);
-                            // FocusScope.of(context).unfocus();
-                            _textController.text = "";
+                          if (event is RawKeyDownEvent && (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true || isMobile())) {
+                            if (_textController.text.trim().isNotEmpty) {
+                              socketManager.sendMessage(_textController.text.trimRight(), false);
+                              // FocusScope.of(context).unfocus();
+                              _textController.text = "";
+                            }
                           }
                         }
                       },
@@ -341,9 +343,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                         cursorColor: Colors.black87,
                         autofocus: isDesktop(),
                         autocorrect: true,
-                        maxLines: 4,
+                        maxLines: isMobile()? 5: 20,
                         minLines: 1,
-                        placeholder: 'Type your message...', // 输入框提示文字
+                        placeholder: '发点什么...', // 输入框提示文字
                         onChanged: (value) {
                           if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
                             _textController.text = "";
@@ -412,7 +414,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
       child: Card(
-        color: isOpponent ? Colors.grey[300] : Colors.blue,
+        color: isOpponent? Colors.grey[300]: messageData.acked? Colors.blue: Colors.redAccent,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: SelectableText(messageData.content??"", // 文本消息内容
@@ -444,7 +446,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       width: screenWidth,
       // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
       decoration: BoxDecoration(
-        color: Colors.grey[200],
+        color: message.acked? Colors.grey[200]: Colors.redAccent,
         borderRadius: BorderRadius.circular(8),
       ),
       // width: 400,
