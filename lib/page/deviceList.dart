@@ -335,7 +335,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
-            child: Icon(
+            child: const Icon(
               Icons.settings_outlined,
               size: 30,
               color: Colors.black45,
@@ -366,7 +366,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     return SwipeActionCell(
       key: ValueKey(devices[index]),
       trailingActions: [
-        SwipeAction(
+        if (socketManager.receiver != deviceItem.uid) SwipeAction(
           widthSpace: 140,
             nestedAction: SwipeNestedAction(
               /// 自定义你nestedAction 的内容
@@ -405,7 +405,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                   description: "连接正在使用，禁止快速删除",
                   isLoading: true,
                   // 是否显示加载指示器
-                  icon: Icon(Icons.warning_rounded, color: Colors.red,),
+                  icon: const Icon(Icons.warning_rounded, color: Colors.red,),
                   cancelButtonText: '关闭',
                   onCancel: () {
                     // 处理取消操作
