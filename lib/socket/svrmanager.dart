@@ -216,8 +216,10 @@ class WsSvrManager {
         break;
       case MessageEnum.File: {
         print("收到文件：${message.name} size: ${message.size}");
-        LocalDatabase().insertMessage(message);
         var path = await _prepareIOSink(message);
+        var msgTemp = message.toJson();
+        msgTemp["path"] = path;
+        LocalDatabase().insertMessage(MessageData.fromJson(msgTemp));
         print("保存文件: $path");
         _event?.onMessage(message);
         _ackMessage(message);
