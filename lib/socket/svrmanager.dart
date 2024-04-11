@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 import '../helper/file.dart';
 
 abstract class ISocketEvent {
-  void onError();
+  void onError(String message);
 
   void onMessage(MessageData messageData);
 
@@ -84,19 +84,29 @@ class WsSvrManager {
   }
 
   void startServer(int port, var callback) {
-    close();
-    var handler = webSocketHandler((webSocket) async {
+    close(closeServer: true);
+    var handler = webSocketHandler((WebSocketChannel webSocket) async {
       if (_sink != null) {
         var device = await LocalSetting().instance();
         var message = _buildMessage(MessageEnum.Auth, device.toJsonString(), "服务占线", "", 0, false);
-        await webSocket.sink.add(utf8.encode(message.toJsonString()));
+        webSocket.sink.add(utf8.encode(message.toJsonString()));
         return;
       }
       _sink = webSocket.sink;
-      webSocket.stream.listen((message) {
-        _listen(message);
-      });
-    });
+      webSocket.stream.timeout(const Duration(minutes: 10)).listen(
+        (message) {
+          _listen(message);
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          print("连接服务异常: $error\n$stackTrace");
+          _event?.onError(error.toString());
+        },
+        onDone: () {
+          print("连接服务done");
+          close();
+        }
+      );
+    }, pingInterval: const Duration(seconds: 10));
 
     shelf_io.serve(handler, '0.0.0.0', port, shared: true).then((server) {
       _server = server;
@@ -112,14 +122,20 @@ class WsSvrManager {
 
   Future<void> connectToServer(String host, var callback) async {
     try {
-      close();
+      close(closeServer: true);
       final wsUrl = Uri.parse('ws://$host');
       WebSocketChannel channel = WebSocketChannel.connect(wsUrl);
       await channel.ready;
       _sink = channel.sink;
       _auth(true);
-      channel.stream.listen((message) {
+      channel.stream.timeout(const Duration(minutes: 10)).listen((message) {
         _listen(message);
+      }, onError: (error, stackTrace) {
+        print("客户端服务异常: $error\n$stackTrace");
+        _event?.onError(error.toString());
+      }, onDone: () {
+        print("客户端服务done");
+        close();
       });
       callback(true, "");
     } on Exception catch (e1) {
@@ -127,7 +143,7 @@ class WsSvrManager {
     }
   }
 
-  void close({bool closeServer=true}) {
+  void close({bool closeServer=false}) {
     _sink?.close();
     _sink = null;
     if (closeServer) {
@@ -137,6 +153,7 @@ class WsSvrManager {
     }
     receiver = "";
     print("服务已关闭");
+    _event?.onClose();
   }
 
   void _send(String message) {
@@ -181,7 +198,7 @@ class WsSvrManager {
           if (allow) {
             receiver = device?.uid??"";
           }else {
-            close(closeServer: false);
+            close();
           }
           _event?.afterAuth(allow, device);
         });
@@ -265,6 +282,9 @@ class WsSvrManager {
   }
 
   void sendMessage(String content, bool clipboard) {
+    if (_sink == null) {
+      return;
+    }
     var message = _buildMessage(MessageEnum.Text, content, "", "", 0, clipboard);
     LocalDatabase().insertMessage(message);
     print("创建新消息, uuid: ${message.uuid}");
@@ -272,6 +292,9 @@ class WsSvrManager {
   }
 
   void sendFile(String path) async {
+    if (_sink == null) {
+      return;
+    }
     final file = File(path);
     final size = file.lengthSync();
     final fileName = p.basename(path);

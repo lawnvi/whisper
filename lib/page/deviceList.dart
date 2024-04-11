@@ -107,6 +107,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     print("wifi ip: $wifiIP");
 
     if (wifiIP == "127.0.0.1") {
+      discovering = false;
       return;
     }
 
@@ -137,6 +138,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   Future<void> _stopBroadcast() async {
     await _broadcast?.stop();
+    discovering = false;
   }
 
   Future<void> _discoverService() async {
@@ -227,6 +229,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   Future<void> _stopDiscovery() async {
     await _discovery?.stop();
+    discovering = false;
   }
 
   DeviceData buildDevice({uid="", name="", host="", port=10002, platform="", around=true}) {
@@ -275,6 +278,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       _startServer();
     }
     if (!discovering) {
+      discovering = true;
       await _broadcastService();
       if (isFirst) {
         await _discoverService();
@@ -292,7 +296,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
             // 作为服务端
             if (device?.isServer == true) {
               if (socketManager.started) {
-                socketManager.close();
+                socketManager.close(closeServer: true);
                 setState(() {
                   socketManager.started = false;
                 });
@@ -455,11 +459,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               children: [
                 if (deviceItem.uid == socketManager.receiver || device?.isServer == false && socketManager.receiver.isEmpty) IconButton(
                   icon: deviceItem.uid == socketManager.receiver
-                      ? Icon(
-                    Icons.wifi_rounded,
-                    color: Colors.lightBlue,
-                  )
-                      : Icon(Icons.wifi_off_rounded), // 连接/断开 图标
+                      ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
+                      : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
                     if (device?.isServer != true || deviceItem.uid == socketManager.receiver) {
@@ -472,7 +473,6 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                         onConfirm: () {
                           if (deviceItem.uid == socketManager.receiver) {
                             socketManager.close(closeServer: device?.isServer != true);
-                            _refreshDevice();
                           }else {
                             _connectServer("${deviceItem.host}:${deviceItem.port}");
                           }
@@ -609,13 +609,13 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   }
 
   @override
-  void afterAuth(bool allow, DeviceData? deviceData) {
+  void afterAuth(bool allow, DeviceData? deviceData) async {
     if (!allow) {
       return;
     }
     db.upsertDevice(deviceData!);
     // 在确认后执行的逻辑
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => SendMessageScreen(device: deviceData,),
@@ -627,6 +627,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   @override
   void onClose() {
     // TODO: implement onClose
+    _refreshDevice();
   }
 
   @override
@@ -635,8 +636,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   }
 
   @override
-  void onError() {
+  void onError(String message) {
     // TODO: implement onError
+    showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
+      WsSvrManager().close();
+    });
   }
 
   @override
@@ -800,8 +804,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                             value: device?.isServer ?? false,
                             onChanged: (bool value) {
                               LocalSetting().updateServer(value);
-                              WsSvrManager().close();
-                              _refreshDevice();
+                              WsSvrManager().close(closeServer: true);
                             },
                           ),
                         ),

@@ -171,10 +171,16 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(device.name), // 设备名称
-                Text(
-                  "${device.host}:${device.port}", // 设备 IP 地址
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
-                ),
+                Row(
+                  children: [
+                    Text(
+                      "${device.host}:${device.port}", // 设备 IP 地址
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(width: 4),
+                    if(socketManager.receiver == device.uid) Icon(Icons.wifi_rounded, size: socketManager.started ? 14 : 0, color: Colors.lightBlue)
+                  ],
+                )
               ],
             ),
           ],
@@ -503,6 +509,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onClose() {
     // TODO: implement onClose
+    percent = 0;
+    setState(() {
+
+    });
   }
 
   @override
@@ -511,13 +521,20 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   @override
-  void onError() {
+  void onError(String message) {
     // TODO: implement onError
+    showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
+      WsSvrManager().close();
+    });
   }
 
   @override
   void afterAuth(bool allow, DeviceData? device) {
+    if (socketManager.receiver == device?.uid) {
+      setState(() {
 
+      });
+    }
   }
 
   @override
