@@ -80,11 +80,11 @@ SPEC CHECKSUMS:
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   open_dir_macos: 9649018f88e71eb9fb8aa3d95caec30a73c08c5b
   package_info_plus: fa739dd842b393193c5ca93c26798dff6e3d0e0c
-  path_provider_foundation: 3784922295ac71e43754bd15e0653ccfd36a147c
-  shared_preferences_foundation: b4c3b4cddf1c21f02770737f147a3f5da9d39695
+  path_provider_foundation: cb5231ba0130894a3c822c8943cbbaa873d048f7
+  shared_preferences_foundation: 725d814e1eb5e7eb4d2e474fcec2c015875da46b
   sqlite3: 73b7fc691fdc43277614250e04d183740cb15078
   sqlite3_flutter_libs: 06a05802529659a272beac4ee1350bfec294f386
-  url_launcher_macos: d2691c7dd33ed713bf3544850a623080ec693d95
+  url_launcher_macos: 744f794cfe7b0e3cd0a072e7480b05eb29215e7d
 
 PODFILE CHECKSUM: 4062a5d7621e35b4f677b9e411c2714a4f99d4c2
 

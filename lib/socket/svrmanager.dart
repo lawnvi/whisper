@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/helper/helper.dart';
@@ -55,6 +56,8 @@ class WsSvrManager {
   bool started = false;
   String receiver = "";
   String sender = "";
+  final List<MessageData> _sendingFiles = [];
+  final _sendFileLock = Lock();
 
   void setSender(String uid) {
     sender = uid;
@@ -232,14 +235,13 @@ class WsSvrManager {
         // TODO: Handle this case.
         break;
       case MessageEnum.File: {
-        print("收到文件：${message.name} size: ${message.size}");
-        var path = await _prepareIOSink(message);
-        var msgTemp = message.toJson();
-        msgTemp["path"] = path;
-        LocalDatabase().insertMessage(MessageData.fromJson(msgTemp));
-        print("保存文件: $path");
-        _event?.onMessage(message);
-        _ackMessage(message);
+        await _sendFileLock.synchronized(() async {
+          _sendingFiles.insert(0, message);
+          if (_sendingFiles.length > 1) {
+            return;
+          }
+          await _handleFileMsg(message);
+        });
         break;
       }
       default: {
@@ -253,7 +255,9 @@ class WsSvrManager {
             _ioSink = null;
             _currentLen = 0;
             _currentSize = 0;
-            print("recv over");
+            _sendingFiles.removeLast();
+            print("recv over, check sending files size: ${_sendingFiles.length}");
+            _handleFileMsg(_sendingFiles.last);
             // fileMD5
           }
         }else {
@@ -261,6 +265,17 @@ class WsSvrManager {
         }
       }
     }
+  }
+  
+  Future<void> _handleFileMsg(MessageData message) async {
+    print("收到文件：${message.name} size: ${message.size}");
+    var path = await _prepareIOSink(message);
+    var msgTemp = message.toJson();
+    msgTemp["path"] = path;
+    LocalDatabase().insertMessage(MessageData.fromJson(msgTemp));
+    print("保存文件: $path");
+    _event?.onMessage(message);
+    _ackMessage(message);
   }
 
   MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path=""}) {
@@ -281,7 +296,7 @@ class WsSvrManager {
     _send(MessageData.fromJson(json).toJsonString());
   }
 
-  void sendMessage(String content, bool clipboard) {
+  Future<void> sendMessage(String content, bool clipboard) async {
     if (_sink == null) {
       return;
     }
@@ -291,17 +306,19 @@ class WsSvrManager {
     _send(message.toJsonString());
   }
 
-  void sendFile(String path) async {
-    if (_sink == null) {
-      return;
-    }
-    final file = File(path);
-    final size = file.lengthSync();
-    final fileName = p.basename(path);
-    // final md5 = await fileMD5(file);
-    var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false, path: path, md5: "");
-    LocalDatabase().insertMessage(message);
-    _send(message.toJsonString());
+  Future<void> sendFile(String path) async {
+    await _sendFileLock.synchronized(() async {
+      if (_sink == null) {
+        return;
+      }
+      final file = File(path);
+      final size = file.lengthSync();
+      final fileName = p.basename(path);
+      // final md5 = await fileMD5(file);
+      var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false, path: path, md5: "");
+      await LocalDatabase().insertMessage(message);
+      _send(message.toJsonString());
+    });
   }
 
   void _sendFile(MessageData message) async {

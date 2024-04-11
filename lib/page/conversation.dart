@@ -320,7 +320,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                   onPressed: () async {
                     var str = await getClipboardData()??"";
                     if (str.trim().isNotEmpty) {
-                      socketManager.sendMessage(str.trimRight(), true);
+                      await socketManager.sendMessage(str.trimRight(), true);
                     }
                   },
                   child: const Icon(
@@ -332,14 +332,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 Expanded(
                     child: RawKeyboardListener(
                       focusNode: FocusNode(),
-                      onKey: (RawKeyEvent event) {
+                      onKey: (RawKeyEvent event) async {
                         if(event.logicalKey == LogicalKeyboardKey.shiftLeft || event.logicalKey == LogicalKeyboardKey.shiftRight) {
                           keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
                         }else if (event.logicalKey == LogicalKeyboardKey.enter) {
                           keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
                           if (event is RawKeyDownEvent && (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true || isMobile())) {
                             if (_textController.text.trim().isNotEmpty) {
-                              socketManager.sendMessage(_textController.text.trimRight(), false);
+                              await socketManager.sendMessage(_textController.text.trimRight(), false);
                               // FocusScope.of(context).unfocus();
                               _textController.text = "";
                             }
@@ -368,11 +368,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                     if (_textController.text.isEmpty) {
                       FilePickerResult? result = await FilePicker.platform.pickFiles();
                       if (result != null) {
-                        socketManager.sendFile(result.files.first.path??"");
+                        for (var item in result.files) {
+                          await socketManager.sendFile(item.path??"");
+                        }
+                        // await socketManager.sendFile(result.files.first.path??"");
                       }
                     }else {
                       // 发送按钮操作
-                      socketManager.sendMessage(_textController.text, false);
+                      await socketManager.sendMessage(_textController.text, false);
                       _textController.text = "";
                     }
                   },
@@ -384,7 +387,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ],
             ),
           ),
-          SizedBox(height: 6,)
+          const SizedBox(height: 6,)
         ],
       ),
     );
@@ -399,7 +402,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           return;
         }
         // todo 多文件发送
-        socketManager.sendFile(detail.files.first.path);
+        // socketManager.sendFile(detail.files.first.path);
+        for (var item in detail.files) {
+         await socketManager.sendFile(item.path);
+        }
       },
       onDragEntered: (detail) {
 
