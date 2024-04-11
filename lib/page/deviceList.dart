@@ -332,9 +332,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                   children: [
                     Text(
                       "${device?.host??"127.0.0.1"}:${device?.port??10002}", // 替换为实际 IP 地址
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     Icon(Icons.wifi_rounded,
                         size: socketManager.started ? 14 : 0, color: Colors.lightBlue)
                   ],
@@ -376,11 +376,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   Widget _buildDeviceItem(int index) {
     final deviceItem = devices[index];
+    bool ism = isMobile();
     return SwipeActionCell(
       key: ValueKey(devices[index]),
       trailingActions: [
         if (socketManager.receiver != deviceItem.uid) SwipeAction(
-          widthSpace: 140,
+          widthSpace: ism? 120: 140 ,
             nestedAction: SwipeNestedAction(
               /// 自定义你nestedAction 的内容
               content: Container(
@@ -388,18 +389,18 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
                   borderRadius: BorderRadius.circular(20),
                   color: Colors.red,
                 ),
-                width: 120,
+                width: ism? 100: 120,
                 height: 40,
-                child: const OverflowBox(
+                child: OverflowBox(
                   maxWidth: double.infinity,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.delete,
                         color: Colors.white,
                       ),
-                      Text('确认删除 ', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      Text('确认删除 ', style: TextStyle(color: Colors.white, fontSize: ism? 16: 18)),
                     ],
                   ),
                 ),
@@ -437,7 +438,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       ],
 
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(15.0, 0, 15.0, 0),
+        padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
         child: ListTile(
             leading: Icon(platformIcon(deviceItem.platform),
                 size: 28,

@@ -308,7 +308,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ),
           ),),
           // Divider(height: 0.2, color: Colors.grey), // 分割线
-          Container(
+          if(device.uid == socketManager.receiver) Container(
             padding: const EdgeInsets.symmetric(horizontal: 10.0),
             decoration: const BoxDecoration(
               color: Colors.white, // 背景颜色设置为白色
