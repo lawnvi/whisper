@@ -68,7 +68,7 @@ mkdir -p "${APPLICATION_DIR}"
 cp -r "${FLUTTER_PROJECT_DIR}/build/linux/x64/release/bundle/." "${APPLICATION_DIR}"
 
 # 创建.deb包
-DEB_PACKAGE_NAME="${APPLICATION_NAME}-${VERSION}-${ARCHITECTURE}.deb"
+DEB_PACKAGE_NAME="${APPLICATION_NAME}-${ARCHITECTURE}.deb"
 dpkg-deb --build "${BUILD_DIR}" "${OUTPUT_DIR}/${DEB_PACKAGE_NAME}"
 
 pwd
