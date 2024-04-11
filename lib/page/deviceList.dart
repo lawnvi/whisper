@@ -92,6 +92,15 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   //   });
   // }
 
+  @override
+  void dispose() {
+    // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
+    print("dispose page");
+    _stopDiscovery();
+    _stopBroadcast();
+    super.dispose();
+  }
+
   Future<void> _broadcastService() async {
     final wifiIP = await getLocalIpAddress();
 
@@ -154,7 +163,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
             print("event type: ${event.type}, service name: ${service.name} start");
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolved || BonsoirDiscoveryEventType.discoveryServiceLost:
-            final svr = service as ResolvedBonsoirService;
+            final svr = service;
             if (!svr.attributes.containsKey('uid')) {
               print("event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
               return;
@@ -266,9 +275,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       _startServer();
     }
     if (!discovering) {
-      _broadcastService();
+      await _broadcastService();
       if (isFirst) {
-        _discoverService();
+        await _discoverService();
       }
     }
   }
@@ -680,6 +689,7 @@ class _SettingsScreen extends State<SettingsScreen> {
   DeviceData? device;
   String path = "";
   PackageInfo? _packageInfo;
+  bool doubleClickDelete = false;
 
   @override
   void initState() {
@@ -692,10 +702,12 @@ class _SettingsScreen extends State<SettingsScreen> {
     var temp = await LocalSetting().instance();
     var p = await downloadDir();
     var pkg = await PackageInfo.fromPlatform();
+    var doubleClick = await LocalSetting().isDoubleClickDelete();
     setState(() {
       device = temp;
       path = p.path;
       _packageInfo = pkg;
+      doubleClickDelete = doubleClick;
     });
   }
 
@@ -795,8 +807,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         ),
                         _buildSettingItem(
                           '自动通过新设备',
-                          const Icon(Icons.lock_open,
-                              color: CupertinoColors.systemGrey),
+                          const Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                             value: device?.auth ?? false,
                             onChanged: (bool value) {
@@ -807,8 +818,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         ),
                         _buildSettingItem(
                           '允许访问剪切板',
-                          const Icon(Icons.copy,
-                              color: CupertinoColors.systemGrey),
+                          const Icon(Icons.copy,  color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                             value: device?.clipboard ?? false,
                             onChanged: (bool value) {
@@ -818,9 +828,21 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
+                          '双击消息删除',
+                          const Icon(Icons.clear, color: CupertinoColors.systemGrey),
+                          trailing: CupertinoSwitch(
+                              value: doubleClickDelete,
+                              onChanged: (bool value) {
+                              LocalSetting().updateDoubleClickDelete(value);
+                              setState(() {
+                                doubleClickDelete = value;
+                              });
+                            },
+                          ),
+                        ),
+                        _buildSettingItem(
                           '存储位置 $path',
-                          const Icon(Icons.file_download_outlined,
-                              color: CupertinoColors.systemGrey),
+                          const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
                           onTap: () {
                             openDir();
                           }

@@ -240,8 +240,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                               openDir(name: message.name);
                             }
                           },
-                          onDoubleTap: () {
-                            _deleteItem(message.id);
+                          onDoubleTap: () async {
+                            if (await LocalSetting().isDoubleClickDelete()) {
+                              _deleteItem(message.id);
+                            }
                           },
                           onLongPress: () {
                             showConfirmationDialog(
@@ -605,7 +607,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                       ],
                     )),
                 const SizedBox(height: 8,),
-                Card(
+                if (device.uid != WsSvrManager().receiver) Card(
                     elevation: 2.0, // 设置卡片的阴影
                     color: Colors.white,
                     shape: RoundedRectangleBorder(
@@ -614,11 +616,11 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '删除连接',
+                          '删除设备',
                           const Icon(Icons.delete_rounded, color: CupertinoColors.destructiveRed,),
                           null,
                           onTap: () {
-                            showConfirmationDialog(context, title: "删除${device.name}", description: "删除后消息会全部清理，不可恢复", confirmButtonText: "确定", cancelButtonText: "取消", onConfirm: (){
+                            showConfirmationDialog(context, title: "删除${device.name}", description: "删除与此设备的所有消息，不可恢复", confirmButtonText: "确定", cancelButtonText: "取消", onConfirm: (){
                               LocalDatabase().clearDevices([device.uid]);
                               Navigator.pop(context);
                               Navigator.pop(context);

@@ -25,6 +25,7 @@ class LocalSetting {
   final String _clipboard = "_clipboard";
   final String _noAuth = "_no_auth";
   final String _password = "_password";
+  final String _doubleClickDelete = "_double_click_delete";
 
 
   Future<DeviceData> instance({bool online=false}) async {
@@ -102,5 +103,13 @@ class LocalSetting {
 
   void updatePassword(String password) async {
     _setSP(_password, password);
+  }
+
+  void updateDoubleClickDelete(bool delete) async {
+    _setSP(_doubleClickDelete, delete);
+  }
+
+  Future<bool> isDoubleClickDelete() async {
+    return await getSPDefault(_doubleClickDelete, false);
   }
 }
