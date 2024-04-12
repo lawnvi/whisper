@@ -366,12 +366,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                   padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
                   onPressed: () async {
                     if (_textController.text.isEmpty) {
-                      FilePickerResult? result = await FilePicker.platform.pickFiles();
+                      FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
                       if (result != null) {
                         for (var item in result.files) {
                           await socketManager.sendFile(item.path??"");
                         }
-                        // await socketManager.sendFile(result.files.first.path??"");
                       }
                     }else {
                       // 发送按钮操作

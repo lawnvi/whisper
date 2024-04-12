@@ -52,8 +52,18 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   }
 
   Future<void> _requestPermission() async {
-    if (Platform.isAndroid) {
-      PermissionStatus status = await Permission.storage.request();
+    if (!isMobile()) {
+      return;
+    }
+
+    var permissions = [Permission.storage];
+
+    for (var item in permissions) {
+      print("permission status: ${await item.status}");
+      if(await item.isDenied) {
+        print("permission request: ${await item.isRestricted}");
+        await item.request();
+      }
     }
   }
 
