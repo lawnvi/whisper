@@ -101,7 +101,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     super.dispose();
   }
 
-  Future<void> _broadcastService() async {
+  void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
 
     print("wifi ip: $wifiIP");
@@ -111,14 +111,15 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       return;
     }
 
+    await _stopBroadcast(close: false);
     BonsoirService service = BonsoirService(
       name: serviceName,
       type: serviceType,
       port: 10004,
       attributes: {
         'host': wifiIP,
-        'port': (device?.port??10002).toString(),
-        'name': await deviceName(),
+        'port': (port??device?.port??10002).toString(),
+        'name': device?.name??(await deviceName()),
         'platform': device?.platform?? "未知",
         'uid': device?.uid?? "",
       },
@@ -136,9 +137,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     discovering = true;
   }
 
-  Future<void> _stopBroadcast() async {
+  Future<void> _stopBroadcast({close=true}) async {
     await _broadcast?.stop();
-    discovering = false;
+    discovering = !close;
   }
 
   Future<void> _discoverService() async {
@@ -270,18 +271,26 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     }
 
     socketManager.setSender(temp.uid);
+
+    var serverPortUpdate = device != null && device!.isServer && device!.port != temp.port;
+
+    if ((isFirst || device?.isServer != true || device?.port != temp.port) && temp.isServer) {
+      _startServer(port: temp.port);
+    }
+
     setState(() {
       device = temp;
       devices = newArr;
     });
-    if (isFirst && temp.isServer) {
-      _startServer();
-    }
-    if (!discovering) {
+
+    print("refresh ui: $discovering $serverPortUpdate");
+    if (!discovering || serverPortUpdate) {
       discovering = true;
-      await _broadcastService();
+      Future.delayed(const Duration(milliseconds: 100), (){
+        _broadcastService();
+      });
       if (isFirst) {
-        await _discoverService();
+        _discoverService();
       }
     }
   }
@@ -541,8 +550,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     });
   }
 
-  void _startServer() {
-    socketManager.startServer(device?.port?? 10002, (ok, msg) {
+  void _startServer({port}) {
+    socketManager.startServer(port??device?.port?? 10002, (ok, msg) {
       setState(() {
         socketManager.started = ok;
         if (!ok) {
@@ -552,7 +561,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
             description: "error: $msg",
             isLoading: true,
             // 是否显示加载指示器
-            icon: Icon(Icons.warning_rounded, color: Colors.red,),
+            icon: const Icon(Icons.warning_rounded, color: Colors.red,),
             cancelButtonText: 'Cancel',
             onCancel: () {
               // 处理取消操作
@@ -692,9 +701,9 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreen extends State<SettingsScreen> {
   DeviceData? device;
-  String path = "";
+  String _path = "";
   PackageInfo? _packageInfo;
-  bool doubleClickDelete = false;
+  bool _doubleClickDelete = false;
 
   @override
   void initState() {
@@ -710,9 +719,9 @@ class _SettingsScreen extends State<SettingsScreen> {
     var doubleClick = await LocalSetting().isDoubleClickDelete();
     setState(() {
       device = temp;
-      path = p.path;
+      _path = p.path;
       _packageInfo = pkg;
-      doubleClickDelete = doubleClick;
+      _doubleClickDelete = doubleClick;
     });
   }
 
@@ -806,6 +815,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                             onChanged: (bool value) {
                               LocalSetting().updateServer(value);
                               WsSvrManager().close(closeServer: true);
+                              _refreshDevice();
                             },
                           ),
                         ),
@@ -835,17 +845,17 @@ class _SettingsScreen extends State<SettingsScreen> {
                           '双击消息删除',
                           const Icon(Icons.clear, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
-                              value: doubleClickDelete,
+                              value: _doubleClickDelete,
                               onChanged: (bool value) {
                               LocalSetting().updateDoubleClickDelete(value);
                               setState(() {
-                                doubleClickDelete = value;
+                                _doubleClickDelete = value;
                               });
                             },
                           ),
                         ),
                         _buildSettingItem(
-                          '存储位置 $path',
+                          '存储位置 $_path',
                           const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
                           onTap: () {
                             openDir();

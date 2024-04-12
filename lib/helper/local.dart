@@ -27,7 +27,6 @@ class LocalSetting {
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
 
-
   Future<DeviceData> instance({bool online=false}) async {
     return DeviceData(id: 0,
         uid: await getSPDefault(_uuid, const Uuid().v4()),
