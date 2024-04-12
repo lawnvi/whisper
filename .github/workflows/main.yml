@@ -139,7 +139,7 @@ jobs:
         run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh $cur_version amd64
 
       - name: build rpm package
-        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper.x86_64.rpm
+        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-x86_64.rpm
 
       - name: prepare for sign
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
@@ -159,7 +159,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           # Specify the path to the tar.gz file instead of the folder
-          artifacts: "whisper.x86_64.rpm,build/linux/deb/whisper-amd64.deb,build/app/outputs/flutter-apk/*.apk"
+          artifacts: "whisper-x86_64.rpm,build/linux/deb/whisper-amd64.deb,build/app/outputs/flutter-apk/*.apk"
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
