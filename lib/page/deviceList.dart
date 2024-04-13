@@ -7,13 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-// import 'package:system_tray/system_tray.dart';
+import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/model/LocalDatabase.dart';
-
-import '../global.dart';
+import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
 import '../socket/svrmanager.dart';
 import 'conversation.dart';
@@ -23,7 +22,7 @@ class DeviceListScreen extends StatefulWidget {
   _DeviceListScreen createState() => _DeviceListScreen();
 }
 
-class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
+class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent, TrayListener, WindowListener {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData? device;
@@ -40,6 +39,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     //     (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
     //   initSystemTray();
     // }
+    _setDesktopWindow();
     _requestPermission();
     super.initState();
   }
@@ -65,6 +65,51 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         await item.request();
       }
     }
+  }
+
+  Future<void> _setDesktopWindow() async {
+    if (isMobile()) {
+      return;
+    }
+    await windowManager.setPreventClose(true);
+    await trayManager.setIcon(
+      Platform.isWindows
+          ? 'assets/app_icon.ico'
+          : 'assets/app_icon_round.png',
+    );
+
+    Menu menu = Menu(
+      items: [
+        MenuItem(
+            key: 'show_window',
+            label: "显示",
+            onClick: (MenuItem item) {
+              windowManager.show();
+            }),
+        MenuItem(
+            key: 'hide_window',
+            label: "隐藏",
+            onClick: (MenuItem item) {
+              windowManager.hide();
+            }),
+        MenuItem(
+            key: 'clipboard',
+            label: "发送剪切板",
+            onClick: (MenuItem item) {
+              socketManager.sendClipboardText();
+            }),
+        MenuItem.separator(),
+        MenuItem(
+            key: 'exit_app',
+            label: '退出',
+            onClick: (MenuItem menuItem) async {
+              await windowManager.destroy();
+            }),
+      ],
+    );
+    await trayManager.setContextMenu(menu);
+    trayManager.addListener(this);
+    windowManager.addListener(this);
   }
 
   // Future<void> initSystemTray() async {
@@ -108,6 +153,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     print("dispose page");
     _stopDiscovery();
     _stopBroadcast();
+    trayManager.removeListener(this);
+    windowManager.removeListener(this);
     super.dispose();
   }
 
@@ -677,6 +724,127 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
   @override
   void onProgress(int size, length) {
     // TODO: implement onProgress
+  }
+
+  @override
+  void onTrayIconMouseDown() async {
+    await windowManager.setHasShadow(true);
+  }
+
+  @override
+  void onTrayIconMouseUp() async {
+    // await windowManager.isVisible()? windowManager.hide(): windowManager.show();
+    await windowManager.show();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // TODO: implement onTrayIconRightMouseDown
+    trayManager.popUpContextMenu();
+  }
+
+  @override
+  void onTrayIconRightMouseUp() {
+    // TODO: implement onTrayIconRightMouseUp
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    // TODO: implement onTrayMenuItemClick
+  }
+
+  @override
+  void onWindowBlur() {
+    // TODO: implement onWindowBlur
+  }
+
+  @override
+  void onWindowClose() async {
+    if (await windowManager.isPreventClose()) {
+      if (Platform.isMacOS && await windowManager.isFocused()) {
+        await windowManager.blur();
+      }else {
+        await windowManager.hide();
+      }
+    }
+  }
+
+  @override
+  void onWindowDocked() {
+    // TODO: implement onWindowDocked
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    // TODO: implement onWindowEnterFullScreen
+  }
+
+  @override
+  void onWindowEvent(String eventName) {
+    // TODO: implement onWindowEvent
+  }
+
+  @override
+  void onWindowFocus() {
+    // TODO: implement onWindowFocus
+    setState(() {});
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    // TODO: implement onWindowLeaveFullScreen
+  }
+
+  @override
+  void onWindowMaximize() {
+    // TODO: implement onWindowMaximize
+  }
+
+  @override
+  void onWindowMinimize() {
+    // TODO: implement onWindowMinimize
+  }
+
+  @override
+  void onWindowMove() {
+    // TODO: implement onWindowMove
+  }
+
+  @override
+  void onWindowMoved() {
+    // TODO: implement onWindowMoved
+  }
+
+  @override
+  void onWindowResize() {
+    // TODO: implement onWindowResize
+  }
+
+  @override
+  void onWindowResized() async {
+    // TODO: implement onWindowResized
+    if (await windowManager.isMaximized() || await windowManager.isMinimized()) {
+      return;
+    }
+    var rect = await windowManager.getBounds();
+    print("resized window: ${rect.width} ${rect.height}");
+    LocalSetting().setWindowWidth(rect.width);
+    LocalSetting().setWindowHeight(rect.height);
+  }
+
+  @override
+  void onWindowRestore() {
+    // TODO: implement onWindowRestore
+  }
+
+  @override
+  void onWindowUndocked() {
+    // TODO: implement onWindowUndocked
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    // TODO: implement onWindowUnmaximize
   }
 }
 

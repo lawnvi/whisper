@@ -348,6 +348,13 @@ class WsSvrManager {
     _send(message.toJsonString());
   }
 
+  void sendClipboardText() async {
+    var str = await getClipboardData()??"";
+    if (str.trim().isNotEmpty) {
+      await sendMessage(str.trimRight(), true);
+    }
+  }
+
   Future<void> sendMessage(String content, bool clipboard) async {
     if (_sink == null) {
       return;

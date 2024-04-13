@@ -318,10 +318,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 if (self?.clipboard == true) CupertinoButton(
                   padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
                   onPressed: () async {
-                    var str = await getClipboardData()??"";
-                    if (str.trim().isNotEmpty) {
-                      await socketManager.sendMessage(str.trimRight(), true);
-                    }
+                    socketManager.sendClipboardText();
                   },
                   child: const Icon(
                     Icons.copy, // 按钮图标

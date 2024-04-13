@@ -26,6 +26,8 @@ class LocalSetting {
   final String _noAuth = "_no_auth";
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
+  final String _windowWidth = "_window_width";
+  final String _windowHeight = "_window_height";
 
   Future<DeviceData> instance({bool online=false}) async {
     return DeviceData(id: 0,
@@ -110,5 +112,21 @@ class LocalSetting {
 
   Future<bool> isDoubleClickDelete() async {
     return await getSPDefault(_doubleClickDelete, false);
+  }
+
+  Future<double> windowHeight() async {
+    return await getSPDefault(_windowHeight, 600.00);
+  }
+
+  Future<double> windowWidth() async {
+    return await getSPDefault(_windowWidth, 800.00);
+  }
+
+  Future<void> setWindowHeight(double height) async {
+     _setSP(_windowHeight, height);
+  }
+
+  Future<void> setWindowWidth(double width) async {
+    _setSP(_windowWidth, width);
   }
 }
