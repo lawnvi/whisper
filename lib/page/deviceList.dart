@@ -129,7 +129,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
       attributes: {
         'host': wifiIP,
         'port': (port??device?.port??10002).toString(),
-        'name': device?.name??(await deviceName()),
+        'name': await deviceName(),
         'platform': device?.platform?? "未知",
         'uid': device?.uid?? "",
       },
@@ -219,7 +219,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
               }
               if (!isLost) {
                 devices.insert(0, buildDevice(
-                    uid: uid, name: name, port: port, host: host, platform: platform
+                    uid: uid, name: temp?.name??name, port: port, host: host, platform: platform
                 ));
               }
             });
@@ -267,6 +267,14 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
     for(var item in devices) {
+      if (aroundIds.contains(item.uid)) {
+        continue;
+      }
+      if(item.uid == socketManager.receiver) {
+        newArr.insert(0, item);
+        aroundIds.add(item.uid);
+        continue;
+      }
       if (item.around == true) {
         newArr.add(item);
         aroundIds.add(item.uid);
@@ -630,10 +638,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) async {
-    if (!allow) {
+    if (!allow || deviceData == null) {
       return;
     }
-    db.upsertDevice(deviceData!);
+    db.upsertDevice(deviceData);
     // 在确认后执行的逻辑
     await Navigator.push(
       context,

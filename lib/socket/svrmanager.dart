@@ -165,7 +165,7 @@ class WsSvrManager {
 
   Future<void> _listen(Uint8List data) async {
     String str = "";
-    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().second, uuid: '', acked: false, path: '', md5: '');
+    MessageData message = MessageData(id: 0, sender: sender, receiver: receiver, name: "", clipboard: false, size: 0, type: MessageEnum.UNKONWN, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, uuid: '', acked: false, path: '', md5: '');
     try {
       str = utf8.decode(data);
       Map<String, dynamic> json = jsonDecode(str);
@@ -194,7 +194,7 @@ class WsSvrManager {
 
         print("AUTH message: ${message.message}");
         _event?.onAuth(device, message.message??"", (allow) async {
-          print("AUTH message: ${message.message} ||| ${allow} ${_server == null}");
+          print("AUTH message: ${message.message} ||| $allow ${_server == null}");
           if (_server != null) {
             await _auth(allow);
           }

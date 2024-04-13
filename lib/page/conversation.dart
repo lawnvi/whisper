@@ -534,10 +534,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   @override
-  void afterAuth(bool allow, DeviceData? device) {
-    if (socketManager.receiver == device?.uid) {
+  void afterAuth(bool allow, DeviceData? deviceData) {
+    if (deviceData != null && deviceData.uid != device.uid) {
       setState(() {
-
+        device = deviceData;
       });
     }
   }
