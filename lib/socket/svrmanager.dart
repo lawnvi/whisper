@@ -51,6 +51,7 @@ class WsSvrManager {
   ISocketEvent? _event;
   ISocketEvent? _eventBak;
   IOSink? _ioSink;
+  File? _receivingFile;
   int _currentSize = 0; // 大小
   int _currentLen = 0; // 已接收长度
   bool started = false;
@@ -251,6 +252,7 @@ class WsSvrManager {
       case MessageEnum.FileSignal: {
         final json = jsonDecode(message.content??"") as Map<String, dynamic>;
         var data = FileSignal.fromJson(json);
+        print('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}%\r'); // \r表示回车，将光标移到行首
         _event?.onProgress(data.size, data.received);
       }
       case MessageEnum.File: {
@@ -267,13 +269,20 @@ class WsSvrManager {
         if (_currentSize > 0 && _ioSink != null) {
           _ioSink?.add(data);
           _currentLen += data.length;
-          print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
+          // print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
+          print('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}%\r'); // \r表示回车，将光标移到行首
           _event?.onProgress(_currentSize, _currentLen);
           _sendFileSignal(_currentLen, _currentSize);
           if (_currentSize == _currentLen) {
+            if (_receivingFile != null) {
+              var path = _receivingFile!.path;
+              await _receivingFile!.rename(path.substring(0, path.length - 11));
+            }
             _freeIoSink();
-            print("recv over, check sending files size: ${_sendingFiles.length}");
-            _handleFileMsg(_sendingFiles.last);
+            print("recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
+            if (_sendingFiles.isNotEmpty) {
+              _handleFileMsg(_sendingFiles.last);
+            }
             // fileMD5
           }
         }else {
@@ -288,6 +297,7 @@ class WsSvrManager {
     _ioSink = null;
     _currentLen = 0;
     _currentSize = 0;
+    _receivingFile = null;
     if (freeAll) {
       _sendingFiles.clear();
     }else {
@@ -382,7 +392,7 @@ class WsSvrManager {
   Future<String> _prepareIOSink(MessageData message) async {
     var appDir = await downloadDir();
     _currentSize = message.size;
-    File file = File('${appDir.path}/${message.name}');
+    _receivingFile = File('${appDir.path}/${message.name}');
     var idx = 1;
     var arr = message.name.split(".");
     var before = message.name;
@@ -391,11 +401,15 @@ class WsSvrManager {
       dot = arr[arr.length-1];
       before = message.name.substring(0, message.name.length - 1 - dot.length);
     }
-    while (file.existsSync()) {
-      file = File('${appDir.path}/$before-$idx.$dot');
+    while (_receivingFile!.existsSync()) {
+      _receivingFile = File('${appDir.path}/$before-$idx.$dot');
       idx++;
     }
-    _ioSink = file.openWrite();
-    return file.path;
+    _receivingFile = File('${appDir.path}/$before-$idx.$dot.crdownload');
+    if (await _receivingFile!.exists()) {
+      await _receivingFile!.delete();
+    }
+    _ioSink = _receivingFile!.openWrite();
+    return _receivingFile!.path;
   }
 }

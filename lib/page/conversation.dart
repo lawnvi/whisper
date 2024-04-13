@@ -56,7 +56,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   void _updatePercent(double num) {
-    print("percent: ${(100*num).toStringAsFixed(2)}%");
+    // print("percent: ${(100*num).toStringAsFixed(2)}%");
     setState(() {
       percent = num;
     });
