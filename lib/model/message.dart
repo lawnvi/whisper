@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:whisper/model/device.dart';
 
+// dart run build_runner build
 class Message extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get deviceId => integer().named("device_id").nullable().references(Device, #id)();
@@ -25,5 +26,26 @@ enum MessageEnum {
   Auth,
   Heartbeat,
   Text,
-  File
+  File,
+  FileSignal,
+}
+
+
+class FileSignal {
+  String msgId = ""; // 消息id
+  int size = 0; // 文件大小
+  int received = 0; // 已接受大小
+
+  FileSignal(this.size, this.received, this.msgId);
+
+  FileSignal.fromJson(Map<String, dynamic> json)
+      : msgId = json['msg_id'] as String,
+        size = json['size'] as int,
+        received = json['received'] as int;
+
+  Map<String, dynamic> toJson() => {
+    'msg_id': msgId,
+    'size': size,
+    'received': received,
+  };
 }

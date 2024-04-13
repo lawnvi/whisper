@@ -46,11 +46,11 @@ class WsSvrManager {
 
   Uuid uuid = const Uuid();
 
-  late HttpServer? _server = null;
-  late WebSocketSink? _sink = null;
-  late ISocketEvent? _event = null;
-  late ISocketEvent? _eventBak = null;
-  IOSink? _ioSink = null;
+  HttpServer? _server;
+  WebSocketSink? _sink;
+  ISocketEvent? _event;
+  ISocketEvent? _eventBak;
+  IOSink? _ioSink;
   int _currentSize = 0; // 大小
   int _currentLen = 0; // 已接收长度
   bool started = false;
@@ -58,6 +58,7 @@ class WsSvrManager {
   String sender = "";
   final List<MessageData> _sendingFiles = [];
   final _sendFileLock = Lock();
+  Timer? _clientTimer;
 
   void setSender(String uid) {
     sender = uid;
@@ -96,7 +97,7 @@ class WsSvrManager {
         return;
       }
       _sink = webSocket.sink;
-      webSocket.stream.timeout(const Duration(minutes: 10)).listen(
+      webSocket.stream.timeout(const Duration(minutes: 1)).listen(
         (message) {
           _listen(message);
         },
@@ -131,7 +132,7 @@ class WsSvrManager {
       await channel.ready;
       _sink = channel.sink;
       _auth(true);
-      channel.stream.timeout(const Duration(minutes: 10)).listen((message) {
+      channel.stream.timeout(const Duration(minutes: 1)).listen((message) {
         _listen(message);
       }, onError: (error, stackTrace) {
         print("客户端服务异常: $error\n$stackTrace");
@@ -140,6 +141,11 @@ class WsSvrManager {
         print("客户端服务done");
         close();
       });
+      // 开启一个定时器，每秒执行一次
+      _clientTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+        // 在这里执行你想要重复执行的代码
+        _heartBeat();
+      });
       callback(true, "");
     } on Exception catch (e1) {
       callback(false, "连接失败：$e1");
@@ -147,6 +153,9 @@ class WsSvrManager {
   }
 
   void close({bool closeServer=false}) {
+    _clientTimer?.cancel();
+    _clientTimer = null;
+    _freeIoSink(freeAll: true);
     _sink?.close();
     _sink = null;
     if (closeServer) {
@@ -208,7 +217,7 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Ack: {
-        print("收到ACK消息: ${message.uuid} ${message.type}\n${str}");
+        print("收到ACK消息: ${message.uuid} ${message.type}\n$str");
         var msg = await LocalDatabase().ackMessage(message);
         if (msg != null) {
           _event?.onMessage(msg);
@@ -232,8 +241,18 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Heartbeat:
-        // TODO: Handle this case.
-        break;
+      {
+          if (_server == null) {
+            return;
+          }
+          _ackMessage(message);
+          break;
+      }
+      case MessageEnum.FileSignal: {
+        final json = jsonDecode(message.content??"") as Map<String, dynamic>;
+        var data = FileSignal.fromJson(json);
+        _event?.onProgress(data.size, data.received);
+      }
       case MessageEnum.File: {
         await _sendFileLock.synchronized(() async {
           _sendingFiles.insert(0, message);
@@ -250,12 +269,9 @@ class WsSvrManager {
           _currentLen += data.length;
           print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
           _event?.onProgress(_currentSize, _currentLen);
+          _sendFileSignal(_currentLen, _currentSize);
           if (_currentSize == _currentLen) {
-            _ioSink?.close();
-            _ioSink = null;
-            _currentLen = 0;
-            _currentSize = 0;
-            _sendingFiles.removeLast();
+            _freeIoSink();
             print("recv over, check sending files size: ${_sendingFiles.length}");
             _handleFileMsg(_sendingFiles.last);
             // fileMD5
@@ -265,6 +281,24 @@ class WsSvrManager {
         }
       }
     }
+  }
+
+  void _freeIoSink({freeAll=false}) {
+    _ioSink?.close();
+    _ioSink = null;
+    _currentLen = 0;
+    _currentSize = 0;
+    if (freeAll) {
+      _sendingFiles.clear();
+    }else {
+      _sendingFiles.removeLast();
+    }
+  }
+
+  void _sendFileSignal(int received, int size, {String msgId=""}) {
+    var data = FileSignal(size, received, msgId);
+    var message = _buildMessage(MessageEnum.FileSignal, jsonEncode(data), "", "", 0, false);
+    _send(message.toJsonString());
   }
   
   Future<void> _handleFileMsg(MessageData message) async {
@@ -294,6 +328,14 @@ class WsSvrManager {
     json["acked"] = true;
     print("ack消息, uuid: ${data.uuid}");
     _send(MessageData.fromJson(json).toJsonString());
+  }
+
+  Future<void> _heartBeat() async {
+    if (_sink == null) {
+      return;
+    }
+    var message = _buildMessage(MessageEnum.Heartbeat, "", "", "", 0, false);
+    _send(message.toJsonString());
   }
 
   Future<void> sendMessage(String content, bool clipboard) async {
@@ -328,11 +370,11 @@ class WsSvrManager {
     final fs = file.openRead();
     var start = DateTime.now().millisecondsSinceEpoch;
     print("start send $fileName, size: $size");
-    var sendLen = 0;
+    // var sendLen = 0;
     await for (var data in fs) {
       _sink?.add(data);
-      sendLen += data.length;
-      _event?.onProgress(size, sendLen);
+      // sendLen += data.length;
+      // _event?.onProgress(size, sendLen);
     }
     print("send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
   }
