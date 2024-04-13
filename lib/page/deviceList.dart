@@ -168,7 +168,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
         switch(event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
             print("event type: ${event.type}, service name: $serviceName ${service.name}");
-            if (service.name.startsWith(serviceName)) {
+            if (service.name == serviceName) {
               await event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
@@ -205,19 +205,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
             }
             var temp = await LocalDatabase().fetchDevice(uid);
             setState(() {
-              if (index >= 0) {
-                devices.removeAt(index);
-                if (isLost && temp != null) {
-                  for (var idx = 0; idx < devices.length; idx++) {
-                    if (devices[idx].around == true) {
-                      continue;
-                    }
-                    devices.insert(idx, temp);
-                    break;
-                  }
+              var index = -1;
+              for (var i = devices.length - 1; i >= 0; i--) {
+                if (devices[i].uid == uid) {
+                  index = i;
+                  devices.removeAt(i);
+                  break;
                 }
               }
-              if (!isLost) {
+              if (isLost && temp != null) {
+                devices.insert(index, temp);
+              }else if (!isLost) {
                 devices.insert(0, buildDevice(
                     uid: uid, name: temp?.name??name, port: port, host: host, platform: platform
                 ));
@@ -553,7 +551,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent{
           description: "$message",
           isLoading: true,
           // 是否显示加载指示器
-          icon: Icon(Icons.warning_rounded, color: Colors.red,),
+          icon: const Icon(Icons.warning_rounded, color: Colors.red,),
           cancelButtonText: 'Cancel',
           onCancel: () {
             // 处理取消操作
