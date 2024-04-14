@@ -100,12 +100,23 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   _insertItem(index, item) {
     messageList.insert(index, item);
-    key.currentState?.insertItem(index, duration: Duration(milliseconds: 500));
+    key.currentState?.insertItem(index, duration: const Duration(milliseconds: 500));
   }
 
   _insertItems(index, items) {
     messageList.insertAll(index, items);
-    key.currentState?.insertAllItems(index, items.length, duration: Duration(milliseconds: 500));
+    key.currentState?.insertAllItems(index, items.length, duration: const Duration(milliseconds: 500));
+  }
+
+  _clearItems() {
+    key.currentState?.removeAllItems((context, animation) {
+      //注意先 build 然后再去删除
+      messageList.clear();
+      return FadeTransition(
+        opacity: animation,
+        child: null,
+      );
+    }, duration: const Duration(milliseconds: 100));
   }
 
   _deleteItem(id) {
@@ -531,8 +542,20 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   @override
-  void afterAuth(bool allow, DeviceData? deviceData) {
-    if (deviceData != null && deviceData.uid != device.uid) {
+  void afterAuth(bool allow, DeviceData? deviceData) async {
+    if (deviceData == null) {
+      return;
+    }
+    if (deviceData.uid != device.uid) {
+      // Navigator.of(context).pop();
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SendMessageScreen(device: deviceData),
+        ),
+      );
+      Navigator.of(context).pop();
+    }else {
       setState(() {
         device = deviceData;
       });
