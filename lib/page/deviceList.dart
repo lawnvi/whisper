@@ -727,13 +727,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onTrayIconMouseDown() async {
-    await windowManager.setHasShadow(true);
+    await windowManager.show();
   }
 
   @override
   void onTrayIconMouseUp() async {
     // await windowManager.isVisible()? windowManager.hide(): windowManager.show();
-    await windowManager.show();
   }
 
   @override

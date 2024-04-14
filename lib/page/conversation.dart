@@ -435,7 +435,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
       child: Card(
-        color: isOpponent? Colors.grey[300]: messageData.acked? Colors.blue: Colors.redAccent,
+        color: isOpponent ? Colors.grey[300] : Colors.blue,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: SelectableText(messageData.content??"", // 文本消息内容
@@ -463,11 +463,13 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     if (isMobile()) {
       screenWidth = 0.618*MediaQuery.of(context).size.width;
     }
+    var failed = !isOpponent && !message.acked && message.timestamp < device.lastTime;
+    // var isSending = !message.acked && message.timestamp >= device.lastTime;
     return Container(
       width: screenWidth,
       // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
       decoration: BoxDecoration(
-        color: isOpponent || message.acked? Colors.grey[200]: Colors.redAccent,
+        color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
       // width: 400,
@@ -476,11 +478,17 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            if (failed) const SizedBox(width: 8),
+            failed? const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.redAccent,
+              size: 24,
+            ): const Icon(
               Icons.insert_drive_file,
               color: Colors.white,
               size: 42,
             ),
+            if (failed) const SizedBox(width: 8),
             const SizedBox(width: 6),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

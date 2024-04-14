@@ -293,7 +293,7 @@ class WsSvrManager {
     _ioSink = null;
     _currentLen = 0;
     _currentSize = 0;
-    if (_receivingFile != null) {
+    if (_receivingFile != null && sendFinish) {
       var path = _receivingFile!.path;
       await _receivingFile!.rename(path.substring(0, path.length - 11));
     }
@@ -336,7 +336,10 @@ class WsSvrManager {
     var json = data.toJson();
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
-    print("ack消息, uuid: ${data.uuid}");
+    if (data.type == MessageEnum.Heartbeat) {
+      return;
+    }
+    print("ack消息, ${data.type.name} uuid: ${data.uuid}");
     _send(MessageData.fromJson(json).toJsonString());
   }
 
