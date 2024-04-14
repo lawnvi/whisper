@@ -814,13 +814,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   }
 
   @override
-  void onWindowResize() {
-    // TODO: implement onWindowResize
+  void onWindowResize() async {
+    if (!Platform.isLinux || await windowManager.isMaximized() || await windowManager.isMinimized()) {
+    return;
+    }
+    var rect = await windowManager.getBounds();
+    LocalSetting().setWindowWidth(rect.width);
+    LocalSetting().setWindowHeight(rect.height);
   }
 
   @override
   void onWindowResized() async {
-    // TODO: implement onWindowResized
     if (await windowManager.isMaximized() || await windowManager.isMinimized()) {
       return;
     }
