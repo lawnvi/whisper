@@ -252,7 +252,7 @@ class WsSvrManager {
       case MessageEnum.FileSignal: {
         final json = jsonDecode(message.content??"") as Map<String, dynamic>;
         var data = FileSignal.fromJson(json);
-        print('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}%\r'); // \r表示回车，将光标移到行首
+        print('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
         _event?.onProgress(data.size, data.received);
       }
       case MessageEnum.File: {
@@ -270,15 +270,11 @@ class WsSvrManager {
           _ioSink?.add(data);
           _currentLen += data.length;
           // print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
-          print('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}%\r'); // \r表示回车，将光标移到行首
+          print('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
           _event?.onProgress(_currentSize, _currentLen);
           _sendFileSignal(_currentLen, _currentSize);
           if (_currentSize == _currentLen) {
-            if (_receivingFile != null) {
-              var path = _receivingFile!.path;
-              await _receivingFile!.rename(path.substring(0, path.length - 11));
-            }
-            _freeIoSink();
+            await _freeIoSink(sendFinish: true);
             print("recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
             if (_sendingFiles.isNotEmpty) {
               _handleFileMsg(_sendingFiles.last);
@@ -292,11 +288,15 @@ class WsSvrManager {
     }
   }
 
-  void _freeIoSink({freeAll=false}) {
-    _ioSink?.close();
+  Future<void> _freeIoSink({freeAll=false, sendFinish=false}) async {
+    await _ioSink?.close();
     _ioSink = null;
     _currentLen = 0;
     _currentSize = 0;
+    if (_receivingFile != null) {
+      var path = _receivingFile!.path;
+      await _receivingFile!.rename(path.substring(0, path.length - 11));
+    }
     _receivingFile = null;
     if (freeAll) {
       _sendingFiles.clear();
