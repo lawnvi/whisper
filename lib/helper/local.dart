@@ -115,11 +115,11 @@ class LocalSetting {
   }
 
   Future<double> windowHeight() async {
-    return await getSPDefault(_windowHeight, 600.00);
+    return await getSPDefault(_windowHeight, 800.00);
   }
 
   Future<double> windowWidth() async {
-    return await getSPDefault(_windowWidth, 800.00);
+    return await getSPDefault(_windowWidth, 1200.00);
   }
 
   Future<void> setWindowHeight(double height) async {

@@ -277,7 +277,7 @@ class WsSvrManager {
             await _freeIoSink(sendFinish: true);
             print("recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
             if (_sendingFiles.isNotEmpty) {
-              _handleFileMsg(_sendingFiles.last);
+              await _handleFileMsg(_sendingFiles.last);
             }
             // fileMD5
           }
