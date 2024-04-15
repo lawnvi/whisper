@@ -44,7 +44,7 @@ class WsSvrManager {
     return _singleton;
   }
 
-  Uuid uuid = const Uuid();
+  Uuid uuid = LocalUuid;
 
   HttpServer? _server;
   WebSocketSink? _sink;
@@ -55,7 +55,7 @@ class WsSvrManager {
   int _currentSize = 0; // 大小
   int _currentLen = 0; // 已接收长度
   bool started = false;
-  bool _asServer = true;
+  bool asServer = true;
   String receiver = "";
   String sender = "";
   final List<MessageData> _sendingFiles = [];
@@ -98,18 +98,18 @@ class WsSvrManager {
         webSocket.sink.add(utf8.encode(message.toJsonString()));
         return;
       }
-      _asServer = true;
+      asServer = true;
       _sink = webSocket.sink;
       webSocket.stream.timeout(const Duration(minutes: 1)).listen(
         (message) {
           _listen(message);
         },
         onError: (Object error, StackTrace stackTrace) {
-          print("连接服务异常: $error\n$stackTrace");
+          logger.i("连接服务异常: $error\n$stackTrace");
           _event?.onError(error.toString());
         },
         onDone: () {
-          print("连接服务done");
+          logger.i("连接服务done");
           close();
         }
       );
@@ -119,30 +119,30 @@ class WsSvrManager {
       _server = server;
       started = true;
       var host = "${server.address.host}:${server.port}";
-      print('Serving at ws://$host');
+      logger.i('Serving at ws://$host');
       callback(true, "");
     }).onError((error, stackTrace) {
-      print("服务启动失败: ${error}\n${stackTrace}");
+      logger.i("服务启动失败: ${error}\n${stackTrace}");
       callback(false, error);
     });
   }
 
-  Future<void> connectToServer(String host, var callback) async {
+  Future<void> connectToServer(String host, int port, var callback) async {
     try {
       close();
-      final wsUrl = Uri.parse('ws://$host');
+      final wsUrl = Uri.parse('ws://$host:$port');
       WebSocketChannel channel = WebSocketChannel.connect(wsUrl);
       await channel.ready;
-      _asServer = false;
+      asServer = false;
       _sink = channel.sink;
       _auth(true);
       channel.stream.timeout(const Duration(minutes: 1)).listen((message) {
         _listen(message);
       }, onError: (error, stackTrace) {
-        print("客户端服务异常: $error\n$stackTrace");
+        logger.i("客户端服务异常: $error\n$stackTrace");
         _event?.onError(error.toString());
       }, onDone: () {
-        print("客户端服务done");
+        logger.i("客户端服务done");
         close();
       });
       // 开启一个定时器，每秒执行一次
@@ -168,7 +168,7 @@ class WsSvrManager {
       _server = null;
     }
     receiver = "";
-    print("服务已关闭");
+    logger.i("服务已关闭");
     _event?.onClose();
   }
 
@@ -193,8 +193,8 @@ class WsSvrManager {
         if (message.content != null) {
           device = DeviceData.fromJson(jsonDecode(message.content??""));
         }
-        print("AUTH message: ${message.sender} + $sender");
-        if (_asServer) {
+        logger.i("AUTH message: ${message.sender} + $sender");
+        if (asServer) {
           var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
           var self = await LocalSetting().instance();
           if ((self.auth || localTemp != null && localTemp.auth)) {
@@ -205,10 +205,10 @@ class WsSvrManager {
           }
         }
 
-        print("AUTH message: ${message.sender} - $sender");
-        _event?.onAuth(device, _asServer, message.message??"", (allow) async {
-          print("AUTH message: ${message.message} ||| $allow");
-          if (_asServer) {
+        logger.i("AUTH message: ${message.sender} - $sender");
+        _event?.onAuth(device, asServer, message.message??"", (allow) async {
+          logger.i("AUTH message: ${message.message} ||| $allow");
+          if (asServer) {
             await _auth(allow);
           }
           if (allow) {
@@ -221,7 +221,7 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Ack: {
-        print("收到ACK消息: ${message.uuid} ${message.type}\n$str");
+        logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
         var msg = await LocalDatabase().ackMessage(message);
         if (msg != null) {
           _event?.onMessage(msg);
@@ -232,7 +232,7 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Text: {
-        print("收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
+        logger.i("收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
         LocalDatabase().insertMessage(message);
         _ackMessage(message);
         if (message.clipboard) {
@@ -241,7 +241,7 @@ class WsSvrManager {
           }
         }
         _event?.onMessage(message);
-        print("文本消息：$str");
+        logger.i("文本消息：$str");
         break;
       }
       case MessageEnum.Heartbeat:
@@ -255,7 +255,7 @@ class WsSvrManager {
       case MessageEnum.FileSignal: {
         final json = jsonDecode(message.content??"") as Map<String, dynamic>;
         var data = FileSignal.fromJson(json);
-        print('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
+        logger.i('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
         _event?.onProgress(data.size, data.received);
       }
       case MessageEnum.File: {
@@ -272,20 +272,20 @@ class WsSvrManager {
         if (_currentSize > 0 && _ioSink != null) {
           _ioSink?.add(data);
           _currentLen += data.length;
-          // print("recv ${data.length}, recved: $_currentLen all: $_currentSize");
-          print('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
+          // logger.i("recv ${data.length}, recved: $_currentLen all: $_currentSize");
+          logger.i('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}%'); // \r表示回车，将光标移到行首
           _event?.onProgress(_currentSize, _currentLen);
           _sendFileSignal(_currentLen, _currentSize);
           if (_currentSize == _currentLen) {
             await _freeIoSink(sendFinish: true);
-            print("recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
+            logger.i("recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
             if (_sendingFiles.isNotEmpty) {
               await _handleFileMsg(_sendingFiles.last);
             }
             // fileMD5
           }
         }else {
-          print("未知消息：$str");
+          logger.i("未知消息：$str");
         }
       }
     }
@@ -315,12 +315,12 @@ class WsSvrManager {
   }
   
   Future<void> _handleFileMsg(MessageData message) async {
-    print("收到文件：${message.name} size: ${message.size}");
+    logger.i("收到文件：${message.name} size: ${message.size}");
     var path = await _prepareIOSink(message);
     var msgTemp = message.toJson();
     msgTemp["path"] = path;
     LocalDatabase().insertMessage(MessageData.fromJson(msgTemp));
-    print("保存文件: $path");
+    logger.i("保存文件: $path");
     _event?.onMessage(message);
     _ackMessage(message);
   }
@@ -342,7 +342,7 @@ class WsSvrManager {
     if (data.type == MessageEnum.Heartbeat) {
       return;
     }
-    print("ack消息, ${data.type.name} uuid: ${data.uuid}");
+    logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
     _send(MessageData.fromJson(json).toJsonString());
   }
 
@@ -354,20 +354,20 @@ class WsSvrManager {
     _send(message.toJsonString());
   }
 
-  void sendClipboardText() async {
-    var str = await getClipboardData()??"";
-    if (str.trim().isNotEmpty) {
-      await sendMessage(str.trimRight(), true);
-    }
-  }
-
-  Future<void> sendMessage(String content, bool clipboard) async {
+  Future<void> sendMessage(String content, {clipboard=false}) async {
     if (_sink == null) {
+      return;
+    }
+    if (clipboard && content.isEmpty) {
+      var str = await getClipboardData()??"";
+      content = str.trimRight();
+    }
+    if (content.trim().isEmpty) {
       return;
     }
     var message = _buildMessage(MessageEnum.Text, content, "", "", 0, clipboard);
     LocalDatabase().insertMessage(message);
-    print("创建新消息, uuid: ${message.uuid}");
+    logger.i("创建新消息, uuid: ${message.uuid}");
     _send(message.toJsonString());
   }
 
@@ -392,14 +392,14 @@ class WsSvrManager {
     final fileName = p.basename(message.path);
     final fs = file.openRead();
     var start = DateTime.now().millisecondsSinceEpoch;
-    print("start send $fileName, size: $size");
+    logger.i("start send $fileName, size: $size");
     // var sendLen = 0;
     await for (var data in fs) {
       _sink?.add(data);
       // sendLen += data.length;
       // _event?.onProgress(size, sendLen);
     }
-    print("send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
+    logger.i("send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
   }
 
   Future<String> _prepareIOSink(MessageData message) async {

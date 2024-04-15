@@ -59,9 +59,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     var permissions = [Permission.storage];
 
     for (var item in permissions) {
-      print("permission status: ${await item.status}");
+      logger.i("permission status: ${await item.status}");
       if(await item.isDenied) {
-        print("permission request: ${await item.isRestricted}");
+        logger.i("permission request: ${await item.isRestricted}");
         await item.request();
       }
     }
@@ -96,7 +96,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             key: 'clipboard',
             label: "发送剪切板",
             onClick: (MenuItem item) {
-              socketManager.sendClipboardText();
+              socketManager.sendMessage("", clipboard: true);
             }),
         MenuItem.separator(),
         MenuItem(
@@ -150,7 +150,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   @override
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
-    print("dispose page");
+    logger.i("dispose page");
     _stopDiscovery();
     _stopBroadcast();
     trayManager.removeListener(this);
@@ -161,7 +161,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
 
-    print("wifi ip: $wifiIP");
+    logger.i("wifi ip: $wifiIP");
 
     if (wifiIP == "127.0.0.1") {
       discovering = false;
@@ -214,18 +214,18 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (service != null) {
         switch(event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
-            print("event type: ${event.type}, service name: $serviceName ${service.name}");
+            logger.i("event type: ${event.type}, service name: $serviceName ${service.name}");
             if (service.name == serviceName) {
               await event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
-            print("event type: ${event.type}, service name: ${service.name} start");
+            logger.i("event type: ${event.type}, service name: ${service.name} start");
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolved || BonsoirDiscoveryEventType.discoveryServiceLost:
             final svr = service;
             if (!svr.attributes.containsKey('uid')) {
-              print("event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
+              logger.i("event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
               return;
             }
             var isLost = event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
@@ -234,12 +234,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
-            print("${isLost?'丢失': '发现'}本地设备");
-            print("本地设备uid: $uid");
-            print("本地设备name: $name");
-            print("本地设备host: $host");
-            print("本地设备port: $port");
-            print("本地设备platform: $platform");
+            logger.i("${isLost?'丢失': '发现'}本地设备");
+            logger.i("本地设备uid: $uid");
+            logger.i("本地设备name: $name");
+            logger.i("本地设备host: $host");
+            logger.i("本地设备port: $port");
+            logger.i("本地设备platform: $platform");
             if (uid == null || uid == device?.uid) {
               return;
             }
@@ -346,7 +346,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       devices = newArr;
     });
 
-    print("refresh ui: $discovering $serverPortUpdate");
+    logger.i("refresh ui: $discovering $serverPortUpdate");
     if (!discovering || serverPortUpdate) {
       discovering = true;
       Future.delayed(const Duration(milliseconds: 100), (){
@@ -379,7 +379,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
               confirmButtonText: '连接',
               cancelButtonText: '取消',
               onConfirm: (List<String> inputValues) async {
-                _connectServer("${inputValues[0]}:${inputValues[1]}");
+                _connectServer(inputValues[0], int.parse(inputValues[1]));
               },
             );
           },
@@ -540,7 +540,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
                         if (deviceItem.uid == socketManager.receiver) {
                           socketManager.close();
                         }else {
-                          _connectServer("${deviceItem.host}:${deviceItem.port}");
+                          _connectServer(deviceItem.host, deviceItem.port);
                         }
                       },
                     );
@@ -578,10 +578,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     );
   }
 
-
-
-  void _connectServer(String host) {
-    socketManager.connectToServer(host, (ok, message) {
+  void _connectServer(String host, int port) async {
+    if (await isLocalhost(host)) {
+      afterAuth(true, device);
+      return;
+    }
+    socketManager.connectToServer(host, port, (ok, message) {
       // _showToast(message);
       if (!ok) {
         showLoadingDialog(
@@ -664,7 +666,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
           callback(true);
         },
         onCancel: () {
-          print("拒绝连接");
+          logger.i("拒绝连接");
           callback(false);
         }
       );
@@ -700,11 +702,18 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // TODO: implement onConnect
   }
 
+  var _isAlert = false;
   @override
   void onError(String message) {
-    // TODO: implement onError
+    if (_isAlert) {
+      return;
+    }
+    _isAlert = true;
     showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
       WsSvrManager().close();
+      _isAlert = false;
+    }, onCancel: () {
+      _isAlert = false;
     });
   }
 
@@ -826,7 +835,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       return;
     }
     var rect = await windowManager.getBounds();
-    print("resized window: ${rect.width} ${rect.height}");
+    logger.i("resized window: ${rect.width} ${rect.height}");
     LocalSetting().setWindowWidth(rect.width);
     LocalSetting().setWindowHeight(rect.height);
   }

@@ -4,6 +4,8 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+import 'package:whisper/helper/local.dart';
+import '../helper/helper.dart';
 import 'device.dart';
 import 'message.dart';
 
@@ -84,7 +86,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<DeviceData?> fetchDevice(String uid) {
-    return (select(device)..where((t) => t.uid.equals(uid))).getSingleOrNull();
+    return (select(device)..where((t) => t.uid.equals(uid))..limit(1)).getSingleOrNull();
   }
 
   Future<List<DeviceData>> fetchAllDevice() {
@@ -95,7 +97,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<List<MessageData>> fetchMessageList(String uid, {int beforeId=0, int limit=8}) {
-    print("device: $uid, msgid: $beforeId");
+    logger.i("device: $uid, msgid: $beforeId");
     if (beforeId > 0) {
       return (select(message)
         ..where((t) => (t.sender.equals(uid) | t.receiver.equals(uid)) & t.id.isSmallerThanValue(beforeId))
@@ -115,7 +117,15 @@ class LocalDatabase extends _$LocalDatabase {
     if (uids.isEmpty) {
       return;
     }
-    (delete(message)..where((t) => t.sender.isIn(uids) | t.receiver.isIn(uids))).go();
+    var localhost = await LocalSetting().instance();
+    if (uids.contains(localhost.uid)) {
+      uids.remove(localhost.uid);
+      (delete(message)..where((t) => t.sender.equals(localhost.uid) & t.receiver.equals(""))).go();
+      (delete(device)..where((t) => t.uid.equals(localhost.uid))).go();
+    }
+    if (uids.isNotEmpty) {
+      (delete(message)..where((t) => t.sender.isIn(uids) | t.receiver.isIn(uids))).go();
+    }
     (delete(device)..where((t) => t.uid.isIn(uids))).go();
   }
 
@@ -132,7 +142,7 @@ LazyDatabase _openConnection() {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File('${dbFolder.path}db.sqlite');
 
-    print('数据库: ${dbFolder.path}db.sqlite');
+    logger.i('数据库: ${dbFolder.path}db.sqlite');
 
     // Also work around limitations on old Android versions
     if (Platform.isAndroid) {

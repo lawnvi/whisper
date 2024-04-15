@@ -8,8 +8,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+
+var logger = Logger();
+const LocalUuid = Uuid();
 
 bool isDesktop() {
   return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
@@ -23,7 +27,7 @@ Future<String> localUUID() async {
   final SharedPreferences sp = await SharedPreferences.getInstance();
   var uuid = sp.getString("_uuid")?? "";
   if (uuid.isEmpty) {
-    uuid = const Uuid().v4();
+    uuid = LocalUuid.v4();
     sp.setString("_uuid", uuid);
   }
   return uuid;
@@ -106,6 +110,22 @@ Future<String> deviceName() async {
   }
 }
 
+Future<bool> isLocalhost(String address) async {
+  try {
+    for (var interface in await NetworkInterface.list()) {
+      for (var addr in interface.addresses) {
+        if (!addr.isLoopback && addr.type == InternetAddressType.IPv4 && addr.address == address) {
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    logger.i("is local err: $e");
+  }
+
+  return false;
+}
+
 Future<String> getLocalIpAddress() async {
   // var sb = StringBuffer();
   Completer<String> completer = Completer<String>();
@@ -139,7 +159,7 @@ Future<String?> getClipboardData() async {
       return null;
     }
   }).catchError((error) {
-    print('Error getting clipboard data: $error');
+    logger.i('Error getting clipboard data: $error');
     return null;
   });
 }
@@ -152,18 +172,18 @@ void copyToClipboard(String content) {
 
 void pickFile(var callback) async {
   var p = await FilePicker.platform.getDirectoryPath();
-  print("current path: $p");
+  logger.i("current path: $p");
   // 打开文件选择器
   FilePickerResult? result = await FilePicker.platform.pickFiles();
 
   if (result != null) {
     PlatformFile file = result.files.first;
-    print('选择的文件路径: ${file.path}');
-    print('选择的文件名: ${file.name}');
-    print('选择的文件大小: ${file.size}');
+    logger.i('选择的文件路径: ${file.path}');
+    logger.i('选择的文件名: ${file.name}');
+    logger.i('选择的文件大小: ${file.size}');
     callback(file.path);
   } else {
     // 用户取消了文件选择
-    print('用户取消了文件选择');
+    logger.i('用户取消了文件选择');
   }
 }

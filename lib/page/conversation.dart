@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -34,12 +35,16 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   double percent = 0;
   final keyPressedMap = {};
   final key = GlobalKey<AnimatedListState>();
+  bool _isLocalhost = false;
 
   _SendMessageScreen(this.device);
 
   @override
   void initState() {
-    socketManager.registerEvent(this);
+    logger.i("init conv: ${socketManager.receiver}-${device.uid}");
+    if (socketManager.receiver == device.uid) {
+      socketManager.registerEvent(this);
+    }
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -51,25 +56,29 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void dispose() {
-    socketManager.unregisterEvent();
+    if (socketManager.receiver == device.uid) {
+      socketManager.unregisterEvent();
+    }
     super.dispose();
   }
 
   void _updatePercent(double num) {
-    // print("percent: ${(100*num).toStringAsFixed(2)}%");
+    // logger.i("percent: ${(100*num).toStringAsFixed(2)}%");
     setState(() {
       percent = num;
     });
   }
 
   void _loadMessages() async {
-    print("current device: ${device.uid}");
+    logger.i("current device: ${device.uid}");
     var me = await LocalSetting().instance();
-    var temp = await LocalDatabase().fetchDevice(device.uid);
-    var arr = await LocalDatabase().fetchMessageList(device.uid, limit: 20);
+    var isLocal = me.uid == device.uid;
+    var temp = isLocal? me: await LocalDatabase().fetchDevice(device.uid);
+    var arr = await LocalDatabase().fetchMessageList(me.uid == temp?.uid? "": device.uid, limit: 20);
     setState(() {
       self = me;
       device = temp!;
+      _isLocalhost = isLocal;
       // messageList = arr;
     });
 
@@ -83,7 +92,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         _scrollController.position.maxScrollExtent) {
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
-      print('滑倒顶部了！${messageList[0].id}');
+      logger.i('滑倒顶部了！${messageList[0].id}');
       var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList.last.id, limit: 12);
       if (arr.isEmpty) {
         return;
@@ -94,7 +103,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     if (_scrollController.position.pixels == 0) {
       // 用户滑动到了ListView的顶部
       // 在这里执行你的操作
-      print('滑倒底部了！');
+      logger.i('滑倒底部了！');
     }
   }
 
@@ -170,7 +179,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         leading: CupertinoNavigationBarBackButton(
           color: Colors.grey,
           onPressed: () {
-            Navigator.pop(context);
+            // Navigator.pop(context);
+            Navigator.popUntil(context, (route) {
+              return route.isFirst;
+            });
           },
           // color: Colors.lightBlue, // 设置返回按钮图标的颜色
         ),
@@ -189,7 +201,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(width: 4),
-                    if(socketManager.receiver == device.uid) Icon(Icons.wifi_rounded, size: socketManager.started ? 14 : 0, color: Colors.lightBlue)
+                    if(socketManager.receiver == device.uid) const Icon(Icons.wifi_rounded, size: 14, color: Colors.lightBlue)
                   ],
                 )
               ],
@@ -273,7 +285,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                                 _deleteItem(message.id);
                                 if (isOpponent && message.type == MessageEnum.File) {
                                   var path = "${(await downloadDir()).path}/${message.name}";
-                                  print("delete $path");
+                                  logger.i("delete $path");
                                   File(path).delete();
                                 }
                               },
@@ -319,7 +331,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               ),
           ),),
           // Divider(height: 0.2, color: Colors.grey), // 分割线
-          if(device.uid == socketManager.receiver) Container(
+          if(_isLocalhost || device.uid == socketManager.receiver) Container(
             padding: const EdgeInsets.symmetric(horizontal: 10.0),
             decoration: const BoxDecoration(
               color: Colors.white, // 背景颜色设置为白色
@@ -328,8 +340,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               children: [
                 if (self?.clipboard == true) CupertinoButton(
                   padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
-                  onPressed: () async {
-                    socketManager.sendClipboardText();
+                  onPressed: () {
+                    _sendText("", isClipboard: true);
                   },
                   child: const Icon(
                     Icons.copy, // 按钮图标
@@ -347,7 +359,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
                           if (event is RawKeyDownEvent && (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true || isMobile())) {
                             if (_textController.text.trim().isNotEmpty) {
-                              await socketManager.sendMessage(_textController.text.trimRight(), false);
+                              await _sendText(_textController.text.trimRight());
                               // FocusScope.of(context).unfocus();
                               _textController.text = "";
                             }
@@ -373,7 +385,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 CupertinoButton(
                   padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
                   onPressed: () async {
-                    if (_textController.text.isEmpty) {
+                    if (!_isLocalhost && _textController.text.isEmpty) {
                       FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
                       if (result != null) {
                         for (var item in result.files) {
@@ -382,12 +394,12 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                       }
                     }else {
                       // 发送按钮操作
-                      await socketManager.sendMessage(_textController.text, false);
+                      await _sendText(_textController.text);
                       _textController.text = "";
                     }
                   },
                   child: Icon(
-                    isInputEmpty?Icons.add:Icons.send, // 发送按钮图标
+                    !_isLocalhost && isInputEmpty?Icons.add:Icons.send, // 发送按钮图标
                     color: Colors.lightBlue, // 发送按钮颜色
                   ),
                 ),
@@ -405,7 +417,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
     return DropTarget(
       onDragDone: (detail) async {
-        if (detail.files.isEmpty) {
+        if (detail.files.isEmpty || _isLocalhost) {
           return;
         }
         // todo 多文件发送
@@ -422,6 +434,23 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       },
       child: widget,
     );
+  }
+
+  Future<void> _sendText(String content, {isClipboard=false}) async {
+    if (isClipboard) {
+      var str = await getClipboardData()??"";
+      content = str.trimRight();
+    }
+    if (content.trim().isEmpty) {
+      return;
+    }
+    if (_isLocalhost) {
+      var message = MessageData(id: 0, sender: device.uid, receiver: "", name: "", clipboard: isClipboard, size: 0, type: MessageEnum.Text, content: content, message: "", timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: true, uuid: LocalUuid.v4(), path: "", md5: "");
+      LocalDatabase().insertMessage(message);
+      onMessage(message);
+    }else if (socketManager.receiver == device.uid) {
+      await socketManager.sendMessage(content, clipboard: true);
+    }
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
@@ -541,28 +570,33 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     // TODO: implement onConnect
   }
 
+  var _isAlert = false;
   @override
   void onError(String message) {
-    // TODO: implement onError
+    if (_isAlert) {
+      return;
+    }
+    _isAlert = true;
     showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
       WsSvrManager().close();
+      _isAlert = false;
+    }, onCancel: () {
+      _isAlert = false;
     });
   }
 
   @override
-  void afterAuth(bool allow, DeviceData? deviceData) async {
+  void afterAuth(bool allow, DeviceData? deviceData) {
     if (deviceData == null) {
       return;
     }
     if (deviceData.uid != device.uid) {
-      // Navigator.of(context).pop();
-      await Navigator.push(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => SendMessageScreen(device: deviceData),
         ),
       );
-      Navigator.of(context).pop();
     }else {
       setState(() {
         device = deviceData;
@@ -572,7 +606,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void onMessage(MessageData messageData) {
-    print("收到消息: ${messageData.type} content: ${messageData.content}");
+    logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
     if (messageData.receiver == device.uid && messageData.acked) {
       // _ackMessage(messageData);
     }else {
@@ -672,8 +706,9 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           onTap: () {
                             showConfirmationDialog(context, title: "删除${device.name}", description: "删除与此设备的所有消息，不可恢复", confirmButtonText: "确定", cancelButtonText: "取消", onConfirm: (){
                               LocalDatabase().clearDevices([device.uid]);
-                              Navigator.pop(context);
-                              Navigator.pop(context);
+                              Navigator.popUntil(context, (route) {
+                                return route.isFirst;
+                              });
                             });
                           }
                         ),

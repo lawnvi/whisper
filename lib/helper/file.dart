@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'helper.dart';
+
 void openDir({String name="", String realPath = ""}) async {
   var dir = await downloadDir();
   var path = dir.path;
@@ -15,7 +17,7 @@ void openDir({String name="", String realPath = ""}) async {
     }
   }
 
-  print("打开文件: $path/$name");
+  logger.i("打开文件: $path/$name");
   if (Platform.isMacOS) {
     openFinder(path);
   }else if (Platform.isAndroid) {
@@ -37,9 +39,9 @@ void openFinder(String path) async {
 
   // 处理执行结果
   if (result.exitCode == 0) {
-    print('Finder opened successfully');
+    logger.i('Finder opened successfully');
   } else {
-    print('Error opening Finder: ${result.stderr}');
+    logger.i('Error opening Finder: ${result.stderr}');
   }
 }
 
@@ -77,7 +79,7 @@ Future<bool> openAndroidDir(String path) async {
     // 用channel发送调用消息到原生端，调用方法是：testAction1
     await platform.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (e) {
-    print(e.toString());
+    logger.i(e.toString());
   }
   return result;
 }
@@ -92,8 +94,8 @@ Future<String> openIosDir(String path) async {
     // 用channel发送调用消息到原生端，调用方法是：testAction1
     await platform.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (e) {
-    print(e.toString());
+    logger.i(e.toString());
   }
-  print(result);
+  logger.i(result);
   return result;
 }
