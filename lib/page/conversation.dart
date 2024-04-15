@@ -42,9 +42,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void initState() {
     logger.i("init conv: ${socketManager.receiver}-${device.uid}");
-    if (socketManager.receiver == device.uid) {
-      socketManager.registerEvent(this);
-    }
+    socketManager.registerEvent(this);
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -56,9 +54,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void dispose() {
-    if (socketManager.receiver == device.uid) {
-      socketManager.unregisterEvent();
-    }
+    logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
+    socketManager.unregisterEvent();
     super.dispose();
   }
 
@@ -607,12 +604,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onMessage(MessageData messageData) {
     logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
-    if (messageData.receiver == device.uid && messageData.acked) {
-      // _ackMessage(messageData);
-    }else {
-      // _addMessage(messageData);
+    if (_isLocalhost && messageData.receiver.isEmpty || device.uid == socketManager.receiver && (messageData.sender == device.uid || messageData.receiver == device.uid)) {
+      _insertItem(0, messageData);
     }
-    _insertItem(0, messageData);
   }
 
   @override

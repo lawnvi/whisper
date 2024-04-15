@@ -325,8 +325,8 @@ class WsSvrManager {
     _ackMessage(message);
   }
 
-  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path=""}) {
-    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uuid.v4(), path: path, md5: md5);
+  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path="", uid}) {
+    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uid??uuid.v4(), path: path, md5: md5);
   }
 
   Future<void> _auth(bool allow) async {
@@ -339,9 +339,6 @@ class WsSvrManager {
     var json = data.toJson();
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
-    if (data.type == MessageEnum.Heartbeat) {
-      return;
-    }
     logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
     _send(MessageData.fromJson(json).toJsonString());
   }
@@ -350,7 +347,7 @@ class WsSvrManager {
     if (_sink == null) {
       return;
     }
-    var message = _buildMessage(MessageEnum.Heartbeat, "", "", "", 0, false);
+    var message = _buildMessage(MessageEnum.Heartbeat, "", "", "", 0, false, uid: "");
     _send(message.toJsonString());
   }
 

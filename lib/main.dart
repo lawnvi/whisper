@@ -1,7 +1,5 @@
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:whisper/helper/local.dart';
-import 'package:whisper/model/LocalDatabase.dart';
-import 'package:whisper/page/conversation.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';

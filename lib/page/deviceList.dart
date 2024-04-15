@@ -215,7 +215,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         switch(event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
             logger.i("event type: ${event.type}, service name: $serviceName ${service.name}");
-            if (service.name == serviceName) {
+            if (service.name.startsWith(serviceName)) {
               await event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
