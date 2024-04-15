@@ -366,17 +366,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
           onPressed: () {
             // 处理悬浮按钮点击事件
             // 作为服务端
-            // if (device?.isServer == true) {
-            //   if (socketManager.started) {
-            //     socketManager.close(closeServer: true);
-            //     setState(() {
-            //       socketManager.started = false;
-            //     });
-            //   }else {
-            //     _startServer();
-            //   }
-            //   return;
-            // }
+            if (socketManager.receiver.isNotEmpty) {
+              socketManager.close();
+              return;
+            }
             // 作为客户端
             showInputAlertDialog(
               context,
@@ -390,8 +383,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
               },
             );
           },
-          color: Colors.grey,
-          icon: const Icon(Icons.add, size: 32), // 调整圆角以获得更圆的按钮
+          color: socketManager.receiver.isNotEmpty? Colors.redAccent: Colors.grey,
+          icon: Icon(socketManager.receiver.isNotEmpty? Icons.power_settings_new: Icons.add, size: 32), // 调整圆角以获得更圆的按钮
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
