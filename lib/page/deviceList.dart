@@ -31,6 +31,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   final serviceName = "whisper";
   final serviceType = "_whisper._tcp";
   bool discovering = false;
+  var lastClickCloseTimestamp = 0;
 
   @override
   void initState() {
@@ -758,13 +759,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onWindowClose() async {
-    if (await windowManager.isPreventClose()) {
-      if (Platform.isMacOS && await windowManager.isFocused()) {
+    var timestamp = DateTime.now().millisecondsSinceEpoch;
+    if (await LocalSetting().isClose2Tray() && await windowManager.isPreventClose()) {
+      if (Platform.isMacOS && (timestamp - lastClickCloseTimestamp > 1000) && await windowManager.isFocused()) {
         await windowManager.blur();
       }else {
         await windowManager.hide();
       }
+    }else {
+      await windowManager.destroy();
     }
+    lastClickCloseTimestamp = timestamp;
   }
 
   @override
@@ -890,6 +895,7 @@ class _SettingsScreen extends State<SettingsScreen> {
   String _path = "";
   PackageInfo? _packageInfo;
   bool _doubleClickDelete = false;
+  bool _close2tray = true;
 
   @override
   void initState() {
@@ -903,10 +909,12 @@ class _SettingsScreen extends State<SettingsScreen> {
     var p = await downloadDir();
     var pkg = await PackageInfo.fromPlatform();
     var doubleClick = await LocalSetting().isDoubleClickDelete();
+    var closeToTray = await LocalSetting().isClose2Tray();
     setState(() {
       device = temp;
       _path = p.path;
       _packageInfo = pkg;
+      _close2tray = closeToTray;
       _doubleClickDelete = doubleClick;
     });
   }
@@ -1029,13 +1037,26 @@ class _SettingsScreen extends State<SettingsScreen> {
                         ),
                         _buildSettingItem(
                           '双击消息删除',
-                          const Icon(Icons.clear, color: CupertinoColors.systemGrey),
+                          const Icon(Icons.delete_outline_rounded, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                               value: _doubleClickDelete,
                               onChanged: (bool value) {
                               LocalSetting().updateDoubleClickDelete(value);
                               setState(() {
                                 _doubleClickDelete = value;
+                              });
+                            },
+                          ),
+                        ),
+                        if (!isMobile()) _buildSettingItem(
+                          '关闭时隐藏到托盘',
+                          const Icon(Icons.close_rounded, color: CupertinoColors.systemGrey),
+                          trailing: CupertinoSwitch(
+                            value: _close2tray,
+                            onChanged: (bool value) async {
+                              LocalSetting().updateClose2Tray(value);
+                              setState(() {
+                                _close2tray = value;
                               });
                             },
                           ),

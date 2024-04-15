@@ -26,6 +26,7 @@ class LocalSetting {
   final String _noAuth = "_no_auth";
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
+  final String _close2tray = "_close_to_tray";
   final String _windowWidth = "_window_width";
   final String _windowHeight = "_window_height";
 
@@ -112,6 +113,14 @@ class LocalSetting {
 
   Future<bool> isDoubleClickDelete() async {
     return await getSPDefault(_doubleClickDelete, false);
+  }
+
+  void updateClose2Tray(bool delete) async {
+    _setSP(_close2tray, delete);
+  }
+
+  Future<bool> isClose2Tray() async {
+    return await getSPDefault(_close2tray, false);
   }
 
   Future<double> windowHeight() async {
