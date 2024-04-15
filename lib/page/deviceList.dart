@@ -335,9 +335,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
     socketManager.setSender(temp.uid);
 
-    var serverPortUpdate = device != null && device!.isServer && device!.port != temp.port;
+    var serverPortUpdate = device != null && device!.port != temp.port;
 
-    if ((isFirst || device?.isServer != true || device?.port != temp.port) && temp.isServer) {
+    if (isFirst || device?.port != temp.port) {
       _startServer(port: temp.port);
     }
 
@@ -366,17 +366,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
           onPressed: () {
             // 处理悬浮按钮点击事件
             // 作为服务端
-            if (device?.isServer == true) {
-              if (socketManager.started) {
-                socketManager.close(closeServer: true);
-                setState(() {
-                  socketManager.started = false;
-                });
-              }else {
-                _startServer();
-              }
-              return;
-            }
+            // if (device?.isServer == true) {
+            //   if (socketManager.started) {
+            //     socketManager.close(closeServer: true);
+            //     setState(() {
+            //       socketManager.started = false;
+            //     });
+            //   }else {
+            //     _startServer();
+            //   }
+            //   return;
+            // }
             // 作为客户端
             showInputAlertDialog(
               context,
@@ -390,7 +390,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
               },
             );
           },
-          color: device?.isServer==true && socketManager.started?Colors.redAccent: Colors.grey, icon: Icon(device?.isServer==true?Icons.power_settings_new:Icons.add, size: 32), // 调整圆角以获得更圆的按钮
+          color: Colors.grey,
+          icon: const Icon(Icons.add, size: 32), // 调整圆角以获得更圆的按钮
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -530,28 +531,26 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (deviceItem.uid == socketManager.receiver || device?.isServer == false && socketManager.receiver.isEmpty) IconButton(
+                if (deviceItem.uid == socketManager.receiver || socketManager.receiver.isEmpty) IconButton(
                   icon: deviceItem.uid == socketManager.receiver
                       ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
                       : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
                   onPressed: () {
                     // 处理连接/断开按钮点击事件
-                    if (device?.isServer != true || deviceItem.uid == socketManager.receiver) {
-                      showConfirmationDialog(
-                        context,
-                        title: deviceItem.uid == socketManager.receiver? "断开连接": "连接设备",
-                        description: '${deviceItem.uid == socketManager.receiver? "断开": "连接到"} ${deviceItem.name}',
-                        confirmButtonText: '确定',
-                        cancelButtonText: '取消',
-                        onConfirm: () {
-                          if (deviceItem.uid == socketManager.receiver) {
-                            socketManager.close(closeServer: device?.isServer != true);
-                          }else {
-                            _connectServer("${deviceItem.host}:${deviceItem.port}");
-                          }
-                        },
-                      );
-                    }
+                    showConfirmationDialog(
+                      context,
+                      title: deviceItem.uid == socketManager.receiver? "断开连接": "连接设备",
+                      description: '${deviceItem.uid == socketManager.receiver? "断开": "连接到"} ${deviceItem.name}',
+                      confirmButtonText: '确定',
+                      cancelButtonText: '取消',
+                      onConfirm: () {
+                        if (deviceItem.uid == socketManager.receiver) {
+                          socketManager.close();
+                        }else {
+                          _connectServer("${deviceItem.host}:${deviceItem.port}");
+                        }
+                      },
+                    );
                   },
                 ),
               ],
@@ -621,7 +620,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
           showLoadingDialog(
             context,
             title: '服务启动失败',
-            description: "error: $msg",
+            description: "暂时无法作为服务端\nerror: $msg",
             isLoading: true,
             // 是否显示加载指示器
             icon: const Icon(Icons.warning_rounded, color: Colors.red,),
@@ -640,7 +639,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   }
 
   @override
-  void onAuth(DeviceData? deviceData, String msg, var callback) {
+  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
     if (msg.isNotEmpty) {
       showLoadingDialog(
         context,
@@ -661,11 +660,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       );
       return;
     }
-    if (device?.isServer == true) {
+    if (asServer) {
       showConfirmationDialog(
         context,
-        title: '新设备',
-        description: '接入新设备: ${deviceData?.name}?',
+        title: '连接请求',
+        description: '接入设备: ${deviceData?.name}?',
         confirmButtonText: '同意',
         cancelButtonText: '拒绝',
         onConfirm: () {
@@ -998,21 +997,21 @@ class _SettingsScreen extends State<SettingsScreen> {
                             );
                           }
                         ),
-                        _buildSettingItem(
-                          '作为服务端',
-                          const Icon(
-                            Icons.wifi_rounded,
-                            color: CupertinoColors.systemGrey,
-                          ),
-                          trailing: CupertinoSwitch(
-                            value: device?.isServer ?? false,
-                            onChanged: (bool value) {
-                              LocalSetting().updateServer(value);
-                              WsSvrManager().close(closeServer: true);
-                              _refreshDevice();
-                            },
-                          ),
-                        ),
+                        // _buildSettingItem(
+                        //   '作为服务端',
+                        //   const Icon(
+                        //     Icons.wifi_rounded,
+                        //     color: CupertinoColors.systemGrey,
+                        //   ),
+                        //   trailing: CupertinoSwitch(
+                        //     value: device?.isServer ?? false,
+                        //     onChanged: (bool value) {
+                        //       LocalSetting().updateServer(value);
+                        //       WsSvrManager().close(closeServer: true);
+                        //       _refreshDevice();
+                        //     },
+                        //   ),
+                        // ),
                         _buildSettingItem(
                           '自动通过新设备',
                           const Icon(Icons.lock_open, color: CupertinoColors.systemGrey),

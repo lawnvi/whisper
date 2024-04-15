@@ -523,7 +523,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   @override
-  void onAuth(DeviceData? deviceData, String msg, var callback) {
+  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
     callback(true);
   }
 

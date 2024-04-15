@@ -26,7 +26,7 @@ abstract class ISocketEvent {
 
   void onConnect();
 
-  void onAuth(DeviceData? deviceData, String msg, var callback);
+  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback);
 
   void afterAuth(bool allow, DeviceData? device);
 }
@@ -55,6 +55,7 @@ class WsSvrManager {
   int _currentSize = 0; // 大小
   int _currentLen = 0; // 已接收长度
   bool started = false;
+  bool _asServer = true;
   String receiver = "";
   String sender = "";
   final List<MessageData> _sendingFiles = [];
@@ -97,6 +98,7 @@ class WsSvrManager {
         webSocket.sink.add(utf8.encode(message.toJsonString()));
         return;
       }
+      _asServer = true;
       _sink = webSocket.sink;
       webSocket.stream.timeout(const Duration(minutes: 1)).listen(
         (message) {
@@ -127,10 +129,11 @@ class WsSvrManager {
 
   Future<void> connectToServer(String host, var callback) async {
     try {
-      close(closeServer: true);
+      close();
       final wsUrl = Uri.parse('ws://$host');
       WebSocketChannel channel = WebSocketChannel.connect(wsUrl);
       await channel.ready;
+      _asServer = false;
       _sink = channel.sink;
       _auth(true);
       channel.stream.timeout(const Duration(minutes: 1)).listen((message) {
@@ -190,8 +193,8 @@ class WsSvrManager {
         if (message.content != null) {
           device = DeviceData.fromJson(jsonDecode(message.content??""));
         }
-
-        if (_server != null) {
+        print("AUTH message: ${message.sender} + $sender");
+        if (_asServer) {
           var localTemp = await LocalDatabase().fetchDevice(device?.uid??"");
           var self = await LocalSetting().instance();
           if ((self.auth || localTemp != null && localTemp.auth)) {
@@ -202,10 +205,10 @@ class WsSvrManager {
           }
         }
 
-        print("AUTH message: ${message.message}");
-        _event?.onAuth(device, message.message??"", (allow) async {
-          print("AUTH message: ${message.message} ||| $allow ${_server == null}");
-          if (_server != null) {
+        print("AUTH message: ${message.sender} - $sender");
+        _event?.onAuth(device, _asServer, message.message??"", (allow) async {
+          print("AUTH message: ${message.message} ||| $allow");
+          if (_asServer) {
             await _auth(allow);
           }
           if (allow) {
@@ -243,7 +246,7 @@ class WsSvrManager {
       }
       case MessageEnum.Heartbeat:
       {
-          if (_server == null) {
+          if (message.sender == sender) {
             return;
           }
           _ackMessage(message);
