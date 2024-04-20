@@ -57,6 +57,16 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       return;
     }
 
+    if (Platform.isAndroid) {
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
+    }else {
+      if (await Permission.location.isDenied) {
+        await Permission.location.request();
+      }
+    }
+
     var permissions = [Permission.storage];
 
     for (var item in permissions) {
