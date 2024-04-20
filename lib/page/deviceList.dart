@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:bonsoir/bonsoir.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -69,6 +70,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   Future<void> _setDesktopWindow() async {
     if (isMobile()) {
+      logger.i("mobile clear file picker cache res: ${await FilePicker.platform.clearTemporaryFiles()}");
       return;
     }
     await windowManager.setPreventClose(true);

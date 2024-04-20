@@ -39,7 +39,7 @@ dependencies:
   path_provider: ^2.1.2
   permission_handler: ^11.3.1
   path: ^1.9.0
-  file_picker: ^6.2.0
+  file_picker: ^8.0.1
   web_socket_channel: ^2.4.0
   shelf_web_socket: ^1.0.4
 #  system_tray: ^2.0.3
