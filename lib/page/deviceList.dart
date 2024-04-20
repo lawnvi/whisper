@@ -385,9 +385,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             // 作为客户端
             showInputAlertDialog(
               context,
-              title: '连接主机',
+              title: '连接设备',
               description: '输入对方局域网地址与端口',
-              inputHints: [{device?.host??"192.168.1.1": false}, {"10002": true}],
+              inputHints: [{device?.host??"192.168.0.1": false}, {"10002": true}],
               confirmButtonText: '连接',
               cancelButtonText: '取消',
               onConfirm: (List<String> inputValues) async {
@@ -1075,7 +1075,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          '存储位置 $_path',
+                          _path,
                           const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
                           onTap: () {
                             openDir();

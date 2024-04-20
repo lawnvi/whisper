@@ -6,18 +6,19 @@ import 'package:path_provider/path_provider.dart';
 
 import 'helper.dart';
 
-void openDir({String name="", String realPath = ""}) async {
+void openDir({String name="", bool isMobile=true}) async {
   var dir = await downloadDir();
   var path = dir.path;
 
-  if (realPath.isNotEmpty) {
-    var file = File(realPath);
-    if (file.existsSync()) {
-      path = file.parent.path;
+  if (isMobile) {
+    path = "${dir.path}/$name";
+    var file = File(path);
+    if (!file.existsSync()) {
+      path = dir.path;
     }
   }
 
-  logger.i("打开文件: $path/$name");
+  logger.i("打开文件: $path");
   if (Platform.isMacOS) {
     openFinder(path);
   }else if (Platform.isAndroid) {
@@ -26,7 +27,7 @@ void openDir({String name="", String realPath = ""}) async {
     await openAndroidDir(path);
   }else if (Platform.isIOS) {
     // openFileExplorer(path);
-    await openIosDir("$path/$name");
+    await openIosDir(path);
   } else if (Platform.isWindows || Platform.isLinux) {
     final openDirPlugin = OpenDir();
     await openDirPlugin.openNativeDir(path: path);

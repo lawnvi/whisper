@@ -221,6 +221,9 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Ack: {
+        if (message.uuid.isEmpty) {
+          return;
+        }
         logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
         var msg = await LocalDatabase().ackMessage(message);
         if (msg != null) {
@@ -339,7 +342,7 @@ class WsSvrManager {
     var json = data.toJson();
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
-    logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
+    // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
     _send(MessageData.fromJson(json).toJsonString());
   }
 
@@ -415,11 +418,12 @@ class WsSvrManager {
       _receivingFile = File('${appDir.path}/$before-$idx.$dot');
       idx++;
     }
-    _receivingFile = File('${appDir.path}/$before-$idx.$dot.crdownload');
+    var path = _receivingFile!.path;
+    _receivingFile = File('$path.crdownload');
     if (await _receivingFile!.exists()) {
       await _receivingFile!.delete();
     }
     _ioSink = _receivingFile!.openWrite();
-    return _receivingFile!.path;
+    return path;
   }
 }
