@@ -26,10 +26,10 @@ flutter开发，建立websocket，通过局域网指定对方地址与端口连�
 
 ## screenshot
 <div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="62%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="20%" style="border-radius: 6px;"/>
+    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="74%" style="border-radius: 6px;"/>
+    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="24%" style="border-radius: 6px;"/>
 </div>
 <div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="62%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="20%" style="border-radius: 6px;"/>
+    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="74%" style="border-radius: 6px;"/>
+    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="25%" style="border-radius: 6px;"/>
 </div>
