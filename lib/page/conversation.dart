@@ -33,6 +33,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final TextEditingController _textController = TextEditingController();
   bool isInputEmpty = true;
   double percent = 0;
+  String _speed = "";
+  int _sentSize = 0;
+  int _lastUpdateTime = 0;
   final keyPressedMap = {};
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
@@ -207,6 +210,18 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         ),
         // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
+          if (percent > 0 && percent < 1 && device.uid == socketManager.receiver)
+            Column(
+              children: [
+                const SizedBox(height: 12),
+                Text(_speed, style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                    "${(100 * percent).toStringAsFixed(2)}%",
+                    style: const TextStyle(fontSize: 12)
+                ),
+              ],
+            ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
@@ -612,7 +627,23 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onProgress(int size, length) {
     // TODO: implement onProgress
+    int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastUpdateTime > 1000) {
+      if (_lastUpdateTime > 0) {
+        String speed = formatSize(1000 * (length - _sentSize)~/(now - _lastUpdateTime));
+        setState(() {
+          _speed = "$speed/s ";
+        });
+      }
+      _lastUpdateTime = now;
+      _sentSize = length;
+    }
     _updatePercent(length/size);
+
+    if (length == size) {
+      _lastUpdateTime = 0;
+      _sentSize = 0;
+    }
   }
 }
 
@@ -639,7 +670,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
             },
             color: Colors.lightBlue, // 设置返回按钮图标的颜色
           ),
-          title: Text('Settings'),
+          title: const Text('Settings'),
         ),
         body: SafeArea(
           child: Material(
