@@ -21,7 +21,12 @@ flutter开发，建立websocket，通过局域网指定对方地址与端口连�
 6. 写入文件时不会检查设备剩余空间是否足够，请注意剩余空间是否足够
 7. 阿巴阿巴
 
-[下载⬇](https://github.com/lawnvi/whisper/releases)
+[web](https://2.127014.xyz/whisper)  [下载⬇](https://github.com/lawnvi/whisper/releases)
+
+If you don't have Avahi installed on your system, just install it using :
+```shell
+  sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
+```
 
 
 ## screenshot

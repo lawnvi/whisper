@@ -110,6 +110,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             onClick: (MenuItem item) {
               socketManager.sendMessage("", clipboard: true);
             }),
+        MenuItem(
+            key: 'pick_file',
+            label: "发送文件",
+            onClick: (MenuItem item) async {
+              FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
+              if (result != null) {
+                for (var item in result.files) {
+                  await socketManager.sendFile(item.path??"");
+                }
+              }
+            }),
         MenuItem.separator(),
         MenuItem(
             key: 'exit_app',
@@ -1085,7 +1096,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                             _packageInfo?.version?? "UNKNOWN",
                             const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
                             onTap: () async {
-                              final Uri toLaunch = Uri(scheme: 'https', host: 'github.com', path: '/lawnvi/whisper/releases');
+                              final Uri toLaunch = Uri(scheme: 'https', host: '2.127014.xyz', path: '/whisper.html');
                               _launchInBrowser(toLaunch);
                             }
                         ),
