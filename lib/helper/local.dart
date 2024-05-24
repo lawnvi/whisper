@@ -29,6 +29,7 @@ class LocalSetting {
   final String _close2tray = "_close_to_tray";
   final String _windowWidth = "_window_width";
   final String _windowHeight = "_window_height";
+  final String _localization = "_localization";
 
   Future<DeviceData> instance({bool online=false}) async {
     return DeviceData(id: 0,
@@ -137,5 +138,13 @@ class LocalSetting {
 
   Future<void> setWindowWidth(double width) async {
     _setSP(_windowWidth, width);
+  }
+
+  Future<String> localization() async {
+    return await getSPDefault(_localization, 'zh');
+  }
+
+  Future<void> setLocalization(String local) async {
+    _setSP(_localization, local);
   }
 }
