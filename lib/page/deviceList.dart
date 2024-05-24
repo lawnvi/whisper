@@ -1097,11 +1097,12 @@ class _SettingsScreen extends State<SettingsScreen> {
                             const Icon(Icons.language_rounded, color: CupertinoColors.systemGrey),
                             onTap: () {
                               var local = Localizations.localeOf(context);
+                              var languageCode = "zh";
                               if (local.languageCode == "zh") {
-                                MyApp.setLocale(context, const Locale('en'));
-                              }else {
-                                MyApp.setLocale(context, const Locale('zh'));
+                                languageCode = "en";
                               }
+                              MyApp.setLocale(context, Locale(languageCode));
+                              LocalSetting().setLocalization(languageCode);
                             }
                         ),
                         _buildSettingItem(

@@ -45,6 +45,17 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   Locale? _locale;
 
+  @override
+  void initState() {
+    loadLocal();
+    super.initState();
+  }
+
+  void loadLocal() async {
+    var local = await LocalSetting().localization();
+    setLocale(Locale(local));
+  }
+
   void setLocale(Locale locale) {
     setState(() {
       _locale = locale;
