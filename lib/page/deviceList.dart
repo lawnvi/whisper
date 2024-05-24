@@ -114,6 +114,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             key: 'pick_file',
             label: "发送文件",
             onClick: (MenuItem item) async {
+              if (socketManager.receiver.isEmpty) {
+                return;
+              }
               FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
               if (result != null) {
                 for (var item in result.files) {
