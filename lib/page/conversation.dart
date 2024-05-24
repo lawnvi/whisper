@@ -15,6 +15,8 @@ import 'package:whisper/socket/svrmanager.dart';
 import '../helper/file.dart';
 import '../helper/helper.dart';
 
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   SendMessageScreen({required this.device});
@@ -289,10 +291,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           onLongPress: () {
                             showConfirmationDialog(
                               context,
-                              title: "删除消息",
-                              description: "确定删除此消息吗？",
-                              confirmButtonText: "确定",
-                              cancelButtonText: "取消",
+                              title:  AppLocalizations.of(context)?.deleteMessageTitle??"删除消息",
+                              description:  AppLocalizations.of(context)?.deleteMessageDesc??"确定删除此消息吗？",
+                              confirmButtonText:  AppLocalizations.of(context)?.confirm??"确定",
+                              cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消",
                               onConfirm: () async {
                                 _deleteItem(message.id);
                                 if (isOpponent && message.type == MessageEnum.File) {
@@ -385,7 +387,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                         autocorrect: true,
                         maxLines: isMobile()? 5: 20,
                         minLines: 1,
-                        placeholder: '发点什么...', // 输入框提示文字
+                        placeholder:  AppLocalizations.of(context)?.sendTips??'发点什么...', // 输入框提示文字
                         onChanged: (value) {
                           if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
                             _textController.text = "";
@@ -589,7 +591,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
+    showConfirmationDialog(context, title:  AppLocalizations.of(context)?.timeoutTitle??"是否释放连接", description: message, confirmButtonText:  AppLocalizations.of(context)?.disconnect??"断开", cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消", onConfirm: (){
       WsSvrManager().close();
       _isAlert = false;
     }, onCancel: () {
@@ -670,12 +672,12 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
             },
             color: Colors.lightBlue, // 设置返回按钮图标的颜色
           ),
-          title: const Text('Settings'),
+          title: Text(AppLocalizations.of(context)?.setting??'设置'),
         ),
         body: SafeArea(
           child: Material(
             child: ListView(
-              padding: EdgeInsets.all(16.0), // 添加内边距以改善外观
+              padding: const EdgeInsets.all(16.0), // 添加内边距以改善外观
               children: [
                 Card(
                     elevation: 1.2, // 设置卡片的阴影
@@ -686,8 +688,8 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '自动接入',
-                          Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
+                          AppLocalizations.of(context)?.trust??'自动接入',
+                          const Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
                           CupertinoSwitch(
                             value: device.auth,
                             onChanged: (bool value) async {
@@ -700,8 +702,8 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          '写入剪切板',
-                          Icon(Icons.copy, color: CupertinoColors.systemGrey),
+                          AppLocalizations.of(context)?.writeClipboard??'写入剪切板',
+                          const Icon(Icons.copy, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
                             value: device.clipboard,
                             onChanged: (bool value) async {
@@ -725,11 +727,11 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          '删除设备',
+                          AppLocalizations.of(context)?.deleteDevice??'删除设备',
                           const Icon(Icons.delete_rounded, color: CupertinoColors.destructiveRed,),
                           null,
                           onTap: () {
-                            showConfirmationDialog(context, title: "删除${device.name}", description: "删除与此设备的所有消息，不可恢复", confirmButtonText: "确定", cancelButtonText: "取消", onConfirm: (){
+                            showConfirmationDialog(context, title:  AppLocalizations.of(context)?.deleteDeviceTitle(device.name)??"删除${device.name}", description:  AppLocalizations.of(context)?.deleteDeviceDesc??"删除与此设备的所有消息，不可恢复", confirmButtonText:  AppLocalizations.of(context)?.confirm??"确定", cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消", onConfirm: (){
                               LocalDatabase().clearDevices([device.uid]);
                               Navigator.popUntil(context, (route) {
                                 return route.isFirst;

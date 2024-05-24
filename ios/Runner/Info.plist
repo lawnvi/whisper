@@ -69,5 +69,10 @@
     <array>
         <string>_whisper._tcp</string>
     </array>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh</string>
+    	<string>en</string>
+    </array>
 </dict>
 </plist>
