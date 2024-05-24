@@ -1,0 +1,77 @@
+{
+  "connectDeviceTitle": "连接设备",
+  "connectDeviceDesc": "输入对方局域网地址与端口",
+  "connectTo": "连接到",
+  "connectRequest": "连接请求",
+  "connectRequestDesc": "接入设备：{device}?",
+  "@connectRequestDesc": {
+    "description": "接入设备描述",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "connect": "连接",
+  "confirm": "确定",
+  "allow": "同意",
+  "refuse": "拒绝",
+  "cancel": "取消",
+  "setting": "设置",
+  "sendTips": "发点什么...",
+  "trust": "自动接入",
+  "writeClipboard": "写入剪切板",
+  "deleteDevice": "删除设备",
+  "serverPort": "服务端口 {port}",
+  "serverPortTitle": "服务端口",
+  "trustNewDevice": "自动通过新设备",
+  "accessClipboard": "允许访问剪切板",
+  "doubleClickRmMessage": "双击消息删除",
+  "close2tray": "关闭时隐藏到托盘",
+  "nickname": "昵称",
+  "nicknameDesc": "请输入昵称",
+  "port": "服务端口",
+  "portDesc": "请输入服务端口：[1000, 65535]",
+  "timeoutTitle": "连接超时",
+  "disconnect": "断开",
+  "keepConnect": "保持",
+  "menuShow": "显示",
+  "menuHide": "隐藏",
+  "menuClipboard": "发送剪切板",
+  "menuSendFile": "发送文件",
+  "exit": "退出",
+  "delete": "删除",
+  "deleteConfirm": "确认删除",
+  "warning": "警告",
+  "deleteWarningText": "连接正在使用，禁止快速删除",
+  "close": "关闭",
+  "deleteDeviceTitle": "删除 {device}",
+  "@deleteDeviceTitle": {
+    "description": "删除设备描述",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "deleteDeviceDesc": "删除与此设备的所有消息，不可恢复",
+  "brokeConnectTitle": "断开连接",
+  "brokeConnectDesc": "断开 {device}",
+  "@brokeConnectDesc": {
+    "description": "断开设备描述",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "connectFailed": "连接失败",
+  "deviceBusy": "服务占线",
+  "startServerFailed": "服务启动失败",
+  "deleteMessageTitle": "删除消息",
+  "deleteMessageDesc": "确定删除此消息吗？",
+  "language": "语言 {language}"
+}

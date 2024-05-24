@@ -11,11 +11,13 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
 import '../socket/svrmanager.dart';
 import 'conversation.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class DeviceListScreen extends StatefulWidget {
   @override
@@ -94,25 +96,25 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       items: [
         MenuItem(
             key: 'show_window',
-            label: "显示",
+            label: AppLocalizations.of(context)?.menuShow??"显示",
             onClick: (MenuItem item) {
               windowManager.show();
             }),
         MenuItem(
             key: 'hide_window',
-            label: "隐藏",
+            label: AppLocalizations.of(context)?.menuHide??"隐藏",
             onClick: (MenuItem item) {
               windowManager.hide();
             }),
         MenuItem(
             key: 'clipboard',
-            label: "发送剪切板",
+            label: AppLocalizations.of(context)?.menuClipboard??"发送剪切板",
             onClick: (MenuItem item) {
               socketManager.sendMessage("", clipboard: true);
             }),
         MenuItem(
             key: 'pick_file',
-            label: "发送文件",
+            label: AppLocalizations.of(context)?.menuSendFile??"发送文件",
             onClick: (MenuItem item) async {
               if (socketManager.receiver.isEmpty) {
                 return;
@@ -127,7 +129,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         MenuItem.separator(),
         MenuItem(
             key: 'exit_app',
-            label: '退出',
+            label: AppLocalizations.of(context)?.exit??'退出',
             onClick: (MenuItem menuItem) async {
               await windowManager.destroy();
             }),
@@ -242,7 +244,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
           case BonsoirDiscoveryEventType.discoveryServiceFound:
             logger.i("event type: ${event.type}, service name: $serviceName ${service.name}");
             if (service.name.startsWith(serviceName)) {
-              await event.service!.resolve(_discovery!.serviceResolver);
+              event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
@@ -376,9 +378,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     if (!discovering || serverPortUpdate) {
       discovering = true;
       Future.delayed(const Duration(milliseconds: 100), (){
+        logger.i("refresh ui 你是来拉屎的吧");
         _broadcastService();
       });
       if (isFirst) {
+        logger.i("refresh ui 你也是来拉屎的吗");
         _discoverService();
       }
     }
@@ -399,11 +403,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             // 作为客户端
             showInputAlertDialog(
               context,
-              title: '连接设备',
-              description: '输入对方局域网地址与端口',
+              title: AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
+              description: AppLocalizations.of(context)?.connectDeviceDesc??'输入对方局域网地址与端口',
               inputHints: [{device?.host??"192.168.0.1": false}, {"10002": true}],
-              confirmButtonText: '连接',
-              cancelButtonText: '取消',
+              confirmButtonText: AppLocalizations.of(context)?.connect??'连接',
+              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
               onConfirm: (List<String> inputValues) async {
                 _connectServer(inputValues[0], int.parse(inputValues[1]));
               },
@@ -507,12 +511,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
               if (socketManager.receiver == deviceItem.uid) {
                 showLoadingDialog(
                   context,
-                  title: '警告',
-                  description: "连接正在使用，禁止快速删除",
+                  title: AppLocalizations.of(context)?.warning?? '警告',
+                  description: AppLocalizations.of(context)?.deleteWarningText?? "连接正在使用，禁止快速删除",
                   isLoading: true,
                   // 是否显示加载指示器
                   icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-                  cancelButtonText: '关闭',
+                  cancelButtonText: AppLocalizations.of(context)?.close??'关闭',
                   onCancel: () {
                     // 处理取消操作
                     Navigator.of(context).pop(); // 关闭对话框
@@ -558,10 +562,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
                     // 处理连接/断开按钮点击事件
                     showConfirmationDialog(
                       context,
-                      title: deviceItem.uid == socketManager.receiver? "断开连接": "连接设备",
-                      description: '${deviceItem.uid == socketManager.receiver? "断开": "连接到"} ${deviceItem.name}',
-                      confirmButtonText: '确定',
-                      cancelButtonText: '取消',
+                      title: deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.brokeConnectTitle??"断开连接": AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
+                      description: '${deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.disconnect??"断开": AppLocalizations.of(context)?.connectTo??"连接到"} ${deviceItem.name}',
+                      confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
+                      cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
                       onConfirm: () {
                         if (deviceItem.uid == socketManager.receiver) {
                           socketManager.close();
@@ -614,7 +618,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (!ok) {
         showLoadingDialog(
           context,
-          title: '连接失败',
+          title: AppLocalizations.of(context)?.connectFailed??'连接失败',
           description: "$message",
           isLoading: true,
           // 是否显示加载指示器
@@ -640,12 +644,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         if (!ok) {
           showLoadingDialog(
             context,
-            title: '服务启动失败',
-            description: "暂时无法作为服务端\nerror: $msg",
+            title: AppLocalizations.of(context)?.startServerFailed??'服务启动失败',
+            description: "error: $msg",
             isLoading: true,
             // 是否显示加载指示器
             icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-            cancelButtonText: 'Cancel',
+            cancelButtonText: AppLocalizations.of(context)?.cancel??'Cancel',
             onCancel: () {
               // 处理取消操作
               Navigator.of(context).pop(); // 关闭对话框
@@ -664,12 +668,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     if (msg.isNotEmpty) {
       showLoadingDialog(
         context,
-        title: '连接失败',
+        title: AppLocalizations.of(context)?.connectFailed??'连接失败',
         description: "${deviceData?.name} $msg",
         isLoading: true,
         // 是否显示加载指示器
         icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-        cancelButtonText: '确定',
+        cancelButtonText: AppLocalizations.of(context)?.confirm??'确定',
         onCancel: () {
           // 处理取消操作
           callback(false);
@@ -684,10 +688,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     if (asServer) {
       showConfirmationDialog(
         context,
-        title: '连接请求',
-        description: '接入设备: ${deviceData?.name}?',
-        confirmButtonText: '同意',
-        cancelButtonText: '拒绝',
+        title: AppLocalizations.of(context)?.connectRequest??'连接请求',
+        description: AppLocalizations.of(context)?.connectRequestDesc(deviceData?.name??"")??'接入设备: ${deviceData?.name}?',
+        confirmButtonText: AppLocalizations.of(context)?.allow??'同意',
+        cancelButtonText: AppLocalizations.of(context)?.refuse??'拒绝',
         onConfirm: () {
           callback(true);
         },
@@ -735,7 +739,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context, title: "是否释放连接", description: message, confirmButtonText: "断开", cancelButtonText: "取消", onConfirm: (){
+    showConfirmationDialog(context, title: AppLocalizations.of(context)?.timeoutTitle??"是否释放连接", description: message, confirmButtonText: AppLocalizations.of(context)?.disconnect??"断开", cancelButtonText: AppLocalizations.of(context)?.keepConnect??"取消", onConfirm: (){
       WsSvrManager().close();
       _isAlert = false;
     }, onCancel: () {
@@ -956,7 +960,7 @@ class _SettingsScreen extends State<SettingsScreen> {
             },
             color: Colors.lightBlue, // 设置返回按钮图标的颜色
           ),
-          title: const Text('设置'),
+          title: Text(AppLocalizations.of(context)?.setting?? "设置"),
         ),
         body: SafeArea(
           child: Material(
@@ -980,11 +984,11 @@ class _SettingsScreen extends State<SettingsScreen> {
                           onTap: () {
                             showInputAlertDialog(
                               context,
-                              title: '昵称',
-                              description: '请输入昵称',
+                              title: AppLocalizations.of(context)?.nickname??'昵称',
+                              description: AppLocalizations.of(context)?.nicknameDesc??'请输入昵称',
                               inputHints: [{device?.name ?? "localhost": false}],
-                              confirmButtonText: '确定',
-                              cancelButtonText: '取消',
+                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
+                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
                               onConfirm: (List<String> inputValues) async {
                                 // 处理输入框的内容
                                 if (inputValues[0].isEmpty) {
@@ -997,7 +1001,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           }
                         ),
                         _buildSettingItem(
-                          '服务端口 ${device?.port}',
+                          AppLocalizations.of(context)?.serverPort(device?.port??10002)?? '服务端口 ${device?.port}',
                           const Icon(
                             Icons.wifi_tethering,
                             color: CupertinoColors.systemGrey,
@@ -1005,11 +1009,11 @@ class _SettingsScreen extends State<SettingsScreen> {
                           onTap: () {
                             showInputAlertDialog(
                               context,
-                              title: '服务端口',
-                              description: '请输入服务端口 [1000, 65535]',
+                              title: AppLocalizations.of(context)?.serverPortTitle??'服务端口',
+                              description: AppLocalizations.of(context)?.portDesc??'请输入服务端口 [1000, 65535]',
                               inputHints: [{'${device?.port ?? "10002"}': true}],
-                              confirmButtonText: '确定',
-                              cancelButtonText: '取消',
+                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
+                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
                               onConfirm: (List<String> inputValues) async {
                                 // 处理输入框的内容
                                 try {
@@ -1041,7 +1045,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         //   ),
                         // ),
                         _buildSettingItem(
-                          '自动通过新设备',
+                          AppLocalizations.of(context)?.trustNewDevice??'自动通过新设备',
                           const Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                             value: device?.auth ?? false,
@@ -1052,7 +1056,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          '允许访问剪切板',
+                          AppLocalizations.of(context)?.accessClipboard??'允许访问剪切板',
                           const Icon(Icons.copy,  color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                             value: device?.clipboard ?? false,
@@ -1063,7 +1067,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          '双击消息删除',
+                          AppLocalizations.of(context)?.doubleClickRmMessage??'双击消息删除',
                           const Icon(Icons.delete_outline_rounded, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                               value: _doubleClickDelete,
@@ -1076,7 +1080,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                           ),
                         ),
                         if (!isMobile()) _buildSettingItem(
-                          '关闭时隐藏到托盘',
+                          AppLocalizations.of(context)?.close2tray??'关闭时隐藏到托盘',
                           const Icon(Icons.close_rounded, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
                             value: _close2tray,
@@ -1087,6 +1091,18 @@ class _SettingsScreen extends State<SettingsScreen> {
                               });
                             },
                           ),
+                        ),
+                        _buildSettingItem(
+                            (AppLocalizations.of(context)?.language(Localizations.localeOf(context).languageCode)??'language ${Localizations.localeOf(context).languageCode}'),
+                            const Icon(Icons.language_rounded, color: CupertinoColors.systemGrey),
+                            onTap: () {
+                              var local = Localizations.localeOf(context);
+                              if (local.languageCode == "zh") {
+                                MyApp.setLocale(context, const Locale('en'));
+                              }else {
+                                MyApp.setLocale(context, const Locale('zh'));
+                              }
+                            }
                         ),
                         _buildSettingItem(
                           _path,
@@ -1266,12 +1282,12 @@ void showInputAlertDialog(
         title: Text(title),
         content: Column(
           children: [
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(description,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.grey, // 自定义取消按钮文本颜色
             ),),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             ...inputFields,
           ],
         ),
@@ -1279,7 +1295,7 @@ void showInputAlertDialog(
           CupertinoDialogAction(
             child: Text(
               cancelButtonText,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.red, // 自定义取消按钮文本颜色
               ),
             ),
@@ -1290,7 +1306,7 @@ void showInputAlertDialog(
           CupertinoDialogAction(
             child: Text(
               confirmButtonText,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.lightBlue, // 自定义取消按钮文本颜色
               ),
             ),
@@ -1327,11 +1343,11 @@ void showLoadingDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 12,
             ),
             if (isLoading) icon, // 显示加载指示器
-            SizedBox(
+            const SizedBox(
               height: 8,
             ),
             Text(description),
@@ -1340,13 +1356,13 @@ void showLoadingDialog(
         actions: <Widget>[
           if (isLoading && showCancel) // 如果正在加载，显示取消按钮
             CupertinoDialogAction(
+              onPressed: onCancel,
               child: Text(
                 cancelButtonText,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.red, // 自定义取消按钮文本颜色
                 ),
               ),
-              onPressed: onCancel,
             ),
         ],
       );

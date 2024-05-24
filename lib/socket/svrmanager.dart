@@ -94,7 +94,7 @@ class WsSvrManager {
     var handler = webSocketHandler((WebSocketChannel webSocket) async {
       if (_sink != null) {
         var device = await LocalSetting().instance();
-        var message = _buildMessage(MessageEnum.Auth, device.toJsonString(), "服务占线", "", 0, false);
+        var message = _buildMessage(MessageEnum.Auth, device.toJsonString(), "服务占线/busy", "", 0, false);
         webSocket.sink.add(utf8.encode(message.toJsonString()));
         return;
       }
