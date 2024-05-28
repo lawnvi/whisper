@@ -47,5 +47,6 @@
   "deleteMessageTitle": "delete message",
   "deleteMessageDesc": "are you sure delete it?",
   "language": "language {language}",
-  "pushNotification": "push android notification"
+  "pushNotification": "push android notification",
+  "ignoreNotification": "ignore android notification"
 }

@@ -14,5 +14,6 @@ class Device extends Table {
   BoolColumn get auth => boolean().withDefault(const Constant(false))();
   IntColumn get lastTime => integer().withDefault(const Constant(0))();
   BoolColumn get around => boolean().nullable().withDefault(const Constant(false))();
-  BoolColumn get syncNotification => boolean().nullable().withDefault(const Constant(false))();
+  BoolColumn get pushNotification => boolean().nullable().withDefault(const Constant(false))();
+  BoolColumn get ignoreNotification => boolean().nullable().withDefault(const Constant(false))();
 }

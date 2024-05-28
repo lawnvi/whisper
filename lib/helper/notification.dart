@@ -1,4 +1,6 @@
 // 导入包
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 
@@ -107,6 +109,10 @@ bool filterNotification(NotificationEvent event) {
     }
   }
   return true;
+}
+
+bool supportNotification() {
+  return Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux;
 }
 
 String pkg2name(String? pkg) {

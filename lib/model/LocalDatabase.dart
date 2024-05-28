@@ -91,7 +91,18 @@ class LocalDatabase extends _$LocalDatabase {
     }
     (update(device)..where((t) => t.uid.equals(uid))).write(
       DeviceCompanion(
-        syncNotification: Value(notify),
+        pushNotification: Value(notify),
+      ),
+    );
+  }
+
+  Future<void> updateIgnoreNotification(String uid, bool notify) async {
+    if (uid.isEmpty) {
+      return;
+    }
+    (update(device)..where((t) => t.uid.equals(uid))).write(
+      DeviceCompanion(
+        ignoreNotification: Value(notify),
       ),
     );
   }
