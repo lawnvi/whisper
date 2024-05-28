@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import 'helper/helper.dart';
+import 'helper/notification.dart';
 
 void main() async {
   if (!isMobile()) {
@@ -29,6 +30,12 @@ void main() async {
     });
 
   }
+  //用于确保Flutter的Widgets绑定已经初始化。
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化通知帮助类
+  NotificationHelper notificationHelper = NotificationHelper();
+  await notificationHelper.initialize();
   runApp(MyApp());
 }
 
