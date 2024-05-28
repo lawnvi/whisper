@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -19,6 +18,7 @@ import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
+import '../helper/notification.dart';
 import '../socket/svrmanager.dart';
 import 'conversation.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -67,6 +67,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (await Permission.manageExternalStorage.isDenied) {
         await Permission.manageExternalStorage.request();
       }
+      if (await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
+      initPlatformState();
     }else {
       if (await Permission.location.isDenied) {
         await Permission.location.request();
@@ -82,9 +86,6 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         await item.request();
       }
     }
-    if (Platform.isAndroid) {
-      initPlatformState();
-    }
   }
 
   @pragma('vm:entry-point')
@@ -93,7 +94,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // try to send the event to ui
     print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.receiver.isNotEmpty) {
+    if (soc.receiver.isNotEmpty && filterNotification(evt)) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
@@ -102,30 +103,6 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // register the static to handle the events
     NotificationsListener.initialize(callbackHandle: _callback);
     // NotificationsListener.receivePort?.listen((evt) => _callback(evt));
-    startListening();
-  }
-
-  void startListening() async {
-    print("start listening");
-    var hasPermission = (await NotificationsListener.hasPermission) ?? false;
-    if (!hasPermission) {
-      print("no permission, so open settings");
-      NotificationsListener.openPermissionSettings();
-      return;
-    }
-    var isRunning = (await NotificationsListener.isRunning) ?? false;
-
-    if (!isRunning) {
-      await NotificationsListener.startService(
-          foreground: false,
-          title: "Listener Running",
-          description: "Welcome to having me");
-    }
-  }
-
-  void stopListening() async {
-    print("stop listening");
-    await NotificationsListener.stopService();
   }
 
   Future<void> _setDesktopWindow() async {
@@ -427,11 +404,11 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       discovering = true;
       Future.delayed(const Duration(milliseconds: 100), (){
         logger.i("refresh ui 你是来拉屎的吧");
-        // _broadcastService();
+        _broadcastService();
       });
       if (isFirst) {
         logger.i("refresh ui 你也是来拉屎的吗");
-        // _discoverService();
+        _discoverService();
       }
     }
   }

@@ -8,6 +8,7 @@ whisper with u
 局域网内两个设备文本/文件互传，快速复制写入对方设备剪切板  
 不访问公网  
 支持设备：Android、MacOS、Linux、Windows、~~ios~~（仅模拟器测试，没钱，不会，真机试了应该是没权限）
+推送安卓设备的通知到其他设备
 
 ## 怎么做的
 flutter开发，建立websocket，通过局域网指定对方地址与端口连接

@@ -46,5 +46,6 @@
   "startServerFailed": "server not start",
   "deleteMessageTitle": "delete message",
   "deleteMessageDesc": "are you sure delete it?",
-  "language": "language {language}"
+  "language": "language {language}",
+  "pushNotification": "push android notification"
 }

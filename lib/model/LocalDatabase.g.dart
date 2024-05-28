@@ -112,6 +112,16 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("around" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _syncNotificationMeta =
+      const VerificationMeta('syncNotification');
+  @override
+  late final GeneratedColumn<bool> syncNotification = GeneratedColumn<bool>(
+      'sync_notification', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("sync_notification" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -126,7 +136,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
         clipboard,
         auth,
         lastTime,
-        around
+        around,
+        syncNotification
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -193,6 +204,12 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       context.handle(_aroundMeta,
           around.isAcceptableOrUnknown(data['around']!, _aroundMeta));
     }
+    if (data.containsKey('sync_notification')) {
+      context.handle(
+          _syncNotificationMeta,
+          syncNotification.isAcceptableOrUnknown(
+              data['sync_notification']!, _syncNotificationMeta));
+    }
     return context;
   }
 
@@ -228,6 +245,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
           .read(DriftSqlType.int, data['${effectivePrefix}last_time'])!,
       around: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}around']),
+      syncNotification: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}sync_notification']),
     );
   }
 
@@ -251,6 +270,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
   final bool auth;
   final int lastTime;
   final bool? around;
+  final bool? syncNotification;
   const DeviceData(
       {required this.id,
       required this.uid,
@@ -264,7 +284,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       required this.clipboard,
       required this.auth,
       required this.lastTime,
-      this.around});
+      this.around,
+      this.syncNotification});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -284,6 +305,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
     map['last_time'] = Variable<int>(lastTime);
     if (!nullToAbsent || around != null) {
       map['around'] = Variable<bool>(around);
+    }
+    if (!nullToAbsent || syncNotification != null) {
+      map['sync_notification'] = Variable<bool>(syncNotification);
     }
     return map;
   }
@@ -306,6 +330,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       lastTime: Value(lastTime),
       around:
           around == null && nullToAbsent ? const Value.absent() : Value(around),
+      syncNotification: syncNotification == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncNotification),
     );
   }
 
@@ -326,6 +353,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       auth: serializer.fromJson<bool>(json['auth']),
       lastTime: serializer.fromJson<int>(json['lastTime']),
       around: serializer.fromJson<bool?>(json['around']),
+      syncNotification: serializer.fromJson<bool?>(json['syncNotification']),
     );
   }
   @override
@@ -345,6 +373,7 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
       'auth': serializer.toJson<bool>(auth),
       'lastTime': serializer.toJson<int>(lastTime),
       'around': serializer.toJson<bool?>(around),
+      'syncNotification': serializer.toJson<bool?>(syncNotification),
     };
   }
 
@@ -361,7 +390,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           bool? clipboard,
           bool? auth,
           int? lastTime,
-          Value<bool?> around = const Value.absent()}) =>
+          Value<bool?> around = const Value.absent(),
+          Value<bool?> syncNotification = const Value.absent()}) =>
       DeviceData(
         id: id ?? this.id,
         uid: uid ?? this.uid,
@@ -376,6 +406,9 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
         auth: auth ?? this.auth,
         lastTime: lastTime ?? this.lastTime,
         around: around.present ? around.value : this.around,
+        syncNotification: syncNotification.present
+            ? syncNotification.value
+            : this.syncNotification,
       );
   @override
   String toString() {
@@ -392,14 +425,15 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           ..write('clipboard: $clipboard, ')
           ..write('auth: $auth, ')
           ..write('lastTime: $lastTime, ')
-          ..write('around: $around')
+          ..write('around: $around, ')
+          ..write('syncNotification: $syncNotification')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, uid, name, host, port, password, platform,
-      isServer, online, clipboard, auth, lastTime, around);
+      isServer, online, clipboard, auth, lastTime, around, syncNotification);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -416,7 +450,8 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
           other.clipboard == this.clipboard &&
           other.auth == this.auth &&
           other.lastTime == this.lastTime &&
-          other.around == this.around);
+          other.around == this.around &&
+          other.syncNotification == this.syncNotification);
 }
 
 class DeviceCompanion extends UpdateCompanion<DeviceData> {
@@ -433,6 +468,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   final Value<bool> auth;
   final Value<int> lastTime;
   final Value<bool?> around;
+  final Value<bool?> syncNotification;
   const DeviceCompanion({
     this.id = const Value.absent(),
     this.uid = const Value.absent(),
@@ -447,6 +483,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
     this.around = const Value.absent(),
+    this.syncNotification = const Value.absent(),
   });
   DeviceCompanion.insert({
     this.id = const Value.absent(),
@@ -462,6 +499,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     this.auth = const Value.absent(),
     this.lastTime = const Value.absent(),
     this.around = const Value.absent(),
+    this.syncNotification = const Value.absent(),
   })  : host = Value(host),
         port = Value(port);
   static Insertable<DeviceData> custom({
@@ -478,6 +516,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     Expression<bool>? auth,
     Expression<int>? lastTime,
     Expression<bool>? around,
+    Expression<bool>? syncNotification,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -493,6 +532,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       if (auth != null) 'auth': auth,
       if (lastTime != null) 'last_time': lastTime,
       if (around != null) 'around': around,
+      if (syncNotification != null) 'sync_notification': syncNotification,
     });
   }
 
@@ -509,7 +549,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       Value<bool>? clipboard,
       Value<bool>? auth,
       Value<int>? lastTime,
-      Value<bool?>? around}) {
+      Value<bool?>? around,
+      Value<bool?>? syncNotification}) {
     return DeviceCompanion(
       id: id ?? this.id,
       uid: uid ?? this.uid,
@@ -524,6 +565,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
       auth: auth ?? this.auth,
       lastTime: lastTime ?? this.lastTime,
       around: around ?? this.around,
+      syncNotification: syncNotification ?? this.syncNotification,
     );
   }
 
@@ -569,6 +611,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     if (around.present) {
       map['around'] = Variable<bool>(around.value);
     }
+    if (syncNotification.present) {
+      map['sync_notification'] = Variable<bool>(syncNotification.value);
+    }
     return map;
   }
 
@@ -587,7 +632,8 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
           ..write('clipboard: $clipboard, ')
           ..write('auth: $auth, ')
           ..write('lastTime: $lastTime, ')
-          ..write('around: $around')
+          ..write('around: $around, ')
+          ..write('syncNotification: $syncNotification')
           ..write(')'))
         .toString();
   }
@@ -1298,6 +1344,7 @@ typedef $$DeviceTableInsertCompanionBuilder = DeviceCompanion Function({
   Value<bool> auth,
   Value<int> lastTime,
   Value<bool?> around,
+  Value<bool?> syncNotification,
 });
 typedef $$DeviceTableUpdateCompanionBuilder = DeviceCompanion Function({
   Value<int> id,
@@ -1313,6 +1360,7 @@ typedef $$DeviceTableUpdateCompanionBuilder = DeviceCompanion Function({
   Value<bool> auth,
   Value<int> lastTime,
   Value<bool?> around,
+  Value<bool?> syncNotification,
 });
 
 class $$DeviceTableTableManager extends RootTableManager<
@@ -1347,6 +1395,7 @@ class $$DeviceTableTableManager extends RootTableManager<
             Value<bool> auth = const Value.absent(),
             Value<int> lastTime = const Value.absent(),
             Value<bool?> around = const Value.absent(),
+            Value<bool?> syncNotification = const Value.absent(),
           }) =>
               DeviceCompanion(
             id: id,
@@ -1362,6 +1411,7 @@ class $$DeviceTableTableManager extends RootTableManager<
             auth: auth,
             lastTime: lastTime,
             around: around,
+            syncNotification: syncNotification,
           ),
           getInsertCompanionBuilder: ({
             Value<int> id = const Value.absent(),
@@ -1377,6 +1427,7 @@ class $$DeviceTableTableManager extends RootTableManager<
             Value<bool> auth = const Value.absent(),
             Value<int> lastTime = const Value.absent(),
             Value<bool?> around = const Value.absent(),
+            Value<bool?> syncNotification = const Value.absent(),
           }) =>
               DeviceCompanion.insert(
             id: id,
@@ -1392,6 +1443,7 @@ class $$DeviceTableTableManager extends RootTableManager<
             auth: auth,
             lastTime: lastTime,
             around: around,
+            syncNotification: syncNotification,
           ),
         ));
 }
@@ -1476,6 +1528,11 @@ class $$DeviceTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<bool> get syncNotification => $state.composableBuilder(
+      column: $state.table.syncNotification,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   ComposableFilter messageRefs(
       ComposableFilter Function($$MessageTableFilterComposer f) f) {
     final $$MessageTableFilterComposer composer = $state.composerBuilder(
@@ -1555,6 +1612,11 @@ class $$DeviceTableOrderingComposer
 
   ColumnOrderings<bool> get around => $state.composableBuilder(
       column: $state.table.around,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get syncNotification => $state.composableBuilder(
+      column: $state.table.syncNotification,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 }
