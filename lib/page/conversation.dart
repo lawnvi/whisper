@@ -92,7 +92,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     _scrollController.addListener(_scrollListener);
 
     // 开启通知监听
-    if (Platform.isAndroid && !isLocal && temp?.uid == socketManager.receiver && temp?.syncNotification == true) {
+    if (Platform.isAndroid && !isLocal && temp?.uid == socketManager.receiver && temp?.pushNotification == true) {
       startAndroidListening();
     }
   }
@@ -742,11 +742,11 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                             },
                           ),
                         ),
-                        _buildSettingItem(
+                        if (Platform.isAndroid) _buildSettingItem(
                           AppLocalizations.of(context)?.pushNotification??'推送安卓通知',
                           const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
-                            value: device.syncNotification == true,
+                            value: device.pushNotification == true,
                             onChanged: (bool value) async {
                               LocalDatabase().updateNotification(device.uid, value);
                               var temp = await LocalDatabase().fetchDevice(device.uid);
@@ -756,6 +756,20 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                               if (Platform.isAndroid && device.uid == WsSvrManager().receiver) {
                                 value? startAndroidListening(): stopAndroidListening();
                               }
+                            },
+                          ),
+                        ),
+                        if (supportNotification()) _buildSettingItem(
+                          AppLocalizations.of(context)?.ignoreNotification??'忽略安卓通知',
+                          const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
+                          CupertinoSwitch(
+                            value: device.ignoreNotification == true,
+                            onChanged: (bool value) async {
+                              LocalDatabase().updateIgnoreNotification(device.uid, value);
+                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
                             },
                           ),
                         ),

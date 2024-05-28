@@ -249,8 +249,9 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Notification: {
+        var device = await LocalDatabase().fetchDevice(receiver);
         var data = jsonDecode(message.content??"{}");
-        if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux) {
+        if (supportNotification() && device?.ignoreNotification != true) {
           NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']);
         }
         _ackMessage(message);
