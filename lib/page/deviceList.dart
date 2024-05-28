@@ -94,7 +94,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     print("send evt to ui: $evt");
     var soc = WsSvrManager();
     if (soc.receiver.isNotEmpty) {
-      soc.sendMessage("【${pkg2name(evt.packageName)}】\n\n${evt.title}\n${evt.text}");
+      soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
 

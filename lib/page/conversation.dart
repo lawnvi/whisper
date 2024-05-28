@@ -478,7 +478,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     var content = messageData.content??"";
     if (messageData.type == MessageEnum.Notification) {
       var data = jsonDecode(messageData.content??"{}");
-      content = "【${data['app']}】\n\n${data['title']}\n${data['text']}";
+      content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -626,9 +626,6 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void onMessage(MessageData messageData) {
-    if (messageData.type == MessageEnum.Notification) {
-      // todo show notification
-    }
     logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
     if (_isLocalhost && messageData.receiver.isEmpty || device.uid == socketManager.receiver && (messageData.sender == device.uid || messageData.receiver == device.uid)) {
       _insertItem(0, messageData);

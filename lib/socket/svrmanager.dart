@@ -14,6 +14,7 @@ import 'package:whisper/model/message.dart';
 import 'package:path/path.dart' as p;
 
 import '../helper/file.dart';
+import '../helper/notification.dart';
 
 abstract class ISocketEvent {
   void onError(String message);
@@ -234,11 +235,9 @@ class WsSvrManager {
         }
         break;
       }
-      case MessageEnum.Text || MessageEnum.Notification: {
+      case MessageEnum.Text: {
         logger.i("收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
-        if (message.type == MessageEnum.Text) {
-          LocalDatabase().insertMessage(message);
-        }
+        LocalDatabase().insertMessage(message);
         _ackMessage(message);
         if (message.clipboard) {
           if ((await LocalSetting().instance()).clipboard) {
@@ -247,6 +246,13 @@ class WsSvrManager {
         }
         _event?.onMessage(message);
         logger.i("文本消息：$str");
+        break;
+      }
+      case MessageEnum.Notification: {
+        var data = jsonDecode(message.content??"{}");
+        NotificationHelper().showNotification(title: "【${data['app']}】${data['title']}", body: data['text']);
+        _ackMessage(message);
+        _event?.onMessage(message);
         break;
       }
       case MessageEnum.Heartbeat:
@@ -373,8 +379,8 @@ class WsSvrManager {
     _send(message.toJsonString());
   }
 
-  Future<void> sendNotification(String package, String title, String text) async {
-    if (_sink == null) {
+  Future<void> sendNotification(String? package, String? title, String? text) async {
+    if (_sink == null || package == null && title == null && text == null) {
       return;
     }
     var content = {
