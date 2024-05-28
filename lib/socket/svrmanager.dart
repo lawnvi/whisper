@@ -250,7 +250,9 @@ class WsSvrManager {
       }
       case MessageEnum.Notification: {
         var data = jsonDecode(message.content??"{}");
-        NotificationHelper().showNotification(title: "【${data['app']}】${data['title']}", body: data['text']);
+        if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux) {
+          NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']);
+        }
         _ackMessage(message);
         _event?.onMessage(message);
         break;

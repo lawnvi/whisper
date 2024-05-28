@@ -73,5 +73,6 @@
   "startServerFailed": "服务启动失败",
   "deleteMessageTitle": "删除消息",
   "deleteMessageDesc": "确定删除此消息吗？",
-  "language": "语言 {language}"
+  "language": "语言 {language}",
+  "pushNotification": "推送安卓通知"
 }

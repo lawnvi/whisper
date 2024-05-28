@@ -18,6 +18,8 @@ import '../helper/helper.dart';
 
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
+import '../helper/notification.dart';
+
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   SendMessageScreen({required this.device});
@@ -88,6 +90,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     _insertItems(0, arr);
 
     _scrollController.addListener(_scrollListener);
+
+    // 开启通知监听
+    if (Platform.isAndroid && !isLocal && temp?.uid == socketManager.receiver && temp?.syncNotification == true) {
+      startAndroidListening();
+    }
   }
 
   void _scrollListener() async {
@@ -669,6 +676,20 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
   _ClientSettingsScreen(this.device);
 
   @override
+  void initState() {
+    _refreshDevice();
+    super.initState();
+  }
+
+  Future<void> _refreshDevice() async {
+    // 数据加载完成后更新状态
+    var temp = await LocalDatabase().fetchDevice(device.uid);
+    setState(() {
+      device = temp!;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
@@ -718,6 +739,23 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                               setState(() {
                                 device = temp!;
                               });
+                            },
+                          ),
+                        ),
+                        _buildSettingItem(
+                          AppLocalizations.of(context)?.pushNotification??'推送安卓通知',
+                          const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
+                          CupertinoSwitch(
+                            value: device.syncNotification == true,
+                            onChanged: (bool value) async {
+                              LocalDatabase().updateNotification(device.uid, value);
+                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
+                              if (Platform.isAndroid && device.uid == WsSvrManager().receiver) {
+                                value? startAndroidListening(): stopAndroidListening();
+                              }
                             },
                           ),
                         ),

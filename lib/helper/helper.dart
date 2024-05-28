@@ -187,12 +187,3 @@ void pickFile(var callback) async {
     logger.i('用户取消了文件选择');
   }
 }
-
-String pkg2name(String? pkg) {
-  if (pkg == null) {
-    return "通知";
-  }
-  return pkgMaps[pkg]?? "通知";
-}
-
-var pkgMaps = {'com.tencent.mm': '微信', 'com.tencent.mobileqq': 'QQ', 'com.eg.android.AlipayGphone': '支付宝', 'com.taobao.taobao': '淘宝', 'com.jingdong.app.mall': '京东', 'com.ss.android.ugc.aweme': '抖音', 'com.smile.gifmaker': '快手', 'com.sina.weibo': '微博', 'tv.danmaku.bili': '哔哩哔哩', 'com.netease.cloudmusic': '网易云音乐', 'com.tencent.qqlive': '腾讯视频', 'com.youku.phone': '优酷', 'com.qiyi.video': '爱奇艺', 'com.sankuai.meituan': '美团', 'com.sdu.didi.psnger': '滴滴出行', 'com.ss.android.lark': '飞书', 'com.android.mms': '短信', 'com.coolapk.market': '酷安', 'com.sankuai.meituan.takeoutnew': '美团外卖', 'com.taobao.idlefish': '闲鱼'};
