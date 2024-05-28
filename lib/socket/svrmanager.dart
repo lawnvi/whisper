@@ -100,7 +100,7 @@ class WsSvrManager {
       }
       asServer = true;
       _sink = webSocket.sink;
-      webSocket.stream.timeout(const Duration(minutes: 1)).listen(
+      webSocket.stream.listen(
         (message) {
           _listen(message);
         },
@@ -136,7 +136,7 @@ class WsSvrManager {
       asServer = false;
       _sink = channel.sink;
       _auth(true);
-      channel.stream.timeout(const Duration(minutes: 1)).listen((message) {
+      channel.stream.listen((message) {
         _listen(message);
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
@@ -234,9 +234,11 @@ class WsSvrManager {
         }
         break;
       }
-      case MessageEnum.Text: {
+      case MessageEnum.Text || MessageEnum.Notification: {
         logger.i("收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
-        LocalDatabase().insertMessage(message);
+        if (message.type == MessageEnum.Text) {
+          LocalDatabase().insertMessage(message);
+        }
         _ackMessage(message);
         if (message.clipboard) {
           if ((await LocalSetting().instance()).clipboard) {
@@ -368,6 +370,21 @@ class WsSvrManager {
     var message = _buildMessage(MessageEnum.Text, content, "", "", 0, clipboard);
     LocalDatabase().insertMessage(message);
     logger.i("创建新消息, uuid: ${message.uuid}");
+    _send(message.toJsonString());
+  }
+
+  Future<void> sendNotification(String package, String title, String text) async {
+    if (_sink == null) {
+      return;
+    }
+    var content = {
+      "app": pkg2name(package),
+      "package": package,
+      "title": title,
+      "text": text,
+    };
+
+    var message = _buildMessage(MessageEnum.Notification, jsonEncode(content), "", "", 0, false);
     _send(message.toJsonString());
   }
 

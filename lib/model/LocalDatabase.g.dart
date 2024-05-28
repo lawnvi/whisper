@@ -1274,6 +1274,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
 
 abstract class _$LocalDatabase extends GeneratedDatabase {
   _$LocalDatabase(QueryExecutor e) : super(e);
+  _$LocalDatabaseManager get managers => _$LocalDatabaseManager(this);
   late final $DeviceTable device = $DeviceTable(this);
   late final $MessageTable message = $MessageTable(this);
   @override
@@ -1281,4 +1282,598 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [device, message];
+}
+
+typedef $$DeviceTableInsertCompanionBuilder = DeviceCompanion Function({
+  Value<int> id,
+  Value<String> uid,
+  Value<String> name,
+  required String host,
+  required int port,
+  Value<String?> password,
+  Value<String> platform,
+  Value<bool> isServer,
+  Value<bool> online,
+  Value<bool> clipboard,
+  Value<bool> auth,
+  Value<int> lastTime,
+  Value<bool?> around,
+});
+typedef $$DeviceTableUpdateCompanionBuilder = DeviceCompanion Function({
+  Value<int> id,
+  Value<String> uid,
+  Value<String> name,
+  Value<String> host,
+  Value<int> port,
+  Value<String?> password,
+  Value<String> platform,
+  Value<bool> isServer,
+  Value<bool> online,
+  Value<bool> clipboard,
+  Value<bool> auth,
+  Value<int> lastTime,
+  Value<bool?> around,
+});
+
+class $$DeviceTableTableManager extends RootTableManager<
+    _$LocalDatabase,
+    $DeviceTable,
+    DeviceData,
+    $$DeviceTableFilterComposer,
+    $$DeviceTableOrderingComposer,
+    $$DeviceTableProcessedTableManager,
+    $$DeviceTableInsertCompanionBuilder,
+    $$DeviceTableUpdateCompanionBuilder> {
+  $$DeviceTableTableManager(_$LocalDatabase db, $DeviceTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$DeviceTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$DeviceTableOrderingComposer(ComposerState(db, table)),
+          getChildManagerBuilder: (p) => $$DeviceTableProcessedTableManager(p),
+          getUpdateCompanionBuilder: ({
+            Value<int> id = const Value.absent(),
+            Value<String> uid = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String> host = const Value.absent(),
+            Value<int> port = const Value.absent(),
+            Value<String?> password = const Value.absent(),
+            Value<String> platform = const Value.absent(),
+            Value<bool> isServer = const Value.absent(),
+            Value<bool> online = const Value.absent(),
+            Value<bool> clipboard = const Value.absent(),
+            Value<bool> auth = const Value.absent(),
+            Value<int> lastTime = const Value.absent(),
+            Value<bool?> around = const Value.absent(),
+          }) =>
+              DeviceCompanion(
+            id: id,
+            uid: uid,
+            name: name,
+            host: host,
+            port: port,
+            password: password,
+            platform: platform,
+            isServer: isServer,
+            online: online,
+            clipboard: clipboard,
+            auth: auth,
+            lastTime: lastTime,
+            around: around,
+          ),
+          getInsertCompanionBuilder: ({
+            Value<int> id = const Value.absent(),
+            Value<String> uid = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            required String host,
+            required int port,
+            Value<String?> password = const Value.absent(),
+            Value<String> platform = const Value.absent(),
+            Value<bool> isServer = const Value.absent(),
+            Value<bool> online = const Value.absent(),
+            Value<bool> clipboard = const Value.absent(),
+            Value<bool> auth = const Value.absent(),
+            Value<int> lastTime = const Value.absent(),
+            Value<bool?> around = const Value.absent(),
+          }) =>
+              DeviceCompanion.insert(
+            id: id,
+            uid: uid,
+            name: name,
+            host: host,
+            port: port,
+            password: password,
+            platform: platform,
+            isServer: isServer,
+            online: online,
+            clipboard: clipboard,
+            auth: auth,
+            lastTime: lastTime,
+            around: around,
+          ),
+        ));
+}
+
+class $$DeviceTableProcessedTableManager extends ProcessedTableManager<
+    _$LocalDatabase,
+    $DeviceTable,
+    DeviceData,
+    $$DeviceTableFilterComposer,
+    $$DeviceTableOrderingComposer,
+    $$DeviceTableProcessedTableManager,
+    $$DeviceTableInsertCompanionBuilder,
+    $$DeviceTableUpdateCompanionBuilder> {
+  $$DeviceTableProcessedTableManager(super.$state);
+}
+
+class $$DeviceTableFilterComposer
+    extends FilterComposer<_$LocalDatabase, $DeviceTable> {
+  $$DeviceTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get uid => $state.composableBuilder(
+      column: $state.table.uid,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get name => $state.composableBuilder(
+      column: $state.table.name,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get host => $state.composableBuilder(
+      column: $state.table.host,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get port => $state.composableBuilder(
+      column: $state.table.port,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get password => $state.composableBuilder(
+      column: $state.table.password,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get platform => $state.composableBuilder(
+      column: $state.table.platform,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get isServer => $state.composableBuilder(
+      column: $state.table.isServer,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get online => $state.composableBuilder(
+      column: $state.table.online,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get clipboard => $state.composableBuilder(
+      column: $state.table.clipboard,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get auth => $state.composableBuilder(
+      column: $state.table.auth,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get lastTime => $state.composableBuilder(
+      column: $state.table.lastTime,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get around => $state.composableBuilder(
+      column: $state.table.around,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ComposableFilter messageRefs(
+      ComposableFilter Function($$MessageTableFilterComposer f) f) {
+    final $$MessageTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $state.db.message,
+        getReferencedColumn: (t) => t.deviceId,
+        builder: (joinBuilder, parentComposers) => $$MessageTableFilterComposer(
+            ComposerState(
+                $state.db, $state.db.message, joinBuilder, parentComposers)));
+    return f(composer);
+  }
+}
+
+class $$DeviceTableOrderingComposer
+    extends OrderingComposer<_$LocalDatabase, $DeviceTable> {
+  $$DeviceTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get uid => $state.composableBuilder(
+      column: $state.table.uid,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get name => $state.composableBuilder(
+      column: $state.table.name,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get host => $state.composableBuilder(
+      column: $state.table.host,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get port => $state.composableBuilder(
+      column: $state.table.port,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get password => $state.composableBuilder(
+      column: $state.table.password,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get platform => $state.composableBuilder(
+      column: $state.table.platform,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get isServer => $state.composableBuilder(
+      column: $state.table.isServer,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get online => $state.composableBuilder(
+      column: $state.table.online,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get clipboard => $state.composableBuilder(
+      column: $state.table.clipboard,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get auth => $state.composableBuilder(
+      column: $state.table.auth,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get lastTime => $state.composableBuilder(
+      column: $state.table.lastTime,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get around => $state.composableBuilder(
+      column: $state.table.around,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+}
+
+typedef $$MessageTableInsertCompanionBuilder = MessageCompanion Function({
+  Value<int> id,
+  Value<int?> deviceId,
+  Value<String> sender,
+  Value<String> receiver,
+  Value<String> name,
+  Value<bool> clipboard,
+  Value<int> size,
+  Value<MessageEnum> type,
+  Value<String?> content,
+  Value<String?> message,
+  Value<int> timestamp,
+  Value<String> uuid,
+  Value<bool> acked,
+  Value<String> path,
+  Value<String> md5,
+});
+typedef $$MessageTableUpdateCompanionBuilder = MessageCompanion Function({
+  Value<int> id,
+  Value<int?> deviceId,
+  Value<String> sender,
+  Value<String> receiver,
+  Value<String> name,
+  Value<bool> clipboard,
+  Value<int> size,
+  Value<MessageEnum> type,
+  Value<String?> content,
+  Value<String?> message,
+  Value<int> timestamp,
+  Value<String> uuid,
+  Value<bool> acked,
+  Value<String> path,
+  Value<String> md5,
+});
+
+class $$MessageTableTableManager extends RootTableManager<
+    _$LocalDatabase,
+    $MessageTable,
+    MessageData,
+    $$MessageTableFilterComposer,
+    $$MessageTableOrderingComposer,
+    $$MessageTableProcessedTableManager,
+    $$MessageTableInsertCompanionBuilder,
+    $$MessageTableUpdateCompanionBuilder> {
+  $$MessageTableTableManager(_$LocalDatabase db, $MessageTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          filteringComposer:
+              $$MessageTableFilterComposer(ComposerState(db, table)),
+          orderingComposer:
+              $$MessageTableOrderingComposer(ComposerState(db, table)),
+          getChildManagerBuilder: (p) => $$MessageTableProcessedTableManager(p),
+          getUpdateCompanionBuilder: ({
+            Value<int> id = const Value.absent(),
+            Value<int?> deviceId = const Value.absent(),
+            Value<String> sender = const Value.absent(),
+            Value<String> receiver = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<bool> clipboard = const Value.absent(),
+            Value<int> size = const Value.absent(),
+            Value<MessageEnum> type = const Value.absent(),
+            Value<String?> content = const Value.absent(),
+            Value<String?> message = const Value.absent(),
+            Value<int> timestamp = const Value.absent(),
+            Value<String> uuid = const Value.absent(),
+            Value<bool> acked = const Value.absent(),
+            Value<String> path = const Value.absent(),
+            Value<String> md5 = const Value.absent(),
+          }) =>
+              MessageCompanion(
+            id: id,
+            deviceId: deviceId,
+            sender: sender,
+            receiver: receiver,
+            name: name,
+            clipboard: clipboard,
+            size: size,
+            type: type,
+            content: content,
+            message: message,
+            timestamp: timestamp,
+            uuid: uuid,
+            acked: acked,
+            path: path,
+            md5: md5,
+          ),
+          getInsertCompanionBuilder: ({
+            Value<int> id = const Value.absent(),
+            Value<int?> deviceId = const Value.absent(),
+            Value<String> sender = const Value.absent(),
+            Value<String> receiver = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<bool> clipboard = const Value.absent(),
+            Value<int> size = const Value.absent(),
+            Value<MessageEnum> type = const Value.absent(),
+            Value<String?> content = const Value.absent(),
+            Value<String?> message = const Value.absent(),
+            Value<int> timestamp = const Value.absent(),
+            Value<String> uuid = const Value.absent(),
+            Value<bool> acked = const Value.absent(),
+            Value<String> path = const Value.absent(),
+            Value<String> md5 = const Value.absent(),
+          }) =>
+              MessageCompanion.insert(
+            id: id,
+            deviceId: deviceId,
+            sender: sender,
+            receiver: receiver,
+            name: name,
+            clipboard: clipboard,
+            size: size,
+            type: type,
+            content: content,
+            message: message,
+            timestamp: timestamp,
+            uuid: uuid,
+            acked: acked,
+            path: path,
+            md5: md5,
+          ),
+        ));
+}
+
+class $$MessageTableProcessedTableManager extends ProcessedTableManager<
+    _$LocalDatabase,
+    $MessageTable,
+    MessageData,
+    $$MessageTableFilterComposer,
+    $$MessageTableOrderingComposer,
+    $$MessageTableProcessedTableManager,
+    $$MessageTableInsertCompanionBuilder,
+    $$MessageTableUpdateCompanionBuilder> {
+  $$MessageTableProcessedTableManager(super.$state);
+}
+
+class $$MessageTableFilterComposer
+    extends FilterComposer<_$LocalDatabase, $MessageTable> {
+  $$MessageTableFilterComposer(super.$state);
+  ColumnFilters<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get sender => $state.composableBuilder(
+      column: $state.table.sender,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get receiver => $state.composableBuilder(
+      column: $state.table.receiver,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get name => $state.composableBuilder(
+      column: $state.table.name,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get clipboard => $state.composableBuilder(
+      column: $state.table.clipboard,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get size => $state.composableBuilder(
+      column: $state.table.size,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnWithTypeConverterFilters<MessageEnum, MessageEnum, int> get type =>
+      $state.composableBuilder(
+          column: $state.table.type,
+          builder: (column, joinBuilders) => ColumnWithTypeConverterFilters(
+              column,
+              joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get content => $state.composableBuilder(
+      column: $state.table.content,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get message => $state.composableBuilder(
+      column: $state.table.message,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<int> get timestamp => $state.composableBuilder(
+      column: $state.table.timestamp,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get uuid => $state.composableBuilder(
+      column: $state.table.uuid,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<bool> get acked => $state.composableBuilder(
+      column: $state.table.acked,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get path => $state.composableBuilder(
+      column: $state.table.path,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  ColumnFilters<String> get md5 => $state.composableBuilder(
+      column: $state.table.md5,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
+  $$DeviceTableFilterComposer get deviceId {
+    final $$DeviceTableFilterComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.deviceId,
+        referencedTable: $state.db.device,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) => $$DeviceTableFilterComposer(
+            ComposerState(
+                $state.db, $state.db.device, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+class $$MessageTableOrderingComposer
+    extends OrderingComposer<_$LocalDatabase, $MessageTable> {
+  $$MessageTableOrderingComposer(super.$state);
+  ColumnOrderings<int> get id => $state.composableBuilder(
+      column: $state.table.id,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get sender => $state.composableBuilder(
+      column: $state.table.sender,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get receiver => $state.composableBuilder(
+      column: $state.table.receiver,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get name => $state.composableBuilder(
+      column: $state.table.name,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get clipboard => $state.composableBuilder(
+      column: $state.table.clipboard,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get size => $state.composableBuilder(
+      column: $state.table.size,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get type => $state.composableBuilder(
+      column: $state.table.type,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get content => $state.composableBuilder(
+      column: $state.table.content,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get message => $state.composableBuilder(
+      column: $state.table.message,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get timestamp => $state.composableBuilder(
+      column: $state.table.timestamp,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get uuid => $state.composableBuilder(
+      column: $state.table.uuid,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<bool> get acked => $state.composableBuilder(
+      column: $state.table.acked,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get path => $state.composableBuilder(
+      column: $state.table.path,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get md5 => $state.composableBuilder(
+      column: $state.table.md5,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  $$DeviceTableOrderingComposer get deviceId {
+    final $$DeviceTableOrderingComposer composer = $state.composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.deviceId,
+        referencedTable: $state.db.device,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder, parentComposers) =>
+            $$DeviceTableOrderingComposer(ComposerState(
+                $state.db, $state.db.device, joinBuilder, parentComposers)));
+    return composer;
+  }
+}
+
+class _$LocalDatabaseManager {
+  final _$LocalDatabase _db;
+  _$LocalDatabaseManager(this._db);
+  $$DeviceTableTableManager get device =>
+      $$DeviceTableTableManager(_db, _db.device);
+  $$MessageTableTableManager get message =>
+      $$MessageTableTableManager(_db, _db.message);
 }

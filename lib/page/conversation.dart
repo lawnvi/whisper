@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -274,9 +275,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                         GestureDetector(
                           child: Container(
                             alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-                            child: message.type == MessageEnum.Text
-                                ? _buildTextMessage(message, isOpponent)
-                                : _buildFileMessage(message, isOpponent),
+                            child: message.type == MessageEnum.File
+                                ? _buildFileMessage(message, isOpponent)
+                                : _buildTextMessage(message, isOpponent),
                           ),
                           onTap: (){
                             if (isOpponent && message.type == MessageEnum.File) {
@@ -474,6 +475,11 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     }else {
       screenWidth *= 0.8;
     }
+    var content = messageData.content??"";
+    if (messageData.type == MessageEnum.Notification) {
+      var data = jsonDecode(messageData.content??"{}");
+      content = "【${data['app']}】\n\n${data['title']}\n${data['text']}";
+    }
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
@@ -481,7 +487,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         color: isOpponent ? Colors.grey[300] : Colors.blue,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-          child: SelectableText(messageData.content??"", // 文本消息内容
+          child: SelectableText(content, // 文本消息内容
             style: TextStyle(
               color: isOpponent ? Colors.black : Colors.white,
             ),
@@ -620,6 +626,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void onMessage(MessageData messageData) {
+    if (messageData.type == MessageEnum.Notification) {
+      // todo show notification
+    }
     logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
     if (_isLocalhost && messageData.receiver.isEmpty || device.uid == socketManager.receiver && (messageData.sender == device.uid || messageData.receiver == device.uid)) {
       _insertItem(0, messageData);
