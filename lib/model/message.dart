@@ -28,6 +28,7 @@ enum MessageEnum {
   Text,
   File,
   FileSignal,
+  Notification
 }
 
 
