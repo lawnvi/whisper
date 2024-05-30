@@ -387,7 +387,7 @@ class WsSvrManager {
       return;
     }
     var content = {
-      "app": pkg2name(package),
+      "app": await appName(package),
       "package": package,
       "title": title,
       "text": text,
