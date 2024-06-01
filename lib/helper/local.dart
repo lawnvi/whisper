@@ -30,6 +30,8 @@ class LocalSetting {
   final String _windowWidth = "_window_width";
   final String _windowHeight = "_window_height";
   final String _localization = "_localization";
+  final String _ftpDir = "_ftpDir";
+  final String _ftpPort = "_ftpPort";
 
   Future<DeviceData> instance({bool online=false}) async {
     return DeviceData(id: 0,
@@ -146,5 +148,21 @@ class LocalSetting {
 
   Future<void> setLocalization(String local) async {
     _setSP(_localization, local);
+  }
+
+  Future<String> ftpDir() async {
+    return await getSPDefault(_ftpDir, '');
+  }
+
+  Future<void> setFTPDir(String local) async {
+    _setSP(_ftpDir, local);
+  }
+
+  Future<int> ftpPort() async {
+    return await getSPDefault(_ftpPort, 8021);
+  }
+
+  Future<void> setFTPPort(int port) async {
+    _setSP(_ftpPort, port);
   }
 }
