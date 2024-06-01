@@ -48,5 +48,6 @@
   "deleteMessageDesc": "are you sure delete it?",
   "language": "language {language}",
   "pushNotification": "push android notification",
-  "ignoreNotification": "ignore android notification"
+  "ignoreNotification": "ignore android notification",
+  "ftpService": "FTP Service"
 }

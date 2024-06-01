@@ -17,6 +17,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:window_manager/window_manager.dart';
+import '../helper/ftp.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
 import '../socket/svrmanager.dart';
@@ -952,6 +953,8 @@ class _SettingsScreen extends State<SettingsScreen> {
   PackageInfo? _packageInfo;
   bool _doubleClickDelete = false;
   bool _close2tray = true;
+  bool _ftpServer = SimpleFtpServer().isActive();
+  int _ftpPort = 8021;
 
   @override
   void initState() {
@@ -966,12 +969,14 @@ class _SettingsScreen extends State<SettingsScreen> {
     var pkg = await PackageInfo.fromPlatform();
     var doubleClick = await LocalSetting().isDoubleClickDelete();
     var closeToTray = await LocalSetting().isClose2Tray();
+    var ftpPort = await LocalSetting().ftpPort();
     setState(() {
       device = temp;
       _path = p.path;
       _packageInfo = pkg;
       _close2tray = closeToTray;
       _doubleClickDelete = doubleClick;
+      _ftpPort = ftpPort;
     });
   }
 
@@ -1070,6 +1075,59 @@ class _SettingsScreen extends State<SettingsScreen> {
                         //   ),
                         // ),
                         _buildSettingItem(
+                          '${AppLocalizations.of(context)?.ftpService??'FTP服务'}$_ftpPort (alpha)',
+                          const Icon(Icons.folder_shared_outlined, color: CupertinoColors.systemGrey),
+                          onTap: () {
+                            _pickFTPDir();
+                          },
+                          onLongPress: () {
+                            if (_ftpServer) {
+                              return;
+                            }
+                            showInputAlertDialog(
+                              context,
+                              title: 'FTP${AppLocalizations.of(context)?.serverPortTitle??'服务端口'}',
+                              description: AppLocalizations.of(context)?.portDesc??'请输入服务端口 [1000, 65535]',
+                              inputHints: [{'$_ftpPort': true}],
+                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
+                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
+                              onConfirm: (List<String> inputValues) async {
+                                // 处理输入框的内容
+                                try {
+                                  var port = int.parse(inputValues[0]);
+                                  if (port > 1000 && port <= 65535) {
+                                    LocalSetting().setFTPPort(port);
+                                    setState(() {
+                                      _ftpPort = port;
+                                    });
+                                  }
+                                }on Exception catch (_, e) {
+
+                                }
+                              },
+                            );
+                          },
+                          trailing: CupertinoSwitch(
+                            value: _ftpServer,
+                            onChanged: (bool value) async {
+
+                              var path = await LocalSetting().ftpDir();
+                              if (path.isEmpty) {
+                                path = await _pickFTPDir();
+                              }
+
+                              if (path.isEmpty) {
+                                return;
+                              }
+
+                              value? SimpleFtpServer().start(path, _ftpPort): SimpleFtpServer().stop();
+                              setState(() {
+                                _ftpServer = value;
+                              });
+                            },
+                          ),
+                        ),
+                        _buildSettingItem(
                           AppLocalizations.of(context)?.trustNewDevice??'自动通过新设备',
                           const Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
                           trailing: CupertinoSwitch(
@@ -1153,6 +1211,14 @@ class _SettingsScreen extends State<SettingsScreen> {
         ));
   }
 
+  Future<String> _pickFTPDir() async {
+    String? selectDir = await FilePicker.platform.getDirectoryPath();
+    if (selectDir != null) {
+      LocalSetting().setFTPDir(selectDir);
+    }
+    return selectDir?? "";
+  }
+
   Future<void> _launchInBrowser(Uri url) async {
     if (!await launchUrl(
       url,
@@ -1163,9 +1229,10 @@ class _SettingsScreen extends State<SettingsScreen> {
   }
 
   Widget _buildSettingItem(String title, Icon icon,
-      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap, String desc = ""}) {
+      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap, String desc = "", GestureTapCallback? onLongPress}) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
