@@ -49,5 +49,9 @@
   "language": "language {language}",
   "pushNotification": "push android notification",
   "ignoreNotification": "ignore android notification",
-  "ftpService": "FTP Service"
+  "ftpService": "FTP Service",
+  "back": "back",
+  "selectAll": "all",
+  "clearAll": "clear",
+  "selectNotifyApp": "listen notify app"
 }

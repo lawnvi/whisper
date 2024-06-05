@@ -32,22 +32,23 @@ class LocalSetting {
   final String _localization = "_localization";
   final String _ftpDir = "_ftpDir";
   final String _ftpPort = "_ftpPort";
+  final String _notifyAppMap = "_notifyAppMap";
 
-  Future<DeviceData> instance({bool online=false}) async {
-    return DeviceData(id: 0,
+  Future<DeviceData> instance({bool online = false}) async {
+    return DeviceData(
+        id: 0,
         uid: await getSPDefault(_uuid, const Uuid().v4()),
         name: await getSPDefault(_name, await deviceName()),
         host: await getLocalIpAddress(),
         port: await getSPDefault(_port, 10002),
         platform: Platform.operatingSystem,
         isServer: await getSPDefault(_isServer, false),
-        lastTime: DateTime.now().millisecondsSinceEpoch~/1000,
+        lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         online: online,
         password: await getSPDefault(_password, ""),
         clipboard: await getSPDefault(_clipboard, true),
         auth: await getSPDefault(_noAuth, false),
-        around: false
-    );
+        around: false);
   }
 
   Future<T> getSPDefault<T>(String key, T value) async {
@@ -135,7 +136,7 @@ class LocalSetting {
   }
 
   Future<void> setWindowHeight(double height) async {
-     _setSP(_windowHeight, height);
+    _setSP(_windowHeight, height);
   }
 
   Future<void> setWindowWidth(double width) async {
@@ -164,5 +165,32 @@ class LocalSetting {
 
   Future<void> setFTPPort(int port) async {
     _setSP(_ftpPort, port);
+  }
+
+  Future<Map<String, int>> listenAppNotifyList() async {
+    var str = await getSPDefault(_notifyAppMap, "");
+    var map = <String, int>{};
+    for (var item in str.split(":")) {
+      map[item] = 1;
+    }
+    return map;
+  }
+
+  Future<void> modifyListenNotifyApp(
+      {packages = List<String>, add = true, clear = false}) async {
+    if (clear) {
+      _setSP(_notifyAppMap, "");
+      return;
+    }
+    if (packages.isEmpty) {
+      return;
+    }
+    var str = await getSPDefault(_notifyAppMap, "");
+    if (add) {
+      packages.addAll(str.replaceAll("::", ":").split(":"));
+    }else {
+      packages = str.replaceAll("::", ":").split(":").where((item) => packages.contains(item));
+    }
+    _setSP(_notifyAppMap, packages.join(":"));
   }
 }
