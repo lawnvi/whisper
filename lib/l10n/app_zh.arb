@@ -76,5 +76,9 @@
   "language": "语言 {language}",
   "pushNotification": "推送安卓通知",
   "ignoreNotification": "忽略安卓通知",
-  "ftpService": "FTP服务"
+  "ftpService": "FTP服务",
+  "back": "返回",
+  "selectAll": "全选",
+  "clearAll": "清空",
+  "selectNotifyApp": "监听APP通知"
 }
