@@ -21,6 +21,7 @@ import '../helper/helper.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../helper/notification.dart';
+import 'appList.dart';
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
@@ -760,6 +761,14 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         if (Platform.isAndroid) _buildSettingItem(
                           AppLocalizations.of(context)?.pushNotification??'推送安卓通知',
                           const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AppListScreen(),
+                              ),
+                            );
+                          },
                           CupertinoSwitch(
                             value: device.pushNotification == true,
                             onChanged: (bool value) async {
@@ -776,7 +785,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         ),
                         if (supportNotification()) _buildSettingItem(
                           AppLocalizations.of(context)?.ignoreNotification??'忽略安卓通知',
-                          const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
+                          const Icon(Icons.notifications_off, color: CupertinoColors.systemGrey),
                           CupertinoSwitch(
                             value: device.ignoreNotification == true,
                             onChanged: (bool value) async {
