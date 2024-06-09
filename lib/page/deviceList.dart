@@ -41,6 +41,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   final serviceType = "_whisper._tcp";
   bool discovering = false;
   var lastClickCloseTimestamp = 0;
+  static var listenApps = {};
 
   @override
   void initState() {
@@ -96,7 +97,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // try to send the event to ui
     print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.receiver.isNotEmpty && filterNotification(evt)) {
+    if (soc.receiver.isNotEmpty && filterNotification(evt) && listenApps.containsKey(evt.packageName)) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
@@ -411,6 +412,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (isFirst) {
         logger.i("refresh ui 你也是来拉屎的吗");
         _discoverService();
+
+        listenApps = await LocalSetting().listenAppNotifyList();
       }
     }
   }
