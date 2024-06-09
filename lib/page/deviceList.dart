@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:whisper/global.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
@@ -1075,7 +1076,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         //   ),
                         // ),
                         _buildSettingItem(
-                          '${AppLocalizations.of(context)?.ftpService??'FTP服务'}$_ftpPort (alpha)',
+                          '${AppLocalizations.of(context)?.ftpService??'FTP服务'}$defaultFtpPort (alpha)',
                           const Icon(Icons.folder_shared_outlined, color: CupertinoColors.systemGrey),
                           onTap: () {
                             _pickFTPDir();
@@ -1120,7 +1121,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                                 return;
                               }
 
-                              value? SimpleFtpServer().start(path, _ftpPort): SimpleFtpServer().stop();
+                              value? SimpleFtpServer().start(path, defaultFtpPort): SimpleFtpServer().stop();
                               setState(() {
                                 _ftpServer = value;
                               });

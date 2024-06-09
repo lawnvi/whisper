@@ -7,6 +7,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/global.dart';
+import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -232,6 +234,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 ),
               ],
             ),
+          if (isDesktop()) CupertinoButton(
+            // 使用CupertinoButton
+            padding: EdgeInsets.zero,
+            child: const Icon(
+              Icons.loop_rounded,
+              size: 30,
+              color: Colors.black45,
+            ),
+            onPressed: () async {
+              // todo update device ftp port
+              SimpleFtpServer().openClient("${device.host}:$defaultFtpPort");
+            },
+          ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
