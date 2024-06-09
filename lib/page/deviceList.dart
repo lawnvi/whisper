@@ -1193,6 +1193,9 @@ class _SettingsScreen extends State<SettingsScreen> {
                           const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
                           onTap: () {
                             openDir();
+                          },
+                          onLongPress: () {
+                            _pickSaveDir();
                           }
                         ),
                         _buildSettingItem(
@@ -1215,6 +1218,17 @@ class _SettingsScreen extends State<SettingsScreen> {
     String? selectDir = await FilePicker.platform.getDirectoryPath();
     if (selectDir != null) {
       LocalSetting().setFTPDir(selectDir);
+    }
+    return selectDir?? "";
+  }
+
+  Future<String> _pickSaveDir() async {
+    String? selectDir = await FilePicker.platform.getDirectoryPath();
+    if (selectDir != null) {
+      LocalSetting().modifySavePath(selectDir);
+      setState(() {
+        _path = selectDir;
+      });
     }
     return selectDir?? "";
   }

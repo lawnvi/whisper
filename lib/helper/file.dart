@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
 
@@ -52,6 +53,13 @@ Future<String> fileMD5(File file) async {
 }
 
 Future<Directory> downloadDir() async {
+
+  var path = await LocalSetting().savePath();
+
+  if (path.isNotEmpty && Directory(path).existsSync()) {
+    return Directory(path);
+  }
+
   Directory? dir;
   if (Platform.isIOS || Platform.isMacOS) {
     return await getApplicationDocumentsDirectory();
