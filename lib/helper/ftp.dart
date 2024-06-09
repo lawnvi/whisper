@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:ftp_server/ftp_server.dart';
 import 'package:ftp_server/server_type.dart';
+import 'package:open_dir/open_dir.dart';
+import 'package:whisper/helper/file.dart';
 
 class SimpleFtpServer {
   static final SimpleFtpServer _singleton = SimpleFtpServer._internal();
@@ -34,5 +38,14 @@ class SimpleFtpServer {
 
   bool isActive() {
     return _ftpServer != null;
+  }
+
+  void openClient(String host) async {
+    if (Platform.isMacOS) {
+      openFinder("ftp://$host");
+    } else if (Platform.isLinux || Platform.isWindows) {
+      final openDirPlugin = OpenDir();
+      openDirPlugin.openNativeDir(path: "ftp://$host");
+    }
   }
 }
