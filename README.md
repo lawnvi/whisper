@@ -1,44 +1,45 @@
-# whisper
+## Whisper
 
-耳鬓厮磨，缱绻旖旎够近了吧  
-悄悄地，很贴心  
-whisper with u
+[English](./README_en.md)
 
-## 什么用
-局域网内两个设备文本/文件互传，快速复制写入对方设备剪切板  
-不访问公网  
-支持设备：Android、MacOS、Linux、Windows、~~ios~~（仅模拟器测试，没钱，不会，真机试了应该是没权限）
-推送安卓设备的通知到其他设备
+Whisper（耳鬓厮磨）是一个能让您在局域网内快速分享文本和文件的工具，实现剪贴板内容的快速互传。就像一种私密的耳语，让您感受到亲密和温暖。
 
-## 怎么做的
-flutter开发，建立websocket，通过局域网指定对方地址与端口连接
+### 功能特点
+- 支持在局域网内的Android、MacOS、Linux和Windows设备之间分享文本和文件。
+- 可将来自Android设备的通知推送到其他连接的设备上。
+- 单独建立FTP服务
 
-## tips
+### 工作原理
+Whisper使用Flutter开发，通过建立WebSocket连接与局域网中指定的设备进行通信。
+
+### 使用提示
 1. 不会dart，不会flutter，就是不想用微信文件传输助手
-2. 连接会断，断开不会自动处理，断开重新连；部分情况发现不了其他设备，需要手动输入地址连接，不要在意
+2. 连接可能会断开，需要手动重新连接。在某些情况下，设备可能无法自动发现，需要手动输入设备地址进行连接。
 3. 水平有限不好看，有些代码只有上帝...也许他也不想看了
-4. windows因为不会打包，安装方式比较古早，arm设备也不会打包
-5. 不好看，不好用，不安全，自己用的问题不大
-6. 选择文件时因为使用的库需要先复制到缓存目录所以大文件不会即时开始传输，桌面端拖拽应该没有这个问题
-7. 写入文件时不会检查设备剩余空间是否足够，请注意剩余空间是否足够
-8. 只有文本和文件两种消息展示
-9. 阿巴阿巴
+4. 由于不熟悉打包技术，Windows上的安装方式有些过时。不一定支持ARM设备。
+5. 虽然可能不是最美观或安全的选择，但对于个人使用来说足够了。
+6. 由于使用的库需要先将大文件复制到缓存目录，因此大文件可能无法立即开始传输。桌面端的拖放功能应该不会遇到此问题。
+7. 写入文件前请确保设备有足够的存储空间。
+8. 仅支持文本和文件消息展示。
+9. 阿巴阿巴！
 
-[web](https://2.127014.xyz/whisper)  [下载⬇](https://github.com/lawnvi/whisper/releases)
+### 安装
+[home page](https://2.127014.xyz/whisper)  |  [Latest Release](https://github.com/lawnvi/whisper/releases)  
 
-
-If you don't have Avahi installed on your linux system, just install it using :
+### Linux安装
+如果您的Linux系统未安装Avahi，请运行以下命令：
 ```shell
-  sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
+sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
 ```
 
-
-## screenshot
+### 截图展示
 <div style="display: inline-block; text-align: center;">
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="74%" style="border-radius: 6px;"/>
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="24%" style="border-radius: 6px;"/>
 </div>
 <div style="display: inline-block; text-align: center;">
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="74%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="25%" style="border-radius: 6px;"/>
-</div>
+    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="24%" style="border-radius: 6px;"/>
+</div> 
+
+如有任何问题或需要进一步帮助，请随时联系！
