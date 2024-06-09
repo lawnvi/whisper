@@ -468,6 +468,24 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         ),
         // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
+          if (false) CupertinoButton(
+            // 使用CupertinoButton
+            padding: EdgeInsets.zero,
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 26,
+              color: Colors.black45,
+            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SendMessageScreen(device: buildDevice(uid: LocalUuid.v4(), name: "", port: -1, host: "localhost")),
+                ),
+              );
+              _refreshDevice();
+            },
+          ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
