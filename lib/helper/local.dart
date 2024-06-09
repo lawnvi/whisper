@@ -33,6 +33,7 @@ class LocalSetting {
   final String _ftpDir = "_ftpDir";
   final String _ftpPort = "_ftpPort";
   final String _notifyAppMap = "_notifyAppMap";
+  final String _savePath = "_savePath";
 
   Future<DeviceData> instance({bool online = false}) async {
     return DeviceData(
@@ -192,5 +193,13 @@ class LocalSetting {
       packages = str.replaceAll("::", ":").split(":").where((item) => packages.contains(item));
     }
     _setSP(_notifyAppMap, packages.join(":"));
+  }
+
+  Future<String> savePath() async {
+    return await getSPDefault(_savePath, '');
+  }
+
+  Future<void> modifySavePath(String path) async {
+    _setSP(_savePath, path);
   }
 }
