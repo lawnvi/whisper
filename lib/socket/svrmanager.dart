@@ -250,10 +250,17 @@ class WsSvrManager {
         break;
       }
       case MessageEnum.Notification: {
-        var device = await LocalDatabase().fetchDevice(receiver);
         var data = jsonDecode(message.content??"{}");
-        if (supportNotification() && device?.ignoreNotification != true) {
-          NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']);
+        if (!await LocalSetting().ignoreAndroidNotification()) {
+          if (supportNotification()) {
+            NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']);
+            if ( data['package'] == "com.android.mms") {
+              var code = verifyCode(data["text"]);
+              if (code.isNotEmpty && await LocalSetting().copyVerify()) {
+                copyToClipboard(code);
+              }
+            }
+          }
         }
         _ackMessage(message);
         _event?.onMessage(message);

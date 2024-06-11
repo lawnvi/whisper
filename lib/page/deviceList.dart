@@ -22,6 +22,7 @@ import '../helper/ftp.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
 import '../socket/svrmanager.dart';
+import 'appList.dart';
 import 'conversation.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
@@ -986,6 +987,9 @@ class _SettingsScreen extends State<SettingsScreen> {
   PackageInfo? _packageInfo;
   bool _doubleClickDelete = false;
   bool _close2tray = true;
+  bool _listenAndroid = true;
+  bool _ignoreAndroid = false;
+  bool _copyVerifyCode = true;
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
 
@@ -1003,6 +1007,9 @@ class _SettingsScreen extends State<SettingsScreen> {
     var doubleClick = await LocalSetting().isDoubleClickDelete();
     var closeToTray = await LocalSetting().isClose2Tray();
     var ftpPort = await LocalSetting().ftpPort();
+    var copyVerify = await LocalSetting().copyVerify();
+    var listenAndroid = await LocalSetting().isListenAndroid();
+    var ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
     setState(() {
       device = temp;
       _path = p.path;
@@ -1010,6 +1017,9 @@ class _SettingsScreen extends State<SettingsScreen> {
       _close2tray = closeToTray;
       _doubleClickDelete = doubleClick;
       _ftpPort = ftpPort;
+      _copyVerifyCode = copyVerify;
+      _ignoreAndroid = ignoreAndroid;
+      _listenAndroid = listenAndroid;
     });
   }
 
@@ -1208,6 +1218,58 @@ class _SettingsScreen extends State<SettingsScreen> {
                             },
                           ),
                         ),
+                        if (Platform.isAndroid) _buildSettingItem(
+                          AppLocalizations.of(context)?.pushNotification??'转发通知',
+                          const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AppListScreen(),
+                              ),
+                            );
+                            // 更新允许通知的apps
+                            DeviceListScreen.setListenApps();
+                          },
+                          trailing: CupertinoSwitch(
+                            value: _listenAndroid,
+                            onChanged: (bool value) async {
+                              LocalSetting().setAndroidListen(value);
+                              setState(() {
+                                _listenAndroid = value;
+                              });
+                              if (Platform.isAndroid && WsSvrManager().receiver.isNotEmpty) {
+                                value? startAndroidListening(): stopAndroidListening();
+                              }
+                            },
+                          ),
+                        ),
+                        _buildSettingItem(
+                          AppLocalizations.of(context)?.ignoreNotification??'忽略安卓通知',
+                          const Icon(Icons.notifications_off, color: CupertinoColors.systemGrey),
+                          trailing: CupertinoSwitch(
+                            value: _ignoreAndroid,
+                            onChanged: (bool value) async {
+                              LocalSetting().setAndroidNotification(value);
+                              setState(() {
+                                _ignoreAndroid = value;
+                              });
+                            },
+                          ),
+                        ),
+                        if (Localizations.localeOf(context).languageCode == "zh") _buildSettingItem(
+                          AppLocalizations.of(context)?.copyVerifyCode??'提取短信验证码写入剪切板',
+                          const Icon(Icons.verified_user_rounded, color: CupertinoColors.systemGrey),
+                          trailing: CupertinoSwitch(
+                            value: _copyVerifyCode,
+                            onChanged: (bool value) async {
+                              LocalSetting().setCopyVerify(value);
+                              setState(() {
+                                _copyVerifyCode = value;
+                              });
+                            },
+                          ),
+                        ),
                         _buildSettingItem(
                             (AppLocalizations.of(context)?.language(Localizations.localeOf(context).languageCode)??'language ${Localizations.localeOf(context).languageCode}'),
                             const Icon(Icons.language_rounded, color: CupertinoColors.systemGrey),
@@ -1285,7 +1347,7 @@ class _SettingsScreen extends State<SettingsScreen> {
         child: Column(
           children: [
             Container(
-              constraints: const BoxConstraints(minHeight: 56),
+              constraints: const BoxConstraints(minHeight: 52),
               // height: 56.0, // 增加高度以适应 iOS 设置样式
               child: Row(
                 children: [

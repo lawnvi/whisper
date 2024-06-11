@@ -53,5 +53,6 @@
   "back": "back",
   "selectAll": "all",
   "clearAll": "clear",
-  "selectNotifyApp": "listen notify app"
+  "selectNotifyApp": "listen notify app",
+  "copyVerifyCode": "verify code to clipboard"
 }

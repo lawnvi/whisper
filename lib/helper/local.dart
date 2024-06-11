@@ -34,6 +34,9 @@ class LocalSetting {
   final String _ftpPort = "_ftpPort";
   final String _notifyAppMap = "_notifyAppMap";
   final String _savePath = "_savePath";
+  final String _copyVerifyCode = "_copyVerifyCode";
+  final String _ignoreAndroidNotify = "_ignoreAndroidNotify";
+  final String _listenAndroidNotify = "_listenAndroidNotify";
 
   Future<DeviceData> instance({bool online = false}) async {
     return DeviceData(
@@ -205,5 +208,29 @@ class LocalSetting {
 
   Future<void> modifySavePath(String path) async {
     _setSP(_savePath, path);
+  }
+
+  void setCopyVerify(bool copy) async {
+    _setSP(_copyVerifyCode, copy);
+  }
+
+  Future<bool> copyVerify() async {
+    return await getSPDefault(_copyVerifyCode, false);
+  }
+
+  void setAndroidNotification(bool ignore) async {
+    _setSP(_close2tray, ignore);
+  }
+
+  Future<bool> ignoreAndroidNotification() async {
+    return await getSPDefault(_ignoreAndroidNotify, false);
+  }
+
+  void setAndroidListen(bool listen) async {
+    _setSP(_listenAndroidNotify, listen);
+  }
+
+  Future<bool> isListenAndroid() async {
+    return await getSPDefault(_listenAndroidNotify, false);
   }
 }
