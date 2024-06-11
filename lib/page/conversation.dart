@@ -768,6 +768,8 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                                 builder: (context) => const AppListScreen(),
                               ),
                             );
+                            // 更新允许通知的apps
+                            DeviceListScreen.setListenApps();
                           },
                           CupertinoSwitch(
                             value: device.pushNotification == true,
