@@ -824,6 +824,14 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(""));
+  static const VerificationMeta _fileTimestampMeta =
+      const VerificationMeta('fileTimestamp');
+  @override
+  late final GeneratedColumn<int> fileTimestamp = GeneratedColumn<int>(
+      'file_timestamp', aliasedName, true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -840,7 +848,8 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
         uuid,
         acked,
         path,
-        md5
+        md5,
+        fileTimestamp
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -908,6 +917,12 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       context.handle(
           _md5Meta, md5.isAcceptableOrUnknown(data['md5']!, _md5Meta));
     }
+    if (data.containsKey('file_timestamp')) {
+      context.handle(
+          _fileTimestampMeta,
+          fileTimestamp.isAcceptableOrUnknown(
+              data['file_timestamp']!, _fileTimestampMeta));
+    }
     return context;
   }
 
@@ -947,6 +962,8 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
           .read(DriftSqlType.string, data['${effectivePrefix}path'])!,
       md5: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}md5'])!,
+      fileTimestamp: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}file_timestamp']),
     );
   }
 
@@ -975,6 +992,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final bool acked;
   final String path;
   final String md5;
+  final int? fileTimestamp;
   const MessageData(
       {required this.id,
       this.deviceId,
@@ -990,7 +1008,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       required this.uuid,
       required this.acked,
       required this.path,
-      required this.md5});
+      required this.md5,
+      this.fileTimestamp});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1017,6 +1036,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     map['acked'] = Variable<bool>(acked);
     map['path'] = Variable<String>(path);
     map['md5'] = Variable<String>(md5);
+    if (!nullToAbsent || fileTimestamp != null) {
+      map['file_timestamp'] = Variable<int>(fileTimestamp);
+    }
     return map;
   }
 
@@ -1043,6 +1065,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       acked: Value(acked),
       path: Value(path),
       md5: Value(md5),
+      fileTimestamp: fileTimestamp == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fileTimestamp),
     );
   }
 
@@ -1066,6 +1091,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       acked: serializer.fromJson<bool>(json['acked']),
       path: serializer.fromJson<String>(json['path']),
       md5: serializer.fromJson<String>(json['md5']),
+      fileTimestamp: serializer.fromJson<int?>(json['fileTimestamp']),
     );
   }
   @override
@@ -1087,6 +1113,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'acked': serializer.toJson<bool>(acked),
       'path': serializer.toJson<String>(path),
       'md5': serializer.toJson<String>(md5),
+      'fileTimestamp': serializer.toJson<int?>(fileTimestamp),
     };
   }
 
@@ -1105,7 +1132,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           String? uuid,
           bool? acked,
           String? path,
-          String? md5}) =>
+          String? md5,
+          Value<int?> fileTimestamp = const Value.absent()}) =>
       MessageData(
         id: id ?? this.id,
         deviceId: deviceId.present ? deviceId.value : this.deviceId,
@@ -1122,6 +1150,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         acked: acked ?? this.acked,
         path: path ?? this.path,
         md5: md5 ?? this.md5,
+        fileTimestamp:
+            fileTimestamp.present ? fileTimestamp.value : this.fileTimestamp,
       );
   @override
   String toString() {
@@ -1140,7 +1170,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('uuid: $uuid, ')
           ..write('acked: $acked, ')
           ..write('path: $path, ')
-          ..write('md5: $md5')
+          ..write('md5: $md5, ')
+          ..write('fileTimestamp: $fileTimestamp')
           ..write(')'))
         .toString();
   }
@@ -1161,7 +1192,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       uuid,
       acked,
       path,
-      md5);
+      md5,
+      fileTimestamp);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1180,7 +1212,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.uuid == this.uuid &&
           other.acked == this.acked &&
           other.path == this.path &&
-          other.md5 == this.md5);
+          other.md5 == this.md5 &&
+          other.fileTimestamp == this.fileTimestamp);
 }
 
 class MessageCompanion extends UpdateCompanion<MessageData> {
@@ -1199,6 +1232,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
   final Value<bool> acked;
   final Value<String> path;
   final Value<String> md5;
+  final Value<int?> fileTimestamp;
   const MessageCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -1215,6 +1249,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.acked = const Value.absent(),
     this.path = const Value.absent(),
     this.md5 = const Value.absent(),
+    this.fileTimestamp = const Value.absent(),
   });
   MessageCompanion.insert({
     this.id = const Value.absent(),
@@ -1232,6 +1267,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     this.acked = const Value.absent(),
     this.path = const Value.absent(),
     this.md5 = const Value.absent(),
+    this.fileTimestamp = const Value.absent(),
   });
   static Insertable<MessageData> custom({
     Expression<int>? id,
@@ -1249,6 +1285,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     Expression<bool>? acked,
     Expression<String>? path,
     Expression<String>? md5,
+    Expression<int>? fileTimestamp,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1266,6 +1303,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       if (acked != null) 'acked': acked,
       if (path != null) 'path': path,
       if (md5 != null) 'md5': md5,
+      if (fileTimestamp != null) 'file_timestamp': fileTimestamp,
     });
   }
 
@@ -1284,7 +1322,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       Value<String>? uuid,
       Value<bool>? acked,
       Value<String>? path,
-      Value<String>? md5}) {
+      Value<String>? md5,
+      Value<int?>? fileTimestamp}) {
     return MessageCompanion(
       id: id ?? this.id,
       deviceId: deviceId ?? this.deviceId,
@@ -1301,6 +1340,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
       acked: acked ?? this.acked,
       path: path ?? this.path,
       md5: md5 ?? this.md5,
+      fileTimestamp: fileTimestamp ?? this.fileTimestamp,
     );
   }
 
@@ -1353,6 +1393,9 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
     if (md5.present) {
       map['md5'] = Variable<String>(md5.value);
     }
+    if (fileTimestamp.present) {
+      map['file_timestamp'] = Variable<int>(fileTimestamp.value);
+    }
     return map;
   }
 
@@ -1373,7 +1416,8 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
           ..write('uuid: $uuid, ')
           ..write('acked: $acked, ')
           ..write('path: $path, ')
-          ..write('md5: $md5')
+          ..write('md5: $md5, ')
+          ..write('fileTimestamp: $fileTimestamp')
           ..write(')'))
         .toString();
   }
@@ -1714,6 +1758,7 @@ typedef $$MessageTableInsertCompanionBuilder = MessageCompanion Function({
   Value<bool> acked,
   Value<String> path,
   Value<String> md5,
+  Value<int?> fileTimestamp,
 });
 typedef $$MessageTableUpdateCompanionBuilder = MessageCompanion Function({
   Value<int> id,
@@ -1731,6 +1776,7 @@ typedef $$MessageTableUpdateCompanionBuilder = MessageCompanion Function({
   Value<bool> acked,
   Value<String> path,
   Value<String> md5,
+  Value<int?> fileTimestamp,
 });
 
 class $$MessageTableTableManager extends RootTableManager<
@@ -1767,6 +1813,7 @@ class $$MessageTableTableManager extends RootTableManager<
             Value<bool> acked = const Value.absent(),
             Value<String> path = const Value.absent(),
             Value<String> md5 = const Value.absent(),
+            Value<int?> fileTimestamp = const Value.absent(),
           }) =>
               MessageCompanion(
             id: id,
@@ -1784,6 +1831,7 @@ class $$MessageTableTableManager extends RootTableManager<
             acked: acked,
             path: path,
             md5: md5,
+            fileTimestamp: fileTimestamp,
           ),
           getInsertCompanionBuilder: ({
             Value<int> id = const Value.absent(),
@@ -1801,6 +1849,7 @@ class $$MessageTableTableManager extends RootTableManager<
             Value<bool> acked = const Value.absent(),
             Value<String> path = const Value.absent(),
             Value<String> md5 = const Value.absent(),
+            Value<int?> fileTimestamp = const Value.absent(),
           }) =>
               MessageCompanion.insert(
             id: id,
@@ -1818,6 +1867,7 @@ class $$MessageTableTableManager extends RootTableManager<
             acked: acked,
             path: path,
             md5: md5,
+            fileTimestamp: fileTimestamp,
           ),
         ));
 }
@@ -1909,6 +1959,11 @@ class $$MessageTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<int> get fileTimestamp => $state.composableBuilder(
+      column: $state.table.fileTimestamp,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   $$DeviceTableFilterComposer get deviceId {
     final $$DeviceTableFilterComposer composer = $state.composerBuilder(
         composer: this,
@@ -1992,6 +2047,11 @@ class $$MessageTableOrderingComposer
 
   ColumnOrderings<String> get md5 => $state.composableBuilder(
       column: $state.table.md5,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<int> get fileTimestamp => $state.composableBuilder(
+      column: $state.table.fileTimestamp,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
