@@ -77,6 +77,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
+      if (await Permission.requestInstallPackages.isDenied) {
+        await Permission.requestInstallPackages.request();
+      }
       initPlatformState();
     }else {
       if (await Permission.location.isDenied) {
