@@ -76,9 +76,6 @@ class _AppListScreenState extends State<AppListScreen> {
           padding: EdgeInsets.zero,
           child: Text(AppLocalizations.of(context)?.selectAll ?? '全选'),
           onPressed: () {
-
-            print(">>>>>>>>>>>>>>>>>$checkedApps");
-
             bool selectAll = checkedApps.length < apps.length || checkedApps.values.contains(false);
 
             var appArr = [];

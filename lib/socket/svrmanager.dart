@@ -54,6 +54,7 @@ class WsSvrManager {
   IOSink? _ioSink;
   File? _receivingFile;
   int _currentSize = 0; // 大小
+  int _currentFileTimestamp = 0; // 修改时间
   int _currentLen = 0; // 已接收长度
   bool started = false;
   bool asServer = true;
@@ -312,6 +313,10 @@ class WsSvrManager {
     _currentSize = 0;
     if (_receivingFile != null && sendFinish) {
       var path = _receivingFile!.path;
+      if (_currentFileTimestamp > 0) {
+        await _receivingFile?.setLastModified(DateTime.fromMillisecondsSinceEpoch(_currentFileTimestamp));
+      }
+      _currentFileTimestamp = 0;
       await _receivingFile!.rename(path.substring(0, path.length - 11));
     }
     _receivingFile = null;
@@ -329,7 +334,7 @@ class WsSvrManager {
   }
   
   Future<void> _handleFileMsg(MessageData message) async {
-    logger.i("收到文件：${message.name} size: ${message.size}");
+    logger.i("收到文件：${message.name} size: ${message.size} timestamp: ${message.fileTimestamp}");
     var path = await _prepareIOSink(message);
     var msgTemp = message.toJson();
     msgTemp["path"] = path;
@@ -339,8 +344,8 @@ class WsSvrManager {
     _ackMessage(message);
   }
 
-  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path="", uid}) {
-    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uid??uuid.v4(), path: path, md5: md5);
+  MessageData _buildMessage(MessageEnum type, String content, msg, fileName, int size, bool clipboard, {String md5="", path="", uid, fileTimestamp=0}) {
+    return MessageData(id: 0, sender: sender, receiver: receiver, name: fileName, clipboard: clipboard, size: size, type: type, content: content, message: msg, timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: false, uuid: uid??uuid.v4(), path: path, md5: md5, fileTimestamp: fileTimestamp);
   }
 
   Future<void> _auth(bool allow) async {
@@ -404,9 +409,10 @@ class WsSvrManager {
       }
       final file = File(path);
       final size = file.lengthSync();
+      final timestamp = (await file.lastModified()).millisecondsSinceEpoch;
       final fileName = p.basename(path);
       // final md5 = await fileMD5(file);
-      var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false, path: path, md5: "");
+      var message = _buildMessage(MessageEnum.File, "", "", fileName, size, false, path: path, md5: "", fileTimestamp: timestamp);
       await LocalDatabase().insertMessage(message);
       _send(message.toJsonString());
     });
@@ -431,6 +437,7 @@ class WsSvrManager {
   Future<String> _prepareIOSink(MessageData message) async {
     var appDir = await downloadDir();
     _currentSize = message.size;
+    _currentFileTimestamp = message.fileTimestamp??DateTime.now().millisecondsSinceEpoch;
     _receivingFile = File('${appDir.path}/${message.name}');
     var idx = 1;
     var arr = message.name.split(".");

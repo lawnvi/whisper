@@ -18,6 +18,7 @@ class Message extends Table {
   BoolColumn get acked => boolean().withDefault(const Constant(false))();
   TextColumn get path => text().withDefault(const Constant(""))();
   TextColumn get md5 => text().withDefault(const Constant(""))();
+  IntColumn get fileTimestamp => integer().nullable().withDefault(const Constant(0))();
 }
 
 enum MessageEnum {
