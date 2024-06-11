@@ -28,6 +28,10 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 class DeviceListScreen extends StatefulWidget {
   @override
   _DeviceListScreen createState() => _DeviceListScreen();
+
+  static void setListenApps() {
+    _DeviceListScreen.setListenApps();
+  }
 }
 
 class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent, TrayListener, WindowListener {
@@ -89,6 +93,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         await item.request();
       }
     }
+  }
+
+  static void setListenApps() async {
+    listenApps = await LocalSetting().listenAppNotifyList();
   }
 
   @pragma('vm:entry-point')
@@ -413,7 +421,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         logger.i("refresh ui 你也是来拉屎的吗");
         _discoverService();
 
-        listenApps = await LocalSetting().listenAppNotifyList();
+        setListenApps();
       }
     }
   }
