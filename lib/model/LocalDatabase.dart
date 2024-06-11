@@ -85,28 +85,6 @@ class LocalDatabase extends _$LocalDatabase {
     );
   }
 
-  Future<void> updateNotification(String uid, bool notify) async {
-    if (uid.isEmpty) {
-      return;
-    }
-    (update(device)..where((t) => t.uid.equals(uid))).write(
-      DeviceCompanion(
-        pushNotification: Value(notify),
-      ),
-    );
-  }
-
-  Future<void> updateIgnoreNotification(String uid, bool notify) async {
-    if (uid.isEmpty) {
-      return;
-    }
-    (update(device)..where((t) => t.uid.equals(uid))).write(
-      DeviceCompanion(
-        ignoreNotification: Value(notify),
-      ),
-    );
-  }
-
   Future<DeviceData?> fetchDevice(String uid) {
     return (select(device)..where((t) => t.uid.equals(uid))..limit(1)).getSingleOrNull();
   }

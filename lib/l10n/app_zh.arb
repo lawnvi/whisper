@@ -80,5 +80,6 @@
   "back": "返回",
   "selectAll": "全选",
   "clearAll": "清空",
-  "selectNotifyApp": "监听APP通知"
+  "selectNotifyApp": "监听APP通知",
+  "copyVerifyCode": "验证码写入剪切板"
 }

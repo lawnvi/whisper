@@ -187,3 +187,27 @@ void pickFile(var callback) async {
     logger.i('用户取消了文件选择');
   }
 }
+
+String verifyCode(String content) {
+  if (!content.contains("验证码")) {
+    return "";
+  }
+  RegExp regExp = RegExp(r'\b\d+\b');
+  Iterable<Match> matches = regExp.allMatches(content);
+
+  List<String> verificationCodes = [];
+  for (Match match in matches) {
+    print(match);
+    var code = match.group(0);
+    if (code == null || code.length < 4) {
+      continue;
+    }
+    verificationCodes.add(code);
+  }
+
+  if (verificationCodes.isEmpty) {
+    return "";
+  }
+  print("提取到的验证码是: $verificationCodes");
+  return verificationCodes[0];
+}
