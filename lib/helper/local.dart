@@ -172,7 +172,9 @@ class LocalSetting {
     var str = await getSPDefault(_notifyAppMap, "");
     var map = <String, int>{};
     for (var item in str.split(":")) {
-      map[item] = 1;
+      if (item.isNotEmpty) {
+        map[item] = 1;
+      }
     }
     return map;
   }
@@ -189,10 +191,12 @@ class LocalSetting {
     var str = await getSPDefault(_notifyAppMap, "");
     if (add) {
       packages.addAll(str.replaceAll("::", ":").split(":"));
+      _setSP(_notifyAppMap, packages.join(":"));
     }else {
-      packages = str.replaceAll("::", ":").split(":").where((item) => packages.contains(item));
+      Iterable<String> tempArr = str.replaceAll("::", ":").split(":");
+      tempArr = tempArr.where((item) => !packages.contains(item));
+      _setSP(_notifyAppMap, tempArr.join(":"));
     }
-    _setSP(_notifyAppMap, packages.join(":"));
   }
 
   Future<String> savePath() async {

@@ -35,12 +35,18 @@ class _AppListScreenState extends State<AppListScreen> {
         onlyAppsWithLaunchIntent: true);
     Map<String, int> appMap = await LocalSetting().listenAppNotifyList();
     installedApps.sort(
-        (a, b) => (appMap[a.packageName] ?? 0) - (appMap[b.packageName] ?? 0));
+        (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0));
+
+    var checked = <String, bool>{};
+    for (var item in appMap.keys) {
+      checked[item] = true;
+    }
 
     setState(() {
       apps = installedApps;
       filteredApps = installedApps;
       isLoading = false;
+      checkedApps = checked;
     });
   }
 
@@ -50,14 +56,6 @@ class _AppListScreenState extends State<AppListScreen> {
     }).toList();
     setState(() {
       filteredApps = filtered;
-    });
-  }
-
-  void toggleSelectAll(bool selectAll) {
-    setState(() {
-      for (var app in filteredApps) {
-        checkedApps[app.packageName] = selectAll;
-      }
     });
   }
 
@@ -71,19 +69,29 @@ class _AppListScreenState extends State<AppListScreen> {
           child: Text(AppLocalizations.of(context)?.back ?? 'Back'),
           onPressed: () {
             // Handle back button press
+            Navigator.pop(context);
           },
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
           child: Text(AppLocalizations.of(context)?.selectAll ?? '全选'),
           onPressed: () {
-            bool selectAll = checkedApps.values.contains(false);
-            toggleSelectAll(selectAll);
+
+            print(">>>>>>>>>>>>>>>>>$checkedApps");
+
+            bool selectAll = checkedApps.length < apps.length || checkedApps.values.contains(false);
+
             var appArr = [];
-            for (var item in apps) {
-              appArr.add(item.packageName);
+            var checkedMap = <String, bool>{};
+            for (var app in apps) {
+              appArr.add(app.packageName);
+              checkedMap[app.packageName] = selectAll;
             }
-            LocalSetting().modifyListenNotifyApp(add: selectAll, clear: selectAll, packages: appArr);
+            setState(() {
+              checkedApps = checkedMap;
+            });
+
+            LocalSetting().modifyListenNotifyApp(add: selectAll, clear: !selectAll, packages: appArr);
           },
         ),
       ),
