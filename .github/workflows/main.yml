@@ -121,6 +121,7 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64 # optional, x64 or arm64
+          flutter-version: '3.19.6'
 
       - run: |
           sudo apt-get update -y
