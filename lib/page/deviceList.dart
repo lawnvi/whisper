@@ -1241,6 +1241,16 @@ class _SettingsScreen extends State<SettingsScreen> {
                               if (Platform.isAndroid && WsSvrManager().receiver.isNotEmpty) {
                                 value? startAndroidListening(): stopAndroidListening();
                               }
+                              if (value && (await LocalSetting().listenAppNotifyList()).isEmpty) {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AppListScreen(),
+                                  ),
+                                );
+                                // 更新允许通知的apps
+                                DeviceListScreen.setListenApps();
+                              }
                             },
                           ),
                         ),
