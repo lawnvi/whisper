@@ -235,7 +235,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 ),
               ],
             ),
-          if (isDesktop()) CupertinoButton(
+          if (false) CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
             child: const Icon(
