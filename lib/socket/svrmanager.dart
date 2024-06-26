@@ -6,6 +6,7 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -353,6 +354,7 @@ class WsSvrManager {
     }else {
       _sendingFiles.removeLast();
     }
+    WakelockPlus.disable();
   }
 
   void _sendFileSignal(int received, int size, {String msgId=""}) {
@@ -447,6 +449,7 @@ class WsSvrManager {
   }
 
   void _sendFile(MessageData message) async {
+    WakelockPlus.enable();
     final file = File(message.path);
     final size = file.lengthSync();
     final fileName = p.basename(message.path);
@@ -469,6 +472,7 @@ class WsSvrManager {
       logger.i("send file chunk over close");
       await _sendingFile?.close();
       _sendingFile = null;
+      WakelockPlus.disable();
       return;
     }
 
@@ -510,6 +514,7 @@ class WsSvrManager {
     }
     _ioSink = _receivingFile!.openWrite();
     // _savingFile = await _receivingFile!.open(mode: FileMode.write);
+    WakelockPlus.enable();
     return path;
   }
 }
