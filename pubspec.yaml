@@ -69,6 +69,7 @@ dependencies:
   fluttertoast: ^8.2.5
   flutter_local_notifications: ^17.1.2
   device_apps: ^2.2.0
+  wakelock_plus: ^1.2.5
 
   ftp_server:
     git:
