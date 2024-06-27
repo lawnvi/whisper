@@ -80,6 +80,12 @@ jobs:
       - run: flutter config --enable-windows-desktop
       - run: flutter build windows
 
+      - name: Copy DLL
+        run: |
+          copy c:\Windows\System32\vcruntime140_1.dll .\build\windows\x64\runner\Release\
+          copy c:\Windows\System32\vcruntime140.dll .\build\windows\x64\runner\Release\
+          copy c:\Windows\System32\msvcp140.dll .\build\windows\x64\runner\Release\
+
       # New step to create the installer using NSIS
       - name: Create EXE Installer
         run: makensis windows\installer.nsi
