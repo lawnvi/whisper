@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -491,8 +492,16 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     }
   }
 
+  // 获取设备横向宽度
+  double _screenWidth({physically=false}) {
+    if (!physically) {
+      return MediaQuery.of(context).size.width;
+    }
+    return min(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height);
+  }
+
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
-    double screenWidth = MediaQuery.of(context).size.width;
+    double screenWidth = _screenWidth();
     if (isDesktop()) {
       screenWidth *= 0.618;
     }else {
@@ -533,7 +542,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     // double screenWidth = 0.382*MediaQuery.of(context).size.width;
     double screenWidth = 300;
     if (isMobile()) {
-      screenWidth = 0.618*MediaQuery.of(context).size.width;
+      screenWidth = 0.618 * _screenWidth(physically: false);
     }
     var failed = !isOpponent && !message.acked && message.timestamp < device.lastTime;
     // var isSending = !message.acked && message.timestamp >= device.lastTime;
