@@ -48,6 +48,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final keyPressedMap = {};
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
+  bool _isLoading = false; // loading file
 
   _SendMessageScreen(this.device);
 
@@ -421,11 +422,18 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                       ),
                     )
                 ),
-                CupertinoButton(
+                if(_isLoading) const SizedBox(width: 12,),
+                _isLoading ? const Center(child: CupertinoActivityIndicator()) : CupertinoButton(
                   padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
                   onPressed: () async {
                     if (!_isLocalhost && _textController.text.isEmpty) {
+                      setState(() {
+                        _isLoading = true;
+                      });
                       FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
+                      setState(() {
+                        _isLoading = false;
+                      });
                       if (result != null) {
                         for (var item in result.files) {
                           await socketManager.sendFile(item.path??"");
@@ -442,6 +450,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                     color: Colors.lightBlue, // 发送按钮颜色
                   ),
                 ),
+                if(_isLoading) const SizedBox(width: 12,),
               ],
             ),
           ),
