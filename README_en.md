@@ -2,7 +2,7 @@
 
 [中文](./README.md)
 
-Whisper allows you to share text and files between devices on the local network, quickly copying and pasting to each other's clipboards. It's intimate and discreet, just like a whisper.
+whisper allows you to share text and files between devices on the local network, quickly copying and pasting to each other's clipboards.
 
 ### Features
 - Share text and files between Android, MacOS, Linux, and Windows devices within the local network.
@@ -20,8 +20,9 @@ Whisper is developed using Flutter and establishes a WebSocket connection to com
 5. While it may not be the most visually appealing or secure option, it serves its purpose for personal use.
 6. Large files may not start transferring immediately due to library constraints requiring initial copying to the cache directory. Drag-and-drop functionality on desktop should not encounter this issue.
 7. Ensure sufficient storage space on the device before writing files.
-8. Supports only text and file messages.
-9. Aba aba!
+8. NO verify! NO encrypt!
+9. Supports only text and file messages.
+10. Aba aba!
 
 ### Installation
 [home page](https://2.127014.xyz/whisper)  |  [Latest Release](https://github.com/lawnvi/whisper/releases)  
@@ -42,4 +43,4 @@ sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-sca
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="24%" style="border-radius: 6px;"/>
 </div> 
 
-Feel free to reach out if you have any questions or need further assistance with Whisper!
+Feel free to reach out if you have any questions or need further assistance with whisper!
