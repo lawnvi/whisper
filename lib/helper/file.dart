@@ -47,8 +47,8 @@ void openFinder(String path) async {
   }
 }
 
-Future<String> fileMD5(File file) async {
-  var value = await md5.bind(file.openRead()).first;
+Future<String> fileMD5(File file, [int? start, int? end]) async {
+  var value = await md5.bind(file.openRead(start, end)).first;
   return value.toString();
 }
 
