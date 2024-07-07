@@ -48,8 +48,8 @@ void openFinder(String path) async {
 }
 
 Future<String> fileMD5(File file) async {
-  var md5 = sha1.convert(await file.readAsBytes());
-  return md5.toString();
+  var value = await md5.bind(file.openRead()).first;
+  return value.toString();
 }
 
 Future<Directory> downloadDir() async {

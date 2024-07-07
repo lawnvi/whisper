@@ -462,7 +462,7 @@ class WsSvrManager {
     logger.i("send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
   }
 
-    Future<void> _sendFileChunk({sendOver=false}) async {
+  Future<void> _sendFileChunk({sendOver=false}) async {
     if (_sendingFile == null) {
       logger.i("send file chunk _sending file is null");
       return;
