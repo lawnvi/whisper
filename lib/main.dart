@@ -49,7 +49,7 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with AutomaticKeepAliveClientMixin{
+class _MyAppState extends State<MyApp> with AutomaticKeepAliveClientMixin {
   Locale? _locale;
 
   @override
@@ -74,6 +74,7 @@ class _MyAppState extends State<MyApp> with AutomaticKeepAliveClientMixin{
 
   @override
   Widget build(BuildContext context) {
+    // super.build(context);
     return MaterialApp(
       localizationsDelegates: const [
         AppLocalizations.delegate, // Add this line
