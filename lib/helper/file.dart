@@ -7,16 +7,12 @@ import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
 
-void openDir({String name="", bool isMobile=true}) async {
-  var dir = await downloadDir();
-  var path = dir.path;
+void openDir(String path) async {
 
-  if (isMobile) {
-    path = "${dir.path}/$name";
-    var file = File(path);
-    if (!file.existsSync()) {
-      path = dir.path;
-    }
+  var file = File(path);
+  if (!file.existsSync()) {
+    var dir = await downloadDir();
+    path = dir.path;
   }
 
   logger.i("打开文件: $path");

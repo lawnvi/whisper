@@ -1296,8 +1296,8 @@ class _SettingsScreen extends State<SettingsScreen> {
                         _buildSettingItem(
                           _path,
                           const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
-                          onTap: () {
-                            openDir();
+                          onTap: () async {
+                            openDir((await downloadDir()).path);
                           },
                           onLongPress: () {
                             _pickSaveDir();
