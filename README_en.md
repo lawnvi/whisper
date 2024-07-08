@@ -20,7 +20,7 @@ Whisper is developed using Flutter and establishes a WebSocket connection to com
 5. While it may not be the most visually appealing or secure option, it serves its purpose for personal use.
 6. Large files may not start transferring immediately due to library constraints requiring initial copying to the cache directory. Drag-and-drop functionality on desktop should not encounter this issue.
 7. Ensure sufficient storage space on the device before writing files.
-8. NO verify! NO encrypt!
+8. No verify! No encrypt!
 9. Supports only text and file messages.
 10. Aba aba!
 
