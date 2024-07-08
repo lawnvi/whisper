@@ -368,9 +368,10 @@ class WsSvrManager {
     var path = await _prepareIOSink(message);
     var msgTemp = message.toJson();
     msgTemp["path"] = path;
-    LocalDatabase().insertMessage(MessageData.fromJson(msgTemp));
-    logger.i("保存文件: $path");
-    _event?.onMessage(message);
+    var newMessage = MessageData.fromJson(msgTemp);
+    LocalDatabase().insertMessage(newMessage);
+    // logger.i("保存文件: $path");
+    _event?.onMessage(newMessage);
     _ackMessage(message);
   }
 
