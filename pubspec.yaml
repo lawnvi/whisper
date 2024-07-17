@@ -70,6 +70,7 @@ dependencies:
   flutter_local_notifications: ^17.1.2
   device_apps: ^2.2.0
   wakelock_plus: ^1.2.5
+  super_context_menu: ^0.8.17
 
   ftp_server:
     git:

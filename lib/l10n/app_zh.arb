@@ -81,5 +81,11 @@
   "selectAll": "全选",
   "clearAll": "清空",
   "selectNotifyApp": "监听APP通知",
-  "copyVerifyCode": "验证码写入剪切板"
+  "copyVerifyCode": "验证码写入剪切板",
+  "open": "打开",
+  "openInFinder": "在Finder中显示",
+  "openInDir": "所在文件夹",
+  "keepFile": "保留文件",
+  "deleteFile": "删除文件",
+  "copyMessage": "复制消息"
 }

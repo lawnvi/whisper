@@ -54,5 +54,11 @@
   "selectAll": "all",
   "clearAll": "clear",
   "selectNotifyApp": "listen notify app",
-  "copyVerifyCode": "verify code to clipboard"
+  "copyVerifyCode": "verify code to clipboard",
+  "open": "open",
+  "openInFinder": "open in Finder",
+  "openInDir": "open directory",
+  "keepFile": "keep file",
+  "deleteFile": "delete file",
+  "copyMessage": "copy message content"
 }

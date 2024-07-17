@@ -377,6 +377,24 @@ class DeviceData extends DataClass implements Insertable<DeviceData> {
         lastTime: lastTime ?? this.lastTime,
         around: around.present ? around.value : this.around,
       );
+  DeviceData copyWithCompanion(DeviceCompanion data) {
+    return DeviceData(
+      id: data.id.present ? data.id.value : this.id,
+      uid: data.uid.present ? data.uid.value : this.uid,
+      name: data.name.present ? data.name.value : this.name,
+      host: data.host.present ? data.host.value : this.host,
+      port: data.port.present ? data.port.value : this.port,
+      password: data.password.present ? data.password.value : this.password,
+      platform: data.platform.present ? data.platform.value : this.platform,
+      isServer: data.isServer.present ? data.isServer.value : this.isServer,
+      online: data.online.present ? data.online.value : this.online,
+      clipboard: data.clipboard.present ? data.clipboard.value : this.clipboard,
+      auth: data.auth.present ? data.auth.value : this.auth,
+      lastTime: data.lastTime.present ? data.lastTime.value : this.lastTime,
+      around: data.around.present ? data.around.value : this.around,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('DeviceData(')
@@ -1046,6 +1064,29 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         fileTimestamp:
             fileTimestamp.present ? fileTimestamp.value : this.fileTimestamp,
       );
+  MessageData copyWithCompanion(MessageCompanion data) {
+    return MessageData(
+      id: data.id.present ? data.id.value : this.id,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      sender: data.sender.present ? data.sender.value : this.sender,
+      receiver: data.receiver.present ? data.receiver.value : this.receiver,
+      name: data.name.present ? data.name.value : this.name,
+      clipboard: data.clipboard.present ? data.clipboard.value : this.clipboard,
+      size: data.size.present ? data.size.value : this.size,
+      type: data.type.present ? data.type.value : this.type,
+      content: data.content.present ? data.content.value : this.content,
+      message: data.message.present ? data.message.value : this.message,
+      timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      uuid: data.uuid.present ? data.uuid.value : this.uuid,
+      acked: data.acked.present ? data.acked.value : this.acked,
+      path: data.path.present ? data.path.value : this.path,
+      md5: data.md5.present ? data.md5.value : this.md5,
+      fileTimestamp: data.fileTimestamp.present
+          ? data.fileTimestamp.value
+          : this.fileTimestamp,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('MessageData(')
@@ -1318,7 +1359,7 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
 
 abstract class _$LocalDatabase extends GeneratedDatabase {
   _$LocalDatabase(QueryExecutor e) : super(e);
-  _$LocalDatabaseManager get managers => _$LocalDatabaseManager(this);
+  $LocalDatabaseManager get managers => $LocalDatabaseManager(this);
   late final $DeviceTable device = $DeviceTable(this);
   late final $MessageTable message = $MessageTable(this);
   @override
@@ -1328,7 +1369,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [device, message];
 }
 
-typedef $$DeviceTableInsertCompanionBuilder = DeviceCompanion Function({
+typedef $$DeviceTableCreateCompanionBuilder = DeviceCompanion Function({
   Value<int> id,
   Value<String> uid,
   Value<String> name,
@@ -1365,8 +1406,7 @@ class $$DeviceTableTableManager extends RootTableManager<
     DeviceData,
     $$DeviceTableFilterComposer,
     $$DeviceTableOrderingComposer,
-    $$DeviceTableProcessedTableManager,
-    $$DeviceTableInsertCompanionBuilder,
+    $$DeviceTableCreateCompanionBuilder,
     $$DeviceTableUpdateCompanionBuilder> {
   $$DeviceTableTableManager(_$LocalDatabase db, $DeviceTable table)
       : super(TableManagerState(
@@ -1376,8 +1416,7 @@ class $$DeviceTableTableManager extends RootTableManager<
               $$DeviceTableFilterComposer(ComposerState(db, table)),
           orderingComposer:
               $$DeviceTableOrderingComposer(ComposerState(db, table)),
-          getChildManagerBuilder: (p) => $$DeviceTableProcessedTableManager(p),
-          getUpdateCompanionBuilder: ({
+          updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> uid = const Value.absent(),
             Value<String> name = const Value.absent(),
@@ -1407,7 +1446,7 @@ class $$DeviceTableTableManager extends RootTableManager<
             lastTime: lastTime,
             around: around,
           ),
-          getInsertCompanionBuilder: ({
+          createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> uid = const Value.absent(),
             Value<String> name = const Value.absent(),
@@ -1438,18 +1477,6 @@ class $$DeviceTableTableManager extends RootTableManager<
             around: around,
           ),
         ));
-}
-
-class $$DeviceTableProcessedTableManager extends ProcessedTableManager<
-    _$LocalDatabase,
-    $DeviceTable,
-    DeviceData,
-    $$DeviceTableFilterComposer,
-    $$DeviceTableOrderingComposer,
-    $$DeviceTableProcessedTableManager,
-    $$DeviceTableInsertCompanionBuilder,
-    $$DeviceTableUpdateCompanionBuilder> {
-  $$DeviceTableProcessedTableManager(super.$state);
 }
 
 class $$DeviceTableFilterComposer
@@ -1603,7 +1630,7 @@ class $$DeviceTableOrderingComposer
           ColumnOrderings(column, joinBuilders: joinBuilders));
 }
 
-typedef $$MessageTableInsertCompanionBuilder = MessageCompanion Function({
+typedef $$MessageTableCreateCompanionBuilder = MessageCompanion Function({
   Value<int> id,
   Value<int?> deviceId,
   Value<String> sender,
@@ -1646,8 +1673,7 @@ class $$MessageTableTableManager extends RootTableManager<
     MessageData,
     $$MessageTableFilterComposer,
     $$MessageTableOrderingComposer,
-    $$MessageTableProcessedTableManager,
-    $$MessageTableInsertCompanionBuilder,
+    $$MessageTableCreateCompanionBuilder,
     $$MessageTableUpdateCompanionBuilder> {
   $$MessageTableTableManager(_$LocalDatabase db, $MessageTable table)
       : super(TableManagerState(
@@ -1657,8 +1683,7 @@ class $$MessageTableTableManager extends RootTableManager<
               $$MessageTableFilterComposer(ComposerState(db, table)),
           orderingComposer:
               $$MessageTableOrderingComposer(ComposerState(db, table)),
-          getChildManagerBuilder: (p) => $$MessageTableProcessedTableManager(p),
-          getUpdateCompanionBuilder: ({
+          updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<int?> deviceId = const Value.absent(),
             Value<String> sender = const Value.absent(),
@@ -1694,7 +1719,7 @@ class $$MessageTableTableManager extends RootTableManager<
             md5: md5,
             fileTimestamp: fileTimestamp,
           ),
-          getInsertCompanionBuilder: ({
+          createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<int?> deviceId = const Value.absent(),
             Value<String> sender = const Value.absent(),
@@ -1731,18 +1756,6 @@ class $$MessageTableTableManager extends RootTableManager<
             fileTimestamp: fileTimestamp,
           ),
         ));
-}
-
-class $$MessageTableProcessedTableManager extends ProcessedTableManager<
-    _$LocalDatabase,
-    $MessageTable,
-    MessageData,
-    $$MessageTableFilterComposer,
-    $$MessageTableOrderingComposer,
-    $$MessageTableProcessedTableManager,
-    $$MessageTableInsertCompanionBuilder,
-    $$MessageTableUpdateCompanionBuilder> {
-  $$MessageTableProcessedTableManager(super.$state);
 }
 
 class $$MessageTableFilterComposer
@@ -1929,9 +1942,9 @@ class $$MessageTableOrderingComposer
   }
 }
 
-class _$LocalDatabaseManager {
+class $LocalDatabaseManager {
   final _$LocalDatabase _db;
-  _$LocalDatabaseManager(this._db);
+  $LocalDatabaseManager(this._db);
   $$DeviceTableTableManager get device =>
       $$DeviceTableTableManager(_db, _db.device);
   $$MessageTableTableManager get message =>
