@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:super_context_menu/super_context_menu.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
@@ -297,41 +298,53 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           ? CrossAxisAlignment.start
                           : CrossAxisAlignment.end,
                       children: [
-                        GestureDetector(
-                          child: Container(
-                            alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-                            child: message.type == MessageEnum.File
-                                ? _buildFileMessage(message, isOpponent)
-                                : _buildTextMessage(message, isOpponent),
-                          ),
-                          onTap: (){
-                            if (isOpponent && message.type == MessageEnum.File) {
-                              openDir(message.path);
-                            }
-                          },
-                          onDoubleTap: () async {
-                            if (await LocalSetting().isDoubleClickDelete()) {
-                              _deleteItem(message.id);
-                            }
-                          },
-                          onLongPress: () {
-                            showConfirmationDialog(
-                              context,
-                              title:  AppLocalizations.of(context)?.deleteMessageTitle??"删除消息",
-                              description:  AppLocalizations.of(context)?.deleteMessageDesc??"确定删除此消息吗？",
-                              confirmButtonText:  AppLocalizations.of(context)?.confirm??"确定",
-                              cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消",
-                              onConfirm: () async {
-                                _deleteItem(message.id);
-                                if (isOpponent && message.type == MessageEnum.File) {
-                                  var path = "${(await downloadDir()).path}/${message.name}";
-                                  logger.i("delete $path");
-                                  File(path).delete();
-                                }
+                        ContextMenuWidget(
+                              child: GestureDetector(
+                                child: Container(
+                                  alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+                                  child: message.type == MessageEnum.File
+                                      ? _buildFileMessage(message, isOpponent)
+                                      : _buildTextMessage(message, isOpponent),
+                                ),
+                                onTap: (){
+                                  if (isOpponent && message.type == MessageEnum.File) {
+                                    openDir(message.path);
+                                  }
+                                }),
+                              menuProvider: (_) {
+                                var isFile = message.type == MessageEnum.File;
+                                return Menu(
+                                  children: [
+                                    if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
+                                      openDir(message.path);
+                                    }),
+                                    if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
+                                      openDir(message.path, parent: true);
+                                    }),
+                                    MenuSeparator(),
+                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', callback: () {
+                                      if (message.content?.isNotEmpty == true) {
+                                        copyToClipboard(message.content!);
+                                      }
+                                    }),
+                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
+                                      _deleteItem(message.id);
+                                    }),
+                                    if (isFile) Menu(title: AppLocalizations.of(context)?.delete??'删除', children: [
+                                      MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', callback: () {
+                                        _deleteItem(message.id);
+                                      }),
+                                      MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', callback: () async {
+                                        var path = "${(await downloadDir()).path}/${message.name}";
+                                        logger.i("delete $path");
+                                        File(path).delete();
+                                        _deleteItem(message.id);
+                                      }),
+                                    ]),
+                                  ],
+                                );
                               },
-                            );
-                          },
-                        ),
+                            ),
                         SizedBox(height: message.type == MessageEnum.File? 4: 2,),
                         Stack(
                           children: [
@@ -535,10 +548,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar(
                 anchors: editableTextState.contextMenuAnchors,
-                children: AdaptiveTextSelectionToolbar.getAdaptiveButtons(
-                  context,
-                  editableTextState.contextMenuButtonItems,
-                ).toList(),
+                children: [],
               );
             },
           ),

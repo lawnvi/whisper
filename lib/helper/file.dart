@@ -7,12 +7,14 @@ import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
 
-void openDir(String path) async {
+void openDir(String path, {parent=false}) async {
 
   var file = File(path);
   if (!file.existsSync()) {
     var dir = await downloadDir();
     path = dir.path;
+  }else if (parent) {
+    path = file.parent.path;
   }
 
   logger.i("打开文件: $path");

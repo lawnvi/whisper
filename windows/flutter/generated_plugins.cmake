@@ -5,10 +5,12 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   bonsoir_windows
   desktop_drop
+  irondash_engine_context
   open_dir_windows
   permission_handler_windows
   screen_retriever
   sqlite3_flutter_libs
+  super_native_extensions
   tray_manager
   url_launcher_windows
   window_manager
