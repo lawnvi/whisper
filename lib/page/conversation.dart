@@ -685,6 +685,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   void onProgress(int size, length) {
+    if (device.uid != socketManager.receiver) {
+      return;
+    }
     // TODO: implement onProgress
     int now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastUpdateTime > 1000) {

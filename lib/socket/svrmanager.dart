@@ -439,6 +439,9 @@ class WsSvrManager {
         return;
       }
       final file = File(path);
+      if (!file.existsSync() || FileSystemEntity.typeSync(path) == FileSystemEntityType.directory) {
+        return;
+      }
       final size = file.lengthSync();
       final timestamp = (await file.lastModified()).millisecondsSinceEpoch;
       final fileName = p.basename(path);
