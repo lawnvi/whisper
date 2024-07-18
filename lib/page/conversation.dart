@@ -533,7 +533,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       LocalDatabase().insertMessage(message);
       onMessage(message);
     }else if (socketManager.receiver == device.uid) {
-      await socketManager.sendMessage(content, clipboard: true);
+      await socketManager.sendMessage(content, clipboard: isClipboard);
     }
   }
 
