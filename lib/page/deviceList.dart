@@ -6,10 +6,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:super_context_menu/super_context_menu.dart' as cMenu;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
@@ -429,6 +431,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   Widget build(BuildContext context) {
+    var isDesk = isDesktop();
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -521,13 +524,98 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
-          return _buildDeviceItem(index);
+          return isDesk? _buildDeviceItem(index): _buildDeviceItemOld(index);
         },
       ),
     );
   }
 
   Widget _buildDeviceItem(int index) {
+    final deviceItem = devices[index];
+
+    return cMenu.ContextMenuWidget(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
+        child: ListTile(
+          leading: Icon(platformIcon(deviceItem.platform),
+              size: 28,
+              color: deviceItem.uid == socketManager.receiver || deviceItem.around == true
+                  ? Colors.lightBlue
+                  : Colors.grey), // Server 图标,
+          title: Text(deviceItem.name),
+          subtitle: Row(
+            children: [
+              Text(deviceItem.host),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (deviceItem.uid == socketManager.receiver || socketManager.receiver.isEmpty) IconButton(
+                icon: deviceItem.uid == socketManager.receiver
+                    ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
+                    : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
+                onPressed: () {
+                  // 处理连接/断开按钮点击事件
+                  _handleDeviceConnect(deviceItem);
+                },
+              ),
+            ],
+          ),
+          onTap: () {
+            _openConv(deviceItem);
+          },
+        ),
+      ),
+      menuProvider: (_) {
+        return cMenu.Menu(children: [
+          if (deviceItem.uid == socketManager.receiver) cMenu.MenuAction(title: "断开", callback: (){
+            socketManager.close();
+          }),
+          if (socketManager.receiver.isEmpty) cMenu.MenuAction(title: "连接", callback: (){
+            _connectServer(deviceItem.host, deviceItem.port);
+          }),
+          if (deviceItem.uid != socketManager.receiver) cMenu.MenuAction(title: "删除", callback: (){
+            LocalDatabase().clearDevices([deviceItem.uid]);
+            devices.removeAt(index);
+            setState(() {});
+          }),
+          if (isDesktop()) cMenu.MenuAction(title: "连接FTP", callback: (){
+            SimpleFtpServer().openClient("${deviceItem.host}:$defaultFtpPort");
+          }),
+        ]);
+      });
+  }
+
+  void _openConv(deviceItem) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SendMessageScreen(device: deviceItem),
+      ),
+    );
+    _refreshDevice();
+  }
+
+  void _handleDeviceConnect(deviceItem) {
+    showConfirmationDialog(
+      context,
+      title: deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.brokeConnectTitle??"断开连接": AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
+      description: '${deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.disconnect??"断开": AppLocalizations.of(context)?.connectTo??"连接到"} ${deviceItem.name}',
+      confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
+      cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
+      onConfirm: () {
+        if (deviceItem.uid == socketManager.receiver) {
+          socketManager.close();
+        }else {
+          _connectServer(deviceItem.host, deviceItem.port);
+        }
+      },
+    );
+  }
+
+  @Deprecated("use context menu, just for mobile")
+  Widget _buildDeviceItemOld(int index) {
     final deviceItem = devices[index];
     bool ism = isMobile();
     return SwipeActionCell(
@@ -635,14 +723,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
                 ),
               ],
             ),
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SendMessageScreen(device: deviceItem),
-                ),
-              );
-              _refreshDevice();
+            onTap: () {
+              _openConv(deviceItem);
             },
           ),
         ),
@@ -1186,19 +1268,6 @@ class _SettingsScreen extends State<SettingsScreen> {
                             onChanged: (bool value) {
                               LocalSetting().updateClipboard(value);
                               _refreshDevice();
-                            },
-                          ),
-                        ),
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.doubleClickRmMessage??'双击消息删除',
-                          const Icon(Icons.delete_outline_rounded, color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                              value: _doubleClickDelete,
-                              onChanged: (bool value) {
-                              LocalSetting().updateDoubleClickDelete(value);
-                              setState(() {
-                                _doubleClickDelete = value;
-                              });
                             },
                           ),
                         ),
