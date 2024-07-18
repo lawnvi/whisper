@@ -2,10 +2,22 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
+
+
+void openFile(String path) async {
+  if (path.endsWith(".apk") && Platform.isAndroid) {
+    if (await Permission.requestInstallPackages.isDenied) {
+      await Permission.requestInstallPackages.request();
+    }
+  }
+  OpenFilex.open(path);
+}
 
 void openDir(String path, {parent=false}) async {
 

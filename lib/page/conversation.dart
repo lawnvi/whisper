@@ -23,7 +23,6 @@ import '../helper/helper.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../helper/notification.dart';
-import 'appList.dart';
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
@@ -290,6 +289,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 itemBuilder: (context, index, animation) {
                   var message = messageList[index];
                   bool isOpponent = message.receiver == self?.uid;
+                  bool isFile = message.type == MessageEnum.File;
 
                   return FadeTransition(opacity: animation, child: Padding(
                     padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
@@ -298,53 +298,76 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                           ? CrossAxisAlignment.start
                           : CrossAxisAlignment.end,
                       children: [
-                        ContextMenuWidget(
-                              child: GestureDetector(
-                                child: Container(
-                                  alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-                                  child: message.type == MessageEnum.File
-                                      ? _buildFileMessage(message, isOpponent)
-                                      : _buildTextMessage(message, isOpponent),
-                                ),
-                                onTap: (){
-                                  if (isOpponent && message.type == MessageEnum.File) {
-                                    openDir(message.path);
-                                  }
-                                }),
-                              menuProvider: (_) {
-                                var isFile = message.type == MessageEnum.File;
-                                return Menu(
-                                  children: [
-                                    if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
-                                      openDir(message.path);
-                                    }),
-                                    if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
-                                      openDir(message.path, parent: true);
-                                    }),
-                                    MenuSeparator(),
-                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', callback: () {
+                        // WPopupMenu(
+                        //   onValueChanged: (int value) {
+                        //     print("selectt $value");
+                        //   },
+                        //     backgroundColor: Colors.white,
+                        //   actions: ['复制', '删除', '打开', '目录'],
+                        //   child:GestureDetector(
+                        //     child: isFile
+                        //         ? _buildFileMessage(message, isOpponent)
+                        //         : _buildTextMessage(message, isOpponent),
+                        //     onTap: (){
+                        //       if (isFile) {
+                        //         openDir(message.path);
+                        //       }
+                        //     },
+                        //   )
+                        // ),
+                        Container(
+                          alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+                          child:
+                          ContextMenuWidget(
+                            child: GestureDetector(
+                              child: isFile
+                                  ? _buildFileMessage(message, isOpponent)
+                                  : _buildTextMessage(message, isOpponent),
+                              onTap: (){
+                                if (isFile) {
+                                  openFile(message.path);
+                                }
+                              },
+                              onLongPress: () {},
+                            ),
+                            menuProvider: (_) {
+                              return Menu(
+                                  children:  [
+                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', image: MenuImage.icon(Icons.copy_rounded), callback: () {
                                       if (message.content?.isNotEmpty == true) {
                                         copyToClipboard(message.content!);
                                       }
                                     }),
-                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
+                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', image: MenuImage.icon(Icons.delete_rounded), callback: () {
                                       _deleteItem(message.id);
                                     }),
-                                    if (isFile) Menu(title: AppLocalizations.of(context)?.delete??'删除', children: [
-                                      MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', callback: () {
-                                        _deleteItem(message.id);
-                                      }),
-                                      MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', callback: () async {
-                                        var path = "${(await downloadDir()).path}/${message.name}";
-                                        logger.i("delete $path");
-                                        File(path).delete();
-                                        _deleteItem(message.id);
-                                      }),
-                                    ]),
+                                    if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', image: MenuImage.icon(Icons.file_open), callback: () {
+                                      logger.i(message.path);
+                                      openFile(message.path);
+                                    }),
+                                    if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹',image: MenuImage.icon(Icons.subdirectory_arrow_left_rounded),  callback: () {
+                                      logger.i(message.path);
+                                      openDir(message.path, parent: true);
+                                    }),
+                                    if (isFile) MenuSeparator(),
+                                    if (isFile) Menu(
+                                        title: AppLocalizations.of(context)?.delete??'删除',
+                                        image: MenuImage.icon(Icons.delete_rounded),
+                                        children: [
+                                          MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', image: MenuImage.icon(Icons.highlight_remove_rounded), callback: () {
+                                            _deleteItem(message.id);
+                                          }),
+                                          MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', image: MenuImage.icon(Icons.highlight_remove_rounded), callback: () {
+                                            logger.i("delete ${message.path}");
+                                            File(message.path).delete();
+                                            _deleteItem(message.id);
+                                          }),
+                                        ]),
                                   ],
-                                );
-                              },
-                            ),
+                              );
+                            },
+                          ),
+                    ),
                         SizedBox(height: message.type == MessageEnum.File? 4: 2,),
                         Stack(
                           children: [
@@ -537,6 +560,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Card(
         color: isOpponent ? Colors.grey[300] : Colors.blue,
         child: Padding(
