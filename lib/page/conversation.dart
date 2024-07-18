@@ -331,40 +331,38 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                               onLongPress: () {},
                             ),
                             menuProvider: (_) {
-                              return Menu(
-                                  children:  [
-                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', image: MenuImage.icon(Icons.copy_rounded), callback: () {
-                                      if (message.content?.isNotEmpty == true) {
-                                        copyToClipboard(message.content!);
-                                      }
-                                    }),
-                                    if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', image: MenuImage.icon(Icons.delete_rounded), callback: () {
+                              return Menu(children: [
+                                if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', callback: () {
+                                  if (message.content?.isNotEmpty == true) {
+                                    copyToClipboard(message.content!);
+                                  }
+                                }),
+                                if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
+                                  _deleteItem(message.id);
+                                }),
+                                if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
+                                  logger.i(message.path);
+                                  openFile(message.path);
+                                }),
+                                if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
+                                  logger.i(message.path);
+                                  openDir(message.path, parent: true);
+                                }),
+                                if (isFile) MenuSeparator(),
+                                if (isFile) Menu(
+                                  title: AppLocalizations.of(context)?.delete??'删除',
+                                  children: [
+                                    MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', callback: () {
                                       _deleteItem(message.id);
                                     }),
-                                    if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', image: MenuImage.icon(Icons.file_open), callback: () {
-                                      logger.i(message.path);
-                                      openFile(message.path);
+                                    MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', callback: () {
+                                      logger.i("delete ${message.path}");
+                                      File(message.path).delete();
+                                      _deleteItem(message.id);
                                     }),
-                                    if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹',image: MenuImage.icon(Icons.subdirectory_arrow_left_rounded),  callback: () {
-                                      logger.i(message.path);
-                                      openDir(message.path, parent: true);
-                                    }),
-                                    if (isFile) MenuSeparator(),
-                                    if (isFile) Menu(
-                                        title: AppLocalizations.of(context)?.delete??'删除',
-                                        image: MenuImage.icon(Icons.delete_rounded),
-                                        children: [
-                                          MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', image: MenuImage.icon(Icons.highlight_remove_rounded), callback: () {
-                                            _deleteItem(message.id);
-                                          }),
-                                          MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', image: MenuImage.icon(Icons.highlight_remove_rounded), callback: () {
-                                            logger.i("delete ${message.path}");
-                                            File(message.path).delete();
-                                            _deleteItem(message.id);
-                                          }),
-                                        ]),
-                                  ],
-                              );
+                                  ]
+                                ),
+                              ]);
                             },
                           ),
                     ),
