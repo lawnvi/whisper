@@ -557,29 +557,27 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
-    return Container(
-      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
-      child: IntrinsicWidth(
-        child: Container(
-          decoration: BoxDecoration(
-            color: isOpponent ? Colors.grey[300] : Colors.blue,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: SelectableText(
-              content, // 文本消息内容
-              style: TextStyle(
-                color: isOpponent ? Colors.black : Colors.white,
-              ),
-              contextMenuBuilder: (context, editableTextState) {
-                return AdaptiveTextSelectionToolbar(
-                  anchors: editableTextState.contextMenuAnchors,
-                  children: const [],
-                );
-              },
+    return IntrinsicWidth(
+      child: Container(
+        alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+        constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
+        decoration: BoxDecoration(
+          color: isOpponent ? Colors.grey[300] : Colors.blue,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: SelectableText(
+            content, // 文本消息内容
+            style: TextStyle(
+              color: isOpponent ? Colors.black : Colors.white,
             ),
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar(
+                anchors: editableTextState.contextMenuAnchors,
+                children: const [],
+              );
+            },
           ),
         ),
       ),
