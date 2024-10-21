@@ -21,7 +21,7 @@ class SimpleFtpServer {
   void start(String path, int port) async {
     _ftpServer = FtpServer(
         port,
-        allowedDirectories: [path],
+        sharedDirectories: [path],
         startingDirectory: path,
         serverType: ServerType.readAndWrite,
         logFunction: (String message){
