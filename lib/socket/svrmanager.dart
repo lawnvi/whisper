@@ -257,8 +257,8 @@ class WsSvrManager {
       case MessageEnum.Notification: {
         var data = jsonDecode(message.content??"{}");
         if (!await LocalSetting().ignoreAndroidNotification()) {
-          if (supportNotification()) {
-            NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']);
+          if (supportNotification() && data['text'] != null) {
+            NotificationHelper().showNotification(title: "【${data['app']}】 ${data['title']}", body: data['text']??"");
             if ( data['package'] == "com.android.mms") {
               var code = verifyCode(data["text"]);
               if (code.isNotEmpty && await LocalSetting().copyVerify()) {
@@ -516,6 +516,7 @@ class WsSvrManager {
     if (await _receivingFile!.exists()) {
       await _receivingFile!.delete();
     }
+    // todo 无法访问时如何处理
     _ioSink = _receivingFile!.openWrite();
     // _savingFile = await _receivingFile!.open(mode: FileMode.write);
     WakelockPlus.enable();

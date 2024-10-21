@@ -1400,22 +1400,236 @@ typedef $$DeviceTableUpdateCompanionBuilder = DeviceCompanion Function({
   Value<bool?> around,
 });
 
+final class $$DeviceTableReferences
+    extends BaseReferences<_$LocalDatabase, $DeviceTable, DeviceData> {
+  $$DeviceTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$MessageTable, List<MessageData>>
+      _messageRefsTable(_$LocalDatabase db) => MultiTypedResultKey.fromTable(
+          db.message,
+          aliasName: $_aliasNameGenerator(db.device.id, db.message.deviceId));
+
+  $$MessageTableProcessedTableManager get messageRefs {
+    final manager = $$MessageTableTableManager($_db, $_db.message)
+        .filter((f) => f.deviceId.id($_item.id));
+
+    final cache = $_typedResult.readTableOrNull(_messageRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$DeviceTableFilterComposer
+    extends Composer<_$LocalDatabase, $DeviceTable> {
+  $$DeviceTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get uid => $composableBuilder(
+      column: $table.uid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get host => $composableBuilder(
+      column: $table.host, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get port => $composableBuilder(
+      column: $table.port, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get password => $composableBuilder(
+      column: $table.password, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get platform => $composableBuilder(
+      column: $table.platform, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isServer => $composableBuilder(
+      column: $table.isServer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get online => $composableBuilder(
+      column: $table.online, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get clipboard => $composableBuilder(
+      column: $table.clipboard, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get auth => $composableBuilder(
+      column: $table.auth, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastTime => $composableBuilder(
+      column: $table.lastTime, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get around => $composableBuilder(
+      column: $table.around, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> messageRefs(
+      Expression<bool> Function($$MessageTableFilterComposer f) f) {
+    final $$MessageTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.message,
+        getReferencedColumn: (t) => t.deviceId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$MessageTableFilterComposer(
+              $db: $db,
+              $table: $db.message,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$DeviceTableOrderingComposer
+    extends Composer<_$LocalDatabase, $DeviceTable> {
+  $$DeviceTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get uid => $composableBuilder(
+      column: $table.uid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get host => $composableBuilder(
+      column: $table.host, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get port => $composableBuilder(
+      column: $table.port, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get password => $composableBuilder(
+      column: $table.password, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get platform => $composableBuilder(
+      column: $table.platform, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isServer => $composableBuilder(
+      column: $table.isServer, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get online => $composableBuilder(
+      column: $table.online, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get clipboard => $composableBuilder(
+      column: $table.clipboard, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get auth => $composableBuilder(
+      column: $table.auth, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastTime => $composableBuilder(
+      column: $table.lastTime, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get around => $composableBuilder(
+      column: $table.around, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DeviceTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $DeviceTable> {
+  $$DeviceTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get uid =>
+      $composableBuilder(column: $table.uid, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get host =>
+      $composableBuilder(column: $table.host, builder: (column) => column);
+
+  GeneratedColumn<int> get port =>
+      $composableBuilder(column: $table.port, builder: (column) => column);
+
+  GeneratedColumn<String> get password =>
+      $composableBuilder(column: $table.password, builder: (column) => column);
+
+  GeneratedColumn<String> get platform =>
+      $composableBuilder(column: $table.platform, builder: (column) => column);
+
+  GeneratedColumn<bool> get isServer =>
+      $composableBuilder(column: $table.isServer, builder: (column) => column);
+
+  GeneratedColumn<bool> get online =>
+      $composableBuilder(column: $table.online, builder: (column) => column);
+
+  GeneratedColumn<bool> get clipboard =>
+      $composableBuilder(column: $table.clipboard, builder: (column) => column);
+
+  GeneratedColumn<bool> get auth =>
+      $composableBuilder(column: $table.auth, builder: (column) => column);
+
+  GeneratedColumn<int> get lastTime =>
+      $composableBuilder(column: $table.lastTime, builder: (column) => column);
+
+  GeneratedColumn<bool> get around =>
+      $composableBuilder(column: $table.around, builder: (column) => column);
+
+  Expression<T> messageRefs<T extends Object>(
+      Expression<T> Function($$MessageTableAnnotationComposer a) f) {
+    final $$MessageTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.message,
+        getReferencedColumn: (t) => t.deviceId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$MessageTableAnnotationComposer(
+              $db: $db,
+              $table: $db.message,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
 class $$DeviceTableTableManager extends RootTableManager<
     _$LocalDatabase,
     $DeviceTable,
     DeviceData,
     $$DeviceTableFilterComposer,
     $$DeviceTableOrderingComposer,
+    $$DeviceTableAnnotationComposer,
     $$DeviceTableCreateCompanionBuilder,
-    $$DeviceTableUpdateCompanionBuilder> {
+    $$DeviceTableUpdateCompanionBuilder,
+    (DeviceData, $$DeviceTableReferences),
+    DeviceData,
+    PrefetchHooks Function({bool messageRefs})> {
   $$DeviceTableTableManager(_$LocalDatabase db, $DeviceTable table)
       : super(TableManagerState(
           db: db,
           table: table,
-          filteringComposer:
-              $$DeviceTableFilterComposer(ComposerState(db, table)),
-          orderingComposer:
-              $$DeviceTableOrderingComposer(ComposerState(db, table)),
+          createFilteringComposer: () =>
+              $$DeviceTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DeviceTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DeviceTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> uid = const Value.absent(),
@@ -1476,160 +1690,47 @@ class $$DeviceTableTableManager extends RootTableManager<
             lastTime: lastTime,
             around: around,
           ),
+          withReferenceMapper: (p0) => p0
+              .map((e) =>
+                  (e.readTable(table), $$DeviceTableReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: ({messageRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (messageRefs) db.message],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (messageRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable:
+                            $$DeviceTableReferences._messageRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$DeviceTableReferences(db, table, p0).messageRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.deviceId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
         ));
 }
 
-class $$DeviceTableFilterComposer
-    extends FilterComposer<_$LocalDatabase, $DeviceTable> {
-  $$DeviceTableFilterComposer(super.$state);
-  ColumnFilters<int> get id => $state.composableBuilder(
-      column: $state.table.id,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get uid => $state.composableBuilder(
-      column: $state.table.uid,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get name => $state.composableBuilder(
-      column: $state.table.name,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get host => $state.composableBuilder(
-      column: $state.table.host,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<int> get port => $state.composableBuilder(
-      column: $state.table.port,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get password => $state.composableBuilder(
-      column: $state.table.password,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get platform => $state.composableBuilder(
-      column: $state.table.platform,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get isServer => $state.composableBuilder(
-      column: $state.table.isServer,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get online => $state.composableBuilder(
-      column: $state.table.online,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get clipboard => $state.composableBuilder(
-      column: $state.table.clipboard,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get auth => $state.composableBuilder(
-      column: $state.table.auth,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<int> get lastTime => $state.composableBuilder(
-      column: $state.table.lastTime,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get around => $state.composableBuilder(
-      column: $state.table.around,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ComposableFilter messageRefs(
-      ComposableFilter Function($$MessageTableFilterComposer f) f) {
-    final $$MessageTableFilterComposer composer = $state.composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $state.db.message,
-        getReferencedColumn: (t) => t.deviceId,
-        builder: (joinBuilder, parentComposers) => $$MessageTableFilterComposer(
-            ComposerState(
-                $state.db, $state.db.message, joinBuilder, parentComposers)));
-    return f(composer);
-  }
-}
-
-class $$DeviceTableOrderingComposer
-    extends OrderingComposer<_$LocalDatabase, $DeviceTable> {
-  $$DeviceTableOrderingComposer(super.$state);
-  ColumnOrderings<int> get id => $state.composableBuilder(
-      column: $state.table.id,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get uid => $state.composableBuilder(
-      column: $state.table.uid,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get name => $state.composableBuilder(
-      column: $state.table.name,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get host => $state.composableBuilder(
-      column: $state.table.host,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get port => $state.composableBuilder(
-      column: $state.table.port,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get password => $state.composableBuilder(
-      column: $state.table.password,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get platform => $state.composableBuilder(
-      column: $state.table.platform,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get isServer => $state.composableBuilder(
-      column: $state.table.isServer,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get online => $state.composableBuilder(
-      column: $state.table.online,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get clipboard => $state.composableBuilder(
-      column: $state.table.clipboard,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get auth => $state.composableBuilder(
-      column: $state.table.auth,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get lastTime => $state.composableBuilder(
-      column: $state.table.lastTime,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get around => $state.composableBuilder(
-      column: $state.table.around,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-}
-
+typedef $$DeviceTableProcessedTableManager = ProcessedTableManager<
+    _$LocalDatabase,
+    $DeviceTable,
+    DeviceData,
+    $$DeviceTableFilterComposer,
+    $$DeviceTableOrderingComposer,
+    $$DeviceTableAnnotationComposer,
+    $$DeviceTableCreateCompanionBuilder,
+    $$DeviceTableUpdateCompanionBuilder,
+    (DeviceData, $$DeviceTableReferences),
+    DeviceData,
+    PrefetchHooks Function({bool messageRefs})>;
 typedef $$MessageTableCreateCompanionBuilder = MessageCompanion Function({
   Value<int> id,
   Value<int?> deviceId,
@@ -1667,22 +1768,274 @@ typedef $$MessageTableUpdateCompanionBuilder = MessageCompanion Function({
   Value<int?> fileTimestamp,
 });
 
+final class $$MessageTableReferences
+    extends BaseReferences<_$LocalDatabase, $MessageTable, MessageData> {
+  $$MessageTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $DeviceTable _deviceIdTable(_$LocalDatabase db) => db.device
+      .createAlias($_aliasNameGenerator(db.message.deviceId, db.device.id));
+
+  $$DeviceTableProcessedTableManager? get deviceId {
+    if ($_item.deviceId == null) return null;
+    final manager = $$DeviceTableTableManager($_db, $_db.device)
+        .filter((f) => f.id($_item.deviceId!));
+    final item = $_typedResult.readTableOrNull(_deviceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$MessageTableFilterComposer
+    extends Composer<_$LocalDatabase, $MessageTable> {
+  $$MessageTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sender => $composableBuilder(
+      column: $table.sender, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get receiver => $composableBuilder(
+      column: $table.receiver, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get clipboard => $composableBuilder(
+      column: $table.clipboard, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get size => $composableBuilder(
+      column: $table.size, builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<MessageEnum, MessageEnum, int> get type =>
+      $composableBuilder(
+          column: $table.type,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get message => $composableBuilder(
+      column: $table.message, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get timestamp => $composableBuilder(
+      column: $table.timestamp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get uuid => $composableBuilder(
+      column: $table.uuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get acked => $composableBuilder(
+      column: $table.acked, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get path => $composableBuilder(
+      column: $table.path, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get md5 => $composableBuilder(
+      column: $table.md5, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get fileTimestamp => $composableBuilder(
+      column: $table.fileTimestamp, builder: (column) => ColumnFilters(column));
+
+  $$DeviceTableFilterComposer get deviceId {
+    final $$DeviceTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.deviceId,
+        referencedTable: $db.device,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DeviceTableFilterComposer(
+              $db: $db,
+              $table: $db.device,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$MessageTableOrderingComposer
+    extends Composer<_$LocalDatabase, $MessageTable> {
+  $$MessageTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sender => $composableBuilder(
+      column: $table.sender, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get receiver => $composableBuilder(
+      column: $table.receiver, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get clipboard => $composableBuilder(
+      column: $table.clipboard, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get size => $composableBuilder(
+      column: $table.size, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get message => $composableBuilder(
+      column: $table.message, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get timestamp => $composableBuilder(
+      column: $table.timestamp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get uuid => $composableBuilder(
+      column: $table.uuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get acked => $composableBuilder(
+      column: $table.acked, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get path => $composableBuilder(
+      column: $table.path, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get md5 => $composableBuilder(
+      column: $table.md5, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get fileTimestamp => $composableBuilder(
+      column: $table.fileTimestamp,
+      builder: (column) => ColumnOrderings(column));
+
+  $$DeviceTableOrderingComposer get deviceId {
+    final $$DeviceTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.deviceId,
+        referencedTable: $db.device,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DeviceTableOrderingComposer(
+              $db: $db,
+              $table: $db.device,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$MessageTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $MessageTable> {
+  $$MessageTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sender =>
+      $composableBuilder(column: $table.sender, builder: (column) => column);
+
+  GeneratedColumn<String> get receiver =>
+      $composableBuilder(column: $table.receiver, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<bool> get clipboard =>
+      $composableBuilder(column: $table.clipboard, builder: (column) => column);
+
+  GeneratedColumn<int> get size =>
+      $composableBuilder(column: $table.size, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<MessageEnum, int> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get message =>
+      $composableBuilder(column: $table.message, builder: (column) => column);
+
+  GeneratedColumn<int> get timestamp =>
+      $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<String> get uuid =>
+      $composableBuilder(column: $table.uuid, builder: (column) => column);
+
+  GeneratedColumn<bool> get acked =>
+      $composableBuilder(column: $table.acked, builder: (column) => column);
+
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<String> get md5 =>
+      $composableBuilder(column: $table.md5, builder: (column) => column);
+
+  GeneratedColumn<int> get fileTimestamp => $composableBuilder(
+      column: $table.fileTimestamp, builder: (column) => column);
+
+  $$DeviceTableAnnotationComposer get deviceId {
+    final $$DeviceTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.deviceId,
+        referencedTable: $db.device,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DeviceTableAnnotationComposer(
+              $db: $db,
+              $table: $db.device,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
 class $$MessageTableTableManager extends RootTableManager<
     _$LocalDatabase,
     $MessageTable,
     MessageData,
     $$MessageTableFilterComposer,
     $$MessageTableOrderingComposer,
+    $$MessageTableAnnotationComposer,
     $$MessageTableCreateCompanionBuilder,
-    $$MessageTableUpdateCompanionBuilder> {
+    $$MessageTableUpdateCompanionBuilder,
+    (MessageData, $$MessageTableReferences),
+    MessageData,
+    PrefetchHooks Function({bool deviceId})> {
   $$MessageTableTableManager(_$LocalDatabase db, $MessageTable table)
       : super(TableManagerState(
           db: db,
           table: table,
-          filteringComposer:
-              $$MessageTableFilterComposer(ComposerState(db, table)),
-          orderingComposer:
-              $$MessageTableOrderingComposer(ComposerState(db, table)),
+          createFilteringComposer: () =>
+              $$MessageTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MessageTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MessageTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<int?> deviceId = const Value.absent(),
@@ -1755,192 +2108,60 @@ class $$MessageTableTableManager extends RootTableManager<
             md5: md5,
             fileTimestamp: fileTimestamp,
           ),
+          withReferenceMapper: (p0) => p0
+              .map((e) =>
+                  (e.readTable(table), $$MessageTableReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: ({deviceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (deviceId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.deviceId,
+                    referencedTable:
+                        $$MessageTableReferences._deviceIdTable(db),
+                    referencedColumn:
+                        $$MessageTableReferences._deviceIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ));
 }
 
-class $$MessageTableFilterComposer
-    extends FilterComposer<_$LocalDatabase, $MessageTable> {
-  $$MessageTableFilterComposer(super.$state);
-  ColumnFilters<int> get id => $state.composableBuilder(
-      column: $state.table.id,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get sender => $state.composableBuilder(
-      column: $state.table.sender,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get receiver => $state.composableBuilder(
-      column: $state.table.receiver,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get name => $state.composableBuilder(
-      column: $state.table.name,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get clipboard => $state.composableBuilder(
-      column: $state.table.clipboard,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<int> get size => $state.composableBuilder(
-      column: $state.table.size,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnWithTypeConverterFilters<MessageEnum, MessageEnum, int> get type =>
-      $state.composableBuilder(
-          column: $state.table.type,
-          builder: (column, joinBuilders) => ColumnWithTypeConverterFilters(
-              column,
-              joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get content => $state.composableBuilder(
-      column: $state.table.content,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get message => $state.composableBuilder(
-      column: $state.table.message,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<int> get timestamp => $state.composableBuilder(
-      column: $state.table.timestamp,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get uuid => $state.composableBuilder(
-      column: $state.table.uuid,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<bool> get acked => $state.composableBuilder(
-      column: $state.table.acked,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get path => $state.composableBuilder(
-      column: $state.table.path,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<String> get md5 => $state.composableBuilder(
-      column: $state.table.md5,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  ColumnFilters<int> get fileTimestamp => $state.composableBuilder(
-      column: $state.table.fileTimestamp,
-      builder: (column, joinBuilders) =>
-          ColumnFilters(column, joinBuilders: joinBuilders));
-
-  $$DeviceTableFilterComposer get deviceId {
-    final $$DeviceTableFilterComposer composer = $state.composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.deviceId,
-        referencedTable: $state.db.device,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder, parentComposers) => $$DeviceTableFilterComposer(
-            ComposerState(
-                $state.db, $state.db.device, joinBuilder, parentComposers)));
-    return composer;
-  }
-}
-
-class $$MessageTableOrderingComposer
-    extends OrderingComposer<_$LocalDatabase, $MessageTable> {
-  $$MessageTableOrderingComposer(super.$state);
-  ColumnOrderings<int> get id => $state.composableBuilder(
-      column: $state.table.id,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get sender => $state.composableBuilder(
-      column: $state.table.sender,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get receiver => $state.composableBuilder(
-      column: $state.table.receiver,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get name => $state.composableBuilder(
-      column: $state.table.name,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get clipboard => $state.composableBuilder(
-      column: $state.table.clipboard,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get size => $state.composableBuilder(
-      column: $state.table.size,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get type => $state.composableBuilder(
-      column: $state.table.type,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get content => $state.composableBuilder(
-      column: $state.table.content,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get message => $state.composableBuilder(
-      column: $state.table.message,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get timestamp => $state.composableBuilder(
-      column: $state.table.timestamp,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get uuid => $state.composableBuilder(
-      column: $state.table.uuid,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<bool> get acked => $state.composableBuilder(
-      column: $state.table.acked,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get path => $state.composableBuilder(
-      column: $state.table.path,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<String> get md5 => $state.composableBuilder(
-      column: $state.table.md5,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  ColumnOrderings<int> get fileTimestamp => $state.composableBuilder(
-      column: $state.table.fileTimestamp,
-      builder: (column, joinBuilders) =>
-          ColumnOrderings(column, joinBuilders: joinBuilders));
-
-  $$DeviceTableOrderingComposer get deviceId {
-    final $$DeviceTableOrderingComposer composer = $state.composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.deviceId,
-        referencedTable: $state.db.device,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder, parentComposers) =>
-            $$DeviceTableOrderingComposer(ComposerState(
-                $state.db, $state.db.device, joinBuilder, parentComposers)));
-    return composer;
-  }
-}
+typedef $$MessageTableProcessedTableManager = ProcessedTableManager<
+    _$LocalDatabase,
+    $MessageTable,
+    MessageData,
+    $$MessageTableFilterComposer,
+    $$MessageTableOrderingComposer,
+    $$MessageTableAnnotationComposer,
+    $$MessageTableCreateCompanionBuilder,
+    $$MessageTableUpdateCompanionBuilder,
+    (MessageData, $$MessageTableReferences),
+    MessageData,
+    PrefetchHooks Function({bool deviceId})>;
 
 class $LocalDatabaseManager {
   final _$LocalDatabase _db;
