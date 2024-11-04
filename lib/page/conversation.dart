@@ -520,7 +520,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   Future<void> _sendText(String content, {isClipboard=false}) async {
     if (isClipboard) {
-      var str = await getClipboardData()??"";
+      var str = await getClipboardText()??"";
       content = str.trimRight();
     }
     if (content.trim().isEmpty) {

@@ -406,7 +406,7 @@ class WsSvrManager {
       return;
     }
     if (clipboard && content.isEmpty) {
-      var str = await getClipboardData()??"";
+      var str = await getClipboardText()??"";
       content = str.trimRight();
     }
     if (content.trim().isEmpty) {
