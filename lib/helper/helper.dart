@@ -151,7 +151,7 @@ Future<String> getLocalIpAddress() async {
   return completer.future;
 }
 
-Future<String?> getClipboardData() async {
+Future<String?> getClipboardText() async {
   return await Clipboard.getData(Clipboard.kTextPlain).then((value) {
     if (value != null && value.text != null) {
       return value.text;

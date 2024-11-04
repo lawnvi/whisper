@@ -50,6 +50,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   bool discovering = false;
   var lastClickCloseTimestamp = 0;
   static var listenApps = {};
+  var _clipboardText = "";
 
   @override
   void initState() {
@@ -100,6 +101,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         await item.request();
       }
     }
+
+    _clipboardText = await getClipboardText()??"";
   }
 
   static void setListenApps() async {
@@ -1033,8 +1036,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onClipboardChanged() async {
-    ClipboardData? clipboard = await Clipboard.getData(Clipboard.kTextPlain);
-    socketManager.sendMessage(clipboard?.text??"", clipboard: true);
+    var text = await getClipboardText()??"";
+    if (_clipboardText == text) {
+      return;
+    }
+    _clipboardText = text;
+    socketManager.sendMessage(text, clipboard: true);
   }
 }
 
