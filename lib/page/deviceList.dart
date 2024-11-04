@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:bonsoir/bonsoir.dart';
+import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -37,7 +38,7 @@ class DeviceListScreen extends StatefulWidget {
   }
 }
 
-class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent, TrayListener, WindowListener {
+class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData? device;
@@ -58,6 +59,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // }
     _setDesktopWindow();
     _requestPermission();
+    clipboardWatcher.addListener(this);
+    // start watch
+    clipboardWatcher.start();
     super.initState();
   }
 
@@ -222,6 +226,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     _stopBroadcast();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
+    clipboardWatcher.removeListener(this);
+    // stop watch
+    clipboardWatcher.stop();
     super.dispose();
   }
 
@@ -1022,6 +1029,12 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   @override
   void onWindowUnmaximize() {
     // TODO: implement onWindowUnmaximize
+  }
+
+  @override
+  void onClipboardChanged() async {
+    ClipboardData? clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    socketManager.sendMessage(clipboard?.text??"", clipboard: true);
   }
 }
 
