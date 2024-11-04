@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   bonsoir_windows
+  clipboard_watcher
   desktop_drop
   irondash_engine_context
   open_dir_windows

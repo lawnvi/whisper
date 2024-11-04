@@ -7,6 +7,7 @@
 #include "generated_plugin_registrant.h"
 
 #include <bonsoir_windows/bonsoir_windows_plugin_c_api.h>
+#include <clipboard_watcher/clipboard_watcher_plugin.h>
 #include <desktop_drop/desktop_drop_plugin.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 #include <open_dir_windows/open_dir_windows_plugin_c_api.h>
@@ -21,6 +22,8 @@
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   BonsoirWindowsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("BonsoirWindowsPluginCApi"));
+  ClipboardWatcherPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("ClipboardWatcherPlugin"));
   DesktopDropPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("DesktopDropPlugin"));
   IrondashEngineContextPluginCApiRegisterWithRegistrar(
