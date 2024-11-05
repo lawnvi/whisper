@@ -340,16 +340,16 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                                 if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
                                   _deleteItem(message.id);
                                 }),
-                                if (isFile) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
+                                if (isFile && (isOpponent || isDesktop())) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
                                   logger.i(message.path);
                                   openFile(message.path);
                                 }),
-                                if (isFile) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
+                                if (isFile && (isOpponent || isDesktop())) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
                                   logger.i(message.path);
                                   openDir(message.path, parent: true);
                                 }),
                                 if (isFile) MenuSeparator(),
-                                if (isFile) Menu(
+                                if (isFile && isOpponent) Menu(
                                   title: AppLocalizations.of(context)?.delete??'删除',
                                   children: [
                                     MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', callback: () {
@@ -362,6 +362,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                                     }),
                                   ]
                                 ),
+                                if (isFile && !isOpponent) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
+                                  _deleteItem(message.id);
+                                }),
                               ]);
                             },
                           ),
