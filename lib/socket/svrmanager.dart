@@ -129,7 +129,7 @@ class WsSvrManager {
       logger.i('Serving at ws://$host');
       callback(true, "");
     }).onError((error, stackTrace) {
-      logger.i("服务启动失败: ${error}\n${stackTrace}");
+      logger.i("服务启动失败: $error\n$stackTrace");
       callback(false, error);
     });
   }

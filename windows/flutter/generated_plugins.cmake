@@ -9,7 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   irondash_engine_context
   open_dir_windows
   permission_handler_windows
-  screen_retriever
+  screen_retriever_windows
   sqlite3_flutter_libs
   super_native_extensions
   tray_manager

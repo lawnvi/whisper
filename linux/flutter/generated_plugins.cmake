@@ -7,7 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   irondash_engine_context
   open_dir_linux
-  screen_retriever
+  screen_retriever_linux
   sqlite3_flutter_libs
   super_native_extensions
   tray_manager
