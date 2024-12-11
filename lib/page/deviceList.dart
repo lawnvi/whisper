@@ -30,6 +30,8 @@ import 'conversation.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class DeviceListScreen extends StatefulWidget {
+  const DeviceListScreen({super.key});
+
   @override
   _DeviceListScreen createState() => _DeviceListScreen();
 
@@ -1048,7 +1050,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 class DeviceDetailsScreen extends StatelessWidget {
   final DeviceData device;
 
-  DeviceDetailsScreen({required this.device});
+  const DeviceDetailsScreen({super.key, required this.device});
 
   @override
   Widget build(BuildContext context) {
@@ -1064,9 +1066,9 @@ class DeviceDetailsScreen extends StatelessWidget {
           children: [
             Text('Device Name: ${device.name.toString()}'),
             Text('IP Address: ${device.host.toString()}'),
-            device.isServer as bool
-                ? Icon(Icons.desktop_mac) // Server 图标
-                : Icon(Icons.phone_android), // Client 图标
+            device.isServer
+                ? const Icon(Icons.desktop_mac) // Server 图标
+                : const Icon(Icons.phone_android), // Client 图标
             // 其他设备详情信息...
           ],
         ),
@@ -1076,6 +1078,8 @@ class DeviceDetailsScreen extends StatelessWidget {
 }
 
 class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
   @override
   _SettingsScreen createState() => _SettingsScreen();
 }
@@ -1194,7 +1198,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                                     LocalSetting().updatePort(port);
                                     _refreshDevice();
                                   }
-                                }on Exception catch (_, e) {
+                                }on Exception catch (_) {
 
                                 }
                               },
@@ -1243,7 +1247,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                                       _ftpPort = port;
                                     });
                                   }
-                                }on Exception catch (_, e) {
+                                }on Exception catch (_) {
 
                                 }
                               },
@@ -1502,7 +1506,7 @@ void showConfirmationDialog(
         title: Text(title),
         content: Column(
           children: [
-            SizedBox(
+            const SizedBox(
               height: 14,
             ),
             Text(description),
@@ -1512,7 +1516,7 @@ void showConfirmationDialog(
           CupertinoDialogAction(
             child: Text(
               cancelButtonText,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.red, // 自定义取消按钮文本颜色
               ),
             ),
@@ -1526,7 +1530,7 @@ void showConfirmationDialog(
           CupertinoDialogAction(
             child: Text(
               confirmButtonText,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.lightBlue, // 自定义取消按钮文本颜色
               ),
             ),
@@ -1560,7 +1564,7 @@ void showInputAlertDialog(
     inputFields.add(
       Column(
         children: [
-          SizedBox(height: 8), // 间隔
+          const SizedBox(height: 8), // 间隔
           CupertinoTextField(
             controller: controller,
             placeholder: inputHints[i].keys.first,

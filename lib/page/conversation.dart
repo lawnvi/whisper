@@ -26,7 +26,7 @@ import '../helper/notification.dart';
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
-  SendMessageScreen({required this.device});
+  const SendMessageScreen({super.key, required this.device});
 
   @override
   _SendMessageScreen createState() => _SendMessageScreen(device);
@@ -36,7 +36,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData device;
-  DeviceData? self = null;
+  DeviceData? self;
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
@@ -740,7 +740,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
 class ClientSettingsScreen extends StatefulWidget {
   final DeviceData device;
-  ClientSettingsScreen({required this.device});
+  const ClientSettingsScreen({super.key, required this.device});
 
   @override
   _ClientSettingsScreen createState() => _ClientSettingsScreen(device);
@@ -858,19 +858,19 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
         onTap();
       },
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
           children: [
-            Container(
+            SizedBox(
               height: 56.0, // 增加高度以适应 iOS 设置样式
               child: Row(
                 children: [
                   icon, // 设置项的图标
-                  SizedBox(width: 16.0), // 图标与文字之间的间距
+                  const SizedBox(width: 16.0), // 图标与文字之间的间距
                   Expanded(
                     child: Text(
                       title,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 17.0,
                         color: CupertinoColors.black,
                         fontWeight: FontWeight.w500, // 尝试更轻的字重
@@ -884,7 +884,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
               ),
             ),
             if (showDivider)
-              Divider(height: 1, color: Colors.white38), // 分割线
+              const Divider(height: 1, color: Colors.white38), // 分割线
           ],
         ),
       ),
