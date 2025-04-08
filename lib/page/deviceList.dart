@@ -28,6 +28,8 @@ import '../socket/svrmanager.dart';
 import 'appList.dart';
 import 'conversation.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 class DeviceListScreen extends StatefulWidget {
   const DeviceListScreen({super.key});
@@ -1850,7 +1852,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                         fontSize: 17.0,
                         color: isDark ? Colors.white : CupertinoColors.black,
                         fontWeight: FontWeight.w500,
-                        fontFamily: 'SF Pro Display',
+                        fontFamily: Platform.isWindows ? null : 'SF Pro Display',
                       ),
                     ),
                   ),
@@ -1866,7 +1868,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                   fontSize: 12.0,
                   color: isDark ? Colors.grey[400] : CupertinoColors.black,
                   fontWeight: FontWeight.w500,
-                  fontFamily: 'SF Pro Display',
+                  fontFamily: Platform.isWindows ? null : 'SF Pro Display',
                 ),
               ),
             if (showDivider)
