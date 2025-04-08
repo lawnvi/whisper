@@ -28,7 +28,6 @@ void main() async {
       await windowManager.show();
       await windowManager.focus();
     });
-
   }
   //用于确保Flutter的Widgets绑定已经初始化。
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,30 +41,35 @@ void main() async {
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
+  @override
+  State<MyApp> createState() => _MyAppState();
+
   static void setLocale(BuildContext context, Locale newLocale) {
     _MyAppState? state = context.findAncestorStateOfType<_MyAppState>();
     state?.setLocale(newLocale);
   }
 
-  @override
-  _MyAppState createState() => _MyAppState();
+  static void setTheme(BuildContext context, bool isDark) {
+    _MyAppState? state = context.findAncestorStateOfType<_MyAppState>();
+    state?.setTheme(isDark);
+  }
 }
 
-class _MyAppState extends State<MyApp> with AutomaticKeepAliveClientMixin {
+class _MyAppState extends State<MyApp> {
   Locale? _locale;
-
-  @override
-  bool get wantKeepAlive => true;
+  ThemeMode _themeMode = ThemeMode.light;
 
   @override
   void initState() {
-    loadLocal();
     super.initState();
+    _loadThemeMode();
   }
 
-  void loadLocal() async {
-    var local = await LocalSetting().localization();
-    setLocale(Locale(local));
+  Future<void> _loadThemeMode() async {
+    final isDark = await LocalSetting().themeMode();
+    setState(() {
+      _themeMode = isDark;
+    });
   }
 
   void setLocale(Locale locale) {
@@ -74,23 +78,49 @@ class _MyAppState extends State<MyApp> with AutomaticKeepAliveClientMixin {
     });
   }
 
+  void setTheme(bool isDark) {
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // super.build(context);
     return MaterialApp(
+      title: 'Whisper',
+      theme: ThemeData(
+        brightness: Brightness.light,
+        primarySwatch: Colors.blue,
+        cardColor: Colors.white,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
+        cardColor: Colors.grey[800],
+        scaffoldBackgroundColor: Colors.grey[900],
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.grey[900],
+          foregroundColor: Colors.white,
+        ),
+      ),
+      themeMode: _themeMode,
       localizationsDelegates: const [
-        AppLocalizations.delegate, // Add this line
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('zh'),
-        Locale('en'), // English
+        Locale('en', ''),
+        Locale('zh', ''),
       ],
-      locale: _locale?? Localizations.maybeLocaleOf(context)?? const Locale('zh'),
-      home: DeviceListScreen(),
-      builder: EasyLoading.init(),
+      locale: _locale,
+      home: const DeviceListScreen(),
     );
   }
 }

@@ -76,7 +76,8 @@ class _AppListScreenState extends State<AppListScreen> {
           padding: EdgeInsets.zero,
           child: Text(AppLocalizations.of(context)?.selectAll ?? '全选'),
           onPressed: () {
-            bool selectAll = checkedApps.length < apps.length || checkedApps.values.contains(false);
+            bool selectAll = checkedApps.length < apps.length ||
+                checkedApps.values.contains(false);
 
             var appArr = [];
             var checkedMap = <String, bool>{};
@@ -88,7 +89,8 @@ class _AppListScreenState extends State<AppListScreen> {
               checkedApps = checkedMap;
             });
 
-            LocalSetting().modifyListenNotifyApp(add: selectAll, clear: !selectAll, packages: appArr);
+            LocalSetting().modifyListenNotifyApp(
+                add: selectAll, clear: !selectAll, packages: appArr);
           },
         ),
       ),
@@ -116,7 +118,8 @@ class _AppListScreenState extends State<AppListScreen> {
                           app: app,
                           isChecked: isChecked,
                           onChanged: (bool value) {
-                            LocalSetting().modifyListenNotifyApp(packages: [app.packageName], add: value);
+                            LocalSetting().modifyListenNotifyApp(
+                                packages: [app.packageName], add: value);
                           },
                         );
                       },

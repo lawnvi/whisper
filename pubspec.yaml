@@ -45,9 +45,9 @@ dependencies:
 #  system_tray: ^2.0.3
   flutter_easyloading: ^3.0.5
   shared_preferences: ^2.3.3
-  sqlite3_flutter_libs: ^0.5.27
+  sqlite3_flutter_libs: ^0.5.32
   drift: ^2.22.1 # dart run build_runner build
-  sqlite3: ^2.5.0
+  sqlite3: ^2.7.5
   uuid: ^4.4.0
   device_info_plus: ^10.1.0
   intl: ^0.19.0

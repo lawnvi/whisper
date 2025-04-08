@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -37,6 +38,7 @@ class LocalSetting {
   final String _copyVerifyCode = "_copyVerifyCode";
   final String _ignoreAndroidNotify = "_ignoreAndroidNotify";
   final String _listenAndroidNotify = "_listenAndroidNotify";
+  final String _themeMode = "_theme_mode";
 
   Future<DeviceData> instance({bool online = false}) async {
     return DeviceData(
@@ -195,7 +197,7 @@ class LocalSetting {
     if (add) {
       packages.addAll(str.replaceAll("::", ":").split(":"));
       _setSP(_notifyAppMap, packages.join(":"));
-    }else {
+    } else {
       Iterable<String> tempArr = str.replaceAll("::", ":").split(":");
       tempArr = tempArr.where((item) => !packages.contains(item));
       _setSP(_notifyAppMap, tempArr.join(":"));
@@ -232,5 +234,15 @@ class LocalSetting {
 
   Future<bool> isListenAndroid() async {
     return await getSPDefault(_listenAndroidNotify, false);
+  }
+
+  Future<ThemeMode> themeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDark = await getSPDefault(_themeMode, false);
+    return isDark ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  Future<void> setThemeMode(bool isDark) async {
+    await _setSP(_themeMode, isDark);
   }
 }
