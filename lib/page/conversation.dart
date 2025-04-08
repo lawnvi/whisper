@@ -24,6 +24,9 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../helper/notification.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
+
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
 
@@ -1043,7 +1046,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         fontSize: 17.0,
                         color: isDark ? Colors.white : CupertinoColors.black,
                         fontWeight: FontWeight.w500,
-                        fontFamily: 'SF Pro Display',
+                        fontFamily: Platform.isWindows ? null : 'SF Pro Display',
                       ),
                     ),
                   ),
