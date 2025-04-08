@@ -687,7 +687,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         decoration: BoxDecoration(
           color: isOpponent
               ? (isDark ? Colors.grey[800] : Colors.grey[300])
-              : Colors.blue,
+              : (isDark ? Colors.grey[800] : Colors.blue),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -696,8 +696,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
             content,
             style: TextStyle(
               color: isOpponent
-                  ? (isDark ? Colors.white : Colors.black)
-                  : Colors.white,
+                  ? (isDark ? Colors.white70 : Colors.black)
+                  : (isDark ? Colors.white70 : Colors.white),
             ),
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar(

@@ -1236,7 +1236,7 @@ class _SettingsScreen extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeMode == ThemeMode.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
@@ -1369,12 +1369,8 @@ class _SettingsScreen extends State<SettingsScreen> {
                                 ],
                                 cancelButton: CupertinoActionSheetAction(
                                   child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: TextStyle(
-                                      color:
-                                          isDark ? Colors.white : Colors.black,
-                                    ),
+                                    AppLocalizations.of(context)?.cancel ?? '取消',
+                                    style: const TextStyle(color: Colors.redAccent),
                                   ),
                                   onPressed: () {
                                     Navigator.pop(context);
@@ -1739,12 +1735,8 @@ class _SettingsScreen extends State<SettingsScreen> {
                                 ],
                                 cancelButton: CupertinoActionSheetAction(
                                   child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: TextStyle(
-                                      color:
-                                          isDark ? Colors.white : Colors.black,
-                                    ),
+                                    AppLocalizations.of(context)?.cancel ?? '取消',
+                                    style: const TextStyle(color: Colors.redAccent),
                                   ),
                                   onPressed: () {
                                     Navigator.pop(context);
@@ -1782,7 +1774,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                       onTap: () async {
                         final Uri toLaunch = Uri(
                             scheme: 'https',
-                            host: 'local-whisper.help',
+                            host: 'whisper.127014.xyz',
                             path: '/zh');
                         _launchInBrowser(toLaunch);
                       },
@@ -1827,11 +1819,11 @@ class _SettingsScreen extends State<SettingsScreen> {
 
   Widget _buildSettingItem(String title, Icon icon,
       {Widget? trailing,
-      bool showDivider = true,
+      bool showDivider = false,
       GestureTapCallback? onTap,
       String desc = "",
       GestureTapCallback? onLongPress}) {
-    final isDark = _themeMode == ThemeMode.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: onTap,
@@ -1890,8 +1882,8 @@ class _SettingsScreen extends State<SettingsScreen> {
   }
 
   void _updateThemeMode(ThemeMode mode) async {
-    await LocalSetting().setThemeMode(mode == ThemeMode.dark);
-    MyApp.setTheme(context, mode == ThemeMode.dark);
+    MyApp.setTheme(context, mode);
+    await LocalSetting().setThemeMode(mode);
     setState(() {
       _themeMode = mode;
     });
