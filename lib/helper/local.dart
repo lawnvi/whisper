@@ -237,12 +237,23 @@ class LocalSetting {
   }
 
   Future<ThemeMode> themeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isDark = await getSPDefault(_themeMode, false);
-    return isDark ? ThemeMode.dark : ThemeMode.light;
+    final num = await getSPDefault(_themeMode, 0);
+    switch (num) {
+      case 0: return ThemeMode.system;
+      case 1: return ThemeMode.light;
+      case 2: return ThemeMode.dark;
+    }
+
+    return ThemeMode.light;
   }
 
-  Future<void> setThemeMode(bool isDark) async {
-    await _setSP(_themeMode, isDark);
+  Future<void> setThemeMode(ThemeMode mode) async {
+    var num = 0;
+    switch(mode) {
+      case ThemeMode.system: num = 0; break;
+      case ThemeMode.light: num = 1; break;
+      case ThemeMode.dark: num = 2; break;
+    }
+    await _setSP(_themeMode, num);
   }
 }

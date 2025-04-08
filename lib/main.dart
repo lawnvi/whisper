@@ -49,9 +49,9 @@ class MyApp extends StatefulWidget {
     state?.setLocale(newLocale);
   }
 
-  static void setTheme(BuildContext context, bool isDark) {
+  static void setTheme(BuildContext context, ThemeMode mode) {
     _MyAppState? state = context.findAncestorStateOfType<_MyAppState>();
-    state?.setTheme(isDark);
+    state?.setTheme(mode);
   }
 }
 
@@ -66,9 +66,9 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _loadThemeMode() async {
-    final isDark = await LocalSetting().themeMode();
+    final mode = await LocalSetting().themeMode();
     setState(() {
-      _themeMode = isDark;
+      _themeMode = mode;
     });
   }
 
@@ -78,9 +78,9 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  void setTheme(bool isDark) {
+  void setTheme(ThemeMode mode) {
     setState(() {
-      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+      _themeMode = mode;
     });
   }
 
