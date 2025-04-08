@@ -87,5 +87,11 @@
   "openInDir": "所在文件夹",
   "keepFile": "保留文件",
   "deleteFile": "删除文件",
-  "copyMessage": "复制消息"
+  "copyMessage": "复制消息",
+  "themeMode": "主题模式",
+  "followSystem": "跟随系统",
+  "lightMode": "明亮",
+  "darkMode": "暗黑",
+  "selectThemeMode": "选择主题模式",
+  "selectLanguage": "选择语言"
 }

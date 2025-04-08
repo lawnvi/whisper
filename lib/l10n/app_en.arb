@@ -60,5 +60,11 @@
   "openInDir": "open directory",
   "keepFile": "keep file",
   "deleteFile": "delete file",
-  "copyMessage": "copy message content"
+  "copyMessage": "copy message content",
+  "darkMode": "Dark Mode",
+  "themeMode": "Theme Mode",
+  "followSystem": "Follow System",
+  "lightMode": "Light",
+  "selectThemeMode": "Select Theme Mode",
+  "selectLanguage": "Select Language"
 }

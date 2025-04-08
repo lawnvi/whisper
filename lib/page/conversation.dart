@@ -26,13 +26,15 @@ import '../helper/notification.dart';
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
+
   const SendMessageScreen({super.key, required this.device});
 
   @override
   _SendMessageScreen createState() => _SendMessageScreen(device);
 }
 
-class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEvent {
+class _SendMessageScreen extends State<SendMessageScreen>
+    implements ISocketEvent {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData device;
@@ -83,8 +85,9 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     logger.i("current device: ${device.uid}");
     var me = await LocalSetting().instance();
     var isLocal = me.uid == device.uid;
-    var temp = isLocal? me: await LocalDatabase().fetchDevice(device.uid);
-    var arr = await LocalDatabase().fetchMessageList(me.uid == temp?.uid? "": device.uid, limit: 20);
+    var temp = isLocal ? me : await LocalDatabase().fetchDevice(device.uid);
+    var arr = await LocalDatabase()
+        .fetchMessageList(me.uid == temp?.uid ? "" : device.uid, limit: 20);
     setState(() {
       self = me;
       device = temp!;
@@ -97,7 +100,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     _scrollController.addListener(_scrollListener);
 
     // 开启通知监听
-    if (Platform.isAndroid && !isLocal && temp?.uid == socketManager.receiver && (await LocalSetting().isListenAndroid())) {
+    if (Platform.isAndroid &&
+        !isLocal &&
+        temp?.uid == socketManager.receiver &&
+        (await LocalSetting().isListenAndroid())) {
       startAndroidListening();
     }
   }
@@ -108,7 +114,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
       logger.i('滑倒顶部了！${messageList[0].id}');
-      var arr = await LocalDatabase().fetchMessageList(device.uid, beforeId: messageList.last.id, limit: 12);
+      var arr = await LocalDatabase().fetchMessageList(device.uid,
+          beforeId: messageList.last.id, limit: 12);
       if (arr.isEmpty) {
         return;
       }
@@ -124,12 +131,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   _insertItem(index, item) {
     messageList.insert(index, item);
-    key.currentState?.insertItem(index, duration: const Duration(milliseconds: 500));
+    key.currentState
+        ?.insertItem(index, duration: const Duration(milliseconds: 500));
   }
 
   _insertItems(index, items) {
     messageList.insertAll(index, items);
-    key.currentState?.insertAllItems(index, items.length, duration: const Duration(milliseconds: 500));
+    key.currentState?.insertAllItems(index, items.length,
+        duration: const Duration(milliseconds: 500));
   }
 
   _clearItems() {
@@ -171,14 +180,14 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   @Deprecated("use list view reverse")
-  void _scrollToBottom({bool isFirst=false}) async {
+  void _scrollToBottom({bool isFirst = false}) async {
     if (isFirst) {
       _scrollController.jumpTo(
         _scrollController.position.maxScrollExtent,
         // duration: const Duration(milliseconds: 200),
         // curve: Curves.easeOut,
       );
-    }else {
+    } else {
       await _scrollController.animateTo(
         0,
         duration: const Duration(milliseconds: 300),
@@ -189,17 +198,17 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     var widget = Scaffold(
       appBar: AppBar(
         leading: CupertinoNavigationBarBackButton(
-          color: Colors.grey,
+          color: isDark ? Colors.grey[400] : Colors.grey,
           onPressed: () {
-            // Navigator.pop(context);
             Navigator.popUntil(context, (route) {
               return route.isFirst;
             });
           },
-          // color: Colors.lightBlue, // 设置返回按钮图标的颜色
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -208,61 +217,73 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(device.name), // 设备名称
+                Text(device.name,
+                    style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black)), // 设备名称
                 Row(
                   children: [
                     Text(
                       "${device.host}:${device.port}", // 设备 IP 地址
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.black54),
                     ),
                     const SizedBox(width: 4),
-                    if(socketManager.receiver == device.uid) const Icon(Icons.wifi_rounded, size: 14, color: Colors.lightBlue)
+                    if (socketManager.receiver == device.uid)
+                      const Icon(Icons.wifi_rounded,
+                          size: 14, color: Colors.lightBlue)
                   ],
                 )
               ],
             ),
           ],
         ),
-        // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
-          if (percent > 0 && percent < 1 && device.uid == socketManager.receiver)
+          if (percent > 0 &&
+              percent < 1 &&
+              device.uid == socketManager.receiver)
             Column(
               children: [
                 const SizedBox(height: 12),
-                Text(_speed, style: const TextStyle(fontSize: 12)),
+                Text(_speed,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.black)),
                 const SizedBox(height: 2),
-                Text(
-                    "${(100 * percent).toStringAsFixed(2)}%",
-                    style: const TextStyle(fontSize: 12)
-                ),
+                Text("${(100 * percent).toStringAsFixed(2)}%",
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.black)),
               ],
             ),
-          if (false) CupertinoButton(
-            // 使用CupertinoButton
-            padding: EdgeInsets.zero,
-            child: const Icon(
-              Icons.loop_rounded,
-              size: 30,
-              color: Colors.black45,
+          if (false)
+            CupertinoButton(
+              // 使用CupertinoButton
+              padding: EdgeInsets.zero,
+              child: const Icon(
+                Icons.loop_rounded,
+                size: 30,
+                color: Colors.black45,
+              ),
+              onPressed: () async {
+                // todo update device ftp port
+                SimpleFtpServer().openClient("${device.host}:$defaultFtpPort");
+              },
             ),
-            onPressed: () async {
-              // todo update device ftp port
-              SimpleFtpServer().openClient("${device.host}:$defaultFtpPort");
-            },
-          ),
           CupertinoButton(
-            // 使用CupertinoButton
             padding: EdgeInsets.zero,
-            child: const Icon(
+            child: Icon(
               Icons.settings_outlined,
               size: 30,
-              color: Colors.black45,
+              color: isDark ? Colors.grey[400] : Colors.black45,
             ),
             onPressed: () async {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ClientSettingsScreen(device: device,),
+                  builder: (context) => ClientSettingsScreen(
+                    device: device,
+                  ),
                 ),
               );
             },
@@ -283,7 +304,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
               child: AnimatedList(
                 key: key,
                 controller: _scrollController,
-                initialItemCount: messageList.length, // 消息数量
+                initialItemCount: messageList.length,
                 reverse: true,
                 shrinkWrap: true,
                 itemBuilder: (context, index, animation) {
@@ -291,207 +312,297 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                   bool isOpponent = message.receiver == self?.uid;
                   bool isFile = message.type == MessageEnum.File;
 
-                  return FadeTransition(opacity: animation, child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                    child: Column(
-                      crossAxisAlignment: isOpponent
-                          ? CrossAxisAlignment.start
-                          : CrossAxisAlignment.end,
-                      children: [
-                        // WPopupMenu(
-                        //   onValueChanged: (int value) {
-                        //     print("selectt $value");
-                        //   },
-                        //     backgroundColor: Colors.white,
-                        //   actions: ['复制', '删除', '打开', '目录'],
-                        //   child:GestureDetector(
-                        //     child: isFile
-                        //         ? _buildFileMessage(message, isOpponent)
-                        //         : _buildTextMessage(message, isOpponent),
-                        //     onTap: (){
-                        //       if (isFile) {
-                        //         openDir(message.path);
-                        //       }
-                        //     },
-                        //   )
-                        // ),
-                        Container(
-                          alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-                          child:
-                          ContextMenuWidget(
-                            child: GestureDetector(
-                              child: isFile
-                                  ? _buildFileMessage(message, isOpponent)
-                                  : _buildTextMessage(message, isOpponent),
-                              onTap: (){
-                                if (isFile) {
-                                  openFile(message.path);
-                                }
-                              },
-                              onLongPress: () {},
-                            ),
-                            menuProvider: (_) {
-                              return Menu(children: [
-                                if (!isFile) MenuAction(title: AppLocalizations.of(context)?.copyMessage??'复制消息', callback: () {
-                                  if (message.content?.isNotEmpty == true) {
-                                    copyToClipboard(message.content!);
-                                  }
-                                }),
-                                if (!isFile) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
-                                  _deleteItem(message.id);
-                                }),
-                                if (isFile && (isOpponent || isDesktop())) MenuAction(title: AppLocalizations.of(context)?.open??'打开', callback: () {
-                                  logger.i(message.path);
-                                  openFile(message.path);
-                                }),
-                                if (isFile && (isOpponent || isDesktop())) MenuAction(title: (Platform.isMacOS? AppLocalizations.of(context)?.openInFinder: AppLocalizations.of(context)?.openInDir)??'所在文件夹', callback: () {
-                                  logger.i(message.path);
-                                  openDir(message.path, parent: true);
-                                }),
-                                if (isFile) MenuSeparator(),
-                                if (isFile && isOpponent) Menu(
-                                  title: AppLocalizations.of(context)?.delete??'删除',
-                                  children: [
-                                    MenuAction(title: AppLocalizations.of(context)?.keepFile??'保留文件', callback: () {
-                                      _deleteItem(message.id);
-                                    }),
-                                    MenuAction(title: AppLocalizations.of(context)?.deleteFile??'删除文件', callback: () {
-                                      logger.i("delete ${message.path}");
-                                      File(message.path).delete();
-                                      _deleteItem(message.id);
-                                    }),
-                                  ]
-                                ),
-                                if (isFile && !isOpponent) MenuAction(title: AppLocalizations.of(context)?.delete??'删除', callback: () {
-                                  _deleteItem(message.id);
-                                }),
-                              ]);
-                            },
-                          ),
-                    ),
-                        SizedBox(height: message.type == MessageEnum.File? 4: 2,),
-                        Stack(
+                  return FadeTransition(
+                      opacity: animation,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        child: Column(
+                          crossAxisAlignment: isOpponent
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.end,
                           children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(width: isOpponent? isMobile()? 10:0 : 20,),
-                                Text(
-                                  " ${formatTimestamp(message.timestamp)} ", // 发送时间
-                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                            Container(
+                              alignment: isOpponent
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
+                              child: ContextMenuWidget(
+                                child: GestureDetector(
+                                  child: isFile
+                                      ? _buildFileMessage(message, isOpponent)
+                                      : _buildTextMessage(message, isOpponent),
+                                  onTap: () {
+                                    if (isFile) {
+                                      openFile(message.path);
+                                    }
+                                  },
+                                  onLongPress: () {},
                                 ),
-                                SizedBox(width: isOpponent? 20: isMobile()? 10:0,),
-                              ],
-                            ),
-                            if (message.type == MessageEnum.Text) Positioned(
-                              left: isOpponent? null: -12,
-                              right: isOpponent?-12: null,
-                              top: Platform.isMacOS? -12.2: -14,
-                              child: IconButton(
-                                hoverColor: Colors.grey.withOpacity(0),
-                                focusColor: Colors.grey,
-                                highlightColor: Colors.transparent,
-                                icon: Icon(Icons.copy, size: (isMobile()? 16: 18), color: Colors.grey,),
-                                onPressed: () {
-                                  if (message.content?.isNotEmpty == true){
-                                    copyToClipboard(message.content!);
-                                  }
+                                menuProvider: (_) {
+                                  return Menu(children: [
+                                    if (!isFile)
+                                      MenuAction(
+                                          title: AppLocalizations.of(context)
+                                                  ?.copyMessage ??
+                                              '复制消息',
+                                          callback: () {
+                                            if (message.content?.isNotEmpty ==
+                                                true) {
+                                              copyToClipboard(message.content!);
+                                            }
+                                          }),
+                                    if (!isFile)
+                                      MenuAction(
+                                          title: AppLocalizations.of(context)
+                                                  ?.delete ??
+                                              '删除',
+                                          callback: () {
+                                            _deleteItem(message.id);
+                                          }),
+                                    if (isFile && (isOpponent || isDesktop()))
+                                      MenuAction(
+                                          title: AppLocalizations.of(context)
+                                                  ?.open ??
+                                              '打开',
+                                          callback: () {
+                                            logger.i(message.path);
+                                            openFile(message.path);
+                                          }),
+                                    if (isFile && (isOpponent || isDesktop()))
+                                      MenuAction(
+                                          title: (Platform.isMacOS
+                                                  ? AppLocalizations.of(context)
+                                                      ?.openInFinder
+                                                  : AppLocalizations.of(context)
+                                                      ?.openInDir) ??
+                                              '所在文件夹',
+                                          callback: () {
+                                            logger.i(message.path);
+                                            openDir(message.path, parent: true);
+                                          }),
+                                    if (isFile) MenuSeparator(),
+                                    if (isFile && isOpponent)
+                                      Menu(
+                                          title: AppLocalizations.of(context)
+                                                  ?.delete ??
+                                              '删除',
+                                          children: [
+                                            MenuAction(
+                                                title:
+                                                    AppLocalizations.of(context)
+                                                            ?.keepFile ??
+                                                        '保留文件',
+                                                callback: () {
+                                                  _deleteItem(message.id);
+                                                }),
+                                            MenuAction(
+                                                title:
+                                                    AppLocalizations.of(context)
+                                                            ?.deleteFile ??
+                                                        '删除文件',
+                                                callback: () {
+                                                  logger.i(
+                                                      "delete ${message.path}");
+                                                  File(message.path).delete();
+                                                  _deleteItem(message.id);
+                                                }),
+                                          ]),
+                                    if (isFile && !isOpponent)
+                                      MenuAction(
+                                          title: AppLocalizations.of(context)
+                                                  ?.delete ??
+                                              '删除',
+                                          callback: () {
+                                            _deleteItem(message.id);
+                                          }),
+                                  ]);
                                 },
                               ),
-                            )
+                            ),
+                            SizedBox(
+                              height: message.type == MessageEnum.File ? 4 : 2,
+                            ),
+                            Stack(
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: isOpponent
+                                          ? isMobile()
+                                              ? 10
+                                              : 0
+                                          : 20,
+                                    ),
+                                    Text(
+                                      " ${formatTimestamp(message.timestamp)} ",
+                                      // 发送时间
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.grey[400]
+                                              : Colors.grey,
+                                          fontSize: 12),
+                                    ),
+                                    SizedBox(
+                                      width: isOpponent
+                                          ? 20
+                                          : isMobile()
+                                              ? 10
+                                              : 0,
+                                    ),
+                                  ],
+                                ),
+                                if (message.type == MessageEnum.Text)
+                                  Positioned(
+                                    left: isOpponent ? null : -12,
+                                    right: isOpponent ? -12 : null,
+                                    top: Platform.isMacOS ? -12.2 : -14,
+                                    child: IconButton(
+                                      hoverColor: Colors.grey.withOpacity(0),
+                                      focusColor: Colors.grey,
+                                      highlightColor: Colors.transparent,
+                                      icon: Icon(
+                                        Icons.copy,
+                                        size: (isMobile() ? 16 : 18),
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey,
+                                      ),
+                                      onPressed: () {
+                                        if (message.content?.isNotEmpty ==
+                                            true) {
+                                          copyToClipboard(message.content!);
+                                        }
+                                      },
+                                    ),
+                                  )
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  ));
+                      ));
                 },
               ),
-          ),),
-          // Divider(height: 0.2, color: Colors.grey), // 分割线
-          if(_isLocalhost || device.uid == socketManager.receiver) Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            decoration: const BoxDecoration(
-              color: Colors.white, // 背景颜色设置为白色
-            ),
-            child: Row(
-              children: [
-                if (self?.clipboard == true) CupertinoButton(
-                  padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
-                  onPressed: () {
-                    _sendText("", isClipboard: true);
-                  },
-                  child: const Icon(
-                    Icons.copy, // 按钮图标
-                    color: Colors.grey, // 按钮颜色
-                  ),
-                ),
-                const SizedBox(height: 50,),
-                Expanded(
-                    child: RawKeyboardListener(
-                      focusNode: FocusNode(),
-                      onKey: (RawKeyEvent event) async {
-                        if(event.logicalKey == LogicalKeyboardKey.shiftLeft || event.logicalKey == LogicalKeyboardKey.shiftRight) {
-                          keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is RawKeyDownEvent;
-                        }else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                          keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is RawKeyDownEvent;
-                          if (event is RawKeyDownEvent && (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true || isMobile())) {
-                            if (_textController.text.trim().isNotEmpty) {
-                              await _sendText(_textController.text.trimRight());
-                              // FocusScope.of(context).unfocus();
-                              _textController.text = "";
-                            }
-                          }
-                        }
-                      },
-                      child: CupertinoTextField(
-                        controller: _textController,
-                        cursorColor: Colors.black87,
-                        autofocus: isDesktop(),
-                        autocorrect: true,
-                        maxLines: isMobile()? 5: 20,
-                        minLines: 1,
-                        placeholder:  AppLocalizations.of(context)?.sendTips??'发点什么...', // 输入框提示文字
-                        onChanged: (value) {
-                          if (value == "\n" && keyPressedMap[keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] != true) {
-                            _textController.text = "";
-                          }
-                        },
-                      ),
-                    )
-                ),
-                if(_isLoading) const SizedBox(width: 12,),
-                _isLoading ? const Center(child: CupertinoActivityIndicator()) : CupertinoButton(
-                  padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
-                  onPressed: () async {
-                    if (!_isLocalhost && _textController.text.isEmpty) {
-                      setState(() {
-                        _isLoading = true;
-                      });
-                      FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
-                      setState(() {
-                        _isLoading = false;
-                      });
-                      if (result != null) {
-                        for (var item in result.files) {
-                          await socketManager.sendFile(item.path??"");
-                        }
-                      }
-                    }else {
-                      // 发送按钮操作
-                      await _sendText(_textController.text);
-                      _textController.text = "";
-                    }
-                  },
-                  child: Icon(
-                    !_isLocalhost && isInputEmpty?Icons.add:Icons.send, // 发送按钮图标
-                    color: Colors.lightBlue, // 发送按钮颜色
-                  ),
-                ),
-                if(_isLoading) const SizedBox(width: 12,),
-              ],
             ),
           ),
-          const SizedBox(height: 6,)
+          if (_isLocalhost || device.uid == socketManager.receiver)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[900] : Colors.white, // 背景颜色
+              ),
+              child: Row(
+                children: [
+                  if (self?.clipboard == true)
+                    CupertinoButton(
+                      padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
+                      onPressed: () {
+                        _sendText("", isClipboard: true);
+                      },
+                      child: Icon(
+                        Icons.copy, // 按钮图标
+                        color: isDark ? Colors.grey[400] : Colors.grey, // 按钮颜色
+                      ),
+                    ),
+                  const SizedBox(
+                    height: 50,
+                  ),
+                  Expanded(
+                      child: RawKeyboardListener(
+                    focusNode: FocusNode(),
+                    onKey: (RawKeyEvent event) async {
+                      if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+                          event.logicalKey == LogicalKeyboardKey.shiftRight) {
+                        keyPressedMap[LogicalKeyboardKey.shift.keyLabel] =
+                            event is RawKeyDownEvent;
+                      } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                        keyPressedMap[LogicalKeyboardKey.enter.keyLabel] =
+                            event is RawKeyDownEvent;
+                        if (event is RawKeyDownEvent &&
+                            (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] !=
+                                    true ||
+                                isMobile())) {
+                          if (_textController.text.trim().isNotEmpty) {
+                            await _sendText(_textController.text.trimRight());
+                            _textController.text = "";
+                          }
+                        }
+                      }
+                    },
+                    child: CupertinoTextField(
+                      controller: _textController,
+                      cursorColor: isDark ? Colors.white : Colors.black87,
+                      autofocus: isDesktop(),
+                      autocorrect: true,
+                      maxLines: isMobile() ? 5 : 20,
+                      minLines: 1,
+                      placeholder:
+                          AppLocalizations.of(context)?.sendTips ?? '发点什么...',
+                      // 输入框提示文字
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.white,
+                        border: Border.all(
+                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      onChanged: (value) {
+                        if (value == "\n" &&
+                            keyPressedMap[keyPressedMap[
+                                    LogicalKeyboardKey.shift.keyLabel]] !=
+                                true) {
+                          _textController.text = "";
+                        }
+                      },
+                    ),
+                  )),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 12,
+                    ),
+                  _isLoading
+                      ? const Center(child: CupertinoActivityIndicator())
+                      : CupertinoButton(
+                          padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
+                          onPressed: () async {
+                            if (!_isLocalhost && _textController.text.isEmpty) {
+                              setState(() {
+                                _isLoading = true;
+                              });
+                              FilePickerResult? result = await FilePicker
+                                  .platform
+                                  .pickFiles(allowMultiple: true);
+                              setState(() {
+                                _isLoading = false;
+                              });
+                              if (result != null) {
+                                for (var item in result.files) {
+                                  await socketManager.sendFile(item.path ?? "");
+                                }
+                              }
+                            } else {
+                              await _sendText(_textController.text);
+                              _textController.text = "";
+                            }
+                          },
+                          child: Icon(
+                            !_isLocalhost && isInputEmpty
+                                ? Icons.add
+                                : Icons.send, // 发送按钮图标
+                            color: Colors.lightBlue, // 发送按钮颜色
+                          ),
+                        ),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 12,
+                    ),
+                ],
+              ),
+            ),
+          const SizedBox(
+            height: 6,
+          )
         ],
       ),
     );
@@ -505,45 +616,54 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
         if (detail.files.isEmpty || _isLocalhost) {
           return;
         }
-        // todo 多文件发送
-        // socketManager.sendFile(detail.files.first.path);
         for (var item in detail.files) {
-         await socketManager.sendFile(item.path);
+          await socketManager.sendFile(item.path);
         }
       },
-      onDragEntered: (detail) {
-
-      },
-      onDragExited: (detail) {
-
-      },
+      onDragEntered: (detail) {},
+      onDragExited: (detail) {},
       child: widget,
     );
   }
 
-  Future<void> _sendText(String content, {isClipboard=false}) async {
+  Future<void> _sendText(String content, {isClipboard = false}) async {
     if (isClipboard) {
-      var str = await getClipboardText()??"";
+      var str = await getClipboardText() ?? "";
       content = str.trimRight();
     }
     if (content.trim().isEmpty) {
       return;
     }
     if (_isLocalhost) {
-      var message = MessageData(id: 0, sender: device.uid, receiver: "", name: "", clipboard: isClipboard, size: 0, type: MessageEnum.Text, content: content, message: "", timestamp: DateTime.now().millisecondsSinceEpoch~/1000, acked: true, uuid: LocalUuid.v4(), path: "", md5: "");
+      var message = MessageData(
+          id: 0,
+          sender: device.uid,
+          receiver: "",
+          name: "",
+          clipboard: isClipboard,
+          size: 0,
+          type: MessageEnum.Text,
+          content: content,
+          message: "",
+          timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          acked: true,
+          uuid: LocalUuid.v4(),
+          path: "",
+          md5: "");
       LocalDatabase().insertMessage(message);
       onMessage(message);
-    }else if (socketManager.receiver == device.uid) {
+    } else if (socketManager.receiver == device.uid) {
       await socketManager.sendMessage(content, clipboard: isClipboard);
     }
   }
 
   // 获取设备横向宽度
-  double _screenWidth({physically=false}) {
+  double _screenWidth({physically = false}) {
     if (!physically) {
       return MediaQuery.of(context).size.width;
     }
-    return min(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height);
+    return min(
+        MediaQuery.of(context).size.width, MediaQuery.of(context).size.height);
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
@@ -558,20 +678,26 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return IntrinsicWidth(
       child: Container(
         alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-        constraints: BoxConstraints(maxWidth: screenWidth), // 控制消息宽度
+        constraints: BoxConstraints(maxWidth: screenWidth),
         decoration: BoxDecoration(
-          color: isOpponent ? Colors.grey[300] : Colors.blue,
+          color: isOpponent
+              ? (isDark ? Colors.grey[800] : Colors.grey[300])
+              : Colors.blue,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: SelectableText(
-            content, // 文本消息内容
+            content,
             style: TextStyle(
-              color: isOpponent ? Colors.black : Colors.white,
+              color: isOpponent
+                  ? (isDark ? Colors.white : Colors.black)
+                  : Colors.white,
             ),
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar(
@@ -585,52 +711,51 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     );
   }
 
-
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
-    // double screenWidth = 0.382*MediaQuery.of(context).size.width;
     double screenWidth = 300;
     if (isMobile()) {
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
-    var failed = !isOpponent && !message.acked && message.timestamp < device.lastTime;
-    // var isSending = !message.acked && message.timestamp >= device.lastTime;
+    var failed =
+        !isOpponent && !message.acked && message.timestamp < device.lastTime;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: screenWidth,
-      // constraints: BoxConstraints(maxWidth: screenWidth, minWidth: 200), // 控制消息宽度
       decoration: BoxDecoration(
-        color: Colors.grey[200],
+        color: isDark ? Colors.grey[800] : Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
-      // width: 400,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (failed) const SizedBox(width: 8),
-            failed? const Icon(
-              Icons.error_outline_rounded,
-              color: Colors.redAccent,
-              size: 24,
-            ): const Icon(
-              Icons.insert_drive_file,
-              color: Colors.white,
-              size: 42,
-            ),
+            failed
+                ? const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 24,
+                  )
+                : Icon(
+                    Icons.insert_drive_file,
+                    color: isDark ? Colors.grey[400] : Colors.white,
+                    size: 42,
+                  ),
             if (failed) const SizedBox(width: 8),
             const SizedBox(width: 6),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: screenWidth-80,
-                  // constraints: BoxConstraints(maxWidth: screenWidth-100, minWidth: 80), // 控制消息宽度
+                  width: screenWidth - 80,
                   child: Text(
-                    message.name, // 文件名
-                    overflow: TextOverflow.clip, // 溢出时的处理方式
-                    style: const TextStyle(
+                    message.name,
+                    overflow: TextOverflow.clip,
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                     maxLines: 4,
                     softWrap: true,
@@ -638,12 +763,13 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  formatSize(message.size), // 文件大小
-                  style: const TextStyle(color: Colors.black, fontSize: 12),
+                  formatSize(message.size),
+                  style: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.black,
+                      fontSize: 12),
                 ),
               ],
             ),
-            // SizedBox(width: 30)
             const SizedBox(width: 6),
           ],
         ),
@@ -660,9 +786,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   void onClose() {
     // TODO: implement onClose
     percent = 0;
-    setState(() {
-
-    });
+    setState(() {});
   }
 
   @override
@@ -671,13 +795,19 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   }
 
   var _isAlert = false;
+
   @override
   void onError(String message) {
     if (_isAlert) {
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context, title:  AppLocalizations.of(context)?.timeoutTitle??"是否释放连接", description: message, confirmButtonText:  AppLocalizations.of(context)?.disconnect??"断开", cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消", onConfirm: (){
+    showConfirmationDialog(context,
+        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+        description: message,
+        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
+        cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
+        onConfirm: () {
       WsSvrManager().close();
       _isAlert = false;
     }, onCancel: () {
@@ -697,7 +827,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
           builder: (context) => SendMessageScreen(device: deviceData),
         ),
       );
-    }else {
+    } else {
       setState(() {
         device = deviceData;
       });
@@ -707,7 +837,10 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
   @override
   void onMessage(MessageData messageData) {
     logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
-    if (_isLocalhost && messageData.receiver.isEmpty || device.uid == socketManager.receiver && (messageData.sender == device.uid || messageData.receiver == device.uid)) {
+    if (_isLocalhost && messageData.receiver.isEmpty ||
+        device.uid == socketManager.receiver &&
+            (messageData.sender == device.uid ||
+                messageData.receiver == device.uid)) {
       _insertItem(0, messageData);
     }
   }
@@ -721,7 +854,8 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
     int now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastUpdateTime > 1000) {
       if (_lastUpdateTime > 0) {
-        String speed = formatSize(1000 * (length - _sentSize)~/(now - _lastUpdateTime));
+        String speed =
+            formatSize(1000 * (length - _sentSize) ~/ (now - _lastUpdateTime));
         setState(() {
           _speed = "$speed/s ";
         });
@@ -729,7 +863,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
       _lastUpdateTime = now;
       _sentSize = length;
     }
-    _updatePercent(length/size);
+    _updatePercent(length / size);
 
     if (length == size) {
       _lastUpdateTime = 0;
@@ -740,6 +874,7 @@ class _SendMessageScreen extends State<SendMessageScreen> implements ISocketEven
 
 class ClientSettingsScreen extends StatefulWidget {
   final DeviceData device;
+
   const ClientSettingsScreen({super.key, required this.device});
 
   @override
@@ -758,7 +893,6 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
   }
 
   Future<void> _refreshDevice() async {
-    // 数据加载完成后更新状态
     var temp = await LocalDatabase().fetchDevice(device.uid);
     setState(() {
       device = temp!;
@@ -767,37 +901,46 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
         appBar: AppBar(
           leading: CupertinoNavigationBarBackButton(
             onPressed: () {
               Navigator.of(context).pop();
             },
-            color: Colors.lightBlue, // 设置返回按钮图标的颜色
+            color: isDark ? Colors.grey[400] : Colors.lightBlue,
           ),
-          title: Text(AppLocalizations.of(context)?.setting??'设置'),
+          title: Text(AppLocalizations.of(context)?.setting ?? '设置',
+              style: TextStyle(color: isDark ? Colors.white : Colors.black)),
         ),
         body: SafeArea(
           child: Material(
             child: ListView(
-              padding: const EdgeInsets.all(16.0), // 添加内边距以改善外观
+              padding: const EdgeInsets.all(16.0),
               children: [
                 Card(
-                    elevation: 1.2, // 设置卡片的阴影
-                    color: Colors.white,
+                    elevation: 1.2,
+                    color: isDark ? Colors.grey[900] : Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0), // 圆角边框
+                      borderRadius: BorderRadius.circular(12.0),
                     ),
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          AppLocalizations.of(context)?.trust??'自动接入',
-                          const Icon(Icons.wifi_rounded, color: CupertinoColors.systemGrey,),
+                          AppLocalizations.of(context)?.trust ?? '自动接入',
+                          Icon(
+                            Icons.wifi_rounded,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
                           CupertinoSwitch(
                             value: device.auth,
                             onChanged: (bool value) async {
                               LocalDatabase().authDevice(device.uid, value);
-                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              var temp =
+                                  await LocalDatabase().fetchDevice(device.uid);
                               setState(() {
                                 device = temp!;
                               });
@@ -805,13 +948,19 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           ),
                         ),
                         _buildSettingItem(
-                          AppLocalizations.of(context)?.writeClipboard??'写入剪切板',
-                          const Icon(Icons.copy, color: CupertinoColors.systemGrey),
+                          AppLocalizations.of(context)?.writeClipboard ??
+                              '写入剪切板',
+                          Icon(Icons.copy,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey),
                           CupertinoSwitch(
                             value: device.clipboard,
                             onChanged: (bool value) async {
-                              LocalDatabase().clipboardDevice(device.uid, value);
-                              var temp = await LocalDatabase().fetchDevice(device.uid);
+                              LocalDatabase()
+                                  .clipboardDevice(device.uid, value);
+                              var temp =
+                                  await LocalDatabase().fetchDevice(device.uid);
                               setState(() {
                                 device = temp!;
                               });
@@ -820,30 +969,49 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         ),
                       ],
                     )),
-                const SizedBox(height: 8,),
-                if (device.uid != WsSvrManager().receiver) Card(
-                    elevation: 2.0, // 设置卡片的阴影
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0), // 圆角边框
-                    ),
-                    child: Column(
-                      children: [
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.deleteDevice??'删除设备',
-                          const Icon(Icons.delete_rounded, color: CupertinoColors.destructiveRed,),
-                          null,
-                          onTap: () {
-                            showConfirmationDialog(context, title:  AppLocalizations.of(context)?.deleteDeviceTitle(device.name)??"删除${device.name}", description:  AppLocalizations.of(context)?.deleteDeviceDesc??"删除与此设备的所有消息，不可恢复", confirmButtonText:  AppLocalizations.of(context)?.confirm??"确定", cancelButtonText:  AppLocalizations.of(context)?.cancel??"取消", onConfirm: (){
+                const SizedBox(
+                  height: 8,
+                ),
+                if (device.uid != WsSvrManager().receiver)
+                  Card(
+                      elevation: 2.0,
+                      color: isDark ? Colors.grey[900] : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSettingItem(
+                              AppLocalizations.of(context)?.deleteDevice ??
+                                  '删除设备',
+                              Icon(
+                                Icons.delete_rounded,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : CupertinoColors.destructiveRed,
+                              ),
+                              null, onTap: () {
+                            showConfirmationDialog(context,
+                                title: AppLocalizations.of(context)
+                                        ?.deleteDeviceTitle(device.name) ??
+                                    "删除${device.name}",
+                                description: AppLocalizations.of(context)
+                                        ?.deleteDeviceDesc ??
+                                    "删除与此设备的所有消息，不可恢复",
+                                confirmButtonText:
+                                    AppLocalizations.of(context)?.confirm ??
+                                        "确定",
+                                cancelButtonText:
+                                    AppLocalizations.of(context)?.cancel ??
+                                        "取消", onConfirm: () {
                               LocalDatabase().clearDevices([device.uid]);
                               Navigator.popUntil(context, (route) {
                                 return route.isFirst;
                               });
                             });
-                          }
-                        ),
-                      ],
-                    ))
+                          }),
+                        ],
+                      ))
               ],
             ),
           ),
@@ -852,9 +1020,10 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
 
   Widget _buildSettingItem(String title, Icon icon, Widget? trailing,
       {bool showDivider = true, onTap}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () {
-        // 处理点击设置项
         onTap();
       },
       child: Container(
@@ -862,21 +1031,20 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
         child: Column(
           children: [
             SizedBox(
-              height: 56.0, // 增加高度以适应 iOS 设置样式
+              height: 56.0,
               child: Row(
                 children: [
-                  icon, // 设置项的图标
-                  const SizedBox(width: 16.0), // 图标与文字之间的间距
+                  icon,
+                  const SizedBox(width: 16.0),
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17.0,
-                        color: CupertinoColors.black,
-                        fontWeight: FontWeight.w500, // 尝试更轻的字重
-                        fontFamily: 'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
+                        color: isDark ? Colors.white : CupertinoColors.black,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'SF Pro Display',
                       ),
-                      // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
                   ),
                   if (trailing != null) trailing,
@@ -884,12 +1052,13 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
               ),
             ),
             if (showDivider)
-              const Divider(height: 1, color: Colors.white38), // 分割线
+              Divider(
+                height: 1,
+                color: isDark ? Colors.grey[800]! : Colors.white38,
+              ),
           ],
         ),
       ),
     );
   }
-
-
 }

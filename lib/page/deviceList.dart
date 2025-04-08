@@ -40,7 +40,8 @@ class DeviceListScreen extends StatefulWidget {
   }
 }
 
-class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
+class _DeviceListScreen extends State<DeviceListScreen>
+    implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData? device;
@@ -71,7 +72,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   @override
   void didChangeDependencies() async {
     _refreshDevice(isFirst: true);
-    socketManager.registerEvent(this, uid: device?.uid??"");
+    socketManager.registerEvent(this, uid: device?.uid ?? "");
     super.didChangeDependencies();
   }
 
@@ -88,7 +89,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         await Permission.notification.request();
       }
       initPlatformState();
-    }else {
+    } else {
       if (await Permission.location.isDenied) {
         await Permission.location.request();
       }
@@ -98,13 +99,13 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
     for (var item in permissions) {
       logger.i("permission status: ${await item.status}");
-      if(await item.isDenied) {
+      if (await item.isDenied) {
         logger.i("permission request: ${await item.isRestricted}");
         await item.request();
       }
     }
 
-    _clipboardText = await getClipboardText()??"";
+    _clipboardText = await getClipboardText() ?? "";
   }
 
   static void setListenApps() async {
@@ -117,7 +118,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     // try to send the event to ui
     print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.receiver.isNotEmpty && filterNotification(evt) && listenApps.containsKey(evt.packageName)) {
+    if (soc.receiver.isNotEmpty &&
+        filterNotification(evt) &&
+        listenApps.containsKey(evt.packageName)) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
@@ -130,54 +133,54 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   Future<void> _setDesktopWindow() async {
     if (isMobile()) {
-      logger.i("mobile clear file picker cache res: ${await FilePicker.platform.clearTemporaryFiles()}");
+      logger.i(
+          "mobile clear file picker cache res: ${await FilePicker.platform.clearTemporaryFiles()}");
       return;
     }
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(
-      Platform.isWindows
-          ? 'assets/app_icon.ico'
-          : 'assets/app_icon_round.png',
+      Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon_round.png',
     );
 
     Menu menu = Menu(
       items: [
         MenuItem(
             key: 'show_window',
-            label: AppLocalizations.of(context)?.menuShow??"显示",
+            label: AppLocalizations.of(context)?.menuShow ?? "显示",
             onClick: (MenuItem item) {
               windowManager.show();
             }),
         MenuItem(
             key: 'hide_window',
-            label: AppLocalizations.of(context)?.menuHide??"隐藏",
+            label: AppLocalizations.of(context)?.menuHide ?? "隐藏",
             onClick: (MenuItem item) {
               windowManager.hide();
             }),
         MenuItem(
             key: 'clipboard',
-            label: AppLocalizations.of(context)?.menuClipboard??"发送剪切板",
+            label: AppLocalizations.of(context)?.menuClipboard ?? "发送剪切板",
             onClick: (MenuItem item) {
               socketManager.sendMessage("", clipboard: true);
             }),
         MenuItem(
             key: 'pick_file',
-            label: AppLocalizations.of(context)?.menuSendFile??"发送文件",
+            label: AppLocalizations.of(context)?.menuSendFile ?? "发送文件",
             onClick: (MenuItem item) async {
               if (socketManager.receiver.isEmpty) {
                 return;
               }
-              FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
+              FilePickerResult? result =
+                  await FilePicker.platform.pickFiles(allowMultiple: true);
               if (result != null) {
                 for (var item in result.files) {
-                  await socketManager.sendFile(item.path??"");
+                  await socketManager.sendFile(item.path ?? "");
                 }
               }
             }),
         MenuItem.separator(),
         MenuItem(
             key: 'exit_app',
-            label: AppLocalizations.of(context)?.exit??'退出',
+            label: AppLocalizations.of(context)?.exit ?? '退出',
             onClick: (MenuItem menuItem) async {
               await windowManager.destroy();
             }),
@@ -254,10 +257,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       port: 10004,
       attributes: {
         'host': wifiIP,
-        'port': (port??device?.port??10002).toString(),
+        'port': (port ?? device?.port ?? 10002).toString(),
         'name': await deviceName(),
-        'platform': device?.platform?? "未知",
-        'uid': device?.uid?? "",
+        'platform': device?.platform ?? "未知",
+        'uid': device?.uid ?? "",
       },
     );
 
@@ -273,7 +276,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     discovering = true;
   }
 
-  Future<void> _stopBroadcast({close=true}) async {
+  Future<void> _stopBroadcast({close = true}) async {
     await _broadcast?.stop();
     discovering = !close;
   }
@@ -291,29 +294,35 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
       if (service != null) {
-        switch(event.type) {
+        switch (event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
-            logger.i("event type: ${event.type}, service name: $serviceName ${service.name}");
+            logger.i(
+                "event type: ${event.type}, service name: $serviceName ${service.name}");
             if (service.name.startsWith(serviceName)) {
               event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
-            logger.i("event type: ${event.type}, service name: ${service.name} start");
+            logger.i(
+                "event type: ${event.type}, service name: ${service.name} start");
             break;
-          case BonsoirDiscoveryEventType.discoveryServiceResolved || BonsoirDiscoveryEventType.discoveryServiceLost:
+          case BonsoirDiscoveryEventType.discoveryServiceResolved ||
+                BonsoirDiscoveryEventType.discoveryServiceLost:
             final svr = service;
             if (!svr.attributes.containsKey('uid')) {
-              logger.i("event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
+              logger.i(
+                  "event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
               return;
             }
-            var isLost = event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+            var isLost =
+                event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
             final host = svr.attributes["host"];
-            final port = int.tryParse(svr.attributes["port"]??"10002")?? 10002;
+            final port =
+                int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
             final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
-            logger.i("${isLost?'丢失': '发现'}本地设备");
+            logger.i("${isLost ? '丢失' : '发现'}本地设备");
             logger.i("本地设备uid: $uid");
             logger.i("本地设备name: $name");
             logger.i("本地设备host: $host");
@@ -341,19 +350,24 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
               }
               if (isLost && temp != null) {
                 devices.insert(index, temp);
-              }else if (!isLost) {
-                devices.insert(0, buildDevice(
-                    uid: uid, name: temp?.name??name, port: port, host: host, platform: platform
-                ));
+              } else if (!isLost) {
+                devices.insert(
+                    0,
+                    buildDevice(
+                        uid: uid,
+                        name: temp?.name ?? name,
+                        port: port,
+                        host: host,
+                        platform: platform));
               }
             });
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
-            // TODO: Handle this case.
+          // TODO: Handle this case.
           case BonsoirDiscoveryEventType.discoveryStopped:
-            // TODO: Handle this case.
+          // TODO: Handle this case.
           case BonsoirDiscoveryEventType.unknown:
-            // TODO: Handle this case.
+          // TODO: Handle this case.
         }
       }
     });
@@ -367,34 +381,40 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     discovering = false;
   }
 
-  DeviceData buildDevice({uid="", name="", host="", port=10002, platform="", around=true}) {
-    return DeviceData(id: 0,
-      uid: uid,
-      name: name,
-      host: host,
-      port: port,
-      platform: platform,
-      isServer: false,
-      lastTime: DateTime.now().millisecondsSinceEpoch~/1000,
-      online: false,
-      password: "",
-      clipboard: false,
-      auth: false,
-      around: around
-    );
+  DeviceData buildDevice(
+      {uid = "",
+      name = "",
+      host = "",
+      port = 10002,
+      platform = "",
+      around = true}) {
+    return DeviceData(
+        id: 0,
+        uid: uid,
+        name: name,
+        host: host,
+        port: port,
+        platform: platform,
+        isServer: false,
+        lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        online: false,
+        password: "",
+        clipboard: false,
+        auth: false,
+        around: around);
   }
 
-  Future<void> _refreshDevice({isFirst=false}) async {
+  Future<void> _refreshDevice({isFirst = false}) async {
     // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
-    for(var item in devices) {
+    for (var item in devices) {
       if (aroundIds.contains(item.uid)) {
         continue;
       }
-      if(item.uid == socketManager.receiver) {
+      if (item.uid == socketManager.receiver) {
         newArr.insert(0, item);
         aroundIds.add(item.uid);
         continue;
@@ -405,7 +425,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       }
     }
 
-    for(var item in arr) {
+    for (var item in arr) {
       if (aroundIds.contains(item.uid)) {
         continue;
       }
@@ -428,7 +448,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     logger.i("refresh ui: $discovering $serverPortUpdate");
     if (!discovering || serverPortUpdate) {
       discovering = true;
-      Future.delayed(const Duration(milliseconds: 100), (){
+      Future.delayed(const Duration(milliseconds: 100), () {
         logger.i("refresh ui 你是来拉屎的吧");
         _broadcastService();
       });
@@ -457,18 +477,28 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             // 作为客户端
             showInputAlertDialog(
               context,
-              title: AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
-              description: AppLocalizations.of(context)?.connectDeviceDesc??'输入对方局域网地址与端口',
-              inputHints: [{device?.host??"192.168.0.1": false}, {"10002": true}],
-              confirmButtonText: AppLocalizations.of(context)?.connect??'连接',
-              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
+              title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
+              description: AppLocalizations.of(context)?.connectDeviceDesc ??
+                  '输入对方局域网地址与端口',
+              inputHints: [
+                {device?.host ?? "192.168.0.1": false},
+                {"10002": true}
+              ],
+              confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
+              cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
               onConfirm: (List<String> inputValues) async {
                 _connectServer(inputValues[0], int.parse(inputValues[1]));
               },
             );
           },
-          color: socketManager.receiver.isNotEmpty? Colors.redAccent: Colors.grey,
-          icon: Icon(socketManager.receiver.isNotEmpty? Icons.power_settings_new: Icons.add, size: 32), // 调整圆角以获得更圆的按钮
+          color: socketManager.receiver.isNotEmpty
+              ? Colors.redAccent
+              : Colors.grey,
+          icon: Icon(
+              socketManager.receiver.isNotEmpty
+                  ? Icons.power_settings_new
+                  : Icons.add,
+              size: 32), // 调整圆角以获得更圆的按钮
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -477,16 +507,22 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(device?.name?? "localhost"), // 替换为实际昵称
+                Text(device?.name ?? "localhost"), // 替换为实际昵称
                 Row(
                   children: [
                     Text(
-                      "${device?.host??"127.0.0.1"}:${device?.port??10002}", // 替换为实际 IP 地址
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      "${device?.host ?? "127.0.0.1"}:${device?.port ?? 10002}",
+                      // 替换为实际 IP 地址
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white54
+                              : Colors.black54),
                     ),
                     const SizedBox(width: 4),
                     Icon(Icons.wifi_rounded,
-                        size: socketManager.started ? 14 : 0, color: Colors.lightBlue)
+                        size: socketManager.started ? 14 : 0,
+                        color: Colors.lightBlue)
                   ],
                 )
               ],
@@ -495,24 +531,30 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
         ),
         // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
-          if (false) CupertinoButton(
-            // 使用CupertinoButton
-            padding: EdgeInsets.zero,
-            child: const Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 26,
-              color: Colors.black45,
+          if (false)
+            CupertinoButton(
+              // 使用CupertinoButton
+              padding: EdgeInsets.zero,
+              child: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 26,
+                color: Colors.black45,
+              ),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SendMessageScreen(
+                        device: buildDevice(
+                            uid: LocalUuid.v4(),
+                            name: "",
+                            port: -1,
+                            host: "localhost")),
+                  ),
+                );
+                _refreshDevice();
+              },
             ),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SendMessageScreen(device: buildDevice(uid: LocalUuid.v4(), name: "", port: -1, host: "localhost")),
-                ),
-              );
-              _refreshDevice();
-            },
-          ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
@@ -536,7 +578,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       body: ListView.builder(
         itemCount: devices.length,
         itemBuilder: (context, index) {
-          return isDesk? _buildDeviceItem(index): _buildDeviceItemOld(index);
+          return isDesk ? _buildDeviceItem(index) : _buildDeviceItemOld(index);
         },
       ),
     );
@@ -546,57 +588,75 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     final deviceItem = devices[index];
 
     return cMenu.ContextMenuWidget(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
-        child: ListTile(
-          leading: Icon(platformIcon(deviceItem.platform),
-              size: 28,
-              color: deviceItem.uid == socketManager.receiver || deviceItem.around == true
-                  ? Colors.lightBlue
-                  : Colors.grey), // Server 图标,
-          title: Text(deviceItem.name),
-          subtitle: Row(
-            children: [
-              Text(deviceItem.host),
-            ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
+          child: ListTile(
+            leading: Icon(platformIcon(deviceItem.platform),
+                size: 28,
+                color: deviceItem.uid == socketManager.receiver ||
+                        deviceItem.around == true
+                    ? Colors.lightBlue
+                    : Colors.grey),
+            // Server 图标,
+            title: Text(deviceItem.name),
+            subtitle: Row(
+              children: [
+                Text(deviceItem.host),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (deviceItem.uid == socketManager.receiver ||
+                    socketManager.receiver.isEmpty)
+                  IconButton(
+                    icon: deviceItem.uid == socketManager.receiver
+                        ? const Icon(Icons.wifi_rounded,
+                            color: Colors.lightBlue)
+                        : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
+                    onPressed: () {
+                      // 处理连接/断开按钮点击事件
+                      _handleDeviceConnect(deviceItem);
+                    },
+                  ),
+              ],
+            ),
+            onTap: () {
+              _openConv(deviceItem);
+            },
           ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (deviceItem.uid == socketManager.receiver || socketManager.receiver.isEmpty) IconButton(
-                icon: deviceItem.uid == socketManager.receiver
-                    ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
-                    : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
-                onPressed: () {
-                  // 处理连接/断开按钮点击事件
-                  _handleDeviceConnect(deviceItem);
-                },
-              ),
-            ],
-          ),
-          onTap: () {
-            _openConv(deviceItem);
-          },
         ),
-      ),
-      menuProvider: (_) {
-        return cMenu.Menu(children: [
-          if (deviceItem.uid == socketManager.receiver) cMenu.MenuAction(title: "断开", callback: (){
-            socketManager.close();
-          }),
-          if (socketManager.receiver.isEmpty) cMenu.MenuAction(title: "连接", callback: (){
-            _connectServer(deviceItem.host, deviceItem.port);
-          }),
-          if (deviceItem.uid != socketManager.receiver) cMenu.MenuAction(title: "删除", callback: (){
-            LocalDatabase().clearDevices([deviceItem.uid]);
-            devices.removeAt(index);
-            setState(() {});
-          }),
-          if (isDesktop()) cMenu.MenuAction(title: "连接FTP", callback: (){
-            SimpleFtpServer().openClient("${deviceItem.host}:$defaultFtpPort");
-          }),
-        ]);
-      });
+        menuProvider: (_) {
+          return cMenu.Menu(children: [
+            if (deviceItem.uid == socketManager.receiver)
+              cMenu.MenuAction(
+                  title: "断开",
+                  callback: () {
+                    socketManager.close();
+                  }),
+            if (socketManager.receiver.isEmpty)
+              cMenu.MenuAction(
+                  title: "连接",
+                  callback: () {
+                    _connectServer(deviceItem.host, deviceItem.port);
+                  }),
+            if (deviceItem.uid != socketManager.receiver)
+              cMenu.MenuAction(
+                  title: "删除",
+                  callback: () {
+                    LocalDatabase().clearDevices([deviceItem.uid]);
+                    devices.removeAt(index);
+                    setState(() {});
+                  }),
+            if (isDesktop())
+              cMenu.MenuAction(
+                  title: "连接FTP",
+                  callback: () {
+                    SimpleFtpServer()
+                        .openClient("${deviceItem.host}:$defaultFtpPort");
+                  }),
+          ]);
+        });
   }
 
   void _openConv(deviceItem) async {
@@ -612,14 +672,17 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   void _handleDeviceConnect(deviceItem) {
     showConfirmationDialog(
       context,
-      title: deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.brokeConnectTitle??"断开连接": AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
-      description: '${deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.disconnect??"断开": AppLocalizations.of(context)?.connectTo??"连接到"} ${deviceItem.name}',
-      confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
-      cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
+      title: deviceItem.uid == socketManager.receiver
+          ? AppLocalizations.of(context)?.brokeConnectTitle ?? "断开连接"
+          : AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
+      description:
+          '${deviceItem.uid == socketManager.receiver ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
+      confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
+      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
       onConfirm: () {
         if (deviceItem.uid == socketManager.receiver) {
           socketManager.close();
-        }else {
+        } else {
           _connectServer(deviceItem.host, deviceItem.port);
         }
       },
@@ -633,85 +696,98 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     return SwipeActionCell(
       key: ValueKey(devices[index]),
       trailingActions: [
-        if (socketManager.receiver != deviceItem.uid) SwipeAction(
-          widthSpace: ism? 120: 140 ,
-            nestedAction: SwipeNestedAction(
-              /// 自定义你nestedAction 的内容
-              content: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: Colors.red,
-                ),
-                width: ism? 100: 120,
-                height: 40,
-                child: OverflowBox(
-                  maxWidth: double.infinity,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.delete,
-                        color: Colors.white,
-                      ),
-                      Text(AppLocalizations.of(context)?.deleteConfirm??'确认删除 ', style: TextStyle(color: Colors.white, fontSize: ism? 16: 18)),
-                    ],
+        if (socketManager.receiver != deviceItem.uid)
+          SwipeAction(
+              widthSpace: ism ? 120 : 140,
+              nestedAction: SwipeNestedAction(
+                /// 自定义你nestedAction 的内容
+                content: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.red,
+                  ),
+                  width: ism ? 100 : 120,
+                  height: 40,
+                  child: OverflowBox(
+                    maxWidth: double.infinity,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.delete,
+                          color: Colors.white,
+                        ),
+                        Text(
+                            AppLocalizations.of(context)?.deleteConfirm ??
+                                '确认删除 ',
+                            style: TextStyle(
+                                color: Colors.white, fontSize: ism ? 16 : 18)),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            /// 将原本的背景设置为透明，因为要用你自己的背景
-            color: Colors.transparent,
 
-            /// 设置了content就不要设置title和icon了
-            content: _getIconButton(Colors.red, Icons.delete),
-            onTap: (handler) {
-              if (socketManager.receiver == deviceItem.uid) {
-                showLoadingDialog(
-                  context,
-                  title: AppLocalizations.of(context)?.warning?? '警告',
-                  description: AppLocalizations.of(context)?.deleteWarningText?? "连接正在使用，禁止快速删除",
-                  isLoading: true,
-                  // 是否显示加载指示器
-                  icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-                  cancelButtonText: AppLocalizations.of(context)?.close??'关闭',
-                  onCancel: () {
-                    // 处理取消操作
-                    Navigator.of(context).pop(); // 关闭对话框
-                  },
-                  task: (VoidCallback onCancel) async {
+              /// 将原本的背景设置为透明，因为要用你自己的背景
+              color: Colors.transparent,
 
-                  },
-                );
-                return;
-              }
-              LocalDatabase().clearDevices([deviceItem.uid]);
-              devices.removeAt(index);
-              setState(() {});
-            }),
+              /// 设置了content就不要设置title和icon了
+              content: _getIconButton(Colors.red, Icons.delete),
+              onTap: (handler) {
+                if (socketManager.receiver == deviceItem.uid) {
+                  showLoadingDialog(
+                    context,
+                    title: AppLocalizations.of(context)?.warning ?? '警告',
+                    description:
+                        AppLocalizations.of(context)?.deleteWarningText ??
+                            "连接正在使用，禁止快速删除",
+                    isLoading: true,
+                    // 是否显示加载指示器
+                    icon: const Icon(
+                      Icons.warning_rounded,
+                      color: Colors.red,
+                    ),
+                    cancelButtonText:
+                        AppLocalizations.of(context)?.close ?? '关闭',
+                    onCancel: () {
+                      // 处理取消操作
+                      Navigator.of(context).pop(); // 关闭对话框
+                    },
+                    task: (VoidCallback onCancel) async {},
+                  );
+                  return;
+                }
+                LocalDatabase().clearDevices([deviceItem.uid]);
+                devices.removeAt(index);
+                setState(() {});
+              }),
       ],
-
       child: Padding(
         padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
         child: ListTile(
-            leading: Icon(platformIcon(deviceItem.platform),
-                size: 28,
-                color: deviceItem.uid == socketManager.receiver || deviceItem.around == true
-                    ? Colors.lightBlue
-                    : Colors.grey), // Server 图标,
-            title: Text(deviceItem.name),
-            subtitle: Row(
-              children: [
-                Text(deviceItem.host),
-                // const SizedBox(width: 4,),
-                // Client 图标
-                // if (deviceItem.around == true) SizedBox(width: 6,),
-                // if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (deviceItem.uid == socketManager.receiver || socketManager.receiver.isEmpty) IconButton(
+          leading: Icon(platformIcon(deviceItem.platform),
+              size: 28,
+              color: deviceItem.uid == socketManager.receiver ||
+                      deviceItem.around == true
+                  ? Colors.lightBlue
+                  : Colors.grey),
+          // Server 图标,
+          title: Text(deviceItem.name),
+          subtitle: Row(
+            children: [
+              Text(deviceItem.host),
+              // const SizedBox(width: 4,),
+              // Client 图标
+              // if (deviceItem.around == true) SizedBox(width: 6,),
+              // if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (deviceItem.uid == socketManager.receiver ||
+                  socketManager.receiver.isEmpty)
+                IconButton(
                   icon: deviceItem.uid == socketManager.receiver
                       ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
                       : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
@@ -719,28 +795,35 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
                     // 处理连接/断开按钮点击事件
                     showConfirmationDialog(
                       context,
-                      title: deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.brokeConnectTitle??"断开连接": AppLocalizations.of(context)?.connectDeviceTitle??"连接设备",
-                      description: '${deviceItem.uid == socketManager.receiver? AppLocalizations.of(context)?.disconnect??"断开": AppLocalizations.of(context)?.connectTo??"连接到"} ${deviceItem.name}',
-                      confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
-                      cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
+                      title: deviceItem.uid == socketManager.receiver
+                          ? AppLocalizations.of(context)?.brokeConnectTitle ??
+                              "断开连接"
+                          : AppLocalizations.of(context)?.connectDeviceTitle ??
+                              "连接设备",
+                      description:
+                          '${deviceItem.uid == socketManager.receiver ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
+                      confirmButtonText:
+                          AppLocalizations.of(context)?.confirm ?? '确定',
+                      cancelButtonText:
+                          AppLocalizations.of(context)?.cancel ?? '取消',
                       onConfirm: () {
                         if (deviceItem.uid == socketManager.receiver) {
                           socketManager.close();
-                        }else {
+                        } else {
                           _connectServer(deviceItem.host, deviceItem.port);
                         }
                       },
                     );
                   },
                 ),
-              ],
-            ),
-            onTap: () {
-              _openConv(deviceItem);
-            },
+            ],
           ),
+          onTap: () {
+            _openConv(deviceItem);
+          },
         ),
-      );
+      ),
+    );
   }
 
   Widget _getIconButton(color, icon) {
@@ -749,6 +832,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       height: 40,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
+
         /// 设置你自己的背景
         color: color,
       ),
@@ -769,19 +853,20 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
       if (!ok) {
         showLoadingDialog(
           context,
-          title: AppLocalizations.of(context)?.connectFailed??'连接失败',
+          title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
           description: "$message",
           isLoading: true,
           // 是否显示加载指示器
-          icon: const Icon(Icons.warning_rounded, color: Colors.red,),
+          icon: const Icon(
+            Icons.warning_rounded,
+            color: Colors.red,
+          ),
           cancelButtonText: 'Cancel',
           onCancel: () {
             // 处理取消操作
             Navigator.of(context).pop(); // 关闭对话框
           },
-          task: (VoidCallback onCancel) async {
-
-          },
+          task: (VoidCallback onCancel) async {},
         );
         return;
       }
@@ -789,25 +874,26 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   }
 
   void _startServer({port}) {
-    socketManager.startServer(port??device?.port?? 10002, (ok, msg) {
+    socketManager.startServer(port ?? device?.port ?? 10002, (ok, msg) {
       setState(() {
         socketManager.started = ok;
         if (!ok) {
           showLoadingDialog(
             context,
-            title: AppLocalizations.of(context)?.startServerFailed??'服务启动失败',
+            title: AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败',
             description: "error: $msg",
             isLoading: true,
             // 是否显示加载指示器
-            icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-            cancelButtonText: AppLocalizations.of(context)?.cancel??'Cancel',
+            icon: const Icon(
+              Icons.warning_rounded,
+              color: Colors.red,
+            ),
+            cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
             onCancel: () {
               // 处理取消操作
               Navigator.of(context).pop(); // 关闭对话框
             },
-            task: (VoidCallback onCancel) async {
-
-            },
+            task: (VoidCallback onCancel) async {},
           );
         }
       });
@@ -819,39 +905,39 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     if (msg.isNotEmpty) {
       showLoadingDialog(
         context,
-        title: AppLocalizations.of(context)?.connectFailed??'连接失败',
+        title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
         description: "${deviceData?.name} $msg",
         isLoading: true,
         // 是否显示加载指示器
-        icon: const Icon(Icons.warning_rounded, color: Colors.red,),
-        cancelButtonText: AppLocalizations.of(context)?.confirm??'确定',
+        icon: const Icon(
+          Icons.warning_rounded,
+          color: Colors.red,
+        ),
+        cancelButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
         onCancel: () {
           // 处理取消操作
           callback(false);
           Navigator.of(context).pop(); // 关闭对话框
         },
-        task: (VoidCallback onCancel) async {
-
-        },
+        task: (VoidCallback onCancel) async {},
       );
       return;
     }
     if (asServer) {
-      showConfirmationDialog(
-        context,
-        title: AppLocalizations.of(context)?.connectRequest??'连接请求',
-        description: AppLocalizations.of(context)?.connectRequestDesc(deviceData?.name??"")??'接入设备: ${deviceData?.name}?',
-        confirmButtonText: AppLocalizations.of(context)?.allow??'同意',
-        cancelButtonText: AppLocalizations.of(context)?.refuse??'拒绝',
-        onConfirm: () {
-          callback(true);
-        },
-        onCancel: () {
-          logger.i("拒绝连接");
-          callback(false);
-        }
-      );
-    }else {
+      showConfirmationDialog(context,
+          title: AppLocalizations.of(context)?.connectRequest ?? '连接请求',
+          description: AppLocalizations.of(context)
+                  ?.connectRequestDesc(deviceData?.name ?? "") ??
+              '接入设备: ${deviceData?.name}?',
+          confirmButtonText: AppLocalizations.of(context)?.allow ?? '同意',
+          cancelButtonText: AppLocalizations.of(context)?.refuse ?? '拒绝',
+          onConfirm: () {
+        callback(true);
+      }, onCancel: () {
+        logger.i("拒绝连接");
+        callback(false);
+      });
+    } else {
       callback(true);
     }
   }
@@ -866,7 +952,9 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SendMessageScreen(device: deviceData,),
+        builder: (context) => SendMessageScreen(
+          device: deviceData,
+        ),
       ),
     );
     _refreshDevice();
@@ -884,13 +972,19 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   }
 
   var _isAlert = false;
+
   @override
   void onError(String message) {
     if (_isAlert) {
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context, title: AppLocalizations.of(context)?.timeoutTitle??"是否释放连接", description: message, confirmButtonText: AppLocalizations.of(context)?.disconnect??"断开", cancelButtonText: AppLocalizations.of(context)?.keepConnect??"取消", onConfirm: (){
+    showConfirmationDialog(context,
+        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+        description: message,
+        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
+        cancelButtonText: AppLocalizations.of(context)?.keepConnect ?? "取消",
+        onConfirm: () {
       WsSvrManager().close();
       _isAlert = false;
     }, onCancel: () {
@@ -942,13 +1036,16 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
   @override
   void onWindowClose() async {
     var timestamp = DateTime.now().millisecondsSinceEpoch;
-    if (await LocalSetting().isClose2Tray() && await windowManager.isPreventClose()) {
-      if (Platform.isMacOS && (timestamp - lastClickCloseTimestamp > 1000) && await windowManager.isFocused()) {
+    if (await LocalSetting().isClose2Tray() &&
+        await windowManager.isPreventClose()) {
+      if (Platform.isMacOS &&
+          (timestamp - lastClickCloseTimestamp > 1000) &&
+          await windowManager.isFocused()) {
         await windowManager.blur();
-      }else {
+      } else {
         await windowManager.hide();
       }
-    }else {
+    } else {
       await windowManager.destroy();
     }
     lastClickCloseTimestamp = timestamp;
@@ -1002,8 +1099,10 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onWindowResize() async {
-    if (!Platform.isLinux || await windowManager.isMaximized() || await windowManager.isMinimized()) {
-    return;
+    if (!Platform.isLinux ||
+        await windowManager.isMaximized() ||
+        await windowManager.isMinimized()) {
+      return;
     }
     var rect = await windowManager.getBounds();
     LocalSetting().setWindowWidth(rect.width);
@@ -1012,7 +1111,8 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onWindowResized() async {
-    if (await windowManager.isMaximized() || await windowManager.isMinimized()) {
+    if (await windowManager.isMaximized() ||
+        await windowManager.isMinimized()) {
       return;
     }
     var rect = await windowManager.getBounds();
@@ -1038,7 +1138,7 @@ class _DeviceListScreen extends State<DeviceListScreen> implements ISocketEvent,
 
   @override
   void onClipboardChanged() async {
-    var text = await getClipboardText()??"";
+    var text = await getClipboardText() ?? "";
     if (_clipboardText == text) {
       return;
     }
@@ -1095,15 +1195,23 @@ class _SettingsScreen extends State<SettingsScreen> {
   bool _copyVerifyCode = true;
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
+  ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
     _refreshDevice();
+    _loadThemeMode();
     super.initState();
   }
 
+  Future<void> _loadThemeMode() async {
+    final themeMode = await LocalSetting().themeMode();
+    setState(() {
+      _themeMode = themeMode;
+    });
+  }
+
   Future<void> _refreshDevice() async {
-    // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var p = await downloadDir();
     var pkg = await PackageInfo.fromPlatform();
@@ -1128,285 +1236,565 @@ class _SettingsScreen extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = _themeMode == ThemeMode.dark;
+
     return Scaffold(
-        appBar: AppBar(
-          leading: CupertinoNavigationBarBackButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            color: Colors.lightBlue, // 设置返回按钮图标的颜色
-          ),
-          title: Text(AppLocalizations.of(context)?.setting?? "设置"),
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      appBar: AppBar(
+        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+        leading: CupertinoNavigationBarBackButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          color: isDark ? Colors.grey[400] : Colors.lightBlue,
         ),
-        body: SafeArea(
-          child: Material(
-            child: ListView(
-              padding: const EdgeInsets.all(16.0), // 添加内边距以改善外观
-              children: [
-                Card(
-                    elevation: 2.0, // 设置卡片的阴影
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.0), // 圆角边框
-                    ),
-                    child: Column(
-                      children: [
-                        _buildSettingItem(
-                          device?.name??"",
-                          Icon(
-                            platformIcon(device?.platform?? ""),
-                            color: CupertinoColors.systemGrey,
-                          ),
-                          onTap: () {
-                            showInputAlertDialog(
-                              context,
-                              title: AppLocalizations.of(context)?.nickname??'昵称',
-                              description: AppLocalizations.of(context)?.nicknameDesc??'请输入昵称',
-                              inputHints: [{device?.name ?? "localhost": false}],
-                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
-                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
-                              onConfirm: (List<String> inputValues) async {
-                                // 处理输入框的内容
-                                if (inputValues[0].isEmpty) {
-                                  inputValues[0] = await deviceName();
-                                }
-                                LocalSetting().updateNickname(inputValues[0]);
-                                _refreshDevice();
-                              },
-                            );
-                          }
-                        ),
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.serverPort(device?.port??10002)?? '服务端口 ${device?.port}',
-                          const Icon(
-                            Icons.wifi_tethering,
-                            color: CupertinoColors.systemGrey,
-                          ),
-                          onTap: () {
-                            showInputAlertDialog(
-                              context,
-                              title: AppLocalizations.of(context)?.serverPortTitle??'服务端口',
-                              description: AppLocalizations.of(context)?.portDesc??'请输入服务端口 [1000, 65535]',
-                              inputHints: [{'${device?.port ?? "10002"}': true}],
-                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
-                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
-                              onConfirm: (List<String> inputValues) async {
-                                // 处理输入框的内容
-                                try {
-                                  var port = int.parse(inputValues[0]);
-                                  if (port > 1000 && port <= 65535) {
-                                    LocalSetting().updatePort(port);
-                                    _refreshDevice();
-                                  }
-                                }on Exception catch (_) {
-
-                                }
-                              },
-                            );
-                          }
-                        ),
-                        // _buildSettingItem(
-                        //   '作为服务端',
-                        //   const Icon(
-                        //     Icons.wifi_rounded,
-                        //     color: CupertinoColors.systemGrey,
-                        //   ),
-                        //   trailing: CupertinoSwitch(
-                        //     value: device?.isServer ?? false,
-                        //     onChanged: (bool value) {
-                        //       LocalSetting().updateServer(value);
-                        //       WsSvrManager().close(closeServer: true);
-                        //       _refreshDevice();
-                        //     },
-                        //   ),
-                        // ),
-                        _buildSettingItem(
-                          '${AppLocalizations.of(context)?.ftpService??'FTP服务'}$defaultFtpPort (alpha)',
-                          const Icon(Icons.folder_shared_outlined, color: CupertinoColors.systemGrey),
-                          onTap: () {
-                            _pickFTPDir();
-                          },
-                          onLongPress: () {
-                            if (_ftpServer) {
-                              return;
-                            }
-                            showInputAlertDialog(
-                              context,
-                              title: 'FTP${AppLocalizations.of(context)?.serverPortTitle??'服务端口'}',
-                              description: AppLocalizations.of(context)?.portDesc??'请输入服务端口 [1000, 65535]',
-                              inputHints: [{'$_ftpPort': true}],
-                              confirmButtonText: AppLocalizations.of(context)?.confirm??'确定',
-                              cancelButtonText: AppLocalizations.of(context)?.cancel??'取消',
-                              onConfirm: (List<String> inputValues) async {
-                                // 处理输入框的内容
-                                try {
-                                  var port = int.parse(inputValues[0]);
-                                  if (port > 1000 && port <= 65535) {
-                                    LocalSetting().setFTPPort(port);
-                                    setState(() {
-                                      _ftpPort = port;
-                                    });
-                                  }
-                                }on Exception catch (_) {
-
-                                }
-                              },
-                            );
-                          },
-                          trailing: CupertinoSwitch(
-                            value: _ftpServer,
-                            onChanged: (bool value) async {
-
-                              var path = await LocalSetting().ftpDir();
-                              if (path.isEmpty) {
-                                path = await _pickFTPDir();
-                              }
-
-                              if (path.isEmpty) {
-                                return;
-                              }
-
-                              value? SimpleFtpServer().start(path, defaultFtpPort): SimpleFtpServer().stop();
-                              setState(() {
-                                _ftpServer = value;
-                              });
-                            },
-                          ),
-                        ),
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.trustNewDevice??'自动通过新设备',
-                          const Icon(Icons.lock_open, color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                            value: device?.auth ?? false,
-                            onChanged: (bool value) {
-                              LocalSetting().updateNoAuth(value);
-                              _refreshDevice();
-                            },
-                          ),
-                        ),
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.accessClipboard??'允许访问剪切板',
-                          const Icon(Icons.copy,  color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                            value: device?.clipboard ?? false,
-                            onChanged: (bool value) {
-                              LocalSetting().updateClipboard(value);
-                              _refreshDevice();
-                            },
-                          ),
-                        ),
-                        if (!isMobile()) _buildSettingItem(
-                          AppLocalizations.of(context)?.close2tray??'关闭时隐藏到托盘',
-                          const Icon(Icons.close_rounded, color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                            value: _close2tray,
-                            onChanged: (bool value) async {
-                              LocalSetting().updateClose2Tray(value);
-                              setState(() {
-                                _close2tray = value;
-                              });
-                            },
-                          ),
-                        ),
-                        if (Platform.isAndroid) _buildSettingItem(
-                          AppLocalizations.of(context)?.pushNotification??'转发通知',
-                          const Icon(Icons.notifications, color: CupertinoColors.systemGrey),
-                          onTap: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AppListScreen(),
+        title: Text(
+          AppLocalizations.of(context)?.setting ?? "设置",
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+      ),
+      body: SafeArea(
+        child: Material(
+          color: isDark ? Colors.grey[900] : Colors.white,
+          child: ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              Card(
+                elevation: 2.0,
+                color: isDark ? Colors.grey[800] : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Column(
+                  children: [
+                    _buildSettingItem(
+                      AppLocalizations.of(context)?.themeMode ?? '主题模式',
+                      Icon(Icons.dark_mode,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey),
+                      trailing: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _themeMode == ThemeMode.system
+                                  ? AppLocalizations.of(context)
+                                          ?.followSystem ??
+                                      '跟随系统'
+                                  : _themeMode == ThemeMode.dark
+                                      ? AppLocalizations.of(context)
+                                              ?.darkMode ??
+                                          '暗黑'
+                                      : AppLocalizations.of(context)
+                                              ?.lightMode ??
+                                          '明亮',
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : CupertinoColors.systemGrey,
                               ),
-                            );
-                            // 更新允许通知的apps
-                            DeviceListScreen.setListenApps();
-                          },
-                          trailing: CupertinoSwitch(
-                            value: _listenAndroid,
-                            onChanged: (bool value) async {
-                              LocalSetting().setAndroidListen(value);
-                              setState(() {
-                                _listenAndroid = value;
-                              });
-                              if (Platform.isAndroid && WsSvrManager().receiver.isNotEmpty) {
-                                value? startAndroidListening(): stopAndroidListening();
-                              }
-                              if (value && (await LocalSetting().listenAppNotifyList()).isEmpty) {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const AppListScreen(),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                            ),
+                          ],
+                        ),
+                        onPressed: () {
+                          showCupertinoModalPopup(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return CupertinoActionSheet(
+                                title: Text(
+                                  AppLocalizations.of(context)
+                                          ?.selectThemeMode ??
+                                      '选择主题模式',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
                                   ),
-                                );
-                                // 更新允许通知的apps
-                                DeviceListScreen.setListenApps();
-                              }
+                                ),
+                                actions: [
+                                  CupertinoActionSheetAction(
+                                    child: Text(
+                                      AppLocalizations.of(context)
+                                              ?.followSystem ??
+                                          '跟随系统',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _updateThemeMode(ThemeMode.system);
+                                    },
+                                  ),
+                                  CupertinoActionSheetAction(
+                                    child: Text(
+                                      AppLocalizations.of(context)?.lightMode ??
+                                          '明亮',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _updateThemeMode(ThemeMode.light);
+                                    },
+                                  ),
+                                  CupertinoActionSheetAction(
+                                    child: Text(
+                                      AppLocalizations.of(context)?.darkMode ??
+                                          '暗黑',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      _updateThemeMode(ThemeMode.dark);
+                                    },
+                                  ),
+                                ],
+                                cancelButton: CupertinoActionSheetAction(
+                                  child: Text(
+                                    AppLocalizations.of(context)?.cancel ??
+                                        '取消',
+                                    style: TextStyle(
+                                      color:
+                                          isDark ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              );
                             },
-                          ),
-                        ),
-                        _buildSettingItem(
-                          AppLocalizations.of(context)?.ignoreNotification??'忽略安卓通知',
-                          const Icon(Icons.notifications_off, color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                            value: _ignoreAndroid,
-                            onChanged: (bool value) async {
-                              LocalSetting().setAndroidNotification(value);
-                              setState(() {
-                                _ignoreAndroid = value;
-                              });
-                            },
-                          ),
-                        ),
-                        if (Localizations.localeOf(context).languageCode == "zh") _buildSettingItem(
-                          AppLocalizations.of(context)?.copyVerifyCode??'提取短信验证码写入剪切板',
-                          const Icon(Icons.verified_user_rounded, color: CupertinoColors.systemGrey),
-                          trailing: CupertinoSwitch(
-                            value: _copyVerifyCode,
-                            onChanged: (bool value) async {
-                              LocalSetting().setCopyVerify(value);
-                              setState(() {
-                                _copyVerifyCode = value;
-                              });
-                            },
-                          ),
-                        ),
-                        _buildSettingItem(
-                            (AppLocalizations.of(context)?.language(Localizations.localeOf(context).languageCode)??'language ${Localizations.localeOf(context).languageCode}'),
-                            const Icon(Icons.language_rounded, color: CupertinoColors.systemGrey),
-                            onTap: () {
-                              var local = Localizations.localeOf(context);
-                              var languageCode = "zh";
-                              if (local.languageCode == "zh") {
-                                languageCode = "en";
-                              }
-                              MyApp.setLocale(context, Locale(languageCode));
-                              LocalSetting().setLocalization(languageCode);
+                          );
+                        },
+                      ),
+                    ),
+                    _buildSettingItem(
+                      device?.name ?? "",
+                      Icon(
+                        platformIcon(device?.platform ?? ""),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      onTap: () {
+                        showInputAlertDialog(
+                          context,
+                          title: AppLocalizations.of(context)?.nickname ?? '昵称',
+                          description:
+                              AppLocalizations.of(context)?.nicknameDesc ??
+                                  '请输入昵称',
+                          inputHints: [
+                            {device?.name ?? "localhost": false}
+                          ],
+                          confirmButtonText:
+                              AppLocalizations.of(context)?.confirm ?? '确定',
+                          cancelButtonText:
+                              AppLocalizations.of(context)?.cancel ?? '取消',
+                          onConfirm: (List<String> inputValues) async {
+                            if (inputValues[0].isEmpty) {
+                              inputValues[0] = await deviceName();
                             }
-                        ),
-                        _buildSettingItem(
-                          _path,
-                          const Icon(Icons.file_download_outlined, color: CupertinoColors.systemGrey),
-                            onLongPress: () async {
-                            openDir((await downloadDir()).path);
+                            LocalSetting().updateNickname(inputValues[0]);
+                            _refreshDevice();
                           },
-                          onTap: () {
-                            _pickSaveDir();
+                        );
+                      },
+                    ),
+                    _buildSettingItem(
+                      AppLocalizations.of(context)
+                              ?.serverPort(device?.port ?? 10002) ??
+                          '服务端口 ${device?.port}',
+                      Icon(
+                        Icons.wifi_tethering,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      onTap: () {
+                        showInputAlertDialog(
+                          context,
+                          title:
+                              AppLocalizations.of(context)?.serverPortTitle ??
+                                  '服务端口',
+                          description: AppLocalizations.of(context)?.portDesc ??
+                              '请输入服务端口 [1000, 65535]',
+                          inputHints: [
+                            {'${device?.port ?? "10002"}': true}
+                          ],
+                          confirmButtonText:
+                              AppLocalizations.of(context)?.confirm ?? '确定',
+                          cancelButtonText:
+                              AppLocalizations.of(context)?.cancel ?? '取消',
+                          onConfirm: (List<String> inputValues) async {
+                            try {
+                              var port = int.parse(inputValues[0]);
+                              if (port > 1000 && port <= 65535) {
+                                LocalSetting().updatePort(port);
+                                _refreshDevice();
+                              }
+                            } on Exception catch (_) {}
+                          },
+                        );
+                      },
+                    ),
+                    _buildSettingItem(
+                      '${AppLocalizations.of(context)?.ftpService ?? 'FTP服务'}$defaultFtpPort (alpha)',
+                      Icon(
+                        Icons.folder_shared_outlined,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      onTap: () {
+                        _pickFTPDir();
+                      },
+                      onLongPress: () {
+                        if (_ftpServer) {
+                          return;
+                        }
+                        showInputAlertDialog(
+                          context,
+                          title:
+                              'FTP${AppLocalizations.of(context)?.serverPortTitle ?? '服务端口'}',
+                          description: AppLocalizations.of(context)?.portDesc ??
+                              '请输入服务端口 [1000, 65535]',
+                          inputHints: [
+                            {'$_ftpPort': true}
+                          ],
+                          confirmButtonText:
+                              AppLocalizations.of(context)?.confirm ?? '确定',
+                          cancelButtonText:
+                              AppLocalizations.of(context)?.cancel ?? '取消',
+                          onConfirm: (List<String> inputValues) async {
+                            try {
+                              var port = int.parse(inputValues[0]);
+                              if (port > 1000 && port <= 65535) {
+                                LocalSetting().setFTPPort(port);
+                                setState(() {
+                                  _ftpPort = port;
+                                });
+                              }
+                            } on Exception catch (_) {}
+                          },
+                        );
+                      },
+                      trailing: CupertinoSwitch(
+                        value: _ftpServer,
+                        onChanged: (bool value) async {
+                          var path = await LocalSetting().ftpDir();
+                          if (path.isEmpty) {
+                            path = await _pickFTPDir();
                           }
+
+                          if (path.isEmpty) {
+                            return;
+                          }
+
+                          value
+                              ? SimpleFtpServer().start(path, defaultFtpPort)
+                              : SimpleFtpServer().stop();
+                          setState(() {
+                            _ftpServer = value;
+                          });
+                        },
+                      ),
+                    ),
+                    _buildSettingItem(
+                      AppLocalizations.of(context)?.trustNewDevice ?? '自动通过新设备',
+                      Icon(
+                        Icons.lock_open,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      trailing: CupertinoSwitch(
+                        value: device?.auth ?? false,
+                        onChanged: (bool value) {
+                          LocalSetting().updateNoAuth(value);
+                          _refreshDevice();
+                        },
+                      ),
+                    ),
+                    _buildSettingItem(
+                      AppLocalizations.of(context)?.accessClipboard ??
+                          '允许访问剪切板',
+                      Icon(
+                        Icons.copy,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      trailing: CupertinoSwitch(
+                        value: device?.clipboard ?? false,
+                        onChanged: (bool value) {
+                          LocalSetting().updateClipboard(value);
+                          _refreshDevice();
+                        },
+                      ),
+                    ),
+                    if (!isMobile())
+                      _buildSettingItem(
+                        AppLocalizations.of(context)?.close2tray ?? '关闭时隐藏到托盘',
+                        Icon(
+                          Icons.close_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
                         ),
-                        _buildSettingItem(
-                            _packageInfo?.version?? "UNKNOWN",
-                            const Icon(Icons.copyright, color: CupertinoColors.systemGrey),
-                            onTap: () async {
-                              final Uri toLaunch = Uri(scheme: 'https', host: '2.127014.xyz', path: '/whisper.html');
-                              _launchInBrowser(toLaunch);
+                        trailing: CupertinoSwitch(
+                          value: _close2tray,
+                          onChanged: (bool value) async {
+                            LocalSetting().updateClose2Tray(value);
+                            setState(() {
+                              _close2tray = value;
+                            });
+                          },
+                        ),
+                      ),
+                    if (Platform.isAndroid)
+                      _buildSettingItem(
+                        AppLocalizations.of(context)?.pushNotification ??
+                            '转发通知',
+                        Icon(
+                          Icons.notifications,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AppListScreen(),
+                            ),
+                          );
+                          DeviceListScreen.setListenApps();
+                        },
+                        trailing: CupertinoSwitch(
+                          value: _listenAndroid,
+                          onChanged: (bool value) async {
+                            LocalSetting().setAndroidListen(value);
+                            setState(() {
+                              _listenAndroid = value;
+                            });
+                            if (Platform.isAndroid &&
+                                WsSvrManager().receiver.isNotEmpty) {
+                              value
+                                  ? startAndroidListening()
+                                  : stopAndroidListening();
                             }
+                            if (value &&
+                                (await LocalSetting().listenAppNotifyList())
+                                    .isEmpty) {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const AppListScreen(),
+                                ),
+                              );
+                              DeviceListScreen.setListenApps();
+                            }
+                          },
                         ),
-                      ],
-                    ))
-              ],
-            ),
+                      ),
+                    _buildSettingItem(
+                      AppLocalizations.of(context)?.ignoreNotification ??
+                          '忽略安卓通知',
+                      Icon(
+                        Icons.notifications_off,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      trailing: CupertinoSwitch(
+                        value: _ignoreAndroid,
+                        onChanged: (bool value) async {
+                          LocalSetting().setAndroidNotification(value);
+                          setState(() {
+                            _ignoreAndroid = value;
+                          });
+                        },
+                      ),
+                    ),
+                    if (Localizations.localeOf(context).languageCode == "zh")
+                      _buildSettingItem(
+                        AppLocalizations.of(context)?.copyVerifyCode ??
+                            '提取短信验证码写入剪切板',
+                        Icon(
+                          Icons.verified_user_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        trailing: CupertinoSwitch(
+                          value: _copyVerifyCode,
+                          onChanged: (bool value) async {
+                            LocalSetting().setCopyVerify(value);
+                            setState(() {
+                              _copyVerifyCode = value;
+                            });
+                          },
+                        ),
+                      ),
+                    _buildSettingItem(
+                      AppLocalizations.of(context)?.language(
+                              Localizations.localeOf(context).languageCode) ??
+                          'language ${Localizations.localeOf(context).languageCode}',
+                      Icon(
+                        Icons.language_rounded,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      trailing: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              Localizations.localeOf(context).languageCode ==
+                                      "zh"
+                                  ? "简体中文"
+                                  : "English",
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : CupertinoColors.systemGrey,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                            ),
+                          ],
+                        ),
+                        onPressed: () {
+                          showCupertinoModalPopup(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return CupertinoActionSheet(
+                                title: Text(
+                                  AppLocalizations.of(context)
+                                          ?.selectLanguage ??
+                                      '选择语言',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
+                                  ),
+                                ),
+                                actions: [
+                                  CupertinoActionSheetAction(
+                                    child: Text(
+                                      '简体中文',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      MyApp.setLocale(
+                                          context, const Locale('zh'));
+                                      LocalSetting().setLocalization('zh');
+                                    },
+                                  ),
+                                  CupertinoActionSheetAction(
+                                    child: Text(
+                                      'English',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      MyApp.setLocale(
+                                          context, const Locale('en'));
+                                      LocalSetting().setLocalization('en');
+                                    },
+                                  ),
+                                ],
+                                cancelButton: CupertinoActionSheetAction(
+                                  child: Text(
+                                    AppLocalizations.of(context)?.cancel ??
+                                        '取消',
+                                    style: TextStyle(
+                                      color:
+                                          isDark ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    _buildSettingItem(
+                      _path,
+                      Icon(
+                        Icons.file_download_outlined,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      onLongPress: () async {
+                        openDir((await downloadDir()).path);
+                      },
+                      onTap: () {
+                        _pickSaveDir();
+                      },
+                    ),
+                    _buildSettingItem(
+                      _packageInfo?.version ?? "UNKNOWN",
+                      Icon(
+                        Icons.copyright,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      onTap: () async {
+                        final Uri toLaunch = Uri(
+                            scheme: 'https',
+                            host: 'local-whisper.help',
+                            path: '/zh');
+                        _launchInBrowser(toLaunch);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ));
+        ),
+      ),
+    );
   }
 
   Future<String> _pickFTPDir() async {
@@ -1414,7 +1802,7 @@ class _SettingsScreen extends State<SettingsScreen> {
     if (selectDir != null) {
       LocalSetting().setFTPDir(selectDir);
     }
-    return selectDir?? "";
+    return selectDir ?? "";
   }
 
   Future<String> _pickSaveDir() async {
@@ -1425,7 +1813,7 @@ class _SettingsScreen extends State<SettingsScreen> {
         _path = selectDir;
       });
     }
-    return selectDir?? "";
+    return selectDir ?? "";
   }
 
   Future<void> _launchInBrowser(Uri url) async {
@@ -1438,7 +1826,13 @@ class _SettingsScreen extends State<SettingsScreen> {
   }
 
   Widget _buildSettingItem(String title, Icon icon,
-      {Widget? trailing , bool showDivider = true, GestureTapCallback? onTap, String desc = "", GestureTapCallback? onLongPress}) {
+      {Widget? trailing,
+      bool showDivider = true,
+      GestureTapCallback? onTap,
+      String desc = "",
+      GestureTapCallback? onLongPress}) {
+    final isDark = _themeMode == ThemeMode.dark;
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1448,45 +1842,59 @@ class _SettingsScreen extends State<SettingsScreen> {
           children: [
             Container(
               constraints: const BoxConstraints(minHeight: 52),
-              // height: 56.0, // 增加高度以适应 iOS 设置样式
               child: Row(
                 children: [
-                  icon, // 设置项的图标
-                  const SizedBox(width: 8.0), // 图标与文字之间的间距
+                  Icon(
+                    icon.icon,
+                    color:
+                        isDark ? Colors.grey[400] : CupertinoColors.systemGrey,
+                  ),
+                  const SizedBox(width: 8.0),
                   Expanded(
                     child: Text(
                       title,
                       softWrap: true,
-                      // overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17.0,
-                        color: CupertinoColors.black,
-                        fontWeight: FontWeight.w500, // 尝试更轻的字重
-                        fontFamily:
-                            'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
+                        color: isDark ? Colors.white : CupertinoColors.black,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'SF Pro Display',
                       ),
-                      // style: TextStyle(fontSize: 17.0, color: CupertinoColors.black, fontWeight: FontWeight.bold), // 设置项的文字样式
                     ),
                   ),
                   if (trailing != null) trailing,
                 ],
               ),
             ),
-            if (desc.isNotEmpty) Text(desc,
-              softWrap: true,
-              // overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12.0,
-                color: CupertinoColors.black,
-                fontWeight: FontWeight.w500, // 尝试更轻的字重
-                fontFamily:
-                'SF Pro Display', // 使用 iOS 默认字体（若有）), // 设置项的文字样式
-              ),),
-            if (showDivider) const Divider(height: 1, color: Colors.white38), // 分割线
+            if (desc.isNotEmpty)
+              Text(
+                desc,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: 12.0,
+                  color: isDark ? Colors.grey[400] : CupertinoColors.black,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'SF Pro Display',
+                ),
+              ),
+            if (showDivider)
+              Divider(
+                height: 0.5,
+                thickness: 0.5,
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+              ),
           ],
         ),
       ),
     );
+  }
+
+  void _updateThemeMode(ThemeMode mode) async {
+    await LocalSetting().setThemeMode(mode == ThemeMode.dark);
+    MyApp.setTheme(context, mode == ThemeMode.dark);
+    setState(() {
+      _themeMode = mode;
+    });
   }
 }
 
@@ -1499,6 +1907,8 @@ void showConfirmationDialog(
   required VoidCallback onConfirm,
   VoidCallback? onCancel,
 }) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
   showCupertinoDialog(
     context: context,
     builder: (BuildContext context) {
@@ -1509,7 +1919,12 @@ void showConfirmationDialog(
             const SizedBox(
               height: 14,
             ),
-            Text(description),
+            Text(
+              description,
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.black87,
+              ),
+            ),
           ],
         ),
         actions: <Widget>[
@@ -1517,7 +1932,7 @@ void showConfirmationDialog(
             child: Text(
               cancelButtonText,
               style: const TextStyle(
-                color: Colors.red, // 自定义取消按钮文本颜色
+                color: Colors.red,
               ),
             ),
             onPressed: () {
@@ -1531,7 +1946,7 @@ void showConfirmationDialog(
             child: Text(
               confirmButtonText,
               style: const TextStyle(
-                color: Colors.lightBlue, // 自定义取消按钮文本颜色
+                color: Colors.lightBlue,
               ),
             ),
             onPressed: () {
@@ -1556,21 +1971,35 @@ void showInputAlertDialog(
 }) {
   List<TextEditingController> controllers = [];
   List<Widget> inputFields = [];
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller = TextEditingController(text: inputHints[i].keys.first);
+    TextEditingController controller =
+        TextEditingController(text: inputHints[i].keys.first);
     controllers.add(controller);
 
     inputFields.add(
       Column(
         children: [
-          const SizedBox(height: 8), // 间隔
+          const SizedBox(height: 8),
           CupertinoTextField(
             controller: controller,
             placeholder: inputHints[i].keys.first,
-            inputFormatters: inputHints[i].values.first?<TextInputFormatter>[
-              FilteringTextInputFormatter.digitsOnly,
-            ]:null,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black,
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[800] : Colors.white,
+              border: Border.all(
+                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            inputFormatters: inputHints[i].values.first
+                ? <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                  ]
+                : null,
           ),
         ],
       ),
@@ -1585,10 +2014,12 @@ void showInputAlertDialog(
         content: Column(
           children: [
             const SizedBox(height: 6),
-            Text(description,
-              style: const TextStyle(
-                color: Colors.grey, // 自定义取消按钮文本颜色
-            ),),
+            Text(
+              description,
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey,
+              ),
+            ),
             const SizedBox(height: 8),
             ...inputFields,
           ],
@@ -1598,7 +2029,7 @@ void showInputAlertDialog(
             child: Text(
               cancelButtonText,
               style: const TextStyle(
-                color: Colors.red, // 自定义取消按钮文本颜色
+                color: Colors.red,
               ),
             ),
             onPressed: () {
@@ -1609,7 +2040,7 @@ void showInputAlertDialog(
             child: Text(
               confirmButtonText,
               style: const TextStyle(
-                color: Colors.lightBlue, // 自定义取消按钮文本颜色
+                color: Colors.lightBlue,
               ),
             ),
             onPressed: () {
@@ -1636,9 +2067,11 @@ void showLoadingDialog(
   required VoidCallback onCancel,
   required Function(VoidCallback onCancel) task,
 }) async {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
   showDialog(
     context: context,
-    barrierDismissible: false, // 不能通过点击外部来关闭对话框
+    barrierDismissible: false,
     builder: (BuildContext context) {
       return CupertinoAlertDialog(
         title: Text(title),
@@ -1648,21 +2081,26 @@ void showLoadingDialog(
             const SizedBox(
               height: 12,
             ),
-            if (isLoading) icon, // 显示加载指示器
+            if (isLoading) icon,
             const SizedBox(
               height: 8,
             ),
-            Text(description),
+            Text(
+              description,
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.black87,
+              ),
+            ),
           ],
         ),
         actions: <Widget>[
-          if (isLoading && showCancel) // 如果正在加载，显示取消按钮
+          if (isLoading && showCancel)
             CupertinoDialogAction(
               onPressed: onCancel,
               child: Text(
                 cancelButtonText,
                 style: const TextStyle(
-                  color: Colors.red, // 自定义取消按钮文本颜色
+                  color: Colors.red,
                 ),
               ),
             ),
@@ -1670,5 +2108,5 @@ void showLoadingDialog(
       );
     },
   );
-  await task(onCancel); // 执行任务
+  await task(onCancel);
 }
