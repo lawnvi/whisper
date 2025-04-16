@@ -2,8 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:device_apps/device_apps.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:whisper/helper/local.dart';
+
+import '../l10n/app_localizations.dart';
 
 class AppListScreen extends StatefulWidget {
   const AppListScreen({super.key});
