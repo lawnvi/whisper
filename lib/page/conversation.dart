@@ -20,12 +20,11 @@ import 'package:whisper/socket/svrmanager.dart';
 import '../helper/file.dart';
 import '../helper/helper.dart';
 
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-
 import '../helper/notification.dart';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
+
+import '../l10n/app_localizations.dart';
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;

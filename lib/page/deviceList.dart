@@ -24,10 +24,10 @@ import 'package:window_manager/window_manager.dart';
 import '../helper/ftp.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
+import '../l10n/app_localizations.dart';
 import '../socket/svrmanager.dart';
 import 'appList.dart';
 import 'conversation.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
