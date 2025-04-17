@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
-import 'package:device_apps/device_apps.dart';
+import 'package:flutter/material.dart';
+import 'package:installed_apps/app_info.dart';
+import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/local.dart';
 
 import '../l10n/app_localizations.dart';
@@ -14,8 +16,8 @@ class AppListScreen extends StatefulWidget {
 }
 
 class _AppListScreenState extends State<AppListScreen> {
-  List<Application> apps = [];
-  List<Application> filteredApps = [];
+  List<AppInfo> apps = [];
+  List<AppInfo> filteredApps = [];
   TextEditingController searchController = TextEditingController();
   Map<String, bool> checkedApps = {};
   bool isLoading = true;
@@ -30,10 +32,7 @@ class _AppListScreenState extends State<AppListScreen> {
     setState(() {
       isLoading = true;
     });
-    List<Application> installedApps = await DeviceApps.getInstalledApplications(
-        includeSystemApps: true,
-        includeAppIcons: true,
-        onlyAppsWithLaunchIntent: true);
+    List<AppInfo> installedApps = await InstalledApps.getInstalledApps(true, true);
     Map<String, int> appMap = await LocalSetting().listenAppNotifyList();
     installedApps.sort(
         (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0));
@@ -51,9 +50,9 @@ class _AppListScreenState extends State<AppListScreen> {
     });
   }
 
-  void filterApps(String query) {
-    List<Application> filtered = apps.where((app) {
-      return app.appName.toLowerCase().contains(query.toLowerCase());
+  void filterApps(String query) async {
+    List<AppInfo> filtered = apps.where((app) {
+      return app.name.toLowerCase().contains(query.toLowerCase());
     }).toList();
     setState(() {
       filteredApps = filtered;
@@ -62,12 +61,14 @@ class _AppListScreenState extends State<AppListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CupertinoPageScaffold(
+      // backgroundColor: isDark?Colors.black87:Colors.white,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '通知APP'),
+        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.back ?? 'Back'),
+          child: Text(AppLocalizations.of(context)?.back ?? 'Back', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
           onPressed: () {
             // Handle back button press
             Navigator.pop(context);
@@ -75,7 +76,7 @@ class _AppListScreenState extends State<AppListScreen> {
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选'),
+          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
           onPressed: () {
             bool selectAll = checkedApps.length < apps.length ||
                 checkedApps.values.contains(false);
@@ -113,11 +114,12 @@ class _AppListScreenState extends State<AppListScreen> {
                   : ListView.builder(
                       itemCount: filteredApps.length,
                       itemBuilder: (context, index) {
-                        Application app = filteredApps[index];
+                        AppInfo app = filteredApps[index];
                         bool isChecked = checkedApps[app.packageName] ?? false;
                         return AppListTile(
                           app: app,
                           isChecked: isChecked,
+                          isDark: isDark,
                           onChanged: (bool value) {
                             LocalSetting().modifyListenNotifyApp(
                                 packages: [app.packageName], add: value);
@@ -134,35 +136,36 @@ class _AppListScreenState extends State<AppListScreen> {
 }
 
 class AppListTile extends StatelessWidget {
-  final Application app;
+  final AppInfo app;
   final ValueNotifier<bool> isCheckedNotifier;
   final ValueChanged<bool> onChanged;
+  final bool isDark;
 
   AppListTile({
     super.key,
     required this.app,
     required bool isChecked,
+    required this.isDark,
     required this.onChanged,
   }) : isCheckedNotifier = ValueNotifier<bool>(isChecked);
 
   @override
   Widget build(BuildContext context) {
-    Application app = this.app;
+    AppInfo app = this.app;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Row(
         children: [
-          if (app is ApplicationWithIcon) AppIcon(icon: app.icon),
+          if (app.icon != null) AppIcon(icon: app.icon!),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(app.appName),
-                Text(
-                  'version: ${app.versionName}',
-                  style: const TextStyle(
-                      fontSize: 12, color: CupertinoColors.systemGrey),
+                Text(app.name, style: TextStyle(fontSize: 14, color: isDark?Colors.white70: Colors.black87, decoration: TextDecoration.none)),
+                const SizedBox(height: 4),
+                Text(app.versionName,
+                  style: const TextStyle(fontSize: 12, color: CupertinoColors.systemGrey, decoration: TextDecoration.none),
                 ),
               ],
             ),

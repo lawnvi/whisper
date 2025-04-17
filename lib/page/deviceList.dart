@@ -466,6 +466,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   Widget build(BuildContext context) {
     var isDesk = isDesktop();
+    var isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -560,16 +561,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
-            child: const Icon(
+            child: Icon(
               Icons.settings_outlined,
               size: 30,
-              color: Colors.black45,
+              color: isDark?Colors.white60:Colors.black45,
             ),
             onPressed: () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SettingsScreen(),
+                  builder: (context) => const SettingsScreen(),
                 ),
               );
               _refreshDevice();
@@ -1851,7 +1852,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                       style: TextStyle(
                         fontSize: 17.0,
                         color: isDark ? Colors.white : CupertinoColors.black,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: Platform.isWindows ? null : FontWeight.w500,
                         fontFamily: Platform.isWindows ? null : 'SF Pro Display',
                       ),
                     ),
@@ -1867,7 +1868,7 @@ class _SettingsScreen extends State<SettingsScreen> {
                 style: TextStyle(
                   fontSize: 12.0,
                   color: isDark ? Colors.grey[400] : CupertinoColors.black,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: Platform.isWindows ? null : FontWeight.w500,
                   fontFamily: Platform.isWindows ? null : 'SF Pro Display',
                 ),
               ),
