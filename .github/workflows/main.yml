@@ -135,6 +135,20 @@ jobs:
           sudo apt-get install -y alien
           sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
 
+      # ✅ 安装 Android SDK 35 + Build Tools
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android SDK packages (Build Tools + Platform Tools)
+        run: |
+          yes | sdkmanager --update
+          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Set environment variables for Android
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator" >> $GITHUB_ENV
+
       - run: flutter config --enable-linux-desktop
       - run: flutter build linux
 
