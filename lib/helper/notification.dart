@@ -1,9 +1,11 @@
 // 导入包
 import 'dart:io';
 
-import 'package:device_apps/device_apps.dart';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
+import 'package:installed_apps/app_info.dart';
+import 'package:installed_apps/installed_apps.dart';
 
 class NotificationHelper {
   // 使用单例模式进行初始化
@@ -132,10 +134,10 @@ Future<String> appName(String? package) async {
 
   if (Platform.isAndroid) {
     // 好像可以获取到app的apk路径
-    List<Application> apps = await DeviceApps.getInstalledApplications();
+    List<AppInfo> apps = await InstalledApps.getInstalledApps(false, true);
     for (var item in apps) {
       if (item.packageName == package) {
-        return item.appName;
+        return item.name;
       }
     }
   }
