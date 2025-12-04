@@ -41,7 +41,7 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Prepare local.properties
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
