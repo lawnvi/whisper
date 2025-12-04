@@ -673,7 +673,6 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
-  static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
   late final GeneratedColumnWithTypeConverter<MessageEnum, int> type =
       GeneratedColumn<int>('type', aliasedName, false,
@@ -799,7 +798,6 @@ class $MessageTable extends Message with TableInfo<$MessageTable, MessageData> {
       context.handle(
           _sizeMeta, size.isAcceptableOrUnknown(data['size']!, _sizeMeta));
     }
-    context.handle(_typeMeta, const VerificationResult.success());
     if (data.containsKey('content')) {
       context.handle(_contentMeta,
           content.isAcceptableOrUnknown(data['content']!, _contentMeta));
@@ -1411,7 +1409,7 @@ final class $$DeviceTableReferences
 
   $$MessageTableProcessedTableManager get messageRefs {
     final manager = $$MessageTableTableManager($_db, $_db.message)
-        .filter((f) => f.deviceId.id($_item.id));
+        .filter((f) => f.deviceId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_messageRefsTable($_db));
     return ProcessedTableManager(
@@ -1702,7 +1700,8 @@ class $$DeviceTableTableManager extends RootTableManager<
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (messageRefs)
-                    await $_getPrefetchedData(
+                    await $_getPrefetchedData<DeviceData, $DeviceTable,
+                            MessageData>(
                         currentTable: table,
                         referencedTable:
                             $$DeviceTableReferences._messageRefsTable(db),
@@ -1776,9 +1775,10 @@ final class $$MessageTableReferences
       .createAlias($_aliasNameGenerator(db.message.deviceId, db.device.id));
 
   $$DeviceTableProcessedTableManager? get deviceId {
-    if ($_item.deviceId == null) return null;
+    final $_column = $_itemColumn<int>('device_id');
+    if ($_column == null) return null;
     final manager = $$DeviceTableTableManager($_db, $_db.device)
-        .filter((f) => f.id($_item.deviceId!));
+        .filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_deviceIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
