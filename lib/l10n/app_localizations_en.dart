@@ -132,7 +132,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get deleteDeviceDesc => 'clear any messages about this device, it\'s not recoverable!';
+  String get deleteDeviceDesc =>
+      'clear any messages about this device, it\'s not recoverable!';
 
   @override
   String get brokeConnectTitle => 'disconnect';
