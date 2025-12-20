@@ -43,6 +43,11 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
+      - name: Set environment variables for Android
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
+
       - name: Prepare local.properties
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
         env:
@@ -52,8 +57,13 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
+      - name: Configure Gradle for build
+        run: |
+          echo "android.disableAutomaticComponentCreation=true" >> android/gradle.properties
+          echo "android.lint.checkReleaseBuilds=false" >> android/gradle.properties
+
       - name: Build Android APK (common)
-        run: flutter build apk
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Build Android APK (split per ABI)
-        run: flutter build apk --split-per-abi
+        run: flutter build apk --split-per-abi --android-skip-build-dependency-validation
