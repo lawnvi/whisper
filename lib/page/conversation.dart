@@ -18,6 +18,7 @@ import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
 import '../helper/file.dart';

@@ -24,7 +24,9 @@ import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_models.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/device_workspace.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/ftp.dart';
 import '../helper/local.dart';
@@ -639,12 +641,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  List<_DeviceSection> _buildDeviceSections() {
-    final connected = <DeviceData>[];
-    final trusted = <DeviceData>[];
-    final pending = <DeviceData>[];
-    final nearby = <DeviceData>[];
-    final history = <DeviceData>[];
+  List<DeviceWorkspaceSection> _buildDeviceSections() {
+    final connected = <DeviceWorkspaceItemData>[];
+    final trusted = <DeviceWorkspaceItemData>[];
+    final pending = <DeviceWorkspaceItemData>[];
+    final nearby = <DeviceWorkspaceItemData>[];
+    final history = <DeviceWorkspaceItemData>[];
 
     for (final item in devices) {
       final presence = connectionCoordinator.peer(item.uid);
@@ -652,46 +654,54 @@ class _DeviceListScreen extends State<DeviceListScreen>
       final isTrusted = presence?.locallyTrusted ?? item.auth;
       final isNearby = presence?.discovered ?? (item.around == true);
       final remoteTrusted = presence?.remotelyTrusted ?? false;
+      final viewData = DeviceWorkspaceItemData(
+        device: item,
+        isConnected: isConnected,
+        isNearby: isNearby,
+        localTrust: isTrusted,
+        remoteTrust: remoteTrusted,
+        isSelected: _selectedPeerId == item.uid,
+      );
 
       if (isConnected) {
-        connected.add(item);
+        connected.add(viewData);
       } else if (isTrusted) {
-        trusted.add(item);
+        trusted.add(viewData);
       } else if (isNearby && remoteTrusted) {
-        pending.add(item);
+        pending.add(viewData);
       } else if (isNearby) {
-        nearby.add(item);
+        nearby.add(viewData);
       } else {
-        history.add(item);
+        history.add(viewData);
       }
     }
 
-    final sections = <_DeviceSection>[
-      _DeviceSection(
+    final sections = <DeviceWorkspaceSection>[
+      DeviceWorkspaceSection(
         title: AppLocalizations.of(context)?.connect ?? 'Connected',
         subtitle: '当前在线会话',
         icon: Icons.wifi_rounded,
         items: connected,
       ),
-      _DeviceSection(
+      DeviceWorkspaceSection(
         title: AppLocalizations.of(context)?.trust ?? 'Trusted',
         subtitle: '双向信任设备优先自动直连',
         icon: Icons.verified_user_rounded,
         items: trusted,
       ),
-      _DeviceSection(
+      DeviceWorkspaceSection(
         title: 'Pending',
         subtitle: '对方信任你，但你还未标记为信任',
         icon: Icons.hourglass_bottom_rounded,
         items: pending,
       ),
-      _DeviceSection(
+      DeviceWorkspaceSection(
         title: 'Nearby',
         subtitle: '当前局域网内发现的设备',
         icon: Icons.radar_rounded,
         items: nearby,
       ),
-      _DeviceSection(
+      DeviceWorkspaceSection(
         title: 'History',
         subtitle: '离线但保留历史消息的设备',
         icon: Icons.history_rounded,
@@ -723,435 +733,126 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return devices.first;
   }
 
-  Widget _buildDeviceRail(List<_DeviceSection> sections) {
+  Widget _buildDeviceRail(List<DeviceWorkspaceSection> sections) {
     return Container(
       color: Theme.of(context).colorScheme.surface,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
         children: [
-          _buildOverviewCard(),
+          WorkspaceOverviewCard(
+            connectedCount: connectionCoordinator.peers
+                .where(
+                    (item) => item.state == ConnectionLifecycleState.connected)
+                .length,
+            trustedCount: connectionCoordinator.peers
+                .where(AutoConnectPlanner.isMutuallyTrusted)
+                .length,
+            totalPeers: devices.length,
+          ),
           const SizedBox(height: 12),
           for (final section in sections)
-            _buildSectionCard(section, compact: false),
+            DeviceSectionCard(
+              section: section,
+              compact: false,
+              onSelectDevice: _selectDevice,
+              onOpenChat: _openConv,
+              onToggleConnection: _toggleConnection,
+              onOpenSettings: _openClientSettings,
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildMobileWorkspace(List<_DeviceSection> sections) {
+  Widget _buildMobileWorkspace(List<DeviceWorkspaceSection> sections) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 24),
       children: [
-        _buildOverviewCard(),
+        WorkspaceOverviewCard(
+          connectedCount: connectionCoordinator.peers
+              .where((item) => item.state == ConnectionLifecycleState.connected)
+              .length,
+          trustedCount: connectionCoordinator.peers
+              .where(AutoConnectPlanner.isMutuallyTrusted)
+              .length,
+          totalPeers: devices.length,
+        ),
         const SizedBox(height: 12),
         for (final section in sections)
-          _buildSectionCard(section, compact: true),
-      ],
-    );
-  }
-
-  Widget _buildOverviewCard() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final connectedCount = connectionCoordinator.peers
-        .where((item) => item.state == ConnectionLifecycleState.connected)
-        .length;
-    final trustedCount = connectionCoordinator.peers
-        .where(AutoConnectPlanner.isMutuallyTrusted)
-        .length;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Whisper Workspace',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '连接、信任、传输和会话围绕同一个工作区组织。',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(
-                  avatar: Icon(Icons.wifi_rounded,
-                      color: palette.connected, size: 18),
-                  label: Text('$connectedCount active'),
-                ),
-                Chip(
-                  avatar: Icon(Icons.verified_user_rounded,
-                      color: palette.trusted, size: 18),
-                  label: Text('$trustedCount mutual trust'),
-                ),
-                Chip(
-                  avatar: Icon(Icons.radar_rounded,
-                      color: colorScheme.primary, size: 18),
-                  label: Text('${devices.length} peers'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionCard(_DeviceSection section, {required bool compact}) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 12 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(section.icon, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  section.title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  '${section.items.length}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              section.subtitle,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final item in section.items)
-              _buildModernDeviceTile(item, compact: compact),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModernDeviceTile(DeviceData deviceItem,
-      {required bool compact}) {
-    final presence = connectionCoordinator.peer(deviceItem.uid);
-    final palette = context.whisperPalette;
-    final colorScheme = Theme.of(context).colorScheme;
-    final isConnected = connectionCoordinator.isConnectedTo(deviceItem.uid);
-    final isNearby = presence?.discovered ?? (deviceItem.around == true);
-    final localTrust = presence?.locallyTrusted ?? deviceItem.auth;
-    final remoteTrust = presence?.remotelyTrusted ?? false;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: _selectedPeerId == deviceItem.uid
-            ? colorScheme.primary.withValues(alpha: 0.08)
-            : colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            setState(() {
-              _selectedPeerId = deviceItem.uid;
-            });
-            if (!isDesktop()) {
-              _openConv(deviceItem);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor:
-                          colorScheme.primary.withValues(alpha: 0.12),
-                      child: Icon(
-                        platformIcon(deviceItem.platform),
-                        color: isConnected
-                            ? palette.connected
-                            : colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            deviceItem.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${deviceItem.host}:${deviceItem.port}',
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (compact && !isDesktop())
-                      IconButton(
-                        icon: const Icon(Icons.chat_bubble_outline_rounded),
-                        onPressed: () => _openConv(deviceItem),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildStatusChip(
-                      label: isConnected
-                          ? 'Connected'
-                          : isNearby
-                              ? 'Nearby'
-                              : 'Offline',
-                      color: isConnected
-                          ? palette.connected
-                          : isNearby
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                    ),
-                    if (localTrust)
-                      _buildStatusChip(
-                        label: remoteTrust ? 'Mutual trust' : 'Trusted',
-                        color: remoteTrust ? palette.trusted : palette.warning,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed:
-                          (!isConnected && socketManager.receiver.isEmpty)
-                              ? () => _connectServer(
-                                    deviceItem.host,
-                                    deviceItem.port,
-                                    deviceData: deviceItem,
-                                  )
-                              : isConnected
-                                  ? () => socketManager.close()
-                                  : null,
-                      icon: Icon(isConnected
-                          ? Icons.link_off_rounded
-                          : Icons.wifi_find_rounded),
-                      label: Text(isConnected ? 'Disconnect' : 'Connect'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _openConv(deviceItem),
-                      icon: const Icon(Icons.chat_bubble_outline_rounded),
-                      label: const Text('Chat'),
-                    ),
-                    if (isDesktop())
-                      IconButton(
-                        tooltip: '更多设置',
-                        onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  ClientSettingsScreen(device: deviceItem),
-                            ),
-                          );
-                          _refreshDevice();
-                        },
-                        icon: const Icon(Icons.tune_rounded),
-                      ),
-                  ],
-                ),
-              ],
-            ),
+          DeviceSectionCard(
+            section: section,
+            compact: true,
+            onSelectDevice: _selectDevice,
+            onOpenChat: _openConv,
+            onToggleConnection: _toggleConnection,
+            onOpenSettings: _openClientSettings,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip({required String label, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      ],
     );
   }
 
   Widget _buildDesktopWorkspace(DeviceData? selectedDevice) {
-    if (selectedDevice == null) {
-      return Center(
-        child: Text(
-          '选择一个设备开始会话',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-      );
-    }
-
-    final presence = connectionCoordinator.peer(selectedDevice.uid);
-    final isConnected = connectionCoordinator.isConnectedTo(selectedDevice.uid);
-    final localTrust = presence?.locallyTrusted ?? selectedDevice.auth;
+    final presence = selectedDevice == null
+        ? null
+        : connectionCoordinator.peer(selectedDevice.uid);
+    final isConnected = selectedDevice != null &&
+        connectionCoordinator.isConnectedTo(selectedDevice.uid);
+    final localTrust = selectedDevice != null &&
+        (presence?.locallyTrusted ?? selectedDevice.auth);
     final remoteTrust = presence?.remotelyTrusted ?? false;
-    final palette = context.whisperPalette;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor:
-                          colorScheme.primary.withValues(alpha: 0.12),
-                      child: Icon(
-                        platformIcon(selectedDevice.platform),
-                        size: 28,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            selectedDevice.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${selectedDevice.host}:${selectedDevice.port}',
-                            style:
-                                TextStyle(color: colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildStatusChip(
-                      label: isConnected ? 'Connected' : 'Ready',
-                      color:
-                          isConnected ? palette.connected : colorScheme.primary,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    if (localTrust)
-                      _buildStatusChip(
-                        label: remoteTrust ? 'Mutual trust' : 'Trusted locally',
-                        color: remoteTrust ? palette.trusted : palette.warning,
-                      ),
-                    if (presence?.discovered == true)
-                      _buildStatusChip(
-                        label: 'Nearby now',
-                        color: colorScheme.primary,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '设备即会话入口。连接、信任、传输和历史消息都围绕这一个工作区收束。',
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 24),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () => _openConv(selectedDevice),
-                      icon: const Icon(Icons.chat_rounded),
-                      label: const Text('Open chat'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed:
-                          (!isConnected && socketManager.receiver.isEmpty)
-                              ? () => _connectServer(
-                                    selectedDevice.host,
-                                    selectedDevice.port,
-                                    deviceData: selectedDevice,
-                                  )
-                              : isConnected
-                                  ? () => socketManager.close()
-                                  : null,
-                      icon: Icon(isConnected
-                          ? Icons.link_off_rounded
-                          : Icons.wifi_find_rounded),
-                      label: Text(isConnected ? 'Disconnect' : 'Connect'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                ClientSettingsScreen(device: selectedDevice),
-                          ),
-                        );
-                        _refreshDevice();
-                      },
-                      icon: const Icon(Icons.settings_outlined),
-                      label: const Text('Device settings'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+    return DeviceWorkspaceDetail(
+      selectedDevice: selectedDevice,
+      isConnected: isConnected,
+      isNearby: presence?.discovered == true,
+      localTrust: localTrust,
+      remoteTrust: remoteTrust,
+      onOpenChat: () {
+        if (selectedDevice != null) {
+          _openConv(selectedDevice);
+        }
+      },
+      onToggleConnection: () {
+        if (selectedDevice != null) {
+          _toggleConnection(selectedDevice);
+        }
+      },
+      onOpenSettings: () {
+        if (selectedDevice != null) {
+          _openClientSettings(selectedDevice);
+        }
+      },
     );
+  }
+
+  void _selectDevice(DeviceData deviceItem) {
+    setState(() {
+      _selectedPeerId = deviceItem.uid;
+    });
+    if (!isDesktop()) {
+      _openConv(deviceItem);
+    }
+  }
+
+  void _toggleConnection(DeviceData deviceItem) {
+    if (deviceItem.uid == socketManager.receiver) {
+      socketManager.close();
+      return;
+    }
+    _connectServer(
+      deviceItem.host,
+      deviceItem.port,
+      deviceData: deviceItem,
+    );
+  }
+
+  Future<void> _openClientSettings(DeviceData deviceItem) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClientSettingsScreen(device: deviceItem),
+      ),
+    );
+    _refreshDevice();
   }
 
   Widget _buildDeviceItem(int index) {
@@ -1754,20 +1455,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _clipboardText = text;
     socketManager.sendMessage(text, clipboard: true);
   }
-}
-
-class _DeviceSection {
-  const _DeviceSection({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.items,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<DeviceData> items;
 }
 
 class DeviceDetailsScreen extends StatelessWidget {
@@ -2537,217 +2224,4 @@ class _SettingsScreen extends State<SettingsScreen> {
       _themeMode = mode;
     });
   }
-}
-
-void showConfirmationDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required String confirmButtonText,
-  required String cancelButtonText,
-  required VoidCallback onConfirm,
-  VoidCallback? onCancel,
-}) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(
-              height: 14,
-            ),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
-            ),
-            onPressed: () {
-              if (onCancel != null) {
-                onCancel();
-              }
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-              onConfirm();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-void showInputAlertDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required List<Map<String, bool>> inputHints,
-  required String confirmButtonText,
-  required String cancelButtonText,
-  required Function(List<String>) onConfirm,
-}) {
-  List<TextEditingController> controllers = [];
-  List<Widget> inputFields = [];
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller =
-        TextEditingController(text: inputHints[i].keys.first);
-    controllers.add(controller);
-
-    inputFields.add(
-      Column(
-        children: [
-          const SizedBox(height: 8),
-          CupertinoTextField(
-            controller: controller,
-            placeholder: inputHints[i].keys.first,
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black,
-            ),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[800] : Colors.white,
-              border: Border.all(
-                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            inputFormatters: inputHints[i].values.first
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                  ]
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...inputFields,
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
-            ),
-            onPressed: () {
-              List<String> inputValues =
-                  controllers.map((controller) => controller.text).toList();
-              onConfirm(inputValues);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-void showLoadingDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required bool isLoading,
-  required Widget icon,
-  required String cancelButtonText,
-  bool showCancel = true,
-  required VoidCallback onCancel,
-  required Function(VoidCallback onCancel) task,
-}) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              height: 12,
-            ),
-            if (isLoading) icon,
-            const SizedBox(
-              height: 8,
-            ),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          if (isLoading && showCancel)
-            CupertinoDialogAction(
-              onPressed: onCancel,
-              child: Text(
-                cancelButtonText,
-                style: const TextStyle(
-                  color: Colors.red,
-                ),
-              ),
-            ),
-        ],
-      );
-    },
-  );
-  await task(onCancel);
 }
