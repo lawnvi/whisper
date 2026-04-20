@@ -8,7 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:super_context_menu/super_context_menu.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
@@ -16,6 +15,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/widget/context_menu_region.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -327,7 +327,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                               alignment: isOpponent
                                   ? Alignment.centerLeft
                                   : Alignment.centerRight,
-                              child: ContextMenuWidget(
+                              child: ContextMenuRegion(
                                 child: GestureDetector(
                                   child: isFile
                                       ? _buildFileMessage(message, isOpponent)
@@ -339,85 +339,79 @@ class _SendMessageScreen extends State<SendMessageScreen>
                                   },
                                   onLongPress: () {},
                                 ),
-                                menuProvider: (_) {
-                                  return Menu(children: [
-                                    if (!isFile)
-                                      MenuAction(
-                                          title: AppLocalizations.of(context)
-                                                  ?.copyMessage ??
-                                              '复制消息',
-                                          callback: () {
-                                            if (message.content?.isNotEmpty ==
-                                                true) {
-                                              copyToClipboard(message.content!);
-                                            }
-                                          }),
-                                    if (!isFile)
-                                      MenuAction(
-                                          title: AppLocalizations.of(context)
-                                                  ?.delete ??
-                                              '删除',
-                                          callback: () {
-                                            _deleteItem(message.id);
-                                          }),
-                                    if (isFile && (isOpponent || isDesktop()))
-                                      MenuAction(
-                                          title: AppLocalizations.of(context)
-                                                  ?.open ??
+                                items: [
+                                  if (!isFile)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.copyMessage ??
+                                          '复制消息',
+                                      onSelected: () {
+                                        if (message.content?.isNotEmpty ==
+                                            true) {
+                                          copyToClipboard(message.content!);
+                                        }
+                                      },
+                                    ),
+                                  if (!isFile)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.delete ??
+                                          '删除',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && (isOpponent || isDesktop()))
+                                    ContextMenuActionItem(
+                                      label:
+                                          AppLocalizations.of(context)?.open ??
                                               '打开',
-                                          callback: () {
-                                            logger.i(message.path);
-                                            openFile(message.path);
-                                          }),
-                                    if (isFile && (isOpponent || isDesktop()))
-                                      MenuAction(
-                                          title: (Platform.isMacOS
-                                                  ? AppLocalizations.of(context)
-                                                      ?.openInFinder
-                                                  : AppLocalizations.of(context)
-                                                      ?.openInDir) ??
-                                              '所在文件夹',
-                                          callback: () {
-                                            logger.i(message.path);
-                                            openDir(message.path, parent: true);
-                                          }),
-                                    if (isFile) MenuSeparator(),
-                                    if (isFile && isOpponent)
-                                      Menu(
-                                          title: AppLocalizations.of(context)
-                                                  ?.delete ??
-                                              '删除',
-                                          children: [
-                                            MenuAction(
-                                                title:
-                                                    AppLocalizations.of(context)
-                                                            ?.keepFile ??
-                                                        '保留文件',
-                                                callback: () {
-                                                  _deleteItem(message.id);
-                                                }),
-                                            MenuAction(
-                                                title:
-                                                    AppLocalizations.of(context)
-                                                            ?.deleteFile ??
-                                                        '删除文件',
-                                                callback: () {
-                                                  logger.i(
-                                                      "delete ${message.path}");
-                                                  File(message.path).delete();
-                                                  _deleteItem(message.id);
-                                                }),
-                                          ]),
-                                    if (isFile && !isOpponent)
-                                      MenuAction(
-                                          title: AppLocalizations.of(context)
-                                                  ?.delete ??
-                                              '删除',
-                                          callback: () {
-                                            _deleteItem(message.id);
-                                          }),
-                                  ]);
-                                },
+                                      onSelected: () {
+                                        logger.i(message.path);
+                                        openFile(message.path);
+                                      },
+                                    ),
+                                  if (isFile && (isOpponent || isDesktop()))
+                                    ContextMenuActionItem(
+                                      label: (Platform.isMacOS
+                                              ? AppLocalizations.of(context)
+                                                  ?.openInFinder
+                                              : AppLocalizations.of(context)
+                                                  ?.openInDir) ??
+                                          '所在文件夹',
+                                      onSelected: () {
+                                        logger.i(message.path);
+                                        openDir(message.path, parent: true);
+                                      },
+                                    ),
+                                  if (isFile && isOpponent)
+                                    ContextMenuActionItem(
+                                      label:
+                                          '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.keepFile ?? '保留文件'})',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && isOpponent)
+                                    ContextMenuActionItem(
+                                      label:
+                                          '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.deleteFile ?? '删除文件'})',
+                                      onSelected: () {
+                                        logger.i("delete ${message.path}");
+                                        File(message.path).delete();
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && !isOpponent)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.delete ??
+                                          '删除',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                ],
                               ),
                             ),
                             SizedBox(
@@ -1045,7 +1039,8 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                         fontSize: 17.0,
                         color: isDark ? Colors.white : CupertinoColors.black,
                         fontWeight: FontWeight.w500,
-                        fontFamily: Platform.isWindows ? null : 'SF Pro Display',
+                        fontFamily:
+                            Platform.isWindows ? null : 'SF Pro Display',
                       ),
                     ),
                   ),

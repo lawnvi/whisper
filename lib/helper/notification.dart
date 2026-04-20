@@ -134,7 +134,10 @@ Future<String> appName(String? package) async {
 
   if (Platform.isAndroid) {
     // 好像可以获取到app的apk路径
-    List<AppInfo> apps = await InstalledApps.getInstalledApps(false, true);
+    List<AppInfo> apps = await InstalledApps.getInstalledApps(
+      excludeSystemApps: false,
+      withIcon: true,
+    );
     for (var item in apps) {
       if (item.packageName == package) {
         return item.name;
