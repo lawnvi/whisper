@@ -32,7 +32,10 @@ class _AppListScreenState extends State<AppListScreen> {
     setState(() {
       isLoading = true;
     });
-    List<AppInfo> installedApps = await InstalledApps.getInstalledApps(true, true);
+    List<AppInfo> installedApps = await InstalledApps.getInstalledApps(
+      excludeSystemApps: true,
+      withIcon: true,
+    );
     Map<String, int> appMap = await LocalSetting().listenAppNotifyList();
     installedApps.sort(
         (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0));
