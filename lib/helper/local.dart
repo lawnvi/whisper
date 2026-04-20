@@ -102,40 +102,40 @@ class LocalSetting {
     }
   }
 
-  void updateNickname(String nickname) async {
-    _setSP(_name, nickname);
+  Future<void> updateNickname(String nickname) async {
+    await _setSP(_name, nickname);
   }
 
-  void updatePort(int port) async {
-    _setSP(_port, port);
+  Future<void> updatePort(int port) async {
+    await _setSP(_port, port);
   }
 
-  void updateServer(bool server) async {
-    _setSP(_isServer, server);
+  Future<void> updateServer(bool server) async {
+    await _setSP(_isServer, server);
   }
 
-  void updateClipboard(bool allow) async {
-    _setSP(_clipboard, allow);
+  Future<void> updateClipboard(bool allow) async {
+    await _setSP(_clipboard, allow);
   }
 
-  void updateNoAuth(bool allow) async {
-    _setSP(_noAuth, allow);
+  Future<void> updateNoAuth(bool allow) async {
+    await _setSP(_noAuth, allow);
   }
 
-  void updatePassword(String password) async {
-    _setSP(_password, password);
+  Future<void> updatePassword(String password) async {
+    await _setSP(_password, password);
   }
 
-  void updateDoubleClickDelete(bool delete) async {
-    _setSP(_doubleClickDelete, delete);
+  Future<void> updateDoubleClickDelete(bool delete) async {
+    await _setSP(_doubleClickDelete, delete);
   }
 
   Future<bool> isDoubleClickDelete() async {
     return await getSPDefault(_doubleClickDelete, false);
   }
 
-  void updateClose2Tray(bool delete) async {
-    _setSP(_close2tray, delete);
+  Future<void> updateClose2Tray(bool delete) async {
+    await _setSP(_close2tray, delete);
   }
 
   Future<bool> isClose2Tray() async {
@@ -151,11 +151,11 @@ class LocalSetting {
   }
 
   Future<void> setWindowHeight(double height) async {
-    _setSP(_windowHeight, height);
+    await _setSP(_windowHeight, height);
   }
 
   Future<void> setWindowWidth(double width) async {
-    _setSP(_windowWidth, width);
+    await _setSP(_windowWidth, width);
   }
 
   Future<String> localization() async {
@@ -163,7 +163,7 @@ class LocalSetting {
   }
 
   Future<void> setLocalization(String local) async {
-    _setSP(_localization, local);
+    await _setSP(_localization, local);
   }
 
   Future<String> ftpDir() async {
@@ -171,7 +171,7 @@ class LocalSetting {
   }
 
   Future<void> setFTPDir(String local) async {
-    _setSP(_ftpDir, local);
+    await _setSP(_ftpDir, local);
   }
 
   Future<int> ftpPort() async {
@@ -179,7 +179,7 @@ class LocalSetting {
   }
 
   Future<void> setFTPPort(int port) async {
-    _setSP(_ftpPort, port);
+    await _setSP(_ftpPort, port);
   }
 
   Future<Map<String, int>> listenAppNotifyList() async {
@@ -216,27 +216,27 @@ class LocalSetting {
   }
 
   Future<void> modifySavePath(String path) async {
-    _setSP(_savePath, path);
+    await _setSP(_savePath, path);
   }
 
-  void setCopyVerify(bool copy) async {
-    _setSP(_copyVerifyCode, copy);
+  Future<void> setCopyVerify(bool copy) async {
+    await _setSP(_copyVerifyCode, copy);
   }
 
   Future<bool> copyVerify() async {
     return await getSPDefault(_copyVerifyCode, false);
   }
 
-  void setAndroidNotification(bool ignore) async {
-    _setSP(_ignoreAndroidNotify, ignore);
+  Future<void> setAndroidNotification(bool ignore) async {
+    await _setSP(_ignoreAndroidNotify, ignore);
   }
 
   Future<bool> ignoreAndroidNotification() async {
     return await getSPDefault(_ignoreAndroidNotify, false);
   }
 
-  void setAndroidListen(bool listen) async {
-    _setSP(_listenAndroidNotify, listen);
+  Future<void> setAndroidListen(bool listen) async {
+    await _setSP(_listenAndroidNotify, listen);
   }
 
   Future<bool> isListenAndroid() async {

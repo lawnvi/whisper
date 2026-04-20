@@ -263,8 +263,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (inputValues[0].isEmpty) {
                               inputValues[0] = await deviceName();
                             }
-                            LocalSetting().updateNickname(inputValues[0]);
-                            _refreshDevice();
+                            await LocalSetting().updateNickname(inputValues[0]);
+                            await _refreshDevice();
                           },
                         );
                       },
@@ -298,8 +298,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             try {
                               final port = int.parse(inputValues[0]);
                               if (port > 1000 && port <= 65535) {
-                                LocalSetting().updatePort(port);
-                                _refreshDevice();
+                                await LocalSetting().updatePort(port);
+                                await _refreshDevice();
                               }
                             } on Exception catch (_) {}
                           },
@@ -336,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             try {
                               final port = int.parse(inputValues[0]);
                               if (port > 1000 && port <= 65535) {
-                                LocalSetting().setFTPPort(port);
+                                await LocalSetting().setFTPPort(port);
                                 setState(() {
                                   _ftpPort = port;
                                 });
@@ -394,9 +394,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       trailing: CupertinoSwitch(
                         value: device?.auth ?? false,
-                        onChanged: (bool value) {
-                          LocalSetting().updateNoAuth(value);
-                          _refreshDevice();
+                        onChanged: (bool value) async {
+                          await LocalSetting().updateNoAuth(value);
+                          await _refreshDevice();
                         },
                       ),
                     ),
@@ -411,9 +411,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       trailing: CupertinoSwitch(
                         value: device?.clipboard ?? false,
-                        onChanged: (bool value) {
-                          LocalSetting().updateClipboard(value);
-                          _refreshDevice();
+                        onChanged: (bool value) async {
+                          await LocalSetting().updateClipboard(value);
+                          await _refreshDevice();
                         },
                       ),
                     ),
@@ -428,8 +428,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: _close2tray,
-                          onChanged: (bool value) {
-                            LocalSetting().updateClose2Tray(value);
+                          onChanged: (bool value) async {
+                            await LocalSetting().updateClose2Tray(value);
                             setState(() {
                               _close2tray = value;
                             });
@@ -458,7 +458,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         trailing: CupertinoSwitch(
                           value: _listenAndroid,
                           onChanged: (bool value) async {
-                            LocalSetting().setAndroidListen(value);
+                            await LocalSetting().setAndroidListen(value);
                             setState(() {
                               _listenAndroid = value;
                             });
@@ -494,8 +494,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       trailing: CupertinoSwitch(
                         value: _ignoreAndroid,
-                        onChanged: (bool value) {
-                          LocalSetting().setAndroidNotification(value);
+                        onChanged: (bool value) async {
+                          await LocalSetting().setAndroidNotification(value);
                           setState(() {
                             _ignoreAndroid = value;
                           });
@@ -514,8 +514,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: CupertinoSwitch(
                           value: _copyVerifyCode,
-                          onChanged: (bool value) {
-                            LocalSetting().setCopyVerify(value);
+                          onChanged: (bool value) async {
+                            await LocalSetting().setCopyVerify(value);
                             setState(() {
                               _copyVerifyCode = value;
                             });
@@ -581,11 +581,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             : Colors.black,
                                       ),
                                     ),
-                                    onPressed: () {
+                                    onPressed: () async {
                                       Navigator.pop(context);
                                       MyApp.setLocale(
                                           context, const Locale('zh'));
-                                      LocalSetting().setLocalization('zh');
+                                      await LocalSetting()
+                                          .setLocalization('zh');
                                     },
                                   ),
                                   CupertinoActionSheetAction(
@@ -597,11 +598,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             : Colors.black,
                                       ),
                                     ),
-                                    onPressed: () {
+                                    onPressed: () async {
                                       Navigator.pop(context);
                                       MyApp.setLocale(
                                           context, const Locale('en'));
-                                      LocalSetting().setLocalization('en');
+                                      await LocalSetting()
+                                          .setLocalization('en');
                                     },
                                   ),
                                 ],
@@ -665,7 +667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<String> _pickFTPDir() async {
     final selectDir = await FilePicker.platform.getDirectoryPath();
     if (selectDir != null) {
-      LocalSetting().setFTPDir(selectDir);
+      await LocalSetting().setFTPDir(selectDir);
     }
     return selectDir ?? "";
   }
@@ -673,7 +675,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<String> _pickSaveDir() async {
     final selectDir = await FilePicker.platform.getDirectoryPath();
     if (selectDir != null) {
-      LocalSetting().modifySavePath(selectDir);
+      await LocalSetting().modifySavePath(selectDir);
+      if (!mounted) {
+        return selectDir;
+      }
       setState(() {
         _path = selectDir;
       });
@@ -690,9 +695,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _updateThemeMode(ThemeMode mode) async {
+  Future<void> _updateThemeMode(ThemeMode mode) async {
     MyApp.setTheme(context, mode);
     await LocalSetting().setThemeMode(mode);
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _themeMode = mode;
     });
