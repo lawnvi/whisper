@@ -75,7 +75,7 @@ jobs:
 
       # New step to install NSIS
       - name: Install NSIS
-        run: choco install nsis
+        run: choco install nsis -y
 
       - run: flutter config --enable-windows-desktop
       - run: flutter build windows
@@ -88,7 +88,7 @@ jobs:
 
       # New step to create the installer using NSIS
       - name: Create EXE Installer
-        run: makensis windows\installer.nsi
+        run: '& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" windows\installer.nsi'
 
       # New step to verify the EXE installer exists
       - name: Check if file exists
@@ -135,19 +135,28 @@ jobs:
           sudo apt-get install -y alien
           sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
 
+      - name: Install Android Command Line Tools
+        run: |
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd "$ANDROID_SDK_ROOT/cmdline-tools"
+          curl -sSLo commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+          unzip -q commandlinetools.zip
+          rm commandlinetools.zip
+          mv cmdline-tools latest
+
       # ✅ 安装 Android SDK 35 + Build Tools
       - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
+        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
 
       - name: Install Android SDK packages (Build Tools + Platform Tools)
         run: |
-          yes | sdkmanager --update
-          yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Set environment variables for Android
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - run: flutter config --enable-linux-desktop
       - run: flutter build linux
