@@ -22,6 +22,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/auto_connect_planner.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_models.dart';
+import 'package:whisper/state/device_workspace_state.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
@@ -534,9 +535,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   Widget build(BuildContext context) {
     var isDesk = isDesktop();
-    final sections = _buildDeviceSections();
-    final selectedDevice = _selectedDevice();
     final colorScheme = Theme.of(context).colorScheme;
+    final workspaceState = DeviceWorkspaceStateBuilder.build(
+      devices: devices,
+      presences: {
+        for (final presence in connectionCoordinator.peers)
+          presence.peerId: presence,
+      },
+      selectedPeerId: _selectedPeerId,
+      activePeerId: socketManager.receiver,
+      connectedTitle: AppLocalizations.of(context)?.connect ?? 'Connected',
+      trustedTitle: AppLocalizations.of(context)?.trust ?? 'Trusted',
+    );
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -629,128 +639,31 @@ class _DeviceListScreen extends State<DeviceListScreen>
               children: [
                 SizedBox(
                   width: 380,
-                  child: _buildDeviceRail(sections),
+                  child: _buildDeviceRail(workspaceState),
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(
-                  child: _buildDesktopWorkspace(selectedDevice),
+                  child: _buildDesktopWorkspace(workspaceState),
                 ),
               ],
             )
-          : _buildMobileWorkspace(sections),
+          : _buildMobileWorkspace(workspaceState),
     );
   }
 
-  List<DeviceWorkspaceSection> _buildDeviceSections() {
-    final connected = <DeviceWorkspaceItemData>[];
-    final trusted = <DeviceWorkspaceItemData>[];
-    final pending = <DeviceWorkspaceItemData>[];
-    final nearby = <DeviceWorkspaceItemData>[];
-    final history = <DeviceWorkspaceItemData>[];
-
-    for (final item in devices) {
-      final presence = connectionCoordinator.peer(item.uid);
-      final isConnected = connectionCoordinator.isConnectedTo(item.uid);
-      final isTrusted = presence?.locallyTrusted ?? item.auth;
-      final isNearby = presence?.discovered ?? (item.around == true);
-      final remoteTrusted = presence?.remotelyTrusted ?? false;
-      final viewData = DeviceWorkspaceItemData(
-        device: item,
-        isConnected: isConnected,
-        isNearby: isNearby,
-        localTrust: isTrusted,
-        remoteTrust: remoteTrusted,
-        isSelected: _selectedPeerId == item.uid,
-      );
-
-      if (isConnected) {
-        connected.add(viewData);
-      } else if (isTrusted) {
-        trusted.add(viewData);
-      } else if (isNearby && remoteTrusted) {
-        pending.add(viewData);
-      } else if (isNearby) {
-        nearby.add(viewData);
-      } else {
-        history.add(viewData);
-      }
-    }
-
-    final sections = <DeviceWorkspaceSection>[
-      DeviceWorkspaceSection(
-        title: AppLocalizations.of(context)?.connect ?? 'Connected',
-        subtitle: '当前在线会话',
-        icon: Icons.wifi_rounded,
-        items: connected,
-      ),
-      DeviceWorkspaceSection(
-        title: AppLocalizations.of(context)?.trust ?? 'Trusted',
-        subtitle: '双向信任设备优先自动直连',
-        icon: Icons.verified_user_rounded,
-        items: trusted,
-      ),
-      DeviceWorkspaceSection(
-        title: 'Pending',
-        subtitle: '对方信任你，但你还未标记为信任',
-        icon: Icons.hourglass_bottom_rounded,
-        items: pending,
-      ),
-      DeviceWorkspaceSection(
-        title: 'Nearby',
-        subtitle: '当前局域网内发现的设备',
-        icon: Icons.radar_rounded,
-        items: nearby,
-      ),
-      DeviceWorkspaceSection(
-        title: 'History',
-        subtitle: '离线但保留历史消息的设备',
-        icon: Icons.history_rounded,
-        items: history,
-      ),
-    ];
-
-    return sections.where((section) => section.items.isNotEmpty).toList();
-  }
-
-  DeviceData? _selectedDevice() {
-    if (devices.isEmpty) {
-      return null;
-    }
-    if (_selectedPeerId != null) {
-      for (final item in devices) {
-        if (item.uid == _selectedPeerId) {
-          return item;
-        }
-      }
-    }
-    if (socketManager.receiver.isNotEmpty) {
-      for (final item in devices) {
-        if (item.uid == socketManager.receiver) {
-          return item;
-        }
-      }
-    }
-    return devices.first;
-  }
-
-  Widget _buildDeviceRail(List<DeviceWorkspaceSection> sections) {
+  Widget _buildDeviceRail(DeviceWorkspaceState workspaceState) {
     return Container(
       color: Theme.of(context).colorScheme.surface,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
         children: [
           WorkspaceOverviewCard(
-            connectedCount: connectionCoordinator.peers
-                .where(
-                    (item) => item.state == ConnectionLifecycleState.connected)
-                .length,
-            trustedCount: connectionCoordinator.peers
-                .where(AutoConnectPlanner.isMutuallyTrusted)
-                .length,
+            connectedCount: workspaceState.connectedCount,
+            trustedCount: workspaceState.trustedCount,
             totalPeers: devices.length,
           ),
           const SizedBox(height: 12),
-          for (final section in sections)
+          for (final section in workspaceState.sections)
             DeviceSectionCard(
               section: section,
               compact: false,
@@ -764,21 +677,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildMobileWorkspace(List<DeviceWorkspaceSection> sections) {
+  Widget _buildMobileWorkspace(DeviceWorkspaceState workspaceState) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 24),
       children: [
         WorkspaceOverviewCard(
-          connectedCount: connectionCoordinator.peers
-              .where((item) => item.state == ConnectionLifecycleState.connected)
-              .length,
-          trustedCount: connectionCoordinator.peers
-              .where(AutoConnectPlanner.isMutuallyTrusted)
-              .length,
+          connectedCount: workspaceState.connectedCount,
+          trustedCount: workspaceState.trustedCount,
           totalPeers: devices.length,
         ),
         const SizedBox(height: 12),
-        for (final section in sections)
+        for (final section in workspaceState.sections)
           DeviceSectionCard(
             section: section,
             compact: true,
@@ -791,7 +700,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildDesktopWorkspace(DeviceData? selectedDevice) {
+  Widget _buildDesktopWorkspace(DeviceWorkspaceState workspaceState) {
+    final selectedDevice = workspaceState.selectedDevice;
     final presence = selectedDevice == null
         ? null
         : connectionCoordinator.peer(selectedDevice.uid);
