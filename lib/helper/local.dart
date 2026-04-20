@@ -183,34 +183,32 @@ class LocalSetting {
   }
 
   Future<Map<String, int>> listenAppNotifyList() async {
-    var str = await getSPDefault(_notifyAppMap, "");
-    var map = <String, int>{};
-    for (var item in str.split(":")) {
-      if (item.isNotEmpty) {
-        map[item] = 1;
-      }
-    }
-    return map;
+    final raw = await getSPDefault(_notifyAppMap, "");
+    final uniquePackages =
+        raw.split(":").where((item) => item.isNotEmpty).toSet();
+    return {
+      for (final packageName in uniquePackages) packageName: 1,
+    };
   }
 
   Future<void> modifyListenNotifyApp(
-      {packages = List<String>, add = true, clear = false}) async {
+      {List<String> packages = const [],
+      bool add = true,
+      bool clear = false}) async {
     if (clear) {
-      _setSP(_notifyAppMap, "");
+      await _setSP(_notifyAppMap, "");
       return;
     }
     if (packages.isEmpty) {
       return;
     }
-    var str = await getSPDefault(_notifyAppMap, "");
+    final currentPackages = (await listenAppNotifyList()).keys.toSet();
     if (add) {
-      packages.addAll(str.replaceAll("::", ":").split(":"));
-      _setSP(_notifyAppMap, packages.join(":"));
+      currentPackages.addAll(packages.where((item) => item.isNotEmpty));
     } else {
-      Iterable<String> tempArr = str.replaceAll("::", ":").split(":");
-      tempArr = tempArr.where((item) => !packages.contains(item));
-      _setSP(_notifyAppMap, tempArr.join(":"));
+      currentPackages.removeAll(packages);
     }
+    await _setSP(_notifyAppMap, currentPackages.join(":"));
   }
 
   Future<String> savePath() async {
