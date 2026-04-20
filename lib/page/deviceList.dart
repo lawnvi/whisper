@@ -12,7 +12,6 @@ import 'package:flutter_notification_listener_plus/flutter_notification_listener
 import 'package:flutter_swipe_action_cell/core/cell.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:super_context_menu/super_context_menu.dart' as cMenu;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
@@ -20,6 +19,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/ftp.dart';
 import '../helper/local.dart';
@@ -564,7 +564,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             child: Icon(
               Icons.settings_outlined,
               size: 30,
-              color: isDark?Colors.white60:Colors.black45,
+              color: isDark ? Colors.white60 : Colors.black45,
             ),
             onPressed: () async {
               await Navigator.push(
@@ -590,7 +590,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Widget _buildDeviceItem(int index) {
     final deviceItem = devices[index];
 
-    return cMenu.ContextMenuWidget(
+    return ContextMenuRegion(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
           child: ListTile(
@@ -629,37 +629,39 @@ class _DeviceListScreen extends State<DeviceListScreen>
             },
           ),
         ),
-        menuProvider: (_) {
-          return cMenu.Menu(children: [
-            if (deviceItem.uid == socketManager.receiver)
-              cMenu.MenuAction(
-                  title: "断开",
-                  callback: () {
-                    socketManager.close();
-                  }),
-            if (socketManager.receiver.isEmpty)
-              cMenu.MenuAction(
-                  title: "连接",
-                  callback: () {
-                    _connectServer(deviceItem.host, deviceItem.port);
-                  }),
-            if (deviceItem.uid != socketManager.receiver)
-              cMenu.MenuAction(
-                  title: "删除",
-                  callback: () {
-                    LocalDatabase().clearDevices([deviceItem.uid]);
-                    devices.removeAt(index);
-                    setState(() {});
-                  }),
-            if (isDesktop())
-              cMenu.MenuAction(
-                  title: "连接FTP",
-                  callback: () {
-                    SimpleFtpServer()
-                        .openClient("${deviceItem.host}:$defaultFtpPort");
-                  }),
-          ]);
-        });
+        items: [
+          if (deviceItem.uid == socketManager.receiver)
+            ContextMenuActionItem(
+              label: "断开",
+              onSelected: () {
+                socketManager.close();
+              },
+            ),
+          if (socketManager.receiver.isEmpty)
+            ContextMenuActionItem(
+              label: "连接",
+              onSelected: () {
+                _connectServer(deviceItem.host, deviceItem.port);
+              },
+            ),
+          if (deviceItem.uid != socketManager.receiver)
+            ContextMenuActionItem(
+              label: "删除",
+              onSelected: () {
+                LocalDatabase().clearDevices([deviceItem.uid]);
+                devices.removeAt(index);
+                setState(() {});
+              },
+            ),
+          if (isDesktop())
+            ContextMenuActionItem(
+              label: "连接FTP",
+              onSelected: () {
+                SimpleFtpServer()
+                    .openClient("${deviceItem.host}:$defaultFtpPort");
+              },
+            ),
+        ]);
   }
 
   void _openConv(deviceItem) async {
@@ -1372,8 +1374,10 @@ class _SettingsScreen extends State<SettingsScreen> {
                                 ],
                                 cancelButton: CupertinoActionSheetAction(
                                   child: Text(
-                                    AppLocalizations.of(context)?.cancel ?? '取消',
-                                    style: const TextStyle(color: Colors.redAccent),
+                                    AppLocalizations.of(context)?.cancel ??
+                                        '取消',
+                                    style: const TextStyle(
+                                        color: Colors.redAccent),
                                   ),
                                   onPressed: () {
                                     Navigator.pop(context);
@@ -1738,8 +1742,10 @@ class _SettingsScreen extends State<SettingsScreen> {
                                 ],
                                 cancelButton: CupertinoActionSheetAction(
                                   child: Text(
-                                    AppLocalizations.of(context)?.cancel ?? '取消',
-                                    style: const TextStyle(color: Colors.redAccent),
+                                    AppLocalizations.of(context)?.cancel ??
+                                        '取消',
+                                    style: const TextStyle(
+                                        color: Colors.redAccent),
                                   ),
                                   onPressed: () {
                                     Navigator.pop(context);
@@ -1853,7 +1859,8 @@ class _SettingsScreen extends State<SettingsScreen> {
                         fontSize: 17.0,
                         color: isDark ? Colors.white : CupertinoColors.black,
                         fontWeight: Platform.isWindows ? null : FontWeight.w500,
-                        fontFamily: Platform.isWindows ? null : 'SF Pro Display',
+                        fontFamily:
+                            Platform.isWindows ? null : 'SF Pro Display',
                       ),
                     ),
                   ),
