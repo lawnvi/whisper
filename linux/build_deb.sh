@@ -1,76 +1,67 @@
 #!/bin/bash
 
-# 定义版本和架构
-VERSION=$1
-ARCHITECTURE=$2
-pwd
-echo "build deb version: ${VERSION}"
+set -euo pipefail
 
-# 定义你的Flutter项目的根目录
-FLUTTER_PROJECT_DIR="."
+VERSION="${1:?version is required}"
+ARCHITECTURE="${2:-amd64}"
+APP_NAME="whisper"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+OUTPUT_DIR="${PROJECT_DIR}/build/linux/deb"
+BUILD_DIR="${OUTPUT_DIR}/pkgroot"
+INSTALL_DIR="/opt/${APP_NAME}"
+BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
-# 定义你想要放置.deb文件的目录
-OUTPUT_DIR="${FLUTTER_PROJECT_DIR}/build/linux/deb"
+echo "Building DEB package ${APP_NAME} ${VERSION} (${ARCHITECTURE})"
 
-# 定义临时构建目录
-BUILD_DIR="${OUTPUT_DIR}/build"
-
-# 清理旧的构建目录
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}/DEBIAN"
+mkdir -p "${BUILD_DIR}${INSTALL_DIR}"
+mkdir -p "${BUILD_DIR}/usr/share/applications"
+mkdir -p "${BUILD_DIR}/usr/share/icons/hicolor/256x256/apps"
 
-# 编译Flutter项目为Linux应用程序
-#flutter build linux
+cp -R "${BUNDLE_DIR}/." "${BUILD_DIR}${INSTALL_DIR}"
+cp "${PROJECT_DIR}/linux/app_icon.png" "${BUILD_DIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
 
-# 创建DEBIAN控制文件所需的目录结构
-DEBIAN_DIR="${BUILD_DIR}/DEBIAN"
-mkdir -p "${DEBIAN_DIR}"
-
-# 创建控制文件
-CONTROL_FILE="${DEBIAN_DIR}/control"
-APPLICATION_NAME="whisper" # 修改为你的应用名称
-cat > "${CONTROL_FILE}" <<EOF
-Package: ${APPLICATION_NAME}
+cat > "${BUILD_DIR}/DEBIAN/control" <<EOF
+Package: ${APP_NAME}
 Version: ${VERSION}
-Section: base
+Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Maintainer: vireen
-Description: transfer files in local network
+Maintainer: lawnvi
+Homepage: https://github.com/lawnvi/whisper
+Description: Cross-platform local network file and message transfer
 EOF
 
-# 创建桌面条目文件夹
-DESKTOP_ENTRIES_DIR="${BUILD_DIR}/usr/share/applications"
-mkdir -p "${DESKTOP_ENTRIES_DIR}"
-
-# 创建.desktop文件
-DESKTOP_FILE="${DESKTOP_ENTRIES_DIR}/${APPLICATION_NAME}.desktop"
-cat > "${DESKTOP_FILE}" <<EOF
+cat > "${BUILD_DIR}/usr/share/applications/${APP_NAME}.desktop" <<EOF
 [Desktop Entry]
-Name=${APPLICATION_NAME}
-Comment=Your application description
-Exec=/usr/local/bin/${APPLICATION_NAME}/${APPLICATION_NAME}
-Icon=app_icon.png
+Name=Whisper
+Comment=Cross-platform local network file and message transfer
+Exec=${INSTALL_DIR}/${APP_NAME}
+Icon=${APP_NAME}
 Terminal=false
 Type=Application
-Categories=Utility;
+Categories=Utility;Network;
+StartupWMClass=whisper
 EOF
 
-# 如果有图标，也应该复制到相应的目录
-# 假设你的图标位于项目的icons目录下
-ICON_DIR="${BUILD_DIR}/usr/share/icons/hicolor/scalable/apps"
-mkdir -p "${ICON_DIR}"
-cp "${FLUTTER_PROJECT_DIR}/linux/app_icon.png" "${ICON_DIR}"
+cat > "${BUILD_DIR}/DEBIAN/postinst" <<EOF
+#!/bin/sh
+set -e
+update-desktop-database >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+EOF
 
-# 复制编译后的文件到构建目录
-APPLICATION_DIR="${BUILD_DIR}/usr/local/bin/${APPLICATION_NAME}"
-mkdir -p "${APPLICATION_DIR}"
-cp -r "${FLUTTER_PROJECT_DIR}/build/linux/x64/release/bundle/." "${APPLICATION_DIR}"
+cat > "${BUILD_DIR}/DEBIAN/postrm" <<EOF
+#!/bin/sh
+set -e
+update-desktop-database >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+EOF
 
-# 创建.deb包
-DEB_PACKAGE_NAME="${APPLICATION_NAME}-${ARCHITECTURE}.deb"
-dpkg-deb --build "${BUILD_DIR}" "${OUTPUT_DIR}/${DEB_PACKAGE_NAME}"
+chmod 0755 "${BUILD_DIR}/DEBIAN/postinst" "${BUILD_DIR}/DEBIAN/postrm"
 
-pwd
-echo "Deb package created at: ${OUTPUT_DIR}/${DEB_PACKAGE_NAME}"
+mkdir -p "${OUTPUT_DIR}"
+dpkg-deb --build "${BUILD_DIR}" "${OUTPUT_DIR}/${APP_NAME}-${ARCHITECTURE}.deb"
 
+echo "Created ${OUTPUT_DIR}/${APP_NAME}-${ARCHITECTURE}.deb"

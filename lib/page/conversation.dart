@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
@@ -15,14 +16,14 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
 
 import '../helper/notification.dart';
-
-import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
 
@@ -44,6 +45,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
+  final FocusNode _composerFocusNode = FocusNode();
   bool isInputEmpty = true;
   double percent = 0;
   String _speed = "";
@@ -73,6 +75,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void dispose() {
     logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
     socketManager.unregisterEvent();
+    _composerFocusNode.dispose();
     super.dispose();
   }
 
@@ -201,6 +204,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
 
     var widget = Scaffold(
       appBar: AppBar(
@@ -221,19 +226,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
               children: [
                 Text(device.name,
                     style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black)), // 设备名称
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.w700)), // 设备名称
                 Row(
                   children: [
                     Text(
                       "${device.host}:${device.port}", // 设备 IP 地址
                       style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey[400] : Colors.black54),
+                          fontSize: 12, color: colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(width: 4),
                     if (socketManager.receiver == device.uid)
-                      const Icon(Icons.wifi_rounded,
-                          size: 14, color: Colors.lightBlue)
+                      Icon(Icons.wifi_rounded,
+                          size: 14, color: palette.connected)
                   ],
                 )
               ],
@@ -277,7 +282,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             child: Icon(
               Icons.settings_outlined,
               size: 30,
-              color: isDark ? Colors.grey[400] : Colors.black45,
+              color: colorScheme.onSurfaceVariant,
             ),
             onPressed: () async {
               Navigator.push(
@@ -298,7 +303,37 @@ class _SendMessageScreen extends State<SendMessageScreen>
           if (percent > 0 && percent < 1)
             LinearProgressIndicator(
               value: percent,
-              color: Colors.lightGreen,
+              color: palette.trusted,
+            ),
+          if (!_isLocalhost)
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    socketManager.receiver == device.uid
+                        ? Icons.link_rounded
+                        : Icons.link_off_rounded,
+                    color: socketManager.receiver == device.uid
+                        ? palette.connected
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      socketManager.receiver == device.uid
+                          ? '当前已连接，可以直接传文本和文件'
+                          : '当前未连接，仍可查看历史消息',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
             ),
           Expanded(
             child: Align(
@@ -433,9 +468,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                                       " ${formatTimestamp(message.timestamp)} ",
                                       // 发送时间
                                       style: TextStyle(
-                                          color: isDark
-                                              ? Colors.grey[400]
-                                              : Colors.grey,
+                                          color: colorScheme.onSurfaceVariant,
                                           fontSize: 12),
                                     ),
                                     SizedBox(
@@ -459,9 +492,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                                       icon: Icon(
                                         Icons.copy,
                                         size: (isMobile() ? 16 : 18),
-                                        color: isDark
-                                            ? Colors.grey[400]
-                                            : Colors.grey,
+                                        color: colorScheme.onSurfaceVariant,
                                       ),
                                       onPressed: () {
                                         if (message.content?.isNotEmpty ==
@@ -482,9 +513,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
           ),
           if (_isLocalhost || device.uid == socketManager.receiver)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey[900] : Colors.white, // 背景颜色
+                color: colorScheme.surface, // 背景颜色
               ),
               child: Row(
                 children: [
@@ -496,24 +527,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
                       },
                       child: Icon(
                         Icons.copy, // 按钮图标
-                        color: isDark ? Colors.grey[400] : Colors.grey, // 按钮颜色
+                        color: colorScheme.onSurfaceVariant, // 按钮颜色
                       ),
                     ),
                   const SizedBox(
                     height: 50,
                   ),
                   Expanded(
-                      child: RawKeyboardListener(
-                    focusNode: FocusNode(),
-                    onKey: (RawKeyEvent event) async {
+                      child: KeyboardListener(
+                    focusNode: _composerFocusNode,
+                    onKeyEvent: (KeyEvent event) async {
                       if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
                           event.logicalKey == LogicalKeyboardKey.shiftRight) {
                         keyPressedMap[LogicalKeyboardKey.shift.keyLabel] =
-                            event is RawKeyDownEvent;
+                            event is KeyDownEvent;
                       } else if (event.logicalKey == LogicalKeyboardKey.enter) {
                         keyPressedMap[LogicalKeyboardKey.enter.keyLabel] =
-                            event is RawKeyDownEvent;
-                        if (event is RawKeyDownEvent &&
+                            event is KeyDownEvent;
+                        if (event is KeyDownEvent &&
                             (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] !=
                                     true ||
                                 isMobile())) {
@@ -526,7 +557,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     },
                     child: CupertinoTextField(
                       controller: _textController,
-                      cursorColor: isDark ? Colors.white : Colors.black87,
+                      cursorColor: colorScheme.primary,
                       autofocus: isDesktop(),
                       autocorrect: true,
                       maxLines: isMobile() ? 5 : 20,
@@ -534,14 +565,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
                       placeholder:
                           AppLocalizations.of(context)?.sendTips ?? '发点什么...',
                       // 输入框提示文字
-                      style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black),
+                      style: TextStyle(color: colorScheme.onSurface),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[800] : Colors.white,
+                        color: colorScheme.surfaceContainerHighest,
                         border: Border.all(
-                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                          color: colorScheme.outlineVariant,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       onChanged: (value) {
                         if (value == "\n" &&
@@ -586,7 +616,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                             !_isLocalhost && isInputEmpty
                                 ? Icons.add
                                 : Icons.send, // 发送按钮图标
-                            color: Colors.lightBlue, // 发送按钮颜色
+                            color: colorScheme.primary, // 发送按钮颜色
                           ),
                         ),
                   if (_isLoading)
@@ -674,7 +704,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
 
     return IntrinsicWidth(
       child: Container(
@@ -682,18 +713,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
         constraints: BoxConstraints(maxWidth: screenWidth),
         decoration: BoxDecoration(
           color: isOpponent
-              ? (isDark ? Colors.grey[800] : Colors.grey[300])
-              : (isDark ? Colors.grey[800] : Colors.blue),
-          borderRadius: BorderRadius.circular(8),
+              ? colorScheme.surfaceContainerHighest
+              : palette.connected.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           child: SelectableText(
             content,
             style: TextStyle(
-              color: isOpponent
-                  ? (isDark ? Colors.white70 : Colors.black)
-                  : (isDark ? Colors.white70 : Colors.white),
+              color: colorScheme.onSurface,
             ),
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar(
@@ -714,16 +743,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     var failed =
         !isOpponent && !message.acked && message.timestamp < device.lastTime;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
 
     return Container(
       width: screenWidth,
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[800] : Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -736,7 +766,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   )
                 : Icon(
                     Icons.insert_drive_file,
-                    color: isDark ? Colors.grey[400] : Colors.white,
+                    color: failed ? palette.danger : colorScheme.primary,
                     size: 42,
                   ),
             if (failed) const SizedBox(width: 8),
@@ -751,7 +781,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     overflow: TextOverflow.clip,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
+                      color: colorScheme.onSurface,
                     ),
                     maxLines: 4,
                     softWrap: true,
@@ -761,8 +791,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 Text(
                   formatSize(message.size),
                   style: TextStyle(
-                      color: isDark ? Colors.grey[400] : Colors.black,
-                      fontSize: 12),
+                      color: colorScheme.onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),
@@ -898,6 +927,10 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final coordinator = ConnectionCoordinator();
+    final presence = coordinator.peer(device.uid);
+    final mutualTrust = (presence?.locallyTrusted ?? device.auth) &&
+        (presence?.remotelyTrusted ?? false);
 
     return Scaffold(
         appBar: AppBar(
@@ -924,6 +957,21 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                     child: Column(
                       children: [
                         _buildSettingItem(
+                          mutualTrust ? '双向互信已开启' : '尚未形成双向互信',
+                          Icon(
+                            mutualTrust
+                                ? Icons.verified_user_rounded
+                                : Icons.shield_outlined,
+                            color: mutualTrust
+                                ? context.whisperPalette.trusted
+                                : (isDark
+                                    ? Colors.grey[400]
+                                    : CupertinoColors.systemGrey),
+                          ),
+                          null,
+                          showDivider: false,
+                        ),
+                        _buildSettingItem(
                           AppLocalizations.of(context)?.trust ?? '自动接入',
                           Icon(
                             Icons.wifi_rounded,
@@ -934,7 +982,9 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           CupertinoSwitch(
                             value: device.auth,
                             onChanged: (bool value) async {
-                              LocalDatabase().authDevice(device.uid, value);
+                              await LocalDatabase()
+                                  .authDevice(device.uid, value);
+                              await ConnectionCoordinator().refreshTrustState();
                               var temp =
                                   await LocalDatabase().fetchDevice(device.uid);
                               setState(() {
@@ -953,7 +1003,7 @@ class _ClientSettingsScreen extends State<ClientSettingsScreen> {
                           CupertinoSwitch(
                             value: device.clipboard,
                             onChanged: (bool value) async {
-                              LocalDatabase()
+                              await LocalDatabase()
                                   .clipboardDevice(device.uid, value);
                               var temp =
                                   await LocalDatabase().fetchDevice(device.uid);
