@@ -57,11 +57,6 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Configure Gradle for build
-        run: |
-          echo "android.disableAutomaticComponentCreation=true" >> android/gradle.properties
-          echo "android.lint.checkReleaseBuilds=false" >> android/gradle.properties
-
       - name: Build Android APK (common)
         run: flutter build apk --release --android-skip-build-dependency-validation
 
