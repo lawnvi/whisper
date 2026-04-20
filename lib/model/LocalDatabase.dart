@@ -28,38 +28,62 @@ class LocalDatabase extends _$LocalDatabase {
   int get schemaVersion => 1;
 
   Future<void> insertMessage(MessageData data) {
-    return into(message).insert(MessageCompanion.insert(sender: Value(data.sender), receiver: Value(data.receiver), content: Value(data.content), message: Value(data.message), name: Value(data.name), clipboard: Value(data.clipboard), size: Value(data.size), type: Value(data.type), timestamp: Value(data.timestamp), acked: const Value(false), uuid: Value(data.uuid), path: Value(data.path), md5: Value(data.md5)));
+    return into(message).insert(MessageCompanion.insert(
+        sender: Value(data.sender),
+        receiver: Value(data.receiver),
+        content: Value(data.content),
+        message: Value(data.message),
+        name: Value(data.name),
+        clipboard: Value(data.clipboard),
+        size: Value(data.size),
+        type: Value(data.type),
+        timestamp: Value(data.timestamp),
+        acked: const Value(false),
+        uuid: Value(data.uuid),
+        path: Value(data.path),
+        md5: Value(data.md5)));
   }
 
   Future<MessageData?> ackMessage(MessageData data) async {
     if (data.uuid.isEmpty) {
       return null;
     }
-    (update(message)..where((t) => t.uuid.equals(data.uuid))).write(
+    await (update(message)..where((t) => t.uuid.equals(data.uuid))).write(
       const MessageCompanion(
-          acked: Value(true),
+        acked: Value(true),
       ),
     );
-    return await (select(message)..where((t) => t.uuid.equals(data.uuid))).getSingleOrNull();
+    return await (select(message)..where((t) => t.uuid.equals(data.uuid)))
+        .getSingleOrNull();
   }
 
   Future<void> upsertDevice(DeviceData data) async {
     if (data.uid.isEmpty) {
       return;
     }
-    var temp = await (select(device)..where((t) => t.uid.equals(data.uid))).getSingleOrNull();
+    var temp = await (select(device)..where((t) => t.uid.equals(data.uid)))
+        .getSingleOrNull();
     if (temp == null) {
-      into(device).insert(DeviceCompanion.insert(uid: Value(data.uid), name: Value(data.name), host: data.host, port: data.port, platform: Value(data.platform), isServer: Value(data.isServer), online: Value(data.online), clipboard: const Value(true), auth: const Value(false), lastTime: Value(DateTime.now().millisecondsSinceEpoch~/1000)));
+      await into(device).insert(DeviceCompanion.insert(
+          uid: Value(data.uid),
+          name: Value(data.name),
+          host: data.host,
+          port: data.port,
+          platform: Value(data.platform),
+          isServer: Value(data.isServer),
+          online: Value(data.online),
+          clipboard: const Value(true),
+          auth: const Value(false),
+          lastTime: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000)));
       return;
     }
-    (update(device)..where((t) => t.uid.equals(data.uid))).write(
+    await (update(device)..where((t) => t.uid.equals(data.uid))).write(
       DeviceCompanion(
           host: Value(data.host),
           port: Value(data.port),
           name: Value(data.name),
           online: Value(data.online),
-          lastTime: Value(DateTime.now().millisecondsSinceEpoch~/1000)
-      ),
+          lastTime: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000)),
     );
   }
 
@@ -67,7 +91,7 @@ class LocalDatabase extends _$LocalDatabase {
     if (uid.isEmpty) {
       return;
     }
-    (update(device)..where((t) => t.uid.equals(uid))).write(
+    await (update(device)..where((t) => t.uid.equals(uid))).write(
       DeviceCompanion(
         auth: Value(auth),
       ),
@@ -78,38 +102,55 @@ class LocalDatabase extends _$LocalDatabase {
     if (uid.isEmpty) {
       return;
     }
-    (update(device)..where((t) => t.uid.equals(uid))).write(
+    await (update(device)..where((t) => t.uid.equals(uid))).write(
       DeviceCompanion(
         clipboard: Value(clipboard),
       ),
     );
   }
 
+  Future<List<String>> fetchTrustedPeerIds() async {
+    final trustedDevices =
+        await (select(device)..where((t) => t.auth.equals(true))).get();
+    return trustedDevices.map((item) => item.uid).toList(growable: false);
+  }
+
   Future<DeviceData?> fetchDevice(String uid) {
-    return (select(device)..where((t) => t.uid.equals(uid))..limit(1)).getSingleOrNull();
+    return (select(device)
+          ..where((t) => t.uid.equals(uid))
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   Future<List<DeviceData>> fetchAllDevice() {
     return (select(device)
-          ..orderBy(
-              [(t) => OrderingTerm(expression: t.lastTime, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.lastTime, mode: OrderingMode.desc)
+          ]))
         .get();
   }
 
-  Future<List<MessageData>> fetchMessageList(String uid, {int beforeId=0, int limit=8}) {
+  Future<List<MessageData>> fetchMessageList(String uid,
+      {int beforeId = 0, int limit = 8}) {
     logger.i("device: $uid, msgid: $beforeId");
     if (beforeId > 0) {
       return (select(message)
-        ..where((t) => (t.sender.equals(uid) | t.receiver.equals(uid)) & t.id.isSmallerThanValue(beforeId))
-        ..orderBy([(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)])
-        ..limit(limit)
-      ).get();
-    }else {
+            ..where((t) =>
+                (t.sender.equals(uid) | t.receiver.equals(uid)) &
+                t.id.isSmallerThanValue(beforeId))
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
+            ])
+            ..limit(limit))
+          .get();
+    } else {
       return (select(message)
-        ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
-        ..orderBy([(t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)])
-        ..limit(limit)
-      ).get();
+            ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
+            ])
+            ..limit(limit))
+          .get();
     }
   }
 
@@ -118,19 +159,26 @@ class LocalDatabase extends _$LocalDatabase {
       return;
     }
     var localhost = await LocalSetting().instance();
-    if (uids.contains(localhost.uid)) {
-      uids.remove(localhost.uid);
-      (delete(message)..where((t) => t.sender.equals(localhost.uid) & t.receiver.equals(""))).go();
-      (delete(device)..where((t) => t.uid.equals(localhost.uid))).go();
+    final targetIds = List<String>.from(uids);
+    if (targetIds.contains(localhost.uid)) {
+      targetIds.remove(localhost.uid);
+      await (delete(message)
+            ..where(
+                (t) => t.sender.equals(localhost.uid) & t.receiver.equals("")))
+          .go();
+      await (delete(device)..where((t) => t.uid.equals(localhost.uid))).go();
     }
-    if (uids.isNotEmpty) {
-      (delete(message)..where((t) => t.sender.isIn(uids) | t.receiver.isIn(uids))).go();
+    if (targetIds.isNotEmpty) {
+      await (delete(message)
+            ..where(
+                (t) => t.sender.isIn(targetIds) | t.receiver.isIn(targetIds)))
+          .go();
     }
-    (delete(device)..where((t) => t.uid.isIn(uids))).go();
+    await (delete(device)..where((t) => t.uid.isIn(targetIds))).go();
   }
 
   Future<void> deleteMessage(int id) async {
-    (delete(message)..where((t) => t.id.equals(id))).go();
+    await (delete(message)..where((t) => t.id.equals(id))).go();
   }
 }
 
@@ -140,9 +188,9 @@ LazyDatabase _openConnection() {
     // put the database file, called db.sqlite here, into the documents folder
     // for your app.
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File('${dbFolder.path}db.sqlite');
+    final file = File('${dbFolder.path}/db.sqlite');
 
-    logger.i('数据库: ${dbFolder.path}db.sqlite');
+    logger.i('数据库: ${dbFolder.path}/db.sqlite');
 
     // Also work around limitations on old Android versions
     if (Platform.isAndroid) {

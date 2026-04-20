@@ -39,6 +39,15 @@ class LocalSetting {
   final String _ignoreAndroidNotify = "_ignoreAndroidNotify";
   final String _listenAndroidNotify = "_listenAndroidNotify";
   final String _themeMode = "_theme_mode";
+  final String _autoConnectEnabled = "_auto_connect_enabled";
+  final String _lastManualPeerId = "_last_manual_peer_id";
+
+  SharedPreferences? _cachedPreferences;
+
+  Future<SharedPreferences> _preferences() async {
+    _cachedPreferences ??= await SharedPreferences.getInstance();
+    return _cachedPreferences!;
+  }
 
   Future<DeviceData> instance({bool online = false}) async {
     return DeviceData(
@@ -58,19 +67,19 @@ class LocalSetting {
   }
 
   Future<T> getSPDefault<T>(String key, T value) async {
-    final SharedPreferences sp = await SharedPreferences.getInstance();
+    final SharedPreferences sp = await _preferences();
     var temp = sp.get(key);
     if (temp == null) {
       if (value is String) {
-        sp.setString(key, value);
+        await sp.setString(key, value);
       } else if (value is bool) {
-        sp.setBool(key, value);
+        await sp.setBool(key, value);
       } else if (value is double) {
-        sp.setDouble(key, value);
+        await sp.setDouble(key, value);
       } else if (value is int) {
-        sp.setInt(key, value);
+        await sp.setInt(key, value);
       } else if (value is List<String>) {
-        sp.setStringList(key, value);
+        await sp.setStringList(key, value);
       }
     } else {
       value = temp as T;
@@ -79,17 +88,17 @@ class LocalSetting {
   }
 
   Future<void> _setSP<T>(String key, T value) async {
-    final SharedPreferences sp = await SharedPreferences.getInstance();
+    final SharedPreferences sp = await _preferences();
     if (value is String) {
-      sp.setString(key, value);
+      await sp.setString(key, value);
     } else if (value is bool) {
-      sp.setBool(key, value);
+      await sp.setBool(key, value);
     } else if (value is double) {
-      sp.setDouble(key, value);
+      await sp.setDouble(key, value);
     } else if (value is int) {
-      sp.setInt(key, value);
+      await sp.setInt(key, value);
     } else if (value is List<String>) {
-      sp.setStringList(key, value);
+      await sp.setStringList(key, value);
     }
   }
 
@@ -221,7 +230,7 @@ class LocalSetting {
   }
 
   void setAndroidNotification(bool ignore) async {
-    _setSP(_close2tray, ignore);
+    _setSP(_ignoreAndroidNotify, ignore);
   }
 
   Future<bool> ignoreAndroidNotification() async {
@@ -236,12 +245,43 @@ class LocalSetting {
     return await getSPDefault(_listenAndroidNotify, false);
   }
 
+  Future<bool> autoConnectEnabled() async {
+    return await getSPDefault(_autoConnectEnabled, true);
+  }
+
+  Future<void> setAutoConnectEnabled(bool enabled) async {
+    await _setSP(_autoConnectEnabled, enabled);
+  }
+
+  Future<String> lastManualPeerId() async {
+    return await getSPDefault(_lastManualPeerId, "");
+  }
+
+  Future<void> setLastManualPeerId(String peerId) async {
+    await _setSP(_lastManualPeerId, peerId);
+  }
+
+  Future<bool> autoApproveNewDevices() async {
+    return await getSPDefault(_noAuth, false);
+  }
+
+  Future<bool> listenAndroidNotifications() async {
+    return await isListenAndroid();
+  }
+
+  Future<bool> ignoreAndroidNotifications() async {
+    return await ignoreAndroidNotification();
+  }
+
   Future<ThemeMode> themeMode() async {
     final num = await getSPDefault(_themeMode, 0);
     switch (num) {
-      case 0: return ThemeMode.system;
-      case 1: return ThemeMode.light;
-      case 2: return ThemeMode.dark;
+      case 0:
+        return ThemeMode.system;
+      case 1:
+        return ThemeMode.light;
+      case 2:
+        return ThemeMode.dark;
     }
 
     return ThemeMode.light;
@@ -249,10 +289,16 @@ class LocalSetting {
 
   Future<void> setThemeMode(ThemeMode mode) async {
     var num = 0;
-    switch(mode) {
-      case ThemeMode.system: num = 0; break;
-      case ThemeMode.light: num = 1; break;
-      case ThemeMode.dark: num = 2; break;
+    switch (mode) {
+      case ThemeMode.system:
+        num = 0;
+        break;
+      case ThemeMode.light:
+        num = 1;
+        break;
+      case ThemeMode.dark:
+        num = 2;
+        break;
     }
     await _setSP(_themeMode, num);
   }
