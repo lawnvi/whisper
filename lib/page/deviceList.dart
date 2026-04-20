@@ -1313,9 +1313,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
         await windowManager.isMinimized()) {
       return;
     }
-    var rect = await windowManager.getBounds();
-    LocalSetting().setWindowWidth(rect.width);
-    LocalSetting().setWindowHeight(rect.height);
+    final rect = await windowManager.getBounds();
+    await Future.wait([
+      LocalSetting().setWindowWidth(rect.width),
+      LocalSetting().setWindowHeight(rect.height),
+    ]);
   }
 
   @override
@@ -1324,10 +1326,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
         await windowManager.isMinimized()) {
       return;
     }
-    var rect = await windowManager.getBounds();
+    final rect = await windowManager.getBounds();
     logger.i("resized window: ${rect.width} ${rect.height}");
-    LocalSetting().setWindowWidth(rect.width);
-    LocalSetting().setWindowHeight(rect.height);
+    await Future.wait([
+      LocalSetting().setWindowWidth(rect.width),
+      LocalSetting().setWindowHeight(rect.height),
+    ]);
   }
 
   @override
