@@ -755,6 +755,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (isMobile()) {
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
+    final isActiveIncomingTransfer = isOpponent &&
+        percent > 0 &&
+        percent < 1 &&
+        messageList.isNotEmpty &&
+        identical(message, messageList.first);
     final missingLocalFile = isOpponent &&
         message.path.isNotEmpty &&
         !File(message.path).existsSync();
@@ -783,19 +788,31 @@ class _SendMessageScreen extends State<SendMessageScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (failed) const SizedBox(width: 8),
-            failed
-                ? const Icon(
-                    Icons.error_outline_rounded,
-                    color: Colors.redAccent,
-                    size: 24,
-                  )
-                : Icon(
-                    Icons.insert_drive_file,
-                    color: colorScheme.primary.withValues(alpha: 0.86),
-                    size: 34,
-                  ),
-            if (failed) const SizedBox(width: 8),
+            if (failed || isActiveIncomingTransfer) const SizedBox(width: 8),
+            if (failed)
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.redAccent,
+                size: 24,
+              )
+            else if (isActiveIncomingTransfer)
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  value: percent,
+                  strokeWidth: 2.4,
+                  color: colorScheme.primary,
+                  backgroundColor: colorScheme.primary.withValues(alpha: 0.18),
+                ),
+              )
+            else
+              Icon(
+                Icons.insert_drive_file,
+                color: colorScheme.primary.withValues(alpha: 0.86),
+                size: 34,
+              ),
+            if (failed || isActiveIncomingTransfer) const SizedBox(width: 8),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -815,7 +832,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  formatSize(message.size),
+                  isActiveIncomingTransfer
+                      ? '${formatSize(message.size)}  ${(percent * 100).toStringAsFixed(0)}%'
+                      : formatSize(message.size),
                   style: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 12,
