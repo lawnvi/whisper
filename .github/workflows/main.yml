@@ -101,12 +101,14 @@ jobs:
       # New step to create the installer using NSIS
       - name: Create EXE Installer
         run: |
+          Push-Location windows
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" `
             /DAPP_NAME="Whisper" `
             /DAPP_VERSION="$env:APP_VERSION" `
             /DAPP_PUBLISHER="lawnvi" `
             /DOUTPUT_NAME="whisper-windows-x86_64.exe" `
-            windows\installer.nsi
+            installer.nsi
+          Pop-Location
 
       # New step to verify the EXE installer exists
       - name: Check if file exists
@@ -115,7 +117,7 @@ jobs:
           if (Test-Path $path) {
             Write-Host "File exists"
           } else {
-            Write-Host "File does not exist"
+            throw "Installer not found at $path"
           }
 
       # Modified Push to Release step to upload the EXE installer
