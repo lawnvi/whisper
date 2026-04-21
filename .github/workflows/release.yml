@@ -2,12 +2,12 @@ name: release-packages
 
 on:
   push:
-    tags:
-      - 'dev-v*.*.*'
-      - 'release-v*.*.*'
+    branches:
+      - release
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-packages-${{ github.ref }}
@@ -65,13 +65,14 @@ jobs:
             hdiutil create -volname "Whisper" -srcfolder build/macos/Build/Products/Release/whisper.app -ov -format UDZO whisper.dmg
           fi
 
-      - name: Push to Release
-        uses: ncipollo/release-action@v1
+      - name: Upload macOS and iOS artifacts
+        uses: actions/upload-artifact@v4
         with:
-          artifacts: whisper.dmg,build/ios/iphoneos/app.ipa
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.TOKEN }}
-          allowUpdates: true
+          name: whisper-macos-ios-${{ github.run_id }}
+          path: |
+            whisper.dmg
+            build/ios/iphoneos/app.ipa
+          retention-days: 7
 
   build-on-windows:
     name: Windows
@@ -90,8 +91,7 @@ jobs:
 
       - name: Set release version
         run: |
-          $version = "${{ github.ref_name }}".Split('-')[-1].TrimStart('v')
-          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_VERSION=0.0.${{ github.run_number }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install NSIS
         run: choco install nsis -y
@@ -125,13 +125,12 @@ jobs:
             throw "Installer not found at $path"
           }
 
-      - name: Push to Release
-        uses: ncipollo/release-action@v1
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
         with:
-          artifacts: windows/whisper-windows-x86_64.exe
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.TOKEN }}
-          allowUpdates: true
+          name: whisper-windows-${{ github.run_id }}
+          path: windows/whisper-windows-x86_64.exe
+          retention-days: 7
 
   build-on-linux:
     name: Linux + Android
@@ -185,7 +184,7 @@ jobs:
           echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Set release version
-        run: echo "PACKAGE_VERSION=$(echo '${{ github.ref_name }}' | cut -d'-' -f2 | sed 's/^v//')" >> $GITHUB_ENV
+        run: echo "PACKAGE_VERSION=0.0.${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Build Linux app
         run: |
@@ -215,10 +214,13 @@ jobs:
           flutter build apk
           flutter build apk --split-per-abi
 
-      - name: Push to Release
-        uses: ncipollo/release-action@v1
+      - name: Upload Linux and Android artifacts
+        uses: actions/upload-artifact@v4
         with:
-          artifacts: whisper-x86_64.rpm,build/linux/deb/whisper-amd64.deb,build/linux/appimage/*.AppImage,build/app/outputs/flutter-apk/*.apk
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.TOKEN }}
-          allowUpdates: true
+          name: whisper-linux-android-${{ github.run_id }}
+          path: |
+            whisper-x86_64.rpm
+            build/linux/deb/whisper-amd64.deb
+            build/linux/appimage/*.AppImage
+            build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
