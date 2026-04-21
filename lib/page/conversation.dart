@@ -64,6 +64,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _isLoading = false; // loading file
   final bool embedded;
   bool _resumeReconnectPending = false;
+  bool _pickerReconnectPending = false;
 
   _SendMessageScreen(this.device, this.embedded);
 
@@ -107,10 +108,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         socketManager.refreshConnectionLiveness();
         break;
       case AppLifecycleState.resumed:
-        final shouldReconnect = _resumeReconnectPending;
+        final shouldReconnect =
+            _resumeReconnectPending || _pickerReconnectPending;
         _resumeReconnectPending = false;
         if (shouldReconnect && !_isConnectedSession && _canToggleConnection) {
-          _connectServer(device.host, device.port);
+          _restoreConnectionIfNeeded();
           return;
         }
         if (_isConnectedSession) {
@@ -528,6 +530,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_canSendCurrentDevice || _isLocalhost) {
       return;
     }
+    final shouldReconnectAfterPicker = _isConnectedSession;
+    _pickerReconnectPending = shouldReconnectAfterPicker;
     if (_isConnectedSession) {
       await socketManager.refreshConnectionLiveness();
     }
@@ -539,6 +543,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (result == null) {
         return;
       }
+      if (shouldReconnectAfterPicker) {
+        final restored = await _restoreConnectionIfNeeded();
+        if (!restored) {
+          if (mounted) {
+            Fluttertoast.showToast(
+              msg: AppLocalizations.of(context)?.connectFailed ??
+                  'Connection Failed',
+            );
+          }
+          return;
+        }
+      }
       for (final item in result.files) {
         if (item.path == null || item.path!.isEmpty) {
           continue;
@@ -546,6 +562,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         await socketManager.sendFile(item.path!);
       }
     } finally {
+      _pickerReconnectPending = false;
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -574,13 +591,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  void _connectServer(String host, int port) async {
+  Future<bool> _connectServer(String host, int port) async {
     if (await isLocalhost(host)) {
       afterAuth(true, device);
-      return;
+      return true;
     }
+    final completer = Completer<bool>();
     socketManager.connectToServer(host, port, (ok, message) {
       if (!ok) {
+        if (!completer.isCompleted) {
+          completer.complete(false);
+        }
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??
@@ -597,8 +618,36 @@ class _SendMessageScreen extends State<SendMessageScreen>
           },
           task: (VoidCallback onCancel) async {},
         );
+        return;
+      }
+      if (!completer.isCompleted) {
+        completer.complete(true);
       }
     });
+    return completer.future;
+  }
+
+  Future<bool> _restoreConnectionIfNeeded() async {
+    if (_isConnectedSession) {
+      return true;
+    }
+    if (!_canToggleConnection) {
+      return false;
+    }
+    final connected = await _connectServer(device.host, device.port);
+    if (!connected) {
+      return false;
+    }
+    for (var i = 0; i < 20; i++) {
+      if (!mounted) {
+        return false;
+      }
+      if (_isConnectedSession || socketManager.receiver == device.uid) {
+        return true;
+      }
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    return _isConnectedSession;
   }
 
   Future<void> _sendText(String content, {isClipboard = false}) async {
