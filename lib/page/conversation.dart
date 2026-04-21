@@ -670,8 +670,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (isMobile()) {
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
+    final missingLocalFile = isOpponent &&
+        message.path.isNotEmpty &&
+        !File(message.path).existsSync();
     var failed =
         !isOpponent && !message.acked && message.timestamp < device.lastTime;
+    failed = failed || missingLocalFile;
     final colorScheme = Theme.of(context).colorScheme;
     final cardColor = colorScheme.brightness == Brightness.dark
         ? const Color(0xFF1F2937)
@@ -789,6 +793,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }, onCancel: () {
       _isAlert = false;
     });
+  }
+
+  @override
+  void onNotice(String message) {
+    Fluttertoast.showToast(msg: message);
   }
 
   @override

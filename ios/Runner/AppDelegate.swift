@@ -15,11 +15,14 @@ import MobileCoreServices
         let dirChannel = FlutterMethodChannel(name: "com.vireen.whisper/ios_dir", binaryMessenger: controller.binaryMessenger)
 
         dirChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-            guard call.method == "openFolder" else {
+            switch call.method {
+            case "openFolder":
+                self?.openDir(call: call, result: result)
+            case "availableBytes":
+                self?.availableBytes(call: call, result: result)
+            default:
                 result(FlutterMethodNotImplemented)
-                return
             }
-            self?.openDir(call: call, result: result)
         }
 
         GeneratedPluginRegistrant.register(with: self)
@@ -66,6 +69,21 @@ import MobileCoreServices
                 showAlert("无效的文件夹路径")
                 result("无效的文件夹路径")
             }
+        }
+    }
+
+    private func availableBytes(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String else {
+            result(nil)
+            return
+        }
+
+        do {
+            let values = try FileManager.default.attributesOfFileSystem(forPath: path)
+            result(values[.systemFreeSize] as? NSNumber)
+        } catch {
+            result(nil)
         }
     }
 }

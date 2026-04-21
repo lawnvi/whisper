@@ -21,6 +21,8 @@ import '../helper/notification.dart';
 abstract class ISocketEvent {
   void onError(String message);
 
+  void onNotice(String message);
+
   void onMessage(MessageData messageData);
 
   void onProgress(int size, length);
@@ -383,13 +385,21 @@ class WsSvrManager {
               _sendFileSignal(_currentLen, _currentSize);
             }
             if (_currentSize == _currentLen) {
-              await _freeIoSink(sendFinish: true);
+              final completedMessage =
+                  _sendingFiles.isNotEmpty ? _sendingFiles.last : null;
+              final receiveCompleted =
+                  await _finalizeReceivedFile(completedMessage);
+              await _freeIoSink();
               logger.i(
                   "recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
+              if (!receiveCompleted && completedMessage != null) {
+                logger.i(
+                  "recv file verification failed: ${completedMessage.name}",
+                );
+              }
               if (_sendingFiles.isNotEmpty) {
                 await _handleFileMsg(_sendingFiles.last);
               }
-              // fileMD5
             }
           } else {
             logger.i("未知消息：$str");
@@ -398,7 +408,7 @@ class WsSvrManager {
     }
   }
 
-  Future<void> _freeIoSink({freeAll = false, sendFinish = false}) async {
+  Future<void> _freeIoSink({freeAll = false}) async {
     logger.i("close file");
     // await _ioSink?.flush();
     // await _savingFile?.close();
@@ -406,15 +416,7 @@ class WsSvrManager {
     _ioSink = null;
     _currentLen = 0;
     _currentSize = 0;
-    if (_receivingFile != null && sendFinish) {
-      var path = _receivingFile!.path;
-      if (_currentFileTimestamp > 0) {
-        await _receivingFile?.setLastModified(
-            DateTime.fromMillisecondsSinceEpoch(_currentFileTimestamp));
-      }
-      _currentFileTimestamp = 0;
-      await _receivingFile!.rename(path.substring(0, path.length - 11));
-    }
+    _currentFileTimestamp = 0;
     _receivingFile = null;
     if (freeAll) {
       _sendingFiles.clear();
@@ -422,6 +424,53 @@ class WsSvrManager {
       _sendingFiles.removeLast();
     }
     WakelockPlus.disable();
+  }
+
+  Future<void> _rejectIncomingFile(MessageData message, String notice) async {
+    logger.i(notice);
+    _dispatchToAll((event) => event.onNotice(notice));
+    if (_sendingFiles.isNotEmpty) {
+      _sendingFiles.removeLast();
+    }
+    if (_sendingFiles.isNotEmpty) {
+      await _handleFileMsg(_sendingFiles.last);
+    }
+  }
+
+  Future<bool> _finalizeReceivedFile(MessageData? message) async {
+    final tempFile = _receivingFile;
+    if (tempFile == null) {
+      return false;
+    }
+
+    final expectedMd5 = message?.md5 ?? "";
+    final finalPath = tempFile.path.substring(0, tempFile.path.length - 11);
+
+    if (expectedMd5.isNotEmpty) {
+      final actualMd5 = await fileMD5(tempFile);
+      if (!isFileIntegrityValid(
+        expectedMd5: expectedMd5,
+        actualMd5: actualMd5,
+      )) {
+        try {
+          await tempFile.delete();
+        } catch (_) {}
+        _dispatchToAll(
+          (event) => event.onNotice(
+            '文件校验失败，已丢弃损坏文件：${message?.name ?? ''}',
+          ),
+        );
+        return false;
+      }
+    }
+
+    if (_currentFileTimestamp > 0) {
+      await tempFile.setLastModified(
+        DateTime.fromMillisecondsSinceEpoch(_currentFileTimestamp),
+      );
+    }
+    await tempFile.rename(finalPath);
+    return true;
   }
 
   void _sendFileSignal(int received, int size, {String msgId = ""}) {
@@ -434,7 +483,16 @@ class WsSvrManager {
   Future<void> _handleFileMsg(MessageData message) async {
     logger.i(
         "收到文件：${message.name} size: ${message.size} timestamp: ${message.fileTimestamp}");
-    var path = await _prepareIOSink(message);
+    String path;
+    try {
+      path = await _prepareIOSink(message);
+    } on FileSystemException catch (error) {
+      await _rejectIncomingFile(message, error.message);
+      return;
+    } catch (error) {
+      await _rejectIncomingFile(message, '接收 ${message.name} 失败：$error');
+      return;
+    }
     var msgTemp = message.toJson();
     msgTemp["path"] = path;
     var newMessage = MessageData.fromJson(msgTemp);
@@ -544,10 +602,10 @@ class WsSvrManager {
       final size = file.lengthSync();
       final timestamp = (await file.lastModified()).millisecondsSinceEpoch;
       final fileName = p.basename(path);
-      // final md5 = await fileMD5(file);
+      final md5 = await fileMD5(file);
       var message = _buildMessage(
           MessageEnum.File, "", "", fileName, size, false,
-          path: path, md5: "", fileTimestamp: timestamp);
+          path: path, md5: md5, fileTimestamp: timestamp);
       await LocalDatabase().insertMessage(message);
       _send(message.toJsonString());
     });
@@ -598,6 +656,16 @@ class WsSvrManager {
 
   Future<String> _prepareIOSink(MessageData message) async {
     var appDir = await downloadDir();
+    final availableBytes = await availableBytesForPath(appDir.path);
+    if (!hasEnoughStorageForFile(
+      fileSize: message.size,
+      availableBytes: availableBytes,
+    )) {
+      throw FileSystemException(
+        '接收 ${message.name} 失败：存储空间不足',
+        appDir.path,
+      );
+    }
     _currentSize = message.size;
     _currentFileTimestamp =
         message.fileTimestamp ?? DateTime.now().millisecondsSinceEpoch;

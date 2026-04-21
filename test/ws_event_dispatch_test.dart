@@ -22,6 +22,9 @@ class _RecordingSocketEvent implements ISocketEvent {
   void onError(String message) {}
 
   @override
+  void onNotice(String message) {}
+
+  @override
   void onMessage(MessageData messageData) {
     messages.add(messageData);
   }
