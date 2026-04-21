@@ -93,5 +93,18 @@
   "lightMode": "明亮",
   "darkMode": "暗黑",
   "selectThemeMode": "选择主题模式",
-  "selectLanguage": "选择语言"
+  "selectLanguage": "选择语言",
+  "searchChats": "搜索",
+  "selectConversationPlaceholder": "选择一个设备开始对话",
+  "connectedNow": "当前已连接",
+  "nearbyAvailable": "附近可连接",
+  "noMessagesYet": "还没有消息",
+  "sharedFile": "发送了一个文件",
+  "connectToSend": "连接后即可发送消息",
+  "localeNameZhHans": "简体中文",
+  "localeNameEnglish": "English",
+  "localeNameSpanish": "Español",
+  "autoConnectTrustedDevices": "自动连接互信设备",
+  "mutualTrustEnabled": "双向互信已开启",
+  "mutualTrustNotEstablished": "尚未形成双向互信"
 }

@@ -154,6 +154,28 @@ class LocalDatabase extends _$LocalDatabase {
     }
   }
 
+  Future<Map<String, MessageData>> fetchLatestMessagesByPeers(
+    List<String> uids,
+  ) async {
+    final latestMessages = <String, MessageData>{};
+    for (final uid in uids.toSet()) {
+      if (uid.isEmpty) {
+        continue;
+      }
+      final latest = await (select(message)
+            ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
+            ])
+            ..limit(1))
+          .getSingleOrNull();
+      if (latest != null) {
+        latestMessages[uid] = latest;
+      }
+    }
+    return latestMessages;
+  }
+
   Future<void> clearDevices(List<String> uids) async {
     if (uids.isEmpty) {
       return;

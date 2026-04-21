@@ -93,5 +93,18 @@
   "lightMode": "Claro",
   "darkMode": "Oscuro",
   "selectThemeMode": "Seleccionar modo de tema",
-  "selectLanguage": "Seleccionar idioma"
+  "selectLanguage": "Seleccionar idioma",
+  "searchChats": "Buscar",
+  "selectConversationPlaceholder": "Selecciona un dispositivo para empezar a chatear",
+  "connectedNow": "Conectado ahora",
+  "nearbyAvailable": "Disponible cerca",
+  "noMessagesYet": "Aun no hay mensajes",
+  "sharedFile": "Compartio un archivo",
+  "connectToSend": "Conectate para enviar mensajes",
+  "localeNameZhHans": "Chino simplificado",
+  "localeNameEnglish": "Ingles",
+  "localeNameSpanish": "Espanol",
+  "autoConnectTrustedDevices": "Conectar automaticamente dispositivos con confianza mutua",
+  "mutualTrustEnabled": "La confianza mutua esta activada",
+  "mutualTrustNotEstablished": "La confianza mutua aun no esta establecida"
 }

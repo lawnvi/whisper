@@ -374,7 +374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     _buildSettingItem(
-                      _autoConnectLabel(locale.languageCode),
+                      _autoConnectLabel(context),
                       Icon(
                         Icons.auto_mode_rounded,
                         color: isDark
@@ -545,7 +545,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _localeLabel(locale.languageCode),
+                              _localeLabel(context, locale.languageCode),
                               style: TextStyle(
                                 color: isDark
                                     ? Colors.grey[400]
@@ -581,7 +581,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     CupertinoActionSheetAction(
                                       child: Text(
                                         _localeLabel(
-                                            supportedLocale.languageCode),
+                                          context,
+                                          supportedLocale.languageCode,
+                                        ),
                                         style: TextStyle(
                                           color: isDark
                                               ? Colors.white
@@ -764,27 +766,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  String _localeLabel(String languageCode) {
+  String _localeLabel(BuildContext context, String languageCode) {
+    final l10n = AppLocalizations.of(context);
     switch (languageCode) {
       case 'zh':
-        return '简体中文';
+        return l10n?.localeNameZhHans ?? '简体中文';
       case 'es':
-        return 'Español';
+        return l10n?.localeNameSpanish ?? 'Español';
       case 'en':
       default:
-        return 'English';
+        return l10n?.localeNameEnglish ?? 'English';
     }
   }
 
-  String _autoConnectLabel(String languageCode) {
-    switch (languageCode) {
-      case 'en':
-        return 'Auto-connect mutually trusted devices';
-      case 'es':
-        return 'Conectar automaticamente dispositivos con confianza mutua';
-      default:
-        return '自动连接互信设备';
-    }
+  String _autoConnectLabel(BuildContext context) {
+    return AppLocalizations.of(context)?.autoConnectTrustedDevices ??
+        'Auto-connect mutually trusted devices';
   }
 }
 
@@ -817,19 +814,13 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     });
   }
 
-  String _mutualTrustTitle(String languageCode, bool enabled) {
-    switch (languageCode) {
-      case 'en':
-        return enabled
-            ? 'Mutual trust is enabled'
-            : 'Mutual trust has not been established';
-      case 'es':
-        return enabled
-            ? 'La confianza mutua esta activada'
-            : 'La confianza mutua aun no esta establecida';
-      default:
-        return enabled ? '双向互信已开启' : '尚未形成双向互信';
+  String _mutualTrustTitle(BuildContext context, bool enabled) {
+    final l10n = AppLocalizations.of(context);
+    if (enabled) {
+      return l10n?.mutualTrustEnabled ?? 'Mutual trust is enabled';
     }
+    return l10n?.mutualTrustNotEstablished ??
+        'Mutual trust has not been established';
   }
 
   @override
@@ -868,7 +859,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                   children: [
                     _DeviceSettingTile(
                       title: _mutualTrustTitle(
-                        Localizations.localeOf(context).languageCode,
+                        context,
                         mutualTrust,
                       ),
                       icon: Icon(
@@ -1030,20 +1021,5 @@ class _DeviceSettingTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _mutualTrustTitle(String languageCode, bool enabled) {
-    switch (languageCode) {
-      case 'en':
-        return enabled
-            ? 'Mutual trust is enabled'
-            : 'Mutual trust has not been established';
-      case 'es':
-        return enabled
-            ? 'La confianza mutua esta activada'
-            : 'La confianza mutua aun no esta establecida';
-      default:
-        return enabled ? '双向互信已开启' : '尚未形成双向互信';
-    }
   }
 }

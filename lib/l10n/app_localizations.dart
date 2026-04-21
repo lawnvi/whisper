@@ -507,6 +507,84 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'选择语言'**
   String get selectLanguage;
+
+  /// No description provided for @searchChats.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get searchChats;
+
+  /// No description provided for @selectConversationPlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择一个设备开始对话'**
+  String get selectConversationPlaceholder;
+
+  /// No description provided for @connectedNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前已连接'**
+  String get connectedNow;
+
+  /// No description provided for @nearbyAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'附近可连接'**
+  String get nearbyAvailable;
+
+  /// No description provided for @noMessagesYet.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有消息'**
+  String get noMessagesYet;
+
+  /// No description provided for @sharedFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送了一个文件'**
+  String get sharedFile;
+
+  /// No description provided for @connectToSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后即可发送消息'**
+  String get connectToSend;
+
+  /// No description provided for @localeNameZhHans.
+  ///
+  /// In zh, this message translates to:
+  /// **'简体中文'**
+  String get localeNameZhHans;
+
+  /// No description provided for @localeNameEnglish.
+  ///
+  /// In zh, this message translates to:
+  /// **'English'**
+  String get localeNameEnglish;
+
+  /// No description provided for @localeNameSpanish.
+  ///
+  /// In zh, this message translates to:
+  /// **'Español'**
+  String get localeNameSpanish;
+
+  /// No description provided for @autoConnectTrustedDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动连接互信设备'**
+  String get autoConnectTrustedDevices;
+
+  /// No description provided for @mutualTrustEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'双向互信已开启'**
+  String get mutualTrustEnabled;
+
+  /// No description provided for @mutualTrustNotEstablished.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未形成双向互信'**
+  String get mutualTrustNotEstablished;
 }
 
 class _AppLocalizationsDelegate

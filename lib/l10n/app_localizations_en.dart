@@ -223,4 +223,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectLanguage => 'Select Language';
+
+  @override
+  String get searchChats => 'Search';
+
+  @override
+  String get selectConversationPlaceholder =>
+      'Select a device to start chatting';
+
+  @override
+  String get connectedNow => 'Connected now';
+
+  @override
+  String get nearbyAvailable => 'Available nearby';
+
+  @override
+  String get noMessagesYet => 'No messages yet';
+
+  @override
+  String get sharedFile => 'Shared a file';
+
+  @override
+  String get connectToSend => 'Connect to send messages';
+
+  @override
+  String get localeNameZhHans => 'Simplified Chinese';
+
+  @override
+  String get localeNameEnglish => 'English';
+
+  @override
+  String get localeNameSpanish => 'Spanish';
+
+  @override
+  String get autoConnectTrustedDevices =>
+      'Auto-connect mutually trusted devices';
+
+  @override
+  String get mutualTrustEnabled => 'Mutual trust is enabled';
+
+  @override
+  String get mutualTrustNotEstablished =>
+      'Mutual trust has not been established';
 }

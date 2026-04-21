@@ -66,5 +66,18 @@
   "followSystem": "Follow System",
   "lightMode": "Light",
   "selectThemeMode": "Select Theme Mode",
-  "selectLanguage": "Select Language"
+  "selectLanguage": "Select Language",
+  "searchChats": "Search",
+  "selectConversationPlaceholder": "Select a device to start chatting",
+  "connectedNow": "Connected now",
+  "nearbyAvailable": "Available nearby",
+  "noMessagesYet": "No messages yet",
+  "sharedFile": "Shared a file",
+  "connectToSend": "Connect to send messages",
+  "localeNameZhHans": "Simplified Chinese",
+  "localeNameEnglish": "English",
+  "localeNameSpanish": "Spanish",
+  "autoConnectTrustedDevices": "Auto-connect mutually trusted devices",
+  "mutualTrustEnabled": "Mutual trust is enabled",
+  "mutualTrustNotEstablished": "Mutual trust has not been established"
 }
