@@ -632,26 +632,49 @@ class _SendMessageScreen extends State<SendMessageScreen>
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
     final colorScheme = Theme.of(context).colorScheme;
+    final receivedBubbleColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF1F2937)
+        : const Color(0xFFF5F5F5);
+    final receivedBorderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
+    final sentBubbleColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF172554)
+        : const Color(0xFFEFF6FF);
 
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth),
       padding:
           EdgeInsets.fromLTRB(isOpponent ? 2 : 18, 2, isOpponent ? 18 : 2, 2),
-      child: SelectableText(
-        content,
-        style: TextStyle(
-          color: colorScheme.onSurface,
-          fontSize: isDesktop() ? 17 : 16.5,
-          height: 1.55,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isOpponent ? receivedBubbleColor : sentBubbleColor,
+          borderRadius: BorderRadius.circular(18),
+          border: isOpponent
+              ? Border.all(
+                  color: receivedBorderColor,
+                )
+              : null,
         ),
-        textAlign: isOpponent ? TextAlign.left : TextAlign.right,
-        contextMenuBuilder: (context, editableTextState) {
-          return AdaptiveTextSelectionToolbar(
-            anchors: editableTextState.contextMenuAnchors,
-            children: const [],
-          );
-        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          child: SelectableText(
+            content,
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: isDesktop() ? 17 : 16.5,
+              height: 1.55,
+            ),
+            textAlign: TextAlign.left,
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar(
+                anchors: editableTextState.contextMenuAnchors,
+                children: const [],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -664,15 +687,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
     var failed =
         !isOpponent && !message.acked && message.timestamp < device.lastTime;
     final colorScheme = Theme.of(context).colorScheme;
+    final cardColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF1F2937)
+        : const Color(0xFFF5F5F5);
+    final cardBorderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
 
     return Container(
       width: screenWidth,
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.75),
-        ),
+        border: Border.all(color: cardBorderColor),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),

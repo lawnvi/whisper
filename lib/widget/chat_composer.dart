@@ -56,16 +56,23 @@ class ChatComposer extends StatelessWidget {
     ColorScheme colorScheme,
   ) {
     final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.52);
+    final accentColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF2563EB);
+    final containerColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF111827)
+        : Colors.white;
+    final borderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
     return Container(
       key: desktopContainerKey,
       margin: const EdgeInsets.fromLTRB(18, 10, 18, 18),
       padding: const EdgeInsets.fromLTRB(20, 14, 18, 14),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: containerColor,
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.72),
-        ),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(
@@ -93,7 +100,7 @@ class ChatComposer extends StatelessWidget {
               maxLines: 5,
               autofocus: isDesktop(),
               autocorrect: true,
-              cursorColor: colorScheme.primary,
+              cursorColor: accentColor,
               style: TextStyle(
                 color: colorScheme.onSurface,
                 fontSize: 16,
@@ -101,7 +108,16 @@ class ChatComposer extends StatelessWidget {
               ),
               decoration: InputDecoration(
                 isCollapsed: true,
+                isDense: true,
+                filled: false,
+                fillColor: Colors.transparent,
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
                 hintText: canSend
                     ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
                     : (AppLocalizations.of(context)?.connectToSend ??
@@ -147,19 +163,29 @@ class ChatComposer extends StatelessWidget {
     ColorScheme colorScheme,
   ) {
     final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.5);
+    final accentColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF2563EB);
+    final outerContainerColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFFFFFFF);
+    final containerColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF111827)
+        : Colors.white;
+    final borderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: outerContainerColor,
       ),
       child: Container(
         padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
         decoration: BoxDecoration(
-          color: colorScheme.surface,
+          color: containerColor,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
-          ),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(
@@ -182,7 +208,7 @@ class ChatComposer extends StatelessWidget {
                 enabled: canSend,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
-                cursorColor: colorScheme.primary,
+                cursorColor: accentColor,
                 autofocus: isDesktop(),
                 autocorrect: true,
                 minLines: 1,
@@ -194,7 +220,16 @@ class ChatComposer extends StatelessWidget {
                 ),
                 decoration: InputDecoration(
                   isCollapsed: true,
+                  isDense: true,
+                  filled: false,
+                  fillColor: Colors.transparent,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
                   hintText: canSend
                       ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
                       : (AppLocalizations.of(context)?.connectToSend ??
@@ -246,6 +281,12 @@ class ChatComposer extends StatelessWidget {
     required bool outlined,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final outlinedBorderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
+    final disabledFillColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF1F2937)
+        : const Color(0xFFF3F4F6);
     return IconButton(
       key: key,
       onPressed: enabled ? () => onPressed() : null,
@@ -254,15 +295,17 @@ class ChatComposer extends StatelessWidget {
         maximumSize: Size(buttonSize, buttonSize),
         backgroundColor: outlined
             ? (enabled
-                ? colorScheme.surface.withValues(alpha: 0.92)
-                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45))
+                ? (colorScheme.brightness == Brightness.dark
+                    ? const Color(0xFF111827)
+                    : Colors.white)
+                : disabledFillColor.withValues(alpha: 0.65))
             : Colors.transparent,
         foregroundColor:
             enabled ? colorScheme.onSurfaceVariant : colorScheme.outline,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(outlined ? 16 : buttonSize / 2),
           side: outlined
-              ? BorderSide(color: colorScheme.outlineVariant)
+              ? BorderSide(color: outlinedBorderColor)
               : BorderSide.none,
         ),
         padding: EdgeInsets.zero,
@@ -280,15 +323,25 @@ class ChatComposer extends StatelessWidget {
     required double buttonSize,
     required double iconSize,
   }) {
+    final accentColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF2563EB);
+    final disabledBorderColor = colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF374151)
+        : const Color(0xFFE5E7EB);
     final showsAttachmentAction = _showsAttachmentAction;
     final enabled =
         canSend && !isLoading && (showsAttachmentAction || _hasDraftText);
     final backgroundColor = showsAttachmentAction
         ? Colors.transparent
-        : (enabled ? colorScheme.primary : colorScheme.surfaceContainerHighest);
+        : (enabled
+            ? accentColor
+            : (colorScheme.brightness == Brightness.dark
+                ? const Color(0xFF1F2937)
+                : const Color(0xFFF3F4F6)));
     final foregroundColor = showsAttachmentAction
         ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
-        : (enabled ? colorScheme.onPrimary : colorScheme.outline);
+        : (enabled ? Colors.white : colorScheme.outline);
     return IconButton(
       key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
       onPressed: enabled ? _handlePrimaryAction : null,
@@ -303,8 +356,7 @@ class ChatComposer extends StatelessWidget {
         side: showsAttachmentAction
             ? BorderSide.none
             : BorderSide(
-                color:
-                    enabled ? colorScheme.primary : colorScheme.outlineVariant,
+                color: enabled ? accentColor : disabledBorderColor,
               ),
         splashFactory: NoSplash.splashFactory,
         overlayColor: Colors.transparent,
@@ -314,9 +366,7 @@ class ChatComposer extends StatelessWidget {
               width: iconSize,
               height: iconSize,
               child: CupertinoActivityIndicator(
-                color: showsAttachmentAction
-                    ? colorScheme.primary
-                    : colorScheme.onPrimary,
+                color: showsAttachmentAction ? accentColor : Colors.white,
               ),
             )
           : Icon(
