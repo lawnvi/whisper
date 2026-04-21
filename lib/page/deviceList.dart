@@ -22,6 +22,8 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/chat_session_list.dart';
+import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
@@ -64,6 +66,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   String? _selectedDesktopPeerId;
+  String? _pendingAutoConnectPeerId;
 
   @override
   void initState() {
@@ -254,6 +257,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
+    final trustedPeerIds = await db.fetchTrustedPeerIds();
+    final autoConnectEnabled = await LocalSetting().autoConnectEnabled();
 
     logger.i("wifi ip: $wifiIP");
 
@@ -273,6 +278,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
         'name': await deviceName(),
         'platform': device?.platform ?? "未知",
         'uid': device?.uid ?? "",
+        'trustedPeers': trustedPeerIds.join(','),
+        'autoConnect': autoConnectEnabled ? '1' : '0',
       },
     );
 
@@ -334,6 +341,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
             final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
+            final remoteTrustedPeerIds =
+                PeerProfile.trustedPeersFromDiscovery(svr.attributes);
+            final remoteAutoConnectEnabled =
+                PeerProfile.autoConnectFromDiscovery(svr.attributes);
             logger.i("${isLost ? '丢失' : '发现'}本地设备");
             logger.i("本地设备uid: $uid");
             logger.i("本地设备name: $name");
@@ -343,12 +354,26 @@ class _DeviceListScreen extends State<DeviceListScreen>
             if (uid == null || uid == device?.uid) {
               return;
             }
+            var temp = await LocalDatabase().fetchDevice(uid);
+            final resolvedDevice = buildDevice(
+              uid: uid,
+              name: temp?.name ?? name,
+              port: port,
+              host: host,
+              platform: platform,
+              around: !isLost,
+            );
+            await ConnectionCoordinator().updateDiscovery(
+              resolvedDevice,
+              discovered: !isLost,
+              remoteTrustedPeerIds: remoteTrustedPeerIds,
+              remoteAutoConnectEnabled: remoteAutoConnectEnabled,
+            );
             for (var item in devices) {
               if (item.uid == uid) {
                 break;
               }
             }
-            var temp = await LocalDatabase().fetchDevice(uid);
             setState(() {
               var index = -1;
               for (var i = devices.length - 1; i >= 0; i--) {
@@ -361,17 +386,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
               if (isLost && temp != null) {
                 devices.insert(index, temp);
               } else if (!isLost) {
-                devices.insert(
-                    0,
-                    buildDevice(
-                        uid: uid,
-                        name: temp?.name ?? name,
-                        port: port,
-                        host: host,
-                        platform: platform));
+                devices.insert(0, resolvedDevice);
               }
             });
             _refreshDevice();
+            if (!isLost) {
+              await _attemptAutoConnect();
+            }
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
           // TODO: Handle this case.
@@ -418,6 +439,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _refreshDevice({isFirst = false}) async {
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
+    await ConnectionCoordinator().bootstrap(temp.uid);
+    await ConnectionCoordinator().syncKnownDevices(arr);
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
     for (var item in devices) {
@@ -873,7 +896,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ContextMenuActionItem(
           label: l10n?.connect ?? '连接',
           onSelected: () {
-            _connectServer(deviceItem.host, deviceItem.port);
+            _connectServer(
+              deviceItem.host,
+              deviceItem.port,
+              peerId: deviceItem.uid,
+            );
           },
         ),
       if (deviceItem.uid != socketManager.receiver)
@@ -999,7 +1026,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
         if (deviceItem.uid == socketManager.receiver) {
           socketManager.close();
         } else {
-          _connectServer(deviceItem.host, deviceItem.port);
+          _connectServer(
+            deviceItem.host,
+            deviceItem.port,
+            peerId: deviceItem.uid,
+          );
         }
       },
     );
@@ -1170,14 +1201,43 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  void _connectServer(String host, int port) async {
+  void _connectServer(String host, int port, {String? peerId}) async {
+    await _connectServerInternal(
+      host,
+      port,
+      manual: true,
+      peerId: peerId,
+    );
+  }
+
+  Future<void> _connectServerInternal(
+    String host,
+    int port, {
+    required bool manual,
+    String? peerId,
+  }) async {
     if (await isLocalhost(host)) {
       afterAuth(true, device);
       return;
     }
+    if (manual && peerId != null) {
+      await ConnectionCoordinator().markManualSelection(peerId);
+    }
+    if (peerId != null) {
+      ConnectionCoordinator().markConnecting(peerId);
+      _pendingAutoConnectPeerId = peerId;
+    }
     socketManager.connectToServer(host, port, (ok, message) {
       // _showToast(message);
       if (!ok) {
+        ConnectionCoordinator().markDisconnected(error: message.toString());
+        if (_pendingAutoConnectPeerId == peerId) {
+          _pendingAutoConnectPeerId = null;
+        }
+        if (!manual) {
+          _refreshDevice();
+          return;
+        }
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
@@ -1198,6 +1258,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
         return;
       }
     });
+  }
+
+  Future<void> _attemptAutoConnect() async {
+    if (socketManager.receiver.isNotEmpty) {
+      return;
+    }
+    final candidate = await ConnectionCoordinator().chooseAutoConnectCandidate();
+    if (candidate == null) {
+      return;
+    }
+    if (_pendingAutoConnectPeerId == candidate.peerId) {
+      return;
+    }
+    await _connectServerInternal(
+      candidate.host,
+      candidate.port,
+      manual: false,
+      peerId: candidate.peerId,
+    );
   }
 
   void _startServer({port}) {
@@ -1275,6 +1354,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     await db.upsertDevice(deviceData);
+    ConnectionCoordinator().markConnected(deviceData);
+    _pendingAutoConnectPeerId = null;
     await _refreshDevice();
     if (!mounted) {
       return;
@@ -1298,6 +1379,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClose() {
+    ConnectionCoordinator().markDisconnected();
+    _pendingAutoConnectPeerId = null;
     _refreshDevice();
   }
 
