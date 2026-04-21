@@ -593,6 +593,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         await socketManager.sendFile(item.path!);
       }
+    } catch (error, stackTrace) {
+      logger.e('pick files failed', error: error, stackTrace: stackTrace);
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: AppLocalizations.of(context)?.filePickerOpenFailed ??
+              'Unable to open the file picker',
+          toastLength: Toast.LENGTH_SHORT,
+        );
+      }
     } finally {
       _pickerReconnectPending = false;
       if (mounted) {

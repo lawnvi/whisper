@@ -292,6 +292,12 @@ abstract class AppLocalizations {
   /// **'发送文件'**
   String get menuSendFile;
 
+  /// No description provided for @filePickerOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开文件选择器'**
+  String get filePickerOpenFailed;
+
   /// No description provided for @exit.
   ///
   /// In zh, this message translates to:

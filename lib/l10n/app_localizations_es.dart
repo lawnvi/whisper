@@ -109,6 +109,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get menuSendFile => 'Enviar archivos';
 
   @override
+  String get filePickerOpenFailed => 'No se pudo abrir el selector de archivos';
+
+  @override
   String get exit => 'Salir';
 
   @override
