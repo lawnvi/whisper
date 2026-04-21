@@ -2,8 +2,9 @@ name: release-packages
 
 on:
   push:
-    branches:
-      - release
+    tags:
+      - 'dev-v*.*.*'
+      - 'release-v*.*.*'
   workflow_dispatch:
 
 permissions:
