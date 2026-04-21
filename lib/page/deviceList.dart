@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
 import 'package:flutter_swipe_action_cell/core/cell.dart';
+import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -19,6 +20,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/ftp.dart';
@@ -28,6 +30,7 @@ import '../l10n/app_localizations.dart';
 import '../socket/svrmanager.dart';
 import 'appList.dart';
 import 'conversation.dart';
+import 'settings.dart' as app_settings;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
@@ -56,6 +59,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
   var lastClickCloseTimestamp = 0;
   static var listenApps = {};
   var _clipboardText = "";
+  final TextEditingController _desktopSearchController =
+      TextEditingController();
+  List<ChatSessionItem> _sessionItems = const [];
+  String _desktopSearchQuery = "";
+  String? _selectedDesktopPeerId;
 
   @override
   void initState() {
@@ -237,6 +245,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
+    _desktopSearchController.dispose();
     // stop watch
     clipboardWatcher.stop();
     super.dispose();
@@ -361,6 +370,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                         platform: platform));
               }
             });
+            _refreshDevice();
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
           // TODO: Handle this case.
@@ -405,7 +415,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _refreshDevice({isFirst = false}) async {
-    // 数据加载完成后更新状态
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
     var newArr = <DeviceData>[];
@@ -440,20 +449,37 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _startServer(port: temp.port);
     }
 
+    final latestMessages = await db
+        .fetchLatestMessagesByPeers(newArr.map((item) => item.uid).toList());
+    final sessions = ChatSessionListBuilder.build(
+      devices: newArr,
+      latestMessages: latestMessages,
+      activePeerId:
+          socketManager.receiver.isEmpty ? null : socketManager.receiver,
+      strings: _sessionPreviewStrings(context),
+    );
+    final selectedPeerId = _selectedDesktopPeerId != null &&
+            sessions.any((item) => item.device.uid == _selectedDesktopPeerId)
+        ? _selectedDesktopPeerId
+        : null;
+
+    if (!mounted) {
+      return;
+    }
     setState(() {
       device = temp;
       devices = newArr;
+      _sessionItems = sessions;
+      _selectedDesktopPeerId = selectedPeerId;
     });
 
     logger.i("refresh ui: $discovering $serverPortUpdate");
     if (!discovering || serverPortUpdate) {
       discovering = true;
       Future.delayed(const Duration(milliseconds: 100), () {
-        logger.i("refresh ui 你是来拉屎的吧");
         _broadcastService();
       });
       if (isFirst) {
-        logger.i("refresh ui 你也是来拉屎的吗");
         _discoverService();
 
         setListenApps();
@@ -461,37 +487,47 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
   }
 
+  ChatSessionPreviewStrings _sessionPreviewStrings(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return ChatSessionPreviewStrings(
+      connectedNow: l10n?.connectedNow ?? '当前已连接',
+      nearbyAvailable: l10n?.nearbyAvailable ?? '附近可连接',
+      noMessagesYet: l10n?.noMessagesYet ?? '还没有消息',
+      sharedFile: l10n?.sharedFile ?? '发送了一个文件',
+    );
+  }
+
+  List<ChatSessionItem> _visibleSessions() {
+    return ChatSessionListBuilder.filter(_sessionItems, _desktopSearchQuery);
+  }
+
+  ChatSessionItem? _selectedDesktopSession() {
+    if (_selectedDesktopPeerId == null) {
+      return null;
+    }
+    for (final item in _sessionItems) {
+      if (item.device.uid == _selectedDesktopPeerId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    var isDesk = isDesktop();
-    var isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesk = isDesktop();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDesk) {
+      return _buildDesktopScaffold(isDark);
+    }
+    return _buildMobileScaffold(isDark);
+  }
+
+  Widget _buildMobileScaffold(bool isDark) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          onPressed: () {
-            // 处理悬浮按钮点击事件
-            // 作为服务端
-            if (socketManager.receiver.isNotEmpty) {
-              socketManager.close();
-              return;
-            }
-            // 作为客户端
-            showInputAlertDialog(
-              context,
-              title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
-              description: AppLocalizations.of(context)?.connectDeviceDesc ??
-                  '输入对方局域网地址与端口',
-              inputHints: [
-                {device?.host ?? "192.168.0.1": false},
-                {"10002": true}
-              ],
-              confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
-              cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-              onConfirm: (List<String> inputValues) async {
-                _connectServer(inputValues[0], int.parse(inputValues[1]));
-              },
-            );
-          },
+          onPressed: _showManualConnectDialog,
           color: socketManager.receiver.isNotEmpty
               ? Colors.redAccent
               : Colors.grey,
@@ -568,7 +604,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
+                  builder: (context) => const app_settings.SettingsScreen(),
                 ),
               );
               _refreshDevice();
@@ -577,92 +613,347 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ],
       ),
       body: ListView.builder(
-        itemCount: devices.length,
+        itemCount: _sessionItems.length,
         itemBuilder: (context, index) {
-          return isDesk ? _buildDeviceItem(index) : _buildDeviceItemOld(index);
+          return _buildDeviceItemOld(_sessionItems[index]);
         },
       ),
     );
   }
 
-  Widget _buildDeviceItem(int index) {
-    final deviceItem = devices[index];
-
-    return ContextMenuRegion(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
-          child: ListTile(
-            leading: Icon(platformIcon(deviceItem.platform),
-                size: 28,
-                color: deviceItem.uid == socketManager.receiver ||
-                        deviceItem.around == true
-                    ? Colors.lightBlue
-                    : Colors.grey),
-            // Server 图标,
-            title: Text(deviceItem.name),
-            subtitle: Row(
-              children: [
-                Text(deviceItem.host),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (deviceItem.uid == socketManager.receiver ||
-                    socketManager.receiver.isEmpty)
-                  IconButton(
-                    icon: deviceItem.uid == socketManager.receiver
-                        ? const Icon(Icons.wifi_rounded,
-                            color: Colors.lightBlue)
-                        : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
-                    onPressed: () {
-                      // 处理连接/断开按钮点击事件
-                      _handleDeviceConnect(deviceItem);
-                    },
+  Widget _buildDesktopScaffold(bool isDark) {
+    final selectedSession = _selectedDesktopSession();
+    final visibleSessions = _visibleSessions();
+    return Scaffold(
+      backgroundColor: isDark ? Colors.grey[950] : Colors.grey[100],
+      body: SafeArea(
+        child: Row(
+          children: [
+            Container(
+              width: 340,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[900] : Colors.white,
+                border: Border(
+                  right: BorderSide(
+                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
                   ),
-              ],
+                ),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: CupertinoSearchTextField(
+                            controller: _desktopSearchController,
+                            placeholder:
+                                AppLocalizations.of(context)?.searchChats ??
+                                    '搜索',
+                            onChanged: (value) {
+                              setState(() {
+                                _desktopSearchQuery = value;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildSidebarAction(
+                          icon: Icons.add,
+                          onPressed: _showManualConnectDialog,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildSidebarAction(
+                          icon: Icons.settings_outlined,
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const app_settings.SettingsScreen(),
+                              ),
+                            );
+                            _refreshDevice();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                      itemCount: visibleSessions.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        final session = visibleSessions[index];
+                        return _buildDesktopSessionTile(
+                          session,
+                          selected:
+                              session.device.uid == _selectedDesktopPeerId,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            onTap: () {
-              _openConv(deviceItem);
-            },
-          ),
+            Expanded(
+              child: selectedSession == null
+                  ? _buildDesktopPlaceholder(isDark)
+                  : SendMessageScreen(
+                      key: ValueKey('desktop-${selectedSession.device.uid}'),
+                      device: selectedSession.device,
+                      embedded: true,
+                    ),
+            ),
+          ],
         ),
-        items: [
-          if (deviceItem.uid == socketManager.receiver)
-            ContextMenuActionItem(
-              label: "断开",
-              onSelected: () {
-                socketManager.close();
-              },
-            ),
-          if (socketManager.receiver.isEmpty)
-            ContextMenuActionItem(
-              label: "连接",
-              onSelected: () {
-                _connectServer(deviceItem.host, deviceItem.port);
-              },
-            ),
-          if (deviceItem.uid != socketManager.receiver)
-            ContextMenuActionItem(
-              label: "删除",
-              onSelected: () {
-                LocalDatabase().clearDevices([deviceItem.uid]);
-                devices.removeAt(index);
-                setState(() {});
-              },
-            ),
-          if (isDesktop())
-            ContextMenuActionItem(
-              label: "连接FTP",
-              onSelected: () {
-                SimpleFtpServer()
-                    .openClient("${deviceItem.host}:$defaultFtpPort");
-              },
-            ),
-        ]);
+      ),
+    );
   }
 
-  void _openConv(deviceItem) async {
+  Widget _buildSidebarAction({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      width: 38,
+      height: 38,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        color: isDark ? Colors.grey[850] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        onPressed: onPressed,
+        child: Icon(
+          icon,
+          size: 20,
+          color: isDark ? Colors.white70 : Colors.black54,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopPlaceholder(bool isDark) {
+    return Container(
+      color: isDark ? Colors.black : Colors.white,
+      alignment: Alignment.center,
+      child: Text(
+        AppLocalizations.of(context)?.selectConversationPlaceholder ??
+            '选择一个设备开始对话',
+        style: TextStyle(
+          color: isDark ? Colors.white54 : Colors.black45,
+          fontSize: 18,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopSessionTile(
+    ChatSessionItem session, {
+    required bool selected,
+  }) {
+    final deviceItem = session.device;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = selected
+        ? (isDark ? Colors.grey[800] : Colors.blue.withOpacity(0.08))
+        : Colors.transparent;
+
+    return ContextMenuRegion(
+      child: Material(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            setState(() {
+              _selectedDesktopPeerId = deviceItem.uid;
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSessionAvatar(session),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              deviceItem.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatSessionTime(session.lastTimestamp),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _sessionStatusColor(session),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              session.preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white54 : Colors.black45,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      items: _buildSessionContextActions(deviceItem),
+    );
+  }
+
+  List<ContextMenuActionItem> _buildSessionContextActions(
+      DeviceData deviceItem) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      if (deviceItem.uid == socketManager.receiver)
+        ContextMenuActionItem(
+          label: l10n?.disconnect ?? '断开',
+          onSelected: () {
+            socketManager.close();
+          },
+        ),
+      if (socketManager.receiver.isEmpty)
+        ContextMenuActionItem(
+          label: l10n?.connect ?? '连接',
+          onSelected: () {
+            _connectServer(deviceItem.host, deviceItem.port);
+          },
+        ),
+      if (deviceItem.uid != socketManager.receiver)
+        ContextMenuActionItem(
+          label: l10n?.delete ?? '删除',
+          onSelected: () {
+            _removeDevice(deviceItem.uid);
+          },
+        ),
+      ContextMenuActionItem(
+        label: 'FTP',
+        onSelected: () {
+          SimpleFtpServer().openClient("${deviceItem.host}:$defaultFtpPort");
+        },
+      ),
+    ];
+  }
+
+  Widget _buildSessionAvatar(ChatSessionItem session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final background = session.isConnected
+        ? Colors.lightBlue
+        : session.isNearby
+            ? Colors.green
+            : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: background,
+      child: Text(
+        session.avatarLabel,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Color _sessionStatusColor(ChatSessionItem session) {
+    if (session.isConnected) {
+      return Colors.lightBlue;
+    }
+    if (session.isNearby) {
+      return Colors.green;
+    }
+    return Colors.grey;
+  }
+
+  String _formatSessionTime(int timestamp) {
+    if (timestamp <= 0) {
+      return '';
+    }
+    final messageTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDay =
+        DateTime(messageTime.year, messageTime.month, messageTime.day);
+    if (targetDay == today) {
+      return DateFormat('HH:mm').format(messageTime);
+    }
+    if (messageTime.year == now.year) {
+      return DateFormat('MM/dd').format(messageTime);
+    }
+    return DateFormat('yyyy/MM/dd').format(messageTime);
+  }
+
+  void _showManualConnectDialog() {
+    if (socketManager.receiver.isNotEmpty) {
+      socketManager.close();
+      return;
+    }
+    showInputAlertDialog(
+      context,
+      title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
+      description:
+          AppLocalizations.of(context)?.connectDeviceDesc ?? '输入对方局域网地址与端口',
+      inputHints: [
+        {device?.host ?? "192.168.0.1": false},
+        {"10002": true}
+      ],
+      confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
+      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
+      onConfirm: (List<String> inputValues) async {
+        _connectServer(inputValues[0], int.parse(inputValues[1]));
+      },
+    );
+  }
+
+  void _openConv(DeviceData deviceItem) async {
+    if (isDesktop()) {
+      setState(() {
+        _selectedDesktopPeerId = deviceItem.uid;
+      });
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -672,7 +963,20 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _refreshDevice();
   }
 
-  void _handleDeviceConnect(deviceItem) {
+  void _removeDevice(String uid) async {
+    await LocalDatabase().clearDevices([uid]);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (_selectedDesktopPeerId == uid) {
+        _selectedDesktopPeerId = null;
+      }
+    });
+    _refreshDevice();
+  }
+
+  void _handleDeviceConnect(DeviceData deviceItem) {
     showConfirmationDialog(
       context,
       title: deviceItem.uid == socketManager.receiver
@@ -693,11 +997,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   @Deprecated("use context menu, just for mobile")
-  Widget _buildDeviceItemOld(int index) {
-    final deviceItem = devices[index];
+  Widget _buildDeviceItemOld(ChatSessionItem session) {
+    final deviceItem = session.device;
     bool ism = isMobile();
     return SwipeActionCell(
-      key: ValueKey(devices[index]),
+      key: ValueKey(deviceItem.uid),
       trailingActions: [
         if (socketManager.receiver != deviceItem.uid)
           SwipeAction(
@@ -760,70 +1064,81 @@ class _DeviceListScreen extends State<DeviceListScreen>
                   );
                   return;
                 }
-                LocalDatabase().clearDevices([deviceItem.uid]);
-                devices.removeAt(index);
-                setState(() {});
+                _removeDevice(deviceItem.uid);
               }),
       ],
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0.0, 0),
-        child: ListTile(
-          leading: Icon(platformIcon(deviceItem.platform),
-              size: 28,
-              color: deviceItem.uid == socketManager.receiver ||
-                      deviceItem.around == true
-                  ? Colors.lightBlue
-                  : Colors.grey),
-          // Server 图标,
-          title: Text(deviceItem.name),
-          subtitle: Row(
+      child: InkWell(
+        onTap: () {
+          _openConv(deviceItem);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
             children: [
-              Text(deviceItem.host),
-              // const SizedBox(width: 4,),
-              // Client 图标
-              // if (deviceItem.around == true) SizedBox(width: 6,),
-              // if (deviceItem.around == true) Icon(Icons.online_prediction_rounded, color: Colors.lightBlue,size: 18,)
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (deviceItem.uid == socketManager.receiver ||
-                  socketManager.receiver.isEmpty)
-                IconButton(
-                  icon: deviceItem.uid == socketManager.receiver
-                      ? const Icon(Icons.wifi_rounded, color: Colors.lightBlue)
-                      : const Icon(Icons.wifi_off_rounded), // 连接/断开 图标
-                  onPressed: () {
-                    // 处理连接/断开按钮点击事件
-                    showConfirmationDialog(
-                      context,
-                      title: deviceItem.uid == socketManager.receiver
-                          ? AppLocalizations.of(context)?.brokeConnectTitle ??
-                              "断开连接"
-                          : AppLocalizations.of(context)?.connectDeviceTitle ??
-                              "连接设备",
-                      description:
-                          '${deviceItem.uid == socketManager.receiver ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
-                      confirmButtonText:
-                          AppLocalizations.of(context)?.confirm ?? '确定',
-                      cancelButtonText:
-                          AppLocalizations.of(context)?.cancel ?? '取消',
-                      onConfirm: () {
-                        if (deviceItem.uid == socketManager.receiver) {
-                          socketManager.close();
-                        } else {
-                          _connectServer(deviceItem.host, deviceItem.port);
-                        }
-                      },
-                    );
-                  },
+              _buildSessionAvatar(session),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            deviceItem.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatSessionTime(session.lastTimestamp),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white38
+                                    : Colors.black38,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _sessionStatusColor(session),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            session.preview,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white54
+                                  : Colors.black45,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ),
             ],
           ),
-          onTap: () {
-            _openConv(deviceItem);
-          },
         ),
       ),
     );
@@ -950,8 +1265,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (!allow || deviceData == null) {
       return;
     }
-    db.upsertDevice(deviceData);
-    // 在确认后执行的逻辑
+    await db.upsertDevice(deviceData);
+    await _refreshDevice();
+    if (!mounted) {
+      return;
+    }
+    if (isDesktop()) {
+      setState(() {
+        _selectedDesktopPeerId = deviceData.uid;
+      });
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -965,13 +1289,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClose() {
-    // TODO: implement onClose
     _refreshDevice();
   }
 
   @override
   void onConnect() {
-    // TODO: implement onConnect
+    _refreshDevice();
   }
 
   var _isAlert = false;
@@ -997,7 +1320,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onMessage(MessageData messageData) {
-    // TODO: implement onMessage
+    _refreshDevice();
   }
 
   @override
@@ -1177,749 +1500,6 @@ class DeviceDetailsScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
-
-  @override
-  _SettingsScreen createState() => _SettingsScreen();
-}
-
-class _SettingsScreen extends State<SettingsScreen> {
-  DeviceData? device;
-  String _path = "";
-  PackageInfo? _packageInfo;
-  bool _doubleClickDelete = false;
-  bool _close2tray = true;
-  bool _listenAndroid = true;
-  bool _ignoreAndroid = false;
-  bool _copyVerifyCode = true;
-  bool _ftpServer = SimpleFtpServer().isActive();
-  int _ftpPort = 8021;
-  ThemeMode _themeMode = ThemeMode.system;
-
-  String _localeLabel(String languageCode) {
-    switch (languageCode) {
-      case 'zh':
-        return '简体中文';
-      case 'es':
-        return 'Español';
-      default:
-        return 'English';
-    }
-  }
-
-  @override
-  void initState() {
-    _refreshDevice();
-    _loadThemeMode();
-    super.initState();
-  }
-
-  Future<void> _loadThemeMode() async {
-    final themeMode = await LocalSetting().themeMode();
-    setState(() {
-      _themeMode = themeMode;
-    });
-  }
-
-  Future<void> _refreshDevice() async {
-    var temp = await LocalSetting().instance();
-    var p = await downloadDir();
-    var pkg = await PackageInfo.fromPlatform();
-    var doubleClick = await LocalSetting().isDoubleClickDelete();
-    var closeToTray = await LocalSetting().isClose2Tray();
-    var ftpPort = await LocalSetting().ftpPort();
-    var copyVerify = await LocalSetting().copyVerify();
-    var listenAndroid = await LocalSetting().isListenAndroid();
-    var ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
-    setState(() {
-      device = temp;
-      _path = p.path;
-      _packageInfo = pkg;
-      _close2tray = closeToTray;
-      _doubleClickDelete = doubleClick;
-      _ftpPort = ftpPort;
-      _copyVerifyCode = copyVerify;
-      _ignoreAndroid = ignoreAndroid;
-      _listenAndroid = listenAndroid;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
-      appBar: AppBar(
-        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
-        leading: CupertinoNavigationBarBackButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          color: isDark ? Colors.grey[400] : Colors.lightBlue,
-        ),
-        title: Text(
-          AppLocalizations.of(context)?.setting ?? "设置",
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-        ),
-      ),
-      body: SafeArea(
-        child: Material(
-          color: isDark ? Colors.grey[900] : Colors.white,
-          child: ListView(
-            padding: const EdgeInsets.all(16.0),
-            children: [
-              Card(
-                elevation: 2.0,
-                color: isDark ? Colors.grey[800] : Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                child: Column(
-                  children: [
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.themeMode ?? '主题模式',
-                      Icon(Icons.dark_mode,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey),
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _themeMode == ThemeMode.system
-                                  ? AppLocalizations.of(context)
-                                          ?.followSystem ??
-                                      '跟随系统'
-                                  : _themeMode == ThemeMode.dark
-                                      ? AppLocalizations.of(context)
-                                              ?.darkMode ??
-                                          '暗黑'
-                                      : AppLocalizations.of(context)
-                                              ?.lightMode ??
-                                          '明亮',
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.grey[400]
-                                    : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_ios,
-                              size: 14,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                          ],
-                        ),
-                        onPressed: () {
-                          showCupertinoModalPopup(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return CupertinoActionSheet(
-                                title: Text(
-                                  AppLocalizations.of(context)
-                                          ?.selectThemeMode ??
-                                      '选择主题模式',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                                actions: [
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)
-                                              ?.followSystem ??
-                                          '跟随系统',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.system);
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)?.lightMode ??
-                                          '明亮',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.light);
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)?.darkMode ??
-                                          '暗黑',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.dark);
-                                    },
-                                  ),
-                                ],
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: const TextStyle(
-                                        color: Colors.redAccent),
-                                  ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      device?.name ?? "",
-                      Icon(
-                        platformIcon(device?.platform ?? ""),
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      onTap: () {
-                        showInputAlertDialog(
-                          context,
-                          title: AppLocalizations.of(context)?.nickname ?? '昵称',
-                          description:
-                              AppLocalizations.of(context)?.nicknameDesc ??
-                                  '请输入昵称',
-                          inputHints: [
-                            {device?.name ?? "localhost": false}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            if (inputValues[0].isEmpty) {
-                              inputValues[0] = await deviceName();
-                            }
-                            LocalSetting().updateNickname(inputValues[0]);
-                            _refreshDevice();
-                          },
-                        );
-                      },
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)
-                              ?.serverPort(device?.port ?? 10002) ??
-                          '服务端口 ${device?.port}',
-                      Icon(
-                        Icons.wifi_tethering,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      onTap: () {
-                        showInputAlertDialog(
-                          context,
-                          title:
-                              AppLocalizations.of(context)?.serverPortTitle ??
-                                  '服务端口',
-                          description: AppLocalizations.of(context)?.portDesc ??
-                              '请输入服务端口 [1000, 65535]',
-                          inputHints: [
-                            {'${device?.port ?? "10002"}': true}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            try {
-                              var port = int.parse(inputValues[0]);
-                              if (port > 1000 && port <= 65535) {
-                                LocalSetting().updatePort(port);
-                                _refreshDevice();
-                              }
-                            } on Exception catch (_) {}
-                          },
-                        );
-                      },
-                    ),
-                    _buildSettingItem(
-                      '${AppLocalizations.of(context)?.ftpService ?? 'FTP服务'}$defaultFtpPort (alpha)',
-                      Icon(
-                        Icons.folder_shared_outlined,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      onTap: () {
-                        _pickFTPDir();
-                      },
-                      onLongPress: () {
-                        if (_ftpServer) {
-                          return;
-                        }
-                        showInputAlertDialog(
-                          context,
-                          title:
-                              'FTP${AppLocalizations.of(context)?.serverPortTitle ?? '服务端口'}',
-                          description: AppLocalizations.of(context)?.portDesc ??
-                              '请输入服务端口 [1000, 65535]',
-                          inputHints: [
-                            {'$_ftpPort': true}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            try {
-                              var port = int.parse(inputValues[0]);
-                              if (port > 1000 && port <= 65535) {
-                                LocalSetting().setFTPPort(port);
-                                setState(() {
-                                  _ftpPort = port;
-                                });
-                              }
-                            } on Exception catch (_) {}
-                          },
-                        );
-                      },
-                      trailing: CupertinoSwitch(
-                        value: _ftpServer,
-                        onChanged: (bool value) async {
-                          var path = await LocalSetting().ftpDir();
-                          if (path.isEmpty) {
-                            path = await _pickFTPDir();
-                          }
-
-                          if (path.isEmpty) {
-                            return;
-                          }
-
-                          value
-                              ? SimpleFtpServer().start(path, defaultFtpPort)
-                              : SimpleFtpServer().stop();
-                          setState(() {
-                            _ftpServer = value;
-                          });
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.trustNewDevice ?? '自动通过新设备',
-                      Icon(
-                        Icons.lock_open,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: device?.auth ?? false,
-                        onChanged: (bool value) {
-                          LocalSetting().updateNoAuth(value);
-                          _refreshDevice();
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.accessClipboard ??
-                          '允许访问剪切板',
-                      Icon(
-                        Icons.copy,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: device?.clipboard ?? false,
-                        onChanged: (bool value) {
-                          LocalSetting().updateClipboard(value);
-                          _refreshDevice();
-                        },
-                      ),
-                    ),
-                    if (!isMobile())
-                      _buildSettingItem(
-                        AppLocalizations.of(context)?.close2tray ?? '关闭时隐藏到托盘',
-                        Icon(
-                          Icons.close_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        trailing: CupertinoSwitch(
-                          value: _close2tray,
-                          onChanged: (bool value) async {
-                            LocalSetting().updateClose2Tray(value);
-                            setState(() {
-                              _close2tray = value;
-                            });
-                          },
-                        ),
-                      ),
-                    if (Platform.isAndroid)
-                      _buildSettingItem(
-                        AppLocalizations.of(context)?.pushNotification ??
-                            '转发通知',
-                        Icon(
-                          Icons.notifications,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AppListScreen(),
-                            ),
-                          );
-                          DeviceListScreen.setListenApps();
-                        },
-                        trailing: CupertinoSwitch(
-                          value: _listenAndroid,
-                          onChanged: (bool value) async {
-                            LocalSetting().setAndroidListen(value);
-                            setState(() {
-                              _listenAndroid = value;
-                            });
-                            if (Platform.isAndroid &&
-                                WsSvrManager().receiver.isNotEmpty) {
-                              value
-                                  ? startAndroidListening()
-                                  : stopAndroidListening();
-                            }
-                            if (value &&
-                                (await LocalSetting().listenAppNotifyList())
-                                    .isEmpty) {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const AppListScreen(),
-                                ),
-                              );
-                              DeviceListScreen.setListenApps();
-                            }
-                          },
-                        ),
-                      ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.ignoreNotification ??
-                          '忽略安卓通知',
-                      Icon(
-                        Icons.notifications_off,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: _ignoreAndroid,
-                        onChanged: (bool value) async {
-                          LocalSetting().setAndroidNotification(value);
-                          setState(() {
-                            _ignoreAndroid = value;
-                          });
-                        },
-                      ),
-                    ),
-                    if (Localizations.localeOf(context).languageCode == "zh")
-                      _buildSettingItem(
-                        AppLocalizations.of(context)?.copyVerifyCode ??
-                            '提取短信验证码写入剪切板',
-                        Icon(
-                          Icons.verified_user_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        trailing: CupertinoSwitch(
-                          value: _copyVerifyCode,
-                          onChanged: (bool value) async {
-                            LocalSetting().setCopyVerify(value);
-                            setState(() {
-                              _copyVerifyCode = value;
-                            });
-                          },
-                        ),
-                      ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.language(
-                              Localizations.localeOf(context).languageCode) ??
-                          'language ${Localizations.localeOf(context).languageCode}',
-                      Icon(
-                        Icons.language_rounded,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _localeLabel(
-                                  Localizations.localeOf(context).languageCode),
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.grey[400]
-                                    : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_ios,
-                              size: 14,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                          ],
-                        ),
-                        onPressed: () {
-                          showCupertinoModalPopup(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return CupertinoActionSheet(
-                                title: Text(
-                                  AppLocalizations.of(context)
-                                          ?.selectLanguage ??
-                                      '选择语言',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                                actions: [
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      '简体中文',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      MyApp.setLocale(
-                                          context, const Locale('zh'));
-                                      LocalSetting().setLocalization('zh');
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      'English',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      MyApp.setLocale(
-                                          context, const Locale('en'));
-                                      LocalSetting().setLocalization('en');
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      'Español',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      MyApp.setLocale(
-                                          context, const Locale('es'));
-                                      LocalSetting().setLocalization('es');
-                                    },
-                                  ),
-                                ],
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: const TextStyle(
-                                        color: Colors.redAccent),
-                                  ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      _path,
-                      Icon(
-                        Icons.file_download_outlined,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      onLongPress: () async {
-                        openDir((await downloadDir()).path);
-                      },
-                      onTap: () {
-                        _pickSaveDir();
-                      },
-                    ),
-                    _buildSettingItem(
-                      _packageInfo?.version ?? "UNKNOWN",
-                      Icon(
-                        Icons.copyright,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      onTap: () async {
-                        final Uri toLaunch = Uri(
-                            scheme: 'https',
-                            host: 'whisper.127014.xyz',
-                            path: '/zh');
-                        _launchInBrowser(toLaunch);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<String> _pickFTPDir() async {
-    String? selectDir = await FilePicker.platform.getDirectoryPath();
-    if (selectDir != null) {
-      LocalSetting().setFTPDir(selectDir);
-    }
-    return selectDir ?? "";
-  }
-
-  Future<String> _pickSaveDir() async {
-    String? selectDir = await FilePicker.platform.getDirectoryPath();
-    if (selectDir != null) {
-      LocalSetting().modifySavePath(selectDir);
-      setState(() {
-        _path = selectDir;
-      });
-    }
-    return selectDir ?? "";
-  }
-
-  Future<void> _launchInBrowser(Uri url) async {
-    if (!await launchUrl(
-      url,
-      mode: LaunchMode.externalApplication,
-    )) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
-  Widget _buildSettingItem(String title, Icon icon,
-      {Widget? trailing,
-      bool showDivider = false,
-      GestureTapCallback? onTap,
-      String desc = "",
-      GestureTapCallback? onLongPress}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Column(
-          children: [
-            Container(
-              constraints: const BoxConstraints(minHeight: 52),
-              child: Row(
-                children: [
-                  Icon(
-                    icon.icon,
-                    color:
-                        isDark ? Colors.grey[400] : CupertinoColors.systemGrey,
-                  ),
-                  const SizedBox(width: 8.0),
-                  Expanded(
-                    child: Text(
-                      title,
-                      softWrap: true,
-                      style: TextStyle(
-                        fontSize: 17.0,
-                        color: isDark ? Colors.white : CupertinoColors.black,
-                        fontWeight: Platform.isWindows ? null : FontWeight.w500,
-                        fontFamily:
-                            Platform.isWindows ? null : 'SF Pro Display',
-                      ),
-                    ),
-                  ),
-                  if (trailing != null) trailing,
-                ],
-              ),
-            ),
-            if (desc.isNotEmpty)
-              Text(
-                desc,
-                softWrap: true,
-                style: TextStyle(
-                  fontSize: 12.0,
-                  color: isDark ? Colors.grey[400] : CupertinoColors.black,
-                  fontWeight: Platform.isWindows ? null : FontWeight.w500,
-                  fontFamily: Platform.isWindows ? null : 'SF Pro Display',
-                ),
-              ),
-            if (showDivider)
-              Divider(
-                height: 0.5,
-                thickness: 0.5,
-                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _updateThemeMode(ThemeMode mode) async {
-    MyApp.setTheme(context, mode);
-    await LocalSetting().setThemeMode(mode);
-    setState(() {
-      _themeMode = mode;
-    });
   }
 }
 

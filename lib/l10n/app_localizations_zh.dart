@@ -221,4 +221,43 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectLanguage => '选择语言';
+
+  @override
+  String get searchChats => '搜索';
+
+  @override
+  String get selectConversationPlaceholder => '选择一个设备开始对话';
+
+  @override
+  String get connectedNow => '当前已连接';
+
+  @override
+  String get nearbyAvailable => '附近可连接';
+
+  @override
+  String get noMessagesYet => '还没有消息';
+
+  @override
+  String get sharedFile => '发送了一个文件';
+
+  @override
+  String get connectToSend => '连接后即可发送消息';
+
+  @override
+  String get localeNameZhHans => '简体中文';
+
+  @override
+  String get localeNameEnglish => 'English';
+
+  @override
+  String get localeNameSpanish => 'Español';
+
+  @override
+  String get autoConnectTrustedDevices => '自动连接互信设备';
+
+  @override
+  String get mutualTrustEnabled => '双向互信已开启';
+
+  @override
+  String get mutualTrustNotEstablished => '尚未形成双向互信';
 }
