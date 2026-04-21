@@ -138,14 +138,14 @@ class ChatMessageList extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: isMobile() ? 3 : 6),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (message.type == MessageEnum.Text && isOpponent)
                         _buildCopyButton(context, message),
                       if (message.type == MessageEnum.Text && isOpponent)
-                        const SizedBox(width: 6),
+                        SizedBox(width: isMobile() ? 4 : 6),
                       Text(
                         formatTimestamp(message.timestamp),
                         style: TextStyle(
@@ -155,7 +155,7 @@ class ChatMessageList extends StatelessWidget {
                         ),
                       ),
                       if (message.type == MessageEnum.Text && !isOpponent)
-                        const SizedBox(width: 6),
+                        SizedBox(width: isMobile() ? 4 : 6),
                       if (message.type == MessageEnum.Text && !isOpponent)
                         _buildCopyButton(context, message),
                     ],
@@ -174,9 +174,9 @@ class ChatMessageList extends StatelessWidget {
     return IconButton(
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 20,
-        minHeight: 20,
+      constraints: BoxConstraints(
+        minWidth: isMobile() ? 18 : 20,
+        minHeight: isMobile() ? 18 : 20,
       ),
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,

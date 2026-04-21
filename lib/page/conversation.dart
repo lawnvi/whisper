@@ -43,6 +43,7 @@ class SendMessageScreen extends StatefulWidget {
 }
 
 class _SendMessageScreen extends State<SendMessageScreen>
+    with WidgetsBindingObserver
     implements ISocketEvent {
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
@@ -62,12 +63,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
   final bool embedded;
+  bool _resumeReconnectPending = false;
 
   _SendMessageScreen(this.device, this.embedded);
 
   @override
   void initState() {
     logger.i("init conv: ${socketManager.receiver}-${device.uid}");
+    WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
     _textController.addListener(() {
       setState(() {
@@ -81,12 +84,42 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   void dispose() {
     logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
+    WidgetsBinding.instance.removeObserver(this);
     socketManager.unregisterEvent(this);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _composerFocusNode.dispose();
     _textController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _resumeReconnectPending = _isConnectedSession;
+        socketManager.refreshConnectionLiveness();
+        break;
+      case AppLifecycleState.resumed:
+        final shouldReconnect = _resumeReconnectPending;
+        _resumeReconnectPending = false;
+        if (shouldReconnect && !_isConnectedSession && _canToggleConnection) {
+          _connectServer(device.host, device.port);
+          return;
+        }
+        if (_isConnectedSession) {
+          socketManager.refreshConnectionLiveness();
+        }
+        break;
+      case AppLifecycleState.detached:
+        break;
+    }
   }
 
   void _updatePercent(double num) {
@@ -495,6 +528,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_canSendCurrentDevice || _isLocalhost) {
       return;
     }
+    if (_isConnectedSession) {
+      await socketManager.refreshConnectionLiveness();
+    }
     setState(() {
       _isLoading = true;
     });
@@ -673,8 +709,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final missingLocalFile = isOpponent &&
         message.path.isNotEmpty &&
         !File(message.path).existsSync();
-    var failed =
-        !isOpponent && !message.acked && message.timestamp < device.lastTime;
+    var failed = !isOpponent &&
+        !_isConnectedSession &&
+        !message.acked &&
+        message.timestamp < device.lastTime;
     failed = failed || missingLocalFile;
     final colorScheme = Theme.of(context).colorScheme;
     final cardColor = colorScheme.brightness == Brightness.dark
