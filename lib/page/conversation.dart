@@ -891,27 +891,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _speed = "";
     stopAndroidBackgroundKeepAlive();
     _refreshCurrentDeviceState();
-    if (!mounted || !_isCurrentRoute) {
-      return;
+    if (mounted) {
+      setState(() {});
     }
-    Fluttertoast.showToast(
-      msg:
-          '${AppLocalizations.of(context)?.disconnect ?? "Disconnect"} ${device.name}',
-    );
-    setState(() {});
   }
 
   @override
   void onConnect() {
     _refreshCurrentDeviceState();
     _syncAndroidKeepAliveService();
-    if (!mounted || !_isCurrentRoute) {
-      return;
-    }
-    Fluttertoast.showToast(
-      msg:
-          '${AppLocalizations.of(context)?.connect ?? "Connect"} ${device.name}',
-    );
   }
 
   var _isAlert = false;
