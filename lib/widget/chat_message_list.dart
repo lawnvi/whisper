@@ -138,14 +138,14 @@ class ChatMessageList extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SizedBox(height: isMobile() ? 3 : 6),
+                  SizedBox(height: isMobile() ? 1.5 : 4),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (message.type == MessageEnum.Text && isOpponent)
                         _buildCopyButton(context, message),
                       if (message.type == MessageEnum.Text && isOpponent)
-                        SizedBox(width: isMobile() ? 4 : 6),
+                        SizedBox(width: isMobile() ? 3 : 5),
                       Text(
                         formatTimestamp(message.timestamp),
                         style: TextStyle(
@@ -155,7 +155,7 @@ class ChatMessageList extends StatelessWidget {
                         ),
                       ),
                       if (message.type == MessageEnum.Text && !isOpponent)
-                        SizedBox(width: isMobile() ? 4 : 6),
+                        SizedBox(width: isMobile() ? 3 : 5),
                       if (message.type == MessageEnum.Text && !isOpponent)
                         _buildCopyButton(context, message),
                     ],
