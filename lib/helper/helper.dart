@@ -13,6 +13,8 @@ import 'package:uuid/uuid.dart';
 
 var logger = Logger();
 const LocalUuid = Uuid();
+String? _suppressedClipboardText;
+DateTime? _suppressedClipboardAt;
 
 bool isDesktop() {
   return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
@@ -24,7 +26,7 @@ bool isMobile() {
 
 Future<String> localUUID() async {
   final SharedPreferences sp = await SharedPreferences.getInstance();
-  var uuid = sp.getString("_uuid")?? "";
+  var uuid = sp.getString("_uuid") ?? "";
   if (uuid.isEmpty) {
     uuid = LocalUuid.v4();
     sp.setString("_uuid", uuid);
@@ -33,21 +35,21 @@ Future<String> localUUID() async {
 }
 
 String formatSize(int size) {
-  var tb = size / (1024*1024*1024*1024);
+  var tb = size / (1024 * 1024 * 1024 * 1024);
   if (tb > 10) {
     return "${tb.toStringAsFixed(1)} TB";
   }
   if (tb >= 0.9) {
     return "${tb.toStringAsFixed(2)} TB";
   }
-  var gb = size / (1024*1024*1024);
+  var gb = size / (1024 * 1024 * 1024);
   if (gb > 10) {
     return "${gb.toStringAsFixed(1)} GB";
   }
   if (gb >= 0.9) {
     return "${gb.toStringAsFixed(2)} GB";
   }
-  var mb = size / (1024*1024);
+  var mb = size / (1024 * 1024);
   if (mb > 10) {
     return "${mb.toStringAsFixed(1)} MB";
   }
@@ -68,10 +70,15 @@ String formatTimestamp(int timestamp) {
 }
 
 IconData platformIcon(platform) {
-  return platform.toLowerCase() == "android"? Icons.android_rounded:
-  platform.toLowerCase() == "macos"? Icons.laptop_mac_rounded:
-  platform.toLowerCase() == "ios"? Icons.apple_rounded:
-  platform.toLowerCase() == "windows"? Icons.laptop_windows_rounded: Icons.laptop_rounded;
+  return platform.toLowerCase() == "android"
+      ? Icons.android_rounded
+      : platform.toLowerCase() == "macos"
+          ? Icons.laptop_mac_rounded
+          : platform.toLowerCase() == "ios"
+              ? Icons.apple_rounded
+              : platform.toLowerCase() == "windows"
+                  ? Icons.laptop_windows_rounded
+                  : Icons.laptop_rounded;
 }
 
 Future<String> deviceName() async {
@@ -89,17 +96,17 @@ Future<String> deviceName() async {
           }
           return "${android.brand} ${android.model}";
         case TargetPlatform.iOS:
-            var ios = await dp.iosInfo;
-            return ios.name;
+          var ios = await dp.iosInfo;
+          return ios.name;
         case TargetPlatform.linux:
-            var linux = await dp.linuxInfo;
-            return linux.name;
+          var linux = await dp.linuxInfo;
+          return linux.name;
         case TargetPlatform.windows:
-            var windows = await dp.windowsInfo;
-            return windows.computerName;
+          var windows = await dp.windowsInfo;
+          return windows.computerName;
         case TargetPlatform.macOS:
-            var mac = await dp.macOsInfo;
-            return mac.computerName;
+          var mac = await dp.macOsInfo;
+          return mac.computerName;
         case TargetPlatform.fuchsia:
           return "unknown";
       }
@@ -113,7 +120,9 @@ Future<bool> isLocalhost(String address) async {
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {
-        if (!addr.isLoopback && addr.type == InternetAddressType.IPv4 && addr.address == address) {
+        if (!addr.isLoopback &&
+            addr.type == InternetAddressType.IPv4 &&
+            addr.address == address) {
           return true;
         }
       }
@@ -132,7 +141,9 @@ Future<String> getLocalIpAddress() async {
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {
-        if (!addr.isLoopback && addr.type == InternetAddressType.IPv4 && addr.address.startsWith("192.168")) {
+        if (!addr.isLoopback &&
+            addr.type == InternetAddressType.IPv4 &&
+            addr.address.startsWith("192.168")) {
           completer.complete(addr.address);
           // if (sb.isNotEmpty) {
           //   sb.write("/");
@@ -163,10 +174,35 @@ Future<String?> getClipboardText() async {
   });
 }
 
-void copyToClipboard(String content) {
+void copyToClipboard(String content, {bool suppressWatcher = false}) {
+  if (suppressWatcher) {
+    _suppressedClipboardText = content;
+    _suppressedClipboardAt = DateTime.now();
+  }
   Clipboard.setData(ClipboardData(text: content))
       .then((value) => {})
       .catchError((error) => {});
+}
+
+bool shouldIgnoreClipboardSync(String content) {
+  if (_suppressedClipboardText == null || _suppressedClipboardAt == null) {
+    return false;
+  }
+
+  final isExpired = DateTime.now().difference(_suppressedClipboardAt!) >
+      const Duration(seconds: 2);
+  if (isExpired) {
+    _suppressedClipboardText = null;
+    _suppressedClipboardAt = null;
+    return false;
+  }
+
+  final shouldIgnore = _suppressedClipboardText == content;
+  if (shouldIgnore) {
+    _suppressedClipboardText = null;
+    _suppressedClipboardAt = null;
+  }
+  return shouldIgnore;
 }
 
 void pickFile(var callback) async {

@@ -1473,7 +1473,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void onClipboardChanged() async {
     var text = await getClipboardText() ?? "";
-    if (_clipboardText == text) {
+    if (_clipboardText == text || shouldIgnoreClipboardSync(text)) {
       return;
     }
     _clipboardText = text;

@@ -299,7 +299,10 @@ class WsSvrManager {
           _ackMessage(message);
           if (message.clipboard) {
             if ((await LocalSetting().instance()).clipboard) {
-              copyToClipboard(message.content ?? "");
+              copyToClipboard(
+                message.content ?? "",
+                suppressWatcher: true,
+              );
             }
           }
           _dispatchToAll((event) => event.onMessage(message));
