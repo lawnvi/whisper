@@ -97,6 +97,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final locale = Localizations.localeOf(context);
+    final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
@@ -117,7 +118,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Material(
           color: isDark ? Colors.grey[900] : Colors.white,
           child: ListView(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPagePadding,
+              12,
+              horizontalPagePadding,
+              16,
+            ),
             children: [
               Card(
                 elevation: 2.0,
@@ -133,38 +139,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: isDark
                               ? Colors.grey[400]
                               : CupertinoColors.systemGrey),
+                      desc: _themeMode == ThemeMode.system
+                          ? AppLocalizations.of(context)?.followSystem ?? '跟随系统'
+                          : _themeMode == ThemeMode.dark
+                              ? AppLocalizations.of(context)?.darkMode ?? '暗黑'
+                              : AppLocalizations.of(context)?.lightMode ?? '明亮',
                       trailing: CupertinoButton(
                         padding: EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _themeMode == ThemeMode.system
-                                  ? AppLocalizations.of(context)
-                                          ?.followSystem ??
-                                      '跟随系统'
-                                  : _themeMode == ThemeMode.dark
-                                      ? AppLocalizations.of(context)
-                                              ?.darkMode ??
-                                          '暗黑'
-                                      : AppLocalizations.of(context)
-                                              ?.lightMode ??
-                                          '明亮',
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.grey[400]
-                                    : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_ios,
-                              size: 14,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                          ],
+                        minimumSize: const Size(28, 28),
+                        child: Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
                         ),
                         onPressed: () {
                           showCupertinoModalPopup(
@@ -245,13 +233,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     _buildSettingItem(
-                      device?.name ?? "",
+                      AppLocalizations.of(context)?.nickname ?? '昵称',
                       Icon(
                         platformIcon(device?.platform ?? ""),
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: device?.name ?? "",
                       onTap: () {
                         showInputAlertDialog(
                           context,
@@ -277,15 +266,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                     _buildSettingItem(
-                      AppLocalizations.of(context)
-                              ?.serverPort(device?.port ?? 10002) ??
-                          '服务端口 ${device?.port}',
+                      AppLocalizations.of(context)?.serverPortTitle ?? '服务端口',
                       Icon(
                         Icons.wifi_tethering,
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: AppLocalizations.of(context)
+                              ?.serverPort(device?.port ?? 10002) ??
+                          '服务端口 ${device?.port}',
                       onTap: () {
                         showInputAlertDialog(
                           context,
@@ -314,13 +304,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                     _buildSettingItem(
-                      '${AppLocalizations.of(context)?.ftpService ?? 'FTP服务'}$defaultFtpPort (alpha)',
+                      AppLocalizations.of(context)?.ftpService ?? 'FTP服务',
                       Icon(
                         Icons.folder_shared_outlined,
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: 'Port $_ftpPort',
                       onTap: _pickFTPDir,
                       onLongPress: () {
                         if (_ftpServer) {
@@ -530,37 +521,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     _buildSettingItem(
-                      AppLocalizations.of(context)?.language(
-                              Localizations.localeOf(context).languageCode) ??
-                          'language ${Localizations.localeOf(context).languageCode}',
+                      AppLocalizations.of(context)?.selectLanguage ?? '选择语言',
                       Icon(
                         Icons.language_rounded,
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: _localeLabel(context, locale.languageCode),
                       trailing: CupertinoButton(
                         padding: EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _localeLabel(context, locale.languageCode),
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.grey[400]
-                                    : CupertinoColors.systemGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_ios,
-                              size: 14,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                          ],
+                        minimumSize: const Size(28, 28),
+                        child: Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
                         ),
                         onPressed: () {
                           showCupertinoModalPopup(
@@ -617,26 +594,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     _buildSettingItem(
-                      _path,
+                      'Save directory',
                       Icon(
                         Icons.file_download_outlined,
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: _path,
                       onLongPress: () async {
                         openDir((await downloadDir()).path);
                       },
                       onTap: _pickSaveDir,
                     ),
                     _buildSettingItem(
-                      _packageInfo?.version ?? "UNKNOWN",
+                      'Version',
                       Icon(
                         Icons.copyright,
                         color: isDark
                             ? Colors.grey[400]
                             : CupertinoColors.systemGrey,
                       ),
+                      desc: _packageInfo?.version ?? "UNKNOWN",
                       onTap: () async {
                         final toLaunch = Uri(
                           scheme: 'https',
@@ -713,47 +692,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
         child: Column(
           children: [
-            Container(
-              constraints: const BoxConstraints(minHeight: 52),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    icon.icon,
-                    color:
-                        isDark ? Colors.grey[400] : CupertinoColors.systemGrey,
-                  ),
-                  const SizedBox(width: 8.0),
-                  Expanded(
-                    child: Text(
-                      title,
-                      softWrap: true,
-                      style: TextStyle(
-                        fontSize: 17.0,
-                        color: isDark ? Colors.white : CupertinoColors.black,
-                        fontWeight: Platform.isWindows ? null : FontWeight.w500,
-                        fontFamily:
-                            Platform.isWindows ? null : 'SF Pro Display',
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      icon.icon,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
                     ),
                   ),
-                  if (trailing != null) trailing,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: true,
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            color:
+                                isDark ? Colors.white : CupertinoColors.black,
+                            fontWeight:
+                                Platform.isWindows ? null : FontWeight.w500,
+                            fontFamily:
+                                Platform.isWindows ? null : 'SF Pro Display',
+                          ),
+                        ),
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: true,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                              fontWeight:
+                                  Platform.isWindows ? null : FontWeight.w400,
+                              fontFamily:
+                                  Platform.isWindows ? null : 'SF Pro Display',
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: trailing,
+                    ),
+                  ],
                 ],
               ),
             ),
-            if (desc.isNotEmpty)
-              Text(
-                desc,
-                softWrap: true,
-                style: TextStyle(
-                  fontSize: 12.0,
-                  color: isDark ? Colors.grey[400] : CupertinoColors.black,
-                  fontWeight: Platform.isWindows ? null : FontWeight.w500,
-                  fontFamily: Platform.isWindows ? null : 'SF Pro Display',
-                ),
-              ),
             if (showDivider)
               Divider(
                 height: 0.5,
@@ -830,6 +837,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final presence = coordinator.peer(device.uid);
     final mutualTrust = (presence?.locallyTrusted ?? device.auth) &&
         (presence?.remotelyTrusted ?? false);
+    final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -847,7 +855,12 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       body: SafeArea(
         child: Material(
           child: ListView(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPagePadding,
+              12,
+              horizontalPagePadding,
+              16,
+            ),
             children: [
               Card(
                 elevation: 1.2,
@@ -862,6 +875,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         context,
                         mutualTrust,
                       ),
+                      desc: '${device.host}:${device.port}',
                       icon: Icon(
                         mutualTrust
                             ? Icons.verified_user_rounded
@@ -971,6 +985,7 @@ class _DeviceSettingTile extends StatelessWidget {
   final Widget? trailing;
   final bool showDivider;
   final VoidCallback? onTap;
+  final String desc;
 
   const _DeviceSettingTile({
     required this.title,
@@ -978,6 +993,7 @@ class _DeviceSettingTile extends StatelessWidget {
     this.trailing,
     this.showDivider = true,
     this.onTap,
+    this.desc = "",
   });
 
   @override
@@ -987,28 +1003,62 @@ class _DeviceSettingTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
         child: Column(
           children: [
-            SizedBox(
-              height: 56.0,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  icon,
-                  const SizedBox(width: 16.0),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: icon,
+                  ),
+                  const SizedBox(width: 12.0),
                   Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 17.0,
-                        color: isDark ? Colors.white : CupertinoColors.black,
-                        fontWeight: FontWeight.w500,
-                        fontFamily:
-                            Platform.isWindows ? null : 'SF Pro Display',
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            color:
+                                isDark ? Colors.white : CupertinoColors.black,
+                            fontWeight: FontWeight.w500,
+                            fontFamily:
+                                Platform.isWindows ? null : 'SF Pro Display',
+                          ),
+                        ),
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                              fontFamily:
+                                  Platform.isWindows ? null : 'SF Pro Display',
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  if (trailing != null) trailing!,
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: trailing!,
+                    ),
+                  ],
                 ],
               ),
             ),
