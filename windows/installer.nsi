@@ -26,7 +26,7 @@
 !endif
 
 Name "${APP_NAME}"
-OutFile "${__FILEDIR__}\${OUTPUT_NAME}"
+OutFile "${OUTPUT_NAME}"
 InstallDir "${INSTALL_ROOT}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallDir"
 RequestExecutionLevel user
@@ -39,8 +39,8 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${__FILEDIR__}\runner\resources\app_icon.ico"
-!define MUI_UNICON "${__FILEDIR__}\runner\resources\app_icon.ico"
+!define MUI_ICON "runner\resources\app_icon.ico"
+!define MUI_UNICON "runner\resources\app_icon.ico"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -54,7 +54,7 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File /r "${__FILEDIR__}\..\build\windows\x64\runner\Release\*.*"
+  File /r "..\build\windows\x64\runner\Release\*.*"
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
