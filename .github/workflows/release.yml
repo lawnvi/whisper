@@ -3,6 +3,7 @@ name: release-packages
 on:
   push:
     tags:
+      - 'dev-v*.*.*'
       - 'release-v*.*.*'
 
 permissions:

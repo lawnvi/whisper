@@ -1,253 +1,37 @@
-name: ci-packages
+name: ci-checks
 
 on:
   push:
-    branches:
-      - dev
-      - main
+    tags-ignore:
+      - '*'
   pull_request:
   workflow_dispatch:
-    inputs:
-      build_macos:
-        description: Build macOS and iOS packages
-        required: true
-        default: true
-        type: boolean
-      build_windows:
-        description: Build Windows installer
-        required: true
-        default: true
-        type: boolean
-      build_linux:
-        description: Build Linux and Android packages
-        required: true
-        default: true
-        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-packages-${{ github.event.pull_request.head.sha || github.ref }}
+  group: ci-checks-${{ github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-on-macos:
-    name: macOS + iOS
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos }}
-    runs-on: macos-15-intel
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          architecture: x64
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Install create-dmg
-        run: npm install --global create-dmg
-
-      - name: Refresh CocoaPods dependencies
-        run: |
-          rm -f macos/Podfile.lock ios/Podfile.lock
-          cd macos
-          pod install --repo-update
-          cd ../ios
-          pod install --repo-update
-
-      - name: Build macOS app
-        run: flutter build macos
-
-      - name: Build iOS IPA
-        run: |
-          flutter build ios --no-codesign
-          cd build/ios/iphoneos
-          mkdir Payload
-          cd Payload
-          ln -s ../Runner.app
-          cd ..
-          zip -r app.ipa Payload
-
-      - name: Package DMG
-        run: |
-          shopt -s nullglob
-          create-dmg build/macos/Build/Products/Release/whisper.app || true
-          dmgs=(whisper*.dmg)
-          if [ ${#dmgs[@]} -gt 0 ]; then
-            mv "${dmgs[0]}" whisper.dmg
-          else
-            hdiutil create -volname "Whisper" -srcfolder build/macos/Build/Products/Release/whisper.app -ov -format UDZO whisper.dmg
-          fi
-
-      - name: Upload macOS and iOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-macos-ios-${{ github.run_id }}
-          path: |
-            whisper.dmg
-            build/ios/iphoneos/app.ipa
-          retention-days: 5
-
-  build-on-windows:
-    name: Windows
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_windows }}
-    runs-on: windows-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Set CI version
-        run: |
-          "APP_VERSION=0.0.${{ github.run_number }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install NSIS
-        run: choco install nsis -y
-
-      - name: Build Windows app
-        run: |
-          flutter config --enable-windows-desktop
-          flutter build windows
-
-      - name: Copy runtime DLLs
-        run: |
-          copy c:\Windows\System32\vcruntime140_1.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\vcruntime140.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\msvcp140.dll .\build\windows\x64\runner\Release\
-
-      - name: Create EXE installer
-        run: |
-          Push-Location windows
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" `
-            /DAPP_NAME="Whisper" `
-            /DAPP_VERSION="$env:APP_VERSION" `
-            /DAPP_PUBLISHER="lawnvi" `
-            /DOUTPUT_NAME="whisper-dev-windows-x86_64.exe" `
-            installer.nsi
-          Pop-Location
-
-      - name: Verify installer exists
-        run: |
-          $path = "windows\whisper-dev-windows-x86_64.exe"
-          if (!(Test-Path $path)) {
-            throw "Installer not found at $path"
-          }
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-windows-${{ github.run_id }}
-          path: windows/whisper-dev-windows-x86_64.exe
-          retention-days: 5
-
-  build-on-linux:
-    name: Linux + Android
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
+  analyze-and-test:
+    name: Flutter analyze + test
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          architecture: x64
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install system packages
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev alien
-          sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
-          sudo apt-get install -y desktop-file-utils libfuse2
+      - name: Run flutter analyze
+        run: flutter analyze
 
-      - name: Install Android command line tools
-        run: |
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          cd "$ANDROID_SDK_ROOT/cmdline-tools"
-          curl -sSLo commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-          unzip -q commandlinetools.zip
-          rm commandlinetools.zip
-          mv cmdline-tools latest
-
-      - name: Accept Android SDK licenses
-        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
-
-      - name: Install Android SDK packages
-        run: |
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-
-      - name: Export Android environment
-        run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
-
-      - name: Set CI package version
-        run: echo "PACKAGE_VERSION=0.0.${{ github.run_number }}" >> $GITHUB_ENV
-
-      - name: Build Linux app
-        run: |
-          flutter config --enable-linux-desktop
-          flutter build linux
-
-      - name: Build DEB package
-        run: chmod +x linux/build_deb.sh && bash linux/build_deb.sh "$PACKAGE_VERSION" amd64
-
-      - name: Build RPM package
-        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${PACKAGE_VERSION}-2.x86_64.rpm whisper-dev-x86_64.rpm
-
-      - name: Install appimagetool
-        run: |
-          curl -L -o /tmp/appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x /tmp/appimagetool.AppImage
-          echo "APPIMAGE_TOOL=/tmp/appimagetool.AppImage" >> $GITHUB_ENV
-
-      - name: Build AppImage
-        run: chmod +x linux/build_appimage.sh && bash linux/build_appimage.sh "$PACKAGE_VERSION"
-
-      - name: Prepare Android signing
-        if: ${{ github.event_name != 'pull_request' }}
-        run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh "${{ secrets.KEY_PASSWORD }}" "${{ secrets.STORE_PASSWORD }}"
-
-      - name: Build Android debug APK
-        if: ${{ github.event_name == 'pull_request' }}
-        run: flutter build apk --debug
-
-      - name: Build Android release APKs
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          flutter build apk
-          flutter build apk --split-per-abi
-
-      - name: Upload Linux and Android artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-linux-android-${{ github.run_id }}
-          path: |
-            whisper-dev-x86_64.rpm
-            build/linux/deb/whisper-amd64.deb
-            build/linux/appimage/*.AppImage
-            build/app/outputs/flutter-apk/*.apk
-          retention-days: 5
+      - name: Run flutter test
+        run: flutter test
