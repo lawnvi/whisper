@@ -37,6 +37,8 @@ abstract class ISocketEvent {
 }
 
 class WsSvrManager {
+  static const Duration _serverPingInterval = Duration(seconds: 45);
+  static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
   // 创建一个私有的静态实例变量
   static final WsSvrManager _singleton = WsSvrManager._internal();
 
@@ -70,6 +72,8 @@ class WsSvrManager {
   final List<MessageData> _sendingFiles = [];
   final _sendFileLock = Lock();
   Timer? _clientTimer;
+
+  bool get isConnected => _sink != null;
 
   void setSender(String uid) {
     sender = uid;
@@ -150,7 +154,7 @@ class WsSvrManager {
         logger.i("连接服务done");
         close();
       });
-    }, pingInterval: const Duration(seconds: 10));
+    }, pingInterval: _serverPingInterval);
 
     shelf_io.serve(handler, '0.0.0.0', port, shared: true).then((server) {
       _server = server;
@@ -183,7 +187,7 @@ class WsSvrManager {
         close();
       });
       // 开启一个定时器，每秒执行一次
-      _clientTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+      _clientTimer = Timer.periodic(_clientHeartbeatInterval, (timer) {
         // 在这里执行你想要重复执行的代码
         _heartBeat();
       });
@@ -385,11 +389,16 @@ class WsSvrManager {
               _sendFileSignal(_currentLen, _currentSize);
             }
             if (_currentSize == _currentLen) {
+              final finishedSize = _currentSize;
               final completedMessage =
                   _sendingFiles.isNotEmpty ? _sendingFiles.last : null;
               final receiveCompleted =
                   await _finalizeReceivedFile(completedMessage);
               await _freeIoSink();
+              if (receiveCompleted && finishedSize > 0) {
+                _dispatchToAll(
+                    (event) => event.onProgress(finishedSize, finishedSize));
+              }
               logger.i(
                   "recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
               if (!receiveCompleted && completedMessage != null) {
@@ -552,6 +561,10 @@ class WsSvrManager {
     var message =
         _buildMessage(MessageEnum.Heartbeat, "", "", "", 0, false, uid: "");
     _send(message.toJsonString());
+  }
+
+  Future<void> refreshConnectionLiveness() async {
+    await _heartBeat();
   }
 
   Future<void> sendMessage(String content, {clipboard = false}) async {
