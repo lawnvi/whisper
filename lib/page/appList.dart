@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/local.dart';
-import 'package:whisper/state/notification_app_registry.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -69,12 +68,10 @@ class _AppListScreenState extends State<AppListScreen> {
     return CupertinoPageScaffold(
       // backgroundColor: isDark?Colors.black87:Colors.white,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知',
-            style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
+        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.back ?? 'Back',
-              style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
+          child: Text(AppLocalizations.of(context)?.back ?? 'Back', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
           onPressed: () {
             // Handle back button press
             Navigator.pop(context);
@@ -82,13 +79,12 @@ class _AppListScreenState extends State<AppListScreen> {
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选',
-              style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
+          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
           onPressed: () {
             bool selectAll = checkedApps.length < apps.length ||
                 checkedApps.values.contains(false);
 
-            final appArr = <String>[];
+            var appArr = <String>[];
             var checkedMap = <String, bool>{};
             for (var app in apps) {
               appArr.add(app.packageName);
@@ -98,10 +94,8 @@ class _AppListScreenState extends State<AppListScreen> {
               checkedApps = checkedMap;
             });
 
-            LocalSetting()
-                .modifyListenNotifyApp(
-                    add: selectAll, clear: !selectAll, packages: appArr)
-                .then((_) => NotificationAppRegistry.instance.refresh());
+            LocalSetting().modifyListenNotifyApp(
+                add: selectAll, clear: !selectAll, packages: appArr);
           },
         ),
       ),
@@ -129,13 +123,9 @@ class _AppListScreenState extends State<AppListScreen> {
                           app: app,
                           isChecked: isChecked,
                           isDark: isDark,
-                          onChanged: (bool value) async {
-                            setState(() {
-                              checkedApps[app.packageName] = value;
-                            });
-                            await LocalSetting().modifyListenNotifyApp(
+                          onChanged: (bool value) {
+                            LocalSetting().modifyListenNotifyApp(
                                 packages: [app.packageName], add: value);
-                            await NotificationAppRegistry.instance.refresh();
                           },
                         );
                       },
@@ -175,18 +165,10 @@ class AppListTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(app.name,
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        decoration: TextDecoration.none)),
+                Text(app.name, style: TextStyle(fontSize: 14, color: isDark?Colors.white70: Colors.black87, decoration: TextDecoration.none)),
                 const SizedBox(height: 4),
-                Text(
-                  app.versionName,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: CupertinoColors.systemGrey,
-                      decoration: TextDecoration.none),
+                Text(app.versionName,
+                  style: const TextStyle(fontSize: 12, color: CupertinoColors.systemGrey, decoration: TextDecoration.none),
                 ),
               ],
             ),

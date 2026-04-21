@@ -8,26 +8,21 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
-import 'package:whisper/page/settings.dart';
+import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/socket/svrmanager.dart';
-import 'package:whisper/state/connection_coordinator.dart';
-import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_dialogs.dart';
-import 'package:whisper/widget/chat_composer.dart';
-import 'package:whisper/widget/chat_connection_banner.dart';
-import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
 
 import '../helper/notification.dart';
+
+import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
 
@@ -49,13 +44,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
-  final FocusNode _composerFocusNode = FocusNode();
   bool isInputEmpty = true;
   double percent = 0;
   String _speed = "";
   int _sentSize = 0;
   int _lastUpdateTime = 0;
-  final Map<String, bool> keyPressedMap = {};
+  final keyPressedMap = {};
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
@@ -79,10 +73,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void dispose() {
     logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
     socketManager.unregisterEvent();
-    _scrollController.removeListener(_scrollListener);
-    _scrollController.dispose();
-    _textController.dispose();
-    _composerFocusNode.dispose();
     super.dispose();
   }
 
@@ -95,21 +85,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   void _loadMessages() async {
     logger.i("current device: ${device.uid}");
-    final me = await LocalSetting().instance();
-    final isLocal = me.uid == device.uid;
-    final temp = isLocal ? me : await LocalDatabase().fetchDevice(device.uid);
-    if (temp == null) {
-      return;
-    }
-    final arr = await LocalDatabase()
-        .fetchMessageList(me.uid == temp.uid ? "" : device.uid, limit: 20);
-    if (!mounted) {
-      return;
-    }
+    var me = await LocalSetting().instance();
+    var isLocal = me.uid == device.uid;
+    var temp = isLocal ? me : await LocalDatabase().fetchDevice(device.uid);
+    var arr = await LocalDatabase()
+        .fetchMessageList(me.uid == temp?.uid ? "" : device.uid, limit: 20);
     setState(() {
       self = me;
-      device = temp;
+      device = temp!;
       _isLocalhost = isLocal;
+      // messageList = arr;
     });
 
     _insertItems(0, arr);
@@ -119,16 +104,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     // 开启通知监听
     if (Platform.isAndroid &&
         !isLocal &&
-        temp.uid == socketManager.receiver &&
+        temp?.uid == socketManager.receiver &&
         (await LocalSetting().isListenAndroid())) {
       startAndroidListening();
     }
   }
 
   void _scrollListener() async {
-    if (messageList.isEmpty) {
-      return;
-    }
     if (_scrollController.position.pixels ==
         _scrollController.position.maxScrollExtent) {
       // 用户滑动到了ListView的底部
@@ -199,17 +181,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     LocalDatabase().deleteMessage(id);
   }
 
-  Future<void> _deleteMessage(MessageData message,
-      {bool deleteFile = false}) async {
-    if (deleteFile && message.path.isNotEmpty) {
-      final file = File(message.path);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    }
-    _deleteItem(message.id);
-  }
-
   @Deprecated("use list view reverse")
   void _scrollToBottom({bool isFirst = false}) async {
     if (isFirst) {
@@ -230,10 +201,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
 
-    final content = Scaffold(
+    var widget = Scaffold(
       appBar: AppBar(
         leading: CupertinoNavigationBarBackButton(
           color: isDark ? Colors.grey[400] : Colors.grey,
@@ -252,19 +221,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
               children: [
                 Text(device.name,
                     style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w700)), // 设备名称
+                        color: isDark ? Colors.white : Colors.black)), // 设备名称
                 Row(
                   children: [
                     Text(
                       "${device.host}:${device.port}", // 设备 IP 地址
                       style: TextStyle(
-                          fontSize: 12, color: colorScheme.onSurfaceVariant),
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.black54),
                     ),
                     const SizedBox(width: 4),
                     if (socketManager.receiver == device.uid)
-                      Icon(Icons.wifi_rounded,
-                          size: 14, color: palette.connected)
+                      const Icon(Icons.wifi_rounded,
+                          size: 14, color: Colors.lightBlue)
                   ],
                 )
               ],
@@ -308,7 +277,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             child: Icon(
               Icons.settings_outlined,
               size: 30,
-              color: colorScheme.onSurfaceVariant,
+              color: isDark ? Colors.grey[400] : Colors.black45,
             ),
             onPressed: () async {
               Navigator.push(
@@ -329,58 +298,303 @@ class _SendMessageScreen extends State<SendMessageScreen>
           if (percent > 0 && percent < 1)
             LinearProgressIndicator(
               value: percent,
-              color: palette.trusted,
-            ),
-          if (!_isLocalhost)
-            ChatConnectionBanner(
-              connected: socketManager.receiver == device.uid,
+              color: Colors.lightGreen,
             ),
           Expanded(
-            child: ChatMessageList(
-              buildFileMessage: _buildFileMessage,
-              buildTextMessage: _buildTextMessage,
-              controller: _scrollController,
-              listKey: key,
-              messages: messageList,
-              onCopyText: copyToClipboard,
-              onDeleteMessage: _deleteMessage,
-              onOpenContainingFolder: (path) => openDir(path, parent: true),
-              onOpenFile: openFile,
-              selfUid: self?.uid,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: AnimatedList(
+                key: key,
+                controller: _scrollController,
+                initialItemCount: messageList.length,
+                reverse: true,
+                shrinkWrap: true,
+                itemBuilder: (context, index, animation) {
+                  var message = messageList[index];
+                  bool isOpponent = message.receiver == self?.uid;
+                  bool isFile = message.type == MessageEnum.File;
+
+                  return FadeTransition(
+                      opacity: animation,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        child: Column(
+                          crossAxisAlignment: isOpponent
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              alignment: isOpponent
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
+                              child: ContextMenuRegion(
+                                child: GestureDetector(
+                                  child: isFile
+                                      ? _buildFileMessage(message, isOpponent)
+                                      : _buildTextMessage(message, isOpponent),
+                                  onTap: () {
+                                    if (isFile) {
+                                      openFile(message.path);
+                                    }
+                                  },
+                                  onLongPress: () {},
+                                ),
+                                items: [
+                                  if (!isFile)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.copyMessage ??
+                                          '复制消息',
+                                      onSelected: () {
+                                        if (message.content?.isNotEmpty ==
+                                            true) {
+                                          copyToClipboard(message.content!);
+                                        }
+                                      },
+                                    ),
+                                  if (!isFile)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.delete ??
+                                          '删除',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && (isOpponent || isDesktop()))
+                                    ContextMenuActionItem(
+                                      label:
+                                          AppLocalizations.of(context)?.open ??
+                                              '打开',
+                                      onSelected: () {
+                                        logger.i(message.path);
+                                        openFile(message.path);
+                                      },
+                                    ),
+                                  if (isFile && (isOpponent || isDesktop()))
+                                    ContextMenuActionItem(
+                                      label: (Platform.isMacOS
+                                              ? AppLocalizations.of(context)
+                                                  ?.openInFinder
+                                              : AppLocalizations.of(context)
+                                                  ?.openInDir) ??
+                                          '所在文件夹',
+                                      onSelected: () {
+                                        logger.i(message.path);
+                                        openDir(message.path, parent: true);
+                                      },
+                                    ),
+                                  if (isFile && isOpponent)
+                                    ContextMenuActionItem(
+                                      label:
+                                          '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.keepFile ?? '保留文件'})',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && isOpponent)
+                                    ContextMenuActionItem(
+                                      label:
+                                          '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.deleteFile ?? '删除文件'})',
+                                      onSelected: () {
+                                        logger.i("delete ${message.path}");
+                                        File(message.path).delete();
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                  if (isFile && !isOpponent)
+                                    ContextMenuActionItem(
+                                      label: AppLocalizations.of(context)
+                                              ?.delete ??
+                                          '删除',
+                                      onSelected: () {
+                                        _deleteItem(message.id);
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              height: message.type == MessageEnum.File ? 4 : 2,
+                            ),
+                            Stack(
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: isOpponent
+                                          ? isMobile()
+                                              ? 10
+                                              : 0
+                                          : 20,
+                                    ),
+                                    Text(
+                                      " ${formatTimestamp(message.timestamp)} ",
+                                      // 发送时间
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.grey[400]
+                                              : Colors.grey,
+                                          fontSize: 12),
+                                    ),
+                                    SizedBox(
+                                      width: isOpponent
+                                          ? 20
+                                          : isMobile()
+                                              ? 10
+                                              : 0,
+                                    ),
+                                  ],
+                                ),
+                                if (message.type == MessageEnum.Text)
+                                  Positioned(
+                                    left: isOpponent ? null : -12,
+                                    right: isOpponent ? -12 : null,
+                                    top: Platform.isMacOS ? -12.2 : -14,
+                                    child: IconButton(
+                                      hoverColor: Colors.grey.withOpacity(0),
+                                      focusColor: Colors.grey,
+                                      highlightColor: Colors.transparent,
+                                      icon: Icon(
+                                        Icons.copy,
+                                        size: (isMobile() ? 16 : 18),
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey,
+                                      ),
+                                      onPressed: () {
+                                        if (message.content?.isNotEmpty ==
+                                            true) {
+                                          copyToClipboard(message.content!);
+                                        }
+                                      },
+                                    ),
+                                  )
+                              ],
+                            ),
+                          ],
+                        ),
+                      ));
+                },
+              ),
             ),
           ),
           if (_isLocalhost || device.uid == socketManager.receiver)
-            ChatComposer(
-              clipboardEnabled: self?.clipboard == true,
-              controller: _textController,
-              focusNode: _composerFocusNode,
-              isInputEmpty: isInputEmpty,
-              isLoading: _isLoading,
-              isLocalhost: _isLocalhost,
-              keyPressedMap: keyPressedMap,
-              onPickFiles: () async {
-                if (_isLocalhost) {
-                  return;
-                }
-                setState(() {
-                  _isLoading = true;
-                });
-                final result =
-                    await FilePicker.platform.pickFiles(allowMultiple: true);
-                if (!mounted) {
-                  return;
-                }
-                setState(() {
-                  _isLoading = false;
-                });
-                if (result != null) {
-                  for (final item in result.files) {
-                    await socketManager.sendFile(item.path ?? "");
-                  }
-                }
-              },
-              onSendClipboard: () => _sendText("", isClipboard: true),
-              onSendText: _sendText,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[900] : Colors.white, // 背景颜色
+              ),
+              child: Row(
+                children: [
+                  if (self?.clipboard == true)
+                    CupertinoButton(
+                      padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
+                      onPressed: () {
+                        _sendText("", isClipboard: true);
+                      },
+                      child: Icon(
+                        Icons.copy, // 按钮图标
+                        color: isDark ? Colors.grey[400] : Colors.grey, // 按钮颜色
+                      ),
+                    ),
+                  const SizedBox(
+                    height: 50,
+                  ),
+                  Expanded(
+                      child: RawKeyboardListener(
+                    focusNode: FocusNode(),
+                    onKey: (RawKeyEvent event) async {
+                      if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+                          event.logicalKey == LogicalKeyboardKey.shiftRight) {
+                        keyPressedMap[LogicalKeyboardKey.shift.keyLabel] =
+                            event is RawKeyDownEvent;
+                      } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                        keyPressedMap[LogicalKeyboardKey.enter.keyLabel] =
+                            event is RawKeyDownEvent;
+                        if (event is RawKeyDownEvent &&
+                            (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] !=
+                                    true ||
+                                isMobile())) {
+                          if (_textController.text.trim().isNotEmpty) {
+                            await _sendText(_textController.text.trimRight());
+                            _textController.text = "";
+                          }
+                        }
+                      }
+                    },
+                    child: CupertinoTextField(
+                      controller: _textController,
+                      cursorColor: isDark ? Colors.white : Colors.black87,
+                      autofocus: isDesktop(),
+                      autocorrect: true,
+                      maxLines: isMobile() ? 5 : 20,
+                      minLines: 1,
+                      placeholder:
+                          AppLocalizations.of(context)?.sendTips ?? '发点什么...',
+                      // 输入框提示文字
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.white,
+                        border: Border.all(
+                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      onChanged: (value) {
+                        if (value == "\n" &&
+                            keyPressedMap[keyPressedMap[
+                                    LogicalKeyboardKey.shift.keyLabel]] !=
+                                true) {
+                          _textController.text = "";
+                        }
+                      },
+                    ),
+                  )),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 12,
+                    ),
+                  _isLoading
+                      ? const Center(child: CupertinoActivityIndicator())
+                      : CupertinoButton(
+                          padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
+                          onPressed: () async {
+                            if (!_isLocalhost && _textController.text.isEmpty) {
+                              setState(() {
+                                _isLoading = true;
+                              });
+                              FilePickerResult? result = await FilePicker
+                                  .platform
+                                  .pickFiles(allowMultiple: true);
+                              setState(() {
+                                _isLoading = false;
+                              });
+                              if (result != null) {
+                                for (var item in result.files) {
+                                  await socketManager.sendFile(item.path ?? "");
+                                }
+                              }
+                            } else {
+                              await _sendText(_textController.text);
+                              _textController.text = "";
+                            }
+                          },
+                          child: Icon(
+                            !_isLocalhost && isInputEmpty
+                                ? Icons.add
+                                : Icons.send, // 发送按钮图标
+                            color: Colors.lightBlue, // 发送按钮颜色
+                          ),
+                        ),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 12,
+                    ),
+                ],
+              ),
             ),
           const SizedBox(
             height: 6,
@@ -390,7 +604,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
 
     if (isMobile()) {
-      return content;
+      return widget;
     }
 
     return DropTarget(
@@ -404,7 +618,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       },
       onDragEntered: (detail) {},
       onDragExited: (detail) {},
-      child: content,
+      child: widget,
     );
   }
 
@@ -460,8 +674,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return IntrinsicWidth(
       child: Container(
@@ -469,16 +682,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
         constraints: BoxConstraints(maxWidth: screenWidth),
         decoration: BoxDecoration(
           color: isOpponent
-              ? colorScheme.surfaceContainerHighest
-              : palette.connected.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(18),
+              ? (isDark ? Colors.grey[800] : Colors.grey[300])
+              : (isDark ? Colors.grey[800] : Colors.blue),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: SelectableText(
             content,
             style: TextStyle(
-              color: colorScheme.onSurface,
+              color: isOpponent
+                  ? (isDark ? Colors.white70 : Colors.black)
+                  : (isDark ? Colors.white70 : Colors.white),
             ),
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar(
@@ -499,17 +714,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     var failed =
         !isOpponent && !message.acked && message.timestamp < device.lastTime;
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: screenWidth,
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
+        color: isDark ? Colors.grey[800] : Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -522,7 +736,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   )
                 : Icon(
                     Icons.insert_drive_file,
-                    color: failed ? palette.danger : colorScheme.primary,
+                    color: isDark ? Colors.grey[400] : Colors.white,
                     size: 42,
                   ),
             if (failed) const SizedBox(width: 8),
@@ -537,7 +751,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     overflow: TextOverflow.clip,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                     maxLines: 4,
                     softWrap: true,
@@ -547,7 +761,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 Text(
                   formatSize(message.size),
                   style: TextStyle(
-                      color: colorScheme.onSurfaceVariant, fontSize: 12),
+                      color: isDark ? Colors.grey[400] : Colors.black,
+                      fontSize: 12),
                 ),
               ],
             ),
@@ -650,5 +865,197 @@ class _SendMessageScreen extends State<SendMessageScreen>
       _lastUpdateTime = 0;
       _sentSize = 0;
     }
+  }
+}
+
+class ClientSettingsScreen extends StatefulWidget {
+  final DeviceData device;
+
+  const ClientSettingsScreen({super.key, required this.device});
+
+  @override
+  _ClientSettingsScreen createState() => _ClientSettingsScreen(device);
+}
+
+class _ClientSettingsScreen extends State<ClientSettingsScreen> {
+  DeviceData device;
+
+  _ClientSettingsScreen(this.device);
+
+  @override
+  void initState() {
+    _refreshDevice();
+    super.initState();
+  }
+
+  Future<void> _refreshDevice() async {
+    var temp = await LocalDatabase().fetchDevice(device.uid);
+    setState(() {
+      device = temp!;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+        appBar: AppBar(
+          leading: CupertinoNavigationBarBackButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            color: isDark ? Colors.grey[400] : Colors.lightBlue,
+          ),
+          title: Text(AppLocalizations.of(context)?.setting ?? '设置',
+              style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+        ),
+        body: SafeArea(
+          child: Material(
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                Card(
+                    elevation: 1.2,
+                    color: isDark ? Colors.grey[900] : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildSettingItem(
+                          AppLocalizations.of(context)?.trust ?? '自动接入',
+                          Icon(
+                            Icons.wifi_rounded,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          CupertinoSwitch(
+                            value: device.auth,
+                            onChanged: (bool value) async {
+                              LocalDatabase().authDevice(device.uid, value);
+                              var temp =
+                                  await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
+                            },
+                          ),
+                        ),
+                        _buildSettingItem(
+                          AppLocalizations.of(context)?.writeClipboard ??
+                              '写入剪切板',
+                          Icon(Icons.copy,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey),
+                          CupertinoSwitch(
+                            value: device.clipboard,
+                            onChanged: (bool value) async {
+                              LocalDatabase()
+                                  .clipboardDevice(device.uid, value);
+                              var temp =
+                                  await LocalDatabase().fetchDevice(device.uid);
+                              setState(() {
+                                device = temp!;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    )),
+                const SizedBox(
+                  height: 8,
+                ),
+                if (device.uid != WsSvrManager().receiver)
+                  Card(
+                      elevation: 2.0,
+                      color: isDark ? Colors.grey[900] : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSettingItem(
+                              AppLocalizations.of(context)?.deleteDevice ??
+                                  '删除设备',
+                              Icon(
+                                Icons.delete_rounded,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : CupertinoColors.destructiveRed,
+                              ),
+                              null, onTap: () {
+                            showConfirmationDialog(context,
+                                title: AppLocalizations.of(context)
+                                        ?.deleteDeviceTitle(device.name) ??
+                                    "删除${device.name}",
+                                description: AppLocalizations.of(context)
+                                        ?.deleteDeviceDesc ??
+                                    "删除与此设备的所有消息，不可恢复",
+                                confirmButtonText:
+                                    AppLocalizations.of(context)?.confirm ??
+                                        "确定",
+                                cancelButtonText:
+                                    AppLocalizations.of(context)?.cancel ??
+                                        "取消", onConfirm: () {
+                              LocalDatabase().clearDevices([device.uid]);
+                              Navigator.popUntil(context, (route) {
+                                return route.isFirst;
+                              });
+                            });
+                          }),
+                        ],
+                      ))
+              ],
+            ),
+          ),
+        ));
+  }
+
+  Widget _buildSettingItem(String title, Icon icon, Widget? trailing,
+      {bool showDivider = true, onTap}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () {
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56.0,
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 16.0),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 17.0,
+                        color: isDark ? Colors.white : CupertinoColors.black,
+                        fontWeight: FontWeight.w500,
+                        fontFamily:
+                            Platform.isWindows ? null : 'SF Pro Display',
+                      ),
+                    ),
+                  ),
+                  if (trailing != null) trailing,
+                ],
+              ),
+            ),
+            if (showDivider)
+              Divider(
+                height: 1,
+                color: isDark ? Colors.grey[800]! : Colors.white38,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -374,7 +374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     _buildSettingItem(
-                      '自动连接互信设备',
+                      _autoConnectLabel(locale.languageCode),
                       Icon(
                         Icons.auto_mode_rounded,
                         color: isDark
@@ -775,6 +775,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return 'English';
     }
   }
+
+  String _autoConnectLabel(String languageCode) {
+    switch (languageCode) {
+      case 'en':
+        return 'Auto-connect mutually trusted devices';
+      case 'es':
+        return 'Conectar automaticamente dispositivos con confianza mutua';
+      default:
+        return '自动连接互信设备';
+    }
+  }
 }
 
 class ClientSettingsScreen extends StatefulWidget {
@@ -804,6 +815,21 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     setState(() {
       device = temp;
     });
+  }
+
+  String _mutualTrustTitle(String languageCode, bool enabled) {
+    switch (languageCode) {
+      case 'en':
+        return enabled
+            ? 'Mutual trust is enabled'
+            : 'Mutual trust has not been established';
+      case 'es':
+        return enabled
+            ? 'La confianza mutua esta activada'
+            : 'La confianza mutua aun no esta establecida';
+      default:
+        return enabled ? '双向互信已开启' : '尚未形成双向互信';
+    }
   }
 
   @override
@@ -841,7 +867,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                 child: Column(
                   children: [
                     _DeviceSettingTile(
-                      title: mutualTrust ? '双向互信已开启' : '尚未形成双向互信',
+                      title: _mutualTrustTitle(
+                        Localizations.localeOf(context).languageCode,
+                        mutualTrust,
+                      ),
                       icon: Icon(
                         mutualTrust
                             ? Icons.verified_user_rounded
@@ -1001,5 +1030,20 @@ class _DeviceSettingTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _mutualTrustTitle(String languageCode, bool enabled) {
+    switch (languageCode) {
+      case 'en':
+        return enabled
+            ? 'Mutual trust is enabled'
+            : 'Mutual trust has not been established';
+      case 'es':
+        return enabled
+            ? 'La confianza mutua esta activada'
+            : 'La confianza mutua aun no esta establecida';
+      default:
+        return enabled ? '双向互信已开启' : '尚未形成双向互信';
+    }
   }
 }
