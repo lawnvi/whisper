@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
@@ -67,6 +68,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
 
+  bool get _isCurrentRoute {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? mounted;
+  }
+
   Future<void> _syncAndroidKeepAliveService() async {
     if (!Platform.isAndroid) {
       return;
@@ -75,6 +81,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!enabled || !_isConnectedSession) {
       await stopAndroidBackgroundKeepAlive();
       return;
+    }
+    final notificationPermission = await Permission.notification.status;
+    if (notificationPermission.isDenied) {
+      await Permission.notification.request();
     }
     await startAndroidBackgroundKeepAlive(
       title:
@@ -881,7 +891,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _speed = "";
     stopAndroidBackgroundKeepAlive();
     _refreshCurrentDeviceState();
-    if (!mounted) {
+    if (!mounted || !_isCurrentRoute) {
       return;
     }
     Fluttertoast.showToast(
@@ -895,7 +905,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onConnect() {
     _refreshCurrentDeviceState();
     _syncAndroidKeepAliveService();
-    if (!mounted) {
+    if (!mounted || !_isCurrentRoute) {
       return;
     }
     Fluttertoast.showToast(
@@ -908,7 +918,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onError(String message) {
-    if (_isAlert) {
+    if (_isAlert || !_isCurrentRoute) {
       return;
     }
     _isAlert = true;
@@ -927,6 +937,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onNotice(String message) {
+    if (!_isCurrentRoute) {
+      return;
+    }
     Fluttertoast.showToast(msg: message);
   }
 
