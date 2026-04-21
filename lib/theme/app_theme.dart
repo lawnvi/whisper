@@ -117,6 +117,17 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6)
+            : const Color(0xFF2563EB),
+        selectionColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6).withValues(alpha: 0.28)
+            : const Color(0xFF2563EB).withValues(alpha: 0.22),
+        selectionHandleColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6)
+            : const Color(0xFF2563EB),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: palette.surfaceMuted,
