@@ -80,7 +80,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   void dispose() {
     logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
-    socketManager.unregisterEvent();
+    socketManager.unregisterEvent(this);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _textController.dispose();
