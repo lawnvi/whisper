@@ -79,5 +79,11 @@
   "localeNameSpanish": "Spanish",
   "autoConnectTrustedDevices": "Auto-connect mutually trusted devices",
   "mutualTrustEnabled": "Mutual trust is enabled",
-  "mutualTrustNotEstablished": "Mutual trust has not been established"
+  "mutualTrustNotEstablished": "Mutual trust has not been established",
+  "androidBackgroundKeepAlive": "Keep connection alive in background",
+  "androidBackgroundKeepAliveDesc": "Use an Android foreground service during active sessions to reduce disconnects when picking files or switching apps",
+  "androidBackgroundKeepAliveActiveTitle": "Whisper is keeping the connection alive",
+  "androidBackgroundKeepAliveActiveDesc": "Active while a device session is connected",
+  "androidBatteryOptimization": "Battery optimization",
+  "androidBatteryOptimizationDesc": "Recommended: allow background activity and exclude Whisper from battery optimization on Android"
 }

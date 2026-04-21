@@ -585,6 +585,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'尚未形成双向互信'**
   String get mutualTrustNotEstablished;
+
+  /// No description provided for @androidBackgroundKeepAlive.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台保活连接'**
+  String get androidBackgroundKeepAlive;
+
+  /// No description provided for @androidBackgroundKeepAliveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率'**
+  String get androidBackgroundKeepAliveDesc;
+
+  /// No description provided for @androidBackgroundKeepAliveActiveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 正在保持连接'**
+  String get androidBackgroundKeepAliveActiveTitle;
+
+  /// No description provided for @androidBackgroundKeepAliveActiveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'有活动会话时保持前台服务运行'**
+  String get androidBackgroundKeepAliveActiveDesc;
+
+  /// No description provided for @androidBatteryOptimization.
+  ///
+  /// In zh, this message translates to:
+  /// **'电池优化白名单'**
+  String get androidBatteryOptimization;
+
+  /// No description provided for @androidBatteryOptimizationDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备'**
+  String get androidBatteryOptimizationDesc;
 }
 
 class _AppLocalizationsDelegate

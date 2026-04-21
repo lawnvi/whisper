@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
+import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/helper.dart';
@@ -44,6 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _ignoreAndroid = false;
   bool _copyVerifyCode = true;
   bool _autoConnect = true;
+  bool _androidBackgroundKeepAlive = true;
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
   ThemeMode _themeMode = ThemeMode.system;
@@ -76,6 +78,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final listenAndroid = await LocalSetting().isListenAndroid();
     final ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
     final autoConnect = await LocalSetting().autoConnectEnabled();
+    final androidBackgroundKeepAlive =
+        await LocalSetting().androidBackgroundKeepAlive();
     if (!mounted) {
       return;
     }
@@ -90,6 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _ignoreAndroid = ignoreAndroid;
       _listenAndroid = listenAndroid;
       _autoConnect = autoConnect;
+      _androidBackgroundKeepAlive = androidBackgroundKeepAlive;
     });
   }
 
@@ -433,6 +438,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             });
                           },
                         ),
+                      ),
+                    if (Platform.isAndroid)
+                      _buildSettingItem(
+                        AppLocalizations.of(context)
+                                ?.androidBackgroundKeepAlive ??
+                            '后台保活连接',
+                        Icon(
+                          Icons.sync_alt_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: AppLocalizations.of(context)
+                                ?.androidBackgroundKeepAliveDesc ??
+                            '连接期间启用前台服务，降低选文件、切后台时被系统断开的概率',
+                        trailing: CupertinoSwitch(
+                          value: _androidBackgroundKeepAlive,
+                          onChanged: (bool value) async {
+                            await LocalSetting()
+                                .setAndroidBackgroundKeepAlive(value);
+                            setState(() {
+                              _androidBackgroundKeepAlive = value;
+                            });
+                            if (WsSvrManager().receiver.isNotEmpty) {
+                              if (value) {
+                                await startAndroidBackgroundKeepAlive(
+                                  title: AppLocalizations.of(context)
+                                          ?.androidBackgroundKeepAliveActiveTitle ??
+                                      'Whisper 正在保持连接',
+                                  description: AppLocalizations.of(context)
+                                          ?.androidBackgroundKeepAliveActiveDesc ??
+                                      '有活动会话时保持前台服务运行',
+                                );
+                              } else {
+                                await stopAndroidBackgroundKeepAlive();
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    if (Platform.isAndroid)
+                      _buildSettingItem(
+                        AppLocalizations.of(context)
+                                ?.androidBatteryOptimization ??
+                            '电池优化白名单',
+                        Icon(
+                          Icons.battery_saver_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: AppLocalizations.of(context)
+                                ?.androidBatteryOptimizationDesc ??
+                            '建议允许后台运行并关闭电池优化，尤其是小米、OPPO、vivo、华为设备',
+                        onTap: () async {
+                          await openAndroidBatteryOptimizationSettings();
+                        },
                       ),
                     if (Platform.isAndroid)
                       _buildSettingItem(

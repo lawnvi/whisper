@@ -265,4 +265,27 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mutualTrustNotEstablished =>
       'La confianza mutua aun no esta establecida';
+
+  @override
+  String get androidBackgroundKeepAlive =>
+      'Mantener la conexion en segundo plano';
+
+  @override
+  String get androidBackgroundKeepAliveDesc =>
+      'Usa un servicio en primer plano durante sesiones activas para reducir desconexiones al elegir archivos o cambiar de app';
+
+  @override
+  String get androidBackgroundKeepAliveActiveTitle =>
+      'Whisper mantiene la conexion activa';
+
+  @override
+  String get androidBackgroundKeepAliveActiveDesc =>
+      'Activo mientras haya una sesion conectada';
+
+  @override
+  String get androidBatteryOptimization => 'Optimizacion de bateria';
+
+  @override
+  String get androidBatteryOptimizationDesc =>
+      'Se recomienda permitir actividad en segundo plano y excluir Whisper de la optimizacion de bateria en Android';
 }

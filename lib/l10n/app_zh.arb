@@ -106,5 +106,11 @@
   "localeNameSpanish": "Español",
   "autoConnectTrustedDevices": "自动连接互信设备",
   "mutualTrustEnabled": "双向互信已开启",
-  "mutualTrustNotEstablished": "尚未形成双向互信"
+  "mutualTrustNotEstablished": "尚未形成双向互信",
+  "androidBackgroundKeepAlive": "后台保活连接",
+  "androidBackgroundKeepAliveDesc": "连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率",
+  "androidBackgroundKeepAliveActiveTitle": "Whisper 正在保持连接",
+  "androidBackgroundKeepAliveActiveDesc": "有活动会话时保持前台服务运行",
+  "androidBatteryOptimization": "电池优化白名单",
+  "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备"
 }
