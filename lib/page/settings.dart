@@ -883,22 +883,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     });
   }
 
-  String _mutualTrustTitle(BuildContext context, bool enabled) {
-    final l10n = AppLocalizations.of(context);
-    if (enabled) {
-      return l10n?.mutualTrustEnabled ?? 'Mutual trust is enabled';
-    }
-    return l10n?.mutualTrustNotEstablished ??
-        'Mutual trust has not been established';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final coordinator = ConnectionCoordinator();
-    final presence = coordinator.peer(device.uid);
-    final mutualTrust = (presence?.locallyTrusted ?? device.auth) &&
-        (presence?.remotelyTrusted ?? false);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
@@ -932,24 +919,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                 ),
                 child: Column(
                   children: [
-                    _DeviceSettingTile(
-                      title: _mutualTrustTitle(
-                        context,
-                        mutualTrust,
-                      ),
-                      desc: '${device.host}:${device.port}',
-                      icon: Icon(
-                        mutualTrust
-                            ? Icons.verified_user_rounded
-                            : Icons.shield_outlined,
-                        color: mutualTrust
-                            ? context.whisperPalette.trusted
-                            : (isDark
-                                ? Colors.grey[400]
-                                : CupertinoColors.systemGrey),
-                      ),
-                      showDivider: false,
-                    ),
                     _DeviceSettingTile(
                       title: AppLocalizations.of(context)?.trust ?? '自动接入',
                       icon: Icon(
@@ -1047,7 +1016,6 @@ class _DeviceSettingTile extends StatelessWidget {
   final Widget? trailing;
   final bool showDivider;
   final VoidCallback? onTap;
-  final String desc;
 
   const _DeviceSettingTile({
     required this.title,
@@ -1055,7 +1023,6 @@ class _DeviceSettingTile extends StatelessWidget {
     this.trailing,
     this.showDivider = true,
     this.onTap,
-    this.desc = "",
   });
 
   @override
@@ -1079,39 +1046,17 @@ class _DeviceSettingTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 12.0),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16.5,
-                            color:
-                                isDark ? Colors.white : CupertinoColors.black,
-                            fontWeight: FontWeight.w500,
-                            fontFamily:
-                                Platform.isWindows ? null : 'SF Pro Display',
-                          ),
-                        ),
-                        if (desc.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            desc,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                              fontFamily:
-                                  Platform.isWindows ? null : 'SF Pro Display',
-                            ),
-                          ),
-                        ],
-                      ],
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16.5,
+                        color: isDark ? Colors.white : CupertinoColors.black,
+                        fontWeight: FontWeight.w500,
+                        fontFamily:
+                            Platform.isWindows ? null : 'SF Pro Display',
+                      ),
                     ),
                   ),
                   if (trailing != null) ...[
