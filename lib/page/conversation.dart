@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:whisper/global.dart';
-import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -258,8 +257,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
             selfUid: self?.uid,
           ),
         ),
-        _buildComposer(isDark),
-        if (!embedded)
+        if (_canSendCurrentDevice) _buildComposer(isDark),
+        if (!embedded && _canSendCurrentDevice)
           const SizedBox(
             height: 6,
           )
@@ -439,35 +438,22 @@ class _SendMessageScreen extends State<SendMessageScreen>
       ),
     );
     actions.add(
-      PopupMenuButton<String>(
+      IconButton(
         tooltip: AppLocalizations.of(context)?.setting ?? '设置',
-        onSelected: (value) async {
-          if (value == 'settings') {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    app_settings.ClientSettingsScreen(device: device),
-              ),
-            );
-            await _refreshCurrentDeviceState();
-            return;
-          }
-          if (value == 'ftp') {
-            SimpleFtpServer().openClient("${device.host}:$defaultFtpPort");
-          }
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem<String>(
-            value: 'settings',
-            child: Text(AppLocalizations.of(context)?.setting ?? '设置'),
-          ),
-          if (isDesktop())
-            const PopupMenuItem<String>(
-              value: 'ftp',
-              child: Text('FTP'),
+        icon: Icon(
+          Icons.settings_outlined,
+          color: isDark ? Colors.white60 : Colors.black45,
+        ),
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  app_settings.ClientSettingsScreen(device: device),
             ),
-        ],
+          );
+          await _refreshCurrentDeviceState();
+        },
       ),
     );
     return actions;

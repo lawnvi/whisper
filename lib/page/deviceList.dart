@@ -23,7 +23,6 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
-import '../helper/ftp.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
 import '../l10n/app_localizations.dart';
@@ -661,7 +660,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
                         ),
                         const SizedBox(width: 10),
                         _buildSidebarAction(
-                          icon: Icons.add,
+                          icon: socketManager.receiver.isNotEmpty
+                              ? Icons.power_settings_new
+                              : Icons.add,
+                          iconColor: socketManager.receiver.isNotEmpty
+                              ? Colors.redAccent
+                              : null,
+                          tooltip: socketManager.receiver.isNotEmpty
+                              ? (AppLocalizations.of(context)?.disconnect ??
+                                  '断开')
+                              : (AppLocalizations.of(context)?.connect ?? '连接'),
                           onPressed: _showManualConnectDialog,
                         ),
                         const SizedBox(width: 6),
@@ -717,20 +725,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Widget _buildSidebarAction({
     required IconData icon,
     required VoidCallback onPressed,
+    Color? iconColor,
+    String? tooltip,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: 38,
       height: 38,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        color: isDark ? Colors.grey[850] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-        onPressed: onPressed,
-        child: Icon(
-          icon,
-          size: 20,
-          color: isDark ? Colors.white70 : Colors.black54,
+      child: Tooltip(
+        message: tooltip ?? '',
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          color: isDark ? Colors.grey[850] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          onPressed: onPressed,
+          child: Icon(
+            icon,
+            size: 20,
+            color: iconColor ?? (isDark ? Colors.white70 : Colors.black54),
+          ),
         ),
       ),
     );
@@ -869,12 +882,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
             _removeDevice(deviceItem.uid);
           },
         ),
-      ContextMenuActionItem(
-        label: 'FTP',
-        onSelected: () {
-          SimpleFtpServer().openClient("${deviceItem.host}:$defaultFtpPort");
-        },
-      ),
     ];
   }
 
