@@ -18,7 +18,7 @@ import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/widget/chat_composer.dart';
-import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/chat_message_list.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -239,179 +239,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
             color: Colors.lightGreen,
           ),
         Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: AnimatedList(
-              key: key,
-              controller: _scrollController,
-              initialItemCount: messageList.length,
-              reverse: true,
-              shrinkWrap: true,
-              itemBuilder: (context, index, animation) {
-                var message = messageList[index];
-                bool isOpponent = message.receiver == self?.uid;
-                bool isFile = message.type == MessageEnum.File;
-
-                return FadeTransition(
-                    opacity: animation,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                      child: Column(
-                        crossAxisAlignment: isOpponent
-                            ? CrossAxisAlignment.start
-                            : CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            alignment: isOpponent
-                                ? Alignment.centerLeft
-                                : Alignment.centerRight,
-                            child: ContextMenuRegion(
-                              child: GestureDetector(
-                                child: isFile
-                                    ? _buildFileMessage(message, isOpponent)
-                                    : _buildTextMessage(message, isOpponent),
-                                onTap: () {
-                                  if (isFile) {
-                                    openFile(message.path);
-                                  }
-                                },
-                                onLongPress: () {},
-                              ),
-                              items: [
-                                if (!isFile)
-                                  ContextMenuActionItem(
-                                    label: AppLocalizations.of(context)
-                                            ?.copyMessage ??
-                                        '复制消息',
-                                    onSelected: () {
-                                      if (message.content?.isNotEmpty == true) {
-                                        copyToClipboard(message.content!);
-                                      }
-                                    },
-                                  ),
-                                if (!isFile)
-                                  ContextMenuActionItem(
-                                    label:
-                                        AppLocalizations.of(context)?.delete ??
-                                            '删除',
-                                    onSelected: () {
-                                      _deleteItem(message.id);
-                                    },
-                                  ),
-                                if (isFile && (isOpponent || isDesktop()))
-                                  ContextMenuActionItem(
-                                    label: AppLocalizations.of(context)?.open ??
-                                        '打开',
-                                    onSelected: () {
-                                      logger.i(message.path);
-                                      openFile(message.path);
-                                    },
-                                  ),
-                                if (isFile && (isOpponent || isDesktop()))
-                                  ContextMenuActionItem(
-                                    label: (Platform.isMacOS
-                                            ? AppLocalizations.of(context)
-                                                ?.openInFinder
-                                            : AppLocalizations.of(context)
-                                                ?.openInDir) ??
-                                        '所在文件夹',
-                                    onSelected: () {
-                                      logger.i(message.path);
-                                      openDir(message.path, parent: true);
-                                    },
-                                  ),
-                                if (isFile && isOpponent)
-                                  ContextMenuActionItem(
-                                    label:
-                                        '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.keepFile ?? '保留文件'})',
-                                    onSelected: () {
-                                      _deleteItem(message.id);
-                                    },
-                                  ),
-                                if (isFile && isOpponent)
-                                  ContextMenuActionItem(
-                                    label:
-                                        '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.deleteFile ?? '删除文件'})',
-                                    onSelected: () {
-                                      logger.i("delete ${message.path}");
-                                      File(message.path).delete();
-                                      _deleteItem(message.id);
-                                    },
-                                  ),
-                                if (isFile && !isOpponent)
-                                  ContextMenuActionItem(
-                                    label:
-                                        AppLocalizations.of(context)?.delete ??
-                                            '删除',
-                                    onSelected: () {
-                                      _deleteItem(message.id);
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(
-                            height: message.type == MessageEnum.File ? 4 : 2,
-                          ),
-                          Stack(
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: isOpponent
-                                        ? isMobile()
-                                            ? 10
-                                            : 0
-                                        : 20,
-                                  ),
-                                  Text(
-                                    " ${formatTimestamp(message.timestamp)} ",
-                                    style: TextStyle(
-                                        color: isDark
-                                            ? Colors.grey[400]
-                                            : Colors.grey,
-                                        fontSize: 12),
-                                  ),
-                                  SizedBox(
-                                    width: isOpponent
-                                        ? 20
-                                        : isMobile()
-                                            ? 10
-                                            : 0,
-                                  ),
-                                ],
-                              ),
-                              if (message.type == MessageEnum.Text)
-                                Positioned(
-                                  left: isOpponent ? null : -12,
-                                  right: isOpponent ? -12 : null,
-                                  top: Platform.isMacOS ? -12.2 : -14,
-                                  child: IconButton(
-                                    hoverColor: Colors.grey.withOpacity(0),
-                                    focusColor: Colors.grey,
-                                    highlightColor: Colors.transparent,
-                                    icon: Icon(
-                                      Icons.copy,
-                                      size: (isMobile() ? 16 : 18),
-                                      color: isDark
-                                          ? Colors.grey[400]
-                                          : Colors.grey,
-                                    ),
-                                    onPressed: () {
-                                      if (message.content?.isNotEmpty == true) {
-                                        copyToClipboard(message.content!);
-                                      }
-                                    },
-                                  ),
-                                )
-                            ],
-                          ),
-                        ],
-                      ),
-                    ));
-              },
-            ),
+          child: ChatMessageList(
+            buildFileMessage: _buildFileMessage,
+            buildTextMessage: _buildTextMessage,
+            controller: _scrollController,
+            listKey: key,
+            messages: messageList,
+            onOpenContainingFolder: (path) => openDir(path, parent: true),
+            onOpenFile: openFile,
+            onCopyText: copyToClipboard,
+            onDeleteMessage: (message, {deleteFile = false}) async {
+              if (deleteFile && message.path.isNotEmpty) {
+                logger.i("delete ${message.path}");
+                await File(message.path).delete();
+              }
+              _deleteItem(message.id);
+            },
+            selfUid: self?.uid,
           ),
         ),
         _buildComposer(isDark),
@@ -778,44 +622,36 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
     double screenWidth = _screenWidth();
     if (isDesktop()) {
-      screenWidth *= 0.618;
+      screenWidth *= 0.6;
     } else {
-      screenWidth *= 0.8;
+      screenWidth *= 0.78;
     }
     var content = messageData.content ?? "";
     if (messageData.type == MessageEnum.Notification) {
       var data = jsonDecode(messageData.content ?? "{}");
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return IntrinsicWidth(
-      child: Container(
-        alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-        constraints: BoxConstraints(maxWidth: screenWidth),
-        decoration: BoxDecoration(
-          color: isOpponent
-              ? (isDark ? Colors.grey[800] : Colors.grey[300])
-              : (isDark ? Colors.grey[800] : Colors.blue),
-          borderRadius: BorderRadius.circular(8),
+    return Container(
+      alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
+      constraints: BoxConstraints(maxWidth: screenWidth),
+      padding:
+          EdgeInsets.fromLTRB(isOpponent ? 2 : 18, 2, isOpponent ? 18 : 2, 2),
+      child: SelectableText(
+        content,
+        style: TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: isDesktop() ? 17 : 16.5,
+          height: 1.55,
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-          child: SelectableText(
-            content,
-            style: TextStyle(
-              color: isOpponent
-                  ? (isDark ? Colors.white70 : Colors.black)
-                  : (isDark ? Colors.white70 : Colors.white),
-            ),
-            contextMenuBuilder: (context, editableTextState) {
-              return AdaptiveTextSelectionToolbar(
-                anchors: editableTextState.contextMenuAnchors,
-                children: const [],
-              );
-            },
-          ),
-        ),
+        textAlign: isOpponent ? TextAlign.left : TextAlign.right,
+        contextMenuBuilder: (context, editableTextState) {
+          return AdaptiveTextSelectionToolbar(
+            anchors: editableTextState.contextMenuAnchors,
+            children: const [],
+          );
+        },
       ),
     );
   }
@@ -827,16 +663,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     var failed =
         !isOpponent && !message.acked && message.timestamp < device.lastTime;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       width: screenWidth,
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[800] : Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.75),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -849,11 +688,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   )
                 : Icon(
                     Icons.insert_drive_file,
-                    color: isDark ? Colors.grey[400] : Colors.white,
-                    size: 42,
+                    color: colorScheme.primary.withValues(alpha: 0.86),
+                    size: 34,
                   ),
             if (failed) const SizedBox(width: 8),
-            const SizedBox(width: 6),
+            const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -863,23 +702,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     message.name,
                     overflow: TextOverflow.clip,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
                     ),
                     maxLines: 4,
                     softWrap: true,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   formatSize(message.size),
                   style: TextStyle(
-                      color: isDark ? Colors.grey[400] : Colors.black,
-                      fontSize: 12),
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(width: 6),
           ],
         ),
       ),
