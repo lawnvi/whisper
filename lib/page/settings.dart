@@ -29,6 +29,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const List<Locale> _supportedLocales = [
+    Locale('zh'),
+    Locale('en'),
+    Locale('es'),
+  ];
+
   DeviceData? device;
   String _path = "";
   PackageInfo? _packageInfo;
@@ -90,6 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final locale = Localizations.localeOf(context);
 
     return Scaffold(
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
@@ -538,10 +545,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              Localizations.localeOf(context).languageCode ==
-                                      "zh"
-                                  ? "简体中文"
-                                  : "English",
+                              _localeLabel(locale.languageCode),
                               style: TextStyle(
                                 color: isDark
                                     ? Colors.grey[400]
@@ -572,40 +576,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                                 actions: [
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      '简体中文',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
+                                  for (final supportedLocale
+                                      in _supportedLocales)
+                                    CupertinoActionSheetAction(
+                                      child: Text(
+                                        _localeLabel(
+                                            supportedLocale.languageCode),
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white
+                                              : Colors.black,
+                                        ),
                                       ),
+                                      onPressed: () async {
+                                        Navigator.pop(context);
+                                        MyApp.setLocale(
+                                            context, supportedLocale);
+                                        await LocalSetting().setLocalization(
+                                            supportedLocale.languageCode);
+                                      },
                                     ),
-                                    onPressed: () async {
-                                      Navigator.pop(context);
-                                      MyApp.setLocale(
-                                          context, const Locale('zh'));
-                                      await LocalSetting()
-                                          .setLocalization('zh');
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      'English',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () async {
-                                      Navigator.pop(context);
-                                      MyApp.setLocale(
-                                          context, const Locale('en'));
-                                      await LocalSetting()
-                                          .setLocalization('en');
-                                    },
-                                  ),
                                 ],
                                 cancelButton: CupertinoActionSheetAction(
                                   child: Text(
@@ -772,6 +762,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  String _localeLabel(String languageCode) {
+    switch (languageCode) {
+      case 'zh':
+        return '简体中文';
+      case 'es':
+        return 'Español';
+      case 'en':
+      default:
+        return 'English';
+    }
   }
 }
 
