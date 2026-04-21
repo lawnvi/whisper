@@ -1,0 +1,97 @@
+{
+  "connectDeviceTitle": "Conectar dispositivo",
+  "connectDeviceDesc": "Ingresar IP y puerto",
+  "connectTo": "Conectar a",
+  "connectRequest": "Solicitud de conexión",
+  "connectRequestDesc": "¿Nuevo dispositivo: {device}?",
+  "@connectRequestDesc": {
+    "description": "Descripción del dispositivo que solicita conexión",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "connect": "Conectar",
+  "confirm": "Confirmar",
+  "allow": "Permitir",
+  "refuse": "Rechazar",
+  "cancel": "Cancelar",
+  "setting": "Ajustes",
+  "sendTips": "Escribe algo...",
+  "trust": "Confiar en dispositivo",
+  "writeClipboard": "Escribir al portapapeles",
+  "deleteDevice": "Eliminar dispositivo",
+  "serverPortTitle": "Puerto del servidor",
+  "serverPort": "Puerto del servidor {port}",
+  "trustNewDevice": "Acceso automático a nuevos dispositivos",
+  "accessClipboard": "Acceder al portapapeles",
+  "doubleClickRmMessage": "Eliminar mensaje al hacer doble clic",
+  "close2tray": "Ocultar en la bandeja al cerrar",
+  "nickname": "Apodo",
+  "nicknameDesc": "Ingresa tu apodo",
+  "port": "Puerto",
+  "portDesc": "Rango del puerto: [1000, 65535]",
+  "timeoutTitle": "Tiempo de espera de conexión",
+  "disconnect": "Desconectar",
+  "keepConnect": "Mantener",
+  "menuShow": "Mostrar",
+  "menuHide": "Ocultar",
+  "menuClipboard": "Enviar portapapeles",
+  "menuSendFile": "Enviar archivos",
+  "exit": "Salir",
+  "delete": "Eliminar",
+  "deleteConfirm": "Confirmar eliminación",
+  "warning": "Advertencia",
+  "deleteWarningText": "La conexión está activa, no se puede eliminar rápidamente",
+  "close": "Cerrar",
+  "deleteDeviceTitle": "Eliminar {device}",
+  "@deleteDeviceTitle": {
+    "description": "Título para eliminar un dispositivo",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "deleteDeviceDesc": "Borra todos los mensajes de este dispositivo. No se puede recuperar.",
+  "brokeConnectTitle": "Desconectar",
+  "brokeConnectDesc": "Desconectar {device}",
+  "@brokeConnectDesc": {
+    "description": "Descripción para desconectar un dispositivo",
+    "placeholders": {
+      "device": {
+        "type": "String",
+        "example": "xiaomi MI 6"
+      }
+    }
+  },
+  "connectFailed": "Error de conexión",
+  "deviceBusy": "Dispositivo ocupado",
+  "startServerFailed": "No se pudo iniciar el servidor",
+  "deleteMessageTitle": "Eliminar mensaje",
+  "deleteMessageDesc": "¿Seguro que quieres eliminarlo?",
+  "language": "Idioma {language}",
+  "pushNotification": "Enviar notificaciones de Android",
+  "ignoreNotification": "Ignorar notificaciones de Android",
+  "ftpService": "Servicio FTP",
+  "back": "Volver",
+  "selectAll": "Todo",
+  "clearAll": "Limpiar",
+  "selectNotifyApp": "Escuchar notificaciones de apps",
+  "copyVerifyCode": "Copiar código de verificación al portapapeles",
+  "open": "Abrir",
+  "openInFinder": "Abrir en Finder",
+  "openInDir": "Abrir carpeta",
+  "keepFile": "Conservar archivo",
+  "deleteFile": "Eliminar archivo",
+  "copyMessage": "Copiar contenido del mensaje",
+  "themeMode": "Modo de tema",
+  "followSystem": "Seguir al sistema",
+  "lightMode": "Claro",
+  "darkMode": "Oscuro",
+  "selectThemeMode": "Seleccionar modo de tema",
+  "selectLanguage": "Seleccionar idioma"
+}
