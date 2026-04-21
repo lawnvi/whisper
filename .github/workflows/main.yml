@@ -30,6 +30,13 @@ jobs:
         run: npm install --global create-dmg
 
       # Flutter macos/ios ipa build command.
+      - name: Refresh CocoaPods dependencies
+        run: |
+          rm -f macos/Podfile.lock ios/Podfile.lock
+          cd macos
+          pod install --repo-update
+          cd ../ios
+          pod install --repo-update
       - run: flutter build macos
       - run: |
           flutter build ios --no-codesign
@@ -178,7 +185,7 @@ jobs:
 
       # New step to compress the release bundle
       - name: build deb package
-        run: chmod +x linux/build_deb.sh && sh linux/build_deb.sh $cur_version amd64
+        run: chmod +x linux/build_deb.sh && bash linux/build_deb.sh $cur_version amd64
 
       - name: build rpm package
         run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-x86_64.rpm
@@ -190,7 +197,7 @@ jobs:
           echo "APPIMAGE_TOOL=/tmp/appimagetool.AppImage" >> $GITHUB_ENV
 
       - name: build AppImage
-        run: chmod +x linux/build_appimage.sh && sh linux/build_appimage.sh $cur_version
+        run: chmod +x linux/build_appimage.sh && bash linux/build_appimage.sh $cur_version
 
       - name: prepare for sign
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
