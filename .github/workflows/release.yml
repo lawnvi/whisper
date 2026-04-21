@@ -1,35 +1,37 @@
-# This is a GitHub Actions configuration file
-
 name: release-packages
 
 on:
   push:
-#    branches:
-#      - dev
-#      - main
     tags:
-      - 'dev-v[0-9]+\.[0-9]+\.[0-9]+'
-      - 'release-v[0-9]+\.[0-9]+\.[0-9]+'
+      - 'release-v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-packages-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-on-macos:
-    name: MacOS, ios
+    name: macOS + iOS
     runs-on: macos-15-intel
     steps:
-      - name: check code
-        uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - name: set flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          architecture: x64 # optional, x64 or arm64
-      - run: flutter pub get
+          channel: stable
+          architecture: x64
 
-      - name: install create-dmg
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install create-dmg
         run: npm install --global create-dmg
 
-      # Flutter macos/ios ipa build command.
       - name: Refresh CocoaPods dependencies
         run: |
           rm -f macos/Podfile.lock ios/Podfile.lock
@@ -37,8 +39,12 @@ jobs:
           pod install --repo-update
           cd ../ios
           pod install --repo-update
-      - run: flutter build macos
-      - run: |
+
+      - name: Build macOS app
+        run: flutter build macos
+
+      - name: Build iOS IPA
+        run: |
           flutter build ios --no-codesign
           cd build/ios/iphoneos
           mkdir Payload
@@ -47,23 +53,21 @@ jobs:
           cd ..
           zip -r app.ipa Payload
 
-      - name: package as dmg
-        run: create-dmg build/macos/Build/Products/Release/whisper.app
-        continue-on-error: true
+      - name: Package DMG
+        run: |
+          shopt -s nullglob
+          create-dmg build/macos/Build/Products/Release/whisper.app || true
+          dmgs=(whisper*.dmg)
+          if [ ${#dmgs[@]} -gt 0 ]; then
+            mv "${dmgs[0]}" whisper.dmg
+          else
+            hdiutil create -volname "Whisper" -srcfolder build/macos/Build/Products/Release/whisper.app -ov -format UDZO whisper.dmg
+          fi
 
-      - name: rename dmg
-        run: mv whisper*.dmg whisper.dmg
-
-#      - run: |
-#          hdiutil create -format UDZO -srcfolder \
-#            build/macos/Build/Products/Release/whisper.app \
-#            build/macos/Build/Products/Release/whisper-x86_64.dmg
-
-      # Upload assets to release
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "whisper.dmg,build/ios/iphoneos/app.ipa"
+          artifacts: whisper.dmg,build/ios/iphoneos/app.ipa
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
@@ -73,33 +77,36 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
 
       - name: Set release version
         run: |
           $version = "${{ github.ref_name }}".Split('-')[-1].TrimStart('v')
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      # New step to install NSIS
       - name: Install NSIS
         run: choco install nsis -y
 
-      - run: flutter config --enable-windows-desktop
-      - run: flutter build windows
+      - name: Build Windows app
+        run: |
+          flutter config --enable-windows-desktop
+          flutter build windows
 
-      - name: Copy DLL
+      - name: Copy runtime DLLs
         run: |
           copy c:\Windows\System32\vcruntime140_1.dll .\build\windows\x64\runner\Release\
           copy c:\Windows\System32\vcruntime140.dll .\build\windows\x64\runner\Release\
           copy c:\Windows\System32\msvcp140.dll .\build\windows\x64\runner\Release\
 
-      # New step to create the installer using NSIS
-      - name: Create EXE Installer
+      - name: Create EXE installer
         run: |
           Push-Location windows
           & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" `
@@ -110,53 +117,51 @@ jobs:
             installer.nsi
           Pop-Location
 
-      # New step to verify the EXE installer exists
-      - name: Check if file exists
+      - name: Verify installer exists
         run: |
           $path = "windows\whisper-windows-x86_64.exe"
-          if (Test-Path $path) {
-            Write-Host "File exists"
-          } else {
+          if (!(Test-Path $path)) {
             throw "Installer not found at $path"
           }
 
-      # Modified Push to Release step to upload the EXE installer
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "windows/whisper-windows-x86_64.exe"
+          artifacts: windows/whisper-windows-x86_64.exe
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
 
   build-on-linux:
-    name: Linux
+    name: Linux + Android
     runs-on: ubuntu-22.04
     steps:
-      - name: check code
-        uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v4
 
-      - name: set java
-        uses: actions/setup-java@v2
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
-      - name: set flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          architecture: x64 # optional, x64 or arm64
-#          flutter-version: '3.19.6'
+          channel: stable
+          architecture: x64
 
-      - run: |
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install system packages
+        run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev
-          sudo apt-get install -y alien
-          sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev alien
+          sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
           sudo apt-get install -y desktop-file-utils libfuse2
 
-      - name: Install Android Command Line Tools
+      - name: Install Android command line tools
         run: |
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
@@ -165,32 +170,32 @@ jobs:
           rm commandlinetools.zip
           mv cmdline-tools latest
 
-      # ✅ 安装 Android SDK 35 + Build Tools
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-      - name: Install Android SDK packages (Build Tools + Platform Tools)
+      - name: Install Android SDK packages
         run: |
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
-      - name: Set environment variables for Android
+      - name: Export Android environment
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
-      - run: flutter config --enable-linux-desktop
-      - run: flutter build linux
+      - name: Set release version
+        run: echo "PACKAGE_VERSION=$(echo '${{ github.ref_name }}' | cut -d'-' -f2 | sed 's/^v//')" >> $GITHUB_ENV
 
-      - name: set variable cur_version
-        run: echo "cur_version=$(echo '${{github.ref_name}}' | cut -d'-' -f2 | sed 's/^v//')" >> $GITHUB_ENV
+      - name: Build Linux app
+        run: |
+          flutter config --enable-linux-desktop
+          flutter build linux
 
-      # New step to compress the release bundle
-      - name: build deb package
-        run: chmod +x linux/build_deb.sh && bash linux/build_deb.sh $cur_version amd64
+      - name: Build DEB package
+        run: chmod +x linux/build_deb.sh && bash linux/build_deb.sh "$PACKAGE_VERSION" amd64
 
-      - name: build rpm package
-        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${cur_version}-2.x86_64.rpm whisper-x86_64.rpm
+      - name: Build RPM package
+        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${PACKAGE_VERSION}-2.x86_64.rpm whisper-x86_64.rpm
 
       - name: Install appimagetool
         run: |
@@ -198,28 +203,21 @@ jobs:
           chmod +x /tmp/appimagetool.AppImage
           echo "APPIMAGE_TOOL=/tmp/appimagetool.AppImage" >> $GITHUB_ENV
 
-      - name: build AppImage
-        run: chmod +x linux/build_appimage.sh && bash linux/build_appimage.sh $cur_version
+      - name: Build AppImage
+        run: chmod +x linux/build_appimage.sh && bash linux/build_appimage.sh "$PACKAGE_VERSION"
 
-      - name: prepare for sign
-        run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh ${{ secrets.KEY_PASSWORD }} ${{ secrets.STORE_PASSWORD }}
-        env:
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+      - name: Prepare Android signing
+        run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh "${{ secrets.KEY_PASSWORD }}" "${{ secrets.STORE_PASSWORD }}"
 
-      - name: build android common package
-        run: flutter build apk
+      - name: Build Android release APKs
+        run: |
+          flutter build apk
+          flutter build apk --split-per-abi
 
-      - name: build android packages with platform
-        run: flutter build apk --split-per-abi
-
-
-      # Modified Push to Release step to upload the tar.gz file
       - name: Push to Release
         uses: ncipollo/release-action@v1
         with:
-          # Specify the path to the tar.gz file instead of the folder
-          artifacts: "whisper-x86_64.rpm,build/linux/deb/whisper-amd64.deb,build/linux/appimage/*.AppImage,build/app/outputs/flutter-apk/*.apk"
+          artifacts: whisper-x86_64.rpm,build/linux/deb/whisper-amd64.deb,build/linux/appimage/*.AppImage,build/app/outputs/flutter-apk/*.apk
           tag: ${{ github.ref_name }}
           token: ${{ secrets.TOKEN }}
           allowUpdates: true
