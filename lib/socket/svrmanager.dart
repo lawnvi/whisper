@@ -198,11 +198,20 @@ class WsSvrManager {
   }
 
   void close({bool closeServer = false}) {
+    final hadActiveConnection = _sink != null ||
+        _ioSink != null ||
+        _clientTimer != null ||
+        receiver.isNotEmpty;
+    if (!hadActiveConnection && !closeServer) {
+      return;
+    }
+
     _clientTimer?.cancel();
     _clientTimer = null;
     _freeIoSink(freeAll: true);
-    _sink?.close();
+    final currentSink = _sink;
     _sink = null;
+    currentSink?.close();
     if (closeServer) {
       started = false;
       _server?.close();
