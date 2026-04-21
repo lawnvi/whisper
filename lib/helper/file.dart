@@ -3,11 +3,67 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
+
+const _androidDirChannel = MethodChannel("com.vireen.whisper/android_dir");
+const _iosDirChannel = MethodChannel("com.vireen.whisper/ios_dir");
+
+bool hasEnoughStorageForFile({
+  required int fileSize,
+  required int? availableBytes,
+  int reserveBytes = 32 * 1024 * 1024,
+}) {
+  if (fileSize <= 0 || availableBytes == null) {
+    return true;
+  }
+  return availableBytes >= fileSize + reserveBytes;
+}
+
+bool isFileIntegrityValid({
+  required String expectedMd5,
+  required String actualMd5,
+}) {
+  if (expectedMd5.isEmpty) {
+    return true;
+  }
+  return expectedMd5.toLowerCase() == actualMd5.toLowerCase();
+}
+
+Future<int?> availableBytesForPath(String path) async {
+  if (path.isEmpty) {
+    return null;
+  }
+
+  try {
+    if (Platform.isAndroid) {
+      return await _androidDirChannel.invokeMethod<int>(
+        'availableBytes',
+        {'path': path},
+      );
+    }
+    if (Platform.isIOS) {
+      return await _iosDirChannel.invokeMethod<int>(
+        'availableBytes',
+        {'path': path},
+      );
+    }
+    if (Platform.isWindows) {
+      return await _availableBytesOnWindows(path);
+    }
+    if (Platform.isMacOS || Platform.isLinux) {
+      return await _availableBytesFromDf(path);
+    }
+  } catch (error) {
+    logger.i('Failed to determine available storage for $path: $error');
+  }
+
+  return null;
+}
 
 void openFile(String path) async {
   if (path.endsWith(".apk") && Platform.isAndroid) {
@@ -140,14 +196,9 @@ Future<Directory> downloadDir() async {
 }
 
 Future<bool> openAndroidDir(String path) async {
-  // Native channel
-  // 创建一个我们自定义的channel。
-  const platform = MethodChannel("com.vireen.whisper/android_dir");
-
   bool result = false;
   try {
-    // 用channel发送调用消息到原生端，调用方法是：testAction1
-    await platform.invokeMethod('openFolder', {'path': path});
+    await _androidDirChannel.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (e) {
     logger.i(e.toString());
   }
@@ -155,17 +206,65 @@ Future<bool> openAndroidDir(String path) async {
 }
 
 Future<String> openIosDir(String path) async {
-  // Native channel
-  // 创建一个我们自定义的channel。
-  const platform = MethodChannel("com.vireen.whisper/ios_dir");
-
   String result = "";
   try {
-    // 用channel发送调用消息到原生端，调用方法是：testAction1
-    await platform.invokeMethod('openFolder', {'path': path});
+    await _iosDirChannel.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (e) {
     logger.i(e.toString());
   }
   logger.i(result);
   return result;
+}
+
+Future<int?> _availableBytesFromDf(String path) async {
+  final result = await Process.run('df', ['-k', path]);
+  if (result.exitCode != 0) {
+    logger.i('df failed for $path: ${result.stderr}');
+    return null;
+  }
+
+  final lines = result.stdout
+      .toString()
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
+  if (lines.length < 2) {
+    return null;
+  }
+
+  final columns = lines.last.split(RegExp(r'\s+'));
+  if (columns.length < 4) {
+    return null;
+  }
+
+  final availableKb = int.tryParse(columns[3]);
+  if (availableKb == null) {
+    return null;
+  }
+  return availableKb * 1024;
+}
+
+Future<int?> _availableBytesOnWindows(String path) async {
+  final root = p.rootPrefix(path);
+  final drive =
+      root.replaceAll('\\', '').replaceAll('/', '').replaceAll(':', '');
+  if (drive.isEmpty) {
+    return null;
+  }
+
+  final result = await Process.run(
+    'powershell',
+    [
+      '-NoProfile',
+      '-Command',
+      "(Get-PSDrive -Name '$drive').Free",
+    ],
+  );
+  if (result.exitCode != 0) {
+    logger.i('PowerShell storage query failed for $path: ${result.stderr}');
+    return null;
+  }
+
+  return int.tryParse(result.stdout.toString().trim());
 }

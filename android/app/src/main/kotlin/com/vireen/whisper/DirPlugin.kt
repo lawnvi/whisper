@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.StatFs
 import android.widget.Toast
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -35,6 +36,10 @@ class DirPlugin() : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwar
                 openDir(message)
                 result.success(null)
             }
+            "availableBytes" -> {
+                val path = call.argument<String>("path") ?: ""
+                result.success(availableBytes(path))
+            }
 
             else -> {
                 result.notImplemented()
@@ -52,6 +57,12 @@ class DirPlugin() : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwar
 //        intent.setDataAndType(Uri.parse(path), "*/*")
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         context.startActivity(intent)
+    }
+
+    private fun availableBytes(path: String): Long {
+        val targetPath = if (path.isNotBlank()) path else context.filesDir.absolutePath
+        val statFs = StatFs(targetPath)
+        return statFs.availableBytes
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {

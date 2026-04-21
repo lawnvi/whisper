@@ -6,6 +6,7 @@ import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
@@ -1324,6 +1325,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }, onCancel: () {
       _isAlert = false;
     });
+  }
+
+  @override
+  void onNotice(String message) {
+    Fluttertoast.showToast(msg: message);
   }
 
   @override
