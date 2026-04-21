@@ -55,26 +55,24 @@ class ChatComposer extends StatelessWidget {
     BuildContext context,
     ColorScheme colorScheme,
   ) {
-    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.58);
-    final borderColor = colorScheme.outlineVariant.withValues(alpha: 0.72);
-    final surfaceColor = colorScheme.brightness == Brightness.dark
-        ? colorScheme.surfaceContainerHigh
-        : colorScheme.surface;
+    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.52);
     return Container(
       key: desktopContainerKey,
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      margin: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+      padding: const EdgeInsets.fromLTRB(20, 14, 18, 14),
       decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(
-              alpha: colorScheme.brightness == Brightness.dark ? 0.22 : 0.05,
+              alpha: colorScheme.brightness == Brightness.dark ? 0.18 : 0.05,
             ),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -92,13 +90,13 @@ class ChatComposer extends StatelessWidget {
               keyboardType: TextInputType.multiline,
               textInputAction: TextInputAction.newline,
               minLines: 1,
-              maxLines: 8,
+              maxLines: 5,
               autofocus: isDesktop(),
               autocorrect: true,
               cursorColor: colorScheme.primary,
               style: TextStyle(
                 color: colorScheme.onSurface,
-                fontSize: 15.5,
+                fontSize: 16,
                 height: 1.45,
               ),
               decoration: InputDecoration(
@@ -115,8 +113,9 @@ class ChatComposer extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (clipboardEnabled)
                 _buildUtilityActionButton(
@@ -125,15 +124,16 @@ class ChatComposer extends StatelessWidget {
                   icon: Icons.content_copy_rounded,
                   enabled: canSend && !isLoading,
                   onPressed: onSendClipboard,
-                  buttonSize: 34,
-                  iconSize: 16,
+                  buttonSize: 26,
+                  iconSize: 15,
+                  outlined: false,
                 ),
               const Spacer(),
               _buildPrimaryActionButton(
                 context,
                 colorScheme: colorScheme,
-                buttonSize: 42,
-                iconSize: 19,
+                buttonSize: 48,
+                iconSize: 20,
               ),
             ],
           ),
@@ -146,29 +146,27 @@ class ChatComposer extends StatelessWidget {
     BuildContext context,
     ColorScheme colorScheme,
   ) {
-    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.58);
-    final borderColor = colorScheme.outlineVariant.withValues(alpha: 0.72);
-    final surfaceColor = colorScheme.brightness == Brightness.dark
-        ? colorScheme.surfaceContainerHigh
-        : colorScheme.surface;
+    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.5);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
       decoration: BoxDecoration(
         color: colorScheme.surface,
       ),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
+        padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
         decoration: BoxDecoration(
-          color: surfaceColor,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: borderColor),
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(
-                alpha: colorScheme.brightness == Brightness.dark ? 0.18 : 0.06,
+                alpha: colorScheme.brightness == Brightness.dark ? 0.12 : 0.05,
               ),
               blurRadius: 24,
-              offset: const Offset(0, 8),
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -208,7 +206,7 @@ class ChatComposer extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Row(
               children: [
                 if (clipboardEnabled)
@@ -218,15 +216,16 @@ class ChatComposer extends StatelessWidget {
                     icon: Icons.content_copy_rounded,
                     enabled: canSend && !isLoading,
                     onPressed: onSendClipboard,
-                    buttonSize: 38,
-                    iconSize: 17,
+                    buttonSize: 28,
+                    iconSize: 18,
+                    outlined: false,
                   ),
                 const Spacer(),
                 _buildPrimaryActionButton(
                   context,
                   colorScheme: colorScheme,
-                  buttonSize: 46,
-                  iconSize: 21,
+                  buttonSize: 42,
+                  iconSize: 20,
                 ),
               ],
             ),
@@ -244,6 +243,7 @@ class ChatComposer extends StatelessWidget {
     required Future<void> Function() onPressed,
     required double buttonSize,
     required double iconSize,
+    required bool outlined,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     return IconButton(
@@ -252,16 +252,23 @@ class ChatComposer extends StatelessWidget {
       style: IconButton.styleFrom(
         minimumSize: Size(buttonSize, buttonSize),
         maximumSize: Size(buttonSize, buttonSize),
-        backgroundColor: enabled
-            ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.9)
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        backgroundColor: outlined
+            ? (enabled
+                ? colorScheme.surface.withValues(alpha: 0.92)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45))
+            : Colors.transparent,
         foregroundColor:
             enabled ? colorScheme.onSurfaceVariant : colorScheme.outline,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(buttonSize / 2.4),
-          side: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(outlined ? 16 : buttonSize / 2),
+          side: outlined
+              ? BorderSide(color: colorScheme.outlineVariant)
+              : BorderSide.none,
         ),
         padding: EdgeInsets.zero,
+        elevation: 0,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
       ),
       icon: Icon(icon, size: iconSize),
     );
@@ -277,7 +284,7 @@ class ChatComposer extends StatelessWidget {
     final enabled =
         canSend && !isLoading && (showsAttachmentAction || _hasDraftText);
     final backgroundColor = showsAttachmentAction
-        ? colorScheme.surfaceContainerHighest
+        ? Colors.transparent
         : (enabled ? colorScheme.primary : colorScheme.surfaceContainerHighest);
     final foregroundColor = showsAttachmentAction
         ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
@@ -292,6 +299,15 @@ class ChatComposer extends StatelessWidget {
         foregroundColor: foregroundColor,
         shape: const CircleBorder(),
         padding: EdgeInsets.zero,
+        elevation: 0,
+        side: showsAttachmentAction
+            ? BorderSide.none
+            : BorderSide(
+                color:
+                    enabled ? colorScheme.primary : colorScheme.outlineVariant,
+              ),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
       ),
       icon: isLoading
           ? SizedBox(

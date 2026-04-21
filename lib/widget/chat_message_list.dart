@@ -54,7 +54,7 @@ class ChatMessageList extends StatelessWidget {
           return FadeTransition(
             opacity: animation,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
               child: Column(
                 crossAxisAlignment: isOpponent
                     ? CrossAxisAlignment.start
@@ -138,56 +138,26 @@ class ChatMessageList extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SizedBox(height: message.type == MessageEnum.File ? 4 : 2),
-                  Stack(
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: isOpponent
-                                ? isMobile()
-                                    ? 10
-                                    : 0
-                                : 20,
-                          ),
-                          Text(
-                            " ${formatTimestamp(message.timestamp)} ",
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                          SizedBox(
-                            width: isOpponent
-                                ? 20
-                                : isMobile()
-                                    ? 10
-                                    : 0,
-                          ),
-                        ],
-                      ),
-                      if (message.type == MessageEnum.Text)
-                        Positioned(
-                          left: isOpponent ? null : -12,
-                          right: isOpponent ? -12 : null,
-                          top: Platform.isMacOS ? -12.2 : -14,
-                          child: IconButton(
-                            hoverColor: Colors.grey.withOpacity(0),
-                            focusColor: Colors.grey,
-                            highlightColor: Colors.transparent,
-                            icon: Icon(
-                              Icons.copy,
-                              size: isMobile() ? 16 : 18,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            onPressed: () {
-                              if (message.content?.isNotEmpty == true) {
-                                onCopyText(message.content!);
-                              }
-                            },
-                          ),
+                      if (message.type == MessageEnum.Text && isOpponent)
+                        _buildCopyButton(context, message),
+                      if (message.type == MessageEnum.Text && isOpponent)
+                        const SizedBox(width: 6),
+                      Text(
+                        formatTimestamp(message.timestamp),
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.8),
+                          fontSize: 12,
                         ),
+                      ),
+                      if (message.type == MessageEnum.Text && !isOpponent)
+                        const SizedBox(width: 6),
+                      if (message.type == MessageEnum.Text && !isOpponent)
+                        _buildCopyButton(context, message),
                     ],
                   ),
                 ],
@@ -196,6 +166,31 @@ class ChatMessageList extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCopyButton(BuildContext context, MessageData message) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(
+        minWidth: 20,
+        minHeight: 20,
+      ),
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      icon: Icon(
+        Icons.content_copy_rounded,
+        size: isMobile() ? 14 : 15,
+        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+      ),
+      onPressed: () {
+        if (message.content?.isNotEmpty == true) {
+          onCopyText(message.content!);
+        }
+      },
     );
   }
 }
