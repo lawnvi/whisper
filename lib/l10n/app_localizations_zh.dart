@@ -109,6 +109,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get menuSendFile => '发送文件';
 
   @override
+  String get filePickerOpenFailed => '无法打开文件选择器';
+
+  @override
   String get exit => '退出';
 
   @override

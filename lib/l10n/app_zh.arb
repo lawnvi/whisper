@@ -40,6 +40,7 @@
   "menuHide": "隐藏",
   "menuClipboard": "发送剪切板",
   "menuSendFile": "发送文件",
+  "filePickerOpenFailed": "无法打开文件选择器",
   "exit": "退出",
   "delete": "删除",
   "deleteConfirm": "确认删除",

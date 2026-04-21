@@ -40,6 +40,7 @@
   "menuHide": "Ocultar",
   "menuClipboard": "Enviar portapapeles",
   "menuSendFile": "Enviar archivos",
+  "filePickerOpenFailed": "No se pudo abrir el selector de archivos",
   "exit": "Salir",
   "delete": "Eliminar",
   "deleteConfirm": "Confirmar eliminación",
