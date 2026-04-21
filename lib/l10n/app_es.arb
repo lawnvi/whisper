@@ -106,5 +106,11 @@
   "localeNameSpanish": "Espanol",
   "autoConnectTrustedDevices": "Conectar automaticamente dispositivos con confianza mutua",
   "mutualTrustEnabled": "La confianza mutua esta activada",
-  "mutualTrustNotEstablished": "La confianza mutua aun no esta establecida"
+  "mutualTrustNotEstablished": "La confianza mutua aun no esta establecida",
+  "androidBackgroundKeepAlive": "Mantener la conexion en segundo plano",
+  "androidBackgroundKeepAliveDesc": "Usa un servicio en primer plano durante sesiones activas para reducir desconexiones al elegir archivos o cambiar de app",
+  "androidBackgroundKeepAliveActiveTitle": "Whisper mantiene la conexion activa",
+  "androidBackgroundKeepAliveActiveDesc": "Activo mientras haya una sesion conectada",
+  "androidBatteryOptimization": "Optimizacion de bateria",
+  "androidBatteryOptimizationDesc": "Se recomienda permitir actividad en segundo plano y excluir Whisper de la optimizacion de bateria en Android"
 }

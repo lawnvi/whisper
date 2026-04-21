@@ -41,6 +41,7 @@ class LocalSetting {
   final String _themeMode = "_theme_mode";
   final String _autoConnectEnabled = "_auto_connect_enabled";
   final String _lastManualPeerId = "_last_manual_peer_id";
+  final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
 
   SharedPreferences? _cachedPreferences;
 
@@ -249,6 +250,14 @@ class LocalSetting {
 
   Future<void> setAutoConnectEnabled(bool enabled) async {
     await _setSP(_autoConnectEnabled, enabled);
+  }
+
+  Future<bool> androidBackgroundKeepAlive() async {
+    return await getSPDefault(_androidBackgroundKeepAlive, true);
+  }
+
+  Future<void> setAndroidBackgroundKeepAlive(bool enabled) async {
+    await _setSP(_androidBackgroundKeepAlive, enabled);
   }
 
   Future<String> lastManualPeerId() async {

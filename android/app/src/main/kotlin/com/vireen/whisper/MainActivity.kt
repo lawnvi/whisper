@@ -8,5 +8,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         GeneratedPluginRegistrant.registerWith(flutterEngine)
         flutterEngine.plugins.add(DirPlugin())
+        flutterEngine.plugins.add(BackgroundKeepAlivePlugin())
     }
 }

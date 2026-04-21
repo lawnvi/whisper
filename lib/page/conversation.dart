@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:whisper/global.dart';
+import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -65,6 +66,25 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final bool embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
+
+  Future<void> _syncAndroidKeepAliveService() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    final enabled = await LocalSetting().androidBackgroundKeepAlive();
+    if (!enabled || !_isConnectedSession) {
+      await stopAndroidBackgroundKeepAlive();
+      return;
+    }
+    await startAndroidBackgroundKeepAlive(
+      title:
+          AppLocalizations.of(context)?.androidBackgroundKeepAliveActiveTitle ??
+              'Whisper is keeping the connection alive',
+      description:
+          AppLocalizations.of(context)?.androidBackgroundKeepAliveActiveDesc ??
+              'Active while a device session is connected',
+    );
+  }
 
   _SendMessageScreen(this.device, this.embedded);
 
@@ -156,6 +176,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         (await LocalSetting().isListenAndroid())) {
       startAndroidListening();
     }
+    await _syncAndroidKeepAliveService();
   }
 
   Future<void> _refreshCurrentDeviceState() async {
@@ -171,6 +192,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       device = latestDevice;
       _isLocalhost = isLocal;
     });
+    await _syncAndroidKeepAliveService();
   }
 
   void _scrollListener() async {
@@ -857,6 +879,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onClose() {
     percent = 0;
     _speed = "";
+    stopAndroidBackgroundKeepAlive();
     _refreshCurrentDeviceState();
     if (!mounted) {
       return;
@@ -871,6 +894,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   void onConnect() {
     _refreshCurrentDeviceState();
+    _syncAndroidKeepAliveService();
     if (!mounted) {
       return;
     }

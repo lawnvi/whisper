@@ -260,4 +260,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mutualTrustNotEstablished => '尚未形成双向互信';
+
+  @override
+  String get androidBackgroundKeepAlive => '后台保活连接';
+
+  @override
+  String get androidBackgroundKeepAliveDesc =>
+      '连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率';
+
+  @override
+  String get androidBackgroundKeepAliveActiveTitle => 'Whisper 正在保持连接';
+
+  @override
+  String get androidBackgroundKeepAliveActiveDesc => '有活动会话时保持前台服务运行';
+
+  @override
+  String get androidBatteryOptimization => '电池优化白名单';
+
+  @override
+  String get androidBatteryOptimizationDesc =>
+      '建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备';
 }
