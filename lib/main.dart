@@ -2,7 +2,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'helper/helper.dart';
@@ -105,8 +104,26 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Whisper',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: ThemeData(
+        brightness: Brightness.light,
+        primarySwatch: Colors.blue,
+        cardColor: Colors.white,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
+        cardColor: Colors.grey[800],
+        scaffoldBackgroundColor: Colors.grey[900],
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.grey[900],
+          foregroundColor: Colors.white,
+        ),
+      ),
       themeMode: _themeMode,
       localizationsDelegates: const [
         AppLocalizations.delegate,
