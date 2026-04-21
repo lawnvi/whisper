@@ -14,7 +14,7 @@ on:
 jobs:
   build-on-macos:
     name: MacOS, ios
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - name: check code
         uses: actions/checkout@v3
