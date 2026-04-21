@@ -259,6 +259,7 @@ class WsSvrManager {
             if ((self.auth || localTemp != null && localTemp.auth)) {
               await _auth(true);
               receiver = device?.uid ?? "";
+              _dispatchToAll((event) => event.onConnect());
               _dispatchToAll((event) => event.afterAuth(true, device));
               return;
             }
@@ -274,6 +275,7 @@ class WsSvrManager {
               }
               if (allow) {
                 receiver = device?.uid ?? "";
+                _dispatchToAll((event) => event.onConnect());
               } else {
                 close();
               }
