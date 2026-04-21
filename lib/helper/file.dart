@@ -9,7 +9,6 @@ import 'package:whisper/helper/local.dart';
 
 import 'helper.dart';
 
-
 void openFile(String path) async {
   if (path.endsWith(".apk") && Platform.isAndroid) {
     if (await Permission.requestInstallPackages.isDenied) {
@@ -19,24 +18,26 @@ void openFile(String path) async {
   OpenFilex.open(path);
 }
 
-void openDir(String path, {parent=false}) async {
-
+void openDir(String path, {parent = false}) async {
   var file = File(path);
   if (!file.existsSync()) {
     var dir = await downloadDir();
     path = dir.path;
-  }else if (parent) {
+  } else if (parent) {
+    if (await _revealFileInFileManager(path)) {
+      return;
+    }
     path = file.parent.path;
   }
 
   logger.i("打开文件: $path");
   if (Platform.isMacOS) {
     openFinder(path);
-  }else if (Platform.isAndroid) {
+  } else if (Platform.isAndroid) {
     // openFolderInFileManager();
     // openFileExplorer(path);
     await openAndroidDir(path);
-  }else if (Platform.isIOS) {
+  } else if (Platform.isIOS) {
     // openFileExplorer(path);
     await openIosDir(path);
   } else if (Platform.isWindows || Platform.isLinux) {
@@ -57,13 +58,63 @@ void openFinder(String path) async {
   }
 }
 
+Future<bool> _revealFileInFileManager(String path) async {
+  if (!File(path).existsSync()) {
+    return false;
+  }
+
+  try {
+    if (Platform.isMacOS) {
+      final result = await Process.run('open', ['-R', path]);
+      if (result.exitCode == 0) {
+        logger.i('Finder revealed file successfully');
+        return true;
+      }
+      logger.i('Error revealing file in Finder: ${result.stderr}');
+      return false;
+    }
+
+    if (Platform.isWindows) {
+      final result = await Process.run('explorer', ['/select,', path]);
+      if (result.exitCode == 0) {
+        logger.i('Explorer revealed file successfully');
+        return true;
+      }
+      logger.i('Error revealing file in Explorer: ${result.stderr}');
+      return false;
+    }
+
+    if (Platform.isLinux) {
+      final revealCommands = <List<String>>[
+        ['nautilus', '--select', path],
+        ['dolphin', '--select', path],
+      ];
+
+      for (final command in revealCommands) {
+        try {
+          final result = await Process.run(command.first, command.sublist(1));
+          if (result.exitCode == 0) {
+            logger.i('${command.first} revealed file successfully');
+            return true;
+          }
+        } catch (_) {
+          // Try the next file manager command.
+        }
+      }
+    }
+  } catch (error) {
+    logger.i('Error revealing file in file manager: $error');
+  }
+
+  return false;
+}
+
 Future<String> fileMD5(File file, [int? start, int? end]) async {
   var value = await md5.bind(file.openRead(start, end)).first;
   return value.toString();
 }
 
 Future<Directory> downloadDir() async {
-
   var path = await LocalSetting().savePath();
 
   if (path.isNotEmpty && Directory(path).existsSync()) {
@@ -73,9 +124,9 @@ Future<Directory> downloadDir() async {
   Directory? dir;
   if (Platform.isIOS || Platform.isMacOS) {
     return await getApplicationDocumentsDirectory();
-  }else if (Platform.isAndroid) {
+  } else if (Platform.isAndroid) {
     dir = Directory("/sdcard/Download/whisper");
-  }else {
+  } else {
     dir = await getDownloadsDirectory();
     if (dir == null) {
       return await getApplicationDocumentsDirectory();
