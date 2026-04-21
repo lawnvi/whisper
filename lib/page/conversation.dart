@@ -17,6 +17,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 
 import '../helper/file.dart';
@@ -51,12 +52,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
   List<MessageData> messageList = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
+  final FocusNode _composerFocusNode = FocusNode();
   bool isInputEmpty = true;
   double percent = 0;
   String _speed = "";
   int _sentSize = 0;
   int _lastUpdateTime = 0;
-  final keyPressedMap = {};
+  final Map<String, bool> keyPressedMap = <String, bool>{};
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
@@ -83,6 +85,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     socketManager.unregisterEvent(this);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
+    _composerFocusNode.dispose();
     _textController.dispose();
     super.dispose();
   }
@@ -638,133 +641,51 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Widget _buildComposer(bool isDark) {
-    final canSend = _canSendCurrentDevice;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[900] : Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (self?.clipboard == true)
-            CupertinoButton(
-              padding: const EdgeInsets.fromLTRB(0, 6, 6, 6),
-              onPressed: canSend
-                  ? () {
-                      _sendText("", isClipboard: true);
-                    }
-                  : null,
-              child: Icon(
-                Icons.copy,
-                color: canSend
-                    ? (isDark ? Colors.grey[400] : Colors.grey)
-                    : Colors.grey,
-              ),
-            ),
-          const SizedBox(
-            height: 50,
-          ),
-          Expanded(
-              child: RawKeyboardListener(
-            focusNode: FocusNode(),
-            onKey: (RawKeyEvent event) async {
-              if (!canSend) {
-                return;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
-                  event.logicalKey == LogicalKeyboardKey.shiftRight) {
-                keyPressedMap[LogicalKeyboardKey.shift.keyLabel] =
-                    event is RawKeyDownEvent;
-              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                keyPressedMap[LogicalKeyboardKey.enter.keyLabel] =
-                    event is RawKeyDownEvent;
-                if (event is RawKeyDownEvent &&
-                    (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
-                        isMobile())) {
-                  if (_textController.text.trim().isNotEmpty) {
-                    await _sendText(_textController.text.trimRight());
-                    _textController.text = "";
-                  }
-                }
-              }
-            },
-            child: CupertinoTextField(
-              controller: _textController,
-              enabled: canSend,
-              cursorColor: isDark ? Colors.white : Colors.black87,
-              autofocus: isDesktop() && !embedded,
-              autocorrect: true,
-              maxLines: isMobile() ? 5 : 20,
-              minLines: 1,
-              placeholder: canSend
-                  ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
-                  : (AppLocalizations.of(context)?.connectToSend ??
-                      '连接后即可发送消息'),
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[800] : Colors.white,
-                border: Border.all(
-                  color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              onChanged: (value) {
-                if (value == "\n" &&
-                    keyPressedMap[
-                            keyPressedMap[LogicalKeyboardKey.shift.keyLabel]] !=
-                        true) {
-                  _textController.text = "";
-                }
-              },
-            ),
-          )),
-          if (_isLoading)
-            const SizedBox(
-              width: 12,
-            ),
-          _isLoading
-              ? const Center(child: CupertinoActivityIndicator())
-              : CupertinoButton(
-                  padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
-                  onPressed: canSend
-                      ? () async {
-                          if (!_isLocalhost && _textController.text.isEmpty) {
-                            setState(() {
-                              _isLoading = true;
-                            });
-                            FilePickerResult? result = await FilePicker.platform
-                                .pickFiles(allowMultiple: true);
-                            setState(() {
-                              _isLoading = false;
-                            });
-                            if (result != null) {
-                              for (var item in result.files) {
-                                await socketManager.sendFile(item.path ?? "");
-                              }
-                            }
-                          } else {
-                            await _sendText(_textController.text);
-                            _textController.text = "";
-                          }
-                        }
-                      : null,
-                  child: Icon(
-                    !_isLocalhost && isInputEmpty ? Icons.add : Icons.send,
-                    color: canSend ? Colors.lightBlue : Colors.grey,
-                  ),
-                ),
-          if (_isLoading)
-            const SizedBox(
-              width: 12,
-            ),
-        ],
-      ),
+    return ChatComposer(
+      clipboardEnabled: self?.clipboard == true,
+      canSend: _canSendCurrentDevice,
+      isInputEmpty: isInputEmpty,
+      isLoading: _isLoading,
+      isLocalhost: _isLocalhost,
+      isDesktopStyle: isDesktop(),
+      keyPressedMap: keyPressedMap,
+      controller: _textController,
+      focusNode: _composerFocusNode,
+      onPickFiles: _pickFilesAndSend,
+      onSendClipboard: () async {
+        await _sendText("", isClipboard: true);
+      },
+      onSendText: (text) async {
+        await _sendText(text);
+      },
     );
+  }
+
+  Future<void> _pickFilesAndSend() async {
+    if (!_canSendCurrentDevice || _isLocalhost) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (result == null) {
+        return;
+      }
+      for (final item in result.files) {
+        if (item.path == null || item.path!.isEmpty) {
+          continue;
+        }
+        await socketManager.sendFile(item.path!);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _toggleConnection() {
