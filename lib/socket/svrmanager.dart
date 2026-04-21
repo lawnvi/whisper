@@ -50,8 +50,8 @@ class WsSvrManager {
 
   HttpServer? _server;
   WebSocketSink? _sink;
-  ISocketEvent? _event;
-  ISocketEvent? _eventBak;
+  final Set<ISocketEvent> _listeners = <ISocketEvent>{};
+  ISocketEvent? _primaryEvent;
   IOSink? _ioSink;
   File? _receivingFile;
   RandomAccessFile? _sendingFile;
@@ -74,26 +74,57 @@ class WsSvrManager {
   }
 
   void setEvent(ISocketEvent event) {
-    _event = event;
+    _listeners
+      ..clear()
+      ..add(event);
+    _primaryEvent = event;
   }
 
-  void registerEvent(ISocketEvent event, {String uid = ""}) {
-    if (_eventBak == null && _event != null) {
-      _eventBak = _event;
+  void registerEvent(
+    ISocketEvent event, {
+    String uid = "",
+    bool primary = false,
+  }) {
+    _listeners.add(event);
+    if (_primaryEvent == null || primary) {
+      _primaryEvent = event;
     }
-    _event = event;
     if (uid.isNotEmpty) {
       sender = uid;
     }
   }
 
-  void unregisterEvent() {
-    if (_eventBak != null) {
-      _event = _eventBak;
-      _eventBak = null;
-    } else {
-      _eventBak = _event;
+  void unregisterEvent([ISocketEvent? event]) {
+    if (event == null) {
+      return;
     }
+    _listeners.remove(event);
+    if (identical(_primaryEvent, event)) {
+      _primaryEvent = _listeners.isEmpty ? null : _listeners.first;
+    }
+  }
+
+  void _dispatchToAll(void Function(ISocketEvent event) callback) {
+    final listeners = _listeners.toList(growable: false);
+    for (final listener in listeners) {
+      callback(listener);
+    }
+  }
+
+  void _dispatchToPrimary(void Function(ISocketEvent event) callback) {
+    final primaryEvent = _primaryEvent;
+    if (primaryEvent != null) {
+      callback(primaryEvent);
+    }
+  }
+
+  void debugResetListeners() {
+    _listeners.clear();
+    _primaryEvent = null;
+  }
+
+  void debugDispatchMessage(MessageData messageData) {
+    _dispatchToAll((event) => event.onMessage(messageData));
   }
 
   void startServer(int port, var callback) {
@@ -112,7 +143,7 @@ class WsSvrManager {
         await _listen(message);
       }, onError: (Object error, StackTrace stackTrace) {
         logger.i("连接服务异常: $error\n$stackTrace");
-        _event?.onError(error.toString());
+        _dispatchToPrimary((event) => event.onError(error.toString()));
       }, onDone: () {
         logger.i("连接服务done");
         close();
@@ -144,7 +175,7 @@ class WsSvrManager {
         await _listen(message);
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
-        _event?.onError(error.toString());
+        _dispatchToPrimary((event) => event.onError(error.toString()));
       }, onDone: () {
         logger.i("客户端服务done");
         close();
@@ -173,7 +204,7 @@ class WsSvrManager {
     }
     receiver = "";
     logger.i("服务已关闭");
-    _event?.onClose();
+    _dispatchToAll((event) => event.onClose());
   }
 
   void _send(String message) {
@@ -222,24 +253,26 @@ class WsSvrManager {
             if ((self.auth || localTemp != null && localTemp.auth)) {
               await _auth(true);
               receiver = device?.uid ?? "";
-              _event?.afterAuth(true, device);
+              _dispatchToAll((event) => event.afterAuth(true, device));
               return;
             }
           }
 
           logger.i("AUTH message: ${message.sender} - $sender");
-          _event?.onAuth(device, asServer, message.message ?? "",
-              (allow) async {
-            logger.i("AUTH message: ${message.message} ||| $allow");
-            if (asServer) {
-              await _auth(allow);
-            }
-            if (allow) {
-              receiver = device?.uid ?? "";
-            } else {
-              close();
-            }
-            _event?.afterAuth(allow, device);
+          _dispatchToPrimary((event) {
+            event.onAuth(device, asServer, message.message ?? "",
+                (allow) async {
+              logger.i("AUTH message: ${message.message} ||| $allow");
+              if (asServer) {
+                await _auth(allow);
+              }
+              if (allow) {
+                receiver = device?.uid ?? "";
+              } else {
+                close();
+              }
+              _dispatchToAll((listener) => listener.afterAuth(allow, device));
+            });
           });
           break;
         }
@@ -251,7 +284,7 @@ class WsSvrManager {
           logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
           var msg = await LocalDatabase().ackMessage(message);
           if (msg != null) {
-            _event?.onMessage(msg);
+            _dispatchToAll((event) => event.onMessage(msg));
             if (msg.type == MessageEnum.File) {
               _sendFile(msg);
             }
@@ -269,7 +302,7 @@ class WsSvrManager {
               copyToClipboard(message.content ?? "");
             }
           }
-          _event?.onMessage(message);
+          _dispatchToAll((event) => event.onMessage(message));
           logger.i("文本消息：$str");
           break;
         }
@@ -290,7 +323,7 @@ class WsSvrManager {
             }
           }
           _ackMessage(message);
-          _event?.onMessage(message);
+          _dispatchToAll((event) => event.onMessage(message));
           break;
         }
       case MessageEnum.Heartbeat:
@@ -312,7 +345,8 @@ class WsSvrManager {
             await _sendFileChunk(sendOver: data.size == data.received);
           }
           if (data.size == data.received || data.received % oneMb == 0) {
-            _event?.onProgress(data.size, data.received);
+            _dispatchToAll(
+                (event) => event.onProgress(data.size, data.received));
           }
         }
       case MessageEnum.File:
@@ -340,7 +374,9 @@ class WsSvrManager {
               // logger.i("recv a chunk: $_currentLen flush over");
             }
             if (_currentSize == _currentLen || _currentLen % oneMb == 0) {
-              _event?.onProgress(_currentSize, _currentLen);
+              _dispatchToAll(
+                (event) => event.onProgress(_currentSize, _currentLen),
+              );
               _sendFileSignal(_currentLen, _currentSize);
             }
             if (_currentSize == _currentLen) {
@@ -401,7 +437,7 @@ class WsSvrManager {
     var newMessage = MessageData.fromJson(msgTemp);
     await LocalDatabase().insertMessage(newMessage);
     // logger.i("保存文件: $path");
-    _event?.onMessage(newMessage);
+    _dispatchToAll((event) => event.onMessage(newMessage));
     _ackMessage(message);
   }
 

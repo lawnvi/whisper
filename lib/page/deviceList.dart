@@ -82,7 +82,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void didChangeDependencies() async {
     _refreshDevice(isFirst: true);
-    socketManager.registerEvent(this, uid: device?.uid ?? "");
+    socketManager.registerEvent(this, uid: device?.uid ?? "", primary: true);
     super.didChangeDependencies();
   }
 
@@ -245,6 +245,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
+    socketManager.unregisterEvent(this);
     _desktopSearchController.dispose();
     // stop watch
     clipboardWatcher.stop();
