@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-packages-${{ github.ref }}
@@ -75,6 +75,17 @@ jobs:
             build/ios/iphoneos/app.ipa
           retention-days: 7
 
+      - name: Publish macOS and iOS release assets
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
+          files: |
+            whisper.dmg
+            build/ios/iphoneos/app.ipa
+
   build-on-windows:
     name: Windows
     runs-on: windows-latest
@@ -92,7 +103,12 @@ jobs:
 
       - name: Set release version
         run: |
-          "APP_VERSION=0.0.${{ github.run_number }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".Split('-')[-1].TrimStart('v')
+          } else {
+            $version = "0.0.${{ github.run_number }}"
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install NSIS
         run: choco install nsis -y
@@ -132,6 +148,15 @@ jobs:
           name: whisper-windows-${{ github.run_id }}
           path: windows/whisper-windows-x86_64.exe
           retention-days: 7
+
+      - name: Publish Windows release asset
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
+          files: windows/whisper-windows-x86_64.exe
 
   build-on-linux:
     name: Linux + Android
@@ -185,7 +210,14 @@ jobs:
           echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Set release version
-        run: echo "PACKAGE_VERSION=0.0.${{ github.run_number }}" >> $GITHUB_ENV
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
+            PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          else
+            PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
 
       - name: Build Linux app
         run: |
@@ -225,3 +257,16 @@ jobs:
             build/linux/appimage/*.AppImage
             build/app/outputs/flutter-apk/*.apk
           retention-days: 7
+
+      - name: Publish Linux and Android release assets
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
+          files: |
+            whisper-x86_64.rpm
+            build/linux/deb/whisper-amd64.deb
+            build/linux/appimage/*.AppImage
+            build/app/outputs/flutter-apk/*.apk
