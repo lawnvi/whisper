@@ -21,6 +21,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -1264,7 +1265,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (socketManager.receiver.isNotEmpty) {
       return;
     }
-    final candidate = await ConnectionCoordinator().chooseAutoConnectCandidate();
+    final candidate =
+        await ConnectionCoordinator().chooseAutoConnectCandidate();
     if (candidate == null) {
       return;
     }
@@ -1423,6 +1425,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void onProgress(int size, length) {
     // TODO: implement onProgress
+  }
+
+  @override
+  void onTransferUpdated(TransferSnapshot snapshot) {
+    // Device list only needs to refresh high-level presence state for now.
   }
 
   @override

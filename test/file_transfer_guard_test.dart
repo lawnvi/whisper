@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/file.dart';
+import 'dart:io';
 
 void main() {
   group('hasEnoughStorageForFile', () {
@@ -67,6 +68,40 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('transfer checksum helpers', () {
+    test('uses sha256 for resumable transfer checksum', () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-test-');
+      final file = File('${directory.path}/payload.bin');
+      await file.writeAsBytes(const <int>[1, 2, 3, 4]);
+
+      final digest = await fileChecksum(file, algorithm: 'sha256');
+
+      expect(
+        digest,
+        '9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a',
+      );
+      await directory.delete(recursive: true);
+    });
+
+    test('computes resume proof hash from the previous full chunk', () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-test-');
+      final file = File('${directory.path}/payload.bin');
+      await file.writeAsBytes(List<int>.generate(8, (index) => index + 1));
+
+      final proof = await resumeProofHash(
+        file,
+        resumeOffset: 8,
+        chunkSize: 4,
+      );
+
+      expect(
+        proof,
+        '55e5509f8052998294266ee5b50cb592938191fb5d67f73cac2e60b0276b1bdd',
+      );
+      await directory.delete(recursive: true);
     });
   });
 }

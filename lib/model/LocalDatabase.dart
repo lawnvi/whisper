@@ -7,16 +7,19 @@ import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import 'package:whisper/helper/local.dart';
 import '../helper/helper.dart';
 import 'device.dart';
+import 'file_transfer.dart';
 import 'message.dart';
 
 part 'LocalDatabase.g.dart';
 
-@DriftDatabase(tables: [Device, Message])
+@DriftDatabase(tables: [Device, Message, FileTransfer])
 class LocalDatabase extends _$LocalDatabase {
   static final LocalDatabase _singleton = LocalDatabase._internal();
 
   // 私有构造函数，阻止类被直接实例化
   LocalDatabase._internal() : super(_openConnection());
+
+  LocalDatabase.forTesting(super.executor);
 
   // 工厂构造函数，返回单例实例
   factory LocalDatabase() {
@@ -24,8 +27,19 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  // TODO: implement schemaVersion
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) async {
+          await m.createAll();
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          if (from < 2) {
+            await m.createTable(fileTransfer);
+          }
+        },
+      );
 
   Future<void> insertMessage(MessageData data) {
     return into(message).insert(MessageCompanion.insert(
@@ -41,7 +55,8 @@ class LocalDatabase extends _$LocalDatabase {
         acked: const Value(false),
         uuid: Value(data.uuid),
         path: Value(data.path),
-        md5: Value(data.md5)));
+        md5: Value(data.md5),
+        fileTimestamp: Value(data.fileTimestamp)));
   }
 
   Future<MessageData?> ackMessage(MessageData data) async {
@@ -201,6 +216,105 @@ class LocalDatabase extends _$LocalDatabase {
 
   Future<void> deleteMessage(int id) async {
     await (delete(message)..where((t) => t.id.equals(id))).go();
+  }
+
+  Future<void> upsertFileTransfer(FileTransferData data) {
+    return into(fileTransfer).insertOnConflictUpdate(data);
+  }
+
+  Future<void> updateFileTransfer(
+    String transferId, {
+    Value<FileTransferState> state = const Value.absent(),
+    Value<int> committedBytes = const Value.absent(),
+    Value<String> lastError = const Value.absent(),
+    Value<String> finalPath = const Value.absent(),
+    Value<String> tempPath = const Value.absent(),
+    Value<int> updatedAt = const Value.absent(),
+  }) {
+    return (update(fileTransfer)..where((t) => t.transferId.equals(transferId)))
+        .write(
+      FileTransferCompanion(
+        state: state,
+        committedBytes: committedBytes,
+        lastError: lastError,
+        finalPath: finalPath,
+        tempPath: tempPath,
+        updatedAt: updatedAt,
+      ),
+    );
+  }
+
+  Future<FileTransferData?> fetchFileTransfer(String transferId) {
+    return (select(fileTransfer)
+          ..where((t) => t.transferId.equals(transferId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<Map<String, FileTransferData>> fetchFileTransfersByIds(
+    Iterable<String> transferIds,
+  ) async {
+    final ids = transferIds.where((item) => item.isNotEmpty).toSet().toList();
+    if (ids.isEmpty) {
+      return const <String, FileTransferData>{};
+    }
+    final items = await (select(fileTransfer)
+          ..where((t) => t.transferId.isIn(ids)))
+        .get();
+    return <String, FileTransferData>{
+      for (final item in items) item.transferId: item,
+    };
+  }
+
+  Future<MessageData?> fetchMessageByUuid(String uuid) {
+    return (select(message)..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+  }
+
+  Future<List<FileTransferData>> fetchRecoverableFileTransfers() {
+    return (select(fileTransfer)
+          ..where((t) => t.state.isNotIn(const <String>[
+                'completed',
+                'failed',
+                'canceled',
+              ]))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+          ]))
+        .get();
+  }
+
+  Future<List<FileTransferData>> fetchRecoverableFileTransfersForPeer(
+    String peerUid, {
+    FileTransferDirection? direction,
+  }) async {
+    final items = await fetchRecoverableFileTransfers();
+    return items.where((item) {
+      if (item.peerUid != peerUid) {
+        return false;
+      }
+      if (direction != null && item.direction != direction) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+  }
+
+  TransferSnapshot snapshotForTransfer(FileTransferData data) {
+    return TransferSnapshot(
+      transferId: data.transferId,
+      messageUuid: data.messageUuid,
+      peerUid: data.peerUid,
+      direction: data.direction,
+      state: data.state,
+      finalPath: data.finalPath,
+      tempPath: data.tempPath,
+      size: data.size,
+      committedBytes: data.committedBytes,
+      lastError: data.lastError,
+      updatedAt: data.updatedAt,
+    );
   }
 }
 

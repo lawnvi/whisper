@@ -14,6 +14,7 @@ import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
@@ -60,6 +61,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   String _speed = "";
   int _sentSize = 0;
   int _lastUpdateTime = 0;
+  final Map<String, TransferSnapshot> _transferSnapshots =
+      <String, TransferSnapshot>{};
+  String? _activeTransferId;
   final Map<String, bool> keyPressedMap = <String, bool>{};
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
@@ -161,6 +165,28 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
   }
 
+  Future<void> _loadTransferSnapshotsForMessages(
+    Iterable<MessageData> messages,
+  ) async {
+    final transferIds = messages
+        .where((item) => item.type == MessageEnum.File)
+        .map((item) => item.uuid)
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (transferIds.isEmpty) {
+      return;
+    }
+    final transfers = await db.fetchFileTransfersByIds(transferIds);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      for (final entry in transfers.entries) {
+        _transferSnapshots[entry.key] = db.snapshotForTransfer(entry.value);
+      }
+    });
+  }
+
   void _loadMessages() async {
     logger.i("current device: ${device.uid}");
     var me = await LocalSetting().instance();
@@ -176,6 +202,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
 
     _insertItems(0, arr);
+    unawaited(_loadTransferSnapshotsForMessages(arr));
 
     _scrollController.addListener(_scrollListener);
 
@@ -236,6 +263,57 @@ class _SendMessageScreen extends State<SendMessageScreen>
     messageList.insertAll(index, items);
     key.currentState?.insertAllItems(index, items.length,
         duration: const Duration(milliseconds: 500));
+  }
+
+  TransferSnapshot? _transferForMessage(MessageData message) {
+    return _transferSnapshots[message.uuid];
+  }
+
+  bool _isTransferTerminal(FileTransferState state) {
+    return state == FileTransferState.completed ||
+        state == FileTransferState.failed ||
+        state == FileTransferState.canceled;
+  }
+
+  String _fileStatusText(MessageData message, TransferSnapshot? transfer) {
+    if (transfer == null) {
+      if (_isConnectedSession &&
+          !socketManager.supportsResumableTransfer &&
+          !message.acked) {
+        return '旧协议传输中';
+      }
+      return formatSize(message.size);
+    }
+    switch (transfer.state) {
+      case FileTransferState.queued:
+        return '排队中';
+      case FileTransferState.negotiating:
+        return transfer.committedBytes > 0
+            ? '准备续传 ${(transfer.progress * 100).toStringAsFixed(0)}%'
+            : '协商中';
+      case FileTransferState.transferring:
+        return '${formatSize(message.size)}  ${(transfer.progress * 100).toStringAsFixed(0)}%';
+      case FileTransferState.waitingReconnect:
+        return '等待重连 ${(transfer.progress * 100).toStringAsFixed(0)}%';
+      case FileTransferState.paused:
+        return '已暂停';
+      case FileTransferState.verifying:
+        return '校验中';
+      case FileTransferState.completed:
+        return formatSize(message.size);
+      case FileTransferState.failed:
+        return transfer.lastError.isEmpty ? '失败，可重试' : transfer.lastError;
+      case FileTransferState.canceled:
+        return '已取消';
+    }
+  }
+
+  Future<void> _retryTransfer(String transferId) async {
+    await socketManager.retryTransfer(transferId);
+  }
+
+  Future<void> _cancelTransfer(String transferId) async {
+    await socketManager.cancelTransfer(transferId);
   }
 
   _clearItems() {
@@ -481,6 +559,20 @@ class _SendMessageScreen extends State<SendMessageScreen>
               ),
             ],
           ),
+        ),
+      );
+    }
+    if (_isConnectedSession && !socketManager.supportsResumableTransfer) {
+      actions.add(
+        IconButton(
+          tooltip: '对端不支持断点续传',
+          icon: Icon(
+            Icons.history_toggle_off_rounded,
+            color: isDark ? Colors.white60 : Colors.black45,
+          ),
+          onPressed: () {
+            Fluttertoast.showToast(msg: '当前连接设备不支持断点续传');
+          },
         ),
       );
     }
@@ -796,19 +888,29 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (isMobile()) {
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
-    final isActiveIncomingTransfer = isOpponent &&
-        percent > 0 &&
-        percent < 1 &&
-        messageList.isNotEmpty &&
-        identical(message, messageList.first);
+    final transfer = _transferForMessage(message);
+    final isActiveTransfer = transfer != null &&
+        !_isTransferTerminal(transfer.state) &&
+        transfer.state != FileTransferState.queued;
     final missingLocalFile = isOpponent &&
         message.path.isNotEmpty &&
+        (transfer == null || transfer.state == FileTransferState.completed) &&
         !File(message.path).existsSync();
     var failed = !isOpponent &&
         !_isConnectedSession &&
+        transfer == null &&
         !message.acked &&
         message.timestamp < device.lastTime;
-    failed = failed || missingLocalFile;
+    failed = failed ||
+        missingLocalFile ||
+        (transfer != null &&
+            (transfer.state == FileTransferState.failed ||
+                transfer.state == FileTransferState.canceled));
+    final showRetry = transfer != null &&
+        (transfer.state == FileTransferState.failed ||
+            transfer.state == FileTransferState.paused ||
+            transfer.state == FileTransferState.waitingReconnect);
+    final showCancel = transfer != null && !_isTransferTerminal(transfer.state);
     final colorScheme = Theme.of(context).colorScheme;
     final cardColor = colorScheme.brightness == Brightness.dark
         ? const Color(0xFF1F2937)
@@ -829,19 +931,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (failed || isActiveIncomingTransfer) const SizedBox(width: 8),
+            if (failed || isActiveTransfer) const SizedBox(width: 8),
             if (failed)
               const Icon(
                 Icons.error_outline_rounded,
                 color: Colors.redAccent,
                 size: 24,
               )
-            else if (isActiveIncomingTransfer)
+            else if (isActiveTransfer)
               SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(
-                  value: percent,
+                  value: transfer.progress.clamp(0, 1),
                   strokeWidth: 2.4,
                   color: colorScheme.primary,
                   backgroundColor: colorScheme.primary.withValues(alpha: 0.18),
@@ -853,36 +955,48 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 color: colorScheme.primary.withValues(alpha: 0.86),
                 size: 34,
               ),
-            if (failed || isActiveIncomingTransfer) const SizedBox(width: 8),
+            if (failed || isActiveTransfer) const SizedBox(width: 8),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: screenWidth - 80,
-                  child: Text(
-                    message.name,
-                    overflow: TextOverflow.clip,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: screenWidth - 80,
+                    child: Text(
+                      message.name,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                      maxLines: 4,
+                      softWrap: true,
                     ),
-                    maxLines: 4,
-                    softWrap: true,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isActiveIncomingTransfer
-                      ? '${formatSize(message.size)}  ${(percent * 100).toStringAsFixed(0)}%'
-                      : formatSize(message.size),
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 12,
+                  const SizedBox(height: 4),
+                  Text(
+                    _fileStatusText(message, transfer),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            if (showRetry)
+              IconButton(
+                tooltip: '重试',
+                onPressed: () => _retryTransfer(message.uuid),
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+            if (showCancel)
+              IconButton(
+                tooltip: '取消',
+                onPressed: () => _cancelTransfer(message.uuid),
+                icon: const Icon(Icons.close_rounded, size: 20),
+              ),
           ],
         ),
       ),
@@ -970,6 +1084,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             (messageData.sender == device.uid ||
                 messageData.receiver == device.uid)) {
       _insertItem(0, messageData);
+      unawaited(_loadTransferSnapshotsForMessages(<MessageData>[messageData]));
     }
   }
 
@@ -996,6 +1111,50 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (length == size) {
       _lastUpdateTime = 0;
       _sentSize = 0;
+    }
+  }
+
+  @override
+  void onTransferUpdated(TransferSnapshot snapshot) {
+    if (snapshot.peerUid != device.uid) {
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_activeTransferId == snapshot.transferId &&
+        now - _lastUpdateTime > 1000 &&
+        snapshot.state == FileTransferState.transferring) {
+      if (_lastUpdateTime > 0) {
+        final speed = formatSize(
+          1000 *
+              (snapshot.committedBytes - _sentSize) ~/
+              (now - _lastUpdateTime),
+        );
+        _speed = '$speed/s ';
+      }
+      _lastUpdateTime = now;
+      _sentSize = snapshot.committedBytes;
+    } else if (_activeTransferId != snapshot.transferId) {
+      _lastUpdateTime = now;
+      _sentSize = snapshot.committedBytes;
+    }
+
+    if (_isTransferTerminal(snapshot.state)) {
+      if (_activeTransferId == snapshot.transferId) {
+        _activeTransferId = null;
+        percent = 0;
+        _speed = '';
+        _lastUpdateTime = 0;
+        _sentSize = 0;
+      }
+    } else {
+      _activeTransferId = snapshot.transferId;
+      percent = snapshot.progress.clamp(0, 1);
+    }
+
+    if (mounted) {
+      setState(() {
+        _transferSnapshots[snapshot.transferId] = snapshot;
+      });
     }
   }
 }
