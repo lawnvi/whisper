@@ -1355,16 +1355,749 @@ class MessageCompanion extends UpdateCompanion<MessageData> {
   }
 }
 
+class $FileTransferTable extends FileTransfer
+    with TableInfo<$FileTransferTable, FileTransferData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FileTransferTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _transferIdMeta =
+      const VerificationMeta('transferId');
+  @override
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+      'transfer_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _messageUuidMeta =
+      const VerificationMeta('messageUuid');
+  @override
+  late final GeneratedColumn<String> messageUuid = GeneratedColumn<String>(
+      'message_uuid', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _peerUidMeta =
+      const VerificationMeta('peerUid');
+  @override
+  late final GeneratedColumn<String> peerUid = GeneratedColumn<String>(
+      'peer_uid', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  late final GeneratedColumnWithTypeConverter<FileTransferDirection, String>
+      direction = GeneratedColumn<String>('direction', aliasedName, false,
+              type: DriftSqlType.string, requiredDuringInsert: true)
+          .withConverter<FileTransferDirection>(
+              $FileTransferTable.$converterdirection);
+  @override
+  late final GeneratedColumnWithTypeConverter<FileTransferState, String> state =
+      GeneratedColumn<String>('state', aliasedName, false,
+              type: DriftSqlType.string, requiredDuringInsert: true)
+          .withConverter<FileTransferState>($FileTransferTable.$converterstate);
+  static const VerificationMeta _finalPathMeta =
+      const VerificationMeta('finalPath');
+  @override
+  late final GeneratedColumn<String> finalPath = GeneratedColumn<String>(
+      'final_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _tempPathMeta =
+      const VerificationMeta('tempPath');
+  @override
+  late final GeneratedColumn<String> tempPath = GeneratedColumn<String>(
+      'temp_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sizeMeta = const VerificationMeta('size');
+  @override
+  late final GeneratedColumn<int> size = GeneratedColumn<int>(
+      'size', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _checksumAlgorithmMeta =
+      const VerificationMeta('checksumAlgorithm');
+  @override
+  late final GeneratedColumn<String> checksumAlgorithm =
+      GeneratedColumn<String>('checksum_algorithm', aliasedName, false,
+          type: DriftSqlType.string,
+          requiredDuringInsert: false,
+          defaultValue: const Constant(''));
+  static const VerificationMeta _checksumValueMeta =
+      const VerificationMeta('checksumValue');
+  @override
+  late final GeneratedColumn<String> checksumValue = GeneratedColumn<String>(
+      'checksum_value', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _chunkSizeMeta =
+      const VerificationMeta('chunkSize');
+  @override
+  late final GeneratedColumn<int> chunkSize = GeneratedColumn<int>(
+      'chunk_size', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _committedBytesMeta =
+      const VerificationMeta('committedBytes');
+  @override
+  late final GeneratedColumn<int> committedBytes = GeneratedColumn<int>(
+      'committed_bytes', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastErrorMeta =
+      const VerificationMeta('lastError');
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+      'last_error', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        transferId,
+        messageUuid,
+        peerUid,
+        direction,
+        state,
+        finalPath,
+        tempPath,
+        size,
+        checksumAlgorithm,
+        checksumValue,
+        chunkSize,
+        committedBytes,
+        lastError,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'file_transfer';
+  @override
+  VerificationContext validateIntegrity(Insertable<FileTransferData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('transfer_id')) {
+      context.handle(
+          _transferIdMeta,
+          transferId.isAcceptableOrUnknown(
+              data['transfer_id']!, _transferIdMeta));
+    } else if (isInserting) {
+      context.missing(_transferIdMeta);
+    }
+    if (data.containsKey('message_uuid')) {
+      context.handle(
+          _messageUuidMeta,
+          messageUuid.isAcceptableOrUnknown(
+              data['message_uuid']!, _messageUuidMeta));
+    } else if (isInserting) {
+      context.missing(_messageUuidMeta);
+    }
+    if (data.containsKey('peer_uid')) {
+      context.handle(_peerUidMeta,
+          peerUid.isAcceptableOrUnknown(data['peer_uid']!, _peerUidMeta));
+    } else if (isInserting) {
+      context.missing(_peerUidMeta);
+    }
+    if (data.containsKey('final_path')) {
+      context.handle(_finalPathMeta,
+          finalPath.isAcceptableOrUnknown(data['final_path']!, _finalPathMeta));
+    } else if (isInserting) {
+      context.missing(_finalPathMeta);
+    }
+    if (data.containsKey('temp_path')) {
+      context.handle(_tempPathMeta,
+          tempPath.isAcceptableOrUnknown(data['temp_path']!, _tempPathMeta));
+    } else if (isInserting) {
+      context.missing(_tempPathMeta);
+    }
+    if (data.containsKey('size')) {
+      context.handle(
+          _sizeMeta, size.isAcceptableOrUnknown(data['size']!, _sizeMeta));
+    }
+    if (data.containsKey('checksum_algorithm')) {
+      context.handle(
+          _checksumAlgorithmMeta,
+          checksumAlgorithm.isAcceptableOrUnknown(
+              data['checksum_algorithm']!, _checksumAlgorithmMeta));
+    }
+    if (data.containsKey('checksum_value')) {
+      context.handle(
+          _checksumValueMeta,
+          checksumValue.isAcceptableOrUnknown(
+              data['checksum_value']!, _checksumValueMeta));
+    }
+    if (data.containsKey('chunk_size')) {
+      context.handle(_chunkSizeMeta,
+          chunkSize.isAcceptableOrUnknown(data['chunk_size']!, _chunkSizeMeta));
+    } else if (isInserting) {
+      context.missing(_chunkSizeMeta);
+    }
+    if (data.containsKey('committed_bytes')) {
+      context.handle(
+          _committedBytesMeta,
+          committedBytes.isAcceptableOrUnknown(
+              data['committed_bytes']!, _committedBytesMeta));
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(_lastErrorMeta,
+          lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {transferId};
+  @override
+  FileTransferData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FileTransferData(
+      transferId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}transfer_id'])!,
+      messageUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}message_uuid'])!,
+      peerUid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}peer_uid'])!,
+      direction: $FileTransferTable.$converterdirection.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}direction'])!),
+      state: $FileTransferTable.$converterstate.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}state'])!),
+      finalPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}final_path'])!,
+      tempPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}temp_path'])!,
+      size: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}size'])!,
+      checksumAlgorithm: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}checksum_algorithm'])!,
+      checksumValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}checksum_value'])!,
+      chunkSize: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}chunk_size'])!,
+      committedBytes: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}committed_bytes'])!,
+      lastError: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last_error'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $FileTransferTable createAlias(String alias) {
+    return $FileTransferTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<FileTransferDirection, String, String>
+      $converterdirection = const EnumNameConverter<FileTransferDirection>(
+          FileTransferDirection.values);
+  static JsonTypeConverter2<FileTransferState, String, String> $converterstate =
+      const EnumNameConverter<FileTransferState>(FileTransferState.values);
+}
+
+class FileTransferData extends DataClass
+    implements Insertable<FileTransferData> {
+  final String transferId;
+  final String messageUuid;
+  final String peerUid;
+  final FileTransferDirection direction;
+  final FileTransferState state;
+  final String finalPath;
+  final String tempPath;
+  final int size;
+  final String checksumAlgorithm;
+  final String checksumValue;
+  final int chunkSize;
+  final int committedBytes;
+  final String lastError;
+  final int createdAt;
+  final int updatedAt;
+  const FileTransferData(
+      {required this.transferId,
+      required this.messageUuid,
+      required this.peerUid,
+      required this.direction,
+      required this.state,
+      required this.finalPath,
+      required this.tempPath,
+      required this.size,
+      required this.checksumAlgorithm,
+      required this.checksumValue,
+      required this.chunkSize,
+      required this.committedBytes,
+      required this.lastError,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['transfer_id'] = Variable<String>(transferId);
+    map['message_uuid'] = Variable<String>(messageUuid);
+    map['peer_uid'] = Variable<String>(peerUid);
+    {
+      map['direction'] = Variable<String>(
+          $FileTransferTable.$converterdirection.toSql(direction));
+    }
+    {
+      map['state'] =
+          Variable<String>($FileTransferTable.$converterstate.toSql(state));
+    }
+    map['final_path'] = Variable<String>(finalPath);
+    map['temp_path'] = Variable<String>(tempPath);
+    map['size'] = Variable<int>(size);
+    map['checksum_algorithm'] = Variable<String>(checksumAlgorithm);
+    map['checksum_value'] = Variable<String>(checksumValue);
+    map['chunk_size'] = Variable<int>(chunkSize);
+    map['committed_bytes'] = Variable<int>(committedBytes);
+    map['last_error'] = Variable<String>(lastError);
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  FileTransferCompanion toCompanion(bool nullToAbsent) {
+    return FileTransferCompanion(
+      transferId: Value(transferId),
+      messageUuid: Value(messageUuid),
+      peerUid: Value(peerUid),
+      direction: Value(direction),
+      state: Value(state),
+      finalPath: Value(finalPath),
+      tempPath: Value(tempPath),
+      size: Value(size),
+      checksumAlgorithm: Value(checksumAlgorithm),
+      checksumValue: Value(checksumValue),
+      chunkSize: Value(chunkSize),
+      committedBytes: Value(committedBytes),
+      lastError: Value(lastError),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory FileTransferData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FileTransferData(
+      transferId: serializer.fromJson<String>(json['transferId']),
+      messageUuid: serializer.fromJson<String>(json['messageUuid']),
+      peerUid: serializer.fromJson<String>(json['peerUid']),
+      direction: $FileTransferTable.$converterdirection
+          .fromJson(serializer.fromJson<String>(json['direction'])),
+      state: $FileTransferTable.$converterstate
+          .fromJson(serializer.fromJson<String>(json['state'])),
+      finalPath: serializer.fromJson<String>(json['finalPath']),
+      tempPath: serializer.fromJson<String>(json['tempPath']),
+      size: serializer.fromJson<int>(json['size']),
+      checksumAlgorithm: serializer.fromJson<String>(json['checksumAlgorithm']),
+      checksumValue: serializer.fromJson<String>(json['checksumValue']),
+      chunkSize: serializer.fromJson<int>(json['chunkSize']),
+      committedBytes: serializer.fromJson<int>(json['committedBytes']),
+      lastError: serializer.fromJson<String>(json['lastError']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'transferId': serializer.toJson<String>(transferId),
+      'messageUuid': serializer.toJson<String>(messageUuid),
+      'peerUid': serializer.toJson<String>(peerUid),
+      'direction': serializer.toJson<String>(
+          $FileTransferTable.$converterdirection.toJson(direction)),
+      'state': serializer
+          .toJson<String>($FileTransferTable.$converterstate.toJson(state)),
+      'finalPath': serializer.toJson<String>(finalPath),
+      'tempPath': serializer.toJson<String>(tempPath),
+      'size': serializer.toJson<int>(size),
+      'checksumAlgorithm': serializer.toJson<String>(checksumAlgorithm),
+      'checksumValue': serializer.toJson<String>(checksumValue),
+      'chunkSize': serializer.toJson<int>(chunkSize),
+      'committedBytes': serializer.toJson<int>(committedBytes),
+      'lastError': serializer.toJson<String>(lastError),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  FileTransferData copyWith(
+          {String? transferId,
+          String? messageUuid,
+          String? peerUid,
+          FileTransferDirection? direction,
+          FileTransferState? state,
+          String? finalPath,
+          String? tempPath,
+          int? size,
+          String? checksumAlgorithm,
+          String? checksumValue,
+          int? chunkSize,
+          int? committedBytes,
+          String? lastError,
+          int? createdAt,
+          int? updatedAt}) =>
+      FileTransferData(
+        transferId: transferId ?? this.transferId,
+        messageUuid: messageUuid ?? this.messageUuid,
+        peerUid: peerUid ?? this.peerUid,
+        direction: direction ?? this.direction,
+        state: state ?? this.state,
+        finalPath: finalPath ?? this.finalPath,
+        tempPath: tempPath ?? this.tempPath,
+        size: size ?? this.size,
+        checksumAlgorithm: checksumAlgorithm ?? this.checksumAlgorithm,
+        checksumValue: checksumValue ?? this.checksumValue,
+        chunkSize: chunkSize ?? this.chunkSize,
+        committedBytes: committedBytes ?? this.committedBytes,
+        lastError: lastError ?? this.lastError,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  FileTransferData copyWithCompanion(FileTransferCompanion data) {
+    return FileTransferData(
+      transferId:
+          data.transferId.present ? data.transferId.value : this.transferId,
+      messageUuid:
+          data.messageUuid.present ? data.messageUuid.value : this.messageUuid,
+      peerUid: data.peerUid.present ? data.peerUid.value : this.peerUid,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      state: data.state.present ? data.state.value : this.state,
+      finalPath: data.finalPath.present ? data.finalPath.value : this.finalPath,
+      tempPath: data.tempPath.present ? data.tempPath.value : this.tempPath,
+      size: data.size.present ? data.size.value : this.size,
+      checksumAlgorithm: data.checksumAlgorithm.present
+          ? data.checksumAlgorithm.value
+          : this.checksumAlgorithm,
+      checksumValue: data.checksumValue.present
+          ? data.checksumValue.value
+          : this.checksumValue,
+      chunkSize: data.chunkSize.present ? data.chunkSize.value : this.chunkSize,
+      committedBytes: data.committedBytes.present
+          ? data.committedBytes.value
+          : this.committedBytes,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FileTransferData(')
+          ..write('transferId: $transferId, ')
+          ..write('messageUuid: $messageUuid, ')
+          ..write('peerUid: $peerUid, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('finalPath: $finalPath, ')
+          ..write('tempPath: $tempPath, ')
+          ..write('size: $size, ')
+          ..write('checksumAlgorithm: $checksumAlgorithm, ')
+          ..write('checksumValue: $checksumValue, ')
+          ..write('chunkSize: $chunkSize, ')
+          ..write('committedBytes: $committedBytes, ')
+          ..write('lastError: $lastError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      transferId,
+      messageUuid,
+      peerUid,
+      direction,
+      state,
+      finalPath,
+      tempPath,
+      size,
+      checksumAlgorithm,
+      checksumValue,
+      chunkSize,
+      committedBytes,
+      lastError,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FileTransferData &&
+          other.transferId == this.transferId &&
+          other.messageUuid == this.messageUuid &&
+          other.peerUid == this.peerUid &&
+          other.direction == this.direction &&
+          other.state == this.state &&
+          other.finalPath == this.finalPath &&
+          other.tempPath == this.tempPath &&
+          other.size == this.size &&
+          other.checksumAlgorithm == this.checksumAlgorithm &&
+          other.checksumValue == this.checksumValue &&
+          other.chunkSize == this.chunkSize &&
+          other.committedBytes == this.committedBytes &&
+          other.lastError == this.lastError &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
+  final Value<String> transferId;
+  final Value<String> messageUuid;
+  final Value<String> peerUid;
+  final Value<FileTransferDirection> direction;
+  final Value<FileTransferState> state;
+  final Value<String> finalPath;
+  final Value<String> tempPath;
+  final Value<int> size;
+  final Value<String> checksumAlgorithm;
+  final Value<String> checksumValue;
+  final Value<int> chunkSize;
+  final Value<int> committedBytes;
+  final Value<String> lastError;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const FileTransferCompanion({
+    this.transferId = const Value.absent(),
+    this.messageUuid = const Value.absent(),
+    this.peerUid = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.state = const Value.absent(),
+    this.finalPath = const Value.absent(),
+    this.tempPath = const Value.absent(),
+    this.size = const Value.absent(),
+    this.checksumAlgorithm = const Value.absent(),
+    this.checksumValue = const Value.absent(),
+    this.chunkSize = const Value.absent(),
+    this.committedBytes = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FileTransferCompanion.insert({
+    required String transferId,
+    required String messageUuid,
+    required String peerUid,
+    required FileTransferDirection direction,
+    required FileTransferState state,
+    required String finalPath,
+    required String tempPath,
+    this.size = const Value.absent(),
+    this.checksumAlgorithm = const Value.absent(),
+    this.checksumValue = const Value.absent(),
+    required int chunkSize,
+    this.committedBytes = const Value.absent(),
+    this.lastError = const Value.absent(),
+    required int createdAt,
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  })  : transferId = Value(transferId),
+        messageUuid = Value(messageUuid),
+        peerUid = Value(peerUid),
+        direction = Value(direction),
+        state = Value(state),
+        finalPath = Value(finalPath),
+        tempPath = Value(tempPath),
+        chunkSize = Value(chunkSize),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<FileTransferData> custom({
+    Expression<String>? transferId,
+    Expression<String>? messageUuid,
+    Expression<String>? peerUid,
+    Expression<String>? direction,
+    Expression<String>? state,
+    Expression<String>? finalPath,
+    Expression<String>? tempPath,
+    Expression<int>? size,
+    Expression<String>? checksumAlgorithm,
+    Expression<String>? checksumValue,
+    Expression<int>? chunkSize,
+    Expression<int>? committedBytes,
+    Expression<String>? lastError,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (transferId != null) 'transfer_id': transferId,
+      if (messageUuid != null) 'message_uuid': messageUuid,
+      if (peerUid != null) 'peer_uid': peerUid,
+      if (direction != null) 'direction': direction,
+      if (state != null) 'state': state,
+      if (finalPath != null) 'final_path': finalPath,
+      if (tempPath != null) 'temp_path': tempPath,
+      if (size != null) 'size': size,
+      if (checksumAlgorithm != null) 'checksum_algorithm': checksumAlgorithm,
+      if (checksumValue != null) 'checksum_value': checksumValue,
+      if (chunkSize != null) 'chunk_size': chunkSize,
+      if (committedBytes != null) 'committed_bytes': committedBytes,
+      if (lastError != null) 'last_error': lastError,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FileTransferCompanion copyWith(
+      {Value<String>? transferId,
+      Value<String>? messageUuid,
+      Value<String>? peerUid,
+      Value<FileTransferDirection>? direction,
+      Value<FileTransferState>? state,
+      Value<String>? finalPath,
+      Value<String>? tempPath,
+      Value<int>? size,
+      Value<String>? checksumAlgorithm,
+      Value<String>? checksumValue,
+      Value<int>? chunkSize,
+      Value<int>? committedBytes,
+      Value<String>? lastError,
+      Value<int>? createdAt,
+      Value<int>? updatedAt,
+      Value<int>? rowid}) {
+    return FileTransferCompanion(
+      transferId: transferId ?? this.transferId,
+      messageUuid: messageUuid ?? this.messageUuid,
+      peerUid: peerUid ?? this.peerUid,
+      direction: direction ?? this.direction,
+      state: state ?? this.state,
+      finalPath: finalPath ?? this.finalPath,
+      tempPath: tempPath ?? this.tempPath,
+      size: size ?? this.size,
+      checksumAlgorithm: checksumAlgorithm ?? this.checksumAlgorithm,
+      checksumValue: checksumValue ?? this.checksumValue,
+      chunkSize: chunkSize ?? this.chunkSize,
+      committedBytes: committedBytes ?? this.committedBytes,
+      lastError: lastError ?? this.lastError,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (transferId.present) {
+      map['transfer_id'] = Variable<String>(transferId.value);
+    }
+    if (messageUuid.present) {
+      map['message_uuid'] = Variable<String>(messageUuid.value);
+    }
+    if (peerUid.present) {
+      map['peer_uid'] = Variable<String>(peerUid.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(
+          $FileTransferTable.$converterdirection.toSql(direction.value));
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(
+          $FileTransferTable.$converterstate.toSql(state.value));
+    }
+    if (finalPath.present) {
+      map['final_path'] = Variable<String>(finalPath.value);
+    }
+    if (tempPath.present) {
+      map['temp_path'] = Variable<String>(tempPath.value);
+    }
+    if (size.present) {
+      map['size'] = Variable<int>(size.value);
+    }
+    if (checksumAlgorithm.present) {
+      map['checksum_algorithm'] = Variable<String>(checksumAlgorithm.value);
+    }
+    if (checksumValue.present) {
+      map['checksum_value'] = Variable<String>(checksumValue.value);
+    }
+    if (chunkSize.present) {
+      map['chunk_size'] = Variable<int>(chunkSize.value);
+    }
+    if (committedBytes.present) {
+      map['committed_bytes'] = Variable<int>(committedBytes.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FileTransferCompanion(')
+          ..write('transferId: $transferId, ')
+          ..write('messageUuid: $messageUuid, ')
+          ..write('peerUid: $peerUid, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('finalPath: $finalPath, ')
+          ..write('tempPath: $tempPath, ')
+          ..write('size: $size, ')
+          ..write('checksumAlgorithm: $checksumAlgorithm, ')
+          ..write('checksumValue: $checksumValue, ')
+          ..write('chunkSize: $chunkSize, ')
+          ..write('committedBytes: $committedBytes, ')
+          ..write('lastError: $lastError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$LocalDatabase extends GeneratedDatabase {
   _$LocalDatabase(QueryExecutor e) : super(e);
   $LocalDatabaseManager get managers => $LocalDatabaseManager(this);
   late final $DeviceTable device = $DeviceTable(this);
   late final $MessageTable message = $MessageTable(this);
+  late final $FileTransferTable fileTransfer = $FileTransferTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [device, message];
+  List<DatabaseSchemaEntity> get allSchemaEntities =>
+      [device, message, fileTransfer];
 }
 
 typedef $$DeviceTableCreateCompanionBuilder = DeviceCompanion Function({
@@ -2162,6 +2895,340 @@ typedef $$MessageTableProcessedTableManager = ProcessedTableManager<
     (MessageData, $$MessageTableReferences),
     MessageData,
     PrefetchHooks Function({bool deviceId})>;
+typedef $$FileTransferTableCreateCompanionBuilder = FileTransferCompanion
+    Function({
+  required String transferId,
+  required String messageUuid,
+  required String peerUid,
+  required FileTransferDirection direction,
+  required FileTransferState state,
+  required String finalPath,
+  required String tempPath,
+  Value<int> size,
+  Value<String> checksumAlgorithm,
+  Value<String> checksumValue,
+  required int chunkSize,
+  Value<int> committedBytes,
+  Value<String> lastError,
+  required int createdAt,
+  required int updatedAt,
+  Value<int> rowid,
+});
+typedef $$FileTransferTableUpdateCompanionBuilder = FileTransferCompanion
+    Function({
+  Value<String> transferId,
+  Value<String> messageUuid,
+  Value<String> peerUid,
+  Value<FileTransferDirection> direction,
+  Value<FileTransferState> state,
+  Value<String> finalPath,
+  Value<String> tempPath,
+  Value<int> size,
+  Value<String> checksumAlgorithm,
+  Value<String> checksumValue,
+  Value<int> chunkSize,
+  Value<int> committedBytes,
+  Value<String> lastError,
+  Value<int> createdAt,
+  Value<int> updatedAt,
+  Value<int> rowid,
+});
+
+class $$FileTransferTableFilterComposer
+    extends Composer<_$LocalDatabase, $FileTransferTable> {
+  $$FileTransferTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get transferId => $composableBuilder(
+      column: $table.transferId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get messageUuid => $composableBuilder(
+      column: $table.messageUuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get peerUid => $composableBuilder(
+      column: $table.peerUid, builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<FileTransferDirection, FileTransferDirection,
+          String>
+      get direction => $composableBuilder(
+          column: $table.direction,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnWithTypeConverterFilters<FileTransferState, FileTransferState, String>
+      get state => $composableBuilder(
+          column: $table.state,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<String> get finalPath => $composableBuilder(
+      column: $table.finalPath, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get tempPath => $composableBuilder(
+      column: $table.tempPath, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get size => $composableBuilder(
+      column: $table.size, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get checksumAlgorithm => $composableBuilder(
+      column: $table.checksumAlgorithm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get checksumValue => $composableBuilder(
+      column: $table.checksumValue, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get chunkSize => $composableBuilder(
+      column: $table.chunkSize, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get committedBytes => $composableBuilder(
+      column: $table.committedBytes,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$FileTransferTableOrderingComposer
+    extends Composer<_$LocalDatabase, $FileTransferTable> {
+  $$FileTransferTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get transferId => $composableBuilder(
+      column: $table.transferId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get messageUuid => $composableBuilder(
+      column: $table.messageUuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get peerUid => $composableBuilder(
+      column: $table.peerUid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+      column: $table.direction, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get state => $composableBuilder(
+      column: $table.state, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get finalPath => $composableBuilder(
+      column: $table.finalPath, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get tempPath => $composableBuilder(
+      column: $table.tempPath, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get size => $composableBuilder(
+      column: $table.size, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get checksumAlgorithm => $composableBuilder(
+      column: $table.checksumAlgorithm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get checksumValue => $composableBuilder(
+      column: $table.checksumValue,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get chunkSize => $composableBuilder(
+      column: $table.chunkSize, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get committedBytes => $composableBuilder(
+      column: $table.committedBytes,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$FileTransferTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $FileTransferTable> {
+  $$FileTransferTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get transferId => $composableBuilder(
+      column: $table.transferId, builder: (column) => column);
+
+  GeneratedColumn<String> get messageUuid => $composableBuilder(
+      column: $table.messageUuid, builder: (column) => column);
+
+  GeneratedColumn<String> get peerUid =>
+      $composableBuilder(column: $table.peerUid, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<FileTransferDirection, String>
+      get direction => $composableBuilder(
+          column: $table.direction, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<FileTransferState, String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get finalPath =>
+      $composableBuilder(column: $table.finalPath, builder: (column) => column);
+
+  GeneratedColumn<String> get tempPath =>
+      $composableBuilder(column: $table.tempPath, builder: (column) => column);
+
+  GeneratedColumn<int> get size =>
+      $composableBuilder(column: $table.size, builder: (column) => column);
+
+  GeneratedColumn<String> get checksumAlgorithm => $composableBuilder(
+      column: $table.checksumAlgorithm, builder: (column) => column);
+
+  GeneratedColumn<String> get checksumValue => $composableBuilder(
+      column: $table.checksumValue, builder: (column) => column);
+
+  GeneratedColumn<int> get chunkSize =>
+      $composableBuilder(column: $table.chunkSize, builder: (column) => column);
+
+  GeneratedColumn<int> get committedBytes => $composableBuilder(
+      column: $table.committedBytes, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$FileTransferTableTableManager extends RootTableManager<
+    _$LocalDatabase,
+    $FileTransferTable,
+    FileTransferData,
+    $$FileTransferTableFilterComposer,
+    $$FileTransferTableOrderingComposer,
+    $$FileTransferTableAnnotationComposer,
+    $$FileTransferTableCreateCompanionBuilder,
+    $$FileTransferTableUpdateCompanionBuilder,
+    (
+      FileTransferData,
+      BaseReferences<_$LocalDatabase, $FileTransferTable, FileTransferData>
+    ),
+    FileTransferData,
+    PrefetchHooks Function()> {
+  $$FileTransferTableTableManager(_$LocalDatabase db, $FileTransferTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FileTransferTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FileTransferTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FileTransferTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> transferId = const Value.absent(),
+            Value<String> messageUuid = const Value.absent(),
+            Value<String> peerUid = const Value.absent(),
+            Value<FileTransferDirection> direction = const Value.absent(),
+            Value<FileTransferState> state = const Value.absent(),
+            Value<String> finalPath = const Value.absent(),
+            Value<String> tempPath = const Value.absent(),
+            Value<int> size = const Value.absent(),
+            Value<String> checksumAlgorithm = const Value.absent(),
+            Value<String> checksumValue = const Value.absent(),
+            Value<int> chunkSize = const Value.absent(),
+            Value<int> committedBytes = const Value.absent(),
+            Value<String> lastError = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              FileTransferCompanion(
+            transferId: transferId,
+            messageUuid: messageUuid,
+            peerUid: peerUid,
+            direction: direction,
+            state: state,
+            finalPath: finalPath,
+            tempPath: tempPath,
+            size: size,
+            checksumAlgorithm: checksumAlgorithm,
+            checksumValue: checksumValue,
+            chunkSize: chunkSize,
+            committedBytes: committedBytes,
+            lastError: lastError,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String transferId,
+            required String messageUuid,
+            required String peerUid,
+            required FileTransferDirection direction,
+            required FileTransferState state,
+            required String finalPath,
+            required String tempPath,
+            Value<int> size = const Value.absent(),
+            Value<String> checksumAlgorithm = const Value.absent(),
+            Value<String> checksumValue = const Value.absent(),
+            required int chunkSize,
+            Value<int> committedBytes = const Value.absent(),
+            Value<String> lastError = const Value.absent(),
+            required int createdAt,
+            required int updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              FileTransferCompanion.insert(
+            transferId: transferId,
+            messageUuid: messageUuid,
+            peerUid: peerUid,
+            direction: direction,
+            state: state,
+            finalPath: finalPath,
+            tempPath: tempPath,
+            size: size,
+            checksumAlgorithm: checksumAlgorithm,
+            checksumValue: checksumValue,
+            chunkSize: chunkSize,
+            committedBytes: committedBytes,
+            lastError: lastError,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$FileTransferTableProcessedTableManager = ProcessedTableManager<
+    _$LocalDatabase,
+    $FileTransferTable,
+    FileTransferData,
+    $$FileTransferTableFilterComposer,
+    $$FileTransferTableOrderingComposer,
+    $$FileTransferTableAnnotationComposer,
+    $$FileTransferTableCreateCompanionBuilder,
+    $$FileTransferTableUpdateCompanionBuilder,
+    (
+      FileTransferData,
+      BaseReferences<_$LocalDatabase, $FileTransferTable, FileTransferData>
+    ),
+    FileTransferData,
+    PrefetchHooks Function()>;
 
 class $LocalDatabaseManager {
   final _$LocalDatabase _db;
@@ -2170,4 +3237,6 @@ class $LocalDatabaseManager {
       $$DeviceTableTableManager(_db, _db.device);
   $$MessageTableTableManager get message =>
       $$MessageTableTableManager(_db, _db.message);
+  $$FileTransferTableTableManager get fileTransfer =>
+      $$FileTransferTableTableManager(_db, _db.fileTransfer);
 }

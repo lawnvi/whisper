@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:open_dir/open_dir.dart';
@@ -170,6 +171,46 @@ Future<String> fileMD5(File file, [int? start, int? end]) async {
   return value.toString();
 }
 
+Future<String> fileChecksum(
+  File file, {
+  String algorithm = 'sha256',
+  int? start,
+  int? end,
+}) async {
+  final digest = switch (algorithm.toLowerCase()) {
+    'md5' => md5,
+    'sha256' => sha256,
+    _ => throw ArgumentError.value(
+        algorithm,
+        'algorithm',
+        'Unsupported checksum algorithm',
+      ),
+  };
+  final value = await digest.bind(file.openRead(start, end)).first;
+  return value.toString();
+}
+
+Future<String> resumeProofHash(
+  File file, {
+  required int resumeOffset,
+  required int chunkSize,
+}) async {
+  if (resumeOffset <= 0 || chunkSize <= 0) {
+    return '';
+  }
+  final proofEnd = resumeOffset;
+  final proofStart = proofEnd - chunkSize;
+  if (proofStart < 0) {
+    return '';
+  }
+  return fileChecksum(
+    file,
+    algorithm: 'sha256',
+    start: proofStart,
+    end: proofEnd,
+  );
+}
+
 Future<Directory> downloadDir() async {
   var path = await LocalSetting().savePath();
 
@@ -193,6 +234,39 @@ Future<Directory> downloadDir() async {
     dir.createSync();
   }
   return dir;
+}
+
+Future<Directory> transferTempDir() async {
+  final base = await downloadDir();
+  final dir = Directory('${base.path}/.whisper/transfers');
+  if (!dir.existsSync()) {
+    dir.createSync(recursive: true);
+  }
+  return dir;
+}
+
+Future<String> allocateFinalDownloadPath(String fileName) async {
+  final appDir = await downloadDir();
+  var candidate = File('${appDir.path}/$fileName');
+  var idx = 1;
+  final arr = fileName.split(".");
+  var before = fileName;
+  var dot = "";
+  if (arr.length > 1) {
+    dot = arr[arr.length - 1];
+    before = fileName.substring(0, fileName.length - 1 - dot.length);
+  }
+  while (candidate.existsSync()) {
+    candidate =
+        File('${appDir.path}/$before-$idx${dot.isEmpty ? '' : '.$dot'}');
+    idx++;
+  }
+  return candidate.path;
+}
+
+Future<String> transferTempFilePath(String transferId) async {
+  final dir = await transferTempDir();
+  return '${dir.path}/$transferId.part';
 }
 
 Future<bool> openAndroidDir(String path) async {
