@@ -140,37 +140,42 @@ class TransferChunkFrame {
     required this.transferId,
     required this.offset,
     required this.payload,
-  });
+    int? payloadLength,
+    this.payloadInNextFrame = false,
+    this.payloadChecksum = '',
+  }) : payloadLength = payloadLength ?? payload.length;
 
   static const String magic = 'WSP2';
 
   final String transferId;
   final int offset;
   final Uint8List payload;
+  final int payloadLength;
+  final bool payloadInNextFrame;
+  final String payloadChecksum;
 
   static bool looksLikeFrame(Uint8List bytes) {
-    if (bytes.length < 4) {
-      return false;
-    }
-    try {
-      return ascii.decode(bytes.sublist(0, 4), allowInvalid: false) == magic;
-    } on FormatException {
-      return false;
-    }
+    return bytes.length >= 4 &&
+        bytes[0] == 0x57 &&
+        bytes[1] == 0x53 &&
+        bytes[2] == 0x50 &&
+        bytes[3] == 0x32;
   }
 
   Uint8List encode() {
     final header = utf8.encode(jsonEncode({
       'transferId': transferId,
       'offset': offset,
-      'length': payload.length,
+      'length': payloadLength,
+      if (payloadInNextFrame) 'payloadInNextFrame': true,
+      if (payloadChecksum.isNotEmpty) 'payloadChecksum': payloadChecksum,
     }));
     final bytes = BytesBuilder(copy: false)..add(ascii.encode(magic));
     final headerLength = ByteData(4)..setUint32(0, header.length);
     bytes
       ..add(headerLength.buffer.asUint8List())
       ..add(header)
-      ..add(payload);
+      ..add(payloadInNextFrame ? Uint8List(0) : payload);
     return bytes.takeBytes();
   }
 
@@ -190,15 +195,22 @@ class TransferChunkFrame {
     final header = jsonDecode(
       utf8.decode(bytes.sublist(8, headerEnd)),
     ) as Map<String, dynamic>;
-    final payload = bytes.sublist(headerEnd);
+    final payload = Uint8List.sublistView(bytes, headerEnd);
     final expectedLength = header['length'] as int? ?? -1;
-    if (payload.length != expectedLength) {
+    final payloadInNextFrame = header['payloadInNextFrame'] == true;
+    if (payloadInNextFrame && payload.isNotEmpty) {
+      throw const FormatException('chunk header frame contains payload');
+    }
+    if (!payloadInNextFrame && payload.length != expectedLength) {
       throw const FormatException('chunk payload length mismatch');
     }
     return TransferChunkFrame(
       transferId: header['transferId'] as String? ?? '',
       offset: header['offset'] as int? ?? 0,
-      payload: Uint8List.fromList(payload),
+      payload: payload,
+      payloadLength: expectedLength,
+      payloadInNextFrame: payloadInNextFrame,
+      payloadChecksum: header['payloadChecksum'] as String? ?? '',
     );
   }
 }

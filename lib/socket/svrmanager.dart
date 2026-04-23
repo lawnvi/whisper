@@ -8,6 +8,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -15,6 +16,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/state/peer_profile.dart';
+import 'package:whisper/state/resumable_transfer_window.dart';
 import 'package:path/path.dart' as p;
 
 import '../helper/file.dart';
@@ -43,7 +45,11 @@ abstract class ISocketEvent {
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
-  static const int _transferChunkSize = 1024 * 1024;
+  static const int defaultTransferChunkSize = 32 * 1024 * 1024;
+  static const int transferFramePayloadSize = 4 * 1024 * 1024;
+  static const int transferRawFramePayloadSize = 64 * 1024;
+  static const String defaultTransferChecksumAlgorithm = 'none';
+  static const int _transferChunkSize = defaultTransferChunkSize;
   // 创建一个私有的静态实例变量
   static final WsSvrManager _singleton = WsSvrManager._internal();
 
@@ -76,16 +82,69 @@ class WsSvrManager {
   String sender = "";
   final List<MessageData> _sendingFiles = [];
   final _sendFileLock = Lock();
+  Future<void> _receiveQueue = Future<void>.value();
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
-  RandomAccessFile? _receivingTransferFile;
+  IOSink? _receivingTransferSink;
+  FileTransferData? _receivingTransfer;
+  StreamingChecksum? _receivingChecksum;
   String? _receivingTransferId;
+  int _receivingTransferOffset = 0;
   String? _activeOutgoingTransferId;
+  final Map<String, int> _incomingBytesSinceProgress = <String, int>{};
+  final Map<String, int> _incomingFramesSinceProgress = <String, int>{};
+  final Map<String, int> _incomingWindowStartedAt = <String, int>{};
+  final Map<String, int> _outgoingWindowSentAt = <String, int>{};
+  final Map<String, int> _incomingWindowEndOffsets = <String, int>{};
+  final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
+  TransferChunkFrame? _pendingIncomingChunkHeader;
+  int _pendingIncomingRawOffset = 0;
+  int _pendingIncomingRawRemaining = 0;
 
   bool get isConnected => _sink != null;
   bool get supportsResumableTransfer => _supportsResumableTransfer;
   bool get _supportsResumableTransfer =>
       _remoteProfile?.capabilities.fileResumeV1 == true;
+
+  static bool shouldUseTransferChecksum(
+      String algorithm, String checksumValue) {
+    final normalized = algorithm.toLowerCase();
+    return normalized.isNotEmpty &&
+        normalized != defaultTransferChecksumAlgorithm &&
+        checksumValue.isNotEmpty;
+  }
+
+  bool _shouldStreamChecksum(String algorithm, String checksumValue) {
+    return shouldUseTransferChecksum(algorithm, checksumValue);
+  }
+
+  bool _hasExpectedChecksum(String algorithm, String value) {
+    return shouldUseTransferChecksum(algorithm, value);
+  }
+
+  String _formatTransferRate(int bytes, int elapsedMicros) {
+    if (elapsedMicros <= 0 || bytes <= 0) {
+      return 'n/a';
+    }
+    final seconds = elapsedMicros / Duration.microsecondsPerSecond;
+    final mibPerSecond = bytes / (1024 * 1024) / seconds;
+    return '${mibPerSecond.toStringAsFixed(1)}MiB/s';
+  }
+
+  void _clearIncomingTransferPerf(String transferId) {
+    _incomingBytesSinceProgress.remove(transferId);
+    _incomingFramesSinceProgress.remove(transferId);
+    _incomingWindowStartedAt.remove(transferId);
+    _incomingWindowEndOffsets.remove(transferId);
+  }
+
+  void _clearPendingIncomingChunk(String transferId) {
+    if (_pendingIncomingChunkHeader?.transferId == transferId) {
+      _pendingIncomingChunkHeader = null;
+      _pendingIncomingRawOffset = 0;
+      _pendingIncomingRawRemaining = 0;
+    }
+  }
 
   void setSender(String uid) {
     sender = uid;
@@ -175,6 +234,7 @@ class WsSvrManager {
     String? lastError,
     String? finalPath,
     String? tempPath,
+    String? checksumValue,
   }) async {
     await LocalDatabase().updateFileTransfer(
       transferId,
@@ -184,6 +244,8 @@ class WsSvrManager {
       lastError: lastError == null ? const Value.absent() : Value(lastError),
       finalPath: finalPath == null ? const Value.absent() : Value(finalPath),
       tempPath: tempPath == null ? const Value.absent() : Value(tempPath),
+      checksumValue:
+          checksumValue == null ? const Value.absent() : Value(checksumValue),
       updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
     );
     return _emitTransferById(transferId);
@@ -201,8 +263,8 @@ class WsSvrManager {
       }
       asServer = true;
       _sink = webSocket.sink;
-      webSocket.stream.listen((message) async {
-        await _listen(message);
+      webSocket.stream.listen((message) {
+        unawaited(_handleIncomingMessage(message));
       }, onError: (Object error, StackTrace stackTrace) {
         logger.i("连接服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -228,13 +290,18 @@ class WsSvrManager {
     try {
       close();
       final wsUrl = Uri.parse('ws://$host:$port');
-      WebSocketChannel channel = WebSocketChannel.connect(wsUrl);
+      WebSocketChannel channel = IOWebSocketChannel(
+        WebSocket.connect(
+          wsUrl.toString(),
+          compression: CompressionOptions.compressionOff,
+        ),
+      );
       await channel.ready;
       asServer = false;
       _sink = channel.sink;
       _auth(true);
-      channel.stream.listen((message) async {
-        await _listen(message);
+      channel.stream.listen((message) {
+        unawaited(_handleIncomingMessage(message));
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -257,7 +324,7 @@ class WsSvrManager {
     final hadActiveConnection = _sink != null ||
         _ioSink != null ||
         _clientTimer != null ||
-        _receivingTransferFile != null ||
+        _receivingTransferSink != null ||
         receiver.isNotEmpty;
     if (!hadActiveConnection && !closeServer) {
       return;
@@ -286,7 +353,83 @@ class WsSvrManager {
     _sink?.add(utf8.encode(message));
   }
 
+  Future<void> _handleIncomingMessage(dynamic message) {
+    _receiveQueue = _receiveQueue.then((_) async {
+      try {
+        await _listen(_incomingBytes(message));
+      } catch (error, stackTrace) {
+        logger.i('处理 websocket 消息失败: $error\n$stackTrace');
+        _dispatchToPrimary((event) => event.onError(error.toString()));
+      }
+    });
+    return _receiveQueue;
+  }
+
+  Uint8List _incomingBytes(dynamic message) {
+    if (message is Uint8List) {
+      return message;
+    }
+    if (message is List<int>) {
+      return Uint8List.fromList(message);
+    }
+    if (message is String) {
+      return Uint8List.fromList(utf8.encode(message));
+    }
+    throw FormatException('unsupported websocket message: $message');
+  }
+
   Future<void> _listen(Uint8List data) async {
+    final pendingHeader = _pendingIncomingChunkHeader;
+    if (_supportsResumableTransfer &&
+        pendingHeader != null &&
+        _pendingIncomingRawRemaining > 0) {
+      final offset = _pendingIncomingRawOffset;
+      if (data.length > _pendingIncomingRawRemaining) {
+        await _recoverIncomingTransferChunk(
+          transferId: pendingHeader.transferId,
+          reason:
+              'raw payload length mismatch remaining=$_pendingIncomingRawRemaining actual=${data.length}',
+        );
+        return;
+      }
+      _pendingIncomingRawOffset += data.length;
+      _pendingIncomingRawRemaining -= data.length;
+      if (_pendingIncomingRawRemaining == 0) {
+        _pendingIncomingChunkHeader = null;
+        _pendingIncomingRawOffset = 0;
+      }
+      await _handleTransferChunk(
+        TransferChunkFrame(
+          transferId: pendingHeader.transferId,
+          offset: offset,
+          payload: data,
+          payloadLength: data.length,
+        ),
+      );
+      return;
+    }
+
+    if (_supportsResumableTransfer && TransferChunkFrame.looksLikeFrame(data)) {
+      final frame = TransferChunkFrame.decode(data);
+      if (frame.payloadInNextFrame) {
+        if (frame.payloadLength <= 0) {
+          await _recoverIncomingTransferChunk(
+            transferId: frame.transferId,
+            reason: 'invalid raw payload length=${frame.payloadLength}',
+          );
+          return;
+        }
+        _pendingIncomingChunkHeader = frame;
+        _pendingIncomingRawOffset = frame.offset;
+        _pendingIncomingRawRemaining = frame.payloadLength;
+        _incomingWindowEndOffsets[frame.transferId] =
+            frame.offset + frame.payloadLength;
+        return;
+      }
+      await _handleTransferChunk(frame);
+      return;
+    }
+
     String str = "";
     MessageData message = MessageData(
         id: 0,
@@ -455,7 +598,8 @@ class WsSvrManager {
         }
       default:
         {
-          if (TransferChunkFrame.looksLikeFrame(data)) {
+          if (_supportsResumableTransfer &&
+              TransferChunkFrame.looksLikeFrame(data)) {
             await _handleTransferChunk(TransferChunkFrame.decode(data));
             return;
           }
@@ -662,6 +806,10 @@ class WsSvrManager {
     if (transfer == null) {
       return;
     }
+    if (transfer.state == FileTransferState.canceled ||
+        transfer.state == FileTransferState.completed) {
+      return;
+    }
     if (_sink == null ||
         !_supportsResumableTransfer ||
         transfer.peerUid != receiver) {
@@ -735,12 +883,14 @@ class WsSvrManager {
       );
     }
     if (_receivingTransferId == transferId) {
-      _receivingTransferId = null;
+      await _clearActiveIncomingTransfer(transferId, flush: true);
       await _startNextQueuedIncomingTransfer();
     }
     if (_activeOutgoingTransferId == transferId) {
       _activeOutgoingTransferId = null;
     }
+    _outgoingWindowSentAt.remove(transferId);
+    _outgoingWindowEndOffsets.remove(transferId);
   }
 
   Future<void> sendMessage(String content, {clipboard = false}) async {
@@ -795,10 +945,11 @@ class WsSvrManager {
       String md5 = '';
       String content = '';
       if (_supportsResumableTransfer) {
-        final checksumValue = await fileChecksum(file, algorithm: 'sha256');
+        const checksumAlgorithm = defaultTransferChecksumAlgorithm;
+        const checksumValue = '';
         content = jsonEncode(
           _FileTransferMetadata(
-            checksumAlgorithm: 'sha256',
+            checksumAlgorithm: checksumAlgorithm,
             checksumValue: checksumValue,
             chunkSize: _transferChunkSize,
             protocolVersion: 2,
@@ -814,6 +965,10 @@ class WsSvrManager {
       if (_supportsResumableTransfer) {
         final metadata = _FileTransferMetadata.fromJson(
           jsonDecode(content) as Map<String, dynamic>,
+        );
+        logger.i(
+          'resumable send file transfer=${message.uuid} size=$size '
+          'checksum=$content path=$path',
         );
         await _persistTransfer(
           FileTransferData(
@@ -982,8 +1137,7 @@ class WsSvrManager {
         await LocalDatabase().fetchFileTransfer(control.transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.incoming ||
-        transfer.state == FileTransferState.canceled ||
-        transfer.state == FileTransferState.failed) {
+        isTerminalFileTransferState(transfer.state)) {
       return;
     }
     if (_receivingTransferId != null &&
@@ -996,6 +1150,9 @@ class WsSvrManager {
   Future<void> _sendReadyForIncomingTransfer(String transferId) async {
     final transfer = await LocalDatabase().fetchFileTransfer(transferId);
     if (transfer == null) {
+      return;
+    }
+    if (isTerminalFileTransferState(transfer.state)) {
       return;
     }
     final tempFile = File(transfer.tempPath);
@@ -1042,7 +1199,8 @@ class WsSvrManager {
     final transfer =
         await LocalDatabase().fetchFileTransfer(control.transferId);
     if (transfer == null ||
-        transfer.direction != FileTransferDirection.outgoing) {
+        transfer.direction != FileTransferDirection.outgoing ||
+        isTerminalFileTransferState(transfer.state)) {
       return;
     }
     final message =
@@ -1067,17 +1225,22 @@ class WsSvrManager {
       );
       return;
     }
-    final currentChecksum = await fileChecksum(
-      file,
-      algorithm: transfer.checksumAlgorithm,
-    );
-    if (currentChecksum != transfer.checksumValue) {
-      await _updateTransfer(
-        transfer.transferId,
-        state: FileTransferState.failed,
-        lastError: '源文件已变化，无法继续传输',
+    if (_hasExpectedChecksum(
+      transfer.checksumAlgorithm,
+      transfer.checksumValue,
+    )) {
+      final currentChecksum = await fileChecksum(
+        file,
+        algorithm: transfer.checksumAlgorithm,
       );
-      return;
+      if (currentChecksum != transfer.checksumValue) {
+        await _updateTransfer(
+          transfer.transferId,
+          state: FileTransferState.failed,
+          lastError: '源文件已变化，无法继续传输',
+        );
+        return;
+      }
     }
     if (control.resumeOffset > 0) {
       final proof = await resumeProofHash(
@@ -1123,8 +1286,15 @@ class WsSvrManager {
     final transfer =
         await LocalDatabase().fetchFileTransfer(control.transferId);
     if (transfer == null ||
-        transfer.direction != FileTransferDirection.incoming) {
+        transfer.direction != FileTransferDirection.incoming ||
+        isTerminalFileTransferState(transfer.state)) {
       return;
+    }
+    if (_receivingTransferId == transfer.transferId) {
+      await _closeReceivingTransferFile(flush: false);
+      _receivingTransfer = null;
+      _receivingChecksum = null;
+      _receivingTransferOffset = 0;
     }
     final tempFile = File(transfer.tempPath);
     if (tempFile.existsSync()) {
@@ -1140,11 +1310,26 @@ class WsSvrManager {
   }
 
   Future<void> _handleTransferProgress(TransferControl control) async {
+    final windowEnd = _outgoingWindowEndOffsets[control.transferId];
+    final transfer =
+        await LocalDatabase().fetchFileTransfer(control.transferId);
+    if (transfer == null ||
+        transfer.direction != FileTransferDirection.outgoing) {
+      return;
+    }
+    final nextState = stateAfterTransferProgress(
+      currentState: transfer.state,
+      committedBytes: control.resumeOffset,
+      size: control.size,
+    );
+    if (nextState == null) {
+      _outgoingWindowSentAt.remove(control.transferId);
+      _outgoingWindowEndOffsets.remove(control.transferId);
+      return;
+    }
     final updated = await _updateTransfer(
       control.transferId,
-      state: control.resumeOffset >= control.size
-          ? FileTransferState.verifying
-          : FileTransferState.transferring,
+      state: nextState,
       committedBytes: control.resumeOffset,
       lastError: '',
     );
@@ -1153,8 +1338,23 @@ class WsSvrManager {
       return;
     }
     if (control.resumeOffset >= updated.size) {
+      _outgoingWindowSentAt.remove(control.transferId);
+      _outgoingWindowEndOffsets.remove(control.transferId);
       return;
     }
+    if (windowEnd != null && control.resumeOffset < windowEnd) {
+      return;
+    }
+    final sentAt = _outgoingWindowSentAt.remove(control.transferId);
+    if (sentAt != null) {
+      final rttMs =
+          ((DateTime.now().microsecondsSinceEpoch - sentAt) / 1000).round();
+      logger.i(
+        'resumable ack window transfer=${control.transferId} '
+        'committed=${control.resumeOffset}/${control.size} rttMs=$rttMs',
+      );
+    }
+    _outgoingWindowEndOffsets.remove(control.transferId);
     final message =
         await LocalDatabase().fetchMessageByUuid(updated.messageUuid);
     if (message == null) {
@@ -1174,6 +1374,8 @@ class WsSvrManager {
     if (_activeOutgoingTransferId == control.transferId) {
       _activeOutgoingTransferId = null;
     }
+    _outgoingWindowSentAt.remove(control.transferId);
+    _outgoingWindowEndOffsets.remove(control.transferId);
   }
 
   Future<void> _handlePeerPause(TransferControl control) async {
@@ -1191,12 +1393,14 @@ class WsSvrManager {
       lastError: control.errorMessage,
     );
     if (_receivingTransferId == control.transferId) {
-      _receivingTransferId = null;
+      await _clearActiveIncomingTransfer(control.transferId, flush: true);
       await _startNextQueuedIncomingTransfer();
     }
     if (_activeOutgoingTransferId == control.transferId) {
       _activeOutgoingTransferId = null;
     }
+    _outgoingWindowSentAt.remove(control.transferId);
+    _outgoingWindowEndOffsets.remove(control.transferId);
   }
 
   Future<void> _handlePeerError(TransferControl control) async {
@@ -1206,15 +1410,33 @@ class WsSvrManager {
       lastError: control.errorMessage,
     );
     if (_receivingTransferId == control.transferId) {
-      _receivingTransferId = null;
+      await _clearActiveIncomingTransfer(control.transferId, flush: true);
       await _startNextQueuedIncomingTransfer();
     }
     if (_activeOutgoingTransferId == control.transferId) {
       _activeOutgoingTransferId = null;
     }
+    _outgoingWindowSentAt.remove(control.transferId);
+    _outgoingWindowEndOffsets.remove(control.transferId);
     if (control.errorMessage.isNotEmpty) {
       _dispatchToAll((event) => event.onNotice(control.errorMessage));
     }
+  }
+
+  Future<void> _recoverIncomingTransferChunk({
+    required String transferId,
+    required String reason,
+  }) async {
+    logger.i('resumable receive recovery transfer=$transferId reason=$reason');
+    _clearIncomingTransferPerf(transferId);
+    _clearPendingIncomingChunk(transferId);
+    _incomingBytesSinceProgress[transferId] = 0;
+    await _clearActiveIncomingTransfer(transferId, flush: true);
+    final transfer = await LocalDatabase().fetchFileTransfer(transferId);
+    if (transfer == null || isTerminalFileTransferState(transfer.state)) {
+      return;
+    }
+    await _sendReadyForIncomingTransfer(transferId);
   }
 
   Future<void> _sendNextTransferChunk(
@@ -1225,28 +1447,85 @@ class WsSvrManager {
     if (_sink == null) {
       return;
     }
+    if (_activeOutgoingTransferId != transfer.transferId) {
+      return;
+    }
     final file = File(message.path);
+    final ranges = buildTransferWindowFrames(
+      startOffset: offset,
+      totalSize: transfer.size,
+      windowSize: transfer.chunkSize,
+      framePayloadSize: transferFramePayloadSize,
+    );
+    if (ranges.isEmpty) {
+      return;
+    }
+    final windowLength = ranges.last.offset + ranges.last.length - offset;
+    final stopwatch = Stopwatch()..start();
+    _outgoingWindowSentAt[transfer.transferId] =
+        DateTime.now().microsecondsSinceEpoch;
+    _outgoingWindowEndOffsets[transfer.transferId] = offset + windowLength;
+    _sink?.add(
+      TransferChunkFrame(
+        transferId: transfer.transferId,
+        offset: offset,
+        payload: Uint8List(0),
+        payloadLength: windowLength,
+        payloadInNextFrame: true,
+      ).encode(),
+    );
     final reader = await file.open();
+    var frameCount = 0;
     try {
-      await reader.setPosition(offset);
-      final buffer = await reader.read(transfer.chunkSize);
-      if (buffer.isEmpty) {
-        return;
+      for (final range in ranges) {
+        if (_activeOutgoingTransferId != transfer.transferId) {
+          return;
+        }
+        await reader.setPosition(range.offset);
+        final buffer = await reader.read(range.length);
+        if (buffer.length != range.length) {
+          throw FileSystemException(
+            'Unexpected EOF while reading transfer chunk',
+            message.path,
+          );
+        }
+        final rawRanges = buildTransferRawPayloadFrames(
+          startOffset: 0,
+          payloadLength: buffer.length,
+          rawFramePayloadSize: transferRawFramePayloadSize,
+        );
+        for (final rawRange in rawRanges) {
+          if (_activeOutgoingTransferId != transfer.transferId) {
+            return;
+          }
+          _sink?.add(
+            Uint8List.sublistView(
+              buffer,
+              rawRange.offset,
+              rawRange.offset + rawRange.length,
+            ),
+          );
+          frameCount++;
+        }
       }
-      _sink?.add(
-        TransferChunkFrame(
-          transferId: transfer.transferId,
-          offset: offset,
-          payload: Uint8List.fromList(buffer),
-        ).encode(),
-      );
     } finally {
       await reader.close();
     }
+    stopwatch.stop();
+    logger.i(
+      'resumable send window transfer=${transfer.transferId} '
+      'offset=$offset bytes=$windowLength frames=$frameCount '
+      'frameBytes=$transferFramePayloadSize '
+      'enqueueMs=${stopwatch.elapsedMilliseconds} '
+      'enqueueRate=${_formatTransferRate(windowLength, stopwatch.elapsedMicroseconds)}',
+    );
   }
 
   Future<void> _handleTransferChunk(TransferChunkFrame frame) async {
-    final transfer = await LocalDatabase().fetchFileTransfer(frame.transferId);
+    var transfer = _receivingTransfer?.transferId == frame.transferId
+        ? _receivingTransfer
+        : null;
+    transfer ??= await LocalDatabase().fetchFileTransfer(frame.transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.incoming) {
       return;
@@ -1260,8 +1539,15 @@ class WsSvrManager {
         _receivingTransferId != transfer.transferId) {
       return;
     }
-    if (frame.offset != transfer.committedBytes) {
-      await _sendReadyForIncomingTransfer(transfer.transferId);
+    final expectedOffset = _receivingTransferSink == null
+        ? transfer.committedBytes
+        : _receivingTransferOffset;
+    if (frame.offset != expectedOffset) {
+      await _recoverIncomingTransferChunk(
+        transferId: transfer.transferId,
+        reason:
+            'unexpected offset expected=$expectedOffset actual=${frame.offset}',
+      );
       return;
     }
 
@@ -1270,33 +1556,102 @@ class WsSvrManager {
       await tempFile.parent.create(recursive: true);
       await tempFile.create(recursive: true);
     }
-    final writer = await tempFile.open(mode: FileMode.write);
-    try {
-      await writer.setPosition(frame.offset);
-      await writer.writeFrom(frame.payload);
-      await writer.flush();
-    } finally {
-      await writer.close();
+    if (_receivingTransferSink == null ||
+        _receivingTransfer?.transferId != transfer.transferId) {
+      final currentLength = await tempFile.length();
+      if (currentLength > frame.offset) {
+        final writer = await tempFile.open(mode: FileMode.write);
+        try {
+          await writer.truncate(frame.offset);
+        } finally {
+          await writer.close();
+        }
+      } else if (currentLength < frame.offset) {
+        await _recoverIncomingTransferChunk(
+          transferId: transfer.transferId,
+          reason:
+              'temp file shorter than expected length=$currentLength offset=${frame.offset}',
+        );
+        return;
+      }
+      _receivingTransferSink = tempFile.openWrite(mode: FileMode.append);
+      _receivingTransfer = transfer;
+      _receivingTransferId = transfer.transferId;
+      _receivingTransferOffset = frame.offset;
+      if (_shouldStreamChecksum(
+        transfer.checksumAlgorithm,
+        transfer.checksumValue,
+      )) {
+        _receivingChecksum = await streamingChecksumForFilePrefix(
+          tempFile,
+          algorithm: transfer.checksumAlgorithm,
+          end: frame.offset,
+        );
+      } else {
+        _receivingChecksum = null;
+      }
     }
 
+    _receivingTransferSink?.add(frame.payload);
+    _receivingChecksum?.add(frame.payload);
     final committedBytes = frame.offset + frame.payload.length;
-    final updated = await _updateTransfer(
+    _receivingTransferOffset = committedBytes;
+
+    final bytesSinceProgress =
+        (_incomingBytesSinceProgress[transfer.transferId] ?? 0) +
+            frame.payload.length;
+    final framesSinceProgress =
+        (_incomingFramesSinceProgress[transfer.transferId] ?? 0) + 1;
+    _incomingBytesSinceProgress[transfer.transferId] = bytesSinceProgress;
+    _incomingFramesSinceProgress[transfer.transferId] = framesSinceProgress;
+    _incomingWindowStartedAt.putIfAbsent(
       transfer.transferId,
-      state: committedBytes >= transfer.size
-          ? FileTransferState.verifying
-          : FileTransferState.transferring,
-      committedBytes: committedBytes,
-      lastError: '',
+      () => DateTime.now().microsecondsSinceEpoch,
     );
-    if (updated == null) {
+    final startedAt = _incomingWindowStartedAt[transfer.transferId] ??
+        DateTime.now().microsecondsSinceEpoch;
+    final nowMicros = DateTime.now().microsecondsSinceEpoch;
+    final elapsedMicros = nowMicros - startedAt;
+    final windowEnd = _incomingWindowEndOffsets[transfer.transferId];
+    final reachedWindowEnd = windowEnd != null && committedBytes >= windowEnd;
+
+    if (!shouldEmitTransferUiProgress(
+      bytesSinceLastUiProgress: bytesSinceProgress,
+      elapsedSinceLastUiProgress: Duration(microseconds: elapsedMicros),
+      committedBytes: committedBytes,
+      totalSize: transfer.size,
+      force: reachedWindowEnd,
+    )) {
       return;
     }
 
-    final proof = await resumeProofHash(
-      tempFile,
-      resumeOffset: committedBytes,
-      chunkSize: updated.chunkSize,
+    final dbStopwatch = Stopwatch()..start();
+    final currentTransfer =
+        await LocalDatabase().fetchFileTransfer(transfer.transferId);
+    final nextState = currentTransfer == null
+        ? null
+        : stateAfterTransferProgress(
+            currentState: currentTransfer.state,
+            committedBytes: committedBytes,
+            size: currentTransfer.size,
+          );
+    if (currentTransfer == null || nextState == null) {
+      await _clearActiveIncomingTransfer(transfer.transferId, flush: true);
+      dbStopwatch.stop();
+      return;
+    }
+    final updated = await _updateTransfer(
+      transfer.transferId,
+      state: nextState,
+      committedBytes: committedBytes,
+      lastError: '',
     );
+    dbStopwatch.stop();
+    if (updated == null) {
+      return;
+    }
+    _receivingTransfer = updated;
+
     _sendTransferControl(
       TransferControl(
         action: TransferAction.progress,
@@ -1308,11 +1663,29 @@ class WsSvrManager {
         checksumValue: updated.checksumValue,
         chunkSize: updated.chunkSize,
         resumeOffset: committedBytes,
-        resumeProofHash: proof,
+        resumeProofHash: '',
         errorCode: '',
         errorMessage: '',
       ),
     );
+
+    if (reachedWindowEnd || committedBytes >= updated.size) {
+      logger.i(
+        'resumable recv window transfer=${updated.transferId} '
+        'committed=$committedBytes/${updated.size} bytes=$bytesSinceProgress '
+        'frames=$framesSinceProgress flush=false '
+        'windowMs=${(elapsedMicros / 1000).round()} '
+        'dbMs=${dbStopwatch.elapsedMilliseconds} '
+        'rate=${_formatTransferRate(bytesSinceProgress, elapsedMicros)}',
+      );
+    }
+    _incomingBytesSinceProgress[updated.transferId] = 0;
+    _incomingFramesSinceProgress[updated.transferId] = 0;
+    _incomingWindowStartedAt[updated.transferId] =
+        DateTime.now().microsecondsSinceEpoch;
+    if (reachedWindowEnd) {
+      _incomingWindowEndOffsets.remove(updated.transferId);
+    }
 
     if (committedBytes >= updated.size) {
       await _finalizeIncomingResumableTransfer(updated);
@@ -1321,36 +1694,46 @@ class WsSvrManager {
 
   Future<void> _finalizeIncomingResumableTransfer(
       FileTransferData transfer) async {
+    await _closeReceivingTransferFile(flush: true);
     final tempFile = File(transfer.tempPath);
-    final actualChecksum = await fileChecksum(
-      tempFile,
-      algorithm: transfer.checksumAlgorithm,
-    );
-    if (actualChecksum != transfer.checksumValue) {
-      await _updateTransfer(
-        transfer.transferId,
-        state: FileTransferState.failed,
-        lastError: '文件校验失败，已暂停续传',
-      );
-      _sendTransferControl(
-        TransferControl(
-          action: TransferAction.error,
-          transferId: transfer.transferId,
-          name: '',
-          size: transfer.size,
-          fileTimestamp: 0,
-          checksumAlgorithm: transfer.checksumAlgorithm,
-          checksumValue: transfer.checksumValue,
-          chunkSize: transfer.chunkSize,
-          resumeOffset: transfer.committedBytes,
-          resumeProofHash: '',
-          errorCode: 'checksum',
-          errorMessage: '文件校验失败，已暂停续传',
-        ),
-      );
-      _receivingTransferId = null;
-      await _startNextQueuedIncomingTransfer();
-      return;
+    if (_hasExpectedChecksum(
+      transfer.checksumAlgorithm,
+      transfer.checksumValue,
+    )) {
+      final actualChecksum = _receivingChecksum?.close() ??
+          await fileChecksum(
+            tempFile,
+            algorithm: transfer.checksumAlgorithm,
+          );
+      if (actualChecksum != transfer.checksumValue) {
+        await _updateTransfer(
+          transfer.transferId,
+          state: FileTransferState.failed,
+          lastError: '文件校验失败，已暂停续传',
+        );
+        _sendTransferControl(
+          TransferControl(
+            action: TransferAction.error,
+            transferId: transfer.transferId,
+            name: '',
+            size: transfer.size,
+            fileTimestamp: 0,
+            checksumAlgorithm: transfer.checksumAlgorithm,
+            checksumValue: transfer.checksumValue,
+            chunkSize: transfer.chunkSize,
+            resumeOffset: transfer.committedBytes,
+            resumeProofHash: '',
+            errorCode: 'checksum',
+            errorMessage: '文件校验失败，已暂停续传',
+          ),
+        );
+        _receivingTransferId = null;
+        _receivingTransfer = null;
+        _receivingChecksum = null;
+        _clearIncomingTransferPerf(transfer.transferId);
+        await _startNextQueuedIncomingTransfer();
+        return;
+      }
     }
     final finalFile = File(transfer.finalPath);
     if (finalFile.existsSync()) {
@@ -1387,6 +1770,9 @@ class WsSvrManager {
       ),
     );
     _receivingTransferId = null;
+    _receivingTransfer = null;
+    _receivingChecksum = null;
+    _clearIncomingTransferPerf(transfer.transferId);
     await _startNextQueuedIncomingTransfer();
   }
 
@@ -1427,11 +1813,50 @@ class WsSvrManager {
     }
   }
 
+  Future<void> _closeReceivingTransferFile({bool flush = false}) async {
+    final sink = _receivingTransferSink;
+    _receivingTransferSink = null;
+    if (sink != null) {
+      if (flush) {
+        await sink.flush();
+      }
+      await sink.close();
+    }
+  }
+
+  Future<void> _clearActiveIncomingTransfer(
+    String transferId, {
+    bool flush = false,
+  }) async {
+    await _closeReceivingTransferFile(flush: flush);
+    if (_receivingTransfer?.transferId == transferId) {
+      _receivingTransfer = null;
+    }
+    _receivingChecksum = null;
+    if (_receivingTransferId == transferId) {
+      _receivingTransferId = null;
+    }
+    _receivingTransferOffset = 0;
+    _clearIncomingTransferPerf(transferId);
+    _clearPendingIncomingChunk(transferId);
+  }
+
   Future<void> _closeResumableHandles() async {
-    await _receivingTransferFile?.close();
-    _receivingTransferFile = null;
+    await _closeReceivingTransferFile(flush: true);
+    _receivingTransfer = null;
+    _receivingChecksum = null;
     _receivingTransferId = null;
+    _receivingTransferOffset = 0;
     _activeOutgoingTransferId = null;
+    _pendingIncomingChunkHeader = null;
+    _pendingIncomingRawOffset = 0;
+    _pendingIncomingRawRemaining = 0;
+    _incomingBytesSinceProgress.clear();
+    _incomingFramesSinceProgress.clear();
+    _incomingWindowStartedAt.clear();
+    _outgoingWindowSentAt.clear();
+    _incomingWindowEndOffsets.clear();
+    _outgoingWindowEndOffsets.clear();
   }
 
   Future<void> _resumeRecoverableOutgoingTransfers() async {
@@ -1593,7 +2018,8 @@ class _FileTransferMetadata {
 
   factory _FileTransferMetadata.fromJson(Map<String, dynamic> json) {
     return _FileTransferMetadata(
-      checksumAlgorithm: json['checksumAlgorithm'] as String? ?? 'sha256',
+      checksumAlgorithm: json['checksumAlgorithm'] as String? ??
+          WsSvrManager.defaultTransferChecksumAlgorithm,
       checksumValue: json['checksumValue'] as String? ?? '',
       chunkSize: json['chunkSize'] as int? ?? WsSvrManager._transferChunkSize,
       protocolVersion: json['protocolVersion'] as int? ?? 1,

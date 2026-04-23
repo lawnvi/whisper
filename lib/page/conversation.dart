@@ -48,6 +48,8 @@ class SendMessageScreen extends StatefulWidget {
 class _SendMessageScreen extends State<SendMessageScreen>
     with WidgetsBindingObserver
     implements ISocketEvent {
+  static const int _transferUiSpeedRefreshMs = 300;
+
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   DeviceData device;
@@ -1095,7 +1097,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     // TODO: implement onProgress
     int now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastUpdateTime > 1000) {
+    if (now - _lastUpdateTime >= _transferUiSpeedRefreshMs) {
       if (_lastUpdateTime > 0) {
         String speed =
             formatSize(1000 * (length - _sentSize) ~/ (now - _lastUpdateTime));
@@ -1121,7 +1123,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_activeTransferId == snapshot.transferId &&
-        now - _lastUpdateTime > 1000 &&
+        now - _lastUpdateTime >= _transferUiSpeedRefreshMs &&
         snapshot.state == FileTransferState.transferring) {
       if (_lastUpdateTime > 0) {
         final speed = formatSize(
