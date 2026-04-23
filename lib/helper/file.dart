@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
@@ -177,17 +178,99 @@ Future<String> fileChecksum(
   int? start,
   int? end,
 }) async {
-  final digest = switch (algorithm.toLowerCase()) {
+  final digest = _checksumHash(algorithm);
+  final value = await digest.bind(file.openRead(start, end)).first;
+  return value.toString();
+}
+
+Hash _checksumHash(String algorithm) {
+  return switch (algorithm.toLowerCase()) {
     'md5' => md5,
     'sha256' => sha256,
+    'none' => throw ArgumentError.value(
+        algorithm,
+        'algorithm',
+        'Checksum disabled',
+      ),
     _ => throw ArgumentError.value(
         algorithm,
         'algorithm',
         'Unsupported checksum algorithm',
       ),
   };
-  final value = await digest.bind(file.openRead(start, end)).first;
-  return value.toString();
+}
+
+String bytesChecksum(
+  List<int> bytes, {
+  String algorithm = 'sha256',
+}) {
+  return _checksumHash(algorithm).convert(bytes).toString();
+}
+
+class StreamingChecksum {
+  StreamingChecksum({
+    String algorithm = 'sha256',
+  })  : _digestSink = _DigestSink(),
+        _closed = false {
+    _inputSink = _checksumHash(algorithm).startChunkedConversion(_digestSink);
+  }
+
+  final _DigestSink _digestSink;
+  late final ByteConversionSink _inputSink;
+  bool _closed;
+
+  void add(List<int> bytes) {
+    if (_closed) {
+      throw StateError('Cannot add bytes after checksum is closed');
+    }
+    _inputSink.add(bytes);
+  }
+
+  String close() {
+    if (!_closed) {
+      _inputSink.close();
+      _closed = true;
+    }
+    return _digestSink.value.toString();
+  }
+}
+
+class _DigestSink implements Sink<Digest> {
+  Digest? _value;
+
+  Digest get value {
+    final value = _value;
+    if (value == null) {
+      throw StateError('Digest has not been produced yet');
+    }
+    return value;
+  }
+
+  @override
+  void add(Digest data) {
+    if (_value != null) {
+      throw StateError('Digest can only be produced once');
+    }
+    _value = data;
+  }
+
+  @override
+  void close() {}
+}
+
+Future<StreamingChecksum> streamingChecksumForFilePrefix(
+  File file, {
+  required String algorithm,
+  required int end,
+}) async {
+  final checksum = StreamingChecksum(algorithm: algorithm);
+  if (end <= 0) {
+    return checksum;
+  }
+  await for (final chunk in file.openRead(0, end)) {
+    checksum.add(chunk);
+  }
+  return checksum;
 }
 
 Future<String> resumeProofHash(
@@ -267,6 +350,48 @@ Future<String> allocateFinalDownloadPath(String fileName) async {
 Future<String> transferTempFilePath(String transferId) async {
   final dir = await transferTempDir();
   return '${dir.path}/$transferId.part';
+}
+
+Future<void> writeResumableChunk(
+  File file, {
+  required int offset,
+  required Uint8List payload,
+}) async {
+  if (!file.existsSync()) {
+    await file.parent.create(recursive: true);
+    await file.create(recursive: true);
+  }
+  final currentLength = await file.length();
+  if (offset > currentLength) {
+    throw StateError(
+      'Cannot write resumable chunk at $offset when file length is $currentLength',
+    );
+  }
+  final writer = await file.open(mode: FileMode.append);
+  try {
+    await writer.truncate(offset);
+    await writeResumableChunkToOpenFile(
+      writer,
+      offset: offset,
+      payload: payload,
+      flush: true,
+    );
+  } finally {
+    await writer.close();
+  }
+}
+
+Future<void> writeResumableChunkToOpenFile(
+  RandomAccessFile writer, {
+  required int offset,
+  required Uint8List payload,
+  bool flush = false,
+}) async {
+  await writer.setPosition(offset);
+  await writer.writeFrom(payload);
+  if (flush) {
+    await writer.flush();
+  }
 }
 
 Future<bool> openAndroidDir(String path) async {

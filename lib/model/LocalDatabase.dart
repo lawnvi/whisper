@@ -229,6 +229,7 @@ class LocalDatabase extends _$LocalDatabase {
     Value<String> lastError = const Value.absent(),
     Value<String> finalPath = const Value.absent(),
     Value<String> tempPath = const Value.absent(),
+    Value<String> checksumValue = const Value.absent(),
     Value<int> updatedAt = const Value.absent(),
   }) {
     return (update(fileTransfer)..where((t) => t.transferId.equals(transferId)))
@@ -239,6 +240,7 @@ class LocalDatabase extends _$LocalDatabase {
         lastError: lastError,
         finalPath: finalPath,
         tempPath: tempPath,
+        checksumValue: checksumValue,
         updatedAt: updatedAt,
       ),
     );

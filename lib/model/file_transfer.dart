@@ -17,6 +17,25 @@ enum FileTransferState {
   canceled,
 }
 
+bool isTerminalFileTransferState(FileTransferState state) {
+  return state == FileTransferState.completed ||
+      state == FileTransferState.failed ||
+      state == FileTransferState.canceled;
+}
+
+FileTransferState? stateAfterTransferProgress({
+  required FileTransferState currentState,
+  required int committedBytes,
+  required int size,
+}) {
+  if (isTerminalFileTransferState(currentState)) {
+    return null;
+  }
+  return committedBytes >= size
+      ? FileTransferState.verifying
+      : FileTransferState.transferring;
+}
+
 class FileTransfer extends Table {
   TextColumn get transferId => text().named('transfer_id')();
   TextColumn get messageUuid => text().named('message_uuid')();

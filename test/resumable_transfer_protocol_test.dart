@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 void main() {
@@ -85,6 +86,23 @@ void main() {
     });
   });
 
+  group('resumable transfer checksum mode', () {
+    test('treats none as an explicit no-checksum fast path', () {
+      expect(
+        WsSvrManager.shouldUseTransferChecksum('none', ''),
+        isFalse,
+      );
+      expect(
+        WsSvrManager.shouldUseTransferChecksum('none', 'unexpected'),
+        isFalse,
+      );
+      expect(
+        WsSvrManager.shouldUseTransferChecksum('sha256', 'abc123'),
+        isTrue,
+      );
+    });
+  });
+
   group('TransferChunkFrame', () {
     test('encodes and decodes transfer id, offset, and payload', () {
       final frame = TransferChunkFrame(
@@ -99,6 +117,29 @@ void main() {
       expect(decoded.transferId, 'transfer-1');
       expect(decoded.offset, 4096);
       expect(decoded.payload, <int>[1, 2, 3, 4]);
+      expect(decoded.payloadLength, 4);
+      expect(decoded.payloadInNextFrame, isFalse);
+    });
+
+    test('encodes header-only frames for raw payload windows', () {
+      final frame = TransferChunkFrame(
+        transferId: 'transfer-1',
+        offset: 4096,
+        payload: Uint8List(0),
+        payloadLength: 32 * 1024 * 1024,
+        payloadInNextFrame: true,
+        payloadChecksum: 'abc123',
+      );
+
+      final encoded = frame.encode();
+      final decoded = TransferChunkFrame.decode(encoded);
+
+      expect(decoded.transferId, 'transfer-1');
+      expect(decoded.offset, 4096);
+      expect(decoded.payload, isEmpty);
+      expect(decoded.payloadLength, 32 * 1024 * 1024);
+      expect(decoded.payloadInNextFrame, isTrue);
+      expect(decoded.payloadChecksum, 'abc123');
     });
 
     test('rejects payloads without the resumable transfer magic header', () {
