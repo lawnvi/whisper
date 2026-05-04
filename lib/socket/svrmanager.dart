@@ -853,7 +853,7 @@ class WsSvrManager {
       protocolVersion: 3,
       capabilities: PeerCapabilities(
         fileResumeV1: true,
-        systemAudioSourceV1: isDesktop(),
+        systemAudioSourceV1: supportsNativeSystemAudio(),
         speakerSinkV1: true,
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),

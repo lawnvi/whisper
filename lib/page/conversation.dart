@@ -50,6 +50,17 @@ class SendMessageScreen extends StatefulWidget {
   _SendMessageScreen createState() => _SendMessageScreen(device, embedded);
 }
 
+DeviceData resolveConversationDeviceSnapshot({
+  required DeviceData localDevice,
+  required DeviceData selectedDevice,
+  required DeviceData? storedDevice,
+}) {
+  if (localDevice.uid == selectedDevice.uid) {
+    return localDevice;
+  }
+  return storedDevice ?? selectedDevice;
+}
+
 class _SendMessageScreen extends State<SendMessageScreen>
     with WidgetsBindingObserver
     implements ISocketEvent {
@@ -215,14 +226,25 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   void _loadMessages() async {
     logger.i("current device: ${device.uid}");
-    var me = await LocalSetting().instance();
-    var isLocal = me.uid == device.uid;
-    var temp = isLocal ? me : await LocalDatabase().fetchDevice(device.uid);
-    var arr = await LocalDatabase()
-        .fetchMessageList(me.uid == temp?.uid ? "" : device.uid, limit: 20);
+    final me = await LocalSetting().instance();
+    final storedDevice =
+        me.uid == device.uid ? null : await db.fetchDevice(device.uid);
+    final currentDevice = resolveConversationDeviceSnapshot(
+      localDevice: me,
+      selectedDevice: device,
+      storedDevice: storedDevice,
+    );
+    final isLocal = me.uid == currentDevice.uid;
+    final arr = await db.fetchMessageList(
+      isLocal ? "" : currentDevice.uid,
+      limit: 20,
+    );
+    if (!mounted) {
+      return;
+    }
     setState(() {
       self = me;
-      device = temp!;
+      device = currentDevice;
       _isLocalhost = isLocal;
       // messageList = arr;
     });
@@ -235,7 +257,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     // 开启通知监听
     if (Platform.isAndroid &&
         !isLocal &&
-        temp?.uid == socketManager.receiver &&
+        currentDevice.uid == socketManager.receiver &&
         (await LocalSetting().isListenAndroid())) {
       startAndroidListening();
     }
@@ -986,8 +1008,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
-      if (!supportsNativeRemoteInput()) {
-        showAppToast('当前设备只能作为扬声器播放端');
+      if (!supportsNativeSystemAudio()) {
+        showAppToast('当前设备不支持系统音频采集');
         return;
       }
       final self = this.self ?? await LocalSetting().instance();

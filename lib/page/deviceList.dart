@@ -40,6 +40,14 @@ import 'settings.dart' as app_settings;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
+String buildWhisperServiceName(String baseName, String uid) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) {
+    return baseName;
+  }
+  return "$baseName-$normalizedUid";
+}
+
 class DeviceListScreen extends StatefulWidget {
   const DeviceListScreen({super.key});
 
@@ -336,7 +344,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     await _stopBroadcast(close: false);
     BonsoirService service = BonsoirService(
-      name: serviceName,
+      name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
       type: serviceType,
       port: 10004,
       attributes: {

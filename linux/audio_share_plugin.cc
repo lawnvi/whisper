@@ -24,6 +24,12 @@ namespace {
 
 constexpr char kAudioShareChannel[] = "com.vireen.whisper/audio_share";
 
+#if HAVE_PULSE_AUDIO
+constexpr int kDefaultAudioFrameDurationMs = 20;
+constexpr int kPulseTargetLatencyMs = 30;
+constexpr uint32_t kPulseBufferAttrUnset = static_cast<uint32_t>(-1);
+#endif
+
 FlValue* Lookup(FlValue* map, const char* key) {
   if (map == nullptr || fl_value_get_type(map) != FL_VALUE_TYPE_MAP) {
     return nullptr;
@@ -121,6 +127,60 @@ int64_t NowMicros() {
   return static_cast<int64_t>(g_get_real_time());
 }
 
+#if HAVE_PULSE_AUDIO
+int FrameDurationMs(FlValue* format) {
+  return std::max(
+      1, std::min(100,
+                  IntValue(format, "frameDurationMs",
+                           kDefaultAudioFrameDurationMs)));
+}
+
+uint32_t BytesForDurationMs(int sample_rate,
+                            int channels,
+                            int duration_ms) {
+  const int safe_rate = std::max(1, sample_rate);
+  const int safe_channels = std::max(1, std::min(2, channels));
+  const int safe_duration = std::max(1, duration_ms);
+  const int64_t bytes =
+      static_cast<int64_t>(safe_rate) * safe_channels * sizeof(int16_t) *
+      safe_duration / 1000;
+  return static_cast<uint32_t>(
+      std::max<int64_t>(sizeof(int16_t) * safe_channels, bytes));
+}
+
+pa_buffer_attr LowLatencyPlaybackBufferAttr(int sample_rate,
+                                            int channels,
+                                            int frame_duration_ms) {
+  const uint32_t frame_bytes =
+      BytesForDurationMs(sample_rate, channels, frame_duration_ms);
+  const uint32_t latency_bytes =
+      BytesForDurationMs(sample_rate, channels, kPulseTargetLatencyMs);
+  pa_buffer_attr attr;
+  attr.maxlength = kPulseBufferAttrUnset;
+  attr.tlength = std::max(frame_bytes, latency_bytes);
+  attr.prebuf = frame_bytes;
+  attr.minreq = frame_bytes;
+  attr.fragsize = kPulseBufferAttrUnset;
+  return attr;
+}
+
+pa_buffer_attr LowLatencyCaptureBufferAttr(int sample_rate,
+                                           int channels,
+                                           int frame_duration_ms) {
+  const uint32_t frame_bytes =
+      BytesForDurationMs(sample_rate, channels, frame_duration_ms);
+  const uint32_t latency_bytes =
+      BytesForDurationMs(sample_rate, channels, kPulseTargetLatencyMs);
+  pa_buffer_attr attr;
+  attr.maxlength = kPulseBufferAttrUnset;
+  attr.tlength = kPulseBufferAttrUnset;
+  attr.prebuf = kPulseBufferAttrUnset;
+  attr.minreq = kPulseBufferAttrUnset;
+  attr.fragsize = std::max(frame_bytes, latency_bytes);
+  return attr;
+}
+#endif
+
 class AudioSharePlugin {
  public:
   explicit AudioSharePlugin(FlMethodChannel* channel)
@@ -192,20 +252,28 @@ class AudioSharePlugin {
 
 #if HAVE_PULSE_AUDIO
     StopPlayback("");
+    const int sample_rate = IntValue(format, "sampleRate", 48000);
+    const int channels =
+        std::max(1, std::min(2, IntValue(format, "channels", 2)));
+    const int frame_duration_ms = FrameDurationMs(format);
     pa_sample_spec spec;
     spec.format = PA_SAMPLE_S16LE;
-    spec.rate = static_cast<uint32_t>(IntValue(format, "sampleRate", 48000));
-    spec.channels = static_cast<uint8_t>(std::max(1, std::min(2, IntValue(format, "channels", 2))));
+    spec.rate = static_cast<uint32_t>(sample_rate);
+    spec.channels = static_cast<uint8_t>(channels);
+    const pa_buffer_attr buffer_attr = LowLatencyPlaybackBufferAttr(
+        sample_rate, channels, frame_duration_ms);
 
     int pulse_error = 0;
     pa_simple* stream = pa_simple_new(nullptr, "whisper",
                                       PA_STREAM_PLAYBACK, nullptr,
                                       "Audio Share Playback", &spec, nullptr,
-                                      nullptr, &pulse_error);
+                                      &buffer_attr, &pulse_error);
     if (stream == nullptr) {
       *error = pa_strerror(pulse_error);
       return false;
     }
+    g_print("Audio Share Playback buffer target=%u minreq=%u frameMs=%d\n",
+            buffer_attr.tlength, buffer_attr.minreq, frame_duration_ms);
 
     std::lock_guard<std::mutex> lock(playback_mutex_);
     playback_stream_ = stream;
@@ -274,14 +342,18 @@ class AudioSharePlugin {
     StopCapture("");
     capture_running_.store(true);
     const int sample_rate = IntValue(format, "sampleRate", 48000);
-    const int channels = std::max(1, std::min(2, IntValue(format, "channels", 2)));
+    const int channels =
+        std::max(1, std::min(2, IntValue(format, "channels", 2)));
+    const int frame_duration_ms = FrameDurationMs(format);
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
       capture_session_id_ = session_id;
     }
-    capture_thread_ = std::thread([this, session_id, sample_rate, channels] {
-      CaptureLoop(session_id, sample_rate, channels);
-    });
+    capture_thread_ =
+        std::thread([this, session_id, sample_rate, channels,
+                     frame_duration_ms] {
+          CaptureLoop(session_id, sample_rate, channels, frame_duration_ms);
+        });
     return true;
 #else
     *error = "PulseAudio support is not available in this Linux build";
@@ -314,11 +386,14 @@ class AudioSharePlugin {
 #if HAVE_PULSE_AUDIO
   void CaptureLoop(const std::string& session_id,
                    int sample_rate,
-                   int channels) {
+                   int channels,
+                   int frame_duration_ms) {
     pa_sample_spec spec;
     spec.format = PA_SAMPLE_S16LE;
     spec.rate = static_cast<uint32_t>(sample_rate);
     spec.channels = static_cast<uint8_t>(channels);
+    const pa_buffer_attr buffer_attr =
+        LowLatencyCaptureBufferAttr(sample_rate, channels, frame_duration_ms);
 
     int pulse_error = 0;
     const std::string monitor = DefaultMonitorSource();
@@ -331,12 +406,14 @@ class AudioSharePlugin {
     pa_simple* stream = pa_simple_new(
         nullptr, "whisper", PA_STREAM_RECORD,
         monitor.c_str(), "Audio Share Capture",
-        &spec, nullptr, nullptr, &pulse_error);
+        &spec, nullptr, &buffer_attr, &pulse_error);
     if (stream == nullptr) {
       SendCaptureError(session_id, pa_strerror(pulse_error));
       capture_running_.store(false);
       return;
     }
+    g_print("Audio Share Capture buffer fragment=%u frameMs=%d\n",
+            buffer_attr.fragsize, frame_duration_ms);
 
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
@@ -344,7 +421,7 @@ class AudioSharePlugin {
     }
 
     const size_t frame_bytes =
-        static_cast<size_t>(sample_rate / 50) * channels * sizeof(int16_t);
+        BytesForDurationMs(sample_rate, channels, frame_duration_ms);
     std::vector<uint8_t> buffer(frame_bytes);
     int64_t sequence = 0;
     while (capture_running_.load()) {
