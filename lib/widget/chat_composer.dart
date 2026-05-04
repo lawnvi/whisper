@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/theme/app_theme.dart';
 
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey =
@@ -55,16 +56,10 @@ class ChatComposer extends StatelessWidget {
     BuildContext context,
     ColorScheme colorScheme,
   ) {
-    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.52);
-    final accentColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF3B82F6)
-        : const Color(0xFF2563EB);
-    final containerColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF111827)
-        : Colors.white;
-    final borderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
+    final palette = context.whisperPalette;
+    final accentColor = colorScheme.primary;
+    final containerColor = palette.surfaceElevated;
+    final borderColor = palette.borderSubtle;
     return Container(
       key: desktopContainerKey,
       margin: const EdgeInsets.fromLTRB(18, 10, 18, 18),
@@ -123,7 +118,7 @@ class ChatComposer extends StatelessWidget {
                     : (AppLocalizations.of(context)?.connectToSend ??
                         '连接后即可发送消息'),
                 hintStyle: TextStyle(
-                  color: onSurfaceMuted,
+                  color: palette.textMuted,
                   fontSize: 16,
                 ),
               ),
@@ -162,19 +157,11 @@ class ChatComposer extends StatelessWidget {
     BuildContext context,
     ColorScheme colorScheme,
   ) {
-    final onSurfaceMuted = colorScheme.onSurface.withValues(alpha: 0.5);
-    final accentColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF3B82F6)
-        : const Color(0xFF2563EB);
-    final outerContainerColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF0F172A)
-        : const Color(0xFFFFFFFF);
-    final containerColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF111827)
-        : Colors.white;
-    final borderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
+    final palette = context.whisperPalette;
+    final accentColor = colorScheme.primary;
+    final outerContainerColor = colorScheme.surface;
+    final containerColor = palette.surfaceElevated;
+    final borderColor = palette.borderSubtle;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
       decoration: BoxDecoration(
@@ -235,7 +222,7 @@ class ChatComposer extends StatelessWidget {
                       : (AppLocalizations.of(context)?.connectToSend ??
                           '连接后即可发送消息'),
                   hintStyle: TextStyle(
-                    color: onSurfaceMuted,
+                    color: palette.textMuted,
                     fontSize: 16,
                   ),
                 ),
@@ -281,12 +268,9 @@ class ChatComposer extends StatelessWidget {
     required bool outlined,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final outlinedBorderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
-    final disabledFillColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF1F2937)
-        : const Color(0xFFF3F4F6);
+    final palette = context.whisperPalette;
+    final outlinedBorderColor = palette.borderSubtle;
+    final disabledFillColor = palette.surfaceMuted;
     return IconButton(
       key: key,
       onPressed: enabled ? () => onPressed() : null,
@@ -295,9 +279,7 @@ class ChatComposer extends StatelessWidget {
         maximumSize: Size(buttonSize, buttonSize),
         backgroundColor: outlined
             ? (enabled
-                ? (colorScheme.brightness == Brightness.dark
-                    ? const Color(0xFF111827)
-                    : Colors.white)
+                ? palette.surfaceElevated
                 : disabledFillColor.withValues(alpha: 0.65))
             : Colors.transparent,
         foregroundColor:
@@ -323,22 +305,15 @@ class ChatComposer extends StatelessWidget {
     required double buttonSize,
     required double iconSize,
   }) {
-    final accentColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF3B82F6)
-        : const Color(0xFF2563EB);
-    final disabledBorderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
+    final palette = context.whisperPalette;
+    final accentColor = colorScheme.primary;
+    final disabledBorderColor = palette.borderSubtle;
     final showsAttachmentAction = _showsAttachmentAction;
     final enabled =
         canSend && !isLoading && (showsAttachmentAction || _hasDraftText);
     final backgroundColor = showsAttachmentAction
         ? Colors.transparent
-        : (enabled
-            ? accentColor
-            : (colorScheme.brightness == Brightness.dark
-                ? const Color(0xFF1F2937)
-                : const Color(0xFFF3F4F6)));
+        : (enabled ? accentColor : palette.surfaceMuted);
     final foregroundColor = showsAttachmentAction
         ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
         : (enabled ? Colors.white : colorScheme.outline);

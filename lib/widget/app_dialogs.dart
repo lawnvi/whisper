@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/theme/app_theme.dart';
 
 void showConfirmationDialog(
   BuildContext context, {
@@ -11,7 +12,7 @@ void showConfirmationDialog(
   required VoidCallback onConfirm,
   VoidCallback? onCancel,
 }) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final palette = context.whisperPalette;
 
   showCupertinoDialog(
     context: context,
@@ -24,7 +25,7 @@ void showConfirmationDialog(
             Text(
               description,
               style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
+                color: palette.textMuted,
               ),
             ),
           ],
@@ -67,7 +68,8 @@ void showInputAlertDialog(
 }) {
   final controllers = <TextEditingController>[];
   final inputFields = <Widget>[];
-  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final colorScheme = Theme.of(context).colorScheme;
+  final palette = context.whisperPalette;
 
   for (int i = 0; i < inputHints.length; i++) {
     final controller = TextEditingController(text: inputHints[i].keys.first);
@@ -81,12 +83,12 @@ void showInputAlertDialog(
             controller: controller,
             placeholder: inputHints[i].keys.first,
             style: TextStyle(
-              color: isDark ? Colors.white : Colors.black,
+              color: colorScheme.onSurface,
             ),
             decoration: BoxDecoration(
-              color: isDark ? Colors.grey[800] : Colors.white,
+              color: palette.surfaceElevated,
               border: Border.all(
-                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                color: palette.borderSubtle,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -112,7 +114,7 @@ void showInputAlertDialog(
             Text(
               description,
               style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.grey,
+                color: palette.textMuted,
               ),
             ),
             const SizedBox(height: 8),
@@ -158,7 +160,7 @@ Future<void> showLoadingDialog(
   required VoidCallback onCancel,
   required Function(VoidCallback onCancel) task,
 }) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final palette = context.whisperPalette;
 
   showDialog(
     context: context,
@@ -175,7 +177,7 @@ Future<void> showLoadingDialog(
             Text(
               description,
               style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
+                color: palette.textMuted,
               ),
             ),
           ],

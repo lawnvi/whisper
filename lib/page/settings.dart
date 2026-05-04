@@ -100,28 +100,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+    final palette = context.whisperPalette;
     final locale = Localizations.localeOf(context);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
         leading: CupertinoNavigationBarBackButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
-          color: isDark ? Colors.grey[400] : Colors.lightBlue,
+          color: colorScheme.primary,
         ),
         title: Text(
           AppLocalizations.of(context)?.setting ?? "设置",
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
       ),
       body: SafeArea(
         child: Material(
-          color: isDark ? Colors.grey[900] : Colors.white,
+          color: colorScheme.surface,
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               horizontalPagePadding,
@@ -131,10 +133,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             children: [
               Card(
-                elevation: 2.0,
-                color: isDark ? Colors.grey[800] : Colors.white,
+                elevation: 0,
+                color: palette.surfaceElevated,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(20.0),
+                  side: BorderSide(color: palette.borderSubtle),
                 ),
                 child: Column(
                   children: [
@@ -149,92 +152,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           : _themeMode == ThemeMode.dark
                               ? AppLocalizations.of(context)?.darkMode ?? '暗黑'
                               : AppLocalizations.of(context)?.lightMode ?? '明亮',
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(28, 28),
-                        child: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 14,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        onPressed: () {
-                          showCupertinoModalPopup(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return CupertinoActionSheet(
-                                title: Text(
-                                  AppLocalizations.of(context)
-                                          ?.selectThemeMode ??
-                                      '选择主题模式',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                                actions: [
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)
-                                              ?.followSystem ??
-                                          '跟随系统',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.system);
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)?.lightMode ??
-                                          '明亮',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.light);
-                                    },
-                                  ),
-                                  CupertinoActionSheetAction(
-                                    child: Text(
-                                      AppLocalizations.of(context)?.darkMode ??
-                                          '暗黑',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _updateThemeMode(ThemeMode.dark);
-                                    },
-                                  ),
-                                ],
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: const TextStyle(
-                                        color: Colors.redAccent),
-                                  ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              );
-                            },
-                          );
-                        },
+                      onTap: _showThemeModeSheet,
+                      trailing: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: palette.textMuted,
                       ),
                     ),
                     _buildSettingItem(
@@ -591,68 +513,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : CupertinoColors.systemGrey,
                       ),
                       desc: _localeLabel(context, locale.languageCode),
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(28, 28),
-                        child: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 14,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        onPressed: () {
-                          showCupertinoModalPopup(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return CupertinoActionSheet(
-                                title: Text(
-                                  AppLocalizations.of(context)
-                                          ?.selectLanguage ??
-                                      '选择语言',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                                actions: [
-                                  for (final supportedLocale
-                                      in _supportedLocales)
-                                    CupertinoActionSheetAction(
-                                      child: Text(
-                                        _localeLabel(
-                                          context,
-                                          supportedLocale.languageCode,
-                                        ),
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white
-                                              : Colors.black,
-                                        ),
-                                      ),
-                                      onPressed: () async {
-                                        Navigator.pop(context);
-                                        MyApp.setLocale(
-                                            context, supportedLocale);
-                                        await LocalSetting().setLocalization(
-                                            supportedLocale.languageCode);
-                                      },
-                                    ),
-                                ],
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: Text(
-                                    AppLocalizations.of(context)?.cancel ??
-                                        '取消',
-                                    style: const TextStyle(
-                                        color: Colors.redAccent),
-                                  ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              );
-                            },
-                          );
-                        },
+                      onTap: _showLanguageSheet,
+                      trailing: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: palette.textMuted,
                       ),
                     ),
                     _buildSettingItem(
@@ -739,6 +604,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  void _showThemeModeSheet() {
+    final colorScheme = Theme.of(context).colorScheme;
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoActionSheet(
+          title: Text(
+            AppLocalizations.of(context)?.selectThemeMode ?? '选择主题模式',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          actions: [
+            CupertinoActionSheetAction(
+              child: Text(
+                AppLocalizations.of(context)?.followSystem ?? '跟随系统',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _updateThemeMode(ThemeMode.system);
+              },
+            ),
+            CupertinoActionSheetAction(
+              child: Text(
+                AppLocalizations.of(context)?.lightMode ?? '明亮',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _updateThemeMode(ThemeMode.light);
+              },
+            ),
+            CupertinoActionSheetAction(
+              child: Text(
+                AppLocalizations.of(context)?.darkMode ?? '暗黑',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                _updateThemeMode(ThemeMode.dark);
+              },
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            child: Text(
+              AppLocalizations.of(context)?.cancel ?? '取消',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLanguageSheet() {
+    final colorScheme = Theme.of(context).colorScheme;
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoActionSheet(
+          title: Text(
+            AppLocalizations.of(context)?.selectLanguage ?? '选择语言',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          actions: [
+            for (final supportedLocale in _supportedLocales)
+              CupertinoActionSheetAction(
+                child: Text(
+                  _localeLabel(
+                    context,
+                    supportedLocale.languageCode,
+                  ),
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  MyApp.setLocale(context, supportedLocale);
+                  await LocalSetting()
+                      .setLocalization(supportedLocale.languageCode);
+                },
+              ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            child: Text(
+              AppLocalizations.of(context)?.cancel ?? '取消',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildSettingItem(
     String title,
     Icon icon, {
@@ -748,9 +723,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String desc = "",
     GestureTapCallback? onLongPress,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
@@ -766,9 +743,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.only(top: 2),
                     child: Icon(
                       icon.icon,
-                      color: isDark
-                          ? Colors.grey[400]
-                          : CupertinoColors.systemGrey,
+                      color: palette.textMuted,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -783,8 +758,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           softWrap: true,
                           style: TextStyle(
                             fontSize: 16.5,
-                            color:
-                                isDark ? Colors.white : CupertinoColors.black,
+                            color: colorScheme.onSurface,
                             fontWeight:
                                 Platform.isWindows ? null : FontWeight.w500,
                             fontFamily:
@@ -800,9 +774,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             softWrap: true,
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
+                              color: palette.textMuted,
                               fontWeight:
                                   Platform.isWindows ? null : FontWeight.w400,
                               fontFamily:
@@ -827,7 +799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Divider(
                 height: 0.5,
                 thickness: 0.5,
-                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                color: palette.borderSubtle,
               ),
           ],
         ),
@@ -885,24 +857,28 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final palette = context.whisperPalette;
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         leading: CupertinoNavigationBarBackButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
-          color: isDark ? Colors.grey[400] : Colors.lightBlue,
+          color: colorScheme.primary,
         ),
         title: Text(
           AppLocalizations.of(context)?.setting ?? '设置',
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
       ),
       body: SafeArea(
         child: Material(
+          color: colorScheme.surface,
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               horizontalPagePadding,
@@ -912,10 +888,11 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
             ),
             children: [
               Card(
-                elevation: 1.2,
-                color: isDark ? Colors.grey[900] : Colors.white,
+                elevation: 0,
+                color: palette.surfaceElevated,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(20.0),
+                  side: BorderSide(color: palette.borderSubtle),
                 ),
                 child: Column(
                   children: [
@@ -923,9 +900,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       title: AppLocalizations.of(context)?.trust ?? '自动接入',
                       icon: Icon(
                         Icons.wifi_rounded,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
+                        color: palette.textMuted,
                       ),
                       trailing: CupertinoSwitch(
                         value: device.auth,
@@ -941,9 +916,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           '写入剪切板',
                       icon: Icon(
                         Icons.copy,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
+                        color: palette.textMuted,
                       ),
                       trailing: CupertinoSwitch(
                         value: device.clipboard,
@@ -960,10 +933,11 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               const SizedBox(height: 8),
               if (device.uid != WsSvrManager().receiver)
                 Card(
-                  elevation: 2.0,
-                  color: isDark ? Colors.grey[900] : Colors.white,
+                  elevation: 0,
+                  color: palette.surfaceElevated,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.0),
+                    borderRadius: BorderRadius.circular(20.0),
+                    side: BorderSide(color: palette.borderSubtle),
                   ),
                   child: Column(
                     children: [
@@ -972,9 +946,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                             '删除设备',
                         icon: Icon(
                           Icons.delete_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.destructiveRed,
+                          color: CupertinoColors.destructiveRed,
                         ),
                         showDivider: false,
                         onTap: () {
@@ -1027,7 +999,8 @@ class _DeviceSettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
 
     return GestureDetector(
       onTap: onTap,
@@ -1052,7 +1025,7 @@ class _DeviceSettingTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 16.5,
-                        color: isDark ? Colors.white : CupertinoColors.black,
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.w500,
                         fontFamily:
                             Platform.isWindows ? null : 'SF Pro Display',
@@ -1072,7 +1045,7 @@ class _DeviceSettingTile extends StatelessWidget {
             if (showDivider)
               Divider(
                 height: 1,
-                color: isDark ? Colors.grey[800]! : Colors.white38,
+                color: palette.borderSubtle,
               ),
           ],
         ),

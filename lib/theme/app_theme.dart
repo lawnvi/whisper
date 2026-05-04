@@ -8,6 +8,12 @@ class WhisperPalette extends ThemeExtension<WhisperPalette> {
     required this.warning,
     required this.danger,
     required this.surfaceMuted,
+    required this.surfaceElevated,
+    required this.surfaceCanvas,
+    required this.borderSubtle,
+    required this.textMuted,
+    required this.messageIncoming,
+    required this.messageOutgoing,
   });
 
   final Color connected;
@@ -15,6 +21,12 @@ class WhisperPalette extends ThemeExtension<WhisperPalette> {
   final Color warning;
   final Color danger;
   final Color surfaceMuted;
+  final Color surfaceElevated;
+  final Color surfaceCanvas;
+  final Color borderSubtle;
+  final Color textMuted;
+  final Color messageIncoming;
+  final Color messageOutgoing;
 
   @override
   WhisperPalette copyWith({
@@ -23,6 +35,12 @@ class WhisperPalette extends ThemeExtension<WhisperPalette> {
     Color? warning,
     Color? danger,
     Color? surfaceMuted,
+    Color? surfaceElevated,
+    Color? surfaceCanvas,
+    Color? borderSubtle,
+    Color? textMuted,
+    Color? messageIncoming,
+    Color? messageOutgoing,
   }) {
     return WhisperPalette(
       connected: connected ?? this.connected,
@@ -30,6 +48,12 @@ class WhisperPalette extends ThemeExtension<WhisperPalette> {
       warning: warning ?? this.warning,
       danger: danger ?? this.danger,
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
+      surfaceElevated: surfaceElevated ?? this.surfaceElevated,
+      surfaceCanvas: surfaceCanvas ?? this.surfaceCanvas,
+      borderSubtle: borderSubtle ?? this.borderSubtle,
+      textMuted: textMuted ?? this.textMuted,
+      messageIncoming: messageIncoming ?? this.messageIncoming,
+      messageOutgoing: messageOutgoing ?? this.messageOutgoing,
     );
   }
 
@@ -44,6 +68,12 @@ class WhisperPalette extends ThemeExtension<WhisperPalette> {
       warning: Color.lerp(warning, other.warning, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
       surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
+      surfaceElevated: Color.lerp(surfaceElevated, other.surfaceElevated, t)!,
+      surfaceCanvas: Color.lerp(surfaceCanvas, other.surfaceCanvas, t)!,
+      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t)!,
+      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
+      messageIncoming: Color.lerp(messageIncoming, other.messageIncoming, t)!,
+      messageOutgoing: Color.lerp(messageOutgoing, other.messageOutgoing, t)!,
     );
   }
 }
@@ -67,37 +97,53 @@ class AppTheme {
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Color(0xFF60A5FA),
-    onPrimary: Color(0xFF082F49),
-    secondary: Color(0xFF38BDF8),
-    onSecondary: Color(0xFF082F49),
+    primary: Color(0xFF7CA7FF),
+    onPrimary: Color(0xFF020617),
+    secondary: Color(0xFF94A3B8),
+    onSecondary: Color(0xFF020617),
     error: Color(0xFFF87171),
     onError: Color(0xFF450A0A),
-    surface: Color(0xFF0F172A),
+    surface: Color(0xFF000000),
     onSurface: Color(0xFFE2E8F0),
     tertiary: Color(0xFFFBBF24),
     onTertiary: Color(0xFF451A03),
   );
 
-  static final ThemeData lightTheme = _buildTheme(
-      _lightScheme,
-      const WhisperPalette(
-        connected: Color(0xFF0284C7),
-        trusted: Color(0xFF16A34A),
-        warning: Color(0xFFD97706),
-        danger: Color(0xFFDC2626),
-        surfaceMuted: Color(0xFFE2E8F0),
-      ));
+  static const _lightPalette = WhisperPalette(
+    connected: Color(0xFF0284C7),
+    trusted: Color(0xFF16A34A),
+    warning: Color(0xFFD97706),
+    danger: Color(0xFFDC2626),
+    surfaceMuted: Color(0xFFE2E8F0),
+    surfaceElevated: Colors.white,
+    surfaceCanvas: Color(0xFFF1F5F9),
+    borderSubtle: Color(0xFFE2E8F0),
+    textMuted: Color(0xFF64748B),
+    messageIncoming: Color(0xFFF8FAFC),
+    messageOutgoing: Color(0xFFEFF6FF),
+  );
 
-  static final ThemeData darkTheme = _buildTheme(
-      _darkScheme,
-      const WhisperPalette(
-        connected: Color(0xFF38BDF8),
-        trusted: Color(0xFF4ADE80),
-        warning: Color(0xFFFBBF24),
-        danger: Color(0xFFF87171),
-        surfaceMuted: Color(0xFF1E293B),
-      ));
+  static const _darkPalette = WhisperPalette(
+    connected: Color(0xFF38BDF8),
+    trusted: Color(0xFF4ADE80),
+    warning: Color(0xFFFBBF24),
+    danger: Color(0xFFF87171),
+    surfaceMuted: Color(0xFF141414),
+    surfaceElevated: Color(0xFF0A0A0A),
+    surfaceCanvas: Color(0xFF000000),
+    borderSubtle: Color(0xFF242424),
+    textMuted: Color(0xFF8A8F98),
+    messageIncoming: Color(0xFF101010),
+    messageOutgoing: Color(0xFF181818),
+  );
+
+  static WhisperPalette fallbackPalette(Brightness brightness) {
+    return brightness == Brightness.dark ? _darkPalette : _lightPalette;
+  }
+
+  static final ThemeData lightTheme = _buildTheme(_lightScheme, _lightPalette);
+
+  static final ThemeData darkTheme = _buildTheme(_darkScheme, _darkPalette);
 
   static ThemeData _buildTheme(
       ColorScheme colorScheme, WhisperPalette palette) {
@@ -153,10 +199,10 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: colorScheme.surface,
+        color: palette.surfaceElevated,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: colorScheme.outlineVariant),
+          side: BorderSide(color: palette.borderSubtle),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
@@ -178,5 +224,6 @@ class AppTheme {
 
 extension WhisperPaletteX on BuildContext {
   WhisperPalette get whisperPalette =>
-      Theme.of(this).extension<WhisperPalette>()!;
+      Theme.of(this).extension<WhisperPalette>() ??
+      AppTheme.fallbackPalette(Theme.of(this).brightness);
 }

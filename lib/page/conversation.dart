@@ -20,6 +20,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 
@@ -386,6 +387,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
     final content = Column(
       children: [
         if (embedded) _buildEmbeddedHeader(isDark),
@@ -424,7 +426,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
     Widget base = embedded
         ? Material(
-            color: isDark ? Colors.black : Colors.white,
+            color: colorScheme.surface,
             child: content,
           )
         : Scaffold(
@@ -464,9 +466,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   PreferredSizeWidget _buildStandaloneAppBar(bool isDark) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AppBar(
       leading: CupertinoNavigationBarBackButton(
-        color: isDark ? Colors.grey[400] : Colors.grey,
+        color: colorScheme.primary,
         onPressed: () {
           Navigator.popUntil(context, (route) {
             return route.isFirst;
@@ -479,14 +482,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Widget _buildEmbeddedHeader(bool isDark) {
+    final palette = context.whisperPalette;
     return Container(
       height: 72,
       padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[900] : Colors.white,
+        color: palette.surfaceElevated,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+            color: palette.borderSubtle,
           ),
         ),
       ),
@@ -500,6 +504,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Widget _buildConversationTitle(bool isDark) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,7 +515,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
+            color: colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
@@ -535,7 +541,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.black54,
+                  color: palette.textMuted,
                 ),
               ),
             ),
@@ -546,6 +552,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   List<Widget> _buildHeaderActions(bool isDark) {
+    final palette = context.whisperPalette;
+    final compactActions = !isDesktop();
+    final actionPadding = compactActions ? EdgeInsets.zero : null;
+    final actionConstraints = compactActions
+        ? const BoxConstraints.tightFor(width: 36, height: 48)
+        : null;
+    final actionVisualDensity = compactActions ? VisualDensity.compact : null;
     final actions = <Widget>[];
     if (percent > 0 && percent < 1 && _isConnectedSession) {
       actions.add(
@@ -559,14 +572,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 _speed,
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.black54,
+                  color: palette.textMuted,
                 ),
               ),
               Text(
                 "${(100 * percent).toStringAsFixed(2)}%",
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.black54,
+                  color: palette.textMuted,
                 ),
               ),
             ],
@@ -577,10 +590,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (_isConnectedSession && !socketManager.supportsResumableTransfer) {
       actions.add(
         IconButton(
+          padding: actionPadding,
+          constraints: actionConstraints,
+          visualDensity: actionVisualDensity,
           tooltip: '对端不支持断点续传',
           icon: Icon(
             Icons.history_toggle_off_rounded,
-            color: isDark ? Colors.white60 : Colors.black45,
+            color: palette.textMuted,
           ),
           onPressed: () {
             Fluttertoast.showToast(msg: '当前连接设备不支持断点续传');
@@ -598,11 +614,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
           : AudioShareRuntimeRole.source;
       actions.add(
         IconButton(
+          padding: actionPadding,
+          constraints: actionConstraints,
+          visualDensity: actionVisualDensity,
           onPressed: isBusy ? null : _toggleAudioShare,
           tooltip: _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
           icon: Icon(_audioShareIcon(role)),
           color: _audioShareIconColor(
-            role,
             isActive: isActive,
             isBusy: isBusy,
             isDark: isDark,
@@ -612,6 +630,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     actions.add(
       IconButton(
+        padding: actionPadding,
+        constraints: actionConstraints,
+        visualDensity: actionVisualDensity,
         onPressed: _canToggleConnection ? _toggleConnection : null,
         tooltip: _isConnectedSession
             ? (AppLocalizations.of(context)?.disconnect ?? '断开')
@@ -624,18 +645,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
                   : Icons.wifi_off_rounded),
           color: _isConnectedSession
               ? Colors.lightBlue
-              : (_canToggleConnection
-                  ? (isDark ? Colors.white60 : Colors.black45)
-                  : Colors.grey),
+              : (_canToggleConnection ? palette.textMuted : Colors.grey),
         ),
       ),
     );
     actions.add(
       IconButton(
+        padding: actionPadding,
+        constraints: actionConstraints,
+        visualDensity: actionVisualDensity,
         tooltip: AppLocalizations.of(context)?.setting ?? '设置',
         icon: Icon(
           Icons.settings_outlined,
-          color: isDark ? Colors.white60 : Colors.black45,
+          color: palette.textMuted,
         ),
         onPressed: () async {
           await Navigator.push(
@@ -662,29 +684,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
   IconData _audioShareIcon(AudioShareRuntimeRole role) {
     switch (role) {
       case AudioShareRuntimeRole.source:
-        return Icons.output_rounded;
+        return Icons.volume_up_outlined;
       case AudioShareRuntimeRole.sink:
-        return Icons.speaker_rounded;
+        return Icons.volume_up_rounded;
       case AudioShareRuntimeRole.none:
-        return Icons.output_rounded;
+        return Icons.volume_up_outlined;
     }
   }
 
-  Color _audioShareIconColor(
-    AudioShareRuntimeRole role, {
+  Color _audioShareIconColor({
     required bool isActive,
     required bool isBusy,
     required bool isDark,
   }) {
-    if (isBusy) {
-      return Colors.amber;
+    if (!isActive && !isBusy) {
+      return context.whisperPalette.textMuted;
     }
-    if (!isActive) {
-      return isDark ? Colors.white60 : Colors.black45;
-    }
-    return role == AudioShareRuntimeRole.source
-        ? Colors.orangeAccent
-        : Colors.lightBlue;
+    return Colors.lightBlue;
   }
 
   String _audioShareTooltip(
@@ -966,15 +982,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       content = "【${data['app']}】${data['title']}\n${data['text']}";
     }
     final colorScheme = Theme.of(context).colorScheme;
-    final receivedBubbleColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF1F2937)
-        : const Color(0xFFF5F5F5);
-    final receivedBorderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
-    final sentBubbleColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF172554)
-        : const Color(0xFFEFF6FF);
+    final palette = context.whisperPalette;
+    final receivedBubbleColor = palette.messageIncoming;
+    final receivedBorderColor = palette.borderSubtle;
+    final sentBubbleColor = palette.messageOutgoing;
 
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -1042,12 +1053,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
             transfer.state == FileTransferState.waitingReconnect);
     final showCancel = transfer != null && !_isTransferTerminal(transfer.state);
     final colorScheme = Theme.of(context).colorScheme;
-    final cardColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF1F2937)
-        : const Color(0xFFF5F5F5);
-    final cardBorderColor = colorScheme.brightness == Brightness.dark
-        ? const Color(0xFF374151)
-        : const Color(0xFFE5E7EB);
+    final palette = context.whisperPalette;
+    final cardColor =
+        isOpponent ? palette.messageIncoming : palette.messageOutgoing;
+    final cardBorderColor = palette.borderSubtle;
 
     return Container(
       width: screenWidth,

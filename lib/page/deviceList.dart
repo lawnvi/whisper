@@ -27,6 +27,7 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/peer_profile.dart';
+import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
@@ -74,8 +75,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   var _clipboardText = "";
   final TextEditingController _desktopSearchController =
       TextEditingController();
-  final AppShutdownCoordinator _shutdownCoordinator =
-      AppShutdownCoordinator();
+  final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   String? _selectedDesktopPeerId;
@@ -733,18 +733,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Widget _buildDesktopScaffold(bool isDark) {
     final selectedSession = _selectedDesktopSession();
     final visibleSessions = _visibleSessions();
+    final palette = context.whisperPalette;
     return Scaffold(
-      backgroundColor: isDark ? Colors.grey[950] : Colors.grey[100],
+      backgroundColor: palette.surfaceCanvas,
       body: SafeArea(
         child: Row(
           children: [
             Container(
               width: 340,
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey[900] : Colors.white,
+                color: palette.surfaceElevated,
                 border: Border(
                   right: BorderSide(
-                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                    color: palette.borderSubtle,
                   ),
                 ),
               ),
@@ -837,7 +838,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     Color? iconColor,
     String? tooltip,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette = context.whisperPalette;
     return SizedBox(
       width: 38,
       height: 38,
@@ -845,13 +846,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
         message: tooltip ?? '',
         child: CupertinoButton(
           padding: EdgeInsets.zero,
-          color: isDark ? Colors.grey[850] : Colors.grey[100],
+          color: palette.surfaceMuted,
           borderRadius: BorderRadius.circular(12),
           onPressed: onPressed,
           child: Icon(
             icon,
             size: 20,
-            color: iconColor ?? (isDark ? Colors.white70 : Colors.black54),
+            color: iconColor ?? palette.textMuted,
           ),
         ),
       ),
@@ -859,14 +860,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Widget _buildDesktopPlaceholder(bool isDark) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
     return Container(
-      color: isDark ? Colors.black : Colors.white,
+      color: colorScheme.surface,
       alignment: Alignment.center,
       child: Text(
         AppLocalizations.of(context)?.selectConversationPlaceholder ??
             '选择一个设备开始对话',
         style: TextStyle(
-          color: isDark ? Colors.white54 : Colors.black45,
+          color: palette.textMuted,
           fontSize: 18,
         ),
       ),
@@ -878,9 +881,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required bool selected,
   }) {
     final deviceItem = session.device;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
     final backgroundColor = selected
-        ? (isDark ? Colors.grey[800] : Colors.blue.withOpacity(0.08))
+        ? (colorScheme.brightness == Brightness.dark
+            ? palette.surfaceMuted
+            : colorScheme.primary.withValues(alpha: 0.08))
         : Colors.transparent;
 
     return ContextMenuRegion(
@@ -915,7 +921,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : Colors.black87,
+                                color: colorScheme.onSurface,
                               ),
                             ),
                           ),
@@ -924,7 +930,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                             _formatSessionTime(session.lastTimestamp),
                             style: TextStyle(
                               fontSize: 12,
-                              color: isDark ? Colors.white38 : Colors.black38,
+                              color: palette.textMuted,
                             ),
                           ),
                         ],
@@ -948,7 +954,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isDark ? Colors.white54 : Colors.black45,
+                                color: palette.textMuted,
                               ),
                             ),
                           ),
