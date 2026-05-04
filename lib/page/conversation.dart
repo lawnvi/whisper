@@ -9,7 +9,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
@@ -612,7 +612,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             color: palette.textMuted,
           ),
           onPressed: () {
-            Fluttertoast.showToast(msg: '当前连接设备不支持断点续传');
+            showAppToast('当前连接设备不支持断点续传');
           },
         ),
       );
@@ -856,8 +856,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         final restored = await _restoreConnectionIfNeeded();
         if (!restored) {
           if (mounted) {
-            Fluttertoast.showToast(
-              msg: AppLocalizations.of(context)?.connectFailed ??
+            showAppToast(
+              AppLocalizations.of(context)?.connectFailed ??
                   'Connection Failed',
             );
           }
@@ -873,10 +873,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     } catch (error, stackTrace) {
       logger.e('pick files failed', error: error, stackTrace: stackTrace);
       if (mounted) {
-        Fluttertoast.showToast(
-          msg: AppLocalizations.of(context)?.filePickerOpenFailed ??
+        showAppToast(
+          AppLocalizations.of(context)?.filePickerOpenFailed ??
               'Unable to open the file picker',
-          toastLength: Toast.LENGTH_SHORT,
         );
       }
     } finally {
@@ -981,14 +980,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
           sendControl: socketManager.sendAudioControl,
         );
         if (mounted) {
-          Fluttertoast.showToast(
-            msg: role == AudioShareRuntimeRole.sink ? '已停止播放共享声音' : '已停止共享声音',
+          showAppToast(
+            role == AudioShareRuntimeRole.sink ? '已停止播放共享声音' : '已停止共享声音',
           );
         }
         return;
       }
       if (!supportsNativeRemoteInput()) {
-        Fluttertoast.showToast(msg: '当前设备只能作为扬声器播放端');
+        showAppToast('当前设备只能作为扬声器播放端');
         return;
       }
       final self = this.self ?? await LocalSetting().instance();
@@ -1000,13 +999,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sendControl: socketManager.sendAudioControl,
       );
       if (mounted) {
-        Fluttertoast.showToast(msg: '正在请求对端播放本机声音');
+        showAppToast('正在请求对端播放本机声音');
       }
     } catch (error, stackTrace) {
       logger.e('audio share toggle failed',
           error: error, stackTrace: stackTrace);
       if (mounted) {
-        Fluttertoast.showToast(msg: '共享声音失败：$error');
+        showAppToast('共享声音失败：$error');
       }
     }
   }
@@ -1023,19 +1022,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
           sendControl: socketManager.sendRemoteInputControl,
         );
         if (mounted && showToast) {
-          Fluttertoast.showToast(msg: '已停止键鼠共享');
+          showAppToast('已停止键鼠共享');
         }
         return;
       }
       if (!isDesktop()) {
         if (showToast) {
-          Fluttertoast.showToast(msg: '当前设备不支持键鼠共享');
+          showAppToast('当前设备不支持键鼠共享');
         }
         return;
       }
       if (!socketManager.supportsRemoteInput) {
         if (showToast) {
-          Fluttertoast.showToast(msg: '当前连接设备不支持键鼠共享');
+          showAppToast('当前连接设备不支持键鼠共享');
         }
         return;
       }
@@ -1043,7 +1042,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final storedDevice = await LocalDatabase().fetchDevice(device.uid);
       if (storedDevice?.auth != true) {
         if (showToast) {
-          Fluttertoast.showToast(msg: '键鼠共享需要互信设备');
+          showAppToast('键鼠共享需要互信设备');
         }
         return;
       }
@@ -1064,7 +1063,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       );
       if (edge == null) {
         if (showToast) {
-          Fluttertoast.showToast(msg: '请先在设备设置里把对端屏幕贴到本机边缘');
+          showAppToast('请先在设备设置里把对端屏幕贴到本机边缘');
         }
         return;
       }
@@ -1080,13 +1079,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sendControl: socketManager.sendRemoteInputControl,
       );
       if (mounted && showToast) {
-        Fluttertoast.showToast(msg: '键鼠共享已启用，移动到屏幕边缘开始控制对端');
+        showAppToast('键鼠共享已启用，移动到屏幕边缘开始控制对端');
       }
     } catch (error, stackTrace) {
       logger.e('remote input toggle failed',
           error: error, stackTrace: stackTrace);
       if (mounted && showToast) {
-        Fluttertoast.showToast(msg: '键鼠共享失败：$error');
+        showAppToast('键鼠共享失败：$error');
       }
     }
   }
@@ -1102,7 +1101,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final layout = await LocalDatabase().fetchRemoteInputLayout(device.uid);
-    if (!mounted || layout?.autoActivate != true) {
+    if (!mounted ||
+        layout?.autoActivate != true ||
+        layout?.autoRoleValue != RemoteInputAutoRole.source) {
       return;
     }
     await _toggleRemoteInput(showToast: false);
@@ -1123,6 +1124,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       height: 600,
       enabled: true,
       autoActivate: false,
+      autoRole: RemoteInputAutoRole.source.name,
       edgeThresholdPx: 6,
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: now,
@@ -1393,7 +1395,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_isCurrentRoute) {
       return;
     }
-    Fluttertoast.showToast(msg: message);
+    showAppToast(message);
   }
 
   @override

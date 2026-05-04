@@ -45,6 +45,22 @@ void main() {
       expect(decoded.layoutEdge, isNull);
       expect(decoded.errorMessage, 'Accessibility permission denied');
     });
+
+    test('round-trips edge release controls', () {
+      const message = RemoteInputControlMessage(
+        action: RemoteInputControlAction.release,
+        sessionId: 'input-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        releaseReason: 'edge',
+      );
+
+      final decoded = RemoteInputControlMessage.fromJson(message.toJson());
+
+      expect(decoded.action, RemoteInputControlAction.release);
+      expect(decoded.releaseReason, 'edge');
+      expect(decoded.sessionId, 'input-1');
+    });
   });
 
   group('RemoteInputPacketFrame', () {

@@ -3,6 +3,11 @@ import 'dart:math' as math;
 import 'package:drift/drift.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
+enum RemoteInputAutoRole {
+  source,
+  sink,
+}
+
 class RemoteInputLayout extends Table {
   TextColumn get peerId => text().named('peer_id')();
   TextColumn get peerName =>
@@ -14,6 +19,9 @@ class RemoteInputLayout extends Table {
   BoolColumn get enabled => boolean().withDefault(const Constant(false))();
   BoolColumn get autoActivate =>
       boolean().named('auto_activate').withDefault(const Constant(false))();
+  TextColumn get autoRole => text()
+      .named('auto_role')
+      .withDefault(Constant(RemoteInputAutoRole.source.name))();
   IntColumn get edgeThresholdPx =>
       integer().named('edge_threshold_px').withDefault(const Constant(6))();
   TextColumn get releaseHotkey => text()

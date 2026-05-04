@@ -21,7 +21,7 @@ bool isDesktop() {
 }
 
 bool supportsNativeRemoteInput() {
-  return Platform.isMacOS;
+  return Platform.isMacOS || Platform.isWindows;
 }
 
 bool isMobile() {

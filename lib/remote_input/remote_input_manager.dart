@@ -149,6 +149,8 @@ class RemoteInputManager {
           state: RemoteInputSessionState.connected,
         );
         break;
+      case RemoteInputControlAction.release:
+        break;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
         stopSession(message.sessionId);

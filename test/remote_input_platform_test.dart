@@ -43,6 +43,14 @@ void main() {
       expect(calls.single.arguments['releaseHotkey'], 'ctrl+alt+esc');
     });
 
+    test('pauses capture without stopping the native capture session',
+        () async {
+      await platform.pauseCapture(sessionId: 'input-1');
+
+      expect(calls.single.method, 'pauseCapture');
+      expect(calls.single.arguments['sessionId'], 'input-1');
+    });
+
     test('starts injection and injects events', () async {
       final event = RemoteInputPacketFrame(
         sessionId: 'input-1',
@@ -80,7 +88,7 @@ void main() {
         }),
       );
       await platform.handleNativeMethodCall(
-        MethodCall('onRelease', <String, dynamic>{
+        const MethodCall('onRelease', <String, dynamic>{
           'sessionId': 'input-1',
           'reason': 'hotkey',
         }),

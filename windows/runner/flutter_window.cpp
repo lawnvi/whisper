@@ -4,6 +4,7 @@
 
 #include "audio_share_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "remote_input_plugin.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -36,6 +37,9 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   AudioSharePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("AudioSharePlugin"));
+  RemoteInputPluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin("RemoteInputPlugin"),
+      GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -64,6 +68,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               LPARAM const lparam) noexcept {
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
+    RemoteInputPluginHandleWindowMessage(hwnd, message, wparam, lparam);
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 enum RemoteInputControlAction {
   offer,
   accept,
+  release,
   reject,
   stop,
   error,
@@ -39,6 +40,7 @@ class RemoteInputControlMessage {
     this.path = '/input',
     this.layoutEdge,
     this.releaseHotkey = '',
+    this.releaseReason = '',
     this.errorMessage = '',
   });
 
@@ -50,6 +52,7 @@ class RemoteInputControlMessage {
   final String path;
   final RemoteInputEdge? layoutEdge;
   final String releaseHotkey;
+  final String releaseReason;
   final String errorMessage;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -61,6 +64,7 @@ class RemoteInputControlMessage {
         'path': path,
         if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
         'releaseHotkey': releaseHotkey,
+        'releaseReason': releaseReason,
         'errorMessage': errorMessage,
       };
 
@@ -85,6 +89,7 @@ class RemoteInputControlMessage {
         json['layoutEdge'] as String?,
       ),
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
+      releaseReason: json['releaseReason'] as String? ?? '',
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }

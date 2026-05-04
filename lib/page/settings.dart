@@ -884,6 +884,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       height: 600,
       enabled: true,
       autoActivate: false,
+      autoRole: RemoteInputAutoRole.source.name,
       edgeThresholdPx: 6,
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -979,22 +980,18 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       ),
                     ),
                     _DeviceSettingTile(
-                      title: '键鼠共享自动启用',
+                      title:
+                          '键鼠共享自动模式：${_remoteInputAutoModeLabel(_remoteInputLayout)}',
                       icon: Icon(
                         Icons.keyboard_option_key_rounded,
                         color: palette.textMuted,
                       ),
-                      trailing: CupertinoSwitch(
-                        value: _remoteInputLayout?.autoActivate ?? false,
-                        onChanged: device.auth
-                            ? (bool value) async {
-                                final layout = await _ensureRemoteInputLayout();
-                                await _saveRemoteInputLayout(
-                                  layout.copyWith(autoActivate: value),
-                                );
-                              }
-                            : null,
+                      trailing: Icon(
+                        Icons.chevron_right_rounded,
+                        color: palette.textMuted,
                       ),
+                      onTap:
+                          device.auth ? _openRemoteInputAutoModePicker : null,
                     ),
                     _DeviceSettingTile(
                       title:
@@ -1092,6 +1089,61 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       case null:
         return '未贴边';
     }
+  }
+
+  String _remoteInputAutoModeLabel(RemoteInputLayoutData? layout) {
+    if (layout?.autoActivate != true) {
+      return '关闭';
+    }
+    switch (layout!.autoRoleValue) {
+      case RemoteInputAutoRole.source:
+        return '本机控制对端';
+      case RemoteInputAutoRole.sink:
+        return '对端控制本机';
+    }
+  }
+
+  Future<void> _openRemoteInputAutoModePicker() async {
+    final layout = await _ensureRemoteInputLayout();
+    if (!mounted) {
+      return;
+    }
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('键鼠共享自动模式'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop('off'),
+            child: const Text('关闭'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop('source'),
+            child: const Text('本机控制对端'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop('sink'),
+            child: const Text('对端控制本机'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(AppLocalizations.of(context)?.cancel ?? '取消'),
+        ),
+      ),
+    );
+    if (choice == null) {
+      return;
+    }
+    final role = choice == 'sink'
+        ? RemoteInputAutoRole.sink
+        : RemoteInputAutoRole.source;
+    await _saveRemoteInputLayout(
+      layout.copyWith(
+        autoActivate: choice != 'off',
+        autoRole: role.name,
+      ),
+    );
   }
 
   Future<void> _openRemoteInputLayoutEditor() async {

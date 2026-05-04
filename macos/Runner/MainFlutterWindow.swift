@@ -39,6 +39,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
   private var sequence = 0
+  private var captureCursorHidden = false
+  private var captureMouseButtons = 0
+  private var injectedMouseButtons = 0
+  private var injectedModifierFlags = CGEventFlags()
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -76,6 +80,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       stopCapture()
       result(nil)
 
+    case "pauseCapture":
+      guard let args = call.arguments as? [String: Any],
+            let sessionId = args["sessionId"] as? String else {
+        result(FlutterError(
+          code: "bad-arguments",
+          message: "pauseCapture requires sessionId",
+          details: nil))
+        return
+      }
+      pauseCapture(sessionId: sessionId)
+      result(nil)
+
     case "startInjection":
       guard let args = call.arguments as? [String: Any],
             let sessionId = args["sessionId"] as? String else {
@@ -85,6 +101,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           details: nil))
         return
       }
+      releaseInjectedMouseButtons()
+      injectedModifierFlags = []
       injectionSessionId = sessionId
       result(nil)
 
@@ -103,7 +121,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       result(nil)
 
     case "stopInjection":
-      injectionSessionId = ""
+      stopInjection()
       result(nil)
 
     default:
@@ -131,6 +149,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureEdge = edge
     self.releaseHotkey = releaseHotkey
     captureActive = false
+    captureMouseButtons = 0
     sequence = 0
 
     let mask =
@@ -146,19 +165,21 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       (1 << CGEventType.otherMouseUp.rawValue) |
       (1 << CGEventType.scrollWheel.rawValue) |
       (1 << CGEventType.keyDown.rawValue) |
-      (1 << CGEventType.keyUp.rawValue)
+      (1 << CGEventType.keyUp.rawValue) |
+      (1 << CGEventType.flagsChanged.rawValue)
 
     let userInfo = Unmanaged.passUnretained(self).toOpaque()
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
       place: .headInsertEventTap,
-      options: .listenOnly,
+      options: .defaultTap,
       eventsOfInterest: CGEventMask(mask),
       callback: remoteInputEventCallback,
       userInfo: userInfo) else {
+      stopCapture()
       result(FlutterError(
         code: "remote-input-capture-unavailable",
-        message: "无法创建键鼠监听，请确认辅助功能权限已开启",
+        message: "系统仍拒绝键鼠监听；如果辅助功能里已经显示允许，请关闭再打开 Whisper Dev 的辅助功能权限后重启应用，必要时同时检查输入监控权限",
         details: nil))
       return
     }
@@ -182,26 +203,53 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     eventTap = nil
     captureSessionId = ""
     captureActive = false
+    captureMouseButtons = 0
+    showCaptureCursorIfNeeded()
   }
 
-  fileprivate func handleEvent(type: CGEventType, event: CGEvent) {
-    guard !captureSessionId.isEmpty else {
+  private func stopInjection() {
+    releaseInjectedMouseButtons()
+    injectedModifierFlags = []
+    injectionSessionId = ""
+  }
+
+  private func pauseCapture(sessionId: String) {
+    guard sessionId == captureSessionId else {
       return
+    }
+    captureActive = false
+    captureMouseButtons = 0
+    moveCaptureCursorToLocalEdge()
+    showCaptureCursorIfNeeded()
+  }
+
+  fileprivate func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
+    guard !captureSessionId.isEmpty else {
+      return false
     }
     if isReleaseHotkey(type: type, event: event) {
-      emitRelease(reason: "hotkey")
-      return
+      emitCaptureRelease(reason: "hotkey")
+      return true
     }
+    var activeStart = false
     if !captureActive {
       if isEdgeActivationEvent(type: type, event: event) {
         captureActive = true
+        activeStart = true
+        hideCaptureCursorIfNeeded()
       } else {
-        return
+        return false
       }
     }
-    guard let encoded = encodePayload(type: type, event: event) else {
-      return
+    prepareCaptureButtonState(type: type)
+    guard let encoded = encodePayload(
+      type: type,
+      event: event,
+      activeStart: activeStart
+    ) else {
+      return true
     }
+    finishCaptureButtonState(type: type)
     sequence += 1
     let eventType = remoteInputEventType(type)
     let arguments: [String: Any] = [
@@ -214,14 +262,31 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     DispatchQueue.main.async { [channel] in
       channel.invokeMethod("onInputEvent", arguments: arguments)
     }
+    pinCaptureCursorIfNeeded(type: type)
+    return true
   }
 
-  private func encodePayload(type: CGEventType, event: CGEvent) -> Data? {
+  private func encodePayload(
+    type: CGEventType,
+    event: CGEvent,
+    activeStart: Bool
+  ) -> Data? {
     let point = event.location
     var payload: [String: Any] = [:]
     switch remoteInputEventType(type) {
     case "mouseMove":
-      payload = ["x": point.x, "y": point.y]
+      let bounds = virtualDisplayBounds()
+      payload = [
+        "x": point.x,
+        "y": point.y,
+        "deltaX": event.getIntegerValueField(.mouseEventDeltaX),
+        "deltaY": event.getIntegerValueField(.mouseEventDeltaY),
+        "activeStart": activeStart,
+        "edge": captureEdge,
+        "buttons": captureMouseButtons,
+        "unitX": normalized(point.x, start: bounds.minX, length: bounds.width),
+        "unitY": normalized(point.y, start: bounds.minY, length: bounds.height)
+      ]
     case "mouseButton":
       payload = [
         "button": buttonNumber(type: type, event: event),
@@ -235,9 +300,14 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "deltaY": event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
       ]
     case "key":
+      let macKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
       payload = [
-        "keyCode": event.getIntegerValueField(.keyboardEventKeycode),
-        "down": type == .keyDown
+        "keyCode": macKeyCode,
+        "macKeyCode": macKeyCode,
+        "windowsKeyCode": windowsVirtualKey(forMacKeyCode: macKeyCode),
+        "down": type == .flagsChanged
+          ? modifierKeyDown(macKeyCode, flags: event.flags)
+          : type == .keyDown
       ]
     default:
       payload = [:]
@@ -254,7 +324,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return "mouseButton"
     case .scrollWheel:
       return "mouseWheel"
-    case .keyDown, .keyUp:
+    case .keyDown, .keyUp, .flagsChanged:
       return "key"
     default:
       return "release"
@@ -285,32 +355,65 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
     switch eventType {
     case "mouseMove":
-      let point = CGPoint(
-        x: data["x"] as? CGFloat ?? 0,
-        y: data["y"] as? CGFloat ?? 0)
-      CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+      let deltaX = doubleValue(data["deltaX"])
+      let deltaY = doubleValue(data["deltaY"])
+      let fallbackPoint = CGPoint(
+        x: doubleValue(data["x"]),
+        y: doubleValue(data["y"]))
+      let currentPoint = CGEvent(source: nil)?.location ?? fallbackPoint
+      if isReverseInjectionRelease(
+        data,
+        currentPoint: currentPoint,
+        deltaX: deltaX,
+        deltaY: deltaY
+      ) {
+        emitInjectionRelease(reason: "edge")
+        return
+      }
+      let entryPoint = entryPointIfNeeded(data)
+      let shouldMove = entryPoint != nil || deltaX != 0 || deltaY != 0
+      let basePoint = entryPoint ?? currentPoint
+      let point = shouldMove
+        ? CGPoint(x: basePoint.x + deltaX, y: basePoint.y + deltaY)
+        : currentPoint
+      if data["buttons"] != nil {
+        syncInjectedMouseButtons(intValue(data["buttons"]), at: point)
+      }
+      guard shouldMove else {
+        return
+      }
+      let drag = injectedMouseDragEvent()
+      CGEvent(mouseEventSource: nil, mouseType: drag.type, mouseCursorPosition: point, mouseButton: drag.button)?.post(tap: .cghidEventTap)
     case "mouseButton":
-      let point = CGPoint(
-        x: data["x"] as? CGFloat ?? 0,
-        y: data["y"] as? CGFloat ?? 0)
-      let buttonValue = data["button"] as? Int ?? 0
-      let down = data["down"] as? Bool ?? false
-      let button: CGMouseButton = buttonValue == 1 ? .right : .left
+      let point = CGEvent(source: nil)?.location ?? CGPoint(
+        x: doubleValue(data["x"]),
+        y: doubleValue(data["y"]))
+      let buttonValue = intValue(data["button"])
+      let down = boolValue(data["down"])
+      let button = cgMouseButton(buttonValue)
       let mouseType: CGEventType
       if button == .right {
         mouseType = down ? .rightMouseDown : .rightMouseUp
+      } else if button == .center {
+        mouseType = down ? .otherMouseDown : .otherMouseUp
       } else {
         mouseType = down ? .leftMouseDown : .leftMouseUp
       }
       CGEvent(mouseEventSource: nil, mouseType: mouseType, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
+      setInjectedMouseButton(buttonValue, down: down)
     case "mouseWheel":
-      let deltaX = Int32(data["deltaX"] as? Int ?? 0)
-      let deltaY = Int32(data["deltaY"] as? Int ?? 0)
+      let deltaX = Int32(intValue(data["deltaX"]))
+      let deltaY = Int32(intValue(data["deltaY"]))
       CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: deltaY, wheel2: deltaX, wheel3: 0)?.post(tap: .cghidEventTap)
     case "key":
-      let keyCode = CGKeyCode(data["keyCode"] as? Int ?? 0)
-      let down = data["down"] as? Bool ?? false
-      CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: down)?.post(tap: .cghidEventTap)
+      let nativeKeyCode = nativeMacKeyCode(data)
+      let keyCode = CGKeyCode(nativeKeyCode)
+      let down = boolValue(data["down"])
+      updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
+      if let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: down) {
+        keyEvent.flags = injectedModifierFlags
+        keyEvent.post(tap: .cghidEventTap)
+      }
     default:
       break
     }
@@ -324,6 +427,379 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return data
     }
     return nil
+  }
+
+  private func doubleValue(_ value: Any?) -> CGFloat {
+    if let number = value as? NSNumber {
+      return CGFloat(number.doubleValue)
+    }
+    if let value = value as? Double {
+      return CGFloat(value)
+    }
+    if let value = value as? Int {
+      return CGFloat(value)
+    }
+    return 0
+  }
+
+  private func intValue(_ value: Any?) -> Int {
+    if let number = value as? NSNumber {
+      return number.intValue
+    }
+    if let value = value as? Int {
+      return value
+    }
+    return 0
+  }
+
+  private func boolValue(_ value: Any?) -> Bool {
+    if let number = value as? NSNumber {
+      return number.boolValue
+    }
+    if let value = value as? Bool {
+      return value
+    }
+    return false
+  }
+
+  private func nativeMacKeyCode(_ data: [String: Any]) -> Int {
+    let nativeKeyCode = intValue(data["macKeyCode"])
+    if nativeKeyCode > 0 || data["macKeyCode"] != nil {
+      return nativeKeyCode
+    }
+    let windowsKeyCode = intValue(data["windowsKeyCode"])
+    if windowsKeyCode > 0 {
+      return macKeyCode(forWindowsVirtualKey: windowsKeyCode)
+    }
+    return intValue(data["keyCode"])
+  }
+
+  private func entryPointIfNeeded(_ data: [String: Any]) -> CGPoint? {
+    guard boolValue(data["activeStart"]) else {
+      return nil
+    }
+    let bounds = virtualDisplayBounds()
+    let edge = data["edge"] as? String ?? "right"
+    let unitX = clampedUnit(doubleValue(data["unitX"]))
+    let unitY = clampedUnit(doubleValue(data["unitY"]))
+    let inset: CGFloat = 2
+    let mappedX = min(bounds.maxX - inset, max(bounds.minX + inset, bounds.minX + bounds.width * unitX))
+    let mappedY = min(bounds.maxY - inset, max(bounds.minY + inset, bounds.minY + bounds.height * unitY))
+    switch edge {
+    case "left":
+      return CGPoint(x: bounds.maxX - inset, y: mappedY)
+    case "top":
+      return CGPoint(x: mappedX, y: bounds.maxY - inset)
+    case "bottom":
+      return CGPoint(x: mappedX, y: bounds.minY + inset)
+    case "right":
+      fallthrough
+    default:
+      return CGPoint(x: bounds.minX + inset, y: mappedY)
+    }
+  }
+
+  private func virtualDisplayBounds() -> CGRect {
+    var bounds = CGRect.null
+    for screen in NSScreen.screens {
+      bounds = bounds.union(screen.frame)
+    }
+    if bounds.isNull || bounds.isEmpty {
+      return CGDisplayBounds(CGMainDisplayID())
+    }
+    return bounds
+  }
+
+  private func normalized(_ value: CGFloat, start: CGFloat, length: CGFloat) -> CGFloat {
+    if length <= 0 {
+      return 0
+    }
+    return clampedUnit((value - start) / length)
+  }
+
+  private func clampedUnit(_ value: CGFloat) -> CGFloat {
+    return min(1, max(0, value))
+  }
+
+  private func cgMouseButton(_ button: Int) -> CGMouseButton {
+    switch button {
+    case 1:
+      return .right
+    case 2:
+      return .center
+    default:
+      return .left
+    }
+  }
+
+  private func mouseButtonBit(_ button: Int) -> Int {
+    switch button {
+    case 1:
+      return 2
+    case 2:
+      return 4
+    default:
+      return 1
+    }
+  }
+
+  private func prepareCaptureButtonState(type: CGEventType) {
+    switch type {
+    case .leftMouseDown, .leftMouseDragged:
+      captureMouseButtons |= mouseButtonBit(0)
+    case .rightMouseDown, .rightMouseDragged:
+      captureMouseButtons |= mouseButtonBit(1)
+    case .otherMouseDown, .otherMouseDragged:
+      captureMouseButtons |= mouseButtonBit(2)
+    default:
+      break
+    }
+  }
+
+  private func finishCaptureButtonState(type: CGEventType) {
+    switch type {
+    case .leftMouseUp:
+      captureMouseButtons &= ~mouseButtonBit(0)
+    case .rightMouseUp:
+      captureMouseButtons &= ~mouseButtonBit(1)
+    case .otherMouseUp:
+      captureMouseButtons &= ~mouseButtonBit(2)
+    default:
+      break
+    }
+  }
+
+  private func modifierKeyDown(_ keyCode: Int, flags: CGEventFlags) -> Bool {
+    switch keyCode {
+    case 54, 55:
+      return flags.contains(.maskCommand)
+    case 56, 60:
+      return flags.contains(.maskShift)
+    case 58, 61:
+      return flags.contains(.maskAlternate)
+    case 59, 62:
+      return flags.contains(.maskControl)
+    case 57:
+      return flags.contains(.maskAlphaShift)
+    default:
+      return false
+    }
+  }
+
+  private func modifierFlag(forMacKeyCode keyCode: Int) -> CGEventFlags? {
+    switch keyCode {
+    case 54, 55:
+      return .maskCommand
+    case 56, 60:
+      return .maskShift
+    case 58, 61:
+      return .maskAlternate
+    case 59, 62:
+      return .maskControl
+    case 57:
+      return .maskAlphaShift
+    default:
+      return nil
+    }
+  }
+
+  private func updateInjectedModifierFlags(macKeyCode: Int, down: Bool) {
+    guard let flag = modifierFlag(forMacKeyCode: macKeyCode) else {
+      return
+    }
+    if down {
+      injectedModifierFlags.insert(flag)
+    } else {
+      injectedModifierFlags.remove(flag)
+    }
+  }
+
+  private func setInjectedMouseButton(_ button: Int, down: Bool) {
+    let bit = mouseButtonBit(button)
+    if down {
+      injectedMouseButtons |= bit
+    } else {
+      injectedMouseButtons &= ~bit
+    }
+  }
+
+  private func syncInjectedMouseButtons(_ desired: Int, at point: CGPoint) {
+    syncInjectedMouseButton(button: 0, desired: desired, at: point)
+    syncInjectedMouseButton(button: 1, desired: desired, at: point)
+    syncInjectedMouseButton(button: 2, desired: desired, at: point)
+  }
+
+  private func syncInjectedMouseButton(button: Int, desired: Int, at point: CGPoint) {
+    let bit = mouseButtonBit(button)
+    let shouldBeDown = (desired & bit) != 0
+    let isDown = (injectedMouseButtons & bit) != 0
+    guard shouldBeDown != isDown else {
+      return
+    }
+    let cgButton = cgMouseButton(button)
+    let eventType: CGEventType
+    if cgButton == .right {
+      eventType = shouldBeDown ? .rightMouseDown : .rightMouseUp
+    } else if cgButton == .center {
+      eventType = shouldBeDown ? .otherMouseDown : .otherMouseUp
+    } else {
+      eventType = shouldBeDown ? .leftMouseDown : .leftMouseUp
+    }
+    CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: point, mouseButton: cgButton)?.post(tap: .cghidEventTap)
+    setInjectedMouseButton(button, down: shouldBeDown)
+  }
+
+  private func injectedMouseDragEvent() -> (type: CGEventType, button: CGMouseButton) {
+    if (injectedMouseButtons & 1) != 0 {
+      return (.leftMouseDragged, .left)
+    }
+    if (injectedMouseButtons & 2) != 0 {
+      return (.rightMouseDragged, .right)
+    }
+    if (injectedMouseButtons & 4) != 0 {
+      return (.otherMouseDragged, .center)
+    }
+    return (.mouseMoved, .left)
+  }
+
+  private func releaseInjectedMouseButtons() {
+    guard injectedMouseButtons != 0 else {
+      return
+    }
+    let point = CGEvent(source: nil)?.location ?? CGPoint.zero
+    syncInjectedMouseButtons(0, at: point)
+  }
+
+  private func windowsVirtualKey(forMacKeyCode keyCode: Int) -> Int {
+    switch keyCode {
+    case 0: return 0x41
+    case 1: return 0x53
+    case 2: return 0x44
+    case 3: return 0x46
+    case 4: return 0x48
+    case 5: return 0x47
+    case 6: return 0x5A
+    case 7: return 0x58
+    case 8: return 0x43
+    case 9: return 0x56
+    case 11: return 0x42
+    case 12: return 0x51
+    case 13: return 0x57
+    case 14: return 0x45
+    case 15: return 0x52
+    case 16: return 0x59
+    case 17: return 0x54
+    case 18: return 0x31
+    case 19: return 0x32
+    case 20: return 0x33
+    case 21: return 0x34
+    case 22: return 0x36
+    case 23: return 0x35
+    case 24: return 0xBB
+    case 25: return 0x39
+    case 26: return 0x37
+    case 27: return 0xBD
+    case 28: return 0x38
+    case 29: return 0x30
+    case 30: return 0xDD
+    case 31: return 0x4F
+    case 32: return 0x55
+    case 33: return 0xDB
+    case 34: return 0x49
+    case 35: return 0x50
+    case 36: return 0x0D
+    case 37: return 0x4C
+    case 38: return 0x4A
+    case 39: return 0xDE
+    case 40: return 0x4B
+    case 41: return 0xBA
+    case 42: return 0xDC
+    case 43: return 0xBC
+    case 44: return 0xBF
+    case 45: return 0x4E
+    case 46: return 0x4D
+    case 47: return 0xBE
+    case 48: return 0x09
+    case 49: return 0x20
+    case 50: return 0xC0
+    case 51: return 0x08
+    case 53: return 0x1B
+    case 54, 55, 59, 62: return 0x11
+    case 56, 60: return 0x10
+    case 58, 61: return 0x12
+    case 117: return 0x2E
+    case 123: return 0x25
+    case 124: return 0x27
+    case 125: return 0x28
+    case 126: return 0x26
+    default: return keyCode
+    }
+  }
+
+  private func macKeyCode(forWindowsVirtualKey virtualKey: Int) -> Int {
+    switch virtualKey {
+    case 0x41: return 0
+    case 0x53: return 1
+    case 0x44: return 2
+    case 0x46: return 3
+    case 0x48: return 4
+    case 0x47: return 5
+    case 0x5A: return 6
+    case 0x58: return 7
+    case 0x43: return 8
+    case 0x56: return 9
+    case 0x42: return 11
+    case 0x51: return 12
+    case 0x57: return 13
+    case 0x45: return 14
+    case 0x52: return 15
+    case 0x59: return 16
+    case 0x54: return 17
+    case 0x31: return 18
+    case 0x32: return 19
+    case 0x33: return 20
+    case 0x34: return 21
+    case 0x36: return 22
+    case 0x35: return 23
+    case 0xBB: return 24
+    case 0x39: return 25
+    case 0x37: return 26
+    case 0xBD: return 27
+    case 0x38: return 28
+    case 0x30: return 29
+    case 0xDD: return 30
+    case 0x4F: return 31
+    case 0x55: return 32
+    case 0xDB: return 33
+    case 0x49: return 34
+    case 0x50: return 35
+    case 0x0D: return 36
+    case 0x4C: return 37
+    case 0x4A: return 38
+    case 0xDE: return 39
+    case 0x4B: return 40
+    case 0xBA: return 41
+    case 0xDC: return 42
+    case 0xBC: return 43
+    case 0xBF: return 44
+    case 0x4E: return 45
+    case 0x4D: return 46
+    case 0xBE: return 47
+    case 0x09: return 48
+    case 0x20: return 49
+    case 0xC0: return 50
+    case 0x08: return 51
+    case 0x1B: return 53
+    case 0x11, 0x5B, 0x5C: return 55
+    case 0x10: return 56
+    case 0x12: return 58
+    case 0x2E: return 117
+    case 0x25: return 123
+    case 0x27: return 124
+    case 0x28: return 125
+    case 0x26: return 126
+    default: return virtualKey
+    }
   }
 
   private func ensureAccessibilityPermission() -> Bool {
@@ -355,30 +831,129 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     switch type {
     case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
       let point = event.location
-      let bounds = CGDisplayBounds(CGMainDisplayID())
+      let deltaX = event.getIntegerValueField(.mouseEventDeltaX)
+      let deltaY = event.getIntegerValueField(.mouseEventDeltaY)
+      let bounds = virtualDisplayBounds()
       let threshold: CGFloat = 6
       switch captureEdge {
       case "left":
-        return point.x <= bounds.minX + threshold
+        return point.x <= bounds.minX + threshold && deltaX < 0
       case "top":
-        return point.y <= bounds.minY + threshold
+        return point.y <= bounds.minY + threshold && deltaY < 0
       case "bottom":
-        return point.y >= bounds.maxY - threshold
+        return point.y >= bounds.maxY - threshold && deltaY > 0
       case "right":
         fallthrough
       default:
-        return point.x >= bounds.maxX - threshold
+        return point.x >= bounds.maxX - threshold && deltaX > 0
       }
     default:
       return false
     }
   }
 
-  private func emitRelease(reason: String) {
+  private func hideCaptureCursorIfNeeded() {
+    guard !captureCursorHidden else {
+      return
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self,
+            !self.captureCursorHidden,
+            self.captureActive,
+            !self.captureSessionId.isEmpty else {
+        return
+      }
+      NSCursor.hide()
+      self.captureCursorHidden = true
+    }
+  }
+
+  private func showCaptureCursorIfNeeded() {
+    guard captureCursorHidden else {
+      return
+    }
+    NSCursor.unhide()
+    captureCursorHidden = false
+  }
+
+  private func pinCaptureCursorIfNeeded(type: CGEventType) {
+    switch type {
+    case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+      moveCaptureCursorToLocalEdge()
+    default:
+      break
+    }
+  }
+
+  private func moveCaptureCursorToLocalEdge() {
+    let bounds = virtualDisplayBounds()
+    let currentPoint = CGEvent(source: nil)?.location ?? CGPoint(
+      x: bounds.midX,
+      y: bounds.midY)
+    let inset: CGFloat = 2
+    let x = min(bounds.maxX - inset, max(bounds.minX + inset, currentPoint.x))
+    let y = min(bounds.maxY - inset, max(bounds.minY + inset, currentPoint.y))
+    let point: CGPoint
+    switch captureEdge {
+    case "left":
+      point = CGPoint(x: bounds.minX + inset, y: y)
+    case "top":
+      point = CGPoint(x: x, y: bounds.minY + inset)
+    case "bottom":
+      point = CGPoint(x: x, y: bounds.maxY - inset)
+    case "right":
+      fallthrough
+    default:
+      point = CGPoint(x: bounds.maxX - inset, y: y)
+    }
+    CGWarpMouseCursorPosition(point)
+  }
+
+  private func isReverseInjectionRelease(
+    _ data: [String: Any],
+    currentPoint: CGPoint,
+    deltaX: CGFloat,
+    deltaY: CGFloat
+  ) -> Bool {
+    guard !boolValue(data["activeStart"]) else {
+      return false
+    }
+    let bounds = virtualDisplayBounds()
+    let threshold: CGFloat = 6
+    let edge = data["edge"] as? String ?? "right"
+    switch edge {
+    case "left":
+      return currentPoint.x >= bounds.maxX - threshold && deltaX > 0
+    case "top":
+      return currentPoint.y >= bounds.maxY - threshold && deltaY > 0
+    case "bottom":
+      return currentPoint.y <= bounds.minY + threshold && deltaY < 0
+    case "right":
+      fallthrough
+    default:
+      return currentPoint.x <= bounds.minX + threshold && deltaX < 0
+    }
+  }
+
+  private func emitCaptureRelease(reason: String) {
     let sessionId = captureSessionId
     guard !sessionId.isEmpty else {
       return
     }
+    stopCapture()
+    emitRelease(sessionId: sessionId, reason: reason)
+  }
+
+  private func emitInjectionRelease(reason: String) {
+    let sessionId = injectionSessionId
+    guard !sessionId.isEmpty else {
+      return
+    }
+    releaseInjectedMouseButtons()
+    emitRelease(sessionId: sessionId, reason: reason)
+  }
+
+  private func emitRelease(sessionId: String, reason: String) {
     DispatchQueue.main.async { [weak self] in
       guard let self = self else {
         return
@@ -387,7 +962,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "sessionId": sessionId,
         "reason": reason
       ])
-      self.stopCapture()
     }
   }
 }
@@ -400,8 +974,9 @@ private let remoteInputEventCallback: CGEventTapCallBack = {
   let plugin = Unmanaged<RemoteInputPlugin>
     .fromOpaque(userInfo)
     .takeUnretainedValue()
-  plugin.handleEvent(type: type, event: event)
-  return Unmanaged.passUnretained(event)
+  return plugin.handleEvent(type: type, event: event)
+    ? nil
+    : Unmanaged.passUnretained(event)
 }
 
 final class AudioSharePlugin: NSObject, FlutterPlugin {

@@ -45,6 +45,14 @@ class RemoteInputPlatform {
     });
   }
 
+  Future<void> pauseCapture({
+    required String sessionId,
+  }) {
+    return _channel.invokeMethod<void>('pauseCapture', <String, dynamic>{
+      'sessionId': sessionId,
+    });
+  }
+
   Future<void> startInjection({
     required String sessionId,
   }) {

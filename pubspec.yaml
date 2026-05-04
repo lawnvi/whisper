@@ -91,6 +91,8 @@ dev_dependencies:
 
 dependency_overrides:
   intl: ^0.19.0
+  permission_handler_windows:
+    path: third_party/permission_handler_windows_stub
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

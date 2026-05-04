@@ -155,6 +155,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
           sendControl: sendControl,
         );
         break;
+      case RemoteInputControlAction.release:
+        await _handleRelease(message);
+        break;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
         _manager.handleControlMessage(message);
@@ -260,7 +263,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return;
     }
     try {
-      await _startInjection(accept);
+      await _startInjection(accept, sendControl: sendControl);
       sendControl(accept);
     } catch (error) {
       final failedPeerId = offer.sourcePeerId;
@@ -302,6 +305,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         accept,
         remoteHost: remoteHost,
         remotePort: remotePort,
+        sendControl: sendControl,
       );
     } catch (error) {
       final failedPeerId = accept.sinkPeerId;
@@ -327,7 +331,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _startInjection(RemoteInputControlMessage message) async {
+  Future<void> _startInjection(
+    RemoteInputControlMessage message, {
+    required RemoteInputControlSender sendControl,
+  }) async {
     await stopLocal();
     _setState(
       RemoteInputRuntimeState(
@@ -338,6 +345,28 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     await _platform.startInjection(sessionId: message.sessionId);
+    _releaseSubscription = _platform.releases.listen((release) {
+      if (release.sessionId == message.sessionId) {
+        if (release.reason == 'edge') {
+          sendControl(
+            RemoteInputControlMessage(
+              action: RemoteInputControlAction.release,
+              sessionId: message.sessionId,
+              sourcePeerId: message.sourcePeerId,
+              sinkPeerId: message.sinkPeerId,
+              releaseReason: release.reason,
+            ),
+          );
+        } else {
+          unawaited(stopSharing(sendControl: sendControl));
+        }
+      }
+    });
+    _errorSubscription = _platform.errors.listen((error) {
+      if (error.sessionId == message.sessionId) {
+        unawaited(stopLocal());
+      }
+    });
     _manager.onPacket = (packet) {
       unawaited(_platform.injectEvent(packet));
     };
@@ -355,6 +384,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputControlMessage message, {
     required String remoteHost,
     required int remotePort,
+    required RemoteInputControlSender sendControl,
   }) async {
     final edge = message.layoutEdge;
     if (edge == null) {
@@ -394,7 +424,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
-        unawaited(stopLocal());
+        unawaited(stopSharing(sendControl: sendControl));
       }
     });
     _errorSubscription = _platform.errors.listen((error) {
@@ -413,6 +443,24 @@ class RemoteInputCoordinator extends ChangeNotifier {
         role: RemoteInputRuntimeRole.source,
         sessionId: message.sessionId,
         peerId: message.sinkPeerId,
+      ),
+    );
+  }
+
+  Future<void> _handleRelease(RemoteInputControlMessage message) async {
+    _manager.handleControlMessage(message);
+    if (_state.sessionId != message.sessionId ||
+        _state.role != RemoteInputRuntimeRole.source ||
+        message.releaseReason != 'edge') {
+      return;
+    }
+    await _platform.pauseCapture(sessionId: message.sessionId);
+    _setState(
+      RemoteInputRuntimeState(
+        status: RemoteInputRuntimeStatus.armed,
+        role: RemoteInputRuntimeRole.source,
+        sessionId: message.sessionId,
+        peerId: _state.peerId,
       ),
     );
   }

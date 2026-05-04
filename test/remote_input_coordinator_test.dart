@@ -95,6 +95,133 @@ void main() {
           RemoteInputEventType.mouseMove);
     });
 
+    test('source sends a stop control when native capture hotkey is released',
+        () async {
+      final transport = _FakeRemoteInputTransport();
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final offer = sentControls.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onRelease', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'reason': 'hotkey',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sentControls, hasLength(2));
+      expect(sentControls.last.action, RemoteInputControlAction.stop);
+      expect(sentControls.last.sessionId, offer.sessionId);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+    });
+
+    test('source pauses capture when peer releases back across the edge',
+        () async {
+      final transport = _FakeRemoteInputTransport();
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final offer = sentControls.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'sequence': 1,
+          'timestampMicros': 2,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(<int>[1, 2]),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.release,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          releaseReason: 'edge',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(calls.map((call) => call.method), contains('pauseCapture'));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
+      expect(coordinator.state.role, RemoteInputRuntimeRole.source);
+      expect(transport.closed, isFalse);
+    });
+
     test('does not offer remote input to untrusted peers', () async {
       final sentControls = <RemoteInputControlMessage>[];
       final coordinator = RemoteInputCoordinator(
@@ -162,6 +289,51 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(calls.map((call) => call.method), contains('injectEvent'));
+    });
+
+    test('sink sends an edge release control without stopping injection',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-release-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await platform.handleNativeMethodCall(
+        const MethodCall('onRelease', <String, dynamic>{
+          'sessionId': 'input-release-1',
+          'reason': 'edge',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sentControls, hasLength(2));
+      expect(sentControls.first.action, RemoteInputControlAction.accept);
+      expect(sentControls.last.action, RemoteInputControlAction.release);
+      expect(sentControls.last.releaseReason, 'edge');
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      expect(
+          calls.map((call) => call.method), isNot(contains('stopInjection')));
     });
 
     test('sink reports a platform injection failure instead of accepting',

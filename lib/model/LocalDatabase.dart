@@ -28,7 +28,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -41,9 +41,37 @@ class LocalDatabase extends _$LocalDatabase {
           }
           if (from < 3) {
             await m.createTable(remoteInputLayout);
+          } else if (from < 4) {
+            await m.addColumn(remoteInputLayout, remoteInputLayout.autoRole);
           }
         },
+        beforeOpen: (_) async {
+          await _repairRemoteInputLayoutAutoRole();
+        },
       );
+
+  Future<void> _repairRemoteInputLayoutAutoRole() async {
+    final columns =
+        await customSelect('PRAGMA table_info(remote_input_layout)').get();
+    if (columns.isEmpty) {
+      return;
+    }
+    final hasAutoRole = columns.any((row) => row.data['name'] == 'auto_role');
+    if (!hasAutoRole) {
+      await customStatement(
+        "ALTER TABLE remote_input_layout ADD COLUMN auto_role TEXT DEFAULT '${RemoteInputAutoRole.source.name}'",
+      );
+    }
+    await customUpdate(
+      'UPDATE remote_input_layout SET auto_role = ? '
+      'WHERE auto_role IS NULL OR auto_role = ?',
+      variables: [
+        Variable<String>(RemoteInputAutoRole.source.name),
+        const Variable<String>(''),
+      ],
+      updates: {remoteInputLayout},
+    );
+  }
 
   Future<void> insertMessage(MessageData data) {
     return into(message).insert(MessageCompanion.insert(
@@ -347,6 +375,17 @@ class LocalDatabase extends _$LocalDatabase {
       lastError: data.lastError,
       updatedAt: data.updatedAt,
     );
+  }
+}
+
+extension RemoteInputLayoutDataAutoRoleX on RemoteInputLayoutData {
+  RemoteInputAutoRole get autoRoleValue {
+    for (final role in RemoteInputAutoRole.values) {
+      if (role.name == autoRole) {
+        return role;
+      }
+    }
+    return RemoteInputAutoRole.source;
   }
 }
 

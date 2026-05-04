@@ -1,0 +1,17 @@
+name: permission_handler_windows
+description: Local no-op Windows package override for mobile-only permission usage.
+version: 0.2.1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      windows:
+        pluginClass: PermissionHandlerWindowsPlugin
