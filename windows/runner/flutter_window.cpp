@@ -9,6 +9,14 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 
 FlutterWindow::~FlutterWindow() {}
 
+void FlutterWindow::Shutdown() {
+  HWND handle = GetHandle();
+  if (handle) {
+    ShowWindow(handle, SW_HIDE);
+  }
+  Destroy();
+}
+
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;

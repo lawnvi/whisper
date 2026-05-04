@@ -15,6 +15,11 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  // Performs an orderly shutdown while the dynamic type is still FlutterWindow,
+  // so we can hide the native window and release the Flutter controller before
+  // stack unwinding reaches the base Win32Window destructor.
+  void Shutdown();
+
  protected:
   // Win32Window:
   bool OnCreate() override;

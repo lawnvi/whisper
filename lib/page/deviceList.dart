@@ -278,12 +278,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
+  Future<void> _closeDatabase() async {
+    await db.close();
+  }
+
   Future<void> _shutdownDesktopResources() {
     return _desktopShutdownFuture ??= _shutdownCoordinator.run([
       _stopDiscovery,
       _stopBroadcast,
       _stopClipboardWatcher,
       _stopSocketServer,
+      _closeDatabase,
       _destroyTray,
     ]);
   }
