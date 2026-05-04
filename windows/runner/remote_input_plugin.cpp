@@ -6,6 +6,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -184,8 +185,10 @@ std::string MouseWheelPayload(int delta_x, int delta_y) {
 
 std::string KeyPayload(USHORT virtual_key, bool down) {
   std::ostringstream json;
-  json << "{\"keyCode\":" << virtual_key << ",\"windowsKeyCode\":"
-       << virtual_key << ",\"macKeyCode\":"
+  json << "{\"sourcePlatform\":\"windows\""
+       << ",\"keyCode\":" << virtual_key
+       << ",\"windowsKeyCode\":" << virtual_key
+       << ",\"macKeyCode\":"
        << WindowsVirtualKeyToMac(virtual_key)
        << ",\"down\":" << (down ? "true" : "false") << "}";
   return json.str();
@@ -245,11 +248,11 @@ WORD MacVirtualKeyToWindows(int key_code) {
     case 50: return VK_OEM_3;
     case 51: return VK_BACK;
     case 53: return VK_ESCAPE;
-    case 54:
-    case 55:
-    case 59:
-    case 62:
-      return VK_CONTROL;
+    case 57: return VK_CAPITAL;
+    case 54: return VK_RWIN;
+    case 55: return VK_LWIN;
+    case 59: return VK_LCONTROL;
+    case 62: return VK_RCONTROL;
     case 56:
     case 60:
       return VK_SHIFT;
@@ -319,6 +322,7 @@ int WindowsVirtualKeyToMac(USHORT virtual_key) {
     case VK_OEM_3: return 50;
     case VK_BACK: return 51;
     case VK_ESCAPE: return 53;
+    case VK_CAPITAL: return 57;
     case VK_CONTROL:
     case VK_LCONTROL:
     case VK_RCONTROL: return 59;
@@ -357,31 +361,47 @@ class RemoteInputPlugin : public flutter::Plugin {
         });
   }
 
-  ~RemoteInputPlugin() override { StopCapture(); }
+  ~RemoteInputPlugin() override {
+    StopInjection();
+    StopCapture();
+  }
 
   bool ShouldSuppressMouse(const MSLLHOOKSTRUCT* mouse) {
     if (capture_session_id_.empty() || mouse == nullptr) {
       return false;
     }
-    if ((mouse->flags & LLMHF_INJECTED) != 0) {
-      return false;
-    }
     return capture_active_;
   }
 
-  bool ShouldSuppressKeyboard(const KBDLLHOOKSTRUCT* keyboard) {
+  bool HandleLowLevelKeyboard(WPARAM wparam, const KBDLLHOOKSTRUCT* keyboard) {
     if (capture_session_id_.empty() || keyboard == nullptr) {
       return false;
     }
-    if ((keyboard->flags & LLKHF_INJECTED) != 0) {
-      return false;
-    }
-    if (IsReleaseHotkey(static_cast<USHORT>(keyboard->vkCode))) {
+    const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
+    const bool up = wparam == WM_KEYUP || wparam == WM_SYSKEYUP;
+    const auto virtual_key = static_cast<USHORT>(keyboard->vkCode);
+    if (down && IsReleaseHotkey(virtual_key)) {
       EmitRelease("hotkey");
       StopCapture();
       return true;
     }
-    return capture_active_;
+    if (!capture_active_) {
+      return false;
+    }
+    if (keyboard_diagnostic_count_ < 20 && (down || up)) {
+      std::ostringstream diagnostic;
+      diagnostic << "windows keyboard hook vk=" << virtual_key
+                 << " down=" << (down ? 1 : 0)
+                 << " up=" << (up ? 1 : 0)
+                 << " flags=" << keyboard->flags
+                 << " captureActive=1";
+      EmitDiagnostic(diagnostic.str());
+      ++keyboard_diagnostic_count_;
+    }
+    if (down || up) {
+      EmitInputEvent("key", JsonBytes(KeyPayload(virtual_key, down)));
+    }
+    return true;
   }
 
   bool HandleWindowMessage(HWND,
@@ -431,9 +451,13 @@ class RemoteInputPlugin : public flutter::Plugin {
                                        ? nullptr
                                        : GetMapValue<std::string>(
                                              *args, "releaseHotkey");
-      StartCapture(*session_id, edge == nullptr ? "right" : *edge,
-                   release_hotkey == nullptr ? "ctrl+alt+esc"
-                                             : *release_hotkey);
+      const auto error = StartCapture(
+          *session_id, edge == nullptr ? "right" : *edge,
+          release_hotkey == nullptr ? "ctrl+alt+esc" : *release_hotkey);
+      if (error.has_value()) {
+        result->Error("remote-input-capture-unavailable", error.value());
+        return;
+      }
       result->Success();
       return;
     }
@@ -466,6 +490,8 @@ class RemoteInputPlugin : public flutter::Plugin {
         return;
       }
       ReleaseInjectedButtons();
+      ReleaseInjectedKeys();
+      ReleaseCommonModifierKeys();
       injection_session_id_ = *session_id;
       result->Success();
       return;
@@ -500,18 +526,35 @@ class RemoteInputPlugin : public flutter::Plugin {
     result->NotImplemented();
   }
 
-  void StartCapture(std::string session_id,
-                    std::string edge,
-                    std::string release_hotkey) {
+  std::optional<std::string> StartCapture(std::string session_id,
+                                          std::string edge,
+                                          std::string release_hotkey) {
     StopCapture();
     capture_session_id_ = std::move(session_id);
     capture_edge_ = std::move(edge);
     release_hotkey_ = std::move(release_hotkey);
     capture_active_ = false;
     capture_buttons_ = 0;
+    keyboard_diagnostic_count_ = 0;
     sequence_ = 0;
-    RegisterRawInput(true);
-    InstallHooks();
+    const bool raw_input_registered = RegisterRawInput(true);
+    std::string hook_error;
+    const bool hooks_installed = InstallHooks(&hook_error);
+    std::ostringstream diagnostic;
+    diagnostic << "windows remote input capture started rawInput="
+               << (raw_input_registered ? 1 : 0)
+               << " mouseHook=" << (mouse_hook_ != nullptr ? 1 : 0)
+               << " keyboardHook=" << (keyboard_hook_ != nullptr ? 1 : 0);
+    if (!hook_error.empty()) {
+      diagnostic << " hookError=" << hook_error;
+    }
+    EmitDiagnostic(diagnostic.str());
+    if (!raw_input_registered || !hooks_installed) {
+      const std::string error = diagnostic.str();
+      StopCapture();
+      return error;
+    }
+    return std::nullopt;
   }
 
   void StopCapture() {
@@ -519,6 +562,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       RegisterRawInput(false);
     }
     UninstallHooks();
+    ReleaseCommonModifierKeys();
     capture_session_id_.clear();
     capture_active_ = false;
     capture_buttons_ = 0;
@@ -526,6 +570,7 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void PauseCapture(const std::string& session_id) {
     if (session_id == capture_session_id_) {
+      ReleaseCommonModifierKeys();
       capture_active_ = false;
       capture_buttons_ = 0;
     }
@@ -533,18 +578,35 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void StopInjection() {
     ReleaseInjectedButtons();
+    ReleaseInjectedKeys();
+    ReleaseCommonModifierKeys();
     injection_session_id_.clear();
   }
 
-  void InstallHooks() {
+  bool InstallHooks(std::string* error_message) {
+    bool installed = true;
     if (mouse_hook_ == nullptr) {
       mouse_hook_ = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
                                      GetModuleHandle(nullptr), 0);
+      if (mouse_hook_ == nullptr) {
+        installed = false;
+        if (error_message != nullptr) {
+          *error_message += " mouseHook=" + std::to_string(GetLastError());
+        }
+      }
     }
     if (keyboard_hook_ == nullptr) {
       keyboard_hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
                                         GetModuleHandle(nullptr), 0);
+      if (keyboard_hook_ == nullptr) {
+        installed = false;
+        if (error_message != nullptr) {
+          *error_message +=
+              " keyboardHook=" + std::to_string(GetLastError());
+        }
+      }
     }
+    return installed;
   }
 
   void UninstallHooks() {
@@ -573,14 +635,14 @@ class RemoteInputPlugin : public flutter::Plugin {
                                                WPARAM wparam,
                                                LPARAM lparam) {
     if (code == HC_ACTION && g_plugin != nullptr &&
-        g_plugin->ShouldSuppressKeyboard(
+        g_plugin->HandleLowLevelKeyboard(wparam,
             reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam))) {
       return 1;
     }
     return CallNextHookEx(nullptr, code, wparam, lparam);
   }
 
-  void RegisterRawInput(bool enabled) {
+  bool RegisterRawInput(bool enabled) {
     RAWINPUTDEVICE devices[2] = {};
     devices[0].usUsagePage = 0x01;
     devices[0].usUsage = 0x02;
@@ -590,7 +652,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     devices[1].usUsage = 0x06;
     devices[1].dwFlags = enabled ? RIDEV_INPUTSINK : RIDEV_REMOVE;
     devices[1].hwndTarget = enabled ? window_ : nullptr;
-    RegisterRawInputDevices(devices, 2, sizeof(RAWINPUTDEVICE));
+    return RegisterRawInputDevices(devices, 2, sizeof(RAWINPUTDEVICE)) == TRUE;
   }
 
   void HandleRawMouse(const RAWMOUSE& mouse) {
@@ -605,6 +667,13 @@ class RemoteInputPlugin : public flutter::Plugin {
         capture_active_ = true;
         active_start = true;
         capture_buttons_ = CurrentMouseButtonsMask();
+        keyboard_diagnostic_count_ = 0;
+        std::ostringstream diagnostic;
+        diagnostic << "windows remote input capture active edge="
+                   << capture_edge_
+                   << " mouseHook=" << (mouse_hook_ != nullptr ? 1 : 0)
+                   << " keyboardHook=" << (keyboard_hook_ != nullptr ? 1 : 0);
+        EmitDiagnostic(diagnostic.str());
       } else {
         return;
       }
@@ -653,24 +722,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
   }
 
-  void HandleRawKeyboard(const RAWKEYBOARD& keyboard) {
-    const bool down =
-        keyboard.Message == WM_KEYDOWN || keyboard.Message == WM_SYSKEYDOWN;
-    if (down && IsReleaseHotkey(keyboard.VKey)) {
-      EmitRelease("hotkey");
-      StopCapture();
-      return;
-    }
-    if (!capture_active_) {
-      return;
-    }
-    const bool up =
-        keyboard.Message == WM_KEYUP || keyboard.Message == WM_SYSKEYUP;
-    if (!down && !up) {
-      return;
-    }
-    EmitInputEvent("key", JsonBytes(KeyPayload(keyboard.VKey, down)));
-  }
+  void HandleRawKeyboard(const RAWKEYBOARD&) {}
 
   bool IsEdgeActivation(POINT point, LONG delta_x, LONG delta_y) const {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -802,6 +854,92 @@ class RemoteInputPlugin : public flutter::Plugin {
     SyncInjectedButtons(0);
   }
 
+  void SendKeyboardKey(WORD key, bool down) {
+    if (key == 0) {
+      return;
+    }
+    const UINT scan_code = MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
+    INPUT input = {};
+    input.type = INPUT_KEYBOARD;
+    if (scan_code == 0) {
+      input.ki.wVk = key;
+      input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    } else {
+      input.ki.wScan = static_cast<WORD>(scan_code);
+      input.ki.dwFlags = KEYEVENTF_SCANCODE;
+      if (!down) {
+        input.ki.dwFlags |= KEYEVENTF_KEYUP;
+      }
+      if (IsExtendedKeyboardKey(key)) {
+        input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+      }
+    }
+    SendInput(1, &input, sizeof(INPUT));
+  }
+
+  bool IsExtendedKeyboardKey(WORD key) const {
+    switch (key) {
+      case VK_RCONTROL:
+      case VK_RMENU:
+      case VK_INSERT:
+      case VK_DELETE:
+      case VK_HOME:
+      case VK_END:
+      case VK_PRIOR:
+      case VK_NEXT:
+      case VK_LEFT:
+      case VK_RIGHT:
+      case VK_UP:
+      case VK_DOWN:
+      case VK_NUMLOCK:
+      case VK_DIVIDE:
+      case VK_LWIN:
+      case VK_RWIN:
+      case VK_APPS:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  void SetInjectedKey(WORD key, bool down) {
+    if (key == 0) {
+      return;
+    }
+    const auto it = std::find(injected_keys_.begin(), injected_keys_.end(), key);
+    if (down) {
+      if (it == injected_keys_.end()) {
+        injected_keys_.push_back(key);
+      }
+      return;
+    }
+    if (it != injected_keys_.end()) {
+      injected_keys_.erase(it);
+    }
+  }
+
+  void ReleaseInjectedKeys() {
+    if (injected_keys_.empty()) {
+      return;
+    }
+    const auto keys = injected_keys_;
+    injected_keys_.clear();
+    for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+      SendKeyboardKey(*it, false);
+    }
+  }
+
+  void ReleaseCommonModifierKeys() {
+    constexpr WORD keys[] = {
+        VK_CONTROL, VK_LCONTROL, VK_RCONTROL, VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+        VK_MENU, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN};
+    for (const WORD key : keys) {
+      if ((GetAsyncKeyState(key) & 0x8000) != 0) {
+        SendKeyboardKey(key, false);
+      }
+    }
+  }
+
   void InjectEvent(const std::string& session_id,
                    const std::string& event_type,
                    const std::vector<uint8_t>& payload) {
@@ -817,6 +955,8 @@ class RemoteInputPlugin : public flutter::Plugin {
       if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
         ReleaseInjectedButtons();
+        ReleaseInjectedKeys();
+        ReleaseCommonModifierKeys();
         EmitReleaseForSession(release_session_id, "edge");
         return;
       }
@@ -871,13 +1011,11 @@ class RemoteInputPlugin : public flutter::Plugin {
       const int raw_key = static_cast<int>(
           windows_key.value_or(JsonNumber(json, "keyCode").value_or(0)));
       const bool down = JsonBool(json, "down");
-      INPUT input = {};
-      input.type = INPUT_KEYBOARD;
-      input.ki.wVk = windows_key.has_value()
-                         ? static_cast<WORD>(raw_key)
-                         : MacVirtualKeyToWindows(raw_key);
-      input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
-      SendInput(1, &input, sizeof(INPUT));
+      const WORD key = windows_key.has_value()
+                           ? static_cast<WORD>(raw_key)
+                           : MacVirtualKeyToWindows(raw_key);
+      SendKeyboardKey(key, down);
+      SetInjectedKey(key, down);
     }
   }
 
@@ -949,6 +1087,22 @@ class RemoteInputPlugin : public flutter::Plugin {
         std::make_unique<flutter::EncodableValue>(std::move(arguments)));
   }
 
+  void EmitDiagnostic(const std::string& message) {
+    if (capture_session_id_.empty()) {
+      return;
+    }
+    flutter::EncodableMap arguments;
+    arguments[flutter::EncodableValue("sessionId")] =
+        flutter::EncodableValue(capture_session_id_);
+    arguments[flutter::EncodableValue("message")] =
+        flutter::EncodableValue(message);
+
+    std::lock_guard<std::mutex> lock(channel_mutex_);
+    channel_->InvokeMethod(
+        "onDiagnostic",
+        std::make_unique<flutter::EncodableValue>(std::move(arguments)));
+  }
+
   HWND window_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::mutex channel_mutex_;
@@ -958,7 +1112,9 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
   int capture_buttons_ = 0;
+  int keyboard_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
+  std::vector<WORD> injected_keys_;
   uint64_t sequence_ = 0;
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;

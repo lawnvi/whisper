@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
+import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,8 +21,23 @@ bool isDesktop() {
   return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 }
 
+// Linux is included in the remote input key protocol, but native source/sink
+// support stays disabled until an X11 or Wayland backend is implemented.
 bool supportsNativeRemoteInput() {
   return Platform.isMacOS || Platform.isWindows;
+}
+
+RemoteInputPlatformKind currentRemoteInputPlatformKind() {
+  if (Platform.isMacOS) {
+    return RemoteInputPlatformKind.macos;
+  }
+  if (Platform.isWindows) {
+    return RemoteInputPlatformKind.windows;
+  }
+  if (Platform.isLinux) {
+    return RemoteInputPlatformKind.linux;
+  }
+  return RemoteInputPlatformKind.unknown;
 }
 
 bool isMobile() {

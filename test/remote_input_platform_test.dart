@@ -75,8 +75,11 @@ void main() {
     test('emits native input events and release callbacks', () async {
       final events = <RemoteInputPacketFrame>[];
       final releases = <PlatformRemoteInputRelease>[];
+      final diagnostics = <PlatformRemoteInputDiagnostic>[];
       final eventSubscription = platform.inputEvents.listen(events.add);
       final releaseSubscription = platform.releases.listen(releases.add);
+      final diagnosticSubscription =
+          platform.diagnostics.listen(diagnostics.add);
 
       await platform.handleNativeMethodCall(
         MethodCall('onInputEvent', <String, dynamic>{
@@ -93,14 +96,22 @@ void main() {
           'reason': 'hotkey',
         }),
       );
+      await platform.handleNativeMethodCall(
+        const MethodCall('onDiagnostic', <String, dynamic>{
+          'sessionId': 'input-1',
+          'message': 'keyboard hook active',
+        }),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(events.single.eventType, RemoteInputEventType.mouseMove);
       expect(events.single.payload, <int>[1, 2]);
       expect(releases.single.reason, 'hotkey');
+      expect(diagnostics.single.message, 'keyboard hook active');
 
       await eventSubscription.cancel();
       await releaseSubscription.cancel();
+      await diagnosticSubscription.cancel();
     });
   });
 

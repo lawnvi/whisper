@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -291,6 +294,148 @@ void main() {
       expect(calls.map((call) => call.method), contains('injectEvent'));
     });
 
+    test('sink translates key payloads before native injection', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        keyTranslatorFactory: (platformKind) => RemoteInputKeyTranslator(
+          targetPlatform: RemoteInputPlatformKind.macos,
+        ),
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-key-translate-1',
+        sourcePeerId: 'win',
+        sinkPeerId: 'mac',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: 'input-key-translate-1',
+          sequence: 1,
+          timestampMicros: 2,
+          eventType: RemoteInputEventType.key,
+          payload: Uint8List.fromList(utf8.encode(jsonEncode(<String, dynamic>{
+            'sourcePlatform': 'windows',
+            'keyCode': 0x11,
+            'windowsKeyCode': 0x11,
+            'macKeyCode': 59,
+            'down': true,
+          }))),
+        ).encode(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final injectCall =
+          calls.lastWhere((call) => call.method == 'injectEvent');
+      final args = injectCall.arguments as Map<Object?, Object?>;
+      final payload = jsonDecode(
+        utf8.decode(args['payload'] as Uint8List),
+      ) as Map<String, dynamic>;
+
+      expect(payload['keyCode'], 59);
+      expect(payload['macKeyCode'], 59);
+      expect(payload['modifierSemantic'], 'control');
+    });
+
+    test('sink serializes key injections to preserve modifier combos',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        keyTranslatorFactory: (platformKind) => RemoteInputKeyTranslator(
+          targetPlatform: RemoteInputPlatformKind.macos,
+        ),
+      );
+      final injectCalls = <MethodCall>[];
+      final firstInjectStarted = Completer<void>();
+      final releaseFirstInject = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent') {
+          injectCalls.add(call);
+          if (injectCalls.length == 1) {
+            firstInjectStarted.complete();
+            await releaseFirstInject.future;
+          }
+        }
+        return null;
+      });
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-key-order-1',
+        sourcePeerId: 'win',
+        sinkPeerId: 'mac',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(
+        _keyFrameBytes(
+          sessionId: 'input-key-order-1',
+          sequence: 1,
+          payload: <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'keyCode': 0x11,
+            'windowsKeyCode': 0x11,
+            'down': true,
+          },
+        ),
+      );
+      await firstInjectStarted.future;
+
+      manager.handlePacketBytes(
+        _keyFrameBytes(
+          sessionId: 'input-key-order-1',
+          sequence: 2,
+          payload: <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'keyCode': 0x43,
+            'windowsKeyCode': 0x43,
+            'down': true,
+          },
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(injectCalls, hasLength(1));
+
+      releaseFirstInject.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(injectCalls, hasLength(2));
+    });
+
     test('sink sends an edge release control without stopping injection',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
@@ -382,6 +527,20 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
     });
   });
+}
+
+Uint8List _keyFrameBytes({
+  required String sessionId,
+  required int sequence,
+  required Map<String, dynamic> payload,
+}) {
+  return RemoteInputPacketFrame(
+    sessionId: sessionId,
+    sequence: sequence,
+    timestampMicros: sequence,
+    eventType: RemoteInputEventType.key,
+    payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+  ).encode();
 }
 
 class _FakeRemoteInputTransport implements RemoteInputPacketTransport {

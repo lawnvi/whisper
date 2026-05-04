@@ -1,11 +1,17 @@
 import Cocoa
 import AVFoundation
 import ApplicationServices
+import Carbon.HIToolbox
 import CoreGraphics
 import CoreMedia
 import FlutterMacOS
+import OSLog
 import ScreenCaptureKit
 import window_manager
+
+private let remoteInputLog = OSLog(
+  subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
+  category: "RemoteInput")
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
@@ -42,7 +48,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var captureCursorHidden = false
   private var captureMouseButtons = 0
   private var injectedMouseButtons = 0
+  private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
+  private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -102,8 +110,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         return
       }
       releaseInjectedMouseButtons()
+      releaseInjectedKeys()
+      releaseCommonModifierKeys()
       injectedModifierFlags = []
       injectionSessionId = sessionId
+      os_log(
+        "remote input injection started session=%{public}@",
+        log: remoteInputLog,
+        type: .info,
+        sessionId)
       result(nil)
 
     case "injectEvent":
@@ -208,7 +223,16 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   private func stopInjection() {
+    if !injectionSessionId.isEmpty {
+      os_log(
+        "remote input injection stopped session=%{public}@",
+        log: remoteInputLog,
+        type: .info,
+        injectionSessionId)
+    }
     releaseInjectedMouseButtons()
+    releaseInjectedKeys()
+    releaseCommonModifierKeys()
     injectedModifierFlags = []
     injectionSessionId = ""
   }
@@ -302,6 +326,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     case "key":
       let macKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
       payload = [
+        "sourcePlatform": "macos",
         "keyCode": macKeyCode,
         "macKeyCode": macKeyCode,
         "windowsKeyCode": windowsVirtualKey(forMacKeyCode: macKeyCode),
@@ -347,9 +372,24 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   private func injectEvent(sessionId: String, eventType: String, payload: Data) {
-    guard sessionId == injectionSessionId,
-          let object = try? JSONSerialization.jsonObject(with: payload),
+    guard sessionId == injectionSessionId else {
+      os_log(
+        "drop remote input event session mismatch event=%{public}@ incoming=%{public}@ active=%{public}@",
+        log: remoteInputLog,
+        type: .info,
+        eventType,
+        sessionId,
+        injectionSessionId)
+      return
+    }
+    guard let object = try? JSONSerialization.jsonObject(with: payload),
           let data = object as? [String: Any] else {
+      os_log(
+        "drop remote input event invalid payload event=%{public}@ session=%{public}@",
+        log: remoteInputLog,
+        type: .info,
+        eventType,
+        sessionId)
       return
     }
 
@@ -409,11 +449,30 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let nativeKeyCode = nativeMacKeyCode(data)
       let keyCode = CGKeyCode(nativeKeyCode)
       let down = boolValue(data["down"])
-      updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
-      if let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: down) {
-        keyEvent.flags = injectedModifierFlags
-        keyEvent.post(tap: .cghidEventTap)
+      let semantic =
+        data["modifierSemantic"] as? String ?? data["keySemantic"] as? String ?? ""
+      os_log(
+        "remote key inject session=%{public}@ down=%{public}d nativeMac=%{public}d keyCode=%{public}d mac=%{public}d win=%{public}d linux=%{public}d semantic=%{public}@ injectedFlags=%{public}llu",
+        log: remoteInputLog,
+        type: .info,
+        sessionId,
+        down ? 1 : 0,
+        nativeKeyCode,
+        intValue(data["keyCode"]),
+        intValue(data["macKeyCode"]),
+        intValue(data["windowsKeyCode"]),
+        intValue(data["linuxKeyCode"]),
+        semantic,
+        injectedModifierFlags.rawValue)
+      if isCapsLockInputSourceSwitch(nativeKeyCode: nativeKeyCode, semantic: semantic) {
+        if down {
+          toggleKeyboardInputSource()
+        }
+        return
       }
+      updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
+      postKeyboardEvent(keyCode: keyCode, down: down)
+      setInjectedKey(nativeKeyCode, down: down)
     default:
       break
     }
@@ -604,7 +663,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   private func updateInjectedModifierFlags(macKeyCode: Int, down: Bool) {
-    guard let flag = modifierFlag(forMacKeyCode: macKeyCode) else {
+    guard macKeyCode != 57,
+          let flag = modifierFlag(forMacKeyCode: macKeyCode) else {
       return
     }
     if down {
@@ -612,6 +672,138 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     } else {
       injectedModifierFlags.remove(flag)
     }
+  }
+
+  private func isInjectedModifierKey(_ keyCode: Int) -> Bool {
+    return keyCode != 57 && modifierFlag(forMacKeyCode: keyCode) != nil
+  }
+
+  private func isCapsLockInputSourceSwitch(nativeKeyCode: Int, semantic: String) -> Bool {
+    return nativeKeyCode == 57 || semantic == "capsLock"
+  }
+
+  private func toggleKeyboardInputSource() {
+    guard let sources = selectableKeyboardInputSources(), !sources.isEmpty else {
+      os_log(
+        "remote caps input source switch skipped no candidates",
+        log: remoteInputLog,
+        type: .info)
+      return
+    }
+
+    let currentId = currentKeyboardInputSourceId()
+    let currentIndex: Int
+    if let currentId = currentId,
+       let index = sources.firstIndex(where: {
+         inputSourceStringProperty($0, kTISPropertyInputSourceID) == currentId
+       }) {
+      currentIndex = index
+    } else {
+      currentIndex = -1
+    }
+
+    let nextSource = sources[(currentIndex + 1) % sources.count]
+    let nextId = inputSourceStringProperty(nextSource, kTISPropertyInputSourceID)
+    let status = TISSelectInputSource(nextSource)
+    os_log(
+      "remote caps input source switched current=%{public}@ next=%{public}@ status=%{public}d",
+      log: remoteInputLog,
+      type: .info,
+      currentId ?? "",
+      nextId,
+      status)
+  }
+
+  private func selectableKeyboardInputSources() -> [TISInputSource]? {
+    guard let rawSources = TISCreateInputSourceList(nil, false)?
+      .takeRetainedValue() as? [TISInputSource] else {
+      return nil
+    }
+    return rawSources.filter {
+      inputSourceBoolProperty($0, kTISPropertyInputSourceIsSelectCapable) &&
+        inputSourceBoolProperty($0, kTISPropertyInputSourceIsEnabled) &&
+        inputSourceStringProperty($0, kTISPropertyInputSourceCategory) ==
+          kTISCategoryKeyboardInputSource as String
+    }
+  }
+
+  private func currentKeyboardInputSourceId() -> String? {
+    guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
+      return nil
+    }
+    let sourceId = inputSourceStringProperty(source, kTISPropertyInputSourceID)
+    return sourceId.isEmpty ? nil : sourceId
+  }
+
+  private func inputSourceBoolProperty(_ source: TISInputSource, _ key: CFString) -> Bool {
+    guard let value = TISGetInputSourceProperty(source, key) else {
+      return false
+    }
+    return Unmanaged<CFBoolean>
+      .fromOpaque(value)
+      .takeUnretainedValue() == kCFBooleanTrue
+  }
+
+  private func inputSourceStringProperty(_ source: TISInputSource, _ key: CFString) -> String {
+    guard let value = TISGetInputSourceProperty(source, key) else {
+      return ""
+    }
+    return Unmanaged<CFString>
+      .fromOpaque(value)
+      .takeUnretainedValue() as String
+  }
+
+  private func postKeyboardEvent(keyCode: CGKeyCode, down: Bool) {
+    if let keyEvent = CGEvent(keyboardEventSource: keyboardEventSource, virtualKey: keyCode, keyDown: down) {
+      let isModifier = isInjectedModifierKey(Int(keyCode))
+      if isModifier {
+        keyEvent.type = .flagsChanged
+        keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)
+      } else {
+        keyEvent.flags = injectedModifierFlags
+      }
+      let eventType = isModifier ? "flagsChanged" : (down ? "keyDown" : "keyUp")
+      os_log(
+        "post remote key mac=%{public}d down=%{public}d type=%{public}@ flags=%{public}llu",
+        log: remoteInputLog,
+        type: .info,
+        Int(keyCode),
+        down ? 1 : 0,
+        eventType,
+        keyEvent.flags.rawValue)
+      keyEvent.post(tap: .cghidEventTap)
+    }
+  }
+
+  private func setInjectedKey(_ keyCode: Int, down: Bool) {
+    if down {
+      if !injectedKeyCodes.contains(keyCode) {
+        injectedKeyCodes.append(keyCode)
+      }
+    } else {
+      injectedKeyCodes.removeAll { $0 == keyCode }
+    }
+  }
+
+  private func releaseInjectedKeys() {
+    guard !injectedKeyCodes.isEmpty else {
+      return
+    }
+    let keyCodes = injectedKeyCodes.reversed()
+    injectedKeyCodes.removeAll()
+    for keyCode in keyCodes {
+      updateInjectedModifierFlags(macKeyCode: keyCode, down: false)
+      postKeyboardEvent(keyCode: CGKeyCode(keyCode), down: false)
+    }
+    injectedModifierFlags = []
+  }
+
+  private func releaseCommonModifierKeys() {
+    for keyCode in [54, 55, 56, 60, 58, 61, 59, 62] {
+      updateInjectedModifierFlags(macKeyCode: keyCode, down: false)
+      postKeyboardEvent(keyCode: CGKeyCode(keyCode), down: false)
+    }
+    injectedModifierFlags = []
   }
 
   private func setInjectedMouseButton(_ button: Int, down: Bool) {
@@ -724,7 +916,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     case 50: return 0xC0
     case 51: return 0x08
     case 53: return 0x1B
-    case 54, 55, 59, 62: return 0x11
+    case 54: return 0x5C
+    case 55: return 0x5B
+    case 59: return 0xA2
+    case 62: return 0xA3
     case 56, 60: return 0x10
     case 58, 61: return 0x12
     case 117: return 0x2E
@@ -790,7 +985,11 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     case 0xC0: return 50
     case 0x08: return 51
     case 0x1B: return 53
-    case 0x11, 0x5B, 0x5C: return 55
+    case 0x14: return 57
+    case 0x11, 0xA2: return 59
+    case 0xA3: return 62
+    case 0x5B: return 55
+    case 0x5C: return 54
     case 0x10: return 56
     case 0x12: return 58
     case 0x2E: return 117
@@ -950,6 +1149,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return
     }
     releaseInjectedMouseButtons()
+    releaseInjectedKeys()
+    releaseCommonModifierKeys()
     emitRelease(sessionId: sessionId, reason: reason)
   }
 

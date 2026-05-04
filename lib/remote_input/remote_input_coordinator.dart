@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/helper.dart';
+import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -12,6 +14,9 @@ typedef RemoteInputControlSender = void Function(
 );
 typedef RemoteInputTransportFactory = Future<RemoteInputPacketTransport>
     Function(Uri uri);
+typedef RemoteInputKeyTranslatorFactory = RemoteInputKeyTranslator Function(
+  RemoteInputPlatformKind platform,
+);
 
 enum RemoteInputRuntimeRole {
   none,
@@ -65,22 +70,29 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputManager? manager,
     RemoteInputPlatform? platform,
     RemoteInputTransportFactory? transportFactory,
+    RemoteInputKeyTranslatorFactory? keyTranslatorFactory,
   })  : _manager = manager ?? RemoteInputManager.shared,
         _platform = platform ?? RemoteInputPlatform(),
         _transportFactory =
-            transportFactory ?? RemoteInputWebSocketPacketTransport.connect;
+            transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
+        _keyTranslatorFactory = keyTranslatorFactory ??
+            ((platform) => RemoteInputKeyTranslator(targetPlatform: platform));
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
   final RemoteInputTransportFactory _transportFactory;
+  final RemoteInputKeyTranslatorFactory _keyTranslatorFactory;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
+  Future<void> _injectionQueue = Future<void>.value();
+  RemoteInputKeyTranslator? _keyTranslator;
   StreamSubscription<RemoteInputPacketFrame>? _inputSubscription;
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
   StreamSubscription<PlatformRemoteInputError>? _errorSubscription;
+  StreamSubscription<PlatformRemoteInputDiagnostic>? _diagnosticSubscription;
 
   RemoteInputRuntimeState get state => _state;
 
@@ -209,15 +221,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final current = _state;
     final transport = _transport;
     _transport = null;
+    _keyTranslator = null;
+    _injectionQueue = Future<void>.value();
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
     await _inputSubscription?.cancel();
     await _releaseSubscription?.cancel();
     await _errorSubscription?.cancel();
+    await _diagnosticSubscription?.cancel();
     _inputSubscription = null;
     _releaseSubscription = null;
     _errorSubscription = null;
+    _diagnosticSubscription = null;
     if (current.sessionId.isNotEmpty) {
       if (current.role == RemoteInputRuntimeRole.source) {
         await _platform.stopCapture(sessionId: current.sessionId);
@@ -345,6 +361,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     await _platform.startInjection(sessionId: message.sessionId);
+    _keyTranslator = _keyTranslatorFactory(currentRemoteInputPlatformKind());
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
@@ -367,8 +384,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
         unawaited(stopLocal());
       }
     });
+    _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
+      if (diagnostic.sessionId == message.sessionId) {
+        logger.i('remote input diagnostic: ${diagnostic.message}');
+      }
+    });
     _manager.onPacket = (packet) {
-      unawaited(_platform.injectEvent(packet));
+      final translated = _keyTranslator?.translateFrame(packet) ??
+          <RemoteInputPacketFrame>[
+            packet,
+          ];
+      _enqueueInjection(message.sessionId, translated);
     };
     _setState(
       RemoteInputRuntimeState(
@@ -378,6 +404,22 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
+  }
+
+  void _enqueueInjection(
+    String sessionId,
+    List<RemoteInputPacketFrame> frames,
+  ) {
+    _injectionQueue = _injectionQueue.then<void>((_) async {
+      for (final frame in frames) {
+        if (_state.role != RemoteInputRuntimeRole.sink ||
+            _state.sessionId != sessionId ||
+            frame.sessionId != sessionId) {
+          return;
+        }
+        await _platform.injectEvent(frame);
+      }
+    }).catchError((Object _) {});
   }
 
   Future<void> _startCapture(
@@ -430,6 +472,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _errorSubscription = _platform.errors.listen((error) {
       if (error.sessionId == message.sessionId) {
         unawaited(stopLocal());
+      }
+    });
+    _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
+      if (diagnostic.sessionId == message.sessionId) {
+        logger.i('remote input diagnostic: ${diagnostic.message}');
       }
     });
     await _platform.startCapture(

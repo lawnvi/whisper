@@ -20,10 +20,13 @@ class RemoteInputPlatform {
       StreamController<PlatformRemoteInputRelease>.broadcast();
   final StreamController<PlatformRemoteInputError> _errors =
       StreamController<PlatformRemoteInputError>.broadcast();
+  final StreamController<PlatformRemoteInputDiagnostic> _diagnostics =
+      StreamController<PlatformRemoteInputDiagnostic>.broadcast();
 
   Stream<RemoteInputPacketFrame> get inputEvents => _inputEvents.stream;
   Stream<PlatformRemoteInputRelease> get releases => _releases.stream;
   Stream<PlatformRemoteInputError> get errors => _errors.stream;
+  Stream<PlatformRemoteInputDiagnostic> get diagnostics => _diagnostics.stream;
 
   Future<void> startCapture({
     required String sessionId,
@@ -120,6 +123,17 @@ class RemoteInputPlatform {
       return null;
     }
 
+    if (call.method == 'onDiagnostic') {
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
+      _diagnostics.add(
+        PlatformRemoteInputDiagnostic(
+          sessionId: arguments['sessionId'] as String? ?? '',
+          message: arguments['message'] as String? ?? '',
+        ),
+      );
+      return null;
+    }
+
     throw MissingPluginException(
       'No remote input platform handler for ${call.method}',
     );
@@ -148,6 +162,16 @@ class PlatformRemoteInputRelease {
 
 class PlatformRemoteInputError {
   const PlatformRemoteInputError({
+    required this.sessionId,
+    required this.message,
+  });
+
+  final String sessionId;
+  final String message;
+}
+
+class PlatformRemoteInputDiagnostic {
+  const PlatformRemoteInputDiagnostic({
     required this.sessionId,
     required this.message,
   });
