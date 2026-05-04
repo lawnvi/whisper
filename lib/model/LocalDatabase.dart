@@ -4,7 +4,6 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
-import 'package:whisper/helper/local.dart';
 import '../helper/helper.dart';
 import 'device.dart';
 import 'file_transfer.dart';
@@ -173,12 +172,17 @@ class LocalDatabase extends _$LocalDatabase {
     List<String> uids,
   ) async {
     final latestMessages = <String, MessageData>{};
+    final selfUid = await localUUID();
     for (final uid in uids.toSet()) {
       if (uid.isEmpty) {
         continue;
       }
       final latest = await (select(message)
-            ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+            ..where(
+              (t) => uid == selfUid
+                  ? t.sender.equals(selfUid) & t.receiver.equals('')
+                  : t.sender.equals(uid) | t.receiver.equals(uid),
+            )
             ..orderBy([
               (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
             ])
@@ -195,15 +199,14 @@ class LocalDatabase extends _$LocalDatabase {
     if (uids.isEmpty) {
       return;
     }
-    var localhost = await LocalSetting().instance();
+    final selfUid = await localUUID();
     final targetIds = List<String>.from(uids);
-    if (targetIds.contains(localhost.uid)) {
-      targetIds.remove(localhost.uid);
+    if (targetIds.contains(selfUid)) {
+      targetIds.remove(selfUid);
       await (delete(message)
-            ..where(
-                (t) => t.sender.equals(localhost.uid) & t.receiver.equals("")))
+            ..where((t) => t.sender.equals(selfUid) & t.receiver.equals("")))
           .go();
-      await (delete(device)..where((t) => t.uid.equals(localhost.uid))).go();
+      await (delete(device)..where((t) => t.uid.equals(selfUid))).go();
     }
     if (targetIds.isNotEmpty) {
       await (delete(message)

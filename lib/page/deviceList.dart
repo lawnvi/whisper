@@ -25,6 +25,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:window_manager/window_manager.dart';
@@ -57,9 +58,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
   BonsoirDiscovery? _discovery;
+  StreamSubscription<BonsoirBroadcastEvent>? _broadcastSubscription;
+  StreamSubscription<BonsoirDiscoveryEvent>? _discoverySubscription;
   final serviceName = "whisper";
   final serviceType = "_whisper._tcp";
-  bool discovering = false;
+  bool _isBroadcasting = false;
+  bool _isDiscovering = false;
+  bool _didBootstrapDiscovery = false;
+  Timer? _broadcastRestartTimer;
+  final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
+    minimumInterval: const Duration(seconds: 5),
+  );
   var lastClickCloseTimestamp = 0;
   static var listenApps = {};
   var _clipboardText = "";
@@ -90,7 +99,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void didChangeDependencies() async {
-    _refreshDevice(isFirst: true);
+    final isFirst = !_didBootstrapDiscovery;
+    _didBootstrapDiscovery = true;
+    _refreshDevice(isFirst: isFirst);
     socketManager.registerEvent(this, uid: device?.uid ?? "", primary: true);
     super.didChangeDependencies();
   }
@@ -249,6 +260,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     logger.i("dispose page");
+    _broadcastRestartTimer?.cancel();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
     trayManager.removeListener(this);
@@ -269,6 +281,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _destroyTray() async {
     trayManager.removeListener(this);
     await trayManager.destroy();
+  }
+
+  String _serviceResolveKey(BonsoirService service) {
+    return '${service.name}|${service.type}';
+  }
+
+  bool _shouldResolveService(BonsoirService service) {
+    return _resolveLimiter.shouldResolve(_serviceResolveKey(service));
   }
 
   Future<void> _stopSocketServer() {
@@ -310,7 +330,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     logger.i("wifi ip: $wifiIP");
 
     if (wifiIP == "127.0.0.1") {
-      discovering = false;
+      _isBroadcasting = false;
       return;
     }
 
@@ -334,20 +354,27 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _broadcast = BonsoirBroadcast(service: service);
     await _broadcast!.ready;
 
-    _broadcast!.eventStream!.listen((event) {
+    _broadcastSubscription?.cancel();
+    _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
       debugPrint('Broadcast event : ${event.type}');
     });
 
     await _broadcast!.start();
-    discovering = true;
+    _isBroadcasting = true;
   }
 
   Future<void> _stopBroadcast({close = true}) async {
+    _broadcastRestartTimer?.cancel();
+    _broadcastRestartTimer = null;
+    await _broadcastSubscription?.cancel();
+    _broadcastSubscription = null;
     await _broadcast?.stop();
-    discovering = !close;
+    _broadcast = null;
+    _isBroadcasting = !close;
   }
 
   Future<void> _discoverService() async {
+    await _stopDiscovery();
     // This is the type of service we're looking for :
 
     // Once defined, we can start the discovery :
@@ -355,7 +382,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await _discovery!.ready;
 
     // If you want to listen to the discovery :
-    _discovery?.eventStream!.listen((event) async {
+    _discoverySubscription?.cancel();
+    _discoverySubscription = _discovery?.eventStream!.listen((event) async {
       debugPrint('Discovery event : ${event.type}');
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
@@ -364,7 +392,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
           case BonsoirDiscoveryEventType.discoveryServiceFound:
             logger.i(
                 "event type: ${event.type}, service name: $serviceName ${service.name}");
-            if (service.name.startsWith(serviceName)) {
+            if (service.name.startsWith(serviceName) &&
+                _shouldResolveService(service)) {
               event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
@@ -400,6 +429,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
             logger.i("本地设备platform: $platform");
             if (uid == null || uid == device?.uid) {
               return;
+            }
+            if (isLost) {
+              _resolveLimiter.clear(_serviceResolveKey(svr));
             }
             var temp = await LocalDatabase().fetchDevice(uid);
             final resolvedDevice = buildDevice(
@@ -453,11 +485,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     // Start discovery **after** having listened to discovery events :
     await _discovery?.start();
+    _isDiscovering = true;
   }
 
   Future<void> _stopDiscovery() async {
+    await _discoverySubscription?.cancel();
+    _discoverySubscription = null;
     await _discovery?.stop();
-    discovering = false;
+    _discovery = null;
+    _isDiscovering = false;
   }
 
   DeviceData buildDevice(
@@ -544,17 +580,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _selectedDesktopPeerId = selectedPeerId;
     });
 
-    logger.i("refresh ui: $discovering $serverPortUpdate");
-    if (!discovering || serverPortUpdate) {
-      discovering = true;
-      Future.delayed(const Duration(milliseconds: 100), () {
+    logger.i(
+        "refresh ui: broadcasting=$_isBroadcasting discovering=$_isDiscovering serverPortUpdate=$serverPortUpdate");
+    if (!_isBroadcasting || serverPortUpdate) {
+      _isBroadcasting = true;
+      _broadcastRestartTimer?.cancel();
+      _broadcastRestartTimer = Timer(const Duration(milliseconds: 100), () {
+        _broadcastRestartTimer = null;
         _broadcastService();
       });
-      if (isFirst) {
-        _discoverService();
-
-        setListenApps();
-      }
+    }
+    if (isFirst && !_isDiscovering) {
+      _discoverService();
+      setListenApps();
     }
   }
 
