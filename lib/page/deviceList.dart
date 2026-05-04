@@ -22,6 +22,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -64,10 +65,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
   var _clipboardText = "";
   final TextEditingController _desktopSearchController =
       TextEditingController();
+  final AppShutdownCoordinator _shutdownCoordinator =
+      AppShutdownCoordinator();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   String? _selectedDesktopPeerId;
   String? _pendingAutoConnectPeerId;
+  Future<void>? _desktopShutdownFuture;
+  bool _isDestroyingWindow = false;
 
   @override
   void initState() {
@@ -196,7 +201,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             key: 'exit_app',
             label: AppLocalizations.of(context)?.exit ?? '退出',
             onClick: (MenuItem menuItem) async {
-              await windowManager.destroy();
+              await _shutdownAndDestroyWindow();
             }),
       ],
     );
@@ -244,16 +249,52 @@ class _DeviceListScreen extends State<DeviceListScreen>
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     logger.i("dispose page");
-    _stopDiscovery();
-    _stopBroadcast();
+    unawaited(_stopDiscovery());
+    unawaited(_stopBroadcast());
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
     socketManager.unregisterEvent(this);
     _desktopSearchController.dispose();
     // stop watch
-    clipboardWatcher.stop();
+    unawaited(clipboardWatcher.stop());
     super.dispose();
+  }
+
+  Future<void> _stopClipboardWatcher() async {
+    clipboardWatcher.removeListener(this);
+    await clipboardWatcher.stop();
+  }
+
+  Future<void> _destroyTray() async {
+    trayManager.removeListener(this);
+    await trayManager.destroy();
+  }
+
+  Future<void> _stopSocketServer() {
+    return socketManager.closeGracefully(
+      closeServer: true,
+      forceServerClose: true,
+    );
+  }
+
+  Future<void> _shutdownDesktopResources() {
+    return _desktopShutdownFuture ??= _shutdownCoordinator.run([
+      _stopDiscovery,
+      _stopBroadcast,
+      _stopClipboardWatcher,
+      _stopSocketServer,
+      _destroyTray,
+    ]);
+  }
+
+  Future<void> _shutdownAndDestroyWindow() async {
+    if (_isDestroyingWindow) {
+      return;
+    }
+    _isDestroyingWindow = true;
+    await _shutdownDesktopResources();
+    await windowManager.destroy();
   }
 
   void _broadcastService({port}) async {
@@ -1466,6 +1507,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void onWindowClose() async {
     var timestamp = DateTime.now().millisecondsSinceEpoch;
+    if (_isDestroyingWindow) {
+      return;
+    }
     if (await LocalSetting().isClose2Tray() &&
         await windowManager.isPreventClose()) {
       if (Platform.isMacOS &&
@@ -1476,7 +1520,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         await windowManager.hide();
       }
     } else {
-      await windowManager.destroy();
+      await _shutdownAndDestroyWindow();
     }
     lastClickCloseTimestamp = timestamp;
   }

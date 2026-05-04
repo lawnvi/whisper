@@ -320,7 +320,10 @@ class WsSvrManager {
     }
   }
 
-  void close({bool closeServer = false}) {
+  Future<void> closeGracefully({
+    bool closeServer = false,
+    bool forceServerClose = false,
+  }) async {
     final hadActiveConnection = _sink != null ||
         _ioSink != null ||
         _clientTimer != null ||
@@ -333,20 +336,26 @@ class WsSvrManager {
     _clientTimer?.cancel();
     _clientTimer = null;
     unawaited(_markRecoverableTransfersWaitingReconnect());
-    unawaited(_closeResumableHandles());
-    _freeIoSink(freeAll: true);
+    final closeResumableHandles = _closeResumableHandles();
+    await _freeIoSink(freeAll: true);
     final currentSink = _sink;
     _sink = null;
-    currentSink?.close();
+    await currentSink?.close();
     if (closeServer) {
       started = false;
-      _server?.close();
+      final server = _server;
       _server = null;
+      await server?.close(force: forceServerClose);
     }
+    await closeResumableHandles;
     _remoteProfile = null;
     receiver = "";
     logger.i("服务已关闭");
     _dispatchToAll((event) => event.onClose());
+  }
+
+  void close({bool closeServer = false}) {
+    unawaited(closeGracefully(closeServer: closeServer));
   }
 
   void _send(String message) {
