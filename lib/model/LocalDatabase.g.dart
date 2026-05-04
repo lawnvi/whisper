@@ -2086,18 +2086,568 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   }
 }
 
+class $RemoteInputLayoutTable extends RemoteInputLayout
+    with TableInfo<$RemoteInputLayoutTable, RemoteInputLayoutData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RemoteInputLayoutTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _peerIdMeta = const VerificationMeta('peerId');
+  @override
+  late final GeneratedColumn<String> peerId = GeneratedColumn<String>(
+      'peer_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _peerNameMeta =
+      const VerificationMeta('peerName');
+  @override
+  late final GeneratedColumn<String> peerName = GeneratedColumn<String>(
+      'peer_name', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _xMeta = const VerificationMeta('x');
+  @override
+  late final GeneratedColumn<int> x = GeneratedColumn<int>(
+      'x', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1000));
+  static const VerificationMeta _yMeta = const VerificationMeta('y');
+  @override
+  late final GeneratedColumn<int> y = GeneratedColumn<int>(
+      'y', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<int> width = GeneratedColumn<int>(
+      'width', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(900));
+  static const VerificationMeta _heightMeta = const VerificationMeta('height');
+  @override
+  late final GeneratedColumn<int> height = GeneratedColumn<int>(
+      'height', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(600));
+  static const VerificationMeta _enabledMeta =
+      const VerificationMeta('enabled');
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+      'enabled', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("enabled" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _autoActivateMeta =
+      const VerificationMeta('autoActivate');
+  @override
+  late final GeneratedColumn<bool> autoActivate = GeneratedColumn<bool>(
+      'auto_activate', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("auto_activate" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _edgeThresholdPxMeta =
+      const VerificationMeta('edgeThresholdPx');
+  @override
+  late final GeneratedColumn<int> edgeThresholdPx = GeneratedColumn<int>(
+      'edge_threshold_px', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(6));
+  static const VerificationMeta _releaseHotkeyMeta =
+      const VerificationMeta('releaseHotkey');
+  @override
+  late final GeneratedColumn<String> releaseHotkey = GeneratedColumn<String>(
+      'release_hotkey', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('ctrl+alt+esc'));
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        peerId,
+        peerName,
+        x,
+        y,
+        width,
+        height,
+        enabled,
+        autoActivate,
+        edgeThresholdPx,
+        releaseHotkey,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'remote_input_layout';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<RemoteInputLayoutData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('peer_id')) {
+      context.handle(_peerIdMeta,
+          peerId.isAcceptableOrUnknown(data['peer_id']!, _peerIdMeta));
+    } else if (isInserting) {
+      context.missing(_peerIdMeta);
+    }
+    if (data.containsKey('peer_name')) {
+      context.handle(_peerNameMeta,
+          peerName.isAcceptableOrUnknown(data['peer_name']!, _peerNameMeta));
+    }
+    if (data.containsKey('x')) {
+      context.handle(_xMeta, x.isAcceptableOrUnknown(data['x']!, _xMeta));
+    }
+    if (data.containsKey('y')) {
+      context.handle(_yMeta, y.isAcceptableOrUnknown(data['y']!, _yMeta));
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+          _widthMeta, width.isAcceptableOrUnknown(data['width']!, _widthMeta));
+    }
+    if (data.containsKey('height')) {
+      context.handle(_heightMeta,
+          height.isAcceptableOrUnknown(data['height']!, _heightMeta));
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(_enabledMeta,
+          enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta));
+    }
+    if (data.containsKey('auto_activate')) {
+      context.handle(
+          _autoActivateMeta,
+          autoActivate.isAcceptableOrUnknown(
+              data['auto_activate']!, _autoActivateMeta));
+    }
+    if (data.containsKey('edge_threshold_px')) {
+      context.handle(
+          _edgeThresholdPxMeta,
+          edgeThresholdPx.isAcceptableOrUnknown(
+              data['edge_threshold_px']!, _edgeThresholdPxMeta));
+    }
+    if (data.containsKey('release_hotkey')) {
+      context.handle(
+          _releaseHotkeyMeta,
+          releaseHotkey.isAcceptableOrUnknown(
+              data['release_hotkey']!, _releaseHotkeyMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {peerId};
+  @override
+  RemoteInputLayoutData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RemoteInputLayoutData(
+      peerId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}peer_id'])!,
+      peerName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}peer_name'])!,
+      x: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}x'])!,
+      y: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}y'])!,
+      width: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}width'])!,
+      height: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}height'])!,
+      enabled: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}enabled'])!,
+      autoActivate: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}auto_activate'])!,
+      edgeThresholdPx: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}edge_threshold_px'])!,
+      releaseHotkey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}release_hotkey'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $RemoteInputLayoutTable createAlias(String alias) {
+    return $RemoteInputLayoutTable(attachedDatabase, alias);
+  }
+}
+
+class RemoteInputLayoutData extends DataClass
+    implements Insertable<RemoteInputLayoutData> {
+  final String peerId;
+  final String peerName;
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+  final bool enabled;
+  final bool autoActivate;
+  final int edgeThresholdPx;
+  final String releaseHotkey;
+  final int updatedAt;
+  const RemoteInputLayoutData(
+      {required this.peerId,
+      required this.peerName,
+      required this.x,
+      required this.y,
+      required this.width,
+      required this.height,
+      required this.enabled,
+      required this.autoActivate,
+      required this.edgeThresholdPx,
+      required this.releaseHotkey,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['peer_id'] = Variable<String>(peerId);
+    map['peer_name'] = Variable<String>(peerName);
+    map['x'] = Variable<int>(x);
+    map['y'] = Variable<int>(y);
+    map['width'] = Variable<int>(width);
+    map['height'] = Variable<int>(height);
+    map['enabled'] = Variable<bool>(enabled);
+    map['auto_activate'] = Variable<bool>(autoActivate);
+    map['edge_threshold_px'] = Variable<int>(edgeThresholdPx);
+    map['release_hotkey'] = Variable<String>(releaseHotkey);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  RemoteInputLayoutCompanion toCompanion(bool nullToAbsent) {
+    return RemoteInputLayoutCompanion(
+      peerId: Value(peerId),
+      peerName: Value(peerName),
+      x: Value(x),
+      y: Value(y),
+      width: Value(width),
+      height: Value(height),
+      enabled: Value(enabled),
+      autoActivate: Value(autoActivate),
+      edgeThresholdPx: Value(edgeThresholdPx),
+      releaseHotkey: Value(releaseHotkey),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RemoteInputLayoutData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RemoteInputLayoutData(
+      peerId: serializer.fromJson<String>(json['peerId']),
+      peerName: serializer.fromJson<String>(json['peerName']),
+      x: serializer.fromJson<int>(json['x']),
+      y: serializer.fromJson<int>(json['y']),
+      width: serializer.fromJson<int>(json['width']),
+      height: serializer.fromJson<int>(json['height']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      autoActivate: serializer.fromJson<bool>(json['autoActivate']),
+      edgeThresholdPx: serializer.fromJson<int>(json['edgeThresholdPx']),
+      releaseHotkey: serializer.fromJson<String>(json['releaseHotkey']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'peerId': serializer.toJson<String>(peerId),
+      'peerName': serializer.toJson<String>(peerName),
+      'x': serializer.toJson<int>(x),
+      'y': serializer.toJson<int>(y),
+      'width': serializer.toJson<int>(width),
+      'height': serializer.toJson<int>(height),
+      'enabled': serializer.toJson<bool>(enabled),
+      'autoActivate': serializer.toJson<bool>(autoActivate),
+      'edgeThresholdPx': serializer.toJson<int>(edgeThresholdPx),
+      'releaseHotkey': serializer.toJson<String>(releaseHotkey),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  RemoteInputLayoutData copyWith(
+          {String? peerId,
+          String? peerName,
+          int? x,
+          int? y,
+          int? width,
+          int? height,
+          bool? enabled,
+          bool? autoActivate,
+          int? edgeThresholdPx,
+          String? releaseHotkey,
+          int? updatedAt}) =>
+      RemoteInputLayoutData(
+        peerId: peerId ?? this.peerId,
+        peerName: peerName ?? this.peerName,
+        x: x ?? this.x,
+        y: y ?? this.y,
+        width: width ?? this.width,
+        height: height ?? this.height,
+        enabled: enabled ?? this.enabled,
+        autoActivate: autoActivate ?? this.autoActivate,
+        edgeThresholdPx: edgeThresholdPx ?? this.edgeThresholdPx,
+        releaseHotkey: releaseHotkey ?? this.releaseHotkey,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  RemoteInputLayoutData copyWithCompanion(RemoteInputLayoutCompanion data) {
+    return RemoteInputLayoutData(
+      peerId: data.peerId.present ? data.peerId.value : this.peerId,
+      peerName: data.peerName.present ? data.peerName.value : this.peerName,
+      x: data.x.present ? data.x.value : this.x,
+      y: data.y.present ? data.y.value : this.y,
+      width: data.width.present ? data.width.value : this.width,
+      height: data.height.present ? data.height.value : this.height,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      autoActivate: data.autoActivate.present
+          ? data.autoActivate.value
+          : this.autoActivate,
+      edgeThresholdPx: data.edgeThresholdPx.present
+          ? data.edgeThresholdPx.value
+          : this.edgeThresholdPx,
+      releaseHotkey: data.releaseHotkey.present
+          ? data.releaseHotkey.value
+          : this.releaseHotkey,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RemoteInputLayoutData(')
+          ..write('peerId: $peerId, ')
+          ..write('peerName: $peerName, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('enabled: $enabled, ')
+          ..write('autoActivate: $autoActivate, ')
+          ..write('edgeThresholdPx: $edgeThresholdPx, ')
+          ..write('releaseHotkey: $releaseHotkey, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(peerId, peerName, x, y, width, height,
+      enabled, autoActivate, edgeThresholdPx, releaseHotkey, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RemoteInputLayoutData &&
+          other.peerId == this.peerId &&
+          other.peerName == this.peerName &&
+          other.x == this.x &&
+          other.y == this.y &&
+          other.width == this.width &&
+          other.height == this.height &&
+          other.enabled == this.enabled &&
+          other.autoActivate == this.autoActivate &&
+          other.edgeThresholdPx == this.edgeThresholdPx &&
+          other.releaseHotkey == this.releaseHotkey &&
+          other.updatedAt == this.updatedAt);
+}
+
+class RemoteInputLayoutCompanion
+    extends UpdateCompanion<RemoteInputLayoutData> {
+  final Value<String> peerId;
+  final Value<String> peerName;
+  final Value<int> x;
+  final Value<int> y;
+  final Value<int> width;
+  final Value<int> height;
+  final Value<bool> enabled;
+  final Value<bool> autoActivate;
+  final Value<int> edgeThresholdPx;
+  final Value<String> releaseHotkey;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const RemoteInputLayoutCompanion({
+    this.peerId = const Value.absent(),
+    this.peerName = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.autoActivate = const Value.absent(),
+    this.edgeThresholdPx = const Value.absent(),
+    this.releaseHotkey = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RemoteInputLayoutCompanion.insert({
+    required String peerId,
+    this.peerName = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.autoActivate = const Value.absent(),
+    this.edgeThresholdPx = const Value.absent(),
+    this.releaseHotkey = const Value.absent(),
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  })  : peerId = Value(peerId),
+        updatedAt = Value(updatedAt);
+  static Insertable<RemoteInputLayoutData> custom({
+    Expression<String>? peerId,
+    Expression<String>? peerName,
+    Expression<int>? x,
+    Expression<int>? y,
+    Expression<int>? width,
+    Expression<int>? height,
+    Expression<bool>? enabled,
+    Expression<bool>? autoActivate,
+    Expression<int>? edgeThresholdPx,
+    Expression<String>? releaseHotkey,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (peerId != null) 'peer_id': peerId,
+      if (peerName != null) 'peer_name': peerName,
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+      if (enabled != null) 'enabled': enabled,
+      if (autoActivate != null) 'auto_activate': autoActivate,
+      if (edgeThresholdPx != null) 'edge_threshold_px': edgeThresholdPx,
+      if (releaseHotkey != null) 'release_hotkey': releaseHotkey,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RemoteInputLayoutCompanion copyWith(
+      {Value<String>? peerId,
+      Value<String>? peerName,
+      Value<int>? x,
+      Value<int>? y,
+      Value<int>? width,
+      Value<int>? height,
+      Value<bool>? enabled,
+      Value<bool>? autoActivate,
+      Value<int>? edgeThresholdPx,
+      Value<String>? releaseHotkey,
+      Value<int>? updatedAt,
+      Value<int>? rowid}) {
+    return RemoteInputLayoutCompanion(
+      peerId: peerId ?? this.peerId,
+      peerName: peerName ?? this.peerName,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      enabled: enabled ?? this.enabled,
+      autoActivate: autoActivate ?? this.autoActivate,
+      edgeThresholdPx: edgeThresholdPx ?? this.edgeThresholdPx,
+      releaseHotkey: releaseHotkey ?? this.releaseHotkey,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (peerId.present) {
+      map['peer_id'] = Variable<String>(peerId.value);
+    }
+    if (peerName.present) {
+      map['peer_name'] = Variable<String>(peerName.value);
+    }
+    if (x.present) {
+      map['x'] = Variable<int>(x.value);
+    }
+    if (y.present) {
+      map['y'] = Variable<int>(y.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<int>(width.value);
+    }
+    if (height.present) {
+      map['height'] = Variable<int>(height.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (autoActivate.present) {
+      map['auto_activate'] = Variable<bool>(autoActivate.value);
+    }
+    if (edgeThresholdPx.present) {
+      map['edge_threshold_px'] = Variable<int>(edgeThresholdPx.value);
+    }
+    if (releaseHotkey.present) {
+      map['release_hotkey'] = Variable<String>(releaseHotkey.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RemoteInputLayoutCompanion(')
+          ..write('peerId: $peerId, ')
+          ..write('peerName: $peerName, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('enabled: $enabled, ')
+          ..write('autoActivate: $autoActivate, ')
+          ..write('edgeThresholdPx: $edgeThresholdPx, ')
+          ..write('releaseHotkey: $releaseHotkey, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$LocalDatabase extends GeneratedDatabase {
   _$LocalDatabase(QueryExecutor e) : super(e);
   $LocalDatabaseManager get managers => $LocalDatabaseManager(this);
   late final $DeviceTable device = $DeviceTable(this);
   late final $MessageTable message = $MessageTable(this);
   late final $FileTransferTable fileTransfer = $FileTransferTable(this);
+  late final $RemoteInputLayoutTable remoteInputLayout =
+      $RemoteInputLayoutTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [device, message, fileTransfer];
+      [device, message, fileTransfer, remoteInputLayout];
 }
 
 typedef $$DeviceTableCreateCompanionBuilder = DeviceCompanion Function({
@@ -3229,6 +3779,277 @@ typedef $$FileTransferTableProcessedTableManager = ProcessedTableManager<
     ),
     FileTransferData,
     PrefetchHooks Function()>;
+typedef $$RemoteInputLayoutTableCreateCompanionBuilder
+    = RemoteInputLayoutCompanion Function({
+  required String peerId,
+  Value<String> peerName,
+  Value<int> x,
+  Value<int> y,
+  Value<int> width,
+  Value<int> height,
+  Value<bool> enabled,
+  Value<bool> autoActivate,
+  Value<int> edgeThresholdPx,
+  Value<String> releaseHotkey,
+  required int updatedAt,
+  Value<int> rowid,
+});
+typedef $$RemoteInputLayoutTableUpdateCompanionBuilder
+    = RemoteInputLayoutCompanion Function({
+  Value<String> peerId,
+  Value<String> peerName,
+  Value<int> x,
+  Value<int> y,
+  Value<int> width,
+  Value<int> height,
+  Value<bool> enabled,
+  Value<bool> autoActivate,
+  Value<int> edgeThresholdPx,
+  Value<String> releaseHotkey,
+  Value<int> updatedAt,
+  Value<int> rowid,
+});
+
+class $$RemoteInputLayoutTableFilterComposer
+    extends Composer<_$LocalDatabase, $RemoteInputLayoutTable> {
+  $$RemoteInputLayoutTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get peerId => $composableBuilder(
+      column: $table.peerId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get peerName => $composableBuilder(
+      column: $table.peerName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get x => $composableBuilder(
+      column: $table.x, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get y => $composableBuilder(
+      column: $table.y, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get width => $composableBuilder(
+      column: $table.width, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get height => $composableBuilder(
+      column: $table.height, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+      column: $table.enabled, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get autoActivate => $composableBuilder(
+      column: $table.autoActivate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get edgeThresholdPx => $composableBuilder(
+      column: $table.edgeThresholdPx,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get releaseHotkey => $composableBuilder(
+      column: $table.releaseHotkey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$RemoteInputLayoutTableOrderingComposer
+    extends Composer<_$LocalDatabase, $RemoteInputLayoutTable> {
+  $$RemoteInputLayoutTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get peerId => $composableBuilder(
+      column: $table.peerId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get peerName => $composableBuilder(
+      column: $table.peerName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get x => $composableBuilder(
+      column: $table.x, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get y => $composableBuilder(
+      column: $table.y, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get width => $composableBuilder(
+      column: $table.width, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get height => $composableBuilder(
+      column: $table.height, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+      column: $table.enabled, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get autoActivate => $composableBuilder(
+      column: $table.autoActivate,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get edgeThresholdPx => $composableBuilder(
+      column: $table.edgeThresholdPx,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get releaseHotkey => $composableBuilder(
+      column: $table.releaseHotkey,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$RemoteInputLayoutTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $RemoteInputLayoutTable> {
+  $$RemoteInputLayoutTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get peerId =>
+      $composableBuilder(column: $table.peerId, builder: (column) => column);
+
+  GeneratedColumn<String> get peerName =>
+      $composableBuilder(column: $table.peerName, builder: (column) => column);
+
+  GeneratedColumn<int> get x =>
+      $composableBuilder(column: $table.x, builder: (column) => column);
+
+  GeneratedColumn<int> get y =>
+      $composableBuilder(column: $table.y, builder: (column) => column);
+
+  GeneratedColumn<int> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<int> get height =>
+      $composableBuilder(column: $table.height, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<bool> get autoActivate => $composableBuilder(
+      column: $table.autoActivate, builder: (column) => column);
+
+  GeneratedColumn<int> get edgeThresholdPx => $composableBuilder(
+      column: $table.edgeThresholdPx, builder: (column) => column);
+
+  GeneratedColumn<String> get releaseHotkey => $composableBuilder(
+      column: $table.releaseHotkey, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$RemoteInputLayoutTableTableManager extends RootTableManager<
+    _$LocalDatabase,
+    $RemoteInputLayoutTable,
+    RemoteInputLayoutData,
+    $$RemoteInputLayoutTableFilterComposer,
+    $$RemoteInputLayoutTableOrderingComposer,
+    $$RemoteInputLayoutTableAnnotationComposer,
+    $$RemoteInputLayoutTableCreateCompanionBuilder,
+    $$RemoteInputLayoutTableUpdateCompanionBuilder,
+    (
+      RemoteInputLayoutData,
+      BaseReferences<_$LocalDatabase, $RemoteInputLayoutTable,
+          RemoteInputLayoutData>
+    ),
+    RemoteInputLayoutData,
+    PrefetchHooks Function()> {
+  $$RemoteInputLayoutTableTableManager(
+      _$LocalDatabase db, $RemoteInputLayoutTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RemoteInputLayoutTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RemoteInputLayoutTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RemoteInputLayoutTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> peerId = const Value.absent(),
+            Value<String> peerName = const Value.absent(),
+            Value<int> x = const Value.absent(),
+            Value<int> y = const Value.absent(),
+            Value<int> width = const Value.absent(),
+            Value<int> height = const Value.absent(),
+            Value<bool> enabled = const Value.absent(),
+            Value<bool> autoActivate = const Value.absent(),
+            Value<int> edgeThresholdPx = const Value.absent(),
+            Value<String> releaseHotkey = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RemoteInputLayoutCompanion(
+            peerId: peerId,
+            peerName: peerName,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            enabled: enabled,
+            autoActivate: autoActivate,
+            edgeThresholdPx: edgeThresholdPx,
+            releaseHotkey: releaseHotkey,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String peerId,
+            Value<String> peerName = const Value.absent(),
+            Value<int> x = const Value.absent(),
+            Value<int> y = const Value.absent(),
+            Value<int> width = const Value.absent(),
+            Value<int> height = const Value.absent(),
+            Value<bool> enabled = const Value.absent(),
+            Value<bool> autoActivate = const Value.absent(),
+            Value<int> edgeThresholdPx = const Value.absent(),
+            Value<String> releaseHotkey = const Value.absent(),
+            required int updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RemoteInputLayoutCompanion.insert(
+            peerId: peerId,
+            peerName: peerName,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            enabled: enabled,
+            autoActivate: autoActivate,
+            edgeThresholdPx: edgeThresholdPx,
+            releaseHotkey: releaseHotkey,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$RemoteInputLayoutTableProcessedTableManager = ProcessedTableManager<
+    _$LocalDatabase,
+    $RemoteInputLayoutTable,
+    RemoteInputLayoutData,
+    $$RemoteInputLayoutTableFilterComposer,
+    $$RemoteInputLayoutTableOrderingComposer,
+    $$RemoteInputLayoutTableAnnotationComposer,
+    $$RemoteInputLayoutTableCreateCompanionBuilder,
+    $$RemoteInputLayoutTableUpdateCompanionBuilder,
+    (
+      RemoteInputLayoutData,
+      BaseReferences<_$LocalDatabase, $RemoteInputLayoutTable,
+          RemoteInputLayoutData>
+    ),
+    RemoteInputLayoutData,
+    PrefetchHooks Function()>;
 
 class $LocalDatabaseManager {
   final _$LocalDatabase _db;
@@ -3239,4 +4060,6 @@ class $LocalDatabaseManager {
       $$MessageTableTableManager(_db, _db.message);
   $$FileTransferTableTableManager get fileTransfer =>
       $$FileTransferTableTableManager(_db, _db.fileTransfer);
+  $$RemoteInputLayoutTableTableManager get remoteInputLayout =>
+      $$RemoteInputLayoutTableTableManager(_db, _db.remoteInputLayout);
 }

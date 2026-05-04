@@ -19,6 +19,9 @@ import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_manager.dart';
+import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/resumable_transfer_window.dart';
 import 'package:path/path.dart' as p;
@@ -107,6 +110,9 @@ class WsSvrManager {
 
   bool get isConnected => _sink != null;
   bool get supportsResumableTransfer => _supportsResumableTransfer;
+  bool get supportsRemoteInput =>
+      _remoteProfile?.capabilities.remoteInputSourceV1 == true &&
+      _remoteProfile?.capabilities.remoteInputSinkV1 == true;
   bool get _supportsResumableTransfer =>
       _remoteProfile?.capabilities.fileResumeV1 == true;
 
@@ -280,10 +286,16 @@ class WsSvrManager {
     final audioHandler = AudioShareManager.shared.webSocketHandler(
       pingInterval: _serverPingInterval,
     );
+    final remoteInputHandler = RemoteInputManager.shared.webSocketHandler(
+      pingInterval: _serverPingInterval,
+    );
 
     FutureOr<shelf.Response> handler(shelf.Request request) {
       if (request.url.path == 'audio') {
         return audioHandler(request);
+      }
+      if (request.url.path == 'input') {
+        return remoteInputHandler(request);
       }
       return chatHandler(request);
     }
@@ -353,6 +365,7 @@ class WsSvrManager {
     final closeResumableHandles = _closeResumableHandles();
     await _freeIoSink(freeAll: true);
     await AudioShareCoordinator.shared.stopLocal();
+    await RemoteInputCoordinator.shared.stopLocal();
     final currentSink = _sink;
     _sink = null;
     await currentSink?.close();
@@ -637,6 +650,30 @@ class WsSvrManager {
           _ackMessage(message);
           break;
         }
+      case MessageEnum.RemoteInputControl:
+        {
+          final json =
+              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          final control = RemoteInputControlMessage.fromJson(json);
+          final self = await LocalSetting().instance();
+          final remoteDevice = _remoteProfile?.device;
+          final storedRemote = remoteDevice == null
+              ? null
+              : await LocalDatabase().fetchDevice(remoteDevice.uid);
+          final isMutuallyTrusted = storedRemote?.auth == true &&
+              (_remoteProfile?.trustsPeer(self.uid) ?? false);
+          await RemoteInputCoordinator.shared.handleControlMessage(
+            control,
+            localPeerId: self.uid,
+            remoteHost: remoteDevice?.host ?? '',
+            remotePort: remoteDevice?.port ?? 0,
+            isMutuallyTrusted: isMutuallyTrusted,
+            localCanInject: supportsNativeRemoteInput(),
+            sendControl: sendRemoteInputControl,
+          );
+          _ackMessage(message);
+          break;
+        }
       default:
         {
           if (_supportsResumableTransfer &&
@@ -818,8 +855,8 @@ class WsSvrManager {
         fileResumeV1: true,
         systemAudioSourceV1: isDesktop(),
         speakerSinkV1: true,
-        remoteInputSourceV1: isDesktop(),
-        remoteInputSinkV1: isDesktop(),
+        remoteInputSourceV1: supportsNativeRemoteInput(),
+        remoteInputSinkV1: supportsNativeRemoteInput(),
       ),
     );
     var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
@@ -851,6 +888,19 @@ class WsSvrManager {
   void sendAudioControl(AudioControlMessage control) {
     final message = _buildMessage(
       MessageEnum.AudioControl,
+      jsonEncode(control.toJson()),
+      "",
+      "",
+      0,
+      false,
+      uid: control.sessionId,
+    );
+    _send(message.toJsonString());
+  }
+
+  void sendRemoteInputControl(RemoteInputControlMessage control) {
+    final message = _buildMessage(
+      MessageEnum.RemoteInputControl,
       jsonEncode(control.toJson()),
       "",
       "",

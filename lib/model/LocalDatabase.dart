@@ -4,6 +4,8 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
+
 import '../helper/helper.dart';
 import 'device.dart';
 import 'file_transfer.dart';
@@ -11,7 +13,7 @@ import 'message.dart';
 
 part 'LocalDatabase.g.dart';
 
-@DriftDatabase(tables: [Device, Message, FileTransfer])
+@DriftDatabase(tables: [Device, Message, FileTransfer, RemoteInputLayout])
 class LocalDatabase extends _$LocalDatabase {
   static final LocalDatabase _singleton = LocalDatabase._internal();
 
@@ -26,7 +28,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -36,6 +38,9 @@ class LocalDatabase extends _$LocalDatabase {
         onUpgrade: (Migrator m, int from, int to) async {
           if (from < 2) {
             await m.createTable(fileTransfer);
+          }
+          if (from < 3) {
+            await m.createTable(remoteInputLayout);
           }
         },
       );
@@ -304,6 +309,28 @@ class LocalDatabase extends _$LocalDatabase {
       }
       return true;
     }).toList(growable: false);
+  }
+
+  Future<void> upsertRemoteInputLayout(RemoteInputLayoutData data) {
+    return into(remoteInputLayout).insertOnConflictUpdate(data);
+  }
+
+  Future<RemoteInputLayoutData?> fetchRemoteInputLayout(String peerId) {
+    return (select(remoteInputLayout)
+          ..where((t) => t.peerId.equals(peerId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<List<RemoteInputLayoutData>> fetchRemoteInputLayouts() {
+    return (select(remoteInputLayout)
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.updatedAt,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .get();
   }
 
   TransferSnapshot snapshotForTransfer(FileTransferData data) {

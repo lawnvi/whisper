@@ -19,6 +19,9 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
@@ -55,6 +58,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
+  final RemoteInputCoordinator _remoteInputCoordinator =
+      RemoteInputCoordinator.shared;
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -113,6 +118,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
     _audioCoordinator.addListener(_handleAudioShareChanged);
+    _remoteInputCoordinator.addListener(_handleRemoteInputChanged);
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -128,6 +134,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     WidgetsBinding.instance.removeObserver(this);
     socketManager.unregisterEvent(this);
     _audioCoordinator.removeListener(_handleAudioShareChanged);
+    _remoteInputCoordinator.removeListener(_handleRemoteInputChanged);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _composerFocusNode.dispose();
@@ -136,6 +143,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _handleAudioShareChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleRemoteInputChanged() {
     if (mounted) {
       setState(() {});
     }
@@ -628,6 +641,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
+    if (_shouldShowRemoteInputAction) {
+      final inputState = _remoteInputCoordinator.state;
+      final isCurrentInputSession = inputState.isForPeer(device.uid);
+      final isActive = isCurrentInputSession && inputState.isActive;
+      final isBusy = isCurrentInputSession && inputState.isBusy;
+      actions.add(
+        IconButton(
+          padding: actionPadding,
+          constraints: actionConstraints,
+          visualDensity: actionVisualDensity,
+          onPressed: isBusy ? null : () => _toggleRemoteInput(),
+          tooltip: _remoteInputTooltip(
+            inputState.role,
+            isActive: isActive,
+            isBusy: isBusy,
+            isArmed: isCurrentInputSession &&
+                inputState.status == RemoteInputRuntimeStatus.armed,
+          ),
+          icon: const Icon(Icons.keyboard_option_key_rounded),
+          color: _remoteInputIconColor(
+            isActive: isActive,
+            isBusy: isBusy,
+            isArmed: isCurrentInputSession &&
+                inputState.status == RemoteInputRuntimeStatus.armed,
+          ),
+        ),
+      );
+    }
     actions.add(
       IconButton(
         padding: actionPadding,
@@ -681,6 +722,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
         (isDesktop() || audioState.isForPeer(device.uid));
   }
 
+  bool get _shouldShowRemoteInputAction {
+    final inputState = _remoteInputCoordinator.state;
+    return !_isLocalhost &&
+        _isConnectedSession &&
+        supportsNativeRemoteInput() &&
+        (socketManager.supportsRemoteInput || inputState.isForPeer(device.uid));
+  }
+
   IconData _audioShareIcon(AudioShareRuntimeRole role) {
     switch (role) {
       case AudioShareRuntimeRole.source:
@@ -719,6 +768,39 @@ class _SendMessageScreen extends State<SendMessageScreen>
           : '播放端：正在作为扬声器播放，点击停止';
     }
     return '共享本机声音到此设备';
+  }
+
+  Color _remoteInputIconColor({
+    required bool isActive,
+    required bool isBusy,
+    required bool isArmed,
+  }) {
+    if (!isActive && !isBusy && !isArmed) {
+      return context.whisperPalette.textMuted;
+    }
+    return Colors.lightBlue;
+  }
+
+  String _remoteInputTooltip(
+    RemoteInputRuntimeRole role, {
+    required bool isActive,
+    required bool isBusy,
+    required bool isArmed,
+  }) {
+    if (isBusy) {
+      return role == RemoteInputRuntimeRole.source
+          ? '键鼠共享：正在连接对端'
+          : '键鼠共享：正在准备接收控制';
+    }
+    if (isArmed) {
+      return '键鼠共享：边缘穿越已启用，点击停止';
+    }
+    if (isActive) {
+      return role == RemoteInputRuntimeRole.source
+          ? '键鼠共享：正在控制对端，点击停止'
+          : '键鼠共享：正在接收控制，点击停止';
+    }
+    return '启用键鼠共享';
   }
 
   String _connectionStatusText() {
@@ -905,7 +987,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
-      if (!isDesktop()) {
+      if (!supportsNativeRemoteInput()) {
         Fluttertoast.showToast(msg: '当前设备只能作为扬声器播放端');
         return;
       }
@@ -927,6 +1009,126 @@ class _SendMessageScreen extends State<SendMessageScreen>
         Fluttertoast.showToast(msg: '共享声音失败：$error');
       }
     }
+  }
+
+  Future<void> _toggleRemoteInput({bool showToast = true}) async {
+    if (!_isConnectedSession || _isLocalhost) {
+      return;
+    }
+    final inputState = _remoteInputCoordinator.state;
+    final isCurrentInputSession = inputState.isForPeer(device.uid);
+    try {
+      if (isCurrentInputSession) {
+        await _remoteInputCoordinator.stopSharing(
+          sendControl: socketManager.sendRemoteInputControl,
+        );
+        if (mounted && showToast) {
+          Fluttertoast.showToast(msg: '已停止键鼠共享');
+        }
+        return;
+      }
+      if (!isDesktop()) {
+        if (showToast) {
+          Fluttertoast.showToast(msg: '当前设备不支持键鼠共享');
+        }
+        return;
+      }
+      if (!socketManager.supportsRemoteInput) {
+        if (showToast) {
+          Fluttertoast.showToast(msg: '当前连接设备不支持键鼠共享');
+        }
+        return;
+      }
+      final self = this.self ?? await LocalSetting().instance();
+      final storedDevice = await LocalDatabase().fetchDevice(device.uid);
+      if (storedDevice?.auth != true) {
+        if (showToast) {
+          Fluttertoast.showToast(msg: '键鼠共享需要互信设备');
+        }
+        return;
+      }
+      final layout = await _remoteInputLayoutForCurrentPeer();
+      final edge = RemoteInputLayoutGeometry.adjacentEdge(
+        local: const RemoteInputScreenRect(
+          x: 0,
+          y: 0,
+          width: 1000,
+          height: 800,
+        ),
+        peer: RemoteInputScreenRect(
+          x: layout.x,
+          y: layout.y,
+          width: layout.width,
+          height: layout.height,
+        ),
+      );
+      if (edge == null) {
+        if (showToast) {
+          Fluttertoast.showToast(msg: '请先在设备设置里把对端屏幕贴到本机边缘');
+        }
+        return;
+      }
+      await _remoteInputCoordinator.startSharingToConnectedPeer(
+        sourcePeerId: self.uid,
+        sinkPeerId: device.uid,
+        sinkHost: device.host,
+        sinkPort: device.port,
+        layoutEdge: edge,
+        releaseHotkey: layout.releaseHotkey,
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: socketManager.sendRemoteInputControl,
+      );
+      if (mounted && showToast) {
+        Fluttertoast.showToast(msg: '键鼠共享已启用，移动到屏幕边缘开始控制对端');
+      }
+    } catch (error, stackTrace) {
+      logger.e('remote input toggle failed',
+          error: error, stackTrace: stackTrace);
+      if (mounted && showToast) {
+        Fluttertoast.showToast(msg: '键鼠共享失败：$error');
+      }
+    }
+  }
+
+  Future<void> _maybeAutoStartRemoteInput() async {
+    if (!mounted ||
+        !_isConnectedSession ||
+        _isLocalhost ||
+        !supportsNativeRemoteInput()) {
+      return;
+    }
+    if (_remoteInputCoordinator.state.isForPeer(device.uid)) {
+      return;
+    }
+    final layout = await LocalDatabase().fetchRemoteInputLayout(device.uid);
+    if (!mounted || layout?.autoActivate != true) {
+      return;
+    }
+    await _toggleRemoteInput(showToast: false);
+  }
+
+  Future<RemoteInputLayoutData> _remoteInputLayoutForCurrentPeer() async {
+    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
+    if (saved != null) {
+      return saved;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final layout = RemoteInputLayoutData(
+      peerId: device.uid,
+      peerName: device.name,
+      x: 1000,
+      y: 0,
+      width: 900,
+      height: 600,
+      enabled: true,
+      autoActivate: false,
+      edgeThresholdPx: 6,
+      releaseHotkey: 'ctrl+alt+esc',
+      updatedAt: now,
+    );
+    await LocalDatabase().upsertRemoteInputLayout(layout);
+    return layout;
   }
 
   Future<void> _sendText(String content, {isClipboard = false}) async {
@@ -1162,6 +1364,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onConnect() {
     _refreshCurrentDeviceState();
     _syncAndroidKeepAliveService();
+    unawaited(_maybeAutoStartRemoteInput());
   }
 
   var _isAlert = false;
@@ -1213,6 +1416,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       });
     }
     _refreshCurrentDeviceState();
+    unawaited(_maybeAutoStartRemoteInput());
   }
 
   @override

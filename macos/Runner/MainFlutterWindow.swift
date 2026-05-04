@@ -1,5 +1,6 @@
 import Cocoa
 import AVFoundation
+import ApplicationServices
 import CoreGraphics
 import CoreMedia
 import FlutterMacOS
@@ -16,6 +17,8 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     AudioSharePlugin.register(
       with: flutterViewController.registrar(forPlugin: "AudioSharePlugin"))
+    RemoteInputPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "RemoteInputPlugin"))
 
     super.awakeFromNib()
   }
@@ -24,6 +27,381 @@ class MainFlutterWindow: NSWindow {
       super.order(place, relativeTo: otherWin)
       hiddenWindowAtLaunch()
   }
+}
+
+final class RemoteInputPlugin: NSObject, FlutterPlugin {
+  private let channel: FlutterMethodChannel
+  private var captureSessionId = ""
+  private var injectionSessionId = ""
+  private var captureEdge = "right"
+  private var releaseHotkey = "ctrl+alt+esc"
+  private var captureActive = false
+  private var eventTap: CFMachPort?
+  private var runLoopSource: CFRunLoopSource?
+  private var sequence = 0
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/remote_input",
+      binaryMessenger: registrar.messenger)
+    let instance = RemoteInputPlugin(channel: channel)
+    registrar.addMethodCallDelegate(instance, channel: channel)
+  }
+
+  init(channel: FlutterMethodChannel) {
+    self.channel = channel
+    super.init()
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "startCapture":
+      guard let args = call.arguments as? [String: Any],
+            let sessionId = args["sessionId"] as? String else {
+        result(FlutterError(
+          code: "bad-arguments",
+          message: "startCapture requires sessionId",
+          details: nil))
+        return
+      }
+      let edge = args["edge"] as? String ?? "right"
+      let releaseHotkey = args["releaseHotkey"] as? String ?? "ctrl+alt+esc"
+      startCapture(
+        sessionId: sessionId,
+        edge: edge,
+        releaseHotkey: releaseHotkey,
+        result: result)
+
+    case "stopCapture":
+      stopCapture()
+      result(nil)
+
+    case "startInjection":
+      guard let args = call.arguments as? [String: Any],
+            let sessionId = args["sessionId"] as? String else {
+        result(FlutterError(
+          code: "bad-arguments",
+          message: "startInjection requires sessionId",
+          details: nil))
+        return
+      }
+      injectionSessionId = sessionId
+      result(nil)
+
+    case "injectEvent":
+      guard let args = call.arguments as? [String: Any],
+            let sessionId = args["sessionId"] as? String,
+            let eventType = args["eventType"] as? String,
+            let payload = payloadData(from: args["payload"]) else {
+        result(FlutterError(
+          code: "bad-arguments",
+          message: "injectEvent requires sessionId, eventType, and payload",
+          details: nil))
+        return
+      }
+      injectEvent(sessionId: sessionId, eventType: eventType, payload: payload)
+      result(nil)
+
+    case "stopInjection":
+      injectionSessionId = ""
+      result(nil)
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func startCapture(
+    sessionId: String,
+    edge: String,
+    releaseHotkey: String,
+    result: @escaping FlutterResult
+  ) {
+    guard ensureAccessibilityPermission() else {
+      openAccessibilitySettings()
+      result(FlutterError(
+        code: "remote-input-permission-denied",
+        message: "需要在系统设置 > 隐私与安全性 > 辅助功能中允许 Whisper Dev，然后重启应用",
+        details: nil))
+      return
+    }
+
+    stopCapture()
+    captureSessionId = sessionId
+    captureEdge = edge
+    self.releaseHotkey = releaseHotkey
+    captureActive = false
+    sequence = 0
+
+    let mask =
+      (1 << CGEventType.mouseMoved.rawValue) |
+      (1 << CGEventType.leftMouseDragged.rawValue) |
+      (1 << CGEventType.rightMouseDragged.rawValue) |
+      (1 << CGEventType.otherMouseDragged.rawValue) |
+      (1 << CGEventType.leftMouseDown.rawValue) |
+      (1 << CGEventType.leftMouseUp.rawValue) |
+      (1 << CGEventType.rightMouseDown.rawValue) |
+      (1 << CGEventType.rightMouseUp.rawValue) |
+      (1 << CGEventType.otherMouseDown.rawValue) |
+      (1 << CGEventType.otherMouseUp.rawValue) |
+      (1 << CGEventType.scrollWheel.rawValue) |
+      (1 << CGEventType.keyDown.rawValue) |
+      (1 << CGEventType.keyUp.rawValue)
+
+    let userInfo = Unmanaged.passUnretained(self).toOpaque()
+    guard let tap = CGEvent.tapCreate(
+      tap: .cgSessionEventTap,
+      place: .headInsertEventTap,
+      options: .listenOnly,
+      eventsOfInterest: CGEventMask(mask),
+      callback: remoteInputEventCallback,
+      userInfo: userInfo) else {
+      result(FlutterError(
+        code: "remote-input-capture-unavailable",
+        message: "无法创建键鼠监听，请确认辅助功能权限已开启",
+        details: nil))
+      return
+    }
+
+    eventTap = tap
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    runLoopSource = source
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    result(nil)
+  }
+
+  private func stopCapture() {
+    if let source = runLoopSource {
+      CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+    }
+    if let tap = eventTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
+    }
+    runLoopSource = nil
+    eventTap = nil
+    captureSessionId = ""
+    captureActive = false
+  }
+
+  fileprivate func handleEvent(type: CGEventType, event: CGEvent) {
+    guard !captureSessionId.isEmpty else {
+      return
+    }
+    if isReleaseHotkey(type: type, event: event) {
+      emitRelease(reason: "hotkey")
+      return
+    }
+    if !captureActive {
+      if isEdgeActivationEvent(type: type, event: event) {
+        captureActive = true
+      } else {
+        return
+      }
+    }
+    guard let encoded = encodePayload(type: type, event: event) else {
+      return
+    }
+    sequence += 1
+    let eventType = remoteInputEventType(type)
+    let arguments: [String: Any] = [
+      "sessionId": captureSessionId,
+      "sequence": sequence,
+      "timestampMicros": Int(Date().timeIntervalSince1970 * 1_000_000),
+      "eventType": eventType,
+      "payload": FlutterStandardTypedData(bytes: encoded)
+    ]
+    DispatchQueue.main.async { [channel] in
+      channel.invokeMethod("onInputEvent", arguments: arguments)
+    }
+  }
+
+  private func encodePayload(type: CGEventType, event: CGEvent) -> Data? {
+    let point = event.location
+    var payload: [String: Any] = [:]
+    switch remoteInputEventType(type) {
+    case "mouseMove":
+      payload = ["x": point.x, "y": point.y]
+    case "mouseButton":
+      payload = [
+        "button": buttonNumber(type: type, event: event),
+        "down": isButtonDown(type: type),
+        "x": point.x,
+        "y": point.y
+      ]
+    case "mouseWheel":
+      payload = [
+        "deltaX": event.getIntegerValueField(.scrollWheelEventDeltaAxis2),
+        "deltaY": event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+      ]
+    case "key":
+      payload = [
+        "keyCode": event.getIntegerValueField(.keyboardEventKeycode),
+        "down": type == .keyDown
+      ]
+    default:
+      payload = [:]
+    }
+    return try? JSONSerialization.data(withJSONObject: payload, options: [])
+  }
+
+  private func remoteInputEventType(_ type: CGEventType) -> String {
+    switch type {
+    case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+      return "mouseMove"
+    case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+         .otherMouseDown, .otherMouseUp:
+      return "mouseButton"
+    case .scrollWheel:
+      return "mouseWheel"
+    case .keyDown, .keyUp:
+      return "key"
+    default:
+      return "release"
+    }
+  }
+
+  private func buttonNumber(type: CGEventType, event: CGEvent) -> Int64 {
+    switch type {
+    case .leftMouseDown, .leftMouseUp:
+      return 0
+    case .rightMouseDown, .rightMouseUp:
+      return 1
+    default:
+      return event.getIntegerValueField(.mouseEventButtonNumber)
+    }
+  }
+
+  private func isButtonDown(type: CGEventType) -> Bool {
+    return type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown
+  }
+
+  private func injectEvent(sessionId: String, eventType: String, payload: Data) {
+    guard sessionId == injectionSessionId,
+          let object = try? JSONSerialization.jsonObject(with: payload),
+          let data = object as? [String: Any] else {
+      return
+    }
+
+    switch eventType {
+    case "mouseMove":
+      let point = CGPoint(
+        x: data["x"] as? CGFloat ?? 0,
+        y: data["y"] as? CGFloat ?? 0)
+      CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    case "mouseButton":
+      let point = CGPoint(
+        x: data["x"] as? CGFloat ?? 0,
+        y: data["y"] as? CGFloat ?? 0)
+      let buttonValue = data["button"] as? Int ?? 0
+      let down = data["down"] as? Bool ?? false
+      let button: CGMouseButton = buttonValue == 1 ? .right : .left
+      let mouseType: CGEventType
+      if button == .right {
+        mouseType = down ? .rightMouseDown : .rightMouseUp
+      } else {
+        mouseType = down ? .leftMouseDown : .leftMouseUp
+      }
+      CGEvent(mouseEventSource: nil, mouseType: mouseType, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
+    case "mouseWheel":
+      let deltaX = Int32(data["deltaX"] as? Int ?? 0)
+      let deltaY = Int32(data["deltaY"] as? Int ?? 0)
+      CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: deltaY, wheel2: deltaX, wheel3: 0)?.post(tap: .cghidEventTap)
+    case "key":
+      let keyCode = CGKeyCode(data["keyCode"] as? Int ?? 0)
+      let down = data["down"] as? Bool ?? false
+      CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: down)?.post(tap: .cghidEventTap)
+    default:
+      break
+    }
+  }
+
+  private func payloadData(from value: Any?) -> Data? {
+    if let typedData = value as? FlutterStandardTypedData {
+      return typedData.data
+    }
+    if let data = value as? Data {
+      return data
+    }
+    return nil
+  }
+
+  private func ensureAccessibilityPermission() -> Bool {
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    return AXIsProcessTrustedWithOptions(options)
+  }
+
+  private func openAccessibilitySettings() {
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+      return
+    }
+    NSWorkspace.shared.open(url)
+  }
+
+  private func isReleaseHotkey(type: CGEventType, event: CGEvent) -> Bool {
+    guard releaseHotkey.lowercased() == "ctrl+alt+esc",
+          type == .keyDown else {
+      return false
+    }
+    let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+    let flags = event.flags
+    return keyCode == 53 &&
+      flags.contains(.maskControl) &&
+      flags.contains(.maskAlternate)
+  }
+
+  private func isEdgeActivationEvent(type: CGEventType, event: CGEvent) -> Bool {
+    switch type {
+    case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+      let point = event.location
+      let bounds = CGDisplayBounds(CGMainDisplayID())
+      let threshold: CGFloat = 6
+      switch captureEdge {
+      case "left":
+        return point.x <= bounds.minX + threshold
+      case "top":
+        return point.y <= bounds.minY + threshold
+      case "bottom":
+        return point.y >= bounds.maxY - threshold
+      case "right":
+        fallthrough
+      default:
+        return point.x >= bounds.maxX - threshold
+      }
+    default:
+      return false
+    }
+  }
+
+  private func emitRelease(reason: String) {
+    let sessionId = captureSessionId
+    guard !sessionId.isEmpty else {
+      return
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        return
+      }
+      self.channel.invokeMethod("onRelease", arguments: [
+        "sessionId": sessionId,
+        "reason": reason
+      ])
+      self.stopCapture()
+    }
+  }
+}
+
+private let remoteInputEventCallback: CGEventTapCallBack = {
+  _, type, event, userInfo in
+  guard let userInfo = userInfo else {
+    return Unmanaged.passUnretained(event)
+  }
+  let plugin = Unmanaged<RemoteInputPlugin>
+    .fromOpaque(userInfo)
+    .takeUnretainedValue()
+  plugin.handleEvent(type: type, event: event)
+  return Unmanaged.passUnretained(event)
 }
 
 final class AudioSharePlugin: NSObject, FlutterPlugin {

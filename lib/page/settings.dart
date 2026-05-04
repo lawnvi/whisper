@@ -16,6 +16,9 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/remote_input/remote_input_layout_editor.dart';
+import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
@@ -837,12 +840,14 @@ class ClientSettingsScreen extends StatefulWidget {
 
 class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   late DeviceData device;
+  RemoteInputLayoutData? _remoteInputLayout;
 
   @override
   void initState() {
     super.initState();
     device = widget.device;
     _refreshDevice();
+    _loadRemoteInputLayout();
   }
 
   Future<void> _refreshDevice() async {
@@ -852,6 +857,52 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     }
     setState(() {
       device = temp;
+    });
+  }
+
+  Future<void> _loadRemoteInputLayout() async {
+    final layout = await _ensureRemoteInputLayout();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _remoteInputLayout = layout;
+    });
+  }
+
+  Future<RemoteInputLayoutData> _ensureRemoteInputLayout() async {
+    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
+    if (saved != null) {
+      return saved;
+    }
+    final layout = RemoteInputLayoutData(
+      peerId: device.uid,
+      peerName: device.name,
+      x: 1000,
+      y: 0,
+      width: 900,
+      height: 600,
+      enabled: true,
+      autoActivate: false,
+      edgeThresholdPx: 6,
+      releaseHotkey: 'ctrl+alt+esc',
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await LocalDatabase().upsertRemoteInputLayout(layout);
+    return layout;
+  }
+
+  Future<void> _saveRemoteInputLayout(RemoteInputLayoutData layout) async {
+    final next = layout.copyWith(
+      peerName: device.name,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await LocalDatabase().upsertRemoteInputLayout(next);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _remoteInputLayout = next;
     });
   }
 
@@ -927,6 +978,36 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         },
                       ),
                     ),
+                    _DeviceSettingTile(
+                      title: '键鼠共享自动启用',
+                      icon: Icon(
+                        Icons.keyboard_option_key_rounded,
+                        color: palette.textMuted,
+                      ),
+                      trailing: CupertinoSwitch(
+                        value: _remoteInputLayout?.autoActivate ?? false,
+                        onChanged: device.auth
+                            ? (bool value) async {
+                                final layout = await _ensureRemoteInputLayout();
+                                await _saveRemoteInputLayout(
+                                  layout.copyWith(autoActivate: value),
+                                );
+                              }
+                            : null,
+                      ),
+                    ),
+                    _DeviceSettingTile(
+                      title:
+                          '屏幕排列：${_remoteInputEdgeLabel(_remoteInputLayout)}',
+                      icon: Icon(
+                        Icons.splitscreen_rounded,
+                        color: palette.textMuted,
+                      ),
+                      showDivider: false,
+                      onTap: () async {
+                        await _openRemoteInputLayoutEditor();
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -979,6 +1060,56 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         ),
       ),
     );
+  }
+
+  String _remoteInputEdgeLabel(RemoteInputLayoutData? layout) {
+    if (layout == null) {
+      return '右侧';
+    }
+    final edge = RemoteInputLayoutGeometry.adjacentEdge(
+      local: const RemoteInputScreenRect(
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 800,
+      ),
+      peer: RemoteInputScreenRect(
+        x: layout.x,
+        y: layout.y,
+        width: layout.width,
+        height: layout.height,
+      ),
+    );
+    switch (edge) {
+      case RemoteInputEdge.left:
+        return '左侧';
+      case RemoteInputEdge.right:
+        return '右侧';
+      case RemoteInputEdge.top:
+        return '上方';
+      case RemoteInputEdge.bottom:
+        return '下方';
+      case null:
+        return '未贴边';
+    }
+  }
+
+  Future<void> _openRemoteInputLayoutEditor() async {
+    final layout = await _ensureRemoteInputLayout();
+    if (!mounted) {
+      return;
+    }
+    final updated = await Navigator.of(context).push<RemoteInputLayoutData>(
+      MaterialPageRoute(
+        builder: (context) => RemoteInputLayoutEditorScreen(
+          initialLayout: layout,
+          peerName: device.name,
+        ),
+      ),
+    );
+    if (updated != null) {
+      await _saveRemoteInputLayout(updated);
+    }
   }
 }
 
