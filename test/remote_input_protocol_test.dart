@@ -53,12 +53,16 @@ void main() {
         sourcePeerId: 'mac',
         sinkPeerId: 'win',
         releaseReason: 'edge',
+        releaseSequence: 7,
+        releaseActivationSequence: 3,
       );
 
       final decoded = RemoteInputControlMessage.fromJson(message.toJson());
 
       expect(decoded.action, RemoteInputControlAction.release);
       expect(decoded.releaseReason, 'edge');
+      expect(decoded.releaseSequence, 7);
+      expect(decoded.releaseActivationSequence, 3);
       expect(decoded.sessionId, 'input-1');
     });
   });

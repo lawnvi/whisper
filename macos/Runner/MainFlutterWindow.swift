@@ -45,12 +45,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
   private var sequence = 0
+  private var captureActivationSequence = 0
   private var captureCursorHidden = false
   private var captureMouseButtons = 0
   private var injectedMouseButtons = 0
+  private var injectedMousePoint: CGPoint?
+  private var injectedMouseEnteredInterior = false
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
+  private let systemShortcutEventSource = CGEventSource(stateID: .privateState)
+  private var injectionKeyDiagnosticCount = 0
+  private var suppressedSystemControlArrowKeyCodes: [Int] = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -97,7 +103,13 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           details: nil))
         return
       }
-      pauseCapture(sessionId: sessionId)
+      let releaseSequence = args["releaseSequence"] as? Int ?? 0
+      let releaseActivationSequence =
+        args["releaseActivationSequence"] as? Int ?? 0
+      pauseCapture(
+        sessionId: sessionId,
+        releaseSequence: releaseSequence,
+        releaseActivationSequence: releaseActivationSequence)
       result(nil)
 
     case "startInjection":
@@ -112,13 +124,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       releaseInjectedMouseButtons()
       releaseInjectedKeys()
       releaseCommonModifierKeys()
+      injectedMousePoint = nil
+      injectedMouseEnteredInterior = false
       injectedModifierFlags = []
+      suppressedSystemControlArrowKeyCodes = []
+      injectionKeyDiagnosticCount = 0
       injectionSessionId = sessionId
       os_log(
         "remote input injection started session=%{public}@",
         log: remoteInputLog,
         type: .info,
         sessionId)
+      emitDiagnostic(message: "mac remote input injection started")
       result(nil)
 
     case "injectEvent":
@@ -166,6 +183,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureActive = false
     captureMouseButtons = 0
     sequence = 0
+    captureActivationSequence = 0
 
     let mask =
       (1 << CGEventType.mouseMoved.rawValue) |
@@ -218,6 +236,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     eventTap = nil
     captureSessionId = ""
     captureActive = false
+    captureActivationSequence = 0
     captureMouseButtons = 0
     showCaptureCursorIfNeeded()
   }
@@ -233,15 +252,36 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     releaseInjectedMouseButtons()
     releaseInjectedKeys()
     releaseCommonModifierKeys()
+    injectedMousePoint = nil
+    injectedMouseEnteredInterior = false
     injectedModifierFlags = []
+    suppressedSystemControlArrowKeyCodes = []
+    injectionKeyDiagnosticCount = 0
     injectionSessionId = ""
   }
 
-  private func pauseCapture(sessionId: String) {
+  private func pauseCapture(
+    sessionId: String,
+    releaseSequence: Int,
+    releaseActivationSequence: Int
+  ) {
     guard sessionId == captureSessionId else {
       return
     }
+    guard releaseActivationSequence <= 0 ||
+          captureActivationSequence <= releaseActivationSequence else {
+      os_log(
+        "remote input ignored stale pause releaseSequence=%{public}d releaseActivationSequence=%{public}d nativeSequence=%{public}d activationSequence=%{public}d",
+        log: remoteInputLog,
+        type: .info,
+        releaseSequence,
+        releaseActivationSequence,
+        sequence,
+        captureActivationSequence)
+      return
+    }
     captureActive = false
+    captureActivationSequence = 0
     captureMouseButtons = 0
     moveCaptureCursorToLocalEdge()
     showCaptureCursorIfNeeded()
@@ -260,6 +300,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       if isEdgeActivationEvent(type: type, event: event) {
         captureActive = true
         activeStart = true
+        captureActivationSequence = sequence + 1
         hideCaptureCursorIfNeeded()
       } else {
         return false
@@ -400,8 +441,16 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let fallbackPoint = CGPoint(
         x: doubleValue(data["x"]),
         y: doubleValue(data["y"]))
-      let currentPoint = CGEvent(source: nil)?.location ?? fallbackPoint
-      if isReverseInjectionRelease(
+      let entryPoint = entryPointIfNeeded(data)
+      if entryPoint != nil {
+        injectedMouseEnteredInterior = false
+      }
+      let currentPoint =
+        entryPoint ??
+        injectedMousePoint ??
+        CGEvent(source: nil)?.location ??
+        fallbackPoint
+      if entryPoint == nil && injectedMouseEnteredInterior && isReverseInjectionRelease(
         data,
         currentPoint: currentPoint,
         deltaX: deltaX,
@@ -410,22 +459,23 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         emitInjectionRelease(reason: "edge")
         return
       }
-      let entryPoint = entryPointIfNeeded(data)
       let shouldMove = entryPoint != nil || deltaX != 0 || deltaY != 0
-      let basePoint = entryPoint ?? currentPoint
       let point = shouldMove
-        ? CGPoint(x: basePoint.x + deltaX, y: basePoint.y + deltaY)
+        ? CGPoint(x: currentPoint.x + deltaX, y: currentPoint.y + deltaY)
         : currentPoint
       if data["buttons"] != nil {
         syncInjectedMouseButtons(intValue(data["buttons"]), at: point)
       }
+      updateInjectedMouseInteriorState(data, point: point)
       guard shouldMove else {
+        injectedMousePoint = point
         return
       }
       let drag = injectedMouseDragEvent()
       CGEvent(mouseEventSource: nil, mouseType: drag.type, mouseCursorPosition: point, mouseButton: drag.button)?.post(tap: .cghidEventTap)
+      injectedMousePoint = point
     case "mouseButton":
-      let point = CGEvent(source: nil)?.location ?? CGPoint(
+      let point = injectedMousePoint ?? CGEvent(source: nil)?.location ?? CGPoint(
         x: doubleValue(data["x"]),
         y: doubleValue(data["y"]))
       let buttonValue = intValue(data["button"])
@@ -441,6 +491,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       }
       CGEvent(mouseEventSource: nil, mouseType: mouseType, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
       setInjectedMouseButton(buttonValue, down: down)
+      injectedMousePoint = point
     case "mouseWheel":
       let deltaX = Int32(intValue(data["deltaX"]))
       let deltaY = Int32(intValue(data["deltaY"]))
@@ -464,6 +515,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         intValue(data["linuxKeyCode"]),
         semantic,
         injectedModifierFlags.rawValue)
+      emitKeyDiagnostic(
+        message: "mac remote key inject down=\(down ? 1 : 0) nativeMac=\(nativeKeyCode) keyCode=\(intValue(data["keyCode"])) mac=\(intValue(data["macKeyCode"])) win=\(intValue(data["windowsKeyCode"])) linux=\(intValue(data["linuxKeyCode"])) semantic=\(semantic) flags=\(injectedModifierFlags.rawValue)")
       if isCapsLockInputSourceSwitch(nativeKeyCode: nativeKeyCode, semantic: semantic) {
         if down {
           toggleKeyboardInputSource()
@@ -471,6 +524,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         return
       }
       updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
+      if handleSystemControlArrowShortcut(keyCode: keyCode, down: down) {
+        return
+      }
       postKeyboardEvent(keyCode: keyCode, down: down)
       setInjectedKey(nativeKeyCode, down: down)
     default:
@@ -684,6 +740,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
   private func toggleKeyboardInputSource() {
     guard let sources = selectableKeyboardInputSources(), !sources.isEmpty else {
+      emitDiagnostic(message: "mac caps input source switch skipped no candidates")
       os_log(
         "remote caps input source switch skipped no candidates",
         log: remoteInputLog,
@@ -705,6 +762,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     let nextSource = sources[(currentIndex + 1) % sources.count]
     let nextId = inputSourceStringProperty(nextSource, kTISPropertyInputSourceID)
     let status = TISSelectInputSource(nextSource)
+    emitDiagnostic(
+      message: "mac caps input source switched current=\(currentId ?? "") next=\(nextId) status=\(status) candidates=\(sources.count)")
     os_log(
       "remote caps input source switched current=%{public}@ next=%{public}@ status=%{public}d",
       log: remoteInputLog,
@@ -753,6 +812,28 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       .takeUnretainedValue() as String
   }
 
+  private func emitKeyDiagnostic(message: String) {
+    guard injectionKeyDiagnosticCount < 40 else {
+      return
+    }
+    injectionKeyDiagnosticCount += 1
+    emitDiagnostic(message: message)
+  }
+
+  private func emitDiagnostic(message: String) {
+    guard !injectionSessionId.isEmpty else {
+      return
+    }
+    NSLog("remote input diagnostic: %@", message)
+    let arguments: [String: Any] = [
+      "sessionId": injectionSessionId,
+      "message": message
+    ]
+    DispatchQueue.main.async { [channel] in
+      channel.invokeMethod("onDiagnostic", arguments: arguments)
+    }
+  }
+
   private func postKeyboardEvent(keyCode: CGKeyCode, down: Bool) {
     if let keyEvent = CGEvent(keyboardEventSource: keyboardEventSource, virtualKey: keyCode, keyDown: down) {
       let isModifier = isInjectedModifierKey(Int(keyCode))
@@ -764,14 +845,87 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       }
       let eventType = isModifier ? "flagsChanged" : (down ? "keyDown" : "keyUp")
       os_log(
-        "post remote key mac=%{public}d down=%{public}d type=%{public}@ flags=%{public}llu",
+        "post remote key mac=%{public}d down=%{public}d type=%{public}@ flags=%{public}llu tap=%{public}@",
         log: remoteInputLog,
         type: .info,
         Int(keyCode),
         down ? 1 : 0,
         eventType,
-        keyEvent.flags.rawValue)
+        keyEvent.flags.rawValue,
+        "hid")
+      emitKeyDiagnostic(
+        message: "mac post remote key mac=\(Int(keyCode)) down=\(down ? 1 : 0) type=\(eventType) flags=\(keyEvent.flags.rawValue) tap=hid")
       keyEvent.post(tap: .cghidEventTap)
+    }
+  }
+
+  private func handleSystemControlArrowShortcut(keyCode: CGKeyCode, down: Bool) -> Bool {
+    let key = Int(keyCode)
+    if let index = suppressedSystemControlArrowKeyCodes.firstIndex(of: key) {
+      if !down {
+        suppressedSystemControlArrowKeyCodes.remove(at: index)
+      }
+      return true
+    }
+    guard down && isSystemControlArrowKey(keyCode: keyCode) else {
+      return false
+    }
+    suppressedSystemControlArrowKeyCodes.append(key)
+    postSystemControlArrowShortcut(keyCode: keyCode)
+    return true
+  }
+
+  private func postSystemControlArrowShortcut(keyCode: CGKeyCode) {
+    emitKeyDiagnostic(
+      message: "mac system control arrow shortcut mac=\(Int(keyCode))")
+    postSystemShortcutKey(
+      keyCode: 59,
+      down: true,
+      type: .flagsChanged,
+      flags: .maskControl)
+    postSystemShortcutKey(
+      keyCode: keyCode,
+      down: true,
+      type: .keyDown,
+      flags: .maskControl)
+    postSystemShortcutKey(
+      keyCode: keyCode,
+      down: false,
+      type: .keyUp,
+      flags: .maskControl)
+    postSystemShortcutKey(
+      keyCode: 59,
+      down: false,
+      type: .flagsChanged,
+      flags: [])
+  }
+
+  private func postSystemShortcutKey(
+    keyCode: CGKeyCode,
+    down: Bool,
+    type: CGEventType,
+    flags: CGEventFlags
+  ) {
+    if let keyEvent = CGEvent(
+      keyboardEventSource: systemShortcutEventSource,
+      virtualKey: keyCode,
+      keyDown: down
+    ) {
+      keyEvent.type = type
+      keyEvent.flags = flags
+      keyEvent.post(tap: .cghidEventTap)
+    }
+  }
+
+  private func isSystemControlArrowKey(keyCode: CGKeyCode) -> Bool {
+    guard injectedModifierFlags.contains(.maskControl) else {
+      return false
+    }
+    switch Int(keyCode) {
+    case 123, 124, 125, 126:
+      return true
+    default:
+      return false
     }
   }
 
@@ -858,7 +1012,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard injectedMouseButtons != 0 else {
       return
     }
-    let point = CGEvent(source: nil)?.location ?? CGPoint.zero
+    let point = injectedMousePoint ?? CGEvent(source: nil)?.location ?? CGPoint.zero
     syncInjectedMouseButtons(0, at: point)
   }
 
@@ -1108,6 +1262,34 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     CGWarpMouseCursorPosition(point)
   }
 
+  private func updateInjectedMouseInteriorState(_ data: [String: Any], point: CGPoint) {
+    if boolValue(data["activeStart"]) {
+      injectedMouseEnteredInterior = false
+    }
+    guard !injectedMouseEnteredInterior else {
+      return
+    }
+    let bounds = virtualDisplayBounds()
+    let distance: CGFloat = 32
+    let edge = data["edge"] as? String ?? "right"
+    let isInterior: Bool
+    switch edge {
+    case "left":
+      isInterior = point.x <= bounds.maxX - distance
+    case "top":
+      isInterior = point.y <= bounds.maxY - distance
+    case "bottom":
+      isInterior = point.y >= bounds.minY + distance
+    case "right":
+      fallthrough
+    default:
+      isInterior = point.x >= bounds.minX + distance
+    }
+    if isInterior {
+      injectedMouseEnteredInterior = true
+    }
+  }
+
   private func isReverseInjectionRelease(
     _ data: [String: Any],
     currentPoint: CGPoint,
@@ -1148,9 +1330,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard !sessionId.isEmpty else {
       return
     }
+    emitDiagnostic(message: "mac remote input injection release reason=\(reason)")
     releaseInjectedMouseButtons()
     releaseInjectedKeys()
     releaseCommonModifierKeys()
+    injectedMousePoint = nil
+    injectedMouseEnteredInterior = false
     emitRelease(sessionId: sessionId, reason: reason)
   }
 

@@ -41,6 +41,8 @@ class RemoteInputControlMessage {
     this.layoutEdge,
     this.releaseHotkey = '',
     this.releaseReason = '',
+    this.releaseSequence = 0,
+    this.releaseActivationSequence = 0,
     this.errorMessage = '',
   });
 
@@ -53,6 +55,8 @@ class RemoteInputControlMessage {
   final RemoteInputEdge? layoutEdge;
   final String releaseHotkey;
   final String releaseReason;
+  final int releaseSequence;
+  final int releaseActivationSequence;
   final String errorMessage;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -65,6 +69,8 @@ class RemoteInputControlMessage {
         if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
         'releaseHotkey': releaseHotkey,
         'releaseReason': releaseReason,
+        'releaseSequence': releaseSequence,
+        'releaseActivationSequence': releaseActivationSequence,
         'errorMessage': errorMessage,
       };
 
@@ -90,6 +96,8 @@ class RemoteInputControlMessage {
       ),
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
       releaseReason: json['releaseReason'] as String? ?? '',
+      releaseSequence: json['releaseSequence'] as int? ?? 0,
+      releaseActivationSequence: json['releaseActivationSequence'] as int? ?? 0,
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }

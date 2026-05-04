@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -79,6 +80,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
             ((platform) => RemoteInputKeyTranslator(targetPlatform: platform));
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
+  static const double _sinkEntryReleaseDistance = 16;
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
@@ -93,6 +95,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
   StreamSubscription<PlatformRemoteInputError>? _errorSubscription;
   StreamSubscription<PlatformRemoteInputDiagnostic>? _diagnosticSubscription;
+  int _latestSourceInputSequence = 0;
+  int _latestSourceActivationSequence = 0;
+  int _latestSinkPacketSequence = 0;
+  int _latestSinkActivationSequence = 0;
+  double _sinkEntryTravel = 0;
 
   RemoteInputRuntimeState get state => _state;
 
@@ -223,6 +230,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _transport = null;
     _keyTranslator = null;
     _injectionQueue = Future<void>.value();
+    _latestSourceInputSequence = 0;
+    _latestSourceActivationSequence = 0;
+    _latestSinkPacketSequence = 0;
+    _latestSinkActivationSequence = 0;
+    _sinkEntryTravel = 0;
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
@@ -362,9 +374,23 @@ class RemoteInputCoordinator extends ChangeNotifier {
     );
     await _platform.startInjection(sessionId: message.sessionId);
     _keyTranslator = _keyTranslatorFactory(currentRemoteInputPlatformKind());
+    _latestSinkPacketSequence = 0;
+    _latestSinkActivationSequence = 0;
+    _sinkEntryTravel = 0;
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
+          if (_isEarlySinkEdgeRelease(release)) {
+            logger.i(
+              'remote input ignored early sink edge release '
+              'releaseSequence=${release.sequence} '
+              'latestSinkPacketSequence=$_latestSinkPacketSequence '
+              'activationSequence=${release.activationSequence} '
+              'latestSinkActivationSequence=$_latestSinkActivationSequence '
+              'sinkEntryTravel=$_sinkEntryTravel',
+            );
+            return;
+          }
           sendControl(
             RemoteInputControlMessage(
               action: RemoteInputControlAction.release,
@@ -372,6 +398,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
               sourcePeerId: message.sourcePeerId,
               sinkPeerId: message.sinkPeerId,
               releaseReason: release.reason,
+              releaseSequence: release.sequence > 0
+                  ? release.sequence
+                  : _latestSinkPacketSequence,
+              releaseActivationSequence: release.activationSequence > 0
+                  ? release.activationSequence
+                  : _latestSinkActivationSequence,
             ),
           );
         } else {
@@ -390,6 +422,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _manager.onPacket = (packet) {
+      if (packet.sessionId == message.sessionId &&
+          packet.sequence > _latestSinkPacketSequence) {
+        _latestSinkPacketSequence = packet.sequence;
+      }
+      if (packet.sessionId == message.sessionId &&
+          _isActivationStartPacket(packet)) {
+        _latestSinkActivationSequence = packet.sequence;
+        _sinkEntryTravel = 0;
+      } else if (packet.sessionId == message.sessionId &&
+          _latestSinkActivationSequence > 0) {
+        _sinkEntryTravel += _sinkEntryDelta(packet, message.layoutEdge);
+      }
       final translated = _keyTranslator?.translateFrame(packet) ??
           <RemoteInputPacketFrame>[
             packet,
@@ -404,6 +448,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
+  }
+
+  bool _isEarlySinkEdgeRelease(PlatformRemoteInputRelease release) {
+    final releaseSequence =
+        release.sequence > 0 ? release.sequence : _latestSinkPacketSequence;
+    final activationSequence = release.activationSequence > 0
+        ? release.activationSequence
+        : _latestSinkActivationSequence;
+    return activationSequence > 0 &&
+        releaseSequence > 0 &&
+        _sinkEntryTravel < _sinkEntryReleaseDistance;
   }
 
   void _enqueueInjection(
@@ -448,9 +503,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     _transport = transport;
+    _latestSourceInputSequence = 0;
+    _latestSourceActivationSequence = 0;
     _inputSubscription = _platform.inputEvents.listen((event) {
       if (event.sessionId != message.sessionId) {
         return;
+      }
+      if (event.sequence > _latestSourceInputSequence) {
+        _latestSourceInputSequence = event.sequence;
+      }
+      if (_isActivationStartPacket(event)) {
+        _latestSourceActivationSequence = event.sequence;
       }
       transport.send(event);
       if (_state.status == RemoteInputRuntimeStatus.armed) {
@@ -501,7 +564,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
         message.releaseReason != 'edge') {
       return;
     }
-    await _platform.pauseCapture(sessionId: message.sessionId);
+    if (message.releaseActivationSequence > 0 &&
+        _latestSourceActivationSequence > message.releaseActivationSequence) {
+      logger.i(
+        'remote input ignored stale edge release '
+        'releaseActivationSequence=${message.releaseActivationSequence} '
+        'latestSourceActivationSequence=$_latestSourceActivationSequence',
+      );
+      return;
+    }
+    await _platform.pauseCapture(
+      sessionId: message.sessionId,
+      releaseSequence: message.releaseSequence,
+      releaseActivationSequence: message.releaseActivationSequence,
+    );
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.armed,
@@ -510,6 +586,63 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: _state.peerId,
       ),
     );
+  }
+
+  bool _isActivationStartPacket(RemoteInputPacketFrame packet) {
+    if (packet.eventType != RemoteInputEventType.mouseMove) {
+      return false;
+    }
+    final payload = _mousePayload(packet);
+    return payload != null && payload['activeStart'] == true;
+  }
+
+  double _sinkEntryDelta(
+    RemoteInputPacketFrame packet,
+    RemoteInputEdge? layoutEdge,
+  ) {
+    if (packet.eventType != RemoteInputEventType.mouseMove) {
+      return 0;
+    }
+    final payload = _mousePayload(packet);
+    if (payload == null) {
+      return 0;
+    }
+    final deltaX = _numberPayload(payload['deltaX']);
+    final deltaY = _numberPayload(payload['deltaY']);
+    final edge = (payload['edge'] as String?) ?? layoutEdge?.name ?? 'right';
+    switch (edge) {
+      case 'left':
+        return deltaX < 0 ? -deltaX : 0;
+      case 'top':
+        return deltaY < 0 ? -deltaY : 0;
+      case 'bottom':
+        return deltaY > 0 ? deltaY : 0;
+      case 'right':
+      default:
+        return deltaX > 0 ? deltaX : 0;
+    }
+  }
+
+  Map<String, dynamic>? _mousePayload(RemoteInputPacketFrame packet) {
+    try {
+      final payload = jsonDecode(utf8.decode(packet.payload));
+      if (payload is Map<String, dynamic>) {
+        return payload;
+      }
+      if (payload is Map) {
+        return Map<String, dynamic>.from(payload);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  double _numberPayload(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return 0;
   }
 
   Uri _inputUri({

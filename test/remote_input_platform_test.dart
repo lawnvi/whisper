@@ -45,10 +45,16 @@ void main() {
 
     test('pauses capture without stopping the native capture session',
         () async {
-      await platform.pauseCapture(sessionId: 'input-1');
+      await platform.pauseCapture(
+        sessionId: 'input-1',
+        releaseSequence: 7,
+        releaseActivationSequence: 3,
+      );
 
       expect(calls.single.method, 'pauseCapture');
       expect(calls.single.arguments['sessionId'], 'input-1');
+      expect(calls.single.arguments['releaseSequence'], 7);
+      expect(calls.single.arguments['releaseActivationSequence'], 3);
     });
 
     test('starts injection and injects events', () async {
@@ -94,6 +100,8 @@ void main() {
         const MethodCall('onRelease', <String, dynamic>{
           'sessionId': 'input-1',
           'reason': 'hotkey',
+          'sequence': 7,
+          'activationSequence': 3,
         }),
       );
       await platform.handleNativeMethodCall(
@@ -107,6 +115,8 @@ void main() {
       expect(events.single.eventType, RemoteInputEventType.mouseMove);
       expect(events.single.payload, <int>[1, 2]);
       expect(releases.single.reason, 'hotkey');
+      expect(releases.single.sequence, 7);
+      expect(releases.single.activationSequence, 3);
       expect(diagnostics.single.message, 'keyboard hook active');
 
       await eventSubscription.cancel();

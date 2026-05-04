@@ -50,9 +50,13 @@ class RemoteInputPlatform {
 
   Future<void> pauseCapture({
     required String sessionId,
+    int releaseSequence = 0,
+    int releaseActivationSequence = 0,
   }) {
     return _channel.invokeMethod<void>('pauseCapture', <String, dynamic>{
       'sessionId': sessionId,
+      'releaseSequence': releaseSequence,
+      'releaseActivationSequence': releaseActivationSequence,
     });
   }
 
@@ -107,6 +111,8 @@ class RemoteInputPlatform {
         PlatformRemoteInputRelease(
           sessionId: arguments['sessionId'] as String? ?? '',
           reason: arguments['reason'] as String? ?? 'release',
+          sequence: arguments['sequence'] as int? ?? 0,
+          activationSequence: arguments['activationSequence'] as int? ?? 0,
         ),
       );
       return null;
@@ -154,10 +160,14 @@ class PlatformRemoteInputRelease {
   const PlatformRemoteInputRelease({
     required this.sessionId,
     required this.reason,
+    this.sequence = 0,
+    this.activationSequence = 0,
   });
 
   final String sessionId;
   final String reason;
+  final int sequence;
+  final int activationSequence;
 }
 
 class PlatformRemoteInputError {

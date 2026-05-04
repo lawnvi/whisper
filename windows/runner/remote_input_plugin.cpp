@@ -41,6 +41,22 @@ const T* GetMapValue(const flutter::EncodableMap& map, const char* key) {
   return std::get_if<T>(&it->second);
 }
 
+int64_t GetMapInt64(const flutter::EncodableMap& map,
+                    const char* key,
+                    int64_t fallback = 0) {
+  auto it = map.find(flutter::EncodableValue(std::string(key)));
+  if (it == map.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<int64_t>(&it->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int32_t>(&it->second)) {
+    return *value;
+  }
+  return fallback;
+}
+
 std::string PayloadString(const std::vector<uint8_t>& payload) {
   return std::string(payload.begin(), payload.end());
 }
@@ -366,9 +382,23 @@ class RemoteInputPlugin : public flutter::Plugin {
     StopCapture();
   }
 
-  bool ShouldSuppressMouse(const MSLLHOOKSTRUCT* mouse) {
+  bool HandleLowLevelMouse(WPARAM wparam, const MSLLHOOKSTRUCT* mouse) {
     if (capture_session_id_.empty() || mouse == nullptr) {
       return false;
+    }
+    const POINT point = mouse->pt;
+    LONG delta_x = 0;
+    LONG delta_y = 0;
+    if (last_hook_mouse_point_.has_value()) {
+      delta_x = point.x - last_hook_mouse_point_->x;
+      delta_y = point.y - last_hook_mouse_point_->y;
+    }
+    last_hook_mouse_point_ = point;
+    if (!capture_active_ && wparam != WM_MOUSEMOVE) {
+      return false;
+    }
+    if (!capture_active_ && IsEdgeActivation(point, delta_x, delta_y)) {
+      ActivateCapture("hook");
     }
     return capture_active_;
   }
@@ -386,7 +416,15 @@ class RemoteInputPlugin : public flutter::Plugin {
       return true;
     }
     if (!capture_active_) {
-      return false;
+      POINT point = {};
+      const bool has_cursor = GetCursorPos(&point) == TRUE;
+      const bool at_edge = has_cursor && IsCursorAtCaptureEdge(point);
+      EmitInactiveKeyboardDiagnostic(
+          virtual_key, down, up, keyboard->flags, point, has_cursor, at_edge);
+      if (!at_edge) {
+        return false;
+      }
+      ActivateCapture("keyboard");
     }
     if (keyboard_diagnostic_count_ < 20 && (down || up)) {
       std::ostringstream diagnostic;
@@ -476,7 +514,11 @@ class RemoteInputPlugin : public flutter::Plugin {
         result->Error("bad-arguments", "pauseCapture requires sessionId");
         return;
       }
-      PauseCapture(*session_id);
+      const auto release_sequence =
+          args == nullptr ? 0 : GetMapInt64(*args, "releaseSequence");
+      const auto release_activation_sequence =
+          args == nullptr ? 0 : GetMapInt64(*args, "releaseActivationSequence");
+      PauseCapture(*session_id, release_sequence, release_activation_sequence);
       result->Success();
       return;
     }
@@ -534,8 +576,12 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_edge_ = std::move(edge);
     release_hotkey_ = std::move(release_hotkey);
     capture_active_ = false;
+    pending_active_start_ = false;
+    capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
+    last_hook_mouse_point_.reset();
     keyboard_diagnostic_count_ = 0;
+    inactive_keyboard_diagnostic_count_ = 0;
     sequence_ = 0;
     const bool raw_input_registered = RegisterRawInput(true);
     std::string hook_error;
@@ -565,14 +611,48 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseCommonModifierKeys();
     capture_session_id_.clear();
     capture_active_ = false;
+    pending_active_start_ = false;
+    capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
+    last_hook_mouse_point_.reset();
+    inactive_keyboard_diagnostic_count_ = 0;
   }
 
-  void PauseCapture(const std::string& session_id) {
+  void PauseCapture(const std::string& session_id,
+                    int64_t release_sequence,
+                    int64_t release_activation_sequence) {
     if (session_id == capture_session_id_) {
+      if (release_activation_sequence > 0 &&
+          capture_activation_sequence_ >
+              static_cast<uint64_t>(release_activation_sequence)) {
+        std::ostringstream diagnostic;
+        diagnostic << "windows remote input ignored stale pause "
+                   << "releaseSequence=" << release_sequence
+                   << " releaseActivationSequence="
+                   << release_activation_sequence
+                   << " nativeSequence=" << sequence_;
+        EmitDiagnostic(diagnostic.str());
+        return;
+      }
+      std::ostringstream diagnostic;
+      diagnostic << "windows remote input capture paused edge="
+                 << capture_edge_
+                 << " releaseSequence=" << release_sequence
+                 << " releaseActivationSequence="
+                 << release_activation_sequence
+                 << " nativeSequence=" << sequence_
+                 << " activationSequence=" << capture_activation_sequence_
+                 << " wasActive=" << (capture_active_ ? 1 : 0);
+      EmitDiagnostic(diagnostic.str());
       ReleaseCommonModifierKeys();
+      MoveCaptureCursorToLocalEdge();
       capture_active_ = false;
+      pending_active_start_ = false;
+      capture_activation_sequence_ = 0;
       capture_buttons_ = 0;
+      last_hook_mouse_point_.reset();
+      keyboard_diagnostic_count_ = 0;
+      inactive_keyboard_diagnostic_count_ = 0;
     }
   }
 
@@ -624,7 +704,8 @@ class RemoteInputPlugin : public flutter::Plugin {
                                             WPARAM wparam,
                                             LPARAM lparam) {
     if (code == HC_ACTION && g_plugin != nullptr &&
-        g_plugin->ShouldSuppressMouse(
+        g_plugin->HandleLowLevelMouse(
+            wparam,
             reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam))) {
       return 1;
     }
@@ -660,26 +741,23 @@ class RemoteInputPlugin : public flutter::Plugin {
     GetCursorPos(&point);
     const LONG delta_x = mouse.lLastX;
     const LONG delta_y = mouse.lLastY;
+    const USHORT flags = mouse.usButtonFlags;
+    const bool has_button_or_wheel = flags != 0;
 
     bool active_start = false;
     if (!capture_active_) {
-      if (IsEdgeActivation(point, delta_x, delta_y)) {
-        capture_active_ = true;
+      if (!has_button_or_wheel && IsEdgeActivation(point, delta_x, delta_y)) {
+        ActivateCapture("raw");
         active_start = true;
-        capture_buttons_ = CurrentMouseButtonsMask();
-        keyboard_diagnostic_count_ = 0;
-        std::ostringstream diagnostic;
-        diagnostic << "windows remote input capture active edge="
-                   << capture_edge_
-                   << " mouseHook=" << (mouse_hook_ != nullptr ? 1 : 0)
-                   << " keyboardHook=" << (keyboard_hook_ != nullptr ? 1 : 0);
-        EmitDiagnostic(diagnostic.str());
+        pending_active_start_ = false;
       } else {
         return;
       }
+    } else if (pending_active_start_) {
+      active_start = true;
+      pending_active_start_ = false;
     }
 
-    const USHORT flags = mouse.usButtonFlags;
     if (flags & RI_MOUSE_LEFT_BUTTON_DOWN) {
       SetCaptureButton(0, true);
       EmitInputEvent("mouseButton", JsonBytes(MouseButtonPayload(point, 0, true)));
@@ -724,6 +802,35 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void HandleRawKeyboard(const RAWKEYBOARD&) {}
 
+  void MoveCaptureCursorToLocalEdge() const {
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const int right = left + width - 1;
+    const int bottom = top + height - 1;
+    constexpr int inset = 2;
+
+    POINT current = {};
+    if (GetCursorPos(&current) != TRUE) {
+      current.x = left + width / 2;
+      current.y = top + height / 2;
+    }
+    const int x =
+        ClampInt(static_cast<int>(current.x), left + inset, right - inset);
+    const int y =
+        ClampInt(static_cast<int>(current.y), top + inset, bottom - inset);
+    POINT target = {right - inset, y};
+    if (capture_edge_ == "left") {
+      target = {left + inset, y};
+    } else if (capture_edge_ == "top") {
+      target = {x, top + inset};
+    } else if (capture_edge_ == "bottom") {
+      target = {x, bottom - inset};
+    }
+    SetCursorPos(target.x, target.y);
+  }
+
   bool IsEdgeActivation(POINT point, LONG delta_x, LONG delta_y) const {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -742,6 +849,68 @@ class RemoteInputPlugin : public flutter::Plugin {
       return point.y >= bottom - kEdgeThreshold && delta_y > 0;
     }
     return point.x >= right - kEdgeThreshold && delta_x > 0;
+  }
+
+  bool IsCursorAtCaptureEdge(POINT point) const {
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const int right = left + width - 1;
+    const int bottom = top + height - 1;
+
+    if (capture_edge_ == "left") {
+      return point.x <= left + kEdgeThreshold;
+    }
+    if (capture_edge_ == "top") {
+      return point.y <= top + kEdgeThreshold;
+    }
+    if (capture_edge_ == "bottom") {
+      return point.y >= bottom - kEdgeThreshold;
+    }
+    return point.x >= right - kEdgeThreshold;
+  }
+
+  void EmitInactiveKeyboardDiagnostic(USHORT virtual_key,
+                                      bool down,
+                                      bool up,
+                                      DWORD flags,
+                                      POINT point,
+                                      bool has_cursor,
+                                      bool at_edge) {
+    if (inactive_keyboard_diagnostic_count_ >= 20 || (!down && !up)) {
+      return;
+    }
+    std::ostringstream diagnostic;
+    diagnostic << "windows keyboard hook inactive vk=" << virtual_key
+               << " down=" << (down ? 1 : 0)
+               << " up=" << (up ? 1 : 0)
+               << " flags=" << flags
+               << " edge=" << capture_edge_
+               << " hasCursor=" << (has_cursor ? 1 : 0)
+               << " cursor=" << point.x << "," << point.y
+               << " atEdge=" << (at_edge ? 1 : 0);
+    EmitDiagnostic(diagnostic.str());
+    ++inactive_keyboard_diagnostic_count_;
+  }
+
+  void ActivateCapture(const char* source) {
+    if (capture_active_) {
+      return;
+    }
+    capture_active_ = true;
+    pending_active_start_ = true;
+    capture_activation_sequence_ = sequence_ + 1;
+    capture_buttons_ = CurrentMouseButtonsMask();
+    keyboard_diagnostic_count_ = 0;
+    std::ostringstream diagnostic;
+    diagnostic << "windows remote input capture active edge="
+               << capture_edge_
+               << " via=" << source
+               << " activationSequence=" << capture_activation_sequence_
+               << " mouseHook=" << (mouse_hook_ != nullptr ? 1 : 0)
+               << " keyboardHook=" << (keyboard_hook_ != nullptr ? 1 : 0);
+    EmitDiagnostic(diagnostic.str());
   }
 
   bool IsReleaseHotkey(USHORT virtual_key) const {
@@ -1111,11 +1280,15 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::string capture_edge_ = "right";
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
+  bool pending_active_start_ = false;
   int capture_buttons_ = 0;
   int keyboard_diagnostic_count_ = 0;
+  int inactive_keyboard_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
   std::vector<WORD> injected_keys_;
+  std::optional<POINT> last_hook_mouse_point_;
   uint64_t sequence_ = 0;
+  uint64_t capture_activation_sequence_ = 0;
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;
 };

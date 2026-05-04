@@ -198,7 +198,20 @@ void main() {
           'sequence': 1,
           'timestampMicros': 2,
           'eventType': 'mouseMove',
-          'payload': Uint8List.fromList(<int>[1, 2]),
+          'payload': Uint8List.fromList(
+            '{"activeStart":true}'.codeUnits,
+          ),
+        }),
+      );
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'sequence': 2,
+          'timestampMicros': 3,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(
+            '{"activeStart":false}'.codeUnits,
+          ),
         }),
       );
       await Future<void>.delayed(Duration.zero);
@@ -210,6 +223,8 @@ void main() {
           sourcePeerId: 'mac',
           sinkPeerId: 'win',
           releaseReason: 'edge',
+          releaseSequence: 1,
+          releaseActivationSequence: 1,
         ),
         localPeerId: 'mac',
         remoteHost: 'win.local',
@@ -219,10 +234,103 @@ void main() {
         sendControl: sentControls.add,
       );
 
-      expect(calls.map((call) => call.method), contains('pauseCapture'));
+      final pauseCall =
+          calls.lastWhere((call) => call.method == 'pauseCapture');
+      expect(pauseCall.arguments['releaseSequence'], 1);
+      expect(pauseCall.arguments['releaseActivationSequence'], 1);
       expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
       expect(coordinator.state.role, RemoteInputRuntimeRole.source);
       expect(transport.closed, isFalse);
+    });
+
+    test('source ignores a stale edge release after newer input reactivates',
+        () async {
+      final transport = _FakeRemoteInputTransport();
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final offer = sentControls.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'sequence': 1,
+          'timestampMicros': 2,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(
+            '{"activeStart":true}'.codeUnits,
+          ),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'sequence': 2,
+          'timestampMicros': 3,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(
+            '{"activeStart":true}'.codeUnits,
+          ),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.release,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          releaseReason: 'edge',
+          releaseSequence: 3,
+          releaseActivationSequence: 1,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(calls.map((call) => call.method), isNot(contains('pauseCapture')));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      expect(
+          transport.sentPackets.map((packet) => packet.sequence), <int>[1, 2]);
     });
 
     test('does not offer remote input to untrusted peers', () async {
@@ -464,6 +572,31 @@ void main() {
         sendControl: sentControls.add,
       );
 
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: 'input-release-1',
+          sequence: 7,
+          timestampMicros: 7,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":true}'.codeUnits,
+          ),
+        ).encode(),
+      );
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: 'input-release-1',
+          sequence: 9,
+          timestampMicros: 9,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":false,"deltaX":32,"deltaY":0,"edge":"right"}'
+                .codeUnits,
+          ),
+        ).encode(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
       await platform.handleNativeMethodCall(
         const MethodCall('onRelease', <String, dynamic>{
           'sessionId': 'input-release-1',
@@ -476,6 +609,99 @@ void main() {
       expect(sentControls.first.action, RemoteInputControlAction.accept);
       expect(sentControls.last.action, RemoteInputControlAction.release);
       expect(sentControls.last.releaseReason, 'edge');
+      expect(sentControls.last.releaseSequence, 9);
+      expect(sentControls.last.releaseActivationSequence, 7);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      expect(
+          calls.map((call) => call.method), isNot(contains('stopInjection')));
+    });
+
+    test('sink ignores an edge release immediately after entry activation',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: offer.sessionId,
+          sequence: 7,
+          timestampMicros: 7,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":true}'.codeUnits,
+          ),
+        ).encode(),
+      );
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: offer.sessionId,
+          sequence: 8,
+          timestampMicros: 8,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":false,"deltaX":2,"deltaY":0,"edge":"right"}'
+                .codeUnits,
+          ),
+        ).encode(),
+      );
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: offer.sessionId,
+          sequence: 9,
+          timestampMicros: 9,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":false,"deltaX":1,"deltaY":0,"edge":"right"}'
+                .codeUnits,
+          ),
+        ).encode(),
+      );
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: offer.sessionId,
+          sequence: 10,
+          timestampMicros: 10,
+          eventType: RemoteInputEventType.mouseMove,
+          payload: Uint8List.fromList(
+            '{"activeStart":false,"deltaX":-1,"deltaY":0,"edge":"right"}'
+                .codeUnits,
+          ),
+        ).encode(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onRelease', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'reason': 'edge',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sentControls, hasLength(1));
+      expect(sentControls.single.action, RemoteInputControlAction.accept);
       expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
       expect(
           calls.map((call) => call.method), isNot(contains('stopInjection')));

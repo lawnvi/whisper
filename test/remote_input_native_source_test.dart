@@ -34,8 +34,29 @@ void main() {
       expect(
         source,
         contains(
-            'ReleaseCommonModifierKeys();\n      capture_active_ = false;'),
+          'ReleaseCommonModifierKeys();\n'
+          '      MoveCaptureCursorToLocalEdge();\n'
+          '      capture_active_ = false;',
+        ),
       );
+    });
+
+    test('pins the local cursor to the capture edge when pausing', () {
+      final pauseCapture = RegExp(
+        r'void PauseCapture\([\s\S]*?\n  void StopInjection',
+      ).firstMatch(source)!.group(0)!;
+      expect(pauseCapture, contains('MoveCaptureCursorToLocalEdge();'));
+
+      final moveCaptureCursor = RegExp(
+        r'void MoveCaptureCursorToLocalEdge\([\s\S]*?\n  bool IsEdgeActivation',
+      ).firstMatch(source)!.group(0)!;
+      expect(moveCaptureCursor, contains('SetCursorPos('));
+      expect(moveCaptureCursor, contains('SM_XVIRTUALSCREEN'));
+      expect(moveCaptureCursor, contains('capture_edge_ == "left"'));
+      expect(
+          moveCaptureCursor, contains('ClampInt(static_cast<int>(current.x)'));
+      expect(moveCaptureCursor, isNot(contains('std::min')));
+      expect(moveCaptureCursor, isNot(contains('std::max')));
     });
 
     test('captures all keyboard events in the low-level hook', () {
@@ -47,6 +68,33 @@ void main() {
       ).firstMatch(source)!.group(0)!;
       expect(lowLevelKeyboard, contains('EmitInputEvent("key"'));
       expect(lowLevelKeyboard, isNot(contains('IsSystemMetaKey(')));
+    });
+
+    test('activates capture from the low-level mouse hook before keys arrive',
+        () {
+      expect(source, contains('HandleLowLevelMouse('));
+      expect(source, contains('ActivateCapture("hook")'));
+      expect(source, contains('pending_active_start_ = true;'));
+    });
+
+    test('only mouse movement can activate capture at the edge', () {
+      final lowLevelMouse = RegExp(
+        r'bool HandleLowLevelMouse\([\s\S]*?\n  bool HandleLowLevelKeyboard',
+      ).firstMatch(source)!.group(0)!;
+      expect(lowLevelMouse, contains('WPARAM wparam'));
+      expect(lowLevelMouse, contains('wparam != WM_MOUSEMOVE'));
+
+      final rawMouse = RegExp(
+        r'void HandleRawMouse\([\s\S]*?\n  void HandleRawKeyboard',
+      ).firstMatch(source)!.group(0)!;
+      expect(rawMouse, contains('const bool has_button_or_wheel'));
+      expect(rawMouse, contains('!has_button_or_wheel'));
+    });
+
+    test('activates keyboard capture when the first key arrives at the edge',
+        () {
+      expect(source, contains('IsCursorAtCaptureEdge('));
+      expect(source, contains('ActivateCapture("keyboard")'));
     });
 
     test('does not duplicate keyboard events from raw input', () {
@@ -83,6 +131,16 @@ void main() {
       expect(source, contains('"onDiagnostic"'));
       expect(source, contains('windows remote input capture started'));
       expect(source, contains('windows keyboard hook vk='));
+      expect(source, contains('windows keyboard hook inactive vk='));
+      expect(source, contains('windows remote input capture paused'));
+      expect(source, contains('releaseSequence'));
+      expect(source, contains('releaseActivationSequence'));
+      expect(source, contains('capture_activation_sequence_'));
+      expect(source, contains('windows remote input ignored stale pause'));
+      expect(
+        source,
+        isNot(contains('sequence_ > static_cast<uint64_t>(release_sequence)')),
+      );
     });
 
     test('suppresses mouse events even when drivers mark them injected', () {
@@ -123,6 +181,16 @@ void main() {
       expect(source, contains('TISSelectInputSource'));
     });
 
+    test('emits sink-side diagnostics for key injection and caps switching',
+        () {
+      expect(source, contains('"onDiagnostic"'));
+      expect(source, contains('NSLog("remote input diagnostic: %@"'));
+      expect(source, contains('mac remote input injection started'));
+      expect(source, contains('mac remote input injection release reason='));
+      expect(source, contains('mac remote key inject'));
+      expect(source, contains('mac caps input source switched'));
+    });
+
     test('preserves native modifier event flags while adding active modifiers',
         () {
       expect(
@@ -130,6 +198,40 @@ void main() {
         contains(
             'keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)'),
       );
+    });
+
+    test('posts Control arrow shortcuts as a complete system shortcut', () {
+      expect(source, contains('handleSystemControlArrowShortcut'));
+      expect(source, contains('postSystemControlArrowShortcut'));
+      expect(source, contains('systemShortcutEventSource'));
+      expect(source, contains('suppressedSystemControlArrowKeyCodes'));
+    });
+
+    test('tracks injected mouse position for reverse edge release decisions',
+        () {
+      expect(source, contains('private var injectedMousePoint'));
+      expect(source, contains('injectedMousePoint = nil'));
+      expect(
+        source,
+        contains('injectedMousePoint ?? CGEvent(source: nil)?.location'),
+      );
+      expect(
+        source,
+        contains(
+            'entryPoint == nil && injectedMouseEnteredInterior && isReverseInjectionRelease'),
+      );
+      expect(source, contains('injectedMousePoint = point'));
+    });
+
+    test('arms reverse edge release only after entering screen interior', () {
+      expect(source, contains('private var injectedMouseEnteredInterior'));
+      expect(source, contains('injectedMouseEnteredInterior = false'));
+      expect(
+        source,
+        contains('injectedMouseEnteredInterior && isReverseInjectionRelease'),
+      );
+      expect(source, contains('updateInjectedMouseInteriorState'));
+      expect(source, contains('injectedMouseEnteredInterior = true'));
     });
 
     test('keeps Windows Control and Meta distinct in native fallback mapping',
