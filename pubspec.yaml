@@ -43,6 +43,8 @@ dependencies:
   web_socket_channel: ^3.0.1
   shelf: ^1.4.2
   shelf_web_socket: ^2.0.1
+  opus_codec: ^3.0.5
+  opus_codec_dart: ^3.0.5
 #  system_tray: ^2.0.3
   flutter_easyloading: ^3.0.5
   shared_preferences: ^2.3.3

@@ -701,6 +701,78 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.7.0"
+  opus_codec:
+    dependency: "direct main"
+    description:
+      name: opus_codec
+      sha256: d8ad96b7242e78025122bc2b3821788310ddfb4700f03da7c67da83339099287
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_android:
+    dependency: transitive
+    description:
+      name: opus_codec_android
+      sha256: "347f61ac7fe53cb684ec4777b49688a8336077e025a3e04e3f61294da5d89c68"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_dart:
+    dependency: "direct main"
+    description:
+      name: opus_codec_dart
+      sha256: a5570ca76ff4d973415991e09507cc05f11d640c2d635aee101152457fecf88f
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_ios:
+    dependency: transitive
+    description:
+      name: opus_codec_ios
+      sha256: fdca5606410eaf14b9d1f1179f0b00b7994b6dbc64f0399e2955618b16ef9353
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_linux:
+    dependency: transitive
+    description:
+      name: opus_codec_linux
+      sha256: "69762fa3c8e87e38e6279124544deeebad48b5c3d8b8950de2ce7ef9c63f80f6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_macos:
+    dependency: transitive
+    description:
+      name: opus_codec_macos
+      sha256: ff8012e5eb692a81151404bc5b43385794be0e7b779e60f7f9d7405bba69d693
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_platform_interface:
+    dependency: transitive
+    description:
+      name: opus_codec_platform_interface
+      sha256: "76c6b64097fd1eed334e7be6fc161567058ba26e61f792be9416552fcf48e83b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_web:
+    dependency: transitive
+    description:
+      name: opus_codec_web
+      sha256: c23af0111c986d62ab14c92a25a5e73939034f5d8cd3ef2aca76d904a5994f29
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
+  opus_codec_windows:
+    dependency: transitive
+    description:
+      name: opus_codec_windows
+      sha256: "85fff458e90d1cca8ae0ea2527fa408db3c7dd4d48d98e407e2eac4f4c3a3426"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.5"
   package_config:
     dependency: transitive
     description:
@@ -1234,6 +1306,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.0"
+  wasm_ffi:
+    dependency: transitive
+    description:
+      name: wasm_ffi
+      sha256: "950238f09e2d18b85c5c4356833a06319b049c1d19f936db32c3f0d8194e30b5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.0"
   watcher:
     dependency: transitive
     description:

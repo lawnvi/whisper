@@ -15,6 +15,8 @@ PODS:
   - FlutterMacOS (1.0.0)
   - open_dir_macos (0.0.1):
     - FlutterMacOS
+  - opus_codec_macos (3.0.5):
+    - FlutterMacOS
   - package_info_plus (0.0.1):
     - FlutterMacOS
   - screen_retriever_macos (0.0.1):
@@ -65,6 +67,7 @@ DEPENDENCIES:
   - flutter_local_notifications (from `Flutter/ephemeral/.symlinks/plugins/flutter_local_notifications/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - open_dir_macos (from `Flutter/ephemeral/.symlinks/plugins/open_dir_macos/macos`)
+  - opus_codec_macos (from `Flutter/ephemeral/.symlinks/plugins/opus_codec_macos/macos`)
   - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
   - screen_retriever_macos (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -95,6 +98,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   open_dir_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/open_dir_macos/macos
+  opus_codec_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/opus_codec_macos/macos
   package_info_plus:
     :path: Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos
   screen_retriever_macos:
@@ -121,6 +126,7 @@ SPEC CHECKSUMS:
   flutter_local_notifications: 13862b132e32eb858dea558a86d45d08daeacfe7
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   open_dir_macos: 79810d7921d777f8732bf6358b3a0839a8fad9b5
+  opus_codec_macos: de7826d5947340105a948def829c04225d993cbf
   package_info_plus: f0052d280d17aa382b932f399edf32507174e870
   screen_retriever_macos: 452e51764a9e1cdb74b3c541238795849f21557f
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
@@ -131,6 +137,6 @@ SPEC CHECKSUMS:
   wakelock_plus: 917609be14d812ddd9e9528876538b2263aaa03b
   window_manager: 1d01fa7ac65a6e6f83b965471b1a7fdd3f06166c
 
-PODFILE CHECKSUM: 4062a5d7621e35b4f677b9e411c2714a4f99d4c2
+PODFILE CHECKSUM: 3f582ee219cdd642a9b7a3f10ce6c138b7763802
 
 COCOAPODS: 1.16.2

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
+import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:synchronized/synchronized.dart';
@@ -10,6 +11,9 @@ import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/audio/audio_share_coordinator.dart';
+import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -253,7 +257,7 @@ class WsSvrManager {
 
   void startServer(int port, var callback) {
     close(closeServer: true);
-    var handler = webSocketHandler((WebSocketChannel webSocket) async {
+    final chatHandler = webSocketHandler((WebSocketChannel webSocket) async {
       if (_sink != null) {
         var device = await LocalSetting().instance();
         var message = _buildMessage(
@@ -273,6 +277,16 @@ class WsSvrManager {
         close();
       });
     }, pingInterval: _serverPingInterval);
+    final audioHandler = AudioShareManager.shared.webSocketHandler(
+      pingInterval: _serverPingInterval,
+    );
+
+    FutureOr<shelf.Response> handler(shelf.Request request) {
+      if (request.url.path == 'audio') {
+        return audioHandler(request);
+      }
+      return chatHandler(request);
+    }
 
     shelf_io.serve(handler, '0.0.0.0', port, shared: true).then((server) {
       _server = server;
@@ -338,6 +352,7 @@ class WsSvrManager {
     unawaited(_markRecoverableTransfersWaitingReconnect());
     final closeResumableHandles = _closeResumableHandles();
     await _freeIoSink(freeAll: true);
+    await AudioShareCoordinator.shared.stopLocal();
     final currentSink = _sink;
     _sink = null;
     await currentSink?.close();
@@ -605,6 +620,23 @@ class WsSvrManager {
           await _handleTransferControl(message);
           break;
         }
+      case MessageEnum.AudioControl:
+        {
+          final json =
+              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          final control = AudioControlMessage.fromJson(json);
+          final self = await LocalSetting().instance();
+          final remoteDevice = _remoteProfile?.device;
+          await AudioShareCoordinator.shared.handleControlMessage(
+            control,
+            localPeerId: self.uid,
+            remoteHost: remoteDevice?.host ?? '',
+            remotePort: remoteDevice?.port ?? 0,
+            sendControl: sendAudioControl,
+          );
+          _ackMessage(message);
+          break;
+        }
       default:
         {
           if (_supportsResumableTransfer &&
@@ -781,8 +813,14 @@ class WsSvrManager {
       trustedPeerIds: trustedPeerIds,
       autoApproveNewDevices: await LocalSetting().autoApproveNewDevices(),
       autoConnectEnabled: await LocalSetting().autoConnectEnabled(),
-      protocolVersion: 2,
-      capabilities: const PeerCapabilities(fileResumeV1: true),
+      protocolVersion: 3,
+      capabilities: PeerCapabilities(
+        fileResumeV1: true,
+        systemAudioSourceV1: isDesktop(),
+        speakerSinkV1: true,
+        remoteInputSourceV1: isDesktop(),
+        remoteInputSinkV1: isDesktop(),
+      ),
     );
     var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
         allow ? "" : "拒绝连接", "", 0, false);
@@ -808,6 +846,19 @@ class WsSvrManager {
 
   Future<void> refreshConnectionLiveness() async {
     await _heartBeat();
+  }
+
+  void sendAudioControl(AudioControlMessage control) {
+    final message = _buildMessage(
+      MessageEnum.AudioControl,
+      jsonEncode(control.toJson()),
+      "",
+      "",
+      0,
+      false,
+      uid: control.sessionId,
+    );
+    _send(message.toJsonString());
   }
 
   Future<void> retryTransfer(String transferId) async {

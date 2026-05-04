@@ -3,6 +3,8 @@ platform :osx, '10.15'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+require 'fileutils'
+
 project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,
@@ -36,7 +38,67 @@ target 'Runner' do
   end
 end
 
+def fix_macos_opus_framework_layout(framework_path)
+  return unless File.exist?(File.join(framework_path, 'Info.plist'))
+  return unless File.directory?(File.join(framework_path, 'Versions'))
+
+  version_a = File.join(framework_path, 'Versions', 'A')
+  resources = File.join(version_a, 'Resources')
+  FileUtils.mkdir_p(resources)
+
+  {
+    'Info.plist' => File.join(resources, 'Info.plist'),
+    'opus' => File.join(version_a, 'opus'),
+    'Headers' => File.join(version_a, 'Headers'),
+    'Modules' => File.join(version_a, 'Modules')
+  }.each do |source_name, target_path|
+    source_path = File.join(framework_path, source_name)
+    FileUtils.rm_rf(target_path)
+    FileUtils.mv(source_path, target_path) if File.exist?(source_path)
+  end
+
+  current_link = File.join(framework_path, 'Versions', 'Current')
+  FileUtils.rm_f(current_link)
+  FileUtils.ln_s('A', current_link)
+
+  {
+    'opus' => 'Versions/Current/opus',
+    'Headers' => 'Versions/Current/Headers',
+    'Modules' => 'Versions/Current/Modules',
+    'Resources' => 'Versions/Current/Resources'
+  }.each do |link_name, target|
+    link_path = File.join(framework_path, link_name)
+    FileUtils.rm_rf(link_path)
+    FileUtils.ln_s(target, link_path)
+  end
+end
+
 post_install do |installer|
+  [
+    File.join(
+      __dir__,
+      'Flutter',
+      'ephemeral',
+      '.symlinks',
+      'plugins',
+      'opus_codec_macos',
+      'macos',
+      'opus.xcframework',
+      'macos-arm64_x86_64',
+      'opus.framework'
+    ),
+    File.join(
+      __dir__,
+      'Pods',
+      'opus_codec_macos',
+      'opus.xcframework',
+      'macos-arm64_x86_64',
+      'opus.framework'
+    )
+  ].each do |opus_framework|
+    fix_macos_opus_framework_layout(opus_framework)
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
     target.build_configurations.each do |config|

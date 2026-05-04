@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/local.dart';
@@ -52,6 +53,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
+  final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -109,6 +111,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     logger.i("init conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
+    _audioCoordinator.addListener(_handleAudioShareChanged);
     _textController.addListener(() {
       setState(() {
         isInputEmpty = _textController.text.isEmpty;
@@ -123,11 +126,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.removeObserver(this);
     socketManager.unregisterEvent(this);
+    _audioCoordinator.removeListener(_handleAudioShareChanged);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _composerFocusNode.dispose();
     _textController.dispose();
     super.dispose();
+  }
+
+  void _handleAudioShareChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -578,6 +588,28 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
+    if (_shouldShowAudioShareAction) {
+      final audioState = _audioCoordinator.state;
+      final isCurrentAudioSession = audioState.isForPeer(device.uid);
+      final isActive = isCurrentAudioSession && audioState.isActive;
+      final isBusy = isCurrentAudioSession && audioState.isBusy;
+      final role = isCurrentAudioSession
+          ? audioState.role
+          : AudioShareRuntimeRole.source;
+      actions.add(
+        IconButton(
+          onPressed: isBusy ? null : _toggleAudioShare,
+          tooltip: _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
+          icon: Icon(_audioShareIcon(role)),
+          color: _audioShareIconColor(
+            role,
+            isActive: isActive,
+            isBusy: isBusy,
+            isDark: isDark,
+          ),
+        ),
+      );
+    }
     actions.add(
       IconButton(
         onPressed: _canToggleConnection ? _toggleConnection : null,
@@ -618,6 +650,59 @@ class _SendMessageScreen extends State<SendMessageScreen>
       ),
     );
     return actions;
+  }
+
+  bool get _shouldShowAudioShareAction {
+    final audioState = _audioCoordinator.state;
+    return !_isLocalhost &&
+        _isConnectedSession &&
+        (isDesktop() || audioState.isForPeer(device.uid));
+  }
+
+  IconData _audioShareIcon(AudioShareRuntimeRole role) {
+    switch (role) {
+      case AudioShareRuntimeRole.source:
+        return Icons.output_rounded;
+      case AudioShareRuntimeRole.sink:
+        return Icons.speaker_rounded;
+      case AudioShareRuntimeRole.none:
+        return Icons.output_rounded;
+    }
+  }
+
+  Color _audioShareIconColor(
+    AudioShareRuntimeRole role, {
+    required bool isActive,
+    required bool isBusy,
+    required bool isDark,
+  }) {
+    if (isBusy) {
+      return Colors.amber;
+    }
+    if (!isActive) {
+      return isDark ? Colors.white60 : Colors.black45;
+    }
+    return role == AudioShareRuntimeRole.source
+        ? Colors.orangeAccent
+        : Colors.lightBlue;
+  }
+
+  String _audioShareTooltip(
+    AudioShareRuntimeRole role, {
+    required bool isActive,
+    required bool isBusy,
+  }) {
+    if (isBusy) {
+      return role == AudioShareRuntimeRole.source
+          ? '采集端：正在连接远端扬声器'
+          : '播放端：正在准备播放共享声音';
+    }
+    if (isActive) {
+      return role == AudioShareRuntimeRole.source
+          ? '采集端：正在共享本机声音，点击停止'
+          : '播放端：正在作为扬声器播放，点击停止';
+    }
+    return '共享本机声音到此设备';
   }
 
   String _connectionStatusText() {
@@ -783,6 +868,49 @@ class _SendMessageScreen extends State<SendMessageScreen>
       await Future.delayed(const Duration(milliseconds: 200));
     }
     return _isConnectedSession;
+  }
+
+  Future<void> _toggleAudioShare() async {
+    if (!_isConnectedSession || _isLocalhost) {
+      return;
+    }
+    final audioState = _audioCoordinator.state;
+    final isCurrentAudioSession = audioState.isForPeer(device.uid);
+    try {
+      if (isCurrentAudioSession) {
+        final role = audioState.role;
+        await _audioCoordinator.stopSharing(
+          sendControl: socketManager.sendAudioControl,
+        );
+        if (mounted) {
+          Fluttertoast.showToast(
+            msg: role == AudioShareRuntimeRole.sink ? '已停止播放共享声音' : '已停止共享声音',
+          );
+        }
+        return;
+      }
+      if (!isDesktop()) {
+        Fluttertoast.showToast(msg: '当前设备只能作为扬声器播放端');
+        return;
+      }
+      final self = this.self ?? await LocalSetting().instance();
+      await _audioCoordinator.startSharingToConnectedPeer(
+        sourcePeerId: self.uid,
+        sinkPeerId: device.uid,
+        sinkHost: device.host,
+        sinkPort: device.port,
+        sendControl: socketManager.sendAudioControl,
+      );
+      if (mounted) {
+        Fluttertoast.showToast(msg: '正在请求对端播放本机声音');
+      }
+    } catch (error, stackTrace) {
+      logger.e('audio share toggle failed',
+          error: error, stackTrace: stackTrace);
+      if (mounted) {
+        Fluttertoast.showToast(msg: '共享声音失败：$error');
+      }
+    }
   }
 
   Future<void> _sendText(String content, {isClipboard = false}) async {

@@ -5,6 +5,7 @@
 #include <gdk/gdkx.h>
 #endif
 
+#include "audio_share_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 
 struct _MyApplication {
@@ -59,6 +60,7 @@ static void my_application_activate(GApplication* application) {
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

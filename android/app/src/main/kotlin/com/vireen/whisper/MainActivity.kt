@@ -9,5 +9,6 @@ class MainActivity : FlutterActivity() {
         GeneratedPluginRegistrant.registerWith(flutterEngine)
         flutterEngine.plugins.add(DirPlugin())
         flutterEngine.plugins.add(BackgroundKeepAlivePlugin())
+        flutterEngine.plugins.add(AudioSharePlugin())
     }
 }

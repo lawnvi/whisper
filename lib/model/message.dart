@@ -36,6 +36,7 @@ enum MessageEnum {
   FileSignal,
   Notification,
   TransferControl,
+  AudioControl,
 }
 
 class FileSignal {

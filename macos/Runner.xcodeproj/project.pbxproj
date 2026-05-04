@@ -701,7 +701,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				APP_DISPLAY_NAME = "Whisper Dev";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vireen.whisper.dev;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
