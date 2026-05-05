@@ -2,38 +2,52 @@
 
 [English](./README_en.md)
 
-whisper（土电话）在局域网内快速分享文本和文件，实现剪贴板内容的快速互传。
+Whisper（土电话）是一款面向局域网的跨平台设备协作工具。它把文本、文件、剪贴板、Android 通知、系统声音和桌面键鼠共享放在一个对话式界面里，让同一网络里的电脑和手机可以快速互联。
+
+当前版本：`0.0.29`
 
 ### 功能特点
-- 支持在局域网内的Android、MacOS、Linux和Windows设备之间分享文本和文件。
-- 可将来自Android设备的通知推送到其他连接的设备上。
-- 单独建立FTP服务（alpha）
+
+- 在 Android、macOS、Linux 和 Windows 设备之间发送文本与文件。
+- 支持大文件续传与传输状态恢复，断线重连后继续发送。
+- 转发 Android 设备通知到已连接设备。
+- 在桌面端共享系统声音，可把一台设备的声音播放到另一台设备。
+- 在桌面端共享键盘和鼠标，支持 macOS、Windows、Linux 作为控制端或被控端。
+- 支持互信设备自动连接，桌面端可配置开机自启动。
+- 可单独启动 FTP 服务（alpha），用于临时文件访问。
+- 支持浅色/深色主题和中英西三种语言。
 
 ### 工作原理
-Whisper使用Flutter开发，通过建立WebSocket连接与局域网中指定的设备进行通信。
+
+Whisper 使用 Flutter 开发，通过局域网设备发现和 WebSocket 连接在设备间传递消息、文件块、音频帧和键鼠事件。数据传输发生在局域网内，不依赖公网中转。
 
 ### 使用提示
-1. 不会dart，不会flutter，就是不想用微信文件传输助手
-2. 连接可能会断开，在某些情况下，设备可能无法自动发现，需要手动输入设备地址进行连接。
-3. 水平有限不好看，有些代码只有上帝...也许他也不想看了
-4. 由于不熟悉打包技术，Windows上的安装方式有些过时，不一定支持ARM设备。
-5. 虽然不那么面面俱到，但对于个人使用来说足够了。
-6. 由于移动设备文件访问问题，使用的库需要先将大文件复制到自身缓存目录，因此大文件可能无法立即开始传输。桌面端的拖放功能应该不会遇到此问题。
-7. 写入文件前请确保设备有足够的存储空间！没有做剩余空间的检查。
-8. 没有加密！没有校验！没有断点续传!
-9. 仅支持文本和文件消息展示，传文件咱就不要那么多了，文件不一定还在。
-10. 阿巴阿巴～
+
+1. 设备需要处于同一局域网，部分网络环境下自动发现可能失败，可手动输入 IP 地址连接。
+2. 互信设备可自动连接；如果要长期使用桌面键鼠共享，建议开启桌面端开机自启动。
+3. 桌面端拖放文件可以直接开始传输；移动端受系统文件访问限制，部分大文件可能需要先复制到应用缓存。
+4. 写入文件前请确保接收设备有足够存储空间。
+5. 当前传输未做端到端加密，请只在可信局域网内使用，不要传输敏感数据。
+6. Linux 设备发现依赖 Avahi；Linux 键鼠共享当前依赖 X11 显示会话。
+7. Linux 系统声音共享依赖 PulseAudio/PipeWire Pulse 兼容层。
+8. Windows 安装包仍在改进中，ARM 设备兼容性未充分验证。
 
 ### 安装
-[home page](https://2.127014.xyz/whisper)  |  [Latest Release](https://github.com/lawnvi/whisper/releases)  
 
-### Linux安装
-如果您的Linux系统未安装Avahi（用于设备发现），请运行以下命令：
+[主页](https://2.127014.xyz/whisper) | [Latest Release](https://github.com/lawnvi/whisper/releases)
+
+### Linux 安装
+
+如果您的 Linux 系统未安装 Avahi（用于设备发现），请运行以下命令：
+
 ```shell
 sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
 ```
 
+如需使用 Linux 音频共享，请确保系统具备 PulseAudio 或 PipeWire Pulse 兼容服务。
+
 ### 截图展示
+
 <div style="display: inline-block; text-align: center;">
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="74%" style="border-radius: 6px;"/>
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="24%" style="border-radius: 6px;"/>
@@ -41,6 +55,8 @@ sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-sca
 <div style="display: inline-block; text-align: center;">
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="74%" style="border-radius: 6px;"/>
     <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="24%" style="border-radius: 6px;"/>
-</div> 
+</div>
 
-如有任何问题或需要进一步帮助，请随时联系！
+### 说明
+
+Whisper 是一个个人使用场景优先的开源项目，目标是替代“文件传输助手”这类临时中转方式。如果遇到问题，欢迎在 GitHub Issues 反馈。
