@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_startup.dart';
@@ -54,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _androidBackgroundKeepAlive = true;
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
+  double _audioSharePlaybackGain = 1.0;
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
@@ -99,6 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final launchAtStartup = await _loadLaunchAtStartup();
     final androidBackgroundKeepAlive =
         await LocalSetting().androidBackgroundKeepAlive();
+    final audioSharePlaybackGain =
+        await LocalSetting().audioSharePlaybackGain();
     if (!mounted) {
       return;
     }
@@ -115,6 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _autoConnect = autoConnect;
       _launchAtStartup = launchAtStartup;
       _androidBackgroundKeepAlive = androidBackgroundKeepAlive;
+      _audioSharePlaybackGain = audioSharePlaybackGain;
     });
   }
 
@@ -393,6 +398,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await LocalSetting().updateClipboard(value);
                           await _refreshDevice();
                         },
+                      ),
+                    ),
+                    _buildSettingItem(
+                      l10n.audioSharePlaybackGainSetting(
+                        _audioSharePlaybackGainLabel(
+                          _audioSharePlaybackGain,
+                        ),
+                      ),
+                      Icon(
+                        Icons.graphic_eq_rounded,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      desc: l10n.audioSharePlaybackGainDesc,
+                      onTap: _showAudioSharePlaybackGainSheet,
+                      trailing: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: palette.textMuted,
                       ),
                     ),
                     if (!isMobile())
@@ -877,6 +902,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return AppLocalizations.of(context)?.autoConnectTrustedDevices ??
         'Auto-connect mutually trusted devices';
   }
+
+  String _audioSharePlaybackGainLabel(double gain) {
+    return 'x${gain.toStringAsFixed(1)}';
+  }
+
+  Future<void> _showAudioSharePlaybackGainSheet() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    var selectedGain = _audioSharePlaybackGain;
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return CupertinoActionSheet(
+              title: Text(
+                l10n.audioSharePlaybackGainTitle,
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
+              message: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _audioSharePlaybackGainLabel(selectedGain),
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  CupertinoSlider(
+                    value: selectedGain,
+                    min: 1.0,
+                    max: 3.0,
+                    divisions: 20,
+                    onChanged: (value) {
+                      setModalState(() {
+                        selectedGain = value;
+                      });
+                    },
+                    onChangeEnd: (value) async {
+                      await LocalSetting().setAudioSharePlaybackGain(value);
+                      AudioShareCoordinator.shared.updatePlaybackGain(value);
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _audioSharePlaybackGain = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              cancelButton: CupertinoActionSheetAction(
+                child: Text(
+                  l10n.confirm,
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 class ClientSettingsScreen extends StatefulWidget {
@@ -1047,8 +1141,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           Icons.chevron_right_rounded,
                           color: palette.textMuted,
                         ),
-                        onTap:
-                            device.auth ? _openRemoteInputAutoModePicker : null,
+                        onTap: _openRemoteInputAutoModePickerWithTrustPrompt,
                       ),
                     if (showRemoteInputSettings)
                       _DeviceSettingTile(
@@ -1166,6 +1259,22 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       case RemoteInputAutoRole.sink:
         return l10n.remoteInputAutoModeSink;
     }
+  }
+
+  Future<void> _openRemoteInputAutoModePickerWithTrustPrompt() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (!device.auth) {
+      showAppToast(l10n.remoteInputRequiresMutualTrust);
+      return;
+    }
+    if (device.uid == WsSvrManager().receiver) {
+      final self = await LocalSetting().instance();
+      if (!WsSvrManager().remoteTrustsPeer(self.uid)) {
+        showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
+        return;
+      }
+    }
+    await _openRemoteInputAutoModePicker();
   }
 
   Future<void> _openRemoteInputAutoModePicker() async {

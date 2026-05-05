@@ -31,9 +31,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install create-dmg
-        run: npm install --global create-dmg
-
       - name: Refresh CocoaPods dependencies
         run: |
           rm -f macos/Podfile.lock ios/Podfile.lock
@@ -57,14 +54,12 @@ jobs:
 
       - name: Package DMG
         run: |
-          shopt -s nullglob
-          create-dmg build/macos/Build/Products/Release/whisper.app || true
-          dmgs=(whisper*.dmg)
-          if [ ${#dmgs[@]} -gt 0 ]; then
-            mv "${dmgs[0]}" whisper.dmg
-          else
-            hdiutil create -volname "Whisper" -srcfolder build/macos/Build/Products/Release/whisper.app -ov -format UDZO whisper.dmg
-          fi
+          rm -rf dmg-root whisper.dmg
+          mkdir -p dmg-root
+          cp -R build/macos/Build/Products/Release/whisper.app dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname "Whisper" -srcfolder dmg-root -ov -format UDZO whisper.dmg
+          hdiutil verify whisper.dmg
 
       - name: Upload macOS and iOS artifacts
         uses: actions/upload-artifact@v4

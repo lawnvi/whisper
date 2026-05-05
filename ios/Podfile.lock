@@ -43,8 +43,6 @@ PODS:
   - Flutter (1.0.0)
   - flutter_local_notifications (0.0.1):
     - Flutter
-  - fluttertoast (0.0.2):
-    - Flutter
   - open_filex (0.0.2):
     - Flutter
   - opus_codec_ios (3.0.5):
@@ -97,7 +95,6 @@ DEPENDENCIES:
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - Flutter (from `Flutter`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
-  - fluttertoast (from `.symlinks/plugins/fluttertoast/ios`)
   - open_filex (from `.symlinks/plugins/open_filex/ios`)
   - opus_codec_ios (from `.symlinks/plugins/opus_codec_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
@@ -128,8 +125,6 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_local_notifications:
     :path: ".symlinks/plugins/flutter_local_notifications/ios"
-  fluttertoast:
-    :path: ".symlinks/plugins/fluttertoast/ios"
   open_filex:
     :path: ".symlinks/plugins/open_filex/ios"
   opus_codec_ios:
@@ -156,7 +151,6 @@ SPEC CHECKSUMS:
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: 395056b3175ba4f08480a7c5de30cd36d69827e4
-  fluttertoast: 2c67e14dce98bbdb200df9e1acf610d7a6264ea1
   open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
   opus_codec_ios: 92a104ce4500126b25cf0abddf379af393846fd2
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499

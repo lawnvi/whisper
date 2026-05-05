@@ -6,11 +6,13 @@ import 'package:whisper/helper/local.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:toastification/toastification.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'helper/helper.dart';
 import 'helper/notification.dart';
+import 'helper/toast.dart';
 import 'l10n/app_localizations.dart';
 
 const MethodChannel _windowThemeChannel =
@@ -157,20 +159,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Whisper',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _themeMode,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: _locale,
-      home: const DeviceListScreen(),
+    return ToastificationWrapper(
+      child: MaterialApp(
+        title: 'Whisper',
+        navigatorKey: appNavigatorKey,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _themeMode,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: _locale,
+        home: const DeviceListScreen(),
+      ),
     );
   }
 }

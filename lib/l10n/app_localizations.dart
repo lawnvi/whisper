@@ -640,6 +640,36 @@ abstract class AppLocalizations {
   /// **'有活动会话时保持前台服务运行'**
   String get androidBackgroundKeepAliveActiveDesc;
 
+  /// No description provided for @androidBackgroundKeepAliveTransferSending.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在传文件 {progress}%'**
+  String androidBackgroundKeepAliveTransferSending(String progress);
+
+  /// No description provided for @androidBackgroundKeepAliveTransferReceiving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在接收文件 {progress}%'**
+  String androidBackgroundKeepAliveTransferReceiving(String progress);
+
+  /// No description provided for @androidBackgroundKeepAliveAudioSharing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在共享音频'**
+  String get androidBackgroundKeepAliveAudioSharing;
+
+  /// No description provided for @androidBackgroundKeepAliveAudioPlaying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在播放共享音频'**
+  String get androidBackgroundKeepAliveAudioPlaying;
+
+  /// No description provided for @androidBackgroundKeepAliveAudioPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备音频共享'**
+  String get androidBackgroundKeepAliveAudioPreparing;
+
   /// No description provided for @androidBatteryOptimization.
   ///
   /// In zh, this message translates to:
@@ -760,6 +790,24 @@ abstract class AppLocalizations {
   /// **'已停止共享声音'**
   String get audioShareCaptureStopped;
 
+  /// No description provided for @audioSharePlaybackGainTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享扬声器增益'**
+  String get audioSharePlaybackGainTitle;
+
+  /// No description provided for @audioSharePlaybackGainSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享扬声器增益：{gain}'**
+  String audioSharePlaybackGainSetting(String gain);
+
+  /// No description provided for @audioSharePlaybackGainDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'只影响本机播放对端共享声音，过高可能产生削波'**
+  String get audioSharePlaybackGainDesc;
+
   /// No description provided for @audioShareUnsupportedCapture.
   ///
   /// In zh, this message translates to:
@@ -843,6 +891,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'键鼠共享需要互信设备'**
   String get remoteInputRequiresMutualTrust;
+
+  /// No description provided for @remoteInputPeerMustTrustThisDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'对端还没有信任本机，请先在对端信任本机后再共享键鼠'**
+  String get remoteInputPeerMustTrustThisDevice;
 
   /// No description provided for @remoteInputLayoutRequired.
   ///

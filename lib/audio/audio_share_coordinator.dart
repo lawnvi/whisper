@@ -9,12 +9,14 @@ import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_playback_sink.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
+import 'package:whisper/helper/local.dart';
 
 typedef AudioControlSender = void Function(AudioControlMessage control);
 typedef AudioCodecFactory = Future<AudioCodec> Function(
   AudioStreamFormat format,
 );
 typedef AudioTransportFactory = Future<AudioPacketTransport> Function(Uri uri);
+typedef AudioPlaybackGainProvider = Future<double> Function();
 
 enum AudioShareRuntimeRole {
   none,
@@ -68,11 +70,14 @@ class AudioShareCoordinator extends ChangeNotifier {
     AudioPlatform? platform,
     AudioCodecFactory? codecFactory,
     AudioTransportFactory? transportFactory,
+    AudioPlaybackGainProvider? playbackGainProvider,
   })  : _manager = manager ?? AudioShareManager.shared,
         _platform = platform ?? AudioPlatform(),
         _codecFactory = codecFactory ?? createDefaultAudioCodec,
         _transportFactory =
-            transportFactory ?? AudioWebSocketPacketTransport.connect;
+            transportFactory ?? AudioWebSocketPacketTransport.connect,
+        _playbackGainProvider =
+            playbackGainProvider ?? LocalSetting().audioSharePlaybackGain;
 
   static final AudioShareCoordinator shared = AudioShareCoordinator();
 
@@ -88,6 +93,7 @@ class AudioShareCoordinator extends ChangeNotifier {
   final AudioPlatform _platform;
   final AudioCodecFactory _codecFactory;
   final AudioTransportFactory _transportFactory;
+  final AudioPlaybackGainProvider _playbackGainProvider;
 
   AudioShareRuntimeState _state = const AudioShareRuntimeState.idle();
   AudioCaptureSource? _captureSource;
@@ -192,6 +198,10 @@ class AudioShareCoordinator extends ChangeNotifier {
     await stopLocal();
   }
 
+  void updatePlaybackGain(double gain) {
+    _playbackSink?.updatePlaybackGain(gain);
+  }
+
   Future<void> stopLocal() async {
     final captureSource = _captureSource;
     final playbackSink = _playbackSink;
@@ -285,9 +295,11 @@ class AudioShareCoordinator extends ChangeNotifier {
       ),
     );
     final codec = await _codecFactory(format);
+    final playbackGain = await _playbackGainProvider();
     final sink = AudioPlaybackSink(
       codec: codec,
       platform: _platform,
+      playbackGain: playbackGain,
     );
     await sink.start(
       sessionId: message.sessionId,

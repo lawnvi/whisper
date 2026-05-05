@@ -123,6 +123,25 @@
   "androidBackgroundKeepAliveDesc": "连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率",
   "androidBackgroundKeepAliveActiveTitle": "Whisper 正在保持连接",
   "androidBackgroundKeepAliveActiveDesc": "有活动会话时保持前台服务运行",
+  "androidBackgroundKeepAliveTransferSending": "正在传文件 {progress}%",
+  "@androidBackgroundKeepAliveTransferSending": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "androidBackgroundKeepAliveTransferReceiving": "正在接收文件 {progress}%",
+  "@androidBackgroundKeepAliveTransferReceiving": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "androidBackgroundKeepAliveAudioSharing": "正在共享音频",
+  "androidBackgroundKeepAliveAudioPlaying": "正在播放共享音频",
+  "androidBackgroundKeepAliveAudioPreparing": "正在准备音频共享",
   "androidBatteryOptimization": "电池优化白名单",
   "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备",
   "fileTransferLegacyInProgress": "旧协议传输中",
@@ -157,6 +176,16 @@
   "audioShareStart": "把本机声音共享给对端",
   "audioSharePlaybackStopped": "已停止播放共享声音",
   "audioShareCaptureStopped": "已停止共享声音",
+  "audioSharePlaybackGainTitle": "共享扬声器增益",
+  "audioSharePlaybackGainSetting": "共享扬声器增益：{gain}",
+  "@audioSharePlaybackGainSetting": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSharePlaybackGainDesc": "只影响本机播放对端共享声音，过高可能产生削波",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
   "audioShareRequestingPlayback": "正在请求对端播放本机声音",
   "audioShareFailed": "共享声音失败：{error}",
@@ -178,6 +207,7 @@
   "remoteInputLocalUnsupported": "当前设备不支持键鼠共享",
   "remoteInputPeerUnsupported": "当前连接设备不支持键鼠共享",
   "remoteInputRequiresMutualTrust": "键鼠共享需要互信设备",
+  "remoteInputPeerMustTrustThisDevice": "对端还没有信任本机，请先在对端信任本机后再共享键鼠",
   "remoteInputLayoutRequired": "请先在设备设置里把对端屏幕贴到本机边缘",
   "remoteInputEnabledMoveToEdge": "键鼠共享已启用，移动到屏幕边缘开始控制对端",
   "remoteInputFailed": "键鼠共享失败：{error}",

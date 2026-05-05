@@ -59,6 +59,62 @@ void main() {
     expect(arguments['pcm'], Uint8List.fromList(<int>[4, 0, 252, 255]));
   });
 
+  test('applies playback gain and clips PCM samples', () async {
+    final codec = PcmPassthroughAudioCodec(config);
+    final playback = AudioPlaybackSink(
+      codec: codec,
+      platform: AudioPlatform(),
+      playbackGain: 2.0,
+    );
+    await playback.start(sessionId: 'audio-1', format: format);
+    calls.clear();
+
+    final packet = AudioPacketFrame(
+      sessionId: 'audio-1',
+      sequence: 1,
+      captureTimeMicros: 100,
+      payload: codec.encode(
+        Int16List.fromList(<int>[1000, -1000, 20000, -20000]),
+      ),
+    );
+
+    await playback.handlePacket(packet);
+
+    final arguments = calls.single.arguments as Map<Object?, Object?>;
+    expect(
+      arguments['pcm'],
+      Uint8List.fromList(<int>[
+        208, 7, // 2000
+        48, 248, // -2000
+        255, 127, // 32767
+        0, 128, // -32768
+      ]),
+    );
+  });
+
+  test('updates playback gain for an active sink', () async {
+    final codec = PcmPassthroughAudioCodec(config);
+    final playback = AudioPlaybackSink(
+      codec: codec,
+      platform: AudioPlatform(),
+    );
+    await playback.start(sessionId: 'audio-1', format: format);
+    playback.updatePlaybackGain(2.0);
+    calls.clear();
+
+    await playback.handlePacket(
+      AudioPacketFrame(
+        sessionId: 'audio-1',
+        sequence: 1,
+        captureTimeMicros: 100,
+        payload: codec.encode(Int16List.fromList(<int>[1000])),
+      ),
+    );
+
+    final arguments = calls.single.arguments as Map<Object?, Object?>;
+    expect(arguments['pcm'], Uint8List.fromList(<int>[208, 7]));
+  });
+
   test('ignores packets for another session', () async {
     final playback = AudioPlaybackSink(
       codec: PcmPassthroughAudioCodec(config),

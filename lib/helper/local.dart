@@ -42,6 +42,7 @@ class LocalSetting {
   final String _autoConnectEnabled = "_auto_connect_enabled";
   final String _lastManualPeerId = "_last_manual_peer_id";
   final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
+  final String _audioSharePlaybackGain = "_audio_share_playback_gain";
 
   SharedPreferences? _cachedPreferences;
 
@@ -258,6 +259,17 @@ class LocalSetting {
 
   Future<void> setAndroidBackgroundKeepAlive(bool enabled) async {
     await _setSP(_androidBackgroundKeepAlive, enabled);
+  }
+
+  Future<double> audioSharePlaybackGain() async {
+    final SharedPreferences sp = await _preferences();
+    final raw = sp.get(_audioSharePlaybackGain);
+    final gain = raw is num ? raw.toDouble() : 1.0;
+    return gain.clamp(1.0, 3.0).toDouble();
+  }
+
+  Future<void> setAudioSharePlaybackGain(double gain) async {
+    await _setSP(_audioSharePlaybackGain, gain.clamp(1.0, 3.0).toDouble());
   }
 
   Future<String> lastManualPeerId() async {

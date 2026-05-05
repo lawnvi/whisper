@@ -102,7 +102,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   Future<void> _syncAndroidKeepAliveService() async {
-    if (!Platform.isAndroid) {
+    if (!Platform.isAndroid || !mounted) {
       return;
     }
     final enabled = await LocalSetting().androidBackgroundKeepAlive();
@@ -114,13 +114,69 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (notificationPermission.isDenied) {
       await Permission.notification.request();
     }
+    if (!mounted) {
+      return;
+    }
+    final notification = _buildAndroidKeepAliveNotification();
     await startAndroidBackgroundKeepAlive(
-      title:
-          AppLocalizations.of(context)?.androidBackgroundKeepAliveActiveTitle ??
-              'Whisper is keeping the connection alive',
-      description:
-          AppLocalizations.of(context)?.androidBackgroundKeepAliveActiveDesc ??
-              'Active while a device session is connected',
+      title: notification.title,
+      description: notification.description,
+      progress: notification.progress,
+      indeterminateProgress: notification.indeterminateProgress,
+    );
+  }
+
+  AndroidKeepAliveNotification _buildAndroidKeepAliveNotification() {
+    final activeTransfer = _activeTransferId == null
+        ? null
+        : _transferSnapshots[_activeTransferId!];
+    final title = l10n.androidBackgroundKeepAliveActiveTitle;
+    if (activeTransfer != null && !_isTransferTerminal(activeTransfer.state)) {
+      final progress = (activeTransfer.progress * 100).round().clamp(0, 100);
+      final progressText = progress.toString();
+      return AndroidKeepAliveNotification(
+        title: title,
+        description: activeTransfer.direction == FileTransferDirection.outgoing
+            ? l10n.androidBackgroundKeepAliveTransferSending(progressText)
+            : l10n.androidBackgroundKeepAliveTransferReceiving(progressText),
+        progress: progress,
+        indeterminateProgress:
+            activeTransfer.state != FileTransferState.transferring,
+      );
+    }
+
+    if (percent > 0 && percent < 1) {
+      final progress = (percent * 100).round().clamp(0, 100);
+      return AndroidKeepAliveNotification(
+        title: title,
+        description:
+            l10n.androidBackgroundKeepAliveTransferSending(progress.toString()),
+        progress: progress,
+      );
+    }
+
+    final audioState = _audioCoordinator.state;
+    if (audioState.isForPeer(device.uid) &&
+        audioState.status != AudioShareRuntimeStatus.idle &&
+        audioState.status != AudioShareRuntimeStatus.failed) {
+      if (audioState.isBusy) {
+        return AndroidKeepAliveNotification(
+          title: title,
+          description: l10n.androidBackgroundKeepAliveAudioPreparing,
+          indeterminateProgress: true,
+        );
+      }
+      return AndroidKeepAliveNotification(
+        title: title,
+        description: audioState.role == AudioShareRuntimeRole.source
+            ? l10n.androidBackgroundKeepAliveAudioSharing
+            : l10n.androidBackgroundKeepAliveAudioPlaying,
+      );
+    }
+
+    return AndroidKeepAliveNotification(
+      title: title,
+      description: l10n.androidBackgroundKeepAliveActiveDesc,
     );
   }
 
@@ -165,6 +221,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _handleAudioShareChanged() {
+    unawaited(_syncAndroidKeepAliveService());
     if (mounted) {
       setState(() {});
     }
@@ -211,6 +268,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     setState(() {
       percent = num;
     });
+    unawaited(_syncAndroidKeepAliveService());
   }
 
   Future<void> _loadTransferSnapshotsForMessages(
@@ -783,12 +841,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   bool get _shouldShowRemoteInputAction {
-    final inputState = _remoteInputCoordinator.state;
     return !_isLocalhost &&
         _isConnectedSession &&
         isDesktop() &&
-        supportsNativeRemoteInput() &&
-        (socketManager.supportsRemoteInput || inputState.isForPeer(device.uid));
+        supportsNativeRemoteInput();
   }
 
   IconData _audioShareIcon(AudioShareRuntimeRole role) {
@@ -1125,22 +1181,35 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
-      if (!socketManager.supportsRemoteInput) {
-        _traceRemoteInput(
-            'remote input toggle blocked: remote peer lacks capability');
-        if (showToast) {
-          showAppToast(l10n.remoteInputPeerUnsupported);
-        }
-        return;
-      }
       final self = this.self ?? await LocalSetting().instance();
       final storedDevice = await LocalDatabase().fetchDevice(device.uid);
-      if (storedDevice?.auth != true) {
+      final localTrustsRemote = storedDevice?.auth == true;
+      final remoteTrustsLocal = socketManager.remoteTrustsPeer(self.uid);
+      final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
+      if (!localTrustsRemote) {
         _traceRemoteInput(
           'remote input toggle blocked: stored auth missing peer=${device.uid}',
         );
         if (showToast) {
           showAppToast(l10n.remoteInputRequiresMutualTrust);
+        }
+        return;
+      }
+      if (!remoteTrustsLocal) {
+        _traceRemoteInput(
+          'remote input toggle blocked: remote peer does not trust local '
+          'peer=${device.uid} self=${self.uid}',
+        );
+        if (showToast) {
+          showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
+        }
+        return;
+      }
+      if (!socketManager.supportsRemoteInput) {
+        _traceRemoteInput(
+            'remote input toggle blocked: remote peer lacks capability');
+        if (showToast) {
+          showAppToast(l10n.remoteInputPeerUnsupported);
         }
         return;
       }
@@ -1181,8 +1250,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sinkPort: device.port,
         layoutEdge: edge,
         releaseHotkey: layout.releaseHotkey,
-        isMutuallyTrusted: true,
-        remoteCanInject: true,
+        isMutuallyTrusted: isMutuallyTrusted,
+        remoteCanInject: socketManager.supportsRemoteInput,
         sendControl: socketManager.sendRemoteInputControl,
       );
       if (mounted && showToast) {
@@ -1613,5 +1682,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _transferSnapshots[snapshot.transferId] = snapshot;
       });
     }
+    unawaited(_syncAndroidKeepAliveService());
   }
 }

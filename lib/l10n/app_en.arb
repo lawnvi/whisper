@@ -89,6 +89,25 @@
   "androidBackgroundKeepAliveDesc": "Use an Android foreground service during active sessions to reduce disconnects when picking files or switching apps",
   "androidBackgroundKeepAliveActiveTitle": "Whisper is keeping the connection alive",
   "androidBackgroundKeepAliveActiveDesc": "Active while a device session is connected",
+  "androidBackgroundKeepAliveTransferSending": "Sending file {progress}%",
+  "@androidBackgroundKeepAliveTransferSending": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "androidBackgroundKeepAliveTransferReceiving": "Receiving file {progress}%",
+  "@androidBackgroundKeepAliveTransferReceiving": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "androidBackgroundKeepAliveAudioSharing": "Sharing audio",
+  "androidBackgroundKeepAliveAudioPlaying": "Playing shared audio",
+  "androidBackgroundKeepAliveAudioPreparing": "Preparing audio sharing",
   "androidBatteryOptimization": "Battery optimization",
   "androidBatteryOptimizationDesc": "Recommended: allow background activity and exclude Whisper from battery optimization on Android",
   "fileTransferLegacyInProgress": "Legacy transfer in progress",
@@ -109,6 +128,16 @@
   "audioShareStart": "Share this device's audio to peer",
   "audioSharePlaybackStopped": "Stopped playing shared audio",
   "audioShareCaptureStopped": "Stopped sharing audio",
+  "audioSharePlaybackGainTitle": "Shared speaker gain",
+  "audioSharePlaybackGainSetting": "Shared speaker gain: {gain}",
+  "@audioSharePlaybackGainSetting": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSharePlaybackGainDesc": "Only affects shared audio played on this device. Higher values may clip",
   "audioShareUnsupportedCapture": "This device does not support system audio capture",
   "audioShareRequestingPlayback": "Requesting peer to play this device's audio",
   "audioShareFailed": "Audio sharing failed: {error}",
@@ -123,6 +152,7 @@
   "remoteInputLocalUnsupported": "This device does not support keyboard and mouse sharing",
   "remoteInputPeerUnsupported": "Connected device does not support keyboard and mouse sharing",
   "remoteInputRequiresMutualTrust": "Keyboard and mouse sharing requires mutual trust",
+  "remoteInputPeerMustTrustThisDevice": "The peer has not trusted this device yet. Trust this device on the peer before sharing keyboard and mouse",
   "remoteInputLayoutRequired": "Place the peer screen against this device's edge in device settings first",
   "remoteInputEnabledMoveToEdge": "Keyboard and mouse sharing is enabled. Move to the screen edge to control peer",
   "remoteInputFailed": "Keyboard and mouse sharing failed: {error}",

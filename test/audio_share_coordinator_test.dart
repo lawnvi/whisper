@@ -165,6 +165,7 @@ void main() {
         platform: platform,
         codecFactory: _pcmCodec,
         transportFactory: (_) async => _FakeAudioTransport(),
+        playbackGainProvider: () async => 2.0,
       );
 
       final offer = AudioControlMessage(
@@ -198,6 +199,9 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(calls.map((call) => call.method), contains('writePcm'));
+      final writeCall = calls.singleWhere((call) => call.method == 'writePcm');
+      final arguments = writeCall.arguments as Map<Object?, Object?>;
+      expect(arguments['pcm'], Uint8List.fromList(<int>[2, 0, 4, 0]));
     });
   });
 }

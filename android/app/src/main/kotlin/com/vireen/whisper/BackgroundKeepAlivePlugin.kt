@@ -29,7 +29,10 @@ class BackgroundKeepAlivePlugin : FlutterPlugin, MethodChannel.MethodCallHandler
             "startKeepAlive" -> {
                 val title = call.argument<String>("title") ?: "Whisper"
                 val description = call.argument<String>("description") ?: "Keeping connection alive"
-                startKeepAlive(title, description)
+                val progress = call.argument<Int>("progress")
+                val indeterminateProgress =
+                    call.argument<Boolean>("indeterminateProgress") ?: false
+                startKeepAlive(title, description, progress, indeterminateProgress)
                 result.success(null)
             }
 
@@ -47,8 +50,19 @@ class BackgroundKeepAlivePlugin : FlutterPlugin, MethodChannel.MethodCallHandler
         }
     }
 
-    private fun startKeepAlive(title: String, description: String) {
-        val intent = KeepAliveForegroundService.buildIntent(context, title, description)
+    private fun startKeepAlive(
+        title: String,
+        description: String,
+        progress: Int?,
+        indeterminateProgress: Boolean
+    ) {
+        val intent = KeepAliveForegroundService.buildIntent(
+            context,
+            title,
+            description,
+            progress,
+            indeterminateProgress
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {

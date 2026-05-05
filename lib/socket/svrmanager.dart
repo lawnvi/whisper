@@ -117,6 +117,10 @@ class WsSvrManager {
   bool get _supportsResumableTransfer =>
       _remoteProfile?.capabilities.fileResumeV1 == true;
 
+  bool remoteTrustsPeer(String peerId) {
+    return _remoteProfile?.trustsPeer(peerId) ?? false;
+  }
+
   String _shortSessionId(String sessionId) {
     if (sessionId.length <= 8) {
       return sessionId;

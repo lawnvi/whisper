@@ -301,6 +301,27 @@ class AppLocalizationsEs extends AppLocalizations {
       'Activo mientras haya una sesion conectada';
 
   @override
+  String androidBackgroundKeepAliveTransferSending(String progress) {
+    return 'Enviando archivo $progress%';
+  }
+
+  @override
+  String androidBackgroundKeepAliveTransferReceiving(String progress) {
+    return 'Recibiendo archivo $progress%';
+  }
+
+  @override
+  String get androidBackgroundKeepAliveAudioSharing => 'Compartiendo audio';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPlaying =>
+      'Reproduciendo audio compartido';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPreparing =>
+      'Preparando audio compartido';
+
+  @override
   String get androidBatteryOptimization => 'Optimizacion de bateria';
 
   @override
@@ -374,6 +395,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get audioShareCaptureStopped => 'Se detuvo el audio compartido';
 
   @override
+  String get audioSharePlaybackGainTitle => 'Ganancia del altavoz compartido';
+
+  @override
+  String audioSharePlaybackGainSetting(String gain) {
+    return 'Ganancia del altavoz compartido: $gain';
+  }
+
+  @override
+  String get audioSharePlaybackGainDesc =>
+      'Solo afecta al audio compartido reproducido en este dispositivo. Valores altos pueden recortar';
+
+  @override
   String get audioShareUnsupportedCapture =>
       'Este dispositivo no admite captura de audio del sistema';
 
@@ -427,6 +460,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get remoteInputRequiresMutualTrust =>
       'Compartir teclado y mouse requiere confianza mutua';
+
+  @override
+  String get remoteInputPeerMustTrustThisDevice =>
+      'El otro dispositivo aun no confia en este. Confia en este dispositivo desde el otro antes de compartir teclado y mouse';
 
   @override
   String get remoteInputLayoutRequired =>

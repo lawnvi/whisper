@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class ContextMenuActionItem {
@@ -13,7 +16,7 @@ class ContextMenuActionItem {
   final bool enabled;
 }
 
-class ContextMenuRegion extends StatelessWidget {
+class ContextMenuRegion extends StatefulWidget {
   const ContextMenuRegion({
     super.key,
     required this.child,
@@ -23,8 +26,28 @@ class ContextMenuRegion extends StatelessWidget {
   final Widget child;
   final List<ContextMenuActionItem> items;
 
+  @override
+  State<ContextMenuRegion> createState() => _ContextMenuRegionState();
+}
+
+class _ContextMenuRegionState extends State<ContextMenuRegion> {
+  Timer? _longPressTimer;
+  Offset? _longPressOrigin;
+
+  @override
+  void dispose() {
+    _cancelLongPressTimer();
+    super.dispose();
+  }
+
+  void _cancelLongPressTimer() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _longPressOrigin = null;
+  }
+
   Future<void> _showMenu(BuildContext context, Offset globalPosition) async {
-    if (items.isEmpty) {
+    if (widget.items.isEmpty) {
       return;
     }
 
@@ -36,8 +59,8 @@ class ContextMenuRegion extends StatelessWidget {
     final enabledItems = <int, ContextMenuActionItem>{};
     final entries = <PopupMenuEntry<int>>[];
 
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
+    for (var i = 0; i < widget.items.length; i++) {
+      final item = widget.items[i];
       if (!item.enabled) {
         continue;
       }
@@ -66,19 +89,51 @@ class ContextMenuRegion extends StatelessWidget {
     }
   }
 
+  void _startLongPressTimer(PointerDownEvent event) {
+    if (kIsWeb) {
+      return;
+    }
+    if (event.buttons != kPrimaryButton) {
+      return;
+    }
+
+    _cancelLongPressTimer();
+    final globalPosition = event.position;
+    _longPressOrigin = globalPosition;
+    _longPressTimer = Timer(kLongPressTimeout, () {
+      _longPressTimer = null;
+      _longPressOrigin = null;
+      if (!mounted) {
+        return;
+      }
+      _showMenu(context, globalPosition);
+    });
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    final origin = _longPressOrigin;
+    if (origin == null) {
+      return;
+    }
+    if ((event.position - origin).distance > kTouchSlop) {
+      _cancelLongPressTimer();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.deferToChild,
-      onSecondaryTapDown: (details) {
-        _showMenu(context, details.globalPosition);
-      },
-      onLongPressStart: (details) {
-        if (!kIsWeb) {
+    return Listener(
+      onPointerDown: _startLongPressTimer,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: (_) => _cancelLongPressTimer(),
+      onPointerCancel: (_) => _cancelLongPressTimer(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.deferToChild,
+        onSecondaryTapDown: (details) {
           _showMenu(context, details.globalPosition);
-        }
-      },
-      child: child,
+        },
+        child: widget.child,
+      ),
     );
   }
 }

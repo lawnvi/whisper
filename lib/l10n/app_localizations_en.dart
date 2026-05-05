@@ -301,6 +301,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'Active while a device session is connected';
 
   @override
+  String androidBackgroundKeepAliveTransferSending(String progress) {
+    return 'Sending file $progress%';
+  }
+
+  @override
+  String androidBackgroundKeepAliveTransferReceiving(String progress) {
+    return 'Receiving file $progress%';
+  }
+
+  @override
+  String get androidBackgroundKeepAliveAudioSharing => 'Sharing audio';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPlaying => 'Playing shared audio';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPreparing =>
+      'Preparing audio sharing';
+
+  @override
   String get androidBatteryOptimization => 'Battery optimization';
 
   @override
@@ -372,6 +392,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioShareCaptureStopped => 'Stopped sharing audio';
 
   @override
+  String get audioSharePlaybackGainTitle => 'Shared speaker gain';
+
+  @override
+  String audioSharePlaybackGainSetting(String gain) {
+    return 'Shared speaker gain: $gain';
+  }
+
+  @override
+  String get audioSharePlaybackGainDesc =>
+      'Only affects shared audio played on this device. Higher values may clip';
+
+  @override
   String get audioShareUnsupportedCapture =>
       'This device does not support system audio capture';
 
@@ -425,6 +457,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get remoteInputRequiresMutualTrust =>
       'Keyboard and mouse sharing requires mutual trust';
+
+  @override
+  String get remoteInputPeerMustTrustThisDevice =>
+      'The peer has not trusted this device yet. Trust this device on the peer before sharing keyboard and mouse';
 
   @override
   String get remoteInputLayoutRequired =>

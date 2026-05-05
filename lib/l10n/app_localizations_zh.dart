@@ -292,6 +292,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidBackgroundKeepAliveActiveDesc => '有活动会话时保持前台服务运行';
 
   @override
+  String androidBackgroundKeepAliveTransferSending(String progress) {
+    return '正在传文件 $progress%';
+  }
+
+  @override
+  String androidBackgroundKeepAliveTransferReceiving(String progress) {
+    return '正在接收文件 $progress%';
+  }
+
+  @override
+  String get androidBackgroundKeepAliveAudioSharing => '正在共享音频';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPlaying => '正在播放共享音频';
+
+  @override
+  String get androidBackgroundKeepAliveAudioPreparing => '正在准备音频共享';
+
+  @override
   String get androidBatteryOptimization => '电池优化白名单';
 
   @override
@@ -357,6 +376,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioShareCaptureStopped => '已停止共享声音';
 
   @override
+  String get audioSharePlaybackGainTitle => '共享扬声器增益';
+
+  @override
+  String audioSharePlaybackGainSetting(String gain) {
+    return '共享扬声器增益：$gain';
+  }
+
+  @override
+  String get audioSharePlaybackGainDesc => '只影响本机播放对端共享声音，过高可能产生削波';
+
+  @override
   String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
 
   @override
@@ -399,6 +429,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteInputRequiresMutualTrust => '键鼠共享需要互信设备';
+
+  @override
+  String get remoteInputPeerMustTrustThisDevice => '对端还没有信任本机，请先在对端信任本机后再共享键鼠';
 
   @override
   String get remoteInputLayoutRequired => '请先在设备设置里把对端屏幕贴到本机边缘';

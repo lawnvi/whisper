@@ -131,7 +131,6 @@ class ChatMessageList extends StatelessWidget {
                             onOpenFile(message.path);
                           }
                         },
-                        onLongPress: () {},
                         child: isFile
                             ? buildFileMessage(message, isOpponent)
                             : buildTextMessage(message, isOpponent),
