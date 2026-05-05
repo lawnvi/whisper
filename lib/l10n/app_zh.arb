@@ -109,6 +109,16 @@
   "autoConnectTrustedDevices": "自动连接互信设备",
   "mutualTrustEnabled": "双向互信已开启",
   "mutualTrustNotEstablished": "尚未形成双向互信",
+  "launchAtStartup": "开机自启动",
+  "launchAtStartupDesc": "登录桌面后自动启动 Whisper，便于自动连接互信设备",
+  "launchAtStartupFailed": "开机自启动设置失败：{error}",
+  "@launchAtStartupFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "androidBackgroundKeepAlive": "后台保活连接",
   "androidBackgroundKeepAliveDesc": "连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率",
   "androidBackgroundKeepAliveActiveTitle": "Whisper 正在保持连接",

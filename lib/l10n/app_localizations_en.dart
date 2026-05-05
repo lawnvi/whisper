@@ -273,6 +273,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Mutual trust has not been established';
 
   @override
+  String get launchAtStartup => 'Launch at startup';
+
+  @override
+  String get launchAtStartupDesc =>
+      'Start Whisper automatically after desktop login to reconnect trusted devices';
+
+  @override
+  String launchAtStartupFailed(String error) {
+    return 'Failed to update launch at startup: $error';
+  }
+
+  @override
   String get androidBackgroundKeepAlive =>
       'Keep connection alive in background';
 

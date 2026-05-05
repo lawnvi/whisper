@@ -598,6 +598,24 @@ abstract class AppLocalizations {
   /// **'尚未形成双向互信'**
   String get mutualTrustNotEstablished;
 
+  /// No description provided for @launchAtStartup.
+  ///
+  /// In zh, this message translates to:
+  /// **'开机自启动'**
+  String get launchAtStartup;
+
+  /// No description provided for @launchAtStartupDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录桌面后自动启动 Whisper，便于自动连接互信设备'**
+  String get launchAtStartupDesc;
+
+  /// No description provided for @launchAtStartupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'开机自启动设置失败：{error}'**
+  String launchAtStartupFailed(String error);
+
   /// No description provided for @androidBackgroundKeepAlive.
   ///
   /// In zh, this message translates to:

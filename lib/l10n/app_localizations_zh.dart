@@ -268,6 +268,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mutualTrustNotEstablished => '尚未形成双向互信';
 
   @override
+  String get launchAtStartup => '开机自启动';
+
+  @override
+  String get launchAtStartupDesc => '登录桌面后自动启动 Whisper，便于自动连接互信设备';
+
+  @override
+  String launchAtStartupFailed(String error) {
+    return '开机自启动设置失败：$error';
+  }
+
+  @override
   String get androidBackgroundKeepAlive => '后台保活连接';
 
   @override

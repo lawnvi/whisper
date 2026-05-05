@@ -7,11 +7,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/notification.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -48,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _ignoreAndroid = false;
   bool _copyVerifyCode = true;
   bool _autoConnect = true;
+  bool _launchAtStartup = false;
   bool _androidBackgroundKeepAlive = true;
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
@@ -70,6 +73,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<bool> _loadLaunchAtStartup() async {
+    if (!isDesktop()) {
+      return false;
+    }
+    try {
+      return await DesktopStartupManager().isEnabled();
+    } catch (error) {
+      logger.i('Failed to load desktop launch at startup: $error');
+      return false;
+    }
+  }
+
   Future<void> _refreshDevice() async {
     final temp = await LocalSetting().instance();
     final path = await downloadDir();
@@ -81,6 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final listenAndroid = await LocalSetting().isListenAndroid();
     final ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
     final autoConnect = await LocalSetting().autoConnectEnabled();
+    final launchAtStartup = await _loadLaunchAtStartup();
     final androidBackgroundKeepAlive =
         await LocalSetting().androidBackgroundKeepAlive();
     if (!mounted) {
@@ -97,6 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _ignoreAndroid = ignoreAndroid;
       _listenAndroid = listenAndroid;
       _autoConnect = autoConnect;
+      _launchAtStartup = launchAtStartup;
       _androidBackgroundKeepAlive = androidBackgroundKeepAlive;
     });
   }
@@ -107,6 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
+    final l10n = AppLocalizations.of(context)!;
     final locale = Localizations.localeOf(context);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
@@ -312,6 +330,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
                     ),
+                    if (isDesktop())
+                      _buildSettingItem(
+                        l10n.launchAtStartup,
+                        Icon(
+                          Icons.rocket_launch_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: l10n.launchAtStartupDesc,
+                        trailing: CupertinoSwitch(
+                          value: _launchAtStartup,
+                          onChanged: (bool value) async {
+                            final previous = _launchAtStartup;
+                            setState(() {
+                              _launchAtStartup = value;
+                            });
+                            try {
+                              await DesktopStartupManager().setEnabled(value);
+                            } catch (error) {
+                              if (mounted) {
+                                setState(() {
+                                  _launchAtStartup = previous;
+                                });
+                              }
+                              showAppToast(
+                                l10n.launchAtStartupFailed(error.toString()),
+                              );
+                            }
+                          },
+                        ),
+                      ),
                     _buildSettingItem(
                       AppLocalizations.of(context)?.trustNewDevice ?? '自动通过新设备',
                       Icon(

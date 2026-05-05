@@ -273,6 +273,18 @@ class AppLocalizationsEs extends AppLocalizations {
       'La confianza mutua aun no esta establecida';
 
   @override
+  String get launchAtStartup => 'Iniciar al arrancar';
+
+  @override
+  String get launchAtStartupDesc =>
+      'Inicia Whisper automaticamente al iniciar sesion para reconectar dispositivos de confianza';
+
+  @override
+  String launchAtStartupFailed(String error) {
+    return 'No se pudo actualizar el inicio automatico: $error';
+  }
+
+  @override
   String get androidBackgroundKeepAlive =>
       'Mantener la conexion en segundo plano';
 
