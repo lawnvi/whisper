@@ -921,7 +921,7 @@ class RemoteInputPlugin : public flutter::Plugin {
            (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
   }
 
-  void SetCursorPosForEntry(const std::string& json) {
+  POINT CursorPointForEntry(const std::string& json) const {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
     const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -955,10 +955,63 @@ class RemoteInputPlugin : public flutter::Plugin {
           left, right);
       y = top + inset;
     }
-    SetCursorPos(x, y);
+    return POINT{x, y};
+  }
+
+  POINT CurrentCursorPoint() const {
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    POINT current = {};
+    if (GetCursorPos(&current) != TRUE) {
+      current.x = left + width / 2;
+      current.y = top + height / 2;
+    }
+    return current;
+  }
+
+  POINT ClampToVirtualScreen(POINT point) const {
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const int right = left + width - 1;
+    const int bottom = top + height - 1;
+    constexpr int inset = 2;
+    point.x = ClampInt(static_cast<int>(point.x), left + inset, right - inset);
+    point.y = ClampInt(static_cast<int>(point.y), top + inset, bottom - inset);
+    return point;
+  }
+
+  void MoveCursorToPoint(POINT point) const {
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const int unit_width = width > 1 ? width - 1 : 1;
+    const int unit_height = height > 1 ? height - 1 : 1;
+    point = ClampToVirtualScreen(point);
+
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
+    input.mi.dx = static_cast<LONG>(std::lround(
+        static_cast<double>(point.x - left) * 65535.0 /
+        static_cast<double>(unit_width)));
+    input.mi.dy = static_cast<LONG>(std::lround(
+        static_cast<double>(point.y - top) * 65535.0 /
+        static_cast<double>(unit_height)));
+    input.mi.dwFlags =
+        MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
+    SendInput(1, &input, sizeof(INPUT));
   }
 
   void SendMouseButton(int button, bool down) {
+    INPUT input = MouseButtonInput(button, down);
+    SendInput(1, &input, sizeof(INPUT));
+  }
+
+  INPUT MouseButtonInput(int button, bool down) const {
     INPUT input = {};
     input.type = INPUT_MOUSE;
     if (button == 1) {
@@ -968,7 +1021,15 @@ class RemoteInputPlugin : public flutter::Plugin {
     } else {
       input.mi.dwFlags = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
     }
-    SendInput(1, &input, sizeof(INPUT));
+    return input;
+  }
+
+  void SendMouseButtonClick(int button) {
+    INPUT inputs[2] = {
+        MouseButtonInput(button, true),
+        MouseButtonInput(button, false),
+    };
+    SendInput(2, inputs, sizeof(INPUT));
   }
 
   int MouseButtonBit(int button) const {
@@ -999,6 +1060,46 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
   }
 
+  void QueueInjectedButtonDown(int button) {
+    const int bit = MouseButtonBit(button);
+    if ((injected_buttons_ & bit) != 0) {
+      return;
+    }
+    pending_injected_buttons_ |= bit;
+  }
+
+  void FlushPendingInjectedButtons() {
+    FlushPendingInjectedButton(0);
+    FlushPendingInjectedButton(1);
+    FlushPendingInjectedButton(2);
+  }
+
+  void FlushPendingInjectedButton(int button) {
+    const int bit = MouseButtonBit(button);
+    if ((pending_injected_buttons_ & bit) == 0) {
+      return;
+    }
+    pending_injected_buttons_ &= ~bit;
+    SendMouseButton(button, true);
+    SetInjectedButton(button, true);
+  }
+
+  void ReleaseInjectedButton(int button) {
+    const int bit = MouseButtonBit(button);
+    const bool is_pending = (pending_injected_buttons_ & bit) != 0;
+    const bool is_down = (injected_buttons_ & bit) != 0;
+    if (is_pending && !is_down) {
+      pending_injected_buttons_ &= ~bit;
+      SendMouseButtonClick(button);
+      return;
+    }
+    pending_injected_buttons_ &= ~bit;
+    if (is_down) {
+      SendMouseButton(button, false);
+      SetInjectedButton(button, false);
+    }
+  }
+
   void SyncInjectedButtons(int desired_buttons) {
     SyncInjectedButton(0, desired_buttons);
     SyncInjectedButton(1, desired_buttons);
@@ -1009,17 +1110,27 @@ class RemoteInputPlugin : public flutter::Plugin {
     const int bit = MouseButtonBit(button);
     const bool should_be_down = (desired_buttons & bit) != 0;
     const bool is_down = (injected_buttons_ & bit) != 0;
-    if (should_be_down == is_down) {
+    const bool is_pending = (pending_injected_buttons_ & bit) != 0;
+    if (should_be_down) {
+      if (!is_down && !is_pending) {
+        QueueInjectedButtonDown(button);
+      }
       return;
     }
-    SendMouseButton(button, should_be_down);
-    SetInjectedButton(button, should_be_down);
+    if (is_pending) {
+      pending_injected_buttons_ &= ~bit;
+    }
+    if (is_down) {
+      SendMouseButton(button, false);
+      SetInjectedButton(button, false);
+    }
   }
 
   void ReleaseInjectedButtons() {
-    if (injected_buttons_ == 0) {
+    if (injected_buttons_ == 0 && pending_injected_buttons_ == 0) {
       return;
     }
+    pending_injected_buttons_ = 0;
     SyncInjectedButtons(0);
   }
 
@@ -1119,8 +1230,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (event_type == "mouseMove") {
       const int delta_x = static_cast<int>(std::round(JsonNumber(json, "deltaX").value_or(0)));
       const int delta_y = static_cast<int>(std::round(JsonNumber(json, "deltaY").value_or(0)));
-      POINT current = {};
-      GetCursorPos(&current);
+      POINT current = CurrentCursorPoint();
       if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
         ReleaseInjectedButtons();
@@ -1130,19 +1240,18 @@ class RemoteInputPlugin : public flutter::Plugin {
         return;
       }
       if (JsonBool(json, "activeStart")) {
-        SetCursorPosForEntry(json);
+        current = CursorPointForEntry(json);
+        MoveCursorToPoint(current);
       }
       const auto buttons = JsonNumber(json, "buttons");
       if (buttons.has_value()) {
         SyncInjectedButtons(static_cast<int>(std::round(buttons.value())));
       }
       if (delta_x != 0 || delta_y != 0) {
-        INPUT input = {};
-        input.type = INPUT_MOUSE;
-        input.mi.dx = delta_x;
-        input.mi.dy = delta_y;
-        input.mi.dwFlags = MOUSEEVENTF_MOVE;
-        SendInput(1, &input, sizeof(INPUT));
+        FlushPendingInjectedButtons();
+        POINT target = {current.x + delta_x, current.y + delta_y};
+        target = ClampToVirtualScreen(target);
+        MoveCursorToPoint(target);
       }
       return;
     }
@@ -1150,8 +1259,11 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (event_type == "mouseButton") {
       const int button = static_cast<int>(JsonNumber(json, "button").value_or(0));
       const bool down = JsonBool(json, "down");
-      SendMouseButton(button, down);
-      SetInjectedButton(button, down);
+      if (down) {
+        QueueInjectedButtonDown(button);
+      } else {
+        ReleaseInjectedButton(button);
+      }
       return;
     }
 
@@ -1285,6 +1397,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   int keyboard_diagnostic_count_ = 0;
   int inactive_keyboard_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
+  int pending_injected_buttons_ = 0;
   std::vector<WORD> injected_keys_;
   std::optional<POINT> last_hook_mouse_point_;
   uint64_t sequence_ = 0;

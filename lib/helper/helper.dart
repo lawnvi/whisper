@@ -25,10 +25,14 @@ bool supportsNativeSystemAudio() {
   return isDesktop();
 }
 
-// Linux is included in the remote input key protocol, but native source/sink
-// support stays disabled until an X11 or Wayland backend is implemented.
 bool supportsNativeRemoteInput() {
-  return Platform.isMacOS || Platform.isWindows;
+  if (Platform.isMacOS || Platform.isWindows) {
+    return true;
+  }
+  if (Platform.isLinux) {
+    return (Platform.environment['DISPLAY'] ?? '').trim().isNotEmpty;
+  }
+  return false;
 }
 
 RemoteInputPlatformKind currentRemoteInputPlatformKind() {

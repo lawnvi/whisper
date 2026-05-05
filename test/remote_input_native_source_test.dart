@@ -148,6 +148,53 @@ void main() {
       expect(source, contains('return capture_active_;'));
     });
 
+    test('clamps injected mouse movement through the Windows input queue', () {
+      expect(source, contains('POINT CurrentCursorPoint() const'));
+      expect(source, contains('POINT ClampToVirtualScreen(POINT point) const'));
+      expect(source, contains('void MoveCursorToPoint(POINT point)'));
+      expect(source, contains('MOUSEEVENTF_ABSOLUTE'));
+      expect(source, contains('MOUSEEVENTF_VIRTUALDESK'));
+
+      final injectEvent = RegExp(
+        r'void InjectEvent\([\s\S]*?\n  bool IsInjectionReverseRelease',
+      ).firstMatch(source)!.group(0)!;
+      final mouseMoveCase = RegExp(
+        r'if \(event_type == "mouseMove"\)[\s\S]*?\n      return;',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(mouseMoveCase, contains('current = CurrentCursorPoint();'));
+      expect(
+        mouseMoveCase,
+        contains('POINT target = {current.x + delta_x, current.y + delta_y};'),
+      );
+      expect(mouseMoveCase, contains('target = ClampToVirtualScreen(target);'));
+      expect(mouseMoveCase, contains('MoveCursorToPoint(target);'));
+      expect(mouseMoveCase, isNot(contains('SetCursorPos')));
+      expect(mouseMoveCase, isNot(contains('MOUSEEVENTF_MOVE')));
+    });
+
+    test('coalesces simple mouse clicks before injecting them on Windows', () {
+      expect(source, contains('pending_injected_buttons_'));
+      expect(source, contains('void QueueInjectedButtonDown(int button)'));
+      expect(source, contains('void FlushPendingInjectedButtons()'));
+      expect(source, contains('void SendMouseButtonClick(int button)'));
+
+      final injectEvent = RegExp(
+        r'void InjectEvent\([\s\S]*?\n  bool IsInjectionReverseRelease',
+      ).firstMatch(source)!.group(0)!;
+      final mouseMoveCase = RegExp(
+        r'if \(event_type == "mouseMove"\)[\s\S]*?\n      return;',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(mouseMoveCase, contains('FlushPendingInjectedButtons();'));
+
+      final mouseButtonCase = RegExp(
+        r'if \(event_type == "mouseButton"\)[\s\S]*?\n      return;',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(mouseButtonCase, contains('QueueInjectedButtonDown(button);'));
+      expect(mouseButtonCase, contains('ReleaseInjectedButton(button);'));
+      expect(
+          mouseButtonCase, isNot(contains('SendMouseButton(button, down);')));
+    });
+
     test('keeps macOS Command and Control distinct in native fallback mapping',
         () {
       expect(source, contains('case 54: return VK_RWIN;'));
@@ -191,6 +238,21 @@ void main() {
       expect(source, contains('mac caps input source switched'));
     });
 
+    test('requires accessibility permission before accepting sink injection',
+        () {
+      final injectionCase = RegExp(
+        r'case "startInjection":[\s\S]*?case "injectEvent":',
+      ).firstMatch(source)!.group(0)!;
+
+      expect(injectionCase, contains('ensureAccessibilityPermission()'));
+      expect(injectionCase, contains('openAccessibilitySettings()'));
+      expect(injectionCase, contains('remote-input-permission-denied'));
+      expect(
+        injectionCase.indexOf('ensureAccessibilityPermission()'),
+        lessThan(injectionCase.indexOf('injectionSessionId = sessionId')),
+      );
+    });
+
     test('preserves native modifier event flags while adding active modifiers',
         () {
       expect(
@@ -221,6 +283,53 @@ void main() {
             'entryPoint == nil && injectedMouseEnteredInterior && isReverseInjectionRelease'),
       );
       expect(source, contains('injectedMousePoint = point'));
+    });
+
+    test('clamps injected mouse movement to the controlled screen', () {
+      expect(source, contains('private func clampedInjectedMousePoint'));
+
+      final injectEvent = RegExp(
+        r'private func injectEvent\([\s\S]*?\n  private func payloadData',
+      ).firstMatch(source)!.group(0)!;
+      final mouseMoveCase = RegExp(
+        r'case "mouseMove":[\s\S]*?case "mouseButton":',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(mouseMoveCase, contains('let requestedPoint = shouldMove'));
+      expect(
+        mouseMoveCase,
+        contains('let point = clampedInjectedMousePoint(requestedPoint)'),
+      );
+      expect(mouseMoveCase, contains('requestedPoint: requestedPoint'));
+      expect(source, contains('requested=%{public}d,%{public}d'));
+    });
+
+    test('requests the visible cursor when receiving remote mouse input', () {
+      expect(source, contains('showCursorForRemoteInjection'));
+      expect(source, contains('for _ in 0..<8'));
+      expect(source, contains('NSCursor.unhide()'));
+      expect(source, contains('NSCursor.setHiddenUntilMouseMoves(false)'));
+      expect(
+        source,
+        contains('CGAssociateMouseAndMouseCursorPosition(boolean_t(1))'),
+      );
+      expect(source, contains('CGWarpMouseCursorPosition(point)'));
+      expect(source, contains('CGDisplayShowCursor(CGMainDisplayID())'));
+      expect(source, contains('remote input cursor show requested result='));
+      expect(source, contains('Thread.isMainThread'));
+
+      final injectionCase = RegExp(
+        r'case "startInjection":[\s\S]*?case "injectEvent":',
+      ).firstMatch(source)!.group(0)!;
+      expect(injectionCase, contains('showCursorForRemoteInjection(at: nil)'));
+
+      final injectEvent = RegExp(
+        r'private func injectEvent\([\s\S]*?\n  private func payloadData',
+      ).firstMatch(source)!.group(0)!;
+      final mouseMoveCase = RegExp(
+        r'case "mouseMove":[\s\S]*?case "mouseButton":',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(
+          mouseMoveCase, contains('showCursorForRemoteInjection(at: point)'));
     });
 
     test('arms reverse edge release only after entering screen interior', () {

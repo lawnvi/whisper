@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
@@ -115,6 +116,32 @@ class WsSvrManager {
       _remoteProfile?.capabilities.remoteInputSinkV1 == true;
   bool get _supportsResumableTransfer =>
       _remoteProfile?.capabilities.fileResumeV1 == true;
+
+  String _shortSessionId(String sessionId) {
+    if (sessionId.length <= 8) {
+      return sessionId;
+    }
+    return sessionId.substring(0, 8);
+  }
+
+  String _remoteInputControlSummary(RemoteInputControlMessage control) {
+    return 'action=${control.action.name} '
+        'session=${_shortSessionId(control.sessionId)} '
+        'source=${control.sourcePeerId} '
+        'sink=${control.sinkPeerId} '
+        'edge=${control.layoutEdge?.name ?? '-'} '
+        'path=${control.path} '
+        'reason=${control.releaseReason} '
+        'error=${control.errorMessage}';
+  }
+
+  void _remoteInputTrace(String message) {
+    logger.i(message);
+    if (!kReleaseMode ||
+        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1') {
+      debugPrint(message);
+    }
+  }
 
   static bool shouldUseTransferChecksum(
       String algorithm, String checksumValue) {
@@ -500,6 +527,13 @@ class WsSvrManager {
             );
             device = profile.device;
           }
+          _remoteInputTrace(
+            'AUTH remote profile uid=${device?.uid ?? ''} '
+            'protocol=${profile?.protocolVersion ?? 1} '
+            'remoteInputSource=${profile?.capabilities.remoteInputSourceV1 ?? false} '
+            'remoteInputSink=${profile?.capabilities.remoteInputSinkV1 ?? false} '
+            'trustedPeers=${profile?.trustedPeerIds.length ?? 0}',
+          );
           logger.i("AUTH message: ${message.sender} + $sender");
           if (asServer) {
             var localTemp =
@@ -662,14 +696,34 @@ class WsSvrManager {
               : await LocalDatabase().fetchDevice(remoteDevice.uid);
           final isMutuallyTrusted = storedRemote?.auth == true &&
               (_remoteProfile?.trustsPeer(self.uid) ?? false);
+          final localCanInject = supportsNativeRemoteInput();
+          _remoteInputTrace(
+            'remote input recv control ${_remoteInputControlSummary(control)} '
+            'local=${self.uid} '
+            'remote=${remoteDevice?.uid ?? ''} '
+            'remoteAddress=${remoteDevice?.host ?? ''}:${remoteDevice?.port ?? 0} '
+            'storedAuth=${storedRemote?.auth == true} '
+            'remoteTrustsLocal=${_remoteProfile?.trustsPeer(self.uid) ?? false} '
+            'mutualTrust=$isMutuallyTrusted '
+            'localCanInject=$localCanInject '
+            'remoteSupports=$supportsRemoteInput',
+          );
           await RemoteInputCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
             remoteHost: remoteDevice?.host ?? '',
             remotePort: remoteDevice?.port ?? 0,
             isMutuallyTrusted: isMutuallyTrusted,
-            localCanInject: supportsNativeRemoteInput(),
+            localCanInject: localCanInject,
             sendControl: sendRemoteInputControl,
+          );
+          final inputState = RemoteInputCoordinator.shared.state;
+          _remoteInputTrace(
+            'remote input handled control ${_remoteInputControlSummary(control)} '
+            'state=${inputState.role.name}/${inputState.status.name} '
+            'stateSession=${_shortSessionId(inputState.sessionId)} '
+            'statePeer=${inputState.peerId} '
+            'stateError=${inputState.errorMessage}',
           );
           _ackMessage(message);
           break;
@@ -859,6 +913,13 @@ class WsSvrManager {
         remoteInputSinkV1: supportsNativeRemoteInput(),
       ),
     );
+    _remoteInputTrace(
+      'AUTH local capabilities uid=${device.uid} '
+      'protocol=${profile.protocolVersion} '
+      'remoteInputSource=${profile.capabilities.remoteInputSourceV1} '
+      'remoteInputSink=${profile.capabilities.remoteInputSinkV1} '
+      'display=${Platform.environment['DISPLAY'] ?? ''}',
+    );
     var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
         allow ? "" : "拒绝连接", "", 0, false);
     _send(message.toJsonString());
@@ -899,6 +960,11 @@ class WsSvrManager {
   }
 
   void sendRemoteInputControl(RemoteInputControlMessage control) {
+    _remoteInputTrace(
+      'remote input send control ${_remoteInputControlSummary(control)} '
+      'sender=$sender receiver=$receiver connected=$isConnected '
+      'remoteSupports=$supportsRemoteInput',
+    );
     final message = _buildMessage(
       MessageEnum.RemoteInputControl,
       jsonEncode(control.toJson()),

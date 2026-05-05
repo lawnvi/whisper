@@ -402,6 +402,73 @@ void main() {
       expect(calls.map((call) => call.method), contains('injectEvent'));
     });
 
+    test('rejects a competing offer while a local session is live', () async {
+      final transport = _FakeRemoteInputTransport();
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'linux',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final originalOffer = sentControls.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: originalOffer.sessionId,
+          sourcePeerId: 'linux',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'linux',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await coordinator.handleControlMessage(
+        const RemoteInputControlMessage(
+          action: RemoteInputControlAction.offer,
+          sessionId: 'reverse-offer-1',
+          sourcePeerId: 'win',
+          sinkPeerId: 'linux',
+          layoutEdge: RemoteInputEdge.left,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'linux',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(sentControls, hasLength(2));
+      expect(sentControls.last.action, RemoteInputControlAction.reject);
+      expect(sentControls.last.sessionId, 'reverse-offer-1');
+      expect(coordinator.state.sessionId, originalOffer.sessionId);
+      expect(coordinator.state.role, RemoteInputRuntimeRole.source);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
+      expect(
+          calls.map((call) => call.method), isNot(contains('startInjection')));
+    });
+
     test('sink translates key payloads before native injection', () async {
       final sentControls = <RemoteInputControlMessage>[];
       final manager = RemoteInputManager();

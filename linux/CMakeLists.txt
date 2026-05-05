@@ -54,6 +54,8 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(PULSE IMPORTED_TARGET libpulse libpulse-simple)
+pkg_check_modules(X11_REMOTE_INPUT IMPORTED_TARGET x11 xtst)
+pkg_check_modules(XI_REMOTE_INPUT IMPORTED_TARGET xi)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
@@ -65,6 +67,7 @@ add_executable(${BINARY_NAME}
   "audio_share_plugin.cc"
   "main.cc"
   "my_application.cc"
+  "remote_input_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
@@ -78,6 +81,14 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 if(PULSE_FOUND)
   target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_PULSE_AUDIO=1)
   target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::PULSE)
+endif()
+if(X11_REMOTE_INPUT_FOUND)
+  target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_X11_REMOTE_INPUT=1)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11_REMOTE_INPUT)
+  if(XI_REMOTE_INPUT_FOUND)
+    target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_XI_REMOTE_INPUT=1)
+    target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XI_REMOTE_INPUT)
+  endif()
 endif()
 
 # Run the Flutter tool portions of the build. This must not be removed.

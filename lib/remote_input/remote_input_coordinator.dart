@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -81,6 +82,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
+  static const int _packetTraceLimit = 40;
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
@@ -99,9 +101,73 @@ class RemoteInputCoordinator extends ChangeNotifier {
   int _latestSourceActivationSequence = 0;
   int _latestSinkPacketSequence = 0;
   int _latestSinkActivationSequence = 0;
+  int _sourcePacketTraceCount = 0;
+  int _sinkPacketTraceCount = 0;
   double _sinkEntryTravel = 0;
 
   RemoteInputRuntimeState get state => _state;
+
+  bool get _hasLiveSession =>
+      _state.status != RemoteInputRuntimeStatus.idle &&
+      _state.status != RemoteInputRuntimeStatus.failed;
+
+  String _shortSessionId(String sessionId) {
+    if (sessionId.length <= 8) {
+      return sessionId;
+    }
+    return sessionId.substring(0, 8);
+  }
+
+  String _stateSummary(RemoteInputRuntimeState state) {
+    return '${state.role.name}/${state.status.name} '
+        'session=${_shortSessionId(state.sessionId)} '
+        'peer=${state.peerId} '
+        'error=${state.errorMessage}';
+  }
+
+  String _controlSummary(RemoteInputControlMessage message) {
+    return 'action=${message.action.name} '
+        'session=${_shortSessionId(message.sessionId)} '
+        'source=${message.sourcePeerId} '
+        'sink=${message.sinkPeerId} '
+        'edge=${message.layoutEdge?.name ?? '-'} '
+        'path=${message.path} '
+        'reason=${message.releaseReason} '
+        'error=${message.errorMessage}';
+  }
+
+  void _trace(String message) {
+    logger.i(message);
+    if (_shouldPrintTrace) {
+      debugPrint(message);
+    }
+  }
+
+  void _tracePacket(String message) {
+    if (_shouldPrintTrace) {
+      _trace(message);
+    }
+  }
+
+  bool get _shouldPrintTrace =>
+      !kReleaseMode ||
+      Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1';
+
+  String _packetSummary(RemoteInputPacketFrame packet) {
+    final payload = _mousePayload(packet);
+    if (payload == null) {
+      return 'session=${_shortSessionId(packet.sessionId)} '
+          'seq=${packet.sequence} type=${packet.eventType.name}';
+    }
+    return 'session=${_shortSessionId(packet.sessionId)} '
+        'seq=${packet.sequence} type=${packet.eventType.name} '
+        'dx=${_numberPayload(payload['deltaX'])} '
+        'dy=${_numberPayload(payload['deltaY'])} '
+        'activeStart=${payload['activeStart'] == true} '
+        'edge=${payload['edge'] ?? '-'} '
+        'unitX=${_numberPayload(payload['unitX']).toStringAsFixed(3)} '
+        'unitY=${_numberPayload(payload['unitY']).toStringAsFixed(3)}';
+  }
 
   Future<void> startSharingToConnectedPeer({
     required String sourcePeerId,
@@ -114,8 +180,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool remoteCanInject,
     required RemoteInputControlSender sendControl,
   }) async {
+    _trace(
+      'remote input start share requested source=$sourcePeerId '
+      'sink=$sinkPeerId sinkAddress=$sinkHost:$sinkPort '
+      'edge=${layoutEdge.name} mutualTrust=$isMutuallyTrusted '
+      'remoteCanInject=$remoteCanInject state=${_stateSummary(_state)}',
+    );
     await stopLocal();
     if (!isMutuallyTrusted || !remoteCanInject) {
+      _trace(
+        'remote input start share rejected locally mutualTrust=$isMutuallyTrusted '
+        'remoteCanInject=$remoteCanInject sink=$sinkPeerId',
+      );
       _setState(
         RemoteInputRuntimeState(
           status: RemoteInputRuntimeStatus.failed,
@@ -143,6 +219,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: sinkPeerId,
       ),
     );
+    _trace('remote input created offer ${_controlSummary(offer)}');
     sendControl(offer);
   }
 
@@ -155,6 +232,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool localCanInject,
     required RemoteInputControlSender sendControl,
   }) async {
+    _trace(
+      'remote input coordinator handling ${_controlSummary(message)} '
+      'local=$localPeerId remoteAddress=$remoteHost:$remotePort '
+      'mutualTrust=$isMutuallyTrusted localCanInject=$localCanInject '
+      'state=${_stateSummary(_state)}',
+    );
     switch (message.action) {
       case RemoteInputControlAction.offer:
         await _handleOffer(
@@ -179,12 +262,15 @@ class RemoteInputCoordinator extends ChangeNotifier {
         break;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
+        _trace(
+            'remote input received ${message.action.name} ${_controlSummary(message)}');
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
           await stopLocal();
         }
         break;
       case RemoteInputControlAction.error:
+        _trace('remote input received error ${_controlSummary(message)}');
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
           await stopLocal();
@@ -226,6 +312,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   Future<void> stopLocal() async {
     final current = _state;
+    _trace('remote input stop local current=${_stateSummary(current)}');
     final transport = _transport;
     _transport = null;
     _keyTranslator = null;
@@ -267,10 +354,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required RemoteInputControlSender sendControl,
   }) async {
     if (offer.sinkPeerId != localPeerId) {
+      _trace(
+        'remote input offer ignored for different sink '
+        '${_controlSummary(offer)} local=$localPeerId',
+      );
       _manager.handleControlMessage(offer);
       return;
     }
     if (!isMutuallyTrusted || !localCanInject) {
+      _trace(
+        'remote input offer rejected ${_controlSummary(offer)} '
+        'mutualTrust=$isMutuallyTrusted localCanInject=$localCanInject',
+      );
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.reject,
@@ -284,16 +379,36 @@ class RemoteInputCoordinator extends ChangeNotifier {
       );
       return;
     }
+    if (_hasLiveSession && _state.sessionId != offer.sessionId) {
+      _trace(
+        'remote input offer rejected because local session is busy '
+        '${_controlSummary(offer)} state=${_stateSummary(_state)}',
+      );
+      sendControl(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.reject,
+          sessionId: offer.sessionId,
+          sourcePeerId: offer.sourcePeerId,
+          sinkPeerId: offer.sinkPeerId,
+          errorMessage: 'Remote input session already active',
+        ),
+      );
+      return;
+    }
 
     final accept = _manager.acceptOffer(offer);
     if (accept.action == RemoteInputControlAction.error) {
+      _trace('remote input offer accept failed ${_controlSummary(accept)}');
       sendControl(accept);
       return;
     }
     try {
+      _trace('remote input starting injection for ${_controlSummary(accept)}');
       await _startInjection(accept, sendControl: sendControl);
+      _trace('remote input sending accept ${_controlSummary(accept)}');
       sendControl(accept);
     } catch (error) {
+      _trace('remote input start injection failed $error');
       final failedPeerId = offer.sourcePeerId;
       await stopLocal();
       _setState(
@@ -326,9 +441,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }) async {
     _manager.handleControlMessage(accept);
     if (accept.sourcePeerId != localPeerId) {
+      _trace(
+        'remote input accept ignored for different source '
+        '${_controlSummary(accept)} local=$localPeerId',
+      );
       return;
     }
     try {
+      _trace(
+        'remote input starting capture for ${_controlSummary(accept)} '
+        'remoteAddress=$remoteHost:$remotePort',
+      );
       await _startCapture(
         accept,
         remoteHost: remoteHost,
@@ -336,6 +459,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         sendControl: sendControl,
       );
     } catch (error) {
+      _trace('remote input start capture failed $error');
       final failedPeerId = accept.sinkPeerId;
       await stopLocal();
       _setState(
@@ -363,6 +487,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputControlMessage message, {
     required RemoteInputControlSender sendControl,
   }) async {
+    _trace('remote input _startInjection ${_controlSummary(message)}');
     await stopLocal();
     _setState(
       RemoteInputRuntimeState(
@@ -373,15 +498,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     await _platform.startInjection(sessionId: message.sessionId);
+    _trace(
+      'remote input platform startInjection returned '
+      'session=${_shortSessionId(message.sessionId)}',
+    );
     _keyTranslator = _keyTranslatorFactory(currentRemoteInputPlatformKind());
     _latestSinkPacketSequence = 0;
     _latestSinkActivationSequence = 0;
+    _sinkPacketTraceCount = 0;
     _sinkEntryTravel = 0;
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
           if (_isEarlySinkEdgeRelease(release)) {
-            logger.i(
+            _trace(
               'remote input ignored early sink edge release '
               'releaseSequence=${release.sequence} '
               'latestSinkPacketSequence=$_latestSinkPacketSequence '
@@ -413,12 +543,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _errorSubscription = _platform.errors.listen((error) {
       if (error.sessionId == message.sessionId) {
+        _trace('remote input platform injection error ${error.message}');
         unawaited(stopLocal());
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
       if (diagnostic.sessionId == message.sessionId) {
-        logger.i('remote input diagnostic: ${diagnostic.message}');
+        _trace('remote input diagnostic: ${diagnostic.message}');
       }
     });
     _manager.onPacket = (packet) {
@@ -438,6 +569,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
           <RemoteInputPacketFrame>[
             packet,
           ];
+      if (_sinkPacketTraceCount < _packetTraceLimit) {
+        _sinkPacketTraceCount++;
+        _tracePacket('remote input sink packet ${_packetSummary(packet)}');
+      }
       _enqueueInjection(message.sessionId, translated);
     };
     _setState(
@@ -448,6 +583,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
+    _trace('remote input injection active ${_controlSummary(message)}');
   }
 
   bool _isEarlySinkEdgeRelease(PlatformRemoteInputRelease release) {
@@ -485,8 +621,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }) async {
     final edge = message.layoutEdge;
     if (edge == null) {
+      _trace(
+          'remote input capture skipped without edge ${_controlSummary(message)}');
       return;
     }
+    final uri = _inputUri(
+      host: remoteHost,
+      port: remotePort,
+      path: message.path,
+    );
+    _trace('remote input _startCapture ${_controlSummary(message)} uri=$uri');
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.connecting,
@@ -496,18 +640,22 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     final transport = await _transportFactory(
-      _inputUri(
-        host: remoteHost,
-        port: remotePort,
-        path: message.path,
-      ),
+      uri,
     );
     _transport = transport;
+    _trace(
+      'remote input transport connected session=${_shortSessionId(message.sessionId)}',
+    );
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
+    _sourcePacketTraceCount = 0;
     _inputSubscription = _platform.inputEvents.listen((event) {
       if (event.sessionId != message.sessionId) {
         return;
+      }
+      if (_sourcePacketTraceCount < _packetTraceLimit) {
+        _sourcePacketTraceCount++;
+        _tracePacket('remote input source packet ${_packetSummary(event)}');
       }
       if (event.sequence > _latestSourceInputSequence) {
         _latestSourceInputSequence = event.sequence;
@@ -534,18 +682,23 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _errorSubscription = _platform.errors.listen((error) {
       if (error.sessionId == message.sessionId) {
+        _trace('remote input platform capture error ${error.message}');
         unawaited(stopLocal());
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
       if (diagnostic.sessionId == message.sessionId) {
-        logger.i('remote input diagnostic: ${diagnostic.message}');
+        _trace('remote input diagnostic: ${diagnostic.message}');
       }
     });
     await _platform.startCapture(
       sessionId: message.sessionId,
       edge: edge,
       releaseHotkey: message.releaseHotkey,
+    );
+    _trace(
+      'remote input platform startCapture returned '
+      'session=${_shortSessionId(message.sessionId)} edge=${edge.name}',
     );
     _setState(
       RemoteInputRuntimeState(
@@ -566,7 +719,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     if (message.releaseActivationSequence > 0 &&
         _latestSourceActivationSequence > message.releaseActivationSequence) {
-      logger.i(
+      _trace(
         'remote input ignored stale edge release '
         'releaseActivationSequence=${message.releaseActivationSequence} '
         'latestSourceActivationSequence=$_latestSourceActivationSequence',
@@ -662,6 +815,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }
 
   void _setState(RemoteInputRuntimeState state) {
+    _trace(
+      'remote input state ${_stateSummary(_state)} -> ${_stateSummary(state)}',
+    );
     _state = state;
     notifyListeners();
   }

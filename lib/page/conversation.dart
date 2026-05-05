@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -122,6 +123,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   _SendMessageScreen(this.device, this.embedded);
+
+  void _traceRemoteInput(String message) {
+    logger.i(message);
+    if (!kReleaseMode ||
+        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1') {
+      debugPrint(message);
+    }
+  }
 
   @override
   void initState() {
@@ -1034,12 +1043,27 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   Future<void> _toggleRemoteInput({bool showToast = true}) async {
     if (!_isConnectedSession || _isLocalhost) {
+      _traceRemoteInput(
+        'remote input toggle ignored connected=$_isConnectedSession '
+        'localhost=$_isLocalhost peer=${device.uid}',
+      );
       return;
     }
     final inputState = _remoteInputCoordinator.state;
     final isCurrentInputSession = inputState.isForPeer(device.uid);
+    _traceRemoteInput(
+      'remote input toggle requested peer=${device.uid} '
+      'showToast=$showToast '
+      'state=${inputState.role.name}/${inputState.status.name} '
+      'stateSession=${inputState.sessionId} '
+      'isCurrent=$isCurrentInputSession '
+      'supportsNative=${supportsNativeRemoteInput()} '
+      'remoteSupports=${socketManager.supportsRemoteInput}',
+    );
     try {
       if (isCurrentInputSession) {
+        _traceRemoteInput(
+            'remote input toggle stopping current session peer=${device.uid}');
         await _remoteInputCoordinator.stopSharing(
           sendControl: socketManager.sendRemoteInputControl,
         );
@@ -1048,13 +1072,28 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
+      if (inputState.status != RemoteInputRuntimeStatus.idle &&
+          inputState.status != RemoteInputRuntimeStatus.failed) {
+        _traceRemoteInput(
+          'remote input toggle blocked: another session is active '
+          'peer=${inputState.peerId} session=${inputState.sessionId}',
+        );
+        if (showToast) {
+          showAppToast('请先停止当前键鼠共享会话');
+        }
+        return;
+      }
       if (!isDesktop()) {
+        _traceRemoteInput(
+            'remote input toggle blocked: local platform is not desktop');
         if (showToast) {
           showAppToast('当前设备不支持键鼠共享');
         }
         return;
       }
       if (!socketManager.supportsRemoteInput) {
+        _traceRemoteInput(
+            'remote input toggle blocked: remote peer lacks capability');
         if (showToast) {
           showAppToast('当前连接设备不支持键鼠共享');
         }
@@ -1063,6 +1102,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final self = this.self ?? await LocalSetting().instance();
       final storedDevice = await LocalDatabase().fetchDevice(device.uid);
       if (storedDevice?.auth != true) {
+        _traceRemoteInput(
+          'remote input toggle blocked: stored auth missing peer=${device.uid}',
+        );
         if (showToast) {
           showAppToast('键鼠共享需要互信设备');
         }
@@ -1084,11 +1126,20 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
       if (edge == null) {
+        _traceRemoteInput(
+          'remote input toggle blocked: no adjacent edge peer=${device.uid} '
+          'layout=${layout.x},${layout.y},${layout.width},${layout.height}',
+        );
         if (showToast) {
           showAppToast('请先在设备设置里把对端屏幕贴到本机边缘');
         }
         return;
       }
+      _traceRemoteInput(
+        'remote input toggle starting peer=${device.uid} '
+        'self=${self.uid} edge=${edge.name} '
+        'host=${device.host}:${device.port}',
+      );
       await _remoteInputCoordinator.startSharingToConnectedPeer(
         sourcePeerId: self.uid,
         sinkPeerId: device.uid,
@@ -1120,6 +1171,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     if (_remoteInputCoordinator.state.isForPeer(device.uid)) {
+      return;
+    }
+    final inputState = _remoteInputCoordinator.state;
+    if (inputState.status != RemoteInputRuntimeStatus.idle &&
+        inputState.status != RemoteInputRuntimeStatus.failed) {
       return;
     }
     final layout = await LocalDatabase().fetchRemoteInputLayout(device.uid);

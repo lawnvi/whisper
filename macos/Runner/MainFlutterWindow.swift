@@ -56,6 +56,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
   private let systemShortcutEventSource = CGEventSource(stateID: .privateState)
   private var injectionKeyDiagnosticCount = 0
+  private var injectionMouseDiagnosticCount = 0
   private var suppressedSystemControlArrowKeyCodes: [Int] = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -121,6 +122,14 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           details: nil))
         return
       }
+      guard ensureAccessibilityPermission() else {
+        openAccessibilitySettings()
+        result(FlutterError(
+          code: "remote-input-permission-denied",
+          message: "需要在系统设置 > 隐私与安全性 > 辅助功能中允许 Whisper Dev，然后重启应用",
+          details: nil))
+        return
+      }
       releaseInjectedMouseButtons()
       releaseInjectedKeys()
       releaseCommonModifierKeys()
@@ -129,7 +138,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectedModifierFlags = []
       suppressedSystemControlArrowKeyCodes = []
       injectionKeyDiagnosticCount = 0
+      injectionMouseDiagnosticCount = 0
       injectionSessionId = sessionId
+      showCursorForRemoteInjection(at: nil)
       os_log(
         "remote input injection started session=%{public}@",
         log: remoteInputLog,
@@ -257,6 +268,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedModifierFlags = []
     suppressedSystemControlArrowKeyCodes = []
     injectionKeyDiagnosticCount = 0
+    injectionMouseDiagnosticCount = 0
     injectionSessionId = ""
   }
 
@@ -460,18 +472,31 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         return
       }
       let shouldMove = entryPoint != nil || deltaX != 0 || deltaY != 0
-      let point = shouldMove
+      let requestedPoint = shouldMove
         ? CGPoint(x: currentPoint.x + deltaX, y: currentPoint.y + deltaY)
         : currentPoint
+      let point = clampedInjectedMousePoint(requestedPoint)
+      if entryPoint != nil {
+        showCursorForRemoteInjection(at: point)
+      }
       if data["buttons"] != nil {
         syncInjectedMouseButtons(intValue(data["buttons"]), at: point)
       }
       updateInjectedMouseInteriorState(data, point: point)
+      let drag = injectedMouseDragEvent()
+      emitMouseDiagnostic(
+        eventType: drag.type,
+        point: point,
+        requestedPoint: requestedPoint,
+        currentPoint: currentPoint,
+        deltaX: deltaX,
+        deltaY: deltaY,
+        activeStart: entryPoint != nil,
+        edge: data["edge"] as? String ?? "right")
       guard shouldMove else {
         injectedMousePoint = point
         return
       }
-      let drag = injectedMouseDragEvent()
       CGEvent(mouseEventSource: nil, mouseType: drag.type, mouseCursorPosition: point, mouseButton: drag.button)?.post(tap: .cghidEventTap)
       injectedMousePoint = point
     case "mouseButton":
@@ -623,6 +648,14 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return CGDisplayBounds(CGMainDisplayID())
     }
     return bounds
+  }
+
+  private func clampedInjectedMousePoint(_ point: CGPoint) -> CGPoint {
+    let bounds = virtualDisplayBounds()
+    let inset: CGFloat = 2
+    return CGPoint(
+      x: min(bounds.maxX - inset, max(bounds.minX + inset, point.x)),
+      y: min(bounds.maxY - inset, max(bounds.minY + inset, point.y)))
   }
 
   private func normalized(_ value: CGFloat, start: CGFloat, length: CGFloat) -> CGFloat {
@@ -818,6 +851,48 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     injectionKeyDiagnosticCount += 1
     emitDiagnostic(message: message)
+  }
+
+  private func emitMouseDiagnostic(
+    eventType: CGEventType,
+    point: CGPoint,
+    requestedPoint: CGPoint,
+    currentPoint: CGPoint,
+    deltaX: CGFloat,
+    deltaY: CGFloat,
+    activeStart: Bool,
+    edge: String
+  ) {
+    guard injectionMouseDiagnosticCount < 40 else {
+      return
+    }
+    injectionMouseDiagnosticCount += 1
+    let bounds = virtualDisplayBounds()
+    let livePoint = CGEvent(source: nil)?.location ?? CGPoint.zero
+    os_log(
+      "mac remote mouse inject type=%{public}d activeStart=%{public}d edge=%{public}@ current=%{public}d,%{public}d point=%{public}d,%{public}d requested=%{public}d,%{public}d live=%{public}d,%{public}d delta=%{public}d,%{public}d bounds=%{public}d,%{public}d,%{public}d,%{public}d",
+      log: remoteInputLog,
+      type: .info,
+      eventType.rawValue,
+      activeStart ? 1 : 0,
+      edge,
+      Int(currentPoint.x),
+      Int(currentPoint.y),
+      Int(point.x),
+      Int(point.y),
+      Int(requestedPoint.x),
+      Int(requestedPoint.y),
+      Int(livePoint.x),
+      Int(livePoint.y),
+      Int(deltaX),
+      Int(deltaY),
+      Int(bounds.minX),
+      Int(bounds.minY),
+      Int(bounds.width),
+      Int(bounds.height))
+    emitDiagnostic(
+      message:
+        "mac remote mouse inject type=\(eventType.rawValue) activeStart=\(activeStart ? 1 : 0) edge=\(edge) current=\(Int(currentPoint.x)),\(Int(currentPoint.y)) point=\(Int(point.x)),\(Int(point.y)) requested=\(Int(requestedPoint.x)),\(Int(requestedPoint.y)) live=\(Int(livePoint.x)),\(Int(livePoint.y)) delta=\(Int(deltaX)),\(Int(deltaY)) bounds=\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),\(Int(bounds.height))")
   }
 
   private func emitDiagnostic(message: String) {
@@ -1227,6 +1302,38 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     NSCursor.unhide()
     captureCursorHidden = false
+  }
+
+  private func showCursorForRemoteInjection(at point: CGPoint?) {
+    let showCursor = { [weak self] in
+      guard let self = self else {
+        return
+      }
+      if self.captureCursorHidden {
+        self.captureCursorHidden = false
+      }
+      for _ in 0..<8 {
+        NSCursor.unhide()
+      }
+      NSCursor.setHiddenUntilMouseMoves(false)
+      CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+      if let point = point {
+        CGWarpMouseCursorPosition(point)
+      }
+      let showResult = CGDisplayShowCursor(CGMainDisplayID())
+      os_log(
+        "remote input cursor show requested result=%{public}d point=%{public}d,%{public}d",
+        log: remoteInputLog,
+        type: .info,
+        showResult.rawValue,
+        point.map { Int($0.x) } ?? -1,
+        point.map { Int($0.y) } ?? -1)
+    }
+    if Thread.isMainThread {
+      showCursor()
+    } else {
+      DispatchQueue.main.async(execute: showCursor)
+    }
   }
 
   private func pinCaptureCursorIfNeeded(type: CGEventType) {
