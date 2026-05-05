@@ -99,6 +99,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return route?.isCurrent ?? mounted;
   }
 
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   Future<void> _syncAndroidKeepAliveService() async {
     if (!Platform.isAndroid) {
       return;
@@ -337,31 +339,37 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (_isConnectedSession &&
           !socketManager.supportsResumableTransfer &&
           !message.acked) {
-        return '旧协议传输中';
+        return l10n.fileTransferLegacyInProgress;
       }
       return formatSize(message.size);
     }
     switch (transfer.state) {
       case FileTransferState.queued:
-        return '排队中';
+        return l10n.fileTransferQueued;
       case FileTransferState.negotiating:
         return transfer.committedBytes > 0
-            ? '准备续传 ${(transfer.progress * 100).toStringAsFixed(0)}%'
-            : '协商中';
+            ? l10n.fileTransferPreparingResume(
+                (transfer.progress * 100).toStringAsFixed(0),
+              )
+            : l10n.fileTransferNegotiating;
       case FileTransferState.transferring:
         return '${formatSize(message.size)}  ${(transfer.progress * 100).toStringAsFixed(0)}%';
       case FileTransferState.waitingReconnect:
-        return '等待重连 ${(transfer.progress * 100).toStringAsFixed(0)}%';
+        return l10n.fileTransferWaitingReconnect(
+          (transfer.progress * 100).toStringAsFixed(0),
+        );
       case FileTransferState.paused:
-        return '已暂停';
+        return l10n.fileTransferPaused;
       case FileTransferState.verifying:
-        return '校验中';
+        return l10n.fileTransferVerifying;
       case FileTransferState.completed:
         return formatSize(message.size);
       case FileTransferState.failed:
-        return transfer.lastError.isEmpty ? '失败，可重试' : transfer.lastError;
+        return transfer.lastError.isEmpty
+            ? l10n.fileTransferFailedRetryable
+            : transfer.lastError;
       case FileTransferState.canceled:
-        return '已取消';
+        return l10n.fileTransferCanceled;
     }
   }
 
@@ -382,6 +390,28 @@ class _SendMessageScreen extends State<SendMessageScreen>
         child: null,
       );
     }, duration: const Duration(milliseconds: 100));
+  }
+
+  Future<void> _deleteMessageFileIfExists(MessageData message) async {
+    final path = message.path;
+    if (path.isEmpty) {
+      return;
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      logger.i("skip delete missing file $path");
+      return;
+    }
+    try {
+      logger.i("delete $path");
+      await file.delete();
+    } on FileSystemException catch (error) {
+      if (!await file.exists()) {
+        logger.i("skip delete missing file $path after delete error: $error");
+        return;
+      }
+      rethrow;
+    }
   }
 
   _deleteItem(id) {
@@ -451,9 +481,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
             onOpenFile: openFile,
             onCopyText: copyToClipboard,
             onDeleteMessage: (message, {deleteFile = false}) async {
-              if (deleteFile && message.path.isNotEmpty) {
-                logger.i("delete ${message.path}");
-                await File(message.path).delete();
+              if (deleteFile) {
+                await _deleteMessageFileIfExists(message);
               }
               _deleteItem(message.id);
             },
@@ -637,13 +666,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
           padding: actionPadding,
           constraints: actionConstraints,
           visualDensity: actionVisualDensity,
-          tooltip: '对端不支持断点续传',
+          tooltip: l10n.peerDoesNotSupportResumableTransfer,
           icon: Icon(
             Icons.history_toggle_off_rounded,
             color: palette.textMuted,
           ),
           onPressed: () {
-            showAppToast('当前连接设备不支持断点续传');
+            showAppToast(l10n.connectedPeerDoesNotSupportResumableTransfer);
           },
         ),
       );
@@ -757,6 +786,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final inputState = _remoteInputCoordinator.state;
     return !_isLocalhost &&
         _isConnectedSession &&
+        isDesktop() &&
         supportsNativeRemoteInput() &&
         (socketManager.supportsRemoteInput || inputState.isForPeer(device.uid));
   }
@@ -790,15 +820,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }) {
     if (isBusy) {
       return role == AudioShareRuntimeRole.source
-          ? '采集端：正在连接远端扬声器'
-          : '播放端：正在准备播放共享声音';
+          ? l10n.audioShareCaptureConnecting
+          : l10n.audioSharePlaybackPreparing;
     }
     if (isActive) {
       return role == AudioShareRuntimeRole.source
-          ? '采集端：正在共享本机声音，点击停止'
-          : '播放端：正在作为扬声器播放，点击停止';
+          ? l10n.audioShareCaptureActiveStop
+          : l10n.audioSharePlaybackActiveStop;
     }
-    return '共享本机声音到此设备';
+    return l10n.audioShareStart;
   }
 
   Color _remoteInputIconColor({
@@ -820,18 +850,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }) {
     if (isBusy) {
       return role == RemoteInputRuntimeRole.source
-          ? '键鼠共享：正在连接对端'
-          : '键鼠共享：正在准备接收控制';
+          ? l10n.remoteInputSourceConnecting
+          : l10n.remoteInputSinkConnecting;
     }
     if (isArmed) {
-      return '键鼠共享：边缘穿越已启用，点击停止';
+      return l10n.remoteInputEdgeActiveStop;
     }
     if (isActive) {
       return role == RemoteInputRuntimeRole.source
-          ? '键鼠共享：正在控制对端，点击停止'
-          : '键鼠共享：正在接收控制，点击停止';
+          ? l10n.remoteInputSourceActiveStop
+          : l10n.remoteInputSinkActiveStop;
     }
-    return '启用键鼠共享';
+    return l10n.remoteInputStart;
   }
 
   String _connectionStatusText() {
@@ -1002,6 +1032,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_isConnectedSession || _isLocalhost) {
       return;
     }
+    final l10n = this.l10n;
     final audioState = _audioCoordinator.state;
     final isCurrentAudioSession = audioState.isForPeer(device.uid);
     try {
@@ -1012,13 +1043,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
         );
         if (mounted) {
           showAppToast(
-            role == AudioShareRuntimeRole.sink ? '已停止播放共享声音' : '已停止共享声音',
+            role == AudioShareRuntimeRole.sink
+                ? l10n.audioSharePlaybackStopped
+                : l10n.audioShareCaptureStopped,
           );
         }
         return;
       }
       if (!supportsNativeSystemAudio()) {
-        showAppToast('当前设备不支持系统音频采集');
+        showAppToast(l10n.audioShareUnsupportedCapture);
         return;
       }
       final self = this.self ?? await LocalSetting().instance();
@@ -1030,13 +1063,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sendControl: socketManager.sendAudioControl,
       );
       if (mounted) {
-        showAppToast('正在请求对端播放本机声音');
+        showAppToast(l10n.audioShareRequestingPlayback);
       }
     } catch (error, stackTrace) {
       logger.e('audio share toggle failed',
           error: error, stackTrace: stackTrace);
       if (mounted) {
-        showAppToast('共享声音失败：$error');
+        showAppToast(l10n.audioShareFailed(error.toString()));
       }
     }
   }
@@ -1049,6 +1082,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       );
       return;
     }
+    final l10n = this.l10n;
     final inputState = _remoteInputCoordinator.state;
     final isCurrentInputSession = inputState.isForPeer(device.uid);
     _traceRemoteInput(
@@ -1068,7 +1102,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           sendControl: socketManager.sendRemoteInputControl,
         );
         if (mounted && showToast) {
-          showAppToast('已停止键鼠共享');
+          showAppToast(l10n.remoteInputStopped);
         }
         return;
       }
@@ -1079,7 +1113,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           'peer=${inputState.peerId} session=${inputState.sessionId}',
         );
         if (showToast) {
-          showAppToast('请先停止当前键鼠共享会话');
+          showAppToast(l10n.remoteInputStopCurrentFirst);
         }
         return;
       }
@@ -1087,7 +1121,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _traceRemoteInput(
             'remote input toggle blocked: local platform is not desktop');
         if (showToast) {
-          showAppToast('当前设备不支持键鼠共享');
+          showAppToast(l10n.remoteInputLocalUnsupported);
         }
         return;
       }
@@ -1095,7 +1129,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _traceRemoteInput(
             'remote input toggle blocked: remote peer lacks capability');
         if (showToast) {
-          showAppToast('当前连接设备不支持键鼠共享');
+          showAppToast(l10n.remoteInputPeerUnsupported);
         }
         return;
       }
@@ -1106,7 +1140,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           'remote input toggle blocked: stored auth missing peer=${device.uid}',
         );
         if (showToast) {
-          showAppToast('键鼠共享需要互信设备');
+          showAppToast(l10n.remoteInputRequiresMutualTrust);
         }
         return;
       }
@@ -1131,7 +1165,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           'layout=${layout.x},${layout.y},${layout.width},${layout.height}',
         );
         if (showToast) {
-          showAppToast('请先在设备设置里把对端屏幕贴到本机边缘');
+          showAppToast(l10n.remoteInputLayoutRequired);
         }
         return;
       }
@@ -1152,13 +1186,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sendControl: socketManager.sendRemoteInputControl,
       );
       if (mounted && showToast) {
-        showAppToast('键鼠共享已启用，移动到屏幕边缘开始控制对端');
+        showAppToast(l10n.remoteInputEnabledMoveToEdge);
       }
     } catch (error, stackTrace) {
       logger.e('remote input toggle failed',
           error: error, stackTrace: stackTrace);
       if (mounted && showToast) {
-        showAppToast('键鼠共享失败：$error');
+        showAppToast(l10n.remoteInputFailed(error.toString()));
       }
     }
   }
@@ -1290,7 +1324,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             content,
             style: TextStyle(
               color: colorScheme.onSurface,
-              fontSize: isDesktop() ? 17 : 16.5,
+              fontSize: isDesktop() ? 16.5 : 16,
               height: 1.55,
             ),
             textAlign: TextAlign.left,
@@ -1408,13 +1442,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ),
             if (showRetry)
               IconButton(
-                tooltip: '重试',
+                tooltip: l10n.retry,
                 onPressed: () => _retryTransfer(message.uuid),
                 icon: const Icon(Icons.refresh_rounded, size: 20),
               ),
             if (showCancel)
               IconButton(
-                tooltip: '取消',
+                tooltip: l10n.cancel,
                 onPressed: () => _cancelTransfer(message.uuid),
                 icon: const Icon(Icons.close_rounded, size: 20),
               ),

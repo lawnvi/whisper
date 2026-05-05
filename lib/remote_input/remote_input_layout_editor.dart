@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -48,6 +49,7 @@ class _RemoteInputLayoutEditorScreenState
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
+    final l10n = AppLocalizations.of(context)!;
     final edge = RemoteInputLayoutGeometry.adjacentEdge(
       local: _localScreen,
       peer: _peerScreen,
@@ -63,12 +65,12 @@ class _RemoteInputLayoutEditorScreenState
           color: colorScheme.primary,
         ),
         title: Text(
-          '屏幕排列',
+          l10n.remoteInputLayoutTitle,
           style: TextStyle(color: colorScheme.onSurface),
         ),
         actions: [
           IconButton(
-            tooltip: '保存',
+            tooltip: l10n.remoteInputLayoutSave,
             onPressed: () {
               Navigator.of(context).pop(
                 widget.initialLayout.copyWith(
@@ -106,7 +108,7 @@ class _RemoteInputLayoutEditorScreenState
                   children: [
                     Expanded(
                       child: Text(
-                        '当前：${_edgeLabel(edge)}',
+                        l10n.remoteInputCurrentEdge(_edgeLabel(l10n, edge)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -117,25 +119,25 @@ class _RemoteInputLayoutEditorScreenState
                     ),
                     _EdgeIconButton(
                       icon: Icons.align_horizontal_left_rounded,
-                      tooltip: '贴左',
+                      tooltip: l10n.remoteInputSnapLeft,
                       selected: edge == RemoteInputEdge.left,
                       onPressed: () => _snapTo(RemoteInputEdge.left),
                     ),
                     _EdgeIconButton(
                       icon: Icons.align_horizontal_right_rounded,
-                      tooltip: '贴右',
+                      tooltip: l10n.remoteInputSnapRight,
                       selected: edge == RemoteInputEdge.right,
                       onPressed: () => _snapTo(RemoteInputEdge.right),
                     ),
                     _EdgeIconButton(
                       icon: Icons.vertical_align_top_rounded,
-                      tooltip: '贴上',
+                      tooltip: l10n.remoteInputSnapTop,
                       selected: edge == RemoteInputEdge.top,
                       onPressed: () => _snapTo(RemoteInputEdge.top),
                     ),
                     _EdgeIconButton(
                       icon: Icons.vertical_align_bottom_rounded,
-                      tooltip: '贴下',
+                      tooltip: l10n.remoteInputSnapBottom,
                       selected: edge == RemoteInputEdge.bottom,
                       onPressed: () => _snapTo(RemoteInputEdge.bottom),
                     ),
@@ -152,6 +154,7 @@ class _RemoteInputLayoutEditorScreenState
   Widget _buildCanvas(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
+    final l10n = AppLocalizations.of(context)!;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -187,7 +190,7 @@ class _RemoteInputLayoutEditorScreenState
                 Positioned.fromRect(
                   rect: localRect,
                   child: _ScreenRectView(
-                    label: '本机',
+                    label: l10n.remoteInputLocalScreen,
                     color: colorScheme.primary.withValues(alpha: 0.12),
                     borderColor: colorScheme.primary,
                     textColor: colorScheme.onSurface,
@@ -221,7 +224,9 @@ class _RemoteInputLayoutEditorScreenState
                         });
                       },
                       child: _ScreenRectView(
-                        label: widget.peerName.isEmpty ? '对端' : widget.peerName,
+                        label: widget.peerName.isEmpty
+                            ? l10n.remoteInputPeerScreen
+                            : widget.peerName,
                         color: palette.trusted.withValues(alpha: 0.14),
                         borderColor: palette.trusted,
                         textColor: colorScheme.onSurface,
@@ -277,18 +282,18 @@ class _RemoteInputLayoutEditorScreenState
     });
   }
 
-  String _edgeLabel(RemoteInputEdge? edge) {
+  String _edgeLabel(AppLocalizations l10n, RemoteInputEdge? edge) {
     switch (edge) {
       case RemoteInputEdge.left:
-        return '左侧';
+        return l10n.remoteInputEdgeLeft;
       case RemoteInputEdge.right:
-        return '右侧';
+        return l10n.remoteInputEdgeRight;
       case RemoteInputEdge.top:
-        return '上方';
+        return l10n.remoteInputEdgeTop;
       case RemoteInputEdge.bottom:
-        return '下方';
+        return l10n.remoteInputEdgeBottom;
       case null:
-        return '未贴边';
+        return l10n.remoteInputEdgeNotAdjacent;
     }
   }
 }

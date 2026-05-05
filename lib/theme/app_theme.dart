@@ -89,7 +89,7 @@ class AppTheme {
     onSecondary: Colors.white,
     error: Color(0xFFDC2626),
     onError: Colors.white,
-    surface: Color(0xFFF8FAFC),
+    surface: Colors.white,
     onSurface: Color(0xFF0F172A),
     tertiary: Color(0xFFF59E0B),
     onTertiary: Colors.white,
@@ -150,6 +150,16 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: ZoomPageTransitionsBuilder(),
+        },
+      ),
       scaffoldBackgroundColor: colorScheme.surface,
       cardColor: colorScheme.surface,
       dividerColor: colorScheme.outlineVariant,

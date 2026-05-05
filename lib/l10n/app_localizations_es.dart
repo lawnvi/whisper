@@ -41,6 +41,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cancel => 'Cancelar';
 
   @override
+  String get retry => 'Reintentar';
+
+  @override
   String get setting => 'Ajustes';
 
   @override
@@ -291,4 +294,204 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get androidBatteryOptimizationDesc =>
       'Se recomienda permitir actividad en segundo plano y excluir Whisper de la optimizacion de bateria en Android';
+
+  @override
+  String get fileTransferLegacyInProgress => 'Transferencia heredada en curso';
+
+  @override
+  String get fileTransferQueued => 'En cola';
+
+  @override
+  String fileTransferPreparingResume(String progress) {
+    return 'Preparando reanudacion $progress%';
+  }
+
+  @override
+  String get fileTransferNegotiating => 'Negociando';
+
+  @override
+  String fileTransferWaitingReconnect(String progress) {
+    return 'Esperando reconexion $progress%';
+  }
+
+  @override
+  String get fileTransferPaused => 'Pausada';
+
+  @override
+  String get fileTransferVerifying => 'Verificando';
+
+  @override
+  String get fileTransferFailedRetryable => 'Error, se puede reintentar';
+
+  @override
+  String get fileTransferCanceled => 'Cancelada';
+
+  @override
+  String get peerDoesNotSupportResumableTransfer =>
+      'El otro dispositivo no admite reanudar transferencias';
+
+  @override
+  String get connectedPeerDoesNotSupportResumableTransfer =>
+      'El dispositivo conectado no admite reanudar transferencias';
+
+  @override
+  String get audioShareCaptureConnecting =>
+      'Captura: conectando al altavoz remoto';
+
+  @override
+  String get audioSharePlaybackPreparing =>
+      'Reproduccion: preparando audio compartido';
+
+  @override
+  String get audioShareCaptureActiveStop =>
+      'Captura: compartiendo el audio de este dispositivo, clic para detener';
+
+  @override
+  String get audioSharePlaybackActiveStop =>
+      'Reproduccion: reproduciendo audio compartido, clic para detener';
+
+  @override
+  String get audioShareStart =>
+      'Compartir el audio de este dispositivo con el otro';
+
+  @override
+  String get audioSharePlaybackStopped =>
+      'Se detuvo la reproduccion del audio compartido';
+
+  @override
+  String get audioShareCaptureStopped => 'Se detuvo el audio compartido';
+
+  @override
+  String get audioShareUnsupportedCapture =>
+      'Este dispositivo no admite captura de audio del sistema';
+
+  @override
+  String get audioShareRequestingPlayback =>
+      'Solicitando al otro dispositivo que reproduzca este audio';
+
+  @override
+  String audioShareFailed(String error) {
+    return 'Error al compartir audio: $error';
+  }
+
+  @override
+  String get remoteInputSourceConnecting =>
+      'Compartir teclado y mouse: conectando al otro dispositivo';
+
+  @override
+  String get remoteInputSinkConnecting =>
+      'Compartir teclado y mouse: preparando recepcion de control';
+
+  @override
+  String get remoteInputEdgeActiveStop =>
+      'Compartir teclado y mouse: cruce de borde activado, clic para detener';
+
+  @override
+  String get remoteInputSourceActiveStop =>
+      'Compartir teclado y mouse: controlando al otro, clic para detener';
+
+  @override
+  String get remoteInputSinkActiveStop =>
+      'Compartir teclado y mouse: recibiendo control, clic para detener';
+
+  @override
+  String get remoteInputStart => 'Activar compartir teclado y mouse';
+
+  @override
+  String get remoteInputStopped => 'Se detuvo compartir teclado y mouse';
+
+  @override
+  String get remoteInputStopCurrentFirst =>
+      'Deten primero la sesion actual de teclado y mouse compartidos';
+
+  @override
+  String get remoteInputLocalUnsupported =>
+      'Este dispositivo no admite compartir teclado y mouse';
+
+  @override
+  String get remoteInputPeerUnsupported =>
+      'El dispositivo conectado no admite compartir teclado y mouse';
+
+  @override
+  String get remoteInputRequiresMutualTrust =>
+      'Compartir teclado y mouse requiere confianza mutua';
+
+  @override
+  String get remoteInputLayoutRequired =>
+      'Primero coloca la pantalla del otro dispositivo contra el borde en ajustes';
+
+  @override
+  String get remoteInputEnabledMoveToEdge =>
+      'Compartir teclado y mouse esta activado. Mueve al borde de la pantalla para controlar el otro dispositivo';
+
+  @override
+  String remoteInputFailed(String error) {
+    return 'Error al compartir teclado y mouse: $error';
+  }
+
+  @override
+  String remoteInputAutoModeSetting(String mode) {
+    return 'Compartir teclado y mouse: $mode';
+  }
+
+  @override
+  String remoteInputLayoutSetting(String edge) {
+    return 'Distribucion de pantalla: $edge';
+  }
+
+  @override
+  String get remoteInputAutoModeTitle => 'Compartir teclado y mouse';
+
+  @override
+  String get remoteInputAutoModeOff => 'Desactivado';
+
+  @override
+  String get remoteInputAutoModeSource => 'Este dispositivo controla al otro';
+
+  @override
+  String get remoteInputAutoModeSink => 'El otro controla este dispositivo';
+
+  @override
+  String get remoteInputLayoutTitle => 'Distribucion de pantalla';
+
+  @override
+  String remoteInputCurrentEdge(String edge) {
+    return 'Actual: $edge';
+  }
+
+  @override
+  String get remoteInputLayoutSave => 'Guardar';
+
+  @override
+  String get remoteInputSnapLeft => 'Ajustar a la izquierda';
+
+  @override
+  String get remoteInputSnapRight => 'Ajustar a la derecha';
+
+  @override
+  String get remoteInputSnapTop => 'Ajustar arriba';
+
+  @override
+  String get remoteInputSnapBottom => 'Ajustar abajo';
+
+  @override
+  String get remoteInputLocalScreen => 'Este dispositivo';
+
+  @override
+  String get remoteInputPeerScreen => 'Otro dispositivo';
+
+  @override
+  String get remoteInputEdgeLeft => 'Izquierda';
+
+  @override
+  String get remoteInputEdgeRight => 'Derecha';
+
+  @override
+  String get remoteInputEdgeTop => 'Arriba';
+
+  @override
+  String get remoteInputEdgeBottom => 'Abajo';
+
+  @override
+  String get remoteInputEdgeNotAdjacent => 'Sin borde compartido';
 }

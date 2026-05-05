@@ -18,6 +18,7 @@
   "allow": "同意",
   "refuse": "拒绝",
   "cancel": "取消",
+  "retry": "重试",
   "setting": "设置",
   "sendTips": "发点什么...",
   "trust": "自动接入",
@@ -113,5 +114,109 @@
   "androidBackgroundKeepAliveActiveTitle": "Whisper 正在保持连接",
   "androidBackgroundKeepAliveActiveDesc": "有活动会话时保持前台服务运行",
   "androidBatteryOptimization": "电池优化白名单",
-  "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备"
+  "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备",
+  "fileTransferLegacyInProgress": "旧协议传输中",
+  "fileTransferQueued": "排队中",
+  "fileTransferPreparingResume": "准备续传 {progress}%",
+  "@fileTransferPreparingResume": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTransferNegotiating": "协商中",
+  "fileTransferWaitingReconnect": "等待重连 {progress}%",
+  "@fileTransferWaitingReconnect": {
+    "placeholders": {
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTransferPaused": "已暂停",
+  "fileTransferVerifying": "校验中",
+  "fileTransferFailedRetryable": "失败，可重试",
+  "fileTransferCanceled": "已取消",
+  "peerDoesNotSupportResumableTransfer": "对端不支持断点续传",
+  "connectedPeerDoesNotSupportResumableTransfer": "当前连接设备不支持断点续传",
+  "audioShareCaptureConnecting": "采集端：正在连接远端扬声器",
+  "audioSharePlaybackPreparing": "播放端：正在准备播放共享声音",
+  "audioShareCaptureActiveStop": "采集端：正在共享本机声音，点击停止",
+  "audioSharePlaybackActiveStop": "播放端：正在作为扬声器播放，点击停止",
+  "audioShareStart": "把本机声音共享给对端",
+  "audioSharePlaybackStopped": "已停止播放共享声音",
+  "audioShareCaptureStopped": "已停止共享声音",
+  "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
+  "audioShareRequestingPlayback": "正在请求对端播放本机声音",
+  "audioShareFailed": "共享声音失败：{error}",
+  "@audioShareFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputSourceConnecting": "键鼠共享：正在连接对端",
+  "remoteInputSinkConnecting": "键鼠共享：正在准备接收控制",
+  "remoteInputEdgeActiveStop": "键鼠共享：边缘穿越已启用，点击停止",
+  "remoteInputSourceActiveStop": "键鼠共享：正在控制对端，点击停止",
+  "remoteInputSinkActiveStop": "键鼠共享：正在接收控制，点击停止",
+  "remoteInputStart": "启用键鼠共享",
+  "remoteInputStopped": "已停止键鼠共享",
+  "remoteInputStopCurrentFirst": "请先停止当前键鼠共享会话",
+  "remoteInputLocalUnsupported": "当前设备不支持键鼠共享",
+  "remoteInputPeerUnsupported": "当前连接设备不支持键鼠共享",
+  "remoteInputRequiresMutualTrust": "键鼠共享需要互信设备",
+  "remoteInputLayoutRequired": "请先在设备设置里把对端屏幕贴到本机边缘",
+  "remoteInputEnabledMoveToEdge": "键鼠共享已启用，移动到屏幕边缘开始控制对端",
+  "remoteInputFailed": "键鼠共享失败：{error}",
+  "@remoteInputFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputAutoModeSetting": "键鼠共享自动模式：{mode}",
+  "@remoteInputAutoModeSetting": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputLayoutSetting": "屏幕排列：{edge}",
+  "@remoteInputLayoutSetting": {
+    "placeholders": {
+      "edge": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputAutoModeTitle": "键鼠共享自动模式",
+  "remoteInputAutoModeOff": "关闭",
+  "remoteInputAutoModeSource": "本机控制对端",
+  "remoteInputAutoModeSink": "对端控制本机",
+  "remoteInputLayoutTitle": "屏幕排列",
+  "remoteInputCurrentEdge": "当前：{edge}",
+  "@remoteInputCurrentEdge": {
+    "placeholders": {
+      "edge": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputLayoutSave": "保存",
+  "remoteInputSnapLeft": "贴左",
+  "remoteInputSnapRight": "贴右",
+  "remoteInputSnapTop": "贴上",
+  "remoteInputSnapBottom": "贴下",
+  "remoteInputLocalScreen": "本机",
+  "remoteInputPeerScreen": "对端",
+  "remoteInputEdgeLeft": "左侧",
+  "remoteInputEdgeRight": "右侧",
+  "remoteInputEdgeTop": "上方",
+  "remoteInputEdgeBottom": "下方",
+  "remoteInputEdgeNotAdjacent": "未贴边"
 }

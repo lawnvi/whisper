@@ -41,6 +41,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancel => 'Cancel';
 
   @override
+  String get retry => 'Retry';
+
+  @override
   String get setting => 'Settings';
 
   @override
@@ -291,4 +294,202 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get androidBatteryOptimizationDesc =>
       'Recommended: allow background activity and exclude Whisper from battery optimization on Android';
+
+  @override
+  String get fileTransferLegacyInProgress => 'Legacy transfer in progress';
+
+  @override
+  String get fileTransferQueued => 'Queued';
+
+  @override
+  String fileTransferPreparingResume(String progress) {
+    return 'Preparing resume $progress%';
+  }
+
+  @override
+  String get fileTransferNegotiating => 'Negotiating';
+
+  @override
+  String fileTransferWaitingReconnect(String progress) {
+    return 'Waiting to reconnect $progress%';
+  }
+
+  @override
+  String get fileTransferPaused => 'Paused';
+
+  @override
+  String get fileTransferVerifying => 'Verifying';
+
+  @override
+  String get fileTransferFailedRetryable => 'Failed, retry available';
+
+  @override
+  String get fileTransferCanceled => 'Canceled';
+
+  @override
+  String get peerDoesNotSupportResumableTransfer =>
+      'Peer does not support resumable transfer';
+
+  @override
+  String get connectedPeerDoesNotSupportResumableTransfer =>
+      'Connected device does not support resumable transfer';
+
+  @override
+  String get audioShareCaptureConnecting =>
+      'Capture side: connecting to remote speaker';
+
+  @override
+  String get audioSharePlaybackPreparing =>
+      'Playback side: preparing shared audio';
+
+  @override
+  String get audioShareCaptureActiveStop =>
+      'Capture side: sharing this device\'s audio, click to stop';
+
+  @override
+  String get audioSharePlaybackActiveStop =>
+      'Playback side: playing shared audio, click to stop';
+
+  @override
+  String get audioShareStart => 'Share this device\'s audio to peer';
+
+  @override
+  String get audioSharePlaybackStopped => 'Stopped playing shared audio';
+
+  @override
+  String get audioShareCaptureStopped => 'Stopped sharing audio';
+
+  @override
+  String get audioShareUnsupportedCapture =>
+      'This device does not support system audio capture';
+
+  @override
+  String get audioShareRequestingPlayback =>
+      'Requesting peer to play this device\'s audio';
+
+  @override
+  String audioShareFailed(String error) {
+    return 'Audio sharing failed: $error';
+  }
+
+  @override
+  String get remoteInputSourceConnecting =>
+      'Keyboard and mouse sharing: connecting to peer';
+
+  @override
+  String get remoteInputSinkConnecting =>
+      'Keyboard and mouse sharing: preparing to receive control';
+
+  @override
+  String get remoteInputEdgeActiveStop =>
+      'Keyboard and mouse sharing: edge crossing is enabled, click to stop';
+
+  @override
+  String get remoteInputSourceActiveStop =>
+      'Keyboard and mouse sharing: controlling peer, click to stop';
+
+  @override
+  String get remoteInputSinkActiveStop =>
+      'Keyboard and mouse sharing: receiving control, click to stop';
+
+  @override
+  String get remoteInputStart => 'Enable keyboard and mouse sharing';
+
+  @override
+  String get remoteInputStopped => 'Stopped keyboard and mouse sharing';
+
+  @override
+  String get remoteInputStopCurrentFirst =>
+      'Stop the current keyboard and mouse sharing session first';
+
+  @override
+  String get remoteInputLocalUnsupported =>
+      'This device does not support keyboard and mouse sharing';
+
+  @override
+  String get remoteInputPeerUnsupported =>
+      'Connected device does not support keyboard and mouse sharing';
+
+  @override
+  String get remoteInputRequiresMutualTrust =>
+      'Keyboard and mouse sharing requires mutual trust';
+
+  @override
+  String get remoteInputLayoutRequired =>
+      'Place the peer screen against this device\'s edge in device settings first';
+
+  @override
+  String get remoteInputEnabledMoveToEdge =>
+      'Keyboard and mouse sharing is enabled. Move to the screen edge to control peer';
+
+  @override
+  String remoteInputFailed(String error) {
+    return 'Keyboard and mouse sharing failed: $error';
+  }
+
+  @override
+  String remoteInputAutoModeSetting(String mode) {
+    return 'Keyboard and mouse sharing: $mode';
+  }
+
+  @override
+  String remoteInputLayoutSetting(String edge) {
+    return 'Screen layout: $edge';
+  }
+
+  @override
+  String get remoteInputAutoModeTitle => 'Keyboard and mouse sharing';
+
+  @override
+  String get remoteInputAutoModeOff => 'Off';
+
+  @override
+  String get remoteInputAutoModeSource => 'This device controls peer';
+
+  @override
+  String get remoteInputAutoModeSink => 'Peer controls this device';
+
+  @override
+  String get remoteInputLayoutTitle => 'Screen layout';
+
+  @override
+  String remoteInputCurrentEdge(String edge) {
+    return 'Current: $edge';
+  }
+
+  @override
+  String get remoteInputLayoutSave => 'Save';
+
+  @override
+  String get remoteInputSnapLeft => 'Snap left';
+
+  @override
+  String get remoteInputSnapRight => 'Snap right';
+
+  @override
+  String get remoteInputSnapTop => 'Snap top';
+
+  @override
+  String get remoteInputSnapBottom => 'Snap bottom';
+
+  @override
+  String get remoteInputLocalScreen => 'This device';
+
+  @override
+  String get remoteInputPeerScreen => 'Peer';
+
+  @override
+  String get remoteInputEdgeLeft => 'Left';
+
+  @override
+  String get remoteInputEdgeRight => 'Right';
+
+  @override
+  String get remoteInputEdgeTop => 'Top';
+
+  @override
+  String get remoteInputEdgeBottom => 'Bottom';
+
+  @override
+  String get remoteInputEdgeNotAdjacent => 'Not adjacent';
 }

@@ -41,6 +41,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancel => '取消';
 
   @override
+  String get retry => '重试';
+
+  @override
   String get setting => '设置';
 
   @override
@@ -283,4 +286,183 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get androidBatteryOptimizationDesc =>
       '建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备';
+
+  @override
+  String get fileTransferLegacyInProgress => '旧协议传输中';
+
+  @override
+  String get fileTransferQueued => '排队中';
+
+  @override
+  String fileTransferPreparingResume(String progress) {
+    return '准备续传 $progress%';
+  }
+
+  @override
+  String get fileTransferNegotiating => '协商中';
+
+  @override
+  String fileTransferWaitingReconnect(String progress) {
+    return '等待重连 $progress%';
+  }
+
+  @override
+  String get fileTransferPaused => '已暂停';
+
+  @override
+  String get fileTransferVerifying => '校验中';
+
+  @override
+  String get fileTransferFailedRetryable => '失败，可重试';
+
+  @override
+  String get fileTransferCanceled => '已取消';
+
+  @override
+  String get peerDoesNotSupportResumableTransfer => '对端不支持断点续传';
+
+  @override
+  String get connectedPeerDoesNotSupportResumableTransfer => '当前连接设备不支持断点续传';
+
+  @override
+  String get audioShareCaptureConnecting => '采集端：正在连接远端扬声器';
+
+  @override
+  String get audioSharePlaybackPreparing => '播放端：正在准备播放共享声音';
+
+  @override
+  String get audioShareCaptureActiveStop => '采集端：正在共享本机声音，点击停止';
+
+  @override
+  String get audioSharePlaybackActiveStop => '播放端：正在作为扬声器播放，点击停止';
+
+  @override
+  String get audioShareStart => '把本机声音共享给对端';
+
+  @override
+  String get audioSharePlaybackStopped => '已停止播放共享声音';
+
+  @override
+  String get audioShareCaptureStopped => '已停止共享声音';
+
+  @override
+  String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
+
+  @override
+  String get audioShareRequestingPlayback => '正在请求对端播放本机声音';
+
+  @override
+  String audioShareFailed(String error) {
+    return '共享声音失败：$error';
+  }
+
+  @override
+  String get remoteInputSourceConnecting => '键鼠共享：正在连接对端';
+
+  @override
+  String get remoteInputSinkConnecting => '键鼠共享：正在准备接收控制';
+
+  @override
+  String get remoteInputEdgeActiveStop => '键鼠共享：边缘穿越已启用，点击停止';
+
+  @override
+  String get remoteInputSourceActiveStop => '键鼠共享：正在控制对端，点击停止';
+
+  @override
+  String get remoteInputSinkActiveStop => '键鼠共享：正在接收控制，点击停止';
+
+  @override
+  String get remoteInputStart => '启用键鼠共享';
+
+  @override
+  String get remoteInputStopped => '已停止键鼠共享';
+
+  @override
+  String get remoteInputStopCurrentFirst => '请先停止当前键鼠共享会话';
+
+  @override
+  String get remoteInputLocalUnsupported => '当前设备不支持键鼠共享';
+
+  @override
+  String get remoteInputPeerUnsupported => '当前连接设备不支持键鼠共享';
+
+  @override
+  String get remoteInputRequiresMutualTrust => '键鼠共享需要互信设备';
+
+  @override
+  String get remoteInputLayoutRequired => '请先在设备设置里把对端屏幕贴到本机边缘';
+
+  @override
+  String get remoteInputEnabledMoveToEdge => '键鼠共享已启用，移动到屏幕边缘开始控制对端';
+
+  @override
+  String remoteInputFailed(String error) {
+    return '键鼠共享失败：$error';
+  }
+
+  @override
+  String remoteInputAutoModeSetting(String mode) {
+    return '键鼠共享自动模式：$mode';
+  }
+
+  @override
+  String remoteInputLayoutSetting(String edge) {
+    return '屏幕排列：$edge';
+  }
+
+  @override
+  String get remoteInputAutoModeTitle => '键鼠共享自动模式';
+
+  @override
+  String get remoteInputAutoModeOff => '关闭';
+
+  @override
+  String get remoteInputAutoModeSource => '本机控制对端';
+
+  @override
+  String get remoteInputAutoModeSink => '对端控制本机';
+
+  @override
+  String get remoteInputLayoutTitle => '屏幕排列';
+
+  @override
+  String remoteInputCurrentEdge(String edge) {
+    return '当前：$edge';
+  }
+
+  @override
+  String get remoteInputLayoutSave => '保存';
+
+  @override
+  String get remoteInputSnapLeft => '贴左';
+
+  @override
+  String get remoteInputSnapRight => '贴右';
+
+  @override
+  String get remoteInputSnapTop => '贴上';
+
+  @override
+  String get remoteInputSnapBottom => '贴下';
+
+  @override
+  String get remoteInputLocalScreen => '本机';
+
+  @override
+  String get remoteInputPeerScreen => '对端';
+
+  @override
+  String get remoteInputEdgeLeft => '左侧';
+
+  @override
+  String get remoteInputEdgeRight => '右侧';
+
+  @override
+  String get remoteInputEdgeTop => '上方';
+
+  @override
+  String get remoteInputEdgeBottom => '下方';
+
+  @override
+  String get remoteInputEdgeNotAdjacent => '未贴边';
 }

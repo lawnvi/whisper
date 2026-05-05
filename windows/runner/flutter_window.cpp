@@ -5,6 +5,7 @@
 #include "audio_share_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
+#include "window_theme_plugin.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -39,6 +40,9 @@ bool FlutterWindow::OnCreate() {
       flutter_controller_->engine()->GetRegistrarForPlugin("AudioSharePlugin"));
   RemoteInputPluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("RemoteInputPlugin"),
+      GetHandle());
+  WindowThemePluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin("WindowThemePlugin"),
       GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 

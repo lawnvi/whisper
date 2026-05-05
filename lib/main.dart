@@ -1,13 +1,20 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'helper/helper.dart';
 import 'helper/notification.dart';
 import 'l10n/app_localizations.dart';
+
+const MethodChannel _windowThemeChannel =
+    MethodChannel('com.vireen.whisper/window_theme');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +24,8 @@ void main() async {
     await windowManager.ensureInitialized();
     var width = await LocalSetting().windowWidth();
     var height = await LocalSetting().windowHeight();
+    final themeMode = await LocalSetting().themeMode();
+    await _applyDesktopWindowTheme(themeMode);
 
     WindowOptions windowOptions = WindowOptions(
       size: Size(width, height),
@@ -37,6 +46,35 @@ void main() async {
   runApp(MyApp());
 }
 
+Brightness _brightnessForThemeMode(ThemeMode mode) {
+  switch (mode) {
+    case ThemeMode.dark:
+      return Brightness.dark;
+    case ThemeMode.light:
+      return Brightness.light;
+    case ThemeMode.system:
+      return WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  }
+}
+
+Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
+  if (isMobile()) {
+    return;
+  }
+
+  final brightness = _brightnessForThemeMode(mode);
+  try {
+    await windowManager.setBrightness(brightness);
+    if (Platform.isWindows) {
+      await _windowThemeChannel.invokeMethod<void>('setBrightness', {
+        'brightness': brightness.name,
+      });
+    }
+  } catch (error) {
+    logger.i('Failed to apply desktop window theme: $error');
+  }
+}
+
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -54,15 +92,29 @@ class MyApp extends StatefulWidget {
   }
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Locale? _locale;
   ThemeMode _themeMode = ThemeMode.light;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadThemeMode();
     _loadLocale();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    if (_themeMode == ThemeMode.system) {
+      unawaited(_applyDesktopWindowTheme(_themeMode));
+    }
   }
 
   Future<void> _loadThemeMode() async {
@@ -73,6 +125,7 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _themeMode = mode;
     });
+    unawaited(_applyDesktopWindowTheme(mode));
   }
 
   Future<void> _loadLocale() async {
@@ -99,6 +152,7 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _themeMode = mode;
     });
+    unawaited(_applyDesktopWindowTheme(mode));
   }
 
   @override

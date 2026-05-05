@@ -160,6 +160,12 @@ abstract class AppLocalizations {
   /// **'取消'**
   String get cancel;
 
+  /// No description provided for @retry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get retry;
+
   /// No description provided for @setting.
   ///
   /// In zh, this message translates to:
@@ -627,6 +633,336 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备'**
   String get androidBatteryOptimizationDesc;
+
+  /// No description provided for @fileTransferLegacyInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧协议传输中'**
+  String get fileTransferLegacyInProgress;
+
+  /// No description provided for @fileTransferQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'排队中'**
+  String get fileTransferQueued;
+
+  /// No description provided for @fileTransferPreparingResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'准备续传 {progress}%'**
+  String fileTransferPreparingResume(String progress);
+
+  /// No description provided for @fileTransferNegotiating.
+  ///
+  /// In zh, this message translates to:
+  /// **'协商中'**
+  String get fileTransferNegotiating;
+
+  /// No description provided for @fileTransferWaitingReconnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待重连 {progress}%'**
+  String fileTransferWaitingReconnect(String progress);
+
+  /// No description provided for @fileTransferPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get fileTransferPaused;
+
+  /// No description provided for @fileTransferVerifying.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验中'**
+  String get fileTransferVerifying;
+
+  /// No description provided for @fileTransferFailedRetryable.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败，可重试'**
+  String get fileTransferFailedRetryable;
+
+  /// No description provided for @fileTransferCanceled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消'**
+  String get fileTransferCanceled;
+
+  /// No description provided for @peerDoesNotSupportResumableTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'对端不支持断点续传'**
+  String get peerDoesNotSupportResumableTransfer;
+
+  /// No description provided for @connectedPeerDoesNotSupportResumableTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前连接设备不支持断点续传'**
+  String get connectedPeerDoesNotSupportResumableTransfer;
+
+  /// No description provided for @audioShareCaptureConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集端：正在连接远端扬声器'**
+  String get audioShareCaptureConnecting;
+
+  /// No description provided for @audioSharePlaybackPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放端：正在准备播放共享声音'**
+  String get audioSharePlaybackPreparing;
+
+  /// No description provided for @audioShareCaptureActiveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集端：正在共享本机声音，点击停止'**
+  String get audioShareCaptureActiveStop;
+
+  /// No description provided for @audioSharePlaybackActiveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放端：正在作为扬声器播放，点击停止'**
+  String get audioSharePlaybackActiveStop;
+
+  /// No description provided for @audioShareStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'把本机声音共享给对端'**
+  String get audioShareStart;
+
+  /// No description provided for @audioSharePlaybackStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止播放共享声音'**
+  String get audioSharePlaybackStopped;
+
+  /// No description provided for @audioShareCaptureStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止共享声音'**
+  String get audioShareCaptureStopped;
+
+  /// No description provided for @audioShareUnsupportedCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前设备不支持系统音频采集'**
+  String get audioShareUnsupportedCapture;
+
+  /// No description provided for @audioShareRequestingPlayback.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在请求对端播放本机声音'**
+  String get audioShareRequestingPlayback;
+
+  /// No description provided for @audioShareFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'共享声音失败：{error}'**
+  String audioShareFailed(String error);
+
+  /// No description provided for @remoteInputSourceConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享：正在连接对端'**
+  String get remoteInputSourceConnecting;
+
+  /// No description provided for @remoteInputSinkConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享：正在准备接收控制'**
+  String get remoteInputSinkConnecting;
+
+  /// No description provided for @remoteInputEdgeActiveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享：边缘穿越已启用，点击停止'**
+  String get remoteInputEdgeActiveStop;
+
+  /// No description provided for @remoteInputSourceActiveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享：正在控制对端，点击停止'**
+  String get remoteInputSourceActiveStop;
+
+  /// No description provided for @remoteInputSinkActiveStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享：正在接收控制，点击停止'**
+  String get remoteInputSinkActiveStop;
+
+  /// No description provided for @remoteInputStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用键鼠共享'**
+  String get remoteInputStart;
+
+  /// No description provided for @remoteInputStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止键鼠共享'**
+  String get remoteInputStopped;
+
+  /// No description provided for @remoteInputStopCurrentFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先停止当前键鼠共享会话'**
+  String get remoteInputStopCurrentFirst;
+
+  /// No description provided for @remoteInputLocalUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前设备不支持键鼠共享'**
+  String get remoteInputLocalUnsupported;
+
+  /// No description provided for @remoteInputPeerUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前连接设备不支持键鼠共享'**
+  String get remoteInputPeerUnsupported;
+
+  /// No description provided for @remoteInputRequiresMutualTrust.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享需要互信设备'**
+  String get remoteInputRequiresMutualTrust;
+
+  /// No description provided for @remoteInputLayoutRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在设备设置里把对端屏幕贴到本机边缘'**
+  String get remoteInputLayoutRequired;
+
+  /// No description provided for @remoteInputEnabledMoveToEdge.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享已启用，移动到屏幕边缘开始控制对端'**
+  String get remoteInputEnabledMoveToEdge;
+
+  /// No description provided for @remoteInputFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享失败：{error}'**
+  String remoteInputFailed(String error);
+
+  /// No description provided for @remoteInputAutoModeSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享自动模式：{mode}'**
+  String remoteInputAutoModeSetting(String mode);
+
+  /// No description provided for @remoteInputLayoutSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕排列：{edge}'**
+  String remoteInputLayoutSetting(String edge);
+
+  /// No description provided for @remoteInputAutoModeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享自动模式'**
+  String get remoteInputAutoModeTitle;
+
+  /// No description provided for @remoteInputAutoModeOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get remoteInputAutoModeOff;
+
+  /// No description provided for @remoteInputAutoModeSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机控制对端'**
+  String get remoteInputAutoModeSource;
+
+  /// No description provided for @remoteInputAutoModeSink.
+  ///
+  /// In zh, this message translates to:
+  /// **'对端控制本机'**
+  String get remoteInputAutoModeSink;
+
+  /// No description provided for @remoteInputLayoutTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕排列'**
+  String get remoteInputLayoutTitle;
+
+  /// No description provided for @remoteInputCurrentEdge.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前：{edge}'**
+  String remoteInputCurrentEdge(String edge);
+
+  /// No description provided for @remoteInputLayoutSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get remoteInputLayoutSave;
+
+  /// No description provided for @remoteInputSnapLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'贴左'**
+  String get remoteInputSnapLeft;
+
+  /// No description provided for @remoteInputSnapRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'贴右'**
+  String get remoteInputSnapRight;
+
+  /// No description provided for @remoteInputSnapTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'贴上'**
+  String get remoteInputSnapTop;
+
+  /// No description provided for @remoteInputSnapBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'贴下'**
+  String get remoteInputSnapBottom;
+
+  /// No description provided for @remoteInputLocalScreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机'**
+  String get remoteInputLocalScreen;
+
+  /// No description provided for @remoteInputPeerScreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'对端'**
+  String get remoteInputPeerScreen;
+
+  /// No description provided for @remoteInputEdgeLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左侧'**
+  String get remoteInputEdgeLeft;
+
+  /// No description provided for @remoteInputEdgeRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右侧'**
+  String get remoteInputEdgeRight;
+
+  /// No description provided for @remoteInputEdgeTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'上方'**
+  String get remoteInputEdgeTop;
+
+  /// No description provided for @remoteInputEdgeBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'下方'**
+  String get remoteInputEdgeBottom;
+
+  /// No description provided for @remoteInputEdgeNotAdjacent.
+  ///
+  /// In zh, this message translates to:
+  /// **'未贴边'**
+  String get remoteInputEdgeNotAdjacent;
 }
 
 class _AppLocalizationsDelegate

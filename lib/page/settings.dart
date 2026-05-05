@@ -117,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          color: colorScheme.primary,
+          color: colorScheme.onSurface,
         ),
         title: Text(
           AppLocalizations.of(context)?.setting ?? "设置",
@@ -847,7 +847,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     super.initState();
     device = widget.device;
     _refreshDevice();
-    _loadRemoteInputLayout();
+    if (isDesktop()) {
+      _loadRemoteInputLayout();
+    }
   }
 
   Future<void> _refreshDevice() async {
@@ -912,7 +914,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
+    final l10n = AppLocalizations.of(context)!;
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
+    final showRemoteInputSettings = isDesktop();
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -921,7 +925,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          color: colorScheme.primary,
+          color: colorScheme.onSurface,
         ),
         title: Text(
           AppLocalizations.of(context)?.setting ?? '设置',
@@ -978,33 +982,38 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           _refreshDevice();
                         },
                       ),
+                      showDivider: showRemoteInputSettings,
                     ),
-                    _DeviceSettingTile(
-                      title:
-                          '键鼠共享自动模式：${_remoteInputAutoModeLabel(_remoteInputLayout)}',
-                      icon: Icon(
-                        Icons.keyboard_option_key_rounded,
-                        color: palette.textMuted,
+                    if (showRemoteInputSettings)
+                      _DeviceSettingTile(
+                        title: l10n.remoteInputAutoModeSetting(
+                          _remoteInputAutoModeLabel(l10n, _remoteInputLayout),
+                        ),
+                        icon: Icon(
+                          Icons.keyboard_option_key_rounded,
+                          color: palette.textMuted,
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          color: palette.textMuted,
+                        ),
+                        onTap:
+                            device.auth ? _openRemoteInputAutoModePicker : null,
                       ),
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: palette.textMuted,
+                    if (showRemoteInputSettings)
+                      _DeviceSettingTile(
+                        title: l10n.remoteInputLayoutSetting(
+                          _remoteInputEdgeLabel(l10n, _remoteInputLayout),
+                        ),
+                        icon: Icon(
+                          Icons.splitscreen_rounded,
+                          color: palette.textMuted,
+                        ),
+                        showDivider: false,
+                        onTap: () async {
+                          await _openRemoteInputLayoutEditor();
+                        },
                       ),
-                      onTap:
-                          device.auth ? _openRemoteInputAutoModePicker : null,
-                    ),
-                    _DeviceSettingTile(
-                      title:
-                          '屏幕排列：${_remoteInputEdgeLabel(_remoteInputLayout)}',
-                      icon: Icon(
-                        Icons.splitscreen_rounded,
-                        color: palette.textMuted,
-                      ),
-                      showDivider: false,
-                      onTap: () async {
-                        await _openRemoteInputLayoutEditor();
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -1059,9 +1068,12 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     );
   }
 
-  String _remoteInputEdgeLabel(RemoteInputLayoutData? layout) {
+  String _remoteInputEdgeLabel(
+    AppLocalizations l10n,
+    RemoteInputLayoutData? layout,
+  ) {
     if (layout == null) {
-      return '右侧';
+      return l10n.remoteInputEdgeRight;
     }
     final edge = RemoteInputLayoutGeometry.adjacentEdge(
       local: const RemoteInputScreenRect(
@@ -1079,27 +1091,30 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     );
     switch (edge) {
       case RemoteInputEdge.left:
-        return '左侧';
+        return l10n.remoteInputEdgeLeft;
       case RemoteInputEdge.right:
-        return '右侧';
+        return l10n.remoteInputEdgeRight;
       case RemoteInputEdge.top:
-        return '上方';
+        return l10n.remoteInputEdgeTop;
       case RemoteInputEdge.bottom:
-        return '下方';
+        return l10n.remoteInputEdgeBottom;
       case null:
-        return '未贴边';
+        return l10n.remoteInputEdgeNotAdjacent;
     }
   }
 
-  String _remoteInputAutoModeLabel(RemoteInputLayoutData? layout) {
+  String _remoteInputAutoModeLabel(
+    AppLocalizations l10n,
+    RemoteInputLayoutData? layout,
+  ) {
     if (layout?.autoActivate != true) {
-      return '关闭';
+      return l10n.remoteInputAutoModeOff;
     }
     switch (layout!.autoRoleValue) {
       case RemoteInputAutoRole.source:
-        return '本机控制对端';
+        return l10n.remoteInputAutoModeSource;
       case RemoteInputAutoRole.sink:
-        return '对端控制本机';
+        return l10n.remoteInputAutoModeSink;
     }
   }
 
@@ -1108,27 +1123,44 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     if (!mounted) {
       return;
     }
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final choice = await showCupertinoModalPopup<String>(
       context: context,
       builder: (context) => CupertinoActionSheet(
-        title: const Text('键鼠共享自动模式'),
+        title: Text(
+          l10n.remoteInputAutoModeTitle,
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop('off'),
-            child: const Text('关闭'),
+            child: Text(
+              l10n.remoteInputAutoModeOff,
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop('source'),
-            child: const Text('本机控制对端'),
+            child: Text(
+              l10n.remoteInputAutoModeSource,
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop('sink'),
-            child: const Text('对端控制本机'),
+            child: Text(
+              l10n.remoteInputAutoModeSink,
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(AppLocalizations.of(context)?.cancel ?? '取消'),
+          child: Text(
+            l10n.cancel,
+            style: const TextStyle(color: Colors.redAccent),
+          ),
         ),
       ),
     );
