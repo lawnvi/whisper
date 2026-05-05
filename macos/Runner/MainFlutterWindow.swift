@@ -13,6 +13,29 @@ private let remoteInputLog = OSLog(
   subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
   category: "RemoteInput")
 
+private func remoteInputEventMask(for type: CGEventType) -> CGEventMask {
+  return CGEventMask(1) << CGEventMask(type.rawValue)
+}
+
+private let remoteInputCaptureEventMask: CGEventMask = [
+  CGEventType.mouseMoved,
+  CGEventType.leftMouseDragged,
+  CGEventType.rightMouseDragged,
+  CGEventType.otherMouseDragged,
+  CGEventType.leftMouseDown,
+  CGEventType.leftMouseUp,
+  CGEventType.rightMouseDown,
+  CGEventType.rightMouseUp,
+  CGEventType.otherMouseDown,
+  CGEventType.otherMouseUp,
+  CGEventType.scrollWheel,
+  CGEventType.keyDown,
+  CGEventType.keyUp,
+  CGEventType.flagsChanged,
+].reduce(CGEventMask(0)) { mask, type in
+  mask | remoteInputEventMask(for: type)
+}
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -196,28 +219,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     sequence = 0
     captureActivationSequence = 0
 
-    let mask =
-      (1 << CGEventType.mouseMoved.rawValue) |
-      (1 << CGEventType.leftMouseDragged.rawValue) |
-      (1 << CGEventType.rightMouseDragged.rawValue) |
-      (1 << CGEventType.otherMouseDragged.rawValue) |
-      (1 << CGEventType.leftMouseDown.rawValue) |
-      (1 << CGEventType.leftMouseUp.rawValue) |
-      (1 << CGEventType.rightMouseDown.rawValue) |
-      (1 << CGEventType.rightMouseUp.rawValue) |
-      (1 << CGEventType.otherMouseDown.rawValue) |
-      (1 << CGEventType.otherMouseUp.rawValue) |
-      (1 << CGEventType.scrollWheel.rawValue) |
-      (1 << CGEventType.keyDown.rawValue) |
-      (1 << CGEventType.keyUp.rawValue) |
-      (1 << CGEventType.flagsChanged.rawValue)
-
     let userInfo = Unmanaged.passUnretained(self).toOpaque()
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
       place: .headInsertEventTap,
       options: .defaultTap,
-      eventsOfInterest: CGEventMask(mask),
+      eventsOfInterest: remoteInputCaptureEventMask,
       callback: remoteInputEventCallback,
       userInfo: userInfo) else {
       stopCapture()

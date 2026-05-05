@@ -253,6 +253,13 @@ void main() {
       );
     });
 
+    test('builds capture event tap mask with explicit CGEventMask values', () {
+      expect(source, contains('remoteInputEventMask(for type: CGEventType)'));
+      expect(source, contains('remoteInputCaptureEventMask'));
+      expect(source, contains('eventsOfInterest: remoteInputCaptureEventMask'));
+      expect(source, isNot(contains('(1 << CGEventType.mouseMoved.rawValue)')));
+    });
+
     test('preserves native modifier event flags while adding active modifiers',
         () {
       expect(

@@ -46,6 +46,7 @@ std::string StringValue(FlValue* map, const char* key) {
   return text == nullptr ? "" : text;
 }
 
+#if HAVE_PULSE_AUDIO
 int IntValue(FlValue* map, const char* key, int fallback) {
   FlValue* value = Lookup(map, key);
   if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_INT) {
@@ -53,6 +54,7 @@ int IntValue(FlValue* map, const char* key, int fallback) {
   }
   return static_cast<int>(fl_value_get_int(value));
 }
+#endif
 
 std::vector<uint8_t> BytesValue(FlValue* map, const char* key) {
   FlValue* value = Lookup(map, key);
@@ -82,6 +84,7 @@ void RespondError(FlMethodCall* method_call,
   fl_method_call_respond(method_call, response, nullptr);
 }
 
+#if HAVE_PULSE_AUDIO
 struct MainThreadEvent {
   FlMethodChannel* channel = nullptr;
   std::string method;
@@ -127,7 +130,6 @@ int64_t NowMicros() {
   return static_cast<int64_t>(g_get_real_time());
 }
 
-#if HAVE_PULSE_AUDIO
 int FrameDurationMs(FlValue* format) {
   return std::max(
       1, std::min(100,
