@@ -102,6 +102,17 @@ void main() {
       expect(plugin, contains('raw_remainder_x'));
     });
 
+    test('keeps remote input native code compatible with C++14', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+
+      expect(cmake, contains('cxx_std_14'));
+      expect(plugin, isNot(contains('#include <optional>')));
+      expect(plugin, isNot(contains('std::optional')));
+      expect(plugin, isNot(contains('std::nullopt')));
+      expect(plugin, contains('class Maybe'));
+    });
+
     test('routes X11 multi-display portals with stable route ids', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 

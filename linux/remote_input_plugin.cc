@@ -10,10 +10,10 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #if HAVE_X11_REMOTE_INPUT
@@ -121,6 +121,34 @@ std::string PayloadString(const std::vector<uint8_t>& payload) {
   return std::string(payload.begin(), payload.end());
 }
 
+template <typename T>
+class Maybe {
+ public:
+  Maybe() = default;
+  Maybe(const T& value) : has_value_(true), value_(value) {}
+  Maybe(T&& value) : has_value_(true), value_(std::move(value)) {}
+
+  bool has_value() const {
+    return has_value_;
+  }
+
+  const T& value() const {
+    return value_;
+  }
+
+  const T* operator->() const {
+    return &value_;
+  }
+
+  T value_or(const T& fallback) const {
+    return has_value_ ? value_ : fallback;
+  }
+
+ private:
+  bool has_value_ = false;
+  T value_{};
+};
+
 std::string JsonEscapedString(const std::string& value) {
   std::ostringstream json;
   const char* hex = "0123456789abcdef";
@@ -159,10 +187,10 @@ std::string JsonEscapedString(const std::string& value) {
   return json.str();
 }
 
-std::optional<uint32_t> JsonHexCodePoint(const std::string& json,
+Maybe<uint32_t> JsonHexCodePoint(const std::string& json,
                                          size_t offset) {
   if (offset + 4 > json.size()) {
-    return std::nullopt;
+    return {};
   }
   uint32_t value = 0;
   for (size_t i = offset; i < offset + 4; i++) {
@@ -175,7 +203,7 @@ std::optional<uint32_t> JsonHexCodePoint(const std::string& json,
     } else if (ch >= 'A' && ch <= 'F') {
       value += static_cast<uint32_t>(ch - 'A' + 10);
     } else {
-      return std::nullopt;
+      return {};
     }
   }
   return value;
@@ -194,19 +222,19 @@ void AppendUtf8(std::string& output, uint32_t code_point) {
   }
 }
 
-std::optional<std::string> JsonStringValue(const std::string& json,
+Maybe<std::string> JsonStringValue(const std::string& json,
                                            const std::string& key) {
   const auto key_pos = json.find("\"" + key + "\"");
   if (key_pos == std::string::npos) {
-    return std::nullopt;
+    return {};
   }
   const auto colon = json.find(':', key_pos);
   if (colon == std::string::npos) {
-    return std::nullopt;
+    return {};
   }
   const auto quote = json.find('"', colon + 1);
   if (quote == std::string::npos) {
-    return std::nullopt;
+    return {};
   }
   std::string result;
   for (size_t i = quote + 1; i < json.size(); i++) {
@@ -219,7 +247,7 @@ std::optional<std::string> JsonStringValue(const std::string& json,
       continue;
     }
     if (++i >= json.size()) {
-      return std::nullopt;
+      return {};
     }
     const char escaped = json[i];
     switch (escaped) {
@@ -246,17 +274,17 @@ std::optional<std::string> JsonStringValue(const std::string& json,
       case 'u': {
         const auto code_point = JsonHexCodePoint(json, i + 1);
         if (!code_point.has_value()) {
-          return std::nullopt;
+          return {};
         }
         AppendUtf8(result, code_point.value());
         i += 4;
         break;
       }
       default:
-        return std::nullopt;
+        return {};
     }
   }
-  return std::nullopt;
+  return {};
 }
 
 double JsonNumber(const std::string& json,
@@ -667,19 +695,19 @@ double EdgeLine(const ScreenBounds& bounds, const std::string& edge) {
   return static_cast<double>(bounds.right());
 }
 
-std::optional<double> IntersectionParameter(const std::string& edge,
+Maybe<double> IntersectionParameter(const std::string& edge,
                                             double line,
                                             DoublePoint previous_point,
                                             double delta_x,
                                             double delta_y) {
   if (edge == "left" || edge == "right") {
     if (delta_x == 0) {
-      return std::nullopt;
+      return {};
     }
     return (line - previous_point.x) / delta_x;
   }
   if (delta_y == 0) {
-    return std::nullopt;
+    return {};
   }
   return (line - previous_point.y) / delta_y;
 }
@@ -1638,7 +1666,7 @@ class RemoteInputPlugin {
     }};
   }
 
-  std::optional<CaptureCrossing> ResolveCaptureCrossing(
+  Maybe<CaptureCrossing> ResolveCaptureCrossing(
       Display* display,
       DoublePoint previous_point,
       DoublePoint current_point,
@@ -1658,7 +1686,7 @@ class RemoteInputPlugin {
       }
     }
     if (candidates.empty()) {
-      return std::nullopt;
+      return {};
     }
     std::sort(candidates.begin(), candidates.end(),
               [](const CaptureCrossing& lhs, const CaptureCrossing& rhs) {
@@ -1680,7 +1708,7 @@ class RemoteInputPlugin {
     return candidates.front();
   }
 
-  std::optional<CaptureCrossing> CaptureCrossingForRoute(
+  Maybe<CaptureCrossing> CaptureCrossingForRoute(
       Display* display,
       const CaptureRoute& route,
       DoublePoint previous_point,
@@ -1691,18 +1719,18 @@ class RemoteInputPlugin {
     const double delta_x = current_point.x - previous_point.x;
     const double delta_y = current_point.y - previous_point.y;
     if (delta_x == 0 && delta_y == 0) {
-      return std::nullopt;
+      return {};
     }
     const double line = EdgeLine(bounds, route.source_edge);
     const auto t = IntersectionParameter(route.source_edge, line,
                                          previous_point, delta_x, delta_y);
     if (!t.has_value() || t.value() < 0 || t.value() > 1) {
-      return std::nullopt;
+      return {};
     }
     const double normal_motion =
         EdgeNormalMotion(route.source_edge, delta_x, delta_y);
     if (normal_motion <= 0) {
-      return std::nullopt;
+      return {};
     }
     const DoublePoint intersection{
         previous_point.x + delta_x * t.value(),
@@ -1711,11 +1739,11 @@ class RemoteInputPlugin {
     const double coordinate = AxisCoordinate(intersection, route.source_edge);
     if (!SegmentContains(coordinate, route.source_segment,
                          route.source_display_id, route.source_edge, routes)) {
-      return std::nullopt;
+      return {};
     }
     const double length = route.source_segment.end - route.source_segment.start;
     if (length <= 0) {
-      return std::nullopt;
+      return {};
     }
     CaptureCrossing crossing;
     crossing.route = route;
@@ -2016,11 +2044,12 @@ class RemoteInputPlugin {
     QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
                  &current_x, &current_y, &mask);
     const bool active_start = JsonBool(json, "activeStart");
-    const auto routed_release =
-        !active_start && injected_cursor_entered_interior_
-            ? ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
-                                             delta_y)
-            : std::nullopt;
+    Maybe<InjectionReleaseRoute> routed_release;
+    if (!active_start && injected_cursor_entered_interior_) {
+      routed_release =
+          ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
+                                         delta_y);
+    }
     if (routed_release.has_value()) {
       const std::string session_id = injection_session_id_;
       const auto release_route = routed_release.value();
@@ -2070,13 +2099,13 @@ class RemoteInputPlugin {
     XFlush(injection_display_);
   }
 
-  std::optional<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit(
+  Maybe<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit(
       int x,
       int y,
       int delta_x,
       int delta_y) const {
     if (injection_routes_.empty()) {
-      return std::nullopt;
+      return {};
     }
     const DoublePoint previous_point{static_cast<double>(x),
                                      static_cast<double>(y)};
@@ -2085,7 +2114,7 @@ class RemoteInputPlugin {
     const auto crossing =
         ResolveInjectionReleaseCrossing(previous_point, current_point);
     if (!crossing.has_value()) {
-      return std::nullopt;
+      return {};
     }
     const auto route = crossing->route;
     return InjectionReleaseRoute{
@@ -2097,7 +2126,7 @@ class RemoteInputPlugin {
     };
   }
 
-  std::optional<InjectionReleaseCrossing> ResolveInjectionReleaseCrossing(
+  Maybe<InjectionReleaseCrossing> ResolveInjectionReleaseCrossing(
       DoublePoint previous_point,
       DoublePoint current_point) const {
     std::vector<InjectionReleaseCrossing> candidates;
@@ -2110,7 +2139,7 @@ class RemoteInputPlugin {
       }
     }
     if (candidates.empty()) {
-      return std::nullopt;
+      return {};
     }
     std::sort(candidates.begin(), candidates.end(),
               [this](const InjectionReleaseCrossing& lhs,
@@ -2138,7 +2167,7 @@ class RemoteInputPlugin {
     return candidates.front();
   }
 
-  std::optional<InjectionReleaseCrossing> InjectionReleaseCrossingForRoute(
+  Maybe<InjectionReleaseCrossing> InjectionReleaseCrossingForRoute(
       const InjectionRoute& route,
       DoublePoint previous_point,
       DoublePoint current_point) const {
@@ -2147,18 +2176,18 @@ class RemoteInputPlugin {
     const double delta_x = current_point.x - previous_point.x;
     const double delta_y = current_point.y - previous_point.y;
     if (delta_x == 0 && delta_y == 0) {
-      return std::nullopt;
+      return {};
     }
     const double line = EdgeLine(bounds, route.sink_edge);
     const auto t = IntersectionParameter(route.sink_edge, line,
                                          previous_point, delta_x, delta_y);
     if (!t.has_value() || t.value() < 0 || t.value() > 1) {
-      return std::nullopt;
+      return {};
     }
     const double normal_motion =
         EdgeNormalMotion(route.sink_edge, delta_x, delta_y);
     if (normal_motion <= 0) {
-      return std::nullopt;
+      return {};
     }
     const DoublePoint intersection{
         previous_point.x + delta_x * t.value(),
@@ -2168,11 +2197,11 @@ class RemoteInputPlugin {
     if (!SegmentContains(coordinate, route.sink_segment,
                          route.sink_display_id, route.sink_edge,
                          injection_routes_)) {
-      return std::nullopt;
+      return {};
     }
     const double length = route.sink_segment.end - route.sink_segment.start;
     if (length <= 0) {
-      return std::nullopt;
+      return {};
     }
     InjectionReleaseCrossing crossing;
     crossing.route = route;
