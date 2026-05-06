@@ -81,10 +81,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
-  private let systemShortcutEventSource = CGEventSource(stateID: .privateState)
   private var injectionKeyDiagnosticCount = 0
   private var injectionMouseDiagnosticCount = 0
-  private var suppressedSystemControlArrowKeyCodes: [Int] = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -164,7 +162,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectedMouseEnteredInterior = false
       resetInjectedClickState()
       injectedModifierFlags = []
-      suppressedSystemControlArrowKeyCodes = []
       injectionKeyDiagnosticCount = 0
       injectionMouseDiagnosticCount = 0
       injectionSessionId = sessionId
@@ -283,7 +280,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedMouseEnteredInterior = false
     resetInjectedClickState()
     injectedModifierFlags = []
-    suppressedSystemControlArrowKeyCodes = []
     injectionKeyDiagnosticCount = 0
     injectionMouseDiagnosticCount = 0
     injectionSessionId = ""
@@ -593,9 +589,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         return
       }
       updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
-      if handleSystemControlArrowShortcut(keyCode: keyCode, down: down) {
-        return
-      }
       postKeyboardEvent(keyCode: keyCode, down: down)
       setInjectedKey(nativeKeyCode, down: down)
     default:
@@ -988,76 +981,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       emitKeyDiagnostic(
         message: "mac post remote key mac=\(Int(keyCode)) down=\(down ? 1 : 0) type=\(eventType) flags=\(keyEvent.flags.rawValue) tap=hid")
       keyEvent.post(tap: .cghidEventTap)
-    }
-  }
-
-  private func handleSystemControlArrowShortcut(keyCode: CGKeyCode, down: Bool) -> Bool {
-    let key = Int(keyCode)
-    if let index = suppressedSystemControlArrowKeyCodes.firstIndex(of: key) {
-      if !down {
-        suppressedSystemControlArrowKeyCodes.remove(at: index)
-      }
-      return true
-    }
-    guard down && isSystemControlArrowKey(keyCode: keyCode) else {
-      return false
-    }
-    suppressedSystemControlArrowKeyCodes.append(key)
-    postSystemControlArrowShortcut(keyCode: keyCode)
-    return true
-  }
-
-  private func postSystemControlArrowShortcut(keyCode: CGKeyCode) {
-    emitKeyDiagnostic(
-      message: "mac system control arrow shortcut mac=\(Int(keyCode))")
-    postSystemShortcutKey(
-      keyCode: 59,
-      down: true,
-      type: .flagsChanged,
-      flags: .maskControl)
-    postSystemShortcutKey(
-      keyCode: keyCode,
-      down: true,
-      type: .keyDown,
-      flags: .maskControl)
-    postSystemShortcutKey(
-      keyCode: keyCode,
-      down: false,
-      type: .keyUp,
-      flags: .maskControl)
-    postSystemShortcutKey(
-      keyCode: 59,
-      down: false,
-      type: .flagsChanged,
-      flags: [])
-  }
-
-  private func postSystemShortcutKey(
-    keyCode: CGKeyCode,
-    down: Bool,
-    type: CGEventType,
-    flags: CGEventFlags
-  ) {
-    if let keyEvent = CGEvent(
-      keyboardEventSource: systemShortcutEventSource,
-      virtualKey: keyCode,
-      keyDown: down
-    ) {
-      keyEvent.type = type
-      keyEvent.flags = flags
-      keyEvent.post(tap: .cghidEventTap)
-    }
-  }
-
-  private func isSystemControlArrowKey(keyCode: CGKeyCode) -> Bool {
-    guard injectedModifierFlags.contains(.maskControl) else {
-      return false
-    }
-    switch Int(keyCode) {
-    case 123, 124, 125, 126:
-      return true
-    default:
-      return false
     }
   }
 

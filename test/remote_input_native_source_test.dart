@@ -263,7 +263,7 @@ void main() {
     test('preserves native modifier event flags while adding active modifiers',
         () {
       final postKeyboardEvent = RegExp(
-        r'private func postKeyboardEvent\([\s\S]*?\n  private func handleSystemControlArrowShortcut',
+        r'private func postKeyboardEvent\([\s\S]*?\n  private func setInjectedKey',
       ).firstMatch(source)!.group(0)!;
 
       expect(
@@ -277,11 +277,11 @@ void main() {
       );
     });
 
-    test('posts Control arrow shortcuts as a complete system shortcut', () {
-      expect(source, contains('handleSystemControlArrowShortcut'));
-      expect(source, contains('postSystemControlArrowShortcut'));
-      expect(source, contains('systemShortcutEventSource'));
-      expect(source, contains('suppressedSystemControlArrowKeyCodes'));
+    test('lets Control arrow shortcuts use the normal HID key path', () {
+      expect(source, isNot(contains('handleSystemControlArrowShortcut')));
+      expect(source, isNot(contains('postSystemControlArrowShortcut')));
+      expect(source, isNot(contains('systemShortcutEventSource')));
+      expect(source, isNot(contains('suppressedSystemControlArrowKeyCodes')));
     });
 
     test('tracks injected mouse position for reverse edge release decisions',
