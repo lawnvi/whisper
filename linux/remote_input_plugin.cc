@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -120,6 +121,144 @@ std::string PayloadString(const std::vector<uint8_t>& payload) {
   return std::string(payload.begin(), payload.end());
 }
 
+std::string JsonEscapedString(const std::string& value) {
+  std::ostringstream json;
+  const char* hex = "0123456789abcdef";
+  for (const unsigned char ch : value) {
+    switch (ch) {
+      case '"':
+        json << "\\\"";
+        break;
+      case '\\':
+        json << "\\\\";
+        break;
+      case '\b':
+        json << "\\b";
+        break;
+      case '\f':
+        json << "\\f";
+        break;
+      case '\n':
+        json << "\\n";
+        break;
+      case '\r':
+        json << "\\r";
+        break;
+      case '\t':
+        json << "\\t";
+        break;
+      default:
+        if (ch < 0x20) {
+          json << "\\u00" << hex[(ch >> 4) & 0x0f] << hex[ch & 0x0f];
+        } else {
+          json << static_cast<char>(ch);
+        }
+        break;
+    }
+  }
+  return json.str();
+}
+
+std::optional<uint32_t> JsonHexCodePoint(const std::string& json,
+                                         size_t offset) {
+  if (offset + 4 > json.size()) {
+    return std::nullopt;
+  }
+  uint32_t value = 0;
+  for (size_t i = offset; i < offset + 4; i++) {
+    const char ch = json[i];
+    value <<= 4;
+    if (ch >= '0' && ch <= '9') {
+      value += static_cast<uint32_t>(ch - '0');
+    } else if (ch >= 'a' && ch <= 'f') {
+      value += static_cast<uint32_t>(ch - 'a' + 10);
+    } else if (ch >= 'A' && ch <= 'F') {
+      value += static_cast<uint32_t>(ch - 'A' + 10);
+    } else {
+      return std::nullopt;
+    }
+  }
+  return value;
+}
+
+void AppendUtf8(std::string& output, uint32_t code_point) {
+  if (code_point <= 0x7f) {
+    output.push_back(static_cast<char>(code_point));
+  } else if (code_point <= 0x7ff) {
+    output.push_back(static_cast<char>(0xc0 | (code_point >> 6)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+  } else {
+    output.push_back(static_cast<char>(0xe0 | (code_point >> 12)));
+    output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+  }
+}
+
+std::optional<std::string> JsonStringValue(const std::string& json,
+                                           const std::string& key) {
+  const auto key_pos = json.find("\"" + key + "\"");
+  if (key_pos == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto colon = json.find(':', key_pos);
+  if (colon == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto quote = json.find('"', colon + 1);
+  if (quote == std::string::npos) {
+    return std::nullopt;
+  }
+  std::string result;
+  for (size_t i = quote + 1; i < json.size(); i++) {
+    const char ch = json[i];
+    if (ch == '"') {
+      return result;
+    }
+    if (ch != '\\') {
+      result.push_back(ch);
+      continue;
+    }
+    if (++i >= json.size()) {
+      return std::nullopt;
+    }
+    const char escaped = json[i];
+    switch (escaped) {
+      case '"':
+      case '\\':
+      case '/':
+        result.push_back(escaped);
+        break;
+      case 'b':
+        result.push_back('\b');
+        break;
+      case 'f':
+        result.push_back('\f');
+        break;
+      case 'n':
+        result.push_back('\n');
+        break;
+      case 'r':
+        result.push_back('\r');
+        break;
+      case 't':
+        result.push_back('\t');
+        break;
+      case 'u': {
+        const auto code_point = JsonHexCodePoint(json, i + 1);
+        if (!code_point.has_value()) {
+          return std::nullopt;
+        }
+        AppendUtf8(result, code_point.value());
+        i += 4;
+        break;
+      }
+      default:
+        return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
 double JsonNumber(const std::string& json,
                   const std::string& key,
                   double fallback = 0) {
@@ -159,23 +298,7 @@ bool JsonBool(const std::string& json, const std::string& key) {
 std::string JsonString(const std::string& json,
                        const std::string& key,
                        const std::string& fallback = "") {
-  const auto key_pos = json.find("\"" + key + "\"");
-  if (key_pos == std::string::npos) {
-    return fallback;
-  }
-  const auto colon = json.find(':', key_pos);
-  if (colon == std::string::npos) {
-    return fallback;
-  }
-  const auto quote = json.find('"', colon + 1);
-  if (quote == std::string::npos) {
-    return fallback;
-  }
-  const auto end = json.find('"', quote + 1);
-  if (end == std::string::npos) {
-    return fallback;
-  }
-  return json.substr(quote + 1, end - quote - 1);
+  return JsonStringValue(json, key).value_or(fallback);
 }
 
 std::vector<uint8_t> JsonBytes(const std::string& json) {
@@ -238,6 +361,12 @@ struct MainThreadEvent {
   int64_t sequence = 0;
   int64_t activation_sequence = 0;
   double edge_unit = 0;
+  bool source_edge_unit = false;
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  double source_segment_start = 0;
+  double source_segment_end = 0;
   int64_t timestamp_micros = 0;
   std::vector<uint8_t> payload;
 };
@@ -266,6 +395,29 @@ gboolean InvokeMainThreadEvent(gpointer user_data) {
         args, "activationSequence", fl_value_new_int(event->activation_sequence));
     fl_value_set_string_take(args, "edgeUnit",
                              fl_value_new_float(event->edge_unit));
+    if (event->source_edge_unit) {
+      fl_value_set_string_take(args, "sourceEdgeUnit",
+                               fl_value_new_bool(TRUE));
+    }
+    if (!event->route_id.empty()) {
+      fl_value_set_string_take(
+          args, "routeId", fl_value_new_string(event->route_id.c_str()));
+    }
+    if (!event->source_display_id.empty()) {
+      fl_value_set_string_take(
+          args, "sourceDisplayId",
+          fl_value_new_string(event->source_display_id.c_str()));
+    }
+    if (!event->source_edge.empty()) {
+      fl_value_set_string_take(
+          args, "sourceEdge", fl_value_new_string(event->source_edge.c_str()));
+    }
+    if (event->source_segment_end > event->source_segment_start) {
+      fl_value_set_string_take(args, "sourceSegmentStart",
+                               fl_value_new_float(event->source_segment_start));
+      fl_value_set_string_take(args, "sourceSegmentEnd",
+                               fl_value_new_float(event->source_segment_end));
+    }
   } else {
     fl_value_set_string_take(args, "message",
                              fl_value_new_string(event->message.c_str()));
@@ -298,6 +450,52 @@ struct EdgeSegment {
   double end = 0;
 };
 
+struct DoublePoint {
+  double x = 0;
+  double y = 0;
+};
+
+struct CaptureRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  EdgeSegment source_segment;
+};
+
+struct InjectionRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  std::string sink_display_id;
+  std::string sink_edge;
+  EdgeSegment sink_segment;
+  EdgeSegment source_segment;
+};
+
+struct InjectionReleaseRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  EdgeSegment source_segment;
+  double edge_unit = 0;
+};
+
+struct CaptureCrossing {
+  CaptureRoute route;
+  double edge_unit = 0;
+  bool strict_segment_hit = false;
+  double normal_motion = 0;
+  double travel_to_intersection = 0;
+};
+
+struct InjectionReleaseCrossing {
+  InjectionRoute route;
+  double edge_unit = 0;
+  bool strict_segment_hit = false;
+  double normal_motion = 0;
+  double travel_to_intersection = 0;
+};
+
 struct DisplayInfo {
   std::string id;
   std::string name;
@@ -308,6 +506,71 @@ struct DisplayInfo {
 
 bool HasSegment(const EdgeSegment& segment) {
   return segment.end > segment.start;
+}
+
+std::vector<CaptureRoute> CaptureRoutesValue(FlValue* map, const char* key) {
+  FlValue* values = Lookup(map, key);
+  if (values == nullptr || fl_value_get_type(values) != FL_VALUE_TYPE_LIST) {
+    return {};
+  }
+  std::vector<CaptureRoute> routes;
+  const size_t length = fl_value_get_length(values);
+  for (size_t i = 0; i < length; i++) {
+    FlValue* item = fl_value_get_list_value(values, i);
+    if (item == nullptr || fl_value_get_type(item) != FL_VALUE_TYPE_MAP) {
+      continue;
+    }
+    CaptureRoute route;
+    route.route_id = StringValue(item, "routeId");
+    route.source_display_id = StringValue(item, "displayId");
+    route.source_edge = StringValue(item, "edge");
+    route.source_segment = EdgeSegment{
+        DoubleValue(item, "start"),
+        DoubleValue(item, "end"),
+    };
+    if (!route.source_edge.empty() &&
+        route.source_segment.end > route.source_segment.start) {
+      routes.push_back(std::move(route));
+    }
+  }
+  return routes;
+}
+
+std::vector<InjectionRoute> InjectionRoutesValue(FlValue* map,
+                                                 const char* key) {
+  FlValue* values = Lookup(map, key);
+  if (values == nullptr || fl_value_get_type(values) != FL_VALUE_TYPE_LIST) {
+    return {};
+  }
+  std::vector<InjectionRoute> routes;
+  const size_t length = fl_value_get_length(values);
+  for (size_t i = 0; i < length; i++) {
+    FlValue* item = fl_value_get_list_value(values, i);
+    if (item == nullptr || fl_value_get_type(item) != FL_VALUE_TYPE_MAP) {
+      continue;
+    }
+    InjectionRoute route;
+    route.route_id = StringValue(item, "routeId");
+    route.source_display_id = StringValue(item, "sourceDisplayId");
+    route.source_edge = StringValue(item, "sourceEdge");
+    route.sink_display_id = StringValue(item, "sinkDisplayId");
+    route.sink_edge = StringValue(item, "sinkEdge");
+    route.source_segment = EdgeSegment{
+        DoubleValue(item, "sourceSegmentStart"),
+        DoubleValue(item, "sourceSegmentEnd"),
+    };
+    route.sink_segment = EdgeSegment{
+        DoubleValue(item, "sinkSegmentStart"),
+        DoubleValue(item, "sinkSegmentEnd"),
+    };
+    if (!route.source_edge.empty() && !route.sink_display_id.empty() &&
+        !route.sink_edge.empty() &&
+        route.source_segment.end > route.source_segment.start &&
+        route.sink_segment.end > route.sink_segment.start) {
+      routes.push_back(std::move(route));
+    }
+  }
+  return routes;
 }
 
 ScreenBounds BoundsFor(Display* display) {
@@ -384,6 +647,58 @@ double AxisValue(int x, int y, const std::string& edge) {
   return static_cast<double>(x);
 }
 
+double AxisCoordinate(DoublePoint point, const std::string& edge) {
+  if (edge == "left" || edge == "right") {
+    return point.y;
+  }
+  return point.x;
+}
+
+double EdgeLine(const ScreenBounds& bounds, const std::string& edge) {
+  if (edge == "left") {
+    return static_cast<double>(bounds.left);
+  }
+  if (edge == "top") {
+    return static_cast<double>(bounds.top);
+  }
+  if (edge == "bottom") {
+    return static_cast<double>(bounds.bottom());
+  }
+  return static_cast<double>(bounds.right());
+}
+
+std::optional<double> IntersectionParameter(const std::string& edge,
+                                            double line,
+                                            DoublePoint previous_point,
+                                            double delta_x,
+                                            double delta_y) {
+  if (edge == "left" || edge == "right") {
+    if (delta_x == 0) {
+      return std::nullopt;
+    }
+    return (line - previous_point.x) / delta_x;
+  }
+  if (delta_y == 0) {
+    return std::nullopt;
+  }
+  return (line - previous_point.y) / delta_y;
+}
+
+double EdgeNormalMotion(const std::string& edge,
+                        double delta_x,
+                        double delta_y) {
+  if (edge == "left") {
+    return -delta_x;
+  }
+  if (edge == "top") {
+    return -delta_y;
+  }
+  if (edge == "bottom") {
+    return delta_y;
+  }
+  return delta_x;
+}
+
 bool PointInSegment(int x,
                     int y,
                     const std::string& edge,
@@ -419,20 +734,28 @@ std::string MouseMovePayload(Display* display,
                              int delta_y,
                              bool active_start,
                              const std::string& edge,
+                             const std::string& route_id,
                              int buttons,
                              const ScreenBounds& bounds,
-                             const EdgeSegment& segment) {
+                             const EdgeSegment& segment,
+                             double edge_unit_override = -1) {
   (void)display;
   std::ostringstream json;
   json << "{\"x\":" << x << ",\"y\":" << y
        << ",\"deltaX\":" << delta_x << ",\"deltaY\":" << delta_y
        << ",\"activeStart\":" << (active_start ? "true" : "false")
-       << ",\"edge\":\"" << edge << "\""
+       << ",\"edge\":\"" << JsonEscapedString(edge) << "\""
        << ",\"buttons\":" << buttons
        << ",\"unitX\":" << Normalized(x, bounds.left, bounds.width)
        << ",\"unitY\":" << Normalized(y, bounds.top, bounds.height);
+  if (!route_id.empty()) {
+    json << ",\"routeId\":\"" << JsonEscapedString(route_id) << "\"";
+  }
   if (HasSegment(segment)) {
-    json << ",\"edgeUnit\":" << EdgeUnitForPoint(x, y, edge, segment);
+    json << ",\"edgeUnit\":"
+         << (edge_unit_override >= 0
+                 ? ClampedUnit(edge_unit_override)
+                 : EdgeUnitForPoint(x, y, edge, segment));
   }
   json << "}";
   return json.str();
@@ -497,8 +820,10 @@ class RemoteInputPlugin {
           DoubleValue(args, "segmentStart"),
           DoubleValue(args, "segmentEnd"),
       };
+      const std::vector<CaptureRoute> routes =
+          CaptureRoutesValue(args, "segments");
       std::string error;
-      if (!StartCapture(session_id, edge, display_id, segment,
+      if (!StartCapture(session_id, edge, display_id, segment, routes,
                         release_hotkey, &error)) {
         RespondError(method_call, "remote-input-capture-unavailable", error);
         return;
@@ -518,7 +843,14 @@ class RemoteInputPlugin {
           StringValue(args, "sessionId"),
           IntValue(args, "releaseSequence"),
           IntValue(args, "releaseActivationSequence"),
-          DoubleValue(args, "releaseEdgeUnit"));
+          DoubleValue(args, "releaseEdgeUnit"),
+          StringValue(args, "displayId"),
+          StringValue(args, "edge"),
+          EdgeSegment{
+              DoubleValue(args, "segmentStart"),
+              DoubleValue(args, "segmentEnd"),
+          },
+          StringValue(args, "routeId"));
       RespondSuccess(method_call);
       return;
     }
@@ -539,6 +871,7 @@ class RemoteInputPlugin {
                   DoubleValue(args, "segmentStart"),
                   DoubleValue(args, "segmentEnd"),
               },
+              InjectionRoutesValue(args, "mappings"),
               &error)) {
         RespondError(method_call, "remote-input-injection-unavailable", error);
         return;
@@ -581,6 +914,7 @@ class RemoteInputPlugin {
                     const std::string& edge,
                     const std::string& display_id,
                     EdgeSegment segment,
+                    std::vector<CaptureRoute> routes,
                     const std::string& release_hotkey,
                     std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
@@ -592,10 +926,17 @@ class RemoteInputPlugin {
       capture_edge_ = edge;
       capture_display_id_ = display_id;
       capture_segment_ = segment;
+      capture_route_id_.clear();
+      capture_routes_ = routes;
+      capture_pause_release_display_id_.clear();
+      capture_pause_release_edge_.clear();
+      capture_pause_release_route_id_.clear();
+      capture_pause_release_segment_ = EdgeSegment{};
     }
     capture_thread_ = std::thread([this, session_id, edge, display_id,
-                                    segment, release_hotkey] {
-      CaptureLoop(session_id, edge, display_id, segment, release_hotkey);
+                                    segment, routes, release_hotkey] {
+      CaptureLoop(session_id, edge, display_id, segment, routes,
+                  release_hotkey);
     });
     return true;
 #else
@@ -603,6 +944,7 @@ class RemoteInputPlugin {
     (void)edge;
     (void)display_id;
     (void)segment;
+    (void)routes;
     (void)release_hotkey;
     *error = "X11 remote input support is not available in this Linux build";
     return false;
@@ -623,8 +965,14 @@ class RemoteInputPlugin {
     }
     std::lock_guard<std::mutex> lock(capture_mutex_);
     capture_session_id_.clear();
+    capture_route_id_.clear();
     capture_display_id_.clear();
     capture_segment_ = EdgeSegment{};
+    capture_routes_.clear();
+    capture_pause_release_display_id_.clear();
+    capture_pause_release_edge_.clear();
+    capture_pause_release_route_id_.clear();
+    capture_pause_release_segment_ = EdgeSegment{};
 #else
     (void)session_id;
 #endif
@@ -633,7 +981,11 @@ class RemoteInputPlugin {
   void PauseCapture(const std::string& session_id,
                     int64_t release_sequence,
                     int64_t release_activation_sequence,
-                    double release_edge_unit) {
+                    double release_edge_unit,
+                    const std::string& release_display_id,
+                    const std::string& release_edge,
+                    EdgeSegment release_segment,
+                    const std::string& release_route_id) {
 #if HAVE_X11_REMOTE_INPUT
     std::lock_guard<std::mutex> lock(capture_mutex_);
     if (session_id != capture_session_id_) {
@@ -643,11 +995,19 @@ class RemoteInputPlugin {
     capture_pause_release_sequence_ = release_sequence;
     capture_pause_release_activation_sequence_ = release_activation_sequence;
     capture_pause_release_edge_unit_ = release_edge_unit;
+    capture_pause_release_display_id_ = release_display_id;
+    capture_pause_release_edge_ = release_edge;
+    capture_pause_release_segment_ = release_segment;
+    capture_pause_release_route_id_ = release_route_id;
 #else
     (void)session_id;
     (void)release_sequence;
     (void)release_activation_sequence;
     (void)release_edge_unit;
+    (void)release_display_id;
+    (void)release_edge;
+    (void)release_segment;
+    (void)release_route_id;
 #endif
   }
 
@@ -655,6 +1015,7 @@ class RemoteInputPlugin {
                       const std::string& display_id,
                       const std::string& edge,
                       EdgeSegment segment,
+                      std::vector<InjectionRoute> routes,
                       std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
     StopInjection("");
@@ -669,6 +1030,9 @@ class RemoteInputPlugin {
     injection_display_id_ = display_id;
     injection_edge_ = edge;
     injection_segment_ = segment;
+    injection_route_id_.clear();
+    injection_routes_ = routes;
+    injected_cursor_entered_interior_ = false;
     injected_buttons_ = 0;
     injected_keys_.clear();
     EmitDiagnosticForSession(session_id, "linux remote input injection started");
@@ -678,6 +1042,7 @@ class RemoteInputPlugin {
     (void)display_id;
     (void)edge;
     (void)segment;
+    (void)routes;
     *error = "X11 remote input support is not available in this Linux build";
     return false;
 #endif
@@ -699,7 +1064,10 @@ class RemoteInputPlugin {
     injection_session_id_.clear();
     injection_display_id_.clear();
     injection_edge_.clear();
+    injection_route_id_.clear();
     injection_segment_ = EdgeSegment{};
+    injection_routes_.clear();
+    injected_cursor_entered_interior_ = false;
 #else
     (void)session_id;
 #endif
@@ -756,6 +1124,7 @@ class RemoteInputPlugin {
                    const std::string& edge,
                    const std::string& display_id,
                    EdgeSegment segment,
+                   std::vector<CaptureRoute> routes,
                    const std::string& release_hotkey) {
     Display* display = XOpenDisplay(nullptr);
     if (display == nullptr) {
@@ -765,9 +1134,13 @@ class RemoteInputPlugin {
       return;
     }
     const Window root = DefaultRootWindow(display);
-    const ScreenBounds bounds = BoundsForDisplay(display, display_id);
-    const int center_x = bounds.left + bounds.width / 2;
-    const int center_y = bounds.top + bounds.height / 2;
+    std::string active_route_id;
+    std::string active_display_id = display_id;
+    std::string active_edge = edge;
+    EdgeSegment active_segment = segment;
+    ScreenBounds bounds = BoundsForDisplay(display, active_display_id);
+    int center_x = bounds.left + bounds.width / 2;
+    int center_y = bounds.top + bounds.height / 2;
     int xi_opcode = 0;
     const bool raw_motion_disabled = ShouldDisableRawMotion();
     const bool raw_motion_enabled =
@@ -787,6 +1160,7 @@ class RemoteInputPlugin {
     int last_y = center_y;
     int entry_x = center_x;
     int entry_y = center_y;
+    double capture_activation_edge_unit = -1;
     bool has_last = false;
     double raw_remainder_x = 0;
     double raw_remainder_y = 0;
@@ -812,9 +1186,12 @@ class RemoteInputPlugin {
 
     while (capture_running_.load()) {
       if (ConsumePauseRequest(session_id, activation_sequence, display, root,
-                              edge, segment, &active, &pointer_grabbed,
-                              &keyboard_grabbed, &pending_active_start,
-                              &capture_buttons, &has_last)) {
+                              &active_route_id, &active_display_id,
+                              &active_edge, &active_segment, &bounds,
+                              &center_x, &center_y, &active,
+                              &pointer_grabbed, &keyboard_grabbed,
+                              &pending_active_start, &capture_buttons,
+                              &has_last)) {
         continue;
       }
 
@@ -828,7 +1205,25 @@ class RemoteInputPlugin {
           last_x = x;
           last_y = y;
           has_last = true;
-          if (IsEdgeActivation(bounds, edge, segment, x, y, delta_x, delta_y)) {
+          const DoublePoint previous_point{
+              static_cast<double>(x - delta_x),
+              static_cast<double>(y - delta_y),
+          };
+          const DoublePoint current_point{static_cast<double>(x),
+                                          static_cast<double>(y)};
+          const auto crossing =
+              ResolveCaptureCrossing(display, previous_point, current_point,
+                                      routes, display_id, edge, segment);
+          if (crossing.has_value()) {
+            const CaptureRoute route = crossing->route;
+            active_route_id = route.route_id;
+            active_display_id = route.source_display_id;
+            active_edge = route.source_edge;
+            active_segment = route.source_segment;
+            capture_activation_edge_unit = crossing->edge_unit;
+            bounds = BoundsForDisplay(display, active_display_id);
+            center_x = bounds.left + bounds.width / 2;
+            center_y = bounds.top + bounds.height / 2;
             std::string grab_error;
             if (!GrabCapture(display, root, hidden_cursor, &pointer_grabbed,
                              &keyboard_grabbed, &grab_error)) {
@@ -855,9 +1250,9 @@ class RemoteInputPlugin {
             }
             EmitDiagnosticForSession(
                 session_id,
-                "linux remote input capture active edge=" + edge);
+                "linux remote input capture active edge=" + active_edge);
             std::ostringstream trace;
-            trace << "linux remote input native active edge=" << edge
+            trace << "linux remote input native active edge=" << active_edge
                   << " x=" << x << " y=" << y
                   << " dx=" << delta_x << " dy=" << delta_y
                   << " rawMotion=" << (raw_motion_enabled ? 1 : 0);
@@ -897,7 +1292,7 @@ class RemoteInputPlugin {
                         << " rawDx=" << raw_delta_x
                         << " rawDy=" << raw_delta_y
                         << " activeStart=" << (active_start ? 1 : 0)
-                        << " edge=" << edge
+                        << " edge=" << active_edge
                         << " payload=" << payload_x << "," << payload_y;
                   TraceRemoteInput(trace.str());
                   mouse_trace_count++;
@@ -906,8 +1301,15 @@ class RemoteInputPlugin {
                     session_id, "mouseMove", ++sequence,
                     JsonBytes(MouseMovePayload(display, payload_x, payload_y,
                                                delta_x, delta_y, active_start,
-                                               edge, capture_buttons, bounds,
-                                               segment)));
+                                               active_edge, active_route_id,
+                                               capture_buttons, bounds,
+                                               active_segment,
+                                               active_start
+                                                   ? capture_activation_edge_unit
+                                                   : -1)));
+                if (active_start) {
+                  capture_activation_edge_unit = -1;
+                }
               }
             }
             XFreeEventData(display, &event.xcookie);
@@ -930,25 +1332,30 @@ class RemoteInputPlugin {
           }
           const bool active_start = pending_active_start;
           pending_active_start = false;
-              const int payload_x = active_start ? entry_x : x;
-              const int payload_y = active_start ? entry_y : y;
-              if (delta_x != 0 || delta_y != 0 || active_start) {
-                if (mouse_trace_count < 60) {
-                  std::ostringstream trace;
-                  trace << "linux remote input native mouse motion seq="
-                        << (sequence + 1)
-                        << " dx=" << delta_x << " dy=" << delta_y
-                        << " activeStart=" << (active_start ? 1 : 0)
-                        << " edge=" << edge
-                        << " payload=" << payload_x << "," << payload_y;
-                  TraceRemoteInput(trace.str());
-                  mouse_trace_count++;
-                }
-                EmitInputEvent(
-                    session_id, "mouseMove", ++sequence,
-                    JsonBytes(MouseMovePayload(display, payload_x, payload_y,
-                                           delta_x, delta_y, active_start, edge,
-                                           capture_buttons, bounds, segment)));
+          const int payload_x = active_start ? entry_x : x;
+          const int payload_y = active_start ? entry_y : y;
+          if (delta_x != 0 || delta_y != 0 || active_start) {
+            if (mouse_trace_count < 60) {
+              std::ostringstream trace;
+              trace << "linux remote input native mouse motion seq="
+                    << (sequence + 1)
+                    << " dx=" << delta_x << " dy=" << delta_y
+                    << " activeStart=" << (active_start ? 1 : 0)
+                    << " edge=" << active_edge
+                    << " payload=" << payload_x << "," << payload_y;
+              TraceRemoteInput(trace.str());
+              mouse_trace_count++;
+            }
+            EmitInputEvent(
+                session_id, "mouseMove", ++sequence,
+                JsonBytes(MouseMovePayload(
+                    display, payload_x, payload_y, delta_x, delta_y,
+                    active_start, active_edge, active_route_id,
+                    capture_buttons, bounds, active_segment,
+                    active_start ? capture_activation_edge_unit : -1)));
+            if (active_start) {
+              capture_activation_edge_unit = -1;
+            }
           }
           if (ShouldRecenter(bounds, x, y)) {
             WarpPointer(display, root, center_x, center_y);
@@ -1002,8 +1409,13 @@ class RemoteInputPlugin {
                            uint64_t activation_sequence,
                            Display* display,
                            Window root,
-                           const std::string& edge,
-                           const EdgeSegment& segment,
+                           std::string* active_route_id,
+                           std::string* active_display_id,
+                           std::string* active_edge,
+                           EdgeSegment* active_segment,
+                           ScreenBounds* bounds,
+                           int* center_x,
+                           int* center_y,
                            bool* active,
                            bool* pointer_grabbed,
                            bool* keyboard_grabbed,
@@ -1013,6 +1425,10 @@ class RemoteInputPlugin {
     int64_t release_sequence = 0;
     int64_t release_activation_sequence = 0;
     double release_edge_unit = 0;
+    std::string release_display_id;
+    std::string release_edge;
+    std::string release_route_id;
+    EdgeSegment release_segment;
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
       if (!capture_pause_requested_) {
@@ -1022,6 +1438,10 @@ class RemoteInputPlugin {
       release_sequence = capture_pause_release_sequence_;
       release_activation_sequence = capture_pause_release_activation_sequence_;
       release_edge_unit = capture_pause_release_edge_unit_;
+      release_display_id = capture_pause_release_display_id_;
+      release_edge = capture_pause_release_edge_;
+      release_segment = capture_pause_release_segment_;
+      release_route_id = capture_pause_release_route_id_;
     }
     if (release_activation_sequence > 0 &&
         activation_sequence > static_cast<uint64_t>(release_activation_sequence)) {
@@ -1037,14 +1457,26 @@ class RemoteInputPlugin {
       XUngrabPointer(display, CurrentTime);
       *pointer_grabbed = false;
     }
-    MoveCaptureCursorToLocalEdge(display, root, edge, segment,
+    if (!release_edge.empty()) {
+      *active_edge = release_edge;
+      *active_segment = release_segment;
+    }
+    if (!release_display_id.empty()) {
+      *active_display_id = release_display_id;
+    }
+    *active_route_id = release_route_id;
+    *bounds = BoundsForDisplay(display, *active_display_id);
+    *center_x = bounds->left + bounds->width / 2;
+    *center_y = bounds->top + bounds->height / 2;
+    MoveCaptureCursorToLocalEdge(display, root, *active_display_id,
+                                 *active_edge, *active_segment,
                                  release_edge_unit);
     *active = false;
     *pending_active_start = false;
     *capture_buttons = 0;
     *has_last = false;
     std::ostringstream diagnostic;
-    diagnostic << "linux remote input capture paused edge=" << edge
+    diagnostic << "linux remote input capture paused edge=" << *active_edge
                << " releaseSequence=" << release_sequence
                << " releaseActivationSequence=" << release_activation_sequence;
     EmitDiagnosticForSession(session_id, diagnostic.str());
@@ -1190,6 +1622,142 @@ class RemoteInputPlugin {
     return true;
   }
 
+  std::vector<CaptureRoute> CaptureRoutesForMatching(
+      const std::vector<CaptureRoute>& routes,
+      const std::string& display_id,
+      const std::string& edge,
+      const EdgeSegment& segment) const {
+    if (!routes.empty()) {
+      return routes;
+    }
+    return std::vector<CaptureRoute>{CaptureRoute{
+        "",
+        display_id,
+        edge,
+        segment,
+    }};
+  }
+
+  std::optional<CaptureCrossing> ResolveCaptureCrossing(
+      Display* display,
+      DoublePoint previous_point,
+      DoublePoint current_point,
+      const std::vector<CaptureRoute>& configured_routes,
+      const std::string& display_id,
+      const std::string& edge,
+      const EdgeSegment& segment) const {
+    const std::vector<CaptureRoute> routes =
+        CaptureRoutesForMatching(configured_routes, display_id, edge, segment);
+    std::vector<CaptureCrossing> candidates;
+    for (const auto& route : routes) {
+      const auto crossing =
+          CaptureCrossingForRoute(display, route, previous_point,
+                                  current_point, routes);
+      if (crossing.has_value()) {
+        candidates.push_back(crossing.value());
+      }
+    }
+    if (candidates.empty()) {
+      return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const CaptureCrossing& lhs, const CaptureCrossing& rhs) {
+                if (lhs.strict_segment_hit != rhs.strict_segment_hit) {
+                  return lhs.strict_segment_hit;
+                }
+                if (std::abs(lhs.normal_motion) !=
+                    std::abs(rhs.normal_motion)) {
+                  return std::abs(lhs.normal_motion) >
+                         std::abs(rhs.normal_motion);
+                }
+                if (lhs.travel_to_intersection !=
+                    rhs.travel_to_intersection) {
+                  return lhs.travel_to_intersection <
+                         rhs.travel_to_intersection;
+                }
+                return lhs.route.route_id < rhs.route.route_id;
+              });
+    return candidates.front();
+  }
+
+  std::optional<CaptureCrossing> CaptureCrossingForRoute(
+      Display* display,
+      const CaptureRoute& route,
+      DoublePoint previous_point,
+      DoublePoint current_point,
+      const std::vector<CaptureRoute>& routes) const {
+    const ScreenBounds bounds =
+        BoundsForDisplay(display, route.source_display_id);
+    const double delta_x = current_point.x - previous_point.x;
+    const double delta_y = current_point.y - previous_point.y;
+    if (delta_x == 0 && delta_y == 0) {
+      return std::nullopt;
+    }
+    const double line = EdgeLine(bounds, route.source_edge);
+    const auto t = IntersectionParameter(route.source_edge, line,
+                                         previous_point, delta_x, delta_y);
+    if (!t.has_value() || t.value() < 0 || t.value() > 1) {
+      return std::nullopt;
+    }
+    const double normal_motion =
+        EdgeNormalMotion(route.source_edge, delta_x, delta_y);
+    if (normal_motion <= 0) {
+      return std::nullopt;
+    }
+    const DoublePoint intersection{
+        previous_point.x + delta_x * t.value(),
+        previous_point.y + delta_y * t.value(),
+    };
+    const double coordinate = AxisCoordinate(intersection, route.source_edge);
+    if (!SegmentContains(coordinate, route.source_segment,
+                         route.source_display_id, route.source_edge, routes)) {
+      return std::nullopt;
+    }
+    const double length = route.source_segment.end - route.source_segment.start;
+    if (length <= 0) {
+      return std::nullopt;
+    }
+    CaptureCrossing crossing;
+    crossing.route = route;
+    crossing.edge_unit =
+        ClampedUnit((coordinate - route.source_segment.start) / length);
+    crossing.strict_segment_hit = coordinate > route.source_segment.start &&
+                                  coordinate < route.source_segment.end;
+    crossing.normal_motion = normal_motion;
+    crossing.travel_to_intersection =
+        std::hypot(intersection.x - previous_point.x,
+                   intersection.y - previous_point.y);
+    return crossing;
+  }
+
+  bool SegmentContains(double coordinate,
+                       const EdgeSegment& segment,
+                       const std::string& display_id,
+                       const std::string& edge,
+                       const std::vector<CaptureRoute>& routes) const {
+    if (!HasSegment(segment)) {
+      return true;
+    }
+    if (coordinate < segment.start) {
+      return false;
+    }
+    if (coordinate < segment.end) {
+      return true;
+    }
+    if (coordinate != segment.end) {
+      return false;
+    }
+    for (const auto& other : routes) {
+      if (other.source_display_id == display_id &&
+          other.source_edge == edge &&
+          other.source_segment.start <= segment.end &&
+          other.source_segment.end > segment.end) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool IsEdgeActivation(const ScreenBounds& bounds,
                         const std::string& edge,
                         const EdgeSegment& segment,
@@ -1226,10 +1794,11 @@ class RemoteInputPlugin {
 
   void MoveCaptureCursorToLocalEdge(Display* display,
                                     Window root,
+                                    const std::string& display_id,
                                     const std::string& edge,
                                     const EdgeSegment& segment,
                                     double edge_unit = -1) const {
-    const ScreenBounds bounds = BoundsForDisplay(display, capture_display_id_);
+    const ScreenBounds bounds = BoundsForDisplay(display, display_id);
     int x = bounds.left + bounds.width / 2;
     int y = bounds.top + bounds.height / 2;
     unsigned int mask = 0;
@@ -1369,7 +1938,22 @@ class RemoteInputPlugin {
     return EdgeUnitForPoint(x, y, injection_edge_, injection_segment_);
   }
 
+  void UpdateInjectionRouteFromPayload(const std::string& json) {
+    injection_display_id_ =
+        JsonString(json, "sinkDisplayId", injection_display_id_);
+    injection_edge_ = JsonString(json, "sinkEdge", injection_edge_);
+    injection_route_id_ = JsonString(json, "routeId", injection_route_id_);
+    const double segment_start =
+        JsonNumber(json, "sinkSegmentStart", injection_segment_.start);
+    const double segment_end =
+        JsonNumber(json, "sinkSegmentEnd", injection_segment_.end);
+    if (segment_end > segment_start) {
+      injection_segment_ = EdgeSegment{segment_start, segment_end};
+    }
+  }
+
   void SetCursorPosForEntryLocked(const std::string& json) {
+    UpdateInjectionRouteFromPayload(json);
     const double edge_unit = JsonNumber(json, "edgeUnit", -1);
     if (edge_unit >= 0 && HasSegment(injection_segment_) &&
         !injection_edge_.empty()) {
@@ -1431,7 +2015,27 @@ class RemoteInputPlugin {
     unsigned int mask = 0;
     QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
                  &current_x, &current_y, &mask);
-    if (IsInjectionReverseRelease(json, current_x, current_y, delta_x,
+    const bool active_start = JsonBool(json, "activeStart");
+    const auto routed_release =
+        !active_start && injected_cursor_entered_interior_
+            ? ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
+                                             delta_y)
+            : std::nullopt;
+    if (routed_release.has_value()) {
+      const std::string session_id = injection_session_id_;
+      const auto release_route = routed_release.value();
+      ReleaseInjectedButtonsLocked();
+      ReleaseInjectedKeysLocked();
+      ReleaseCommonModifierKeysLocked();
+      EmitReleaseForSession(
+          session_id, "edge", 0, 0, release_route.edge_unit, true,
+          release_route.route_id, release_route.source_display_id,
+          release_route.source_edge, release_route.source_segment.start,
+          release_route.source_segment.end);
+      return;
+    }
+    if (!active_start && injected_cursor_entered_interior_ &&
+        IsInjectionReverseRelease(json, current_x, current_y, delta_x,
                                   delta_y)) {
       const std::string session_id = injection_session_id_;
       const double edge_unit = InjectionEdgeUnit(current_x, current_y);
@@ -1441,8 +2045,15 @@ class RemoteInputPlugin {
       EmitReleaseForSession(session_id, "edge", 0, 0, edge_unit);
       return;
     }
-    if (JsonBool(json, "activeStart")) {
+    int final_x = current_x;
+    int final_y = current_y;
+    if (active_start) {
       SetCursorPosForEntryLocked(json);
+      injected_cursor_entered_interior_ = false;
+      QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
+                   &current_x, &current_y, &mask);
+      final_x = current_x;
+      final_y = current_y;
     }
     const int buttons =
         static_cast<int>(std::lround(JsonNumber(json, "buttons", -1)));
@@ -1452,8 +2063,156 @@ class RemoteInputPlugin {
     if (delta_x != 0 || delta_y != 0) {
       XTestFakeRelativeMotionEvent(injection_display_, delta_x, delta_y,
                                    CurrentTime);
+      final_x += delta_x;
+      final_y += delta_y;
     }
+    UpdateInjectedCursorInteriorState(json, final_x, final_y);
     XFlush(injection_display_);
+  }
+
+  std::optional<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit(
+      int x,
+      int y,
+      int delta_x,
+      int delta_y) const {
+    if (injection_routes_.empty()) {
+      return std::nullopt;
+    }
+    const DoublePoint previous_point{static_cast<double>(x),
+                                     static_cast<double>(y)};
+    const DoublePoint current_point{static_cast<double>(x + delta_x),
+                                    static_cast<double>(y + delta_y)};
+    const auto crossing =
+        ResolveInjectionReleaseCrossing(previous_point, current_point);
+    if (!crossing.has_value()) {
+      return std::nullopt;
+    }
+    const auto route = crossing->route;
+    return InjectionReleaseRoute{
+        route.route_id,
+        route.source_display_id,
+        route.source_edge,
+        route.source_segment,
+        crossing->edge_unit,
+    };
+  }
+
+  std::optional<InjectionReleaseCrossing> ResolveInjectionReleaseCrossing(
+      DoublePoint previous_point,
+      DoublePoint current_point) const {
+    std::vector<InjectionReleaseCrossing> candidates;
+    for (const auto& route : injection_routes_) {
+      const auto crossing =
+          InjectionReleaseCrossingForRoute(route, previous_point,
+                                           current_point);
+      if (crossing.has_value()) {
+        candidates.push_back(crossing.value());
+      }
+    }
+    if (candidates.empty()) {
+      return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [this](const InjectionReleaseCrossing& lhs,
+                     const InjectionReleaseCrossing& rhs) {
+                if (lhs.strict_segment_hit != rhs.strict_segment_hit) {
+                  return lhs.strict_segment_hit;
+                }
+                if (std::abs(lhs.normal_motion) !=
+                    std::abs(rhs.normal_motion)) {
+                  return std::abs(lhs.normal_motion) >
+                         std::abs(rhs.normal_motion);
+                }
+                if (lhs.travel_to_intersection !=
+                    rhs.travel_to_intersection) {
+                  return lhs.travel_to_intersection <
+                         rhs.travel_to_intersection;
+                }
+                if (!injection_route_id_.empty() &&
+                    (lhs.route.route_id == injection_route_id_) !=
+                        (rhs.route.route_id == injection_route_id_)) {
+                  return lhs.route.route_id == injection_route_id_;
+                }
+                return lhs.route.route_id < rhs.route.route_id;
+              });
+    return candidates.front();
+  }
+
+  std::optional<InjectionReleaseCrossing> InjectionReleaseCrossingForRoute(
+      const InjectionRoute& route,
+      DoublePoint previous_point,
+      DoublePoint current_point) const {
+    const ScreenBounds bounds =
+        BoundsForDisplay(injection_display_, route.sink_display_id);
+    const double delta_x = current_point.x - previous_point.x;
+    const double delta_y = current_point.y - previous_point.y;
+    if (delta_x == 0 && delta_y == 0) {
+      return std::nullopt;
+    }
+    const double line = EdgeLine(bounds, route.sink_edge);
+    const auto t = IntersectionParameter(route.sink_edge, line,
+                                         previous_point, delta_x, delta_y);
+    if (!t.has_value() || t.value() < 0 || t.value() > 1) {
+      return std::nullopt;
+    }
+    const double normal_motion =
+        EdgeNormalMotion(route.sink_edge, delta_x, delta_y);
+    if (normal_motion <= 0) {
+      return std::nullopt;
+    }
+    const DoublePoint intersection{
+        previous_point.x + delta_x * t.value(),
+        previous_point.y + delta_y * t.value(),
+    };
+    const double coordinate = AxisCoordinate(intersection, route.sink_edge);
+    if (!SegmentContains(coordinate, route.sink_segment,
+                         route.sink_display_id, route.sink_edge,
+                         injection_routes_)) {
+      return std::nullopt;
+    }
+    const double length = route.sink_segment.end - route.sink_segment.start;
+    if (length <= 0) {
+      return std::nullopt;
+    }
+    InjectionReleaseCrossing crossing;
+    crossing.route = route;
+    crossing.edge_unit =
+        ClampedUnit((coordinate - route.sink_segment.start) / length);
+    crossing.strict_segment_hit = coordinate > route.sink_segment.start &&
+                                  coordinate < route.sink_segment.end;
+    crossing.normal_motion = normal_motion;
+    crossing.travel_to_intersection =
+        std::hypot(intersection.x - previous_point.x,
+                   intersection.y - previous_point.y);
+    return crossing;
+  }
+
+  bool SegmentContains(double coordinate,
+                       const EdgeSegment& segment,
+                       const std::string& display_id,
+                       const std::string& edge,
+                       const std::vector<InjectionRoute>& routes) const {
+    if (!HasSegment(segment)) {
+      return true;
+    }
+    if (coordinate < segment.start) {
+      return false;
+    }
+    if (coordinate < segment.end) {
+      return true;
+    }
+    if (coordinate != segment.end) {
+      return false;
+    }
+    for (const auto& other : routes) {
+      if (other.sink_display_id == display_id &&
+          other.sink_edge == edge &&
+          other.sink_segment.start <= segment.end &&
+          other.sink_segment.end > segment.end) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool IsInjectionReverseRelease(const std::string& json,
@@ -1496,6 +2255,50 @@ class RemoteInputPlugin {
       return y <= bounds.top + kEdgeThreshold && delta_y < 0;
     }
     return x <= bounds.left + kEdgeThreshold && delta_x < 0;
+  }
+
+  void UpdateInjectedCursorInteriorState(const std::string& json,
+                                         int x,
+                                         int y) {
+    if (JsonBool(json, "activeStart")) {
+      injected_cursor_entered_interior_ = false;
+      return;
+    }
+    if (injected_cursor_entered_interior_) {
+      return;
+    }
+    const bool using_configured_edge =
+        HasSegment(injection_segment_) && !injection_edge_.empty();
+    const ScreenBounds bounds =
+        using_configured_edge
+            ? BoundsForDisplay(injection_display_, injection_display_id_)
+            : BoundsFor(injection_display_);
+    const std::string edge =
+        using_configured_edge ? injection_edge_ : JsonString(json, "edge", "right");
+    constexpr int distance = 32;
+    bool interior = false;
+    if (using_configured_edge) {
+      if (edge == "left") {
+        interior = x >= bounds.left + distance;
+      } else if (edge == "right") {
+        interior = x <= bounds.right() - distance;
+      } else if (edge == "top") {
+        interior = y >= bounds.top + distance;
+      } else if (edge == "bottom") {
+        interior = y <= bounds.bottom() - distance;
+      }
+    } else if (edge == "left") {
+      interior = x <= bounds.right() - distance;
+    } else if (edge == "top") {
+      interior = y <= bounds.bottom() - distance;
+    } else if (edge == "bottom") {
+      interior = y >= bounds.top + distance;
+    } else {
+      interior = x >= bounds.left + distance;
+    }
+    if (interior) {
+      injected_cursor_entered_interior_ = true;
+    }
   }
 
   void SendMouseButtonLocked(int button, bool down) {
@@ -1659,7 +2462,13 @@ class RemoteInputPlugin {
                              const std::string& reason,
                              int64_t sequence,
                              int64_t activation_sequence,
-                             double edge_unit = 0) {
+                             double edge_unit = 0,
+                             bool source_edge_unit = false,
+                             const std::string& route_id = "",
+                             const std::string& source_display_id = "",
+                             const std::string& source_edge = "",
+                             double source_segment_start = 0,
+                             double source_segment_end = 0) {
     if (session_id.empty()) {
       return;
     }
@@ -1671,6 +2480,12 @@ class RemoteInputPlugin {
     event->sequence = sequence;
     event->activation_sequence = activation_sequence;
     event->edge_unit = edge_unit;
+    event->source_edge_unit = source_edge_unit;
+    event->route_id = route_id;
+    event->source_display_id = source_display_id;
+    event->source_edge = source_edge;
+    event->source_segment_start = source_segment_start;
+    event->source_segment_end = source_segment_end;
     g_main_context_invoke(nullptr, InvokeMainThreadEvent, event);
   }
 
@@ -1702,22 +2517,31 @@ class RemoteInputPlugin {
 #if HAVE_X11_REMOTE_INPUT
   std::mutex capture_mutex_;
   std::string capture_session_id_;
+  std::string capture_route_id_;
   std::string capture_edge_ = "right";
   std::string capture_display_id_;
   EdgeSegment capture_segment_;
+  std::vector<CaptureRoute> capture_routes_;
   std::atomic<bool> capture_running_{false};
   std::thread capture_thread_;
   bool capture_pause_requested_ = false;
   int64_t capture_pause_release_sequence_ = 0;
   int64_t capture_pause_release_activation_sequence_ = 0;
   double capture_pause_release_edge_unit_ = 0;
+  std::string capture_pause_release_display_id_;
+  std::string capture_pause_release_edge_;
+  std::string capture_pause_release_route_id_;
+  EdgeSegment capture_pause_release_segment_;
 
   std::mutex injection_mutex_;
   Display* injection_display_ = nullptr;
   std::string injection_session_id_;
   std::string injection_display_id_;
   std::string injection_edge_;
+  std::string injection_route_id_;
   EdgeSegment injection_segment_;
+  std::vector<InjectionRoute> injection_routes_;
+  bool injected_cursor_entered_interior_ = false;
   int injected_buttons_ = 0;
   std::vector<int> injected_keys_;
 #endif

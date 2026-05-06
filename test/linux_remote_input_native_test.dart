@@ -101,5 +101,35 @@ void main() {
       expect(plugin, contains('RawMotionDelta'));
       expect(plugin, contains('raw_remainder_x'));
     });
+
+    test('routes X11 multi-display portals with stable route ids', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+
+      expect(plugin, contains('struct CaptureRoute'));
+      expect(plugin, contains('struct InjectionRoute'));
+      expect(plugin, contains('struct InjectionReleaseRoute'));
+      expect(plugin, contains('CaptureRoutesValue'));
+      expect(plugin, contains('InjectionRoutesValue'));
+      expect(plugin, contains('capture_routes_'));
+      expect(plugin, contains('injection_routes_'));
+      expect(plugin, contains('ResolveCaptureCrossing'));
+      expect(plugin, contains('ResolveInjectionReleaseCrossing'));
+      expect(plugin, contains('UpdateInjectionRouteFromPayload'));
+      expect(plugin, contains('routeId'));
+      expect(plugin, contains('JsonEscapedString'));
+      expect(plugin, contains('JsonStringValue'));
+      expect(plugin, contains('"sourceEdgeUnit"'));
+      expect(plugin, contains('"sourceDisplayId"'));
+      expect(plugin, contains('"sourceEdge"'));
+      expect(plugin, contains('"sourceSegmentStart"'));
+      expect(plugin, contains('"sourceSegmentEnd"'));
+      expect(plugin, contains('other.source_segment.start <= segment.end'));
+      expect(plugin, contains('other.sink_segment.start <= segment.end'));
+      expect(
+        plugin,
+        isNot(contains('for (const auto& route : capture_routes_) {\n'
+            '        if (IsEdgeActivation(')),
+      );
+    });
   });
 }
