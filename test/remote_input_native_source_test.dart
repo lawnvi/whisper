@@ -262,10 +262,18 @@ void main() {
 
     test('preserves native modifier event flags while adding active modifiers',
         () {
+      final postKeyboardEvent = RegExp(
+        r'private func postKeyboardEvent\([\s\S]*?\n  private func handleSystemControlArrowShortcut',
+      ).firstMatch(source)!.group(0)!;
+
       expect(
-        source,
+        postKeyboardEvent,
         contains(
             'keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)'),
+      );
+      expect(
+        postKeyboardEvent,
+        isNot(contains('keyEvent.flags = injectedModifierFlags')),
       );
     });
 

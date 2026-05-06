@@ -973,7 +973,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         keyEvent.type = .flagsChanged
         keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)
       } else {
-        keyEvent.flags = injectedModifierFlags
+        keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)
       }
       let eventType = isModifier ? "flagsChanged" : (down ? "keyDown" : "keyUp")
       os_log(
