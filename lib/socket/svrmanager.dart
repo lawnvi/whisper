@@ -720,6 +720,7 @@ class WsSvrManager {
             isMutuallyTrusted: isMutuallyTrusted,
             localCanInject: localCanInject,
             sendControl: sendRemoteInputControl,
+            remotePlatform: remoteDevice?.platform ?? '',
           );
           final inputState = RemoteInputCoordinator.shared.state;
           _remoteInputTrace(

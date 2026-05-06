@@ -380,8 +380,14 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       ]
     case "mouseWheel":
       payload = [
+        "sourcePlatform": "macos",
         "deltaX": event.getIntegerValueField(.scrollWheelEventDeltaAxis2),
-        "deltaY": event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        "deltaY": event.getIntegerValueField(.scrollWheelEventDeltaAxis1),
+        "pointDeltaX": event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2),
+        "pointDeltaY": event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1),
+        "fixedDeltaX": event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2),
+        "fixedDeltaY": event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1),
+        "isContinuous": event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
       ]
     case "key":
       let macKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))

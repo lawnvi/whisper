@@ -808,6 +808,24 @@ abstract class AppLocalizations {
   /// **'只影响本机播放对端共享声音，过高可能产生削波'**
   String get audioSharePlaybackGainDesc;
 
+  /// No description provided for @remoteInputScrollMultiplierTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享滚轮速度'**
+  String get remoteInputScrollMultiplierTitle;
+
+  /// No description provided for @remoteInputScrollMultiplierSetting.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠共享滚轮速度：{multiplier}'**
+  String remoteInputScrollMultiplierSetting(String multiplier);
+
+  /// No description provided for @remoteInputScrollMultiplierDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'只影响本机作为被控端时接收的远端滚轮事件'**
+  String get remoteInputScrollMultiplierDesc;
+
   /// No description provided for @audioShareUnsupportedCapture.
   ///
   /// In zh, this message translates to:

@@ -402,6 +402,65 @@ void main() {
       expect(calls.map((call) => call.method), contains('injectEvent'));
     });
 
+    test('sink normalizes legacy wheel packets before injection', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        platformKindProvider: () => RemoteInputPlatformKind.macos,
+        scrollMultiplierProvider: () async => 2,
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-wheel-normalize-1',
+        sourcePeerId: 'win',
+        sinkPeerId: 'mac',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourcePlatform: 'windows',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(
+        RemoteInputPacketFrame(
+          sessionId: 'input-wheel-normalize-1',
+          sequence: 1,
+          timestampMicros: 2,
+          eventType: RemoteInputEventType.mouseWheel,
+          payload: Uint8List.fromList(
+            utf8.encode(jsonEncode(<String, dynamic>{
+              'deltaX': 0,
+              'deltaY': 120,
+            })),
+          ),
+        ).encode(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final injectCall =
+          calls.lastWhere((call) => call.method == 'injectEvent');
+      final args = injectCall.arguments as Map<Object?, Object?>;
+      final payload = jsonDecode(
+        utf8.decode(args['payload'] as Uint8List),
+      ) as Map<String, dynamic>;
+
+      expect(payload['scrollUnit'], 'wheel');
+      expect(payload['scrollDeltaY'], 1);
+      expect(payload['deltaY'], 240);
+      expect(payload['targetScrollUnit'], 'pixel');
+    });
+
     test('rejects a competing offer while a local session is live', () async {
       final transport = _FakeRemoteInputTransport();
       final sentControls = <RemoteInputControlMessage>[];

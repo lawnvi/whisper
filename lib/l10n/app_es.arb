@@ -165,6 +165,16 @@
     }
   },
   "audioSharePlaybackGainDesc": "Solo afecta al audio compartido reproducido en este dispositivo. Valores altos pueden recortar",
+  "remoteInputScrollMultiplierTitle": "Velocidad de desplazamiento compartido",
+  "remoteInputScrollMultiplierSetting": "Velocidad de desplazamiento compartido: {multiplier}",
+  "@remoteInputScrollMultiplierSetting": {
+    "placeholders": {
+      "multiplier": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputScrollMultiplierDesc": "Solo afecta eventos de rueda remotos recibidos cuando este dispositivo esta siendo controlado",
   "audioShareUnsupportedCapture": "Este dispositivo no admite captura de audio del sistema",
   "audioShareRequestingPlayback": "Solicitando al otro dispositivo que reproduzca este audio",
   "audioShareFailed": "Error al compartir audio: {error}",

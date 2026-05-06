@@ -19,6 +19,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_layout_editor.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -56,6 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _ftpServer = SimpleFtpServer().isActive();
   int _ftpPort = 8021;
   double _audioSharePlaybackGain = 1.0;
+  double _remoteInputScrollMultiplier = 1.0;
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
@@ -103,6 +105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await LocalSetting().androidBackgroundKeepAlive();
     final audioSharePlaybackGain =
         await LocalSetting().audioSharePlaybackGain();
+    final remoteInputScrollMultiplier =
+        await LocalSetting().remoteInputScrollMultiplier();
     if (!mounted) {
       return;
     }
@@ -120,6 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _launchAtStartup = launchAtStartup;
       _androidBackgroundKeepAlive = androidBackgroundKeepAlive;
       _audioSharePlaybackGain = audioSharePlaybackGain;
+      _remoteInputScrollMultiplier = remoteInputScrollMultiplier;
     });
   }
 
@@ -420,6 +425,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: palette.textMuted,
                       ),
                     ),
+                    if (isDesktop())
+                      _buildSettingItem(
+                        l10n.remoteInputScrollMultiplierSetting(
+                          _remoteInputScrollMultiplierLabel(
+                            _remoteInputScrollMultiplier,
+                          ),
+                        ),
+                        Icon(
+                          Icons.mouse_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: l10n.remoteInputScrollMultiplierDesc,
+                        onTap: _showRemoteInputScrollMultiplierSheet,
+                        trailing: Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: palette.textMuted,
+                        ),
+                      ),
                     if (!isMobile())
                       _buildSettingItem(
                         AppLocalizations.of(context)?.close2tray ?? '关闭时隐藏到托盘',
@@ -907,6 +933,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'x${gain.toStringAsFixed(1)}';
   }
 
+  String _remoteInputScrollMultiplierLabel(double multiplier) {
+    return 'x${multiplier.toStringAsFixed(1)}';
+  }
+
   Future<void> _showAudioSharePlaybackGainSheet() async {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
@@ -951,6 +981,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                       setState(() {
                         _audioSharePlaybackGain = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              cancelButton: CupertinoActionSheetAction(
+                child: Text(
+                  l10n.confirm,
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showRemoteInputScrollMultiplierSheet() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    var selectedMultiplier = _remoteInputScrollMultiplier;
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return CupertinoActionSheet(
+              title: Text(
+                l10n.remoteInputScrollMultiplierTitle,
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
+              message: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _remoteInputScrollMultiplierLabel(selectedMultiplier),
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  CupertinoSlider(
+                    value: selectedMultiplier,
+                    min: 0.5,
+                    max: 3.0,
+                    divisions: 25,
+                    onChanged: (value) {
+                      setModalState(() {
+                        selectedMultiplier = value;
+                      });
+                    },
+                    onChangeEnd: (value) async {
+                      await LocalSetting().setRemoteInputScrollMultiplier(
+                        value,
+                      );
+                      RemoteInputCoordinator.shared.updateScrollMultiplier(
+                        value,
+                      );
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _remoteInputScrollMultiplier = value;
                       });
                     },
                   ),

@@ -367,5 +367,13 @@ void main() {
       expect(source, contains('remote key inject session='));
       expect(source, contains('post remote key mac='));
     });
+
+    test('captures macOS precise scroll metadata for normalization', () {
+      expect(source, contains('scrollWheelEventPointDeltaAxis1'));
+      expect(source, contains('scrollWheelEventPointDeltaAxis2'));
+      expect(source, contains('scrollWheelEventIsContinuous'));
+      expect(source, contains('"pointDeltaY"'));
+      expect(source, contains('"isContinuous"'));
+    });
   });
 }

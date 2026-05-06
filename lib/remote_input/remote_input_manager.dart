@@ -69,6 +69,8 @@ class RemoteInputManager {
     required String sinkPeerId,
     required RemoteInputEdge layoutEdge,
     required String releaseHotkey,
+    String sourcePlatform = '',
+    String sinkPlatform = '',
   }) {
     final sessionId = _uuid.v4();
     _sessions[sessionId] = RemoteInputSession(
@@ -88,10 +90,15 @@ class RemoteInputManager {
       releaseHotkey: releaseHotkey,
       transport: RemoteInputTransport.websocket,
       path: '/input',
+      sourcePlatform: sourcePlatform,
+      sinkPlatform: sinkPlatform,
     );
   }
 
-  RemoteInputControlMessage acceptOffer(RemoteInputControlMessage offer) {
+  RemoteInputControlMessage acceptOffer(
+    RemoteInputControlMessage offer, {
+    String sinkPlatform = '',
+  }) {
     if (offer.layoutEdge == null) {
       return RemoteInputControlMessage(
         action: RemoteInputControlAction.error,
@@ -118,6 +125,8 @@ class RemoteInputManager {
       path: offer.path,
       layoutEdge: offer.layoutEdge,
       releaseHotkey: offer.releaseHotkey,
+      sourcePlatform: offer.sourcePlatform,
+      sinkPlatform: sinkPlatform.isNotEmpty ? sinkPlatform : offer.sinkPlatform,
     );
   }
 

@@ -186,6 +186,16 @@
     }
   },
   "audioSharePlaybackGainDesc": "只影响本机播放对端共享声音，过高可能产生削波",
+  "remoteInputScrollMultiplierTitle": "键鼠共享滚轮速度",
+  "remoteInputScrollMultiplierSetting": "键鼠共享滚轮速度：{multiplier}",
+  "@remoteInputScrollMultiplierSetting": {
+    "placeholders": {
+      "multiplier": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputScrollMultiplierDesc": "只影响本机作为被控端时接收的远端滚轮事件",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
   "audioShareRequestingPlayback": "正在请求对端播放本机声音",
   "audioShareFailed": "共享声音失败：{error}",

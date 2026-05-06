@@ -44,6 +44,8 @@ class RemoteInputControlMessage {
     this.releaseSequence = 0,
     this.releaseActivationSequence = 0,
     this.errorMessage = '',
+    this.sourcePlatform = '',
+    this.sinkPlatform = '',
   });
 
   final RemoteInputControlAction action;
@@ -58,6 +60,8 @@ class RemoteInputControlMessage {
   final int releaseSequence;
   final int releaseActivationSequence;
   final String errorMessage;
+  final String sourcePlatform;
+  final String sinkPlatform;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'action': action.name,
@@ -72,6 +76,8 @@ class RemoteInputControlMessage {
         'releaseSequence': releaseSequence,
         'releaseActivationSequence': releaseActivationSequence,
         'errorMessage': errorMessage,
+        if (sourcePlatform.isNotEmpty) 'sourcePlatform': sourcePlatform,
+        if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
       };
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
@@ -99,6 +105,8 @@ class RemoteInputControlMessage {
       releaseSequence: json['releaseSequence'] as int? ?? 0,
       releaseActivationSequence: json['releaseActivationSequence'] as int? ?? 0,
       errorMessage: json['errorMessage'] as String? ?? '',
+      sourcePlatform: json['sourcePlatform'] as String? ?? '',
+      sinkPlatform: json['sinkPlatform'] as String? ?? '',
     );
   }
 }

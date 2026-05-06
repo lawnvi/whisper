@@ -43,6 +43,7 @@ class LocalSetting {
   final String _lastManualPeerId = "_last_manual_peer_id";
   final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
   final String _audioSharePlaybackGain = "_audio_share_playback_gain";
+  final String _remoteInputScrollMultiplier = "_remote_input_scroll_multiplier";
 
   SharedPreferences? _cachedPreferences;
 
@@ -270,6 +271,20 @@ class LocalSetting {
 
   Future<void> setAudioSharePlaybackGain(double gain) async {
     await _setSP(_audioSharePlaybackGain, gain.clamp(1.0, 3.0).toDouble());
+  }
+
+  Future<double> remoteInputScrollMultiplier() async {
+    final SharedPreferences sp = await _preferences();
+    final raw = sp.get(_remoteInputScrollMultiplier);
+    final multiplier = raw is num ? raw.toDouble() : 1.0;
+    return multiplier.clamp(0.5, 3.0).toDouble();
+  }
+
+  Future<void> setRemoteInputScrollMultiplier(double multiplier) async {
+    await _setSP(
+      _remoteInputScrollMultiplier,
+      multiplier.clamp(0.5, 3.0).toDouble(),
+    );
   }
 
   Future<String> lastManualPeerId() async {

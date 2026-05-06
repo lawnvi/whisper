@@ -407,6 +407,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'Solo afecta al audio compartido reproducido en este dispositivo. Valores altos pueden recortar';
 
   @override
+  String get remoteInputScrollMultiplierTitle =>
+      'Velocidad de desplazamiento compartido';
+
+  @override
+  String remoteInputScrollMultiplierSetting(String multiplier) {
+    return 'Velocidad de desplazamiento compartido: $multiplier';
+  }
+
+  @override
+  String get remoteInputScrollMultiplierDesc =>
+      'Solo afecta eventos de rueda remotos recibidos cuando este dispositivo esta siendo controlado';
+
+  @override
   String get audioShareUnsupportedCapture =>
       'Este dispositivo no admite captura de audio del sistema';
 

@@ -16,6 +16,8 @@ void main() {
         path: '/input',
         layoutEdge: RemoteInputEdge.right,
         releaseHotkey: 'ctrl+alt+esc',
+        sourcePlatform: 'macos',
+        sinkPlatform: 'windows',
       );
 
       final decoded = RemoteInputControlMessage.fromJson(message.toJson());
@@ -28,6 +30,8 @@ void main() {
       expect(decoded.path, '/input');
       expect(decoded.layoutEdge, RemoteInputEdge.right);
       expect(decoded.releaseHotkey, 'ctrl+alt+esc');
+      expect(decoded.sourcePlatform, 'macos');
+      expect(decoded.sinkPlatform, 'windows');
     });
 
     test('round-trips error messages without an edge', () {

@@ -387,6 +387,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioSharePlaybackGainDesc => '只影响本机播放对端共享声音，过高可能产生削波';
 
   @override
+  String get remoteInputScrollMultiplierTitle => '键鼠共享滚轮速度';
+
+  @override
+  String remoteInputScrollMultiplierSetting(String multiplier) {
+    return '键鼠共享滚轮速度：$multiplier';
+  }
+
+  @override
+  String get remoteInputScrollMultiplierDesc => '只影响本机作为被控端时接收的远端滚轮事件';
+
+  @override
   String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
 
   @override

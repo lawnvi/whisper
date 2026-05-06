@@ -5,11 +5,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/local.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_input_scroll.dart';
 
 typedef RemoteInputControlSender = void Function(
   RemoteInputControlMessage control,
@@ -19,6 +21,8 @@ typedef RemoteInputTransportFactory = Future<RemoteInputPacketTransport>
 typedef RemoteInputKeyTranslatorFactory = RemoteInputKeyTranslator Function(
   RemoteInputPlatformKind platform,
 );
+typedef RemoteInputPlatformKindProvider = RemoteInputPlatformKind Function();
+typedef RemoteInputScrollMultiplierProvider = Future<double> Function();
 
 enum RemoteInputRuntimeRole {
   none,
@@ -73,12 +77,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputPlatform? platform,
     RemoteInputTransportFactory? transportFactory,
     RemoteInputKeyTranslatorFactory? keyTranslatorFactory,
+    RemoteInputPlatformKindProvider? platformKindProvider,
+    RemoteInputScrollMultiplierProvider? scrollMultiplierProvider,
   })  : _manager = manager ?? RemoteInputManager.shared,
         _platform = platform ?? RemoteInputPlatform(),
         _transportFactory =
             transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
         _keyTranslatorFactory = keyTranslatorFactory ??
-            ((platform) => RemoteInputKeyTranslator(targetPlatform: platform));
+            ((platform) => RemoteInputKeyTranslator(targetPlatform: platform)),
+        _platformKindProvider =
+            platformKindProvider ?? currentRemoteInputPlatformKind,
+        _scrollMultiplierProvider = scrollMultiplierProvider ??
+            LocalSetting().remoteInputScrollMultiplier;
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
@@ -88,6 +98,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputPlatform _platform;
   final RemoteInputTransportFactory _transportFactory;
   final RemoteInputKeyTranslatorFactory _keyTranslatorFactory;
+  final RemoteInputPlatformKindProvider _platformKindProvider;
+  final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
@@ -104,8 +116,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
   int _sourcePacketTraceCount = 0;
   int _sinkPacketTraceCount = 0;
   double _sinkEntryTravel = 0;
+  double _scrollMultiplier = 1.0;
+  RemoteInputPlatformKind _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
 
   RemoteInputRuntimeState get state => _state;
+
+  void updateScrollMultiplier(double multiplier) {
+    _scrollMultiplier = RemoteInputScrollNormalizer.clampMultiplier(multiplier);
+  }
 
   bool get _hasLiveSession =>
       _state.status != RemoteInputRuntimeStatus.idle &&
@@ -132,6 +150,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
         'sink=${message.sinkPeerId} '
         'edge=${message.layoutEdge?.name ?? '-'} '
         'path=${message.path} '
+        'sourcePlatform=${message.sourcePlatform} '
+        'sinkPlatform=${message.sinkPlatform} '
         'reason=${message.releaseReason} '
         'error=${message.errorMessage}';
   }
@@ -210,6 +230,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkPeerId: sinkPeerId,
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
+      sourcePlatform: _platformKindProvider().name,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -231,6 +252,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool isMutuallyTrusted,
     required bool localCanInject,
     required RemoteInputControlSender sendControl,
+    String remotePlatform = '',
   }) async {
     _trace(
       'remote input coordinator handling ${_controlSummary(message)} '
@@ -246,6 +268,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           isMutuallyTrusted: isMutuallyTrusted,
           localCanInject: localCanInject,
           sendControl: sendControl,
+          remotePlatform: remotePlatform,
         );
         break;
       case RemoteInputControlAction.accept:
@@ -322,6 +345,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _latestSinkPacketSequence = 0;
     _latestSinkActivationSequence = 0;
     _sinkEntryTravel = 0;
+    _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
@@ -352,6 +376,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool isMutuallyTrusted,
     required bool localCanInject,
     required RemoteInputControlSender sendControl,
+    String remotePlatform = '',
   }) async {
     if (offer.sinkPeerId != localPeerId) {
       _trace(
@@ -396,7 +421,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return;
     }
 
-    final accept = _manager.acceptOffer(offer);
+    final accept = _manager.acceptOffer(
+      offer,
+      sinkPlatform: _platformKindProvider().name,
+    );
     if (accept.action == RemoteInputControlAction.error) {
       _trace('remote input offer accept failed ${_controlSummary(accept)}');
       sendControl(accept);
@@ -404,7 +432,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     try {
       _trace('remote input starting injection for ${_controlSummary(accept)}');
-      await _startInjection(accept, sendControl: sendControl);
+      await _startInjection(
+        accept,
+        sendControl: sendControl,
+        remotePlatform: remotePlatform,
+      );
       _trace('remote input sending accept ${_controlSummary(accept)}');
       sendControl(accept);
     } catch (error) {
@@ -486,6 +518,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   Future<void> _startInjection(
     RemoteInputControlMessage message, {
     required RemoteInputControlSender sendControl,
+    String remotePlatform = '',
   }) async {
     _trace('remote input _startInjection ${_controlSummary(message)}');
     await stopLocal();
@@ -502,7 +535,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       'remote input platform startInjection returned '
       'session=${_shortSessionId(message.sessionId)}',
     );
-    _keyTranslator = _keyTranslatorFactory(currentRemoteInputPlatformKind());
+    final targetPlatform = _platformKindProvider();
+    _keyTranslator = _keyTranslatorFactory(targetPlatform);
+    _sinkSourcePlatform = _effectiveRemotePlatform(
+      message.sourcePlatform,
+      remotePlatform,
+    );
+    updateScrollMultiplier(await _loadScrollMultiplier());
     _latestSinkPacketSequence = 0;
     _latestSinkActivationSequence = 0;
     _sinkPacketTraceCount = 0;
@@ -565,13 +604,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
           _latestSinkActivationSequence > 0) {
         _sinkEntryTravel += _sinkEntryDelta(packet, message.layoutEdge);
       }
-      final translated = _keyTranslator?.translateFrame(packet) ??
+      final scrollNormalized = RemoteInputScrollNormalizer.normalizeForTarget(
+        packet,
+        targetPlatform: targetPlatform,
+        scrollMultiplier: _scrollMultiplier,
+        fallbackSourcePlatform: _sinkSourcePlatform,
+      );
+      final translated = _keyTranslator?.translateFrame(scrollNormalized) ??
           <RemoteInputPacketFrame>[
-            packet,
+            scrollNormalized,
           ];
       if (_sinkPacketTraceCount < _packetTraceLimit) {
         _sinkPacketTraceCount++;
-        _tracePacket('remote input sink packet ${_packetSummary(packet)}');
+        _tracePacket(
+          'remote input sink packet ${_packetSummary(scrollNormalized)}',
+        );
       }
       _enqueueInjection(message.sessionId, translated);
     };
@@ -653,9 +700,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (event.sessionId != message.sessionId) {
         return;
       }
+      final annotated = RemoteInputScrollNormalizer.annotateSourceFrame(
+        event,
+        sourcePlatform: _platformKindProvider(),
+      );
       if (_sourcePacketTraceCount < _packetTraceLimit) {
         _sourcePacketTraceCount++;
-        _tracePacket('remote input source packet ${_packetSummary(event)}');
+        _tracePacket('remote input source packet ${_packetSummary(annotated)}');
       }
       if (event.sequence > _latestSourceInputSequence) {
         _latestSourceInputSequence = event.sequence;
@@ -663,7 +714,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (_isActivationStartPacket(event)) {
         _latestSourceActivationSequence = event.sequence;
       }
-      transport.send(event);
+      transport.send(annotated);
       if (_state.status == RemoteInputRuntimeStatus.armed) {
         _setState(
           RemoteInputRuntimeState(
@@ -812,6 +863,26 @@ class RemoteInputCoordinator extends ChangeNotifier {
           ? normalizedPath.substring(1)
           : normalizedPath,
     );
+  }
+
+  RemoteInputPlatformKind _effectiveRemotePlatform(
+    String declaredPlatform,
+    String fallbackPlatform,
+  ) {
+    final declared = remoteInputPlatformKindFromString(declaredPlatform);
+    if (declared != RemoteInputPlatformKind.unknown) {
+      return declared;
+    }
+    return remoteInputPlatformKindFromString(fallbackPlatform);
+  }
+
+  Future<double> _loadScrollMultiplier() async {
+    try {
+      return await _scrollMultiplierProvider();
+    } catch (error) {
+      _trace('remote input scroll multiplier fallback after error $error');
+      return 1.0;
+    }
   }
 
   void _setState(RemoteInputRuntimeState state) {

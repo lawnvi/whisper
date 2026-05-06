@@ -138,6 +138,16 @@
     }
   },
   "audioSharePlaybackGainDesc": "Only affects shared audio played on this device. Higher values may clip",
+  "remoteInputScrollMultiplierTitle": "Keyboard and mouse scroll speed",
+  "remoteInputScrollMultiplierSetting": "Keyboard and mouse scroll speed: {multiplier}",
+  "@remoteInputScrollMultiplierSetting": {
+    "placeholders": {
+      "multiplier": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputScrollMultiplierDesc": "Only affects remote wheel events received while this device is being controlled",
   "audioShareUnsupportedCapture": "This device does not support system audio capture",
   "audioShareRequestingPlayback": "Requesting peer to play this device's audio",
   "audioShareFailed": "Audio sharing failed: {error}",

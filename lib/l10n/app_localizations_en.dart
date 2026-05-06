@@ -404,6 +404,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only affects shared audio played on this device. Higher values may clip';
 
   @override
+  String get remoteInputScrollMultiplierTitle =>
+      'Keyboard and mouse scroll speed';
+
+  @override
+  String remoteInputScrollMultiplierSetting(String multiplier) {
+    return 'Keyboard and mouse scroll speed: $multiplier';
+  }
+
+  @override
+  String get remoteInputScrollMultiplierDesc =>
+      'Only affects remote wheel events received while this device is being controlled';
+
+  @override
   String get audioShareUnsupportedCapture =>
       'This device does not support system audio capture';
 
