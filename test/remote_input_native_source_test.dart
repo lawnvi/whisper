@@ -339,6 +339,22 @@ void main() {
           mouseMoveCase, contains('showCursorForRemoteInjection(at: point)'));
     });
 
+    test('marks macOS injected double clicks with CG click state', () {
+      expect(source, contains('private var injectedLastClickButton'));
+      expect(source, contains('private func injectedClickState'));
+
+      final injectEvent = RegExp(
+        r'private func injectEvent\([\s\S]*?\n  private func payloadData',
+      ).firstMatch(source)!.group(0)!;
+      final mouseButtonCase = RegExp(
+        r'case "mouseButton":[\s\S]*?case "mouseWheel":',
+      ).firstMatch(injectEvent)!.group(0)!;
+      expect(
+        mouseButtonCase,
+        contains('setIntegerValueField(.mouseEventClickState'),
+      );
+    });
+
     test('arms reverse edge release only after entering screen interior', () {
       expect(source, contains('private var injectedMouseEnteredInterior'));
       expect(source, contains('injectedMouseEnteredInterior = false'));

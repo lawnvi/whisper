@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -103,7 +104,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
-  Future<void> _injectionQueue = Future<void>.value();
+  final List<RemoteInputPacketFrame> _pendingInjectionFrames =
+      <RemoteInputPacketFrame>[];
+  bool _injectionPumpRunning = false;
   RemoteInputKeyTranslator? _keyTranslator;
   StreamSubscription<RemoteInputPacketFrame>? _inputSubscription;
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
@@ -339,7 +342,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final transport = _transport;
     _transport = null;
     _keyTranslator = null;
-    _injectionQueue = Future<void>.value();
+    _pendingInjectionFrames.clear();
+    _injectionPumpRunning = false;
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
     _latestSinkPacketSequence = 0;
@@ -648,16 +652,82 @@ class RemoteInputCoordinator extends ChangeNotifier {
     String sessionId,
     List<RemoteInputPacketFrame> frames,
   ) {
-    _injectionQueue = _injectionQueue.then<void>((_) async {
-      for (final frame in frames) {
-        if (_state.role != RemoteInputRuntimeRole.sink ||
-            _state.sessionId != sessionId ||
-            frame.sessionId != sessionId) {
-          return;
-        }
-        await _platform.injectEvent(frame);
+    for (final frame in frames) {
+      if (frame.sessionId == sessionId) {
+        _appendPendingInjectionFrame(frame);
       }
-    }).catchError((Object _) {});
+    }
+    _startInjectionPump();
+  }
+
+  void _appendPendingInjectionFrame(RemoteInputPacketFrame frame) {
+    if (_pendingInjectionFrames.isNotEmpty) {
+      final previous = _pendingInjectionFrames.last;
+      final coalesced = _coalesceQueuedMouseMove(previous, frame);
+      if (coalesced != null) {
+        _pendingInjectionFrames[_pendingInjectionFrames.length - 1] = coalesced;
+        return;
+      }
+    }
+    _pendingInjectionFrames.add(frame);
+  }
+
+  void _startInjectionPump() {
+    if (_injectionPumpRunning) {
+      return;
+    }
+    _injectionPumpRunning = true;
+    unawaited(_drainInjectionQueue());
+  }
+
+  Future<void> _drainInjectionQueue() async {
+    while (_pendingInjectionFrames.isNotEmpty) {
+      final frame = _pendingInjectionFrames.removeAt(0);
+      if (_state.role != RemoteInputRuntimeRole.sink ||
+          _state.sessionId != frame.sessionId) {
+        continue;
+      }
+      try {
+        await _platform.injectEvent(frame);
+      } catch (_) {}
+    }
+    _injectionPumpRunning = false;
+    if (_pendingInjectionFrames.isNotEmpty) {
+      _startInjectionPump();
+    }
+  }
+
+  RemoteInputPacketFrame? _coalesceQueuedMouseMove(
+    RemoteInputPacketFrame previous,
+    RemoteInputPacketFrame next,
+  ) {
+    if (previous.sessionId != next.sessionId ||
+        previous.eventType != RemoteInputEventType.mouseMove ||
+        next.eventType != RemoteInputEventType.mouseMove) {
+      return null;
+    }
+    final previousPayload = _mousePayload(previous);
+    final nextPayload = _mousePayload(next);
+    if (previousPayload == null || nextPayload == null) {
+      return null;
+    }
+    if (previousPayload['activeStart'] == true ||
+        nextPayload['activeStart'] == true) {
+      return null;
+    }
+    final mergedPayload = Map<String, dynamic>.from(nextPayload);
+    mergedPayload['activeStart'] = false;
+    mergedPayload['deltaX'] = _numberPayload(previousPayload['deltaX']) +
+        _numberPayload(nextPayload['deltaX']);
+    mergedPayload['deltaY'] = _numberPayload(previousPayload['deltaY']) +
+        _numberPayload(nextPayload['deltaY']);
+    return RemoteInputPacketFrame(
+      sessionId: next.sessionId,
+      sequence: next.sequence,
+      timestampMicros: next.timestampMicros,
+      eventType: next.eventType,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(mergedPayload))),
+    );
   }
 
   Future<void> _startCapture(

@@ -74,6 +74,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedMouseButtons = 0
   private var injectedMousePoint: CGPoint?
   private var injectedMouseEnteredInterior = false
+  private var injectedLastClickButton = -1
+  private var injectedLastClickTimeMicros: Int64 = 0
+  private var injectedLastClickPoint = CGPoint.zero
+  private var injectedCurrentClickCount = 1
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
@@ -158,6 +162,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       releaseCommonModifierKeys()
       injectedMousePoint = nil
       injectedMouseEnteredInterior = false
+      resetInjectedClickState()
       injectedModifierFlags = []
       suppressedSystemControlArrowKeyCodes = []
       injectionKeyDiagnosticCount = 0
@@ -183,7 +188,11 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           details: nil))
         return
       }
-      injectEvent(sessionId: sessionId, eventType: eventType, payload: payload)
+      injectEvent(
+        sessionId: sessionId,
+        eventType: eventType,
+        payload: payload,
+        timestampMicros: int64Value(args["timestampMicros"]))
       result(nil)
 
     case "stopInjection":
@@ -272,6 +281,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     releaseCommonModifierKeys()
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
+    resetInjectedClickState()
     injectedModifierFlags = []
     suppressedSystemControlArrowKeyCodes = []
     injectionKeyDiagnosticCount = 0
@@ -376,7 +386,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "button": buttonNumber(type: type, event: event),
         "down": isButtonDown(type: type),
         "x": point.x,
-        "y": point.y
+        "y": point.y,
+        "clickCount": max(
+          1,
+          event.getIntegerValueField(.mouseEventClickState))
       ]
     case "mouseWheel":
       payload = [
@@ -437,7 +450,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown
   }
 
-  private func injectEvent(sessionId: String, eventType: String, payload: Data) {
+  private func injectEvent(
+    sessionId: String,
+    eventType: String,
+    payload: Data,
+    timestampMicros: Int64 = 0
+  ) {
     guard sessionId == injectionSessionId else {
       os_log(
         "drop remote input event session mismatch event=%{public}@ incoming=%{public}@ active=%{public}@",
@@ -527,7 +545,20 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       } else {
         mouseType = down ? .leftMouseDown : .leftMouseUp
       }
-      CGEvent(mouseEventSource: nil, mouseType: mouseType, mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
+      let clickState = injectedClickState(
+        button: buttonValue,
+        down: down,
+        point: point,
+        payloadClickCount: intValue(data["clickCount"]),
+        timestampMicros: timestampMicros)
+      if let event = CGEvent(
+        mouseEventSource: nil,
+        mouseType: mouseType,
+        mouseCursorPosition: point,
+        mouseButton: button) {
+        event.setIntegerValueField(.mouseEventClickState, value: clickState)
+        event.post(tap: .cghidEventTap)
+      }
       setInjectedMouseButton(buttonValue, down: down)
       injectedMousePoint = point
     case "mouseWheel":
@@ -601,6 +632,19 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     if let value = value as? Int {
       return value
+    }
+    return 0
+  }
+
+  private func int64Value(_ value: Any?) -> Int64 {
+    if let number = value as? NSNumber {
+      return number.int64Value
+    }
+    if let value = value as? Int64 {
+      return value
+    }
+    if let value = value as? Int {
+      return Int64(value)
     }
     return 0
   }
@@ -1057,6 +1101,73 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func resetInjectedClickState() {
+    injectedLastClickButton = -1
+    injectedLastClickTimeMicros = 0
+    injectedLastClickPoint = CGPoint.zero
+    injectedCurrentClickCount = 1
+  }
+
+  private func currentTimeMicros() -> Int64 {
+    return Int64(Date().timeIntervalSince1970 * 1_000_000)
+  }
+
+  private func injectedClickState(
+    button: Int,
+    down: Bool,
+    point: CGPoint,
+    payloadClickCount: Int,
+    timestampMicros: Int64
+  ) -> Int64 {
+    if !down {
+      if button == injectedLastClickButton {
+        return Int64(max(1, injectedCurrentClickCount))
+      }
+      return 1
+    }
+
+    let eventTimeMicros =
+      timestampMicros > 0 ? timestampMicros : currentTimeMicros()
+    let payloadState = max(0, payloadClickCount)
+    let clickCount: Int
+    if payloadState > 0 {
+      clickCount = min(payloadState, 2)
+    } else if isInjectedDoubleClickCandidate(
+      button: button,
+      point: point,
+      timestampMicros: eventTimeMicros) {
+      clickCount = min(injectedCurrentClickCount + 1, 2)
+    } else {
+      clickCount = 1
+    }
+
+    injectedLastClickButton = button
+    injectedLastClickTimeMicros = eventTimeMicros
+    injectedLastClickPoint = point
+    injectedCurrentClickCount = clickCount
+    return Int64(clickCount)
+  }
+
+  private func isInjectedDoubleClickCandidate(
+    button: Int,
+    point: CGPoint,
+    timestampMicros: Int64
+  ) -> Bool {
+    guard button == injectedLastClickButton,
+          injectedLastClickTimeMicros > 0 else {
+      return false
+    }
+    let elapsedSeconds =
+      Double(timestampMicros - injectedLastClickTimeMicros) / 1_000_000.0
+    guard elapsedSeconds >= 0 &&
+          elapsedSeconds <= NSEvent.doubleClickInterval else {
+      return false
+    }
+    let distanceX = point.x - injectedLastClickPoint.x
+    let distanceY = point.y - injectedLastClickPoint.y
+    return distanceX * distanceX + distanceY * distanceY <= 64
+  }
+
   private func syncInjectedMouseButtons(_ desired: Int, at point: CGPoint) {
     syncInjectedMouseButton(button: 0, desired: desired, at: point)
     syncInjectedMouseButton(button: 1, desired: desired, at: point)
@@ -1456,6 +1567,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     releaseCommonModifierKeys()
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
+    resetInjectedClickState()
     emitRelease(sessionId: sessionId, reason: reason)
   }
 

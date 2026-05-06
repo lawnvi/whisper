@@ -402,6 +402,85 @@ void main() {
       expect(calls.map((call) => call.method), contains('injectEvent'));
     });
 
+    test('sink coalesces queued mouse move packets before injection', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final firstInjectCompleter = Completer<void>();
+      var blockNextInject = true;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent' && blockNextInject) {
+          blockNextInject = false;
+          await firstInjectCompleter.future;
+        }
+        return null;
+      });
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-coalesce-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: 'input-coalesce-1',
+        sequence: 1,
+        payload: <String, dynamic>{
+          'activeStart': false,
+          'deltaX': 1,
+          'deltaY': 2,
+          'edge': 'right',
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      for (var sequence = 2; sequence <= 6; sequence++) {
+        manager.handlePacketBytes(_mouseMoveFrameBytes(
+          sessionId: 'input-coalesce-1',
+          sequence: sequence,
+          payload: <String, dynamic>{
+            'activeStart': false,
+            'deltaX': 1,
+            'deltaY': 2,
+            'edge': 'right',
+          },
+        ));
+      }
+      await Future<void>.delayed(Duration.zero);
+      firstInjectCompleter.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      final injectCalls =
+          calls.where((call) => call.method == 'injectEvent').toList();
+      expect(injectCalls, hasLength(2));
+      final coalescedArgs = injectCalls.last.arguments as Map<Object?, Object?>;
+      expect(coalescedArgs['eventType'], 'mouseMove');
+      final coalescedPayload = jsonDecode(
+        utf8.decode(coalescedArgs['payload'] as Uint8List),
+      ) as Map<String, dynamic>;
+      expect(coalescedPayload['deltaX'], 5);
+      expect(coalescedPayload['deltaY'], 10);
+    });
+
     test('sink normalizes legacy wheel packets before injection', () async {
       final sentControls = <RemoteInputControlMessage>[];
       final manager = RemoteInputManager();
@@ -891,6 +970,20 @@ Uint8List _keyFrameBytes({
     sequence: sequence,
     timestampMicros: sequence,
     eventType: RemoteInputEventType.key,
+    payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+  ).encode();
+}
+
+Uint8List _mouseMoveFrameBytes({
+  required String sessionId,
+  required int sequence,
+  required Map<String, dynamic> payload,
+}) {
+  return RemoteInputPacketFrame(
+    sessionId: sessionId,
+    sequence: sequence,
+    timestampMicros: sequence,
+    eventType: RemoteInputEventType.mouseMove,
     payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
   ).encode();
 }
