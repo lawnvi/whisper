@@ -399,16 +399,25 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "isContinuous": event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
       ]
     case "key":
-      let macKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+      let rawMacKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+      let macKeyCode = normalizedCapturedMacKeyCode(
+        type: type,
+        rawKeyCode: rawMacKeyCode)
+      let isCapturedCapsLockEvent = type == .flagsChanged && macKeyCode == 57
       payload = [
         "sourcePlatform": "macos",
         "keyCode": macKeyCode,
         "macKeyCode": macKeyCode,
         "windowsKeyCode": windowsVirtualKey(forMacKeyCode: macKeyCode),
-        "down": type == .flagsChanged
+        "down": isCapturedCapsLockEvent
+          ? true
+          : type == .flagsChanged
           ? modifierKeyDown(macKeyCode, flags: event.flags)
           : type == .keyDown
       ]
+      if isCapturedCapsLockEvent {
+        payload["modifierSemantic"] = "capsLock"
+      }
     default:
       payload = [:]
     }
@@ -782,6 +791,13 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     default:
       return false
     }
+  }
+
+  private func normalizedCapturedMacKeyCode(type: CGEventType, rawKeyCode: Int) -> Int {
+    if type == .flagsChanged && rawKeyCode == 255 {
+      return 57
+    }
+    return rawKeyCode
   }
 
   private func modifierFlag(forMacKeyCode keyCode: Int) -> CGEventFlags? {
@@ -1192,6 +1208,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     case 50: return 0xC0
     case 51: return 0x08
     case 53: return 0x1B
+    case 57: return 0x14
     case 54: return 0x5C
     case 55: return 0x5B
     case 59: return 0xA2

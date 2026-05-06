@@ -228,6 +228,15 @@ void main() {
       expect(source, contains('TISSelectInputSource'));
     });
 
+    test('normalizes macOS Caps Lock input-source switch events', () {
+      expect(source, contains('normalizedCapturedMacKeyCode'));
+      expect(source, contains('rawKeyCode == 255'));
+      expect(source, contains('return 57'));
+      expect(source, contains('isCapturedCapsLockEvent'));
+      expect(source, contains('payload["modifierSemantic"] = "capsLock"'));
+      expect(source, contains('"down": isCapturedCapsLockEvent'));
+    });
+
     test('emits sink-side diagnostics for key injection and caps switching',
         () {
       expect(source, contains('"onDiagnostic"'));
