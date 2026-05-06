@@ -321,6 +321,7 @@ class RemoteInputResolvedLayout {
     required this.sharedSegment,
     required this.sinkSegmentStart,
     required this.sinkSegmentEnd,
+    required this.edgeMappings,
   });
 
   final RemoteInputSavedLayout savedLayout;
@@ -330,6 +331,7 @@ class RemoteInputResolvedLayout {
   final RemoteInputSharedEdgeSegment sharedSegment;
   final int sinkSegmentStart;
   final int sinkSegmentEnd;
+  final List<RemoteInputEdgeMapping> edgeMappings;
 }
 
 class RemoteInputLayoutGeometry {
@@ -397,24 +399,25 @@ class RemoteInputLayoutGeometry {
     required RemoteInputEdge sourceEdge,
     required RemoteInputDisplay sinkInLayout,
     required RemoteInputEdge sinkEdge,
+    int edgeTolerance = 0,
   }) {
     if (!_areOppositeEdges(sourceEdge, sinkEdge)) {
       return null;
     }
     if (sourceEdge == RemoteInputEdge.right &&
-        source.right != sinkInLayout.left) {
+        !_sameCoordinate(source.right, sinkInLayout.left, edgeTolerance)) {
       return null;
     }
     if (sourceEdge == RemoteInputEdge.left &&
-        source.left != sinkInLayout.right) {
+        !_sameCoordinate(source.left, sinkInLayout.right, edgeTolerance)) {
       return null;
     }
     if (sourceEdge == RemoteInputEdge.bottom &&
-        source.bottom != sinkInLayout.top) {
+        !_sameCoordinate(source.bottom, sinkInLayout.top, edgeTolerance)) {
       return null;
     }
     if (sourceEdge == RemoteInputEdge.top &&
-        source.top != sinkInLayout.bottom) {
+        !_sameCoordinate(source.top, sinkInLayout.bottom, edgeTolerance)) {
       return null;
     }
 
@@ -443,6 +446,7 @@ class RemoteInputLayoutGeometry {
     required RemoteInputSavedLayout savedLayout,
     required RemoteInputTopology sourceTopology,
     required RemoteInputTopology sinkTopology,
+    int edgeTolerance = 0,
   }) {
     final sourceDisplay =
         sourceTopology.displayById(savedLayout.sourceDisplayId);
@@ -459,6 +463,7 @@ class RemoteInputLayoutGeometry {
       sourceEdge: savedLayout.sourceEdge,
       sinkInLayout: sinkInLayout,
       sinkEdge: savedLayout.sinkEdge,
+      edgeTolerance: edgeTolerance,
     );
     if (segment == null) {
       return null;
@@ -466,6 +471,12 @@ class RemoteInputLayoutGeometry {
     final isVertical = segment.isVertical;
     final sinkOffset =
         isVertical ? savedLayout.sinkOffsetY : savedLayout.sinkOffsetX;
+    final edgeMappings = resolveSavedLayoutMappings(
+      savedLayout: savedLayout,
+      sourceTopology: sourceTopology,
+      sinkTopology: sinkTopology,
+      edgeTolerance: edgeTolerance,
+    );
     return RemoteInputResolvedLayout(
       savedLayout: savedLayout,
       sourceDisplay: sourceDisplay,
@@ -474,7 +485,149 @@ class RemoteInputLayoutGeometry {
       sharedSegment: segment,
       sinkSegmentStart: segment.start - sinkOffset,
       sinkSegmentEnd: segment.end - sinkOffset,
+      edgeMappings: edgeMappings.isEmpty
+          ? <RemoteInputEdgeMapping>[
+              RemoteInputEdgeMapping(
+                sourceDisplayId: segment.sourceDisplayId,
+                sourceEdge: segment.sourceEdge,
+                sourceSegmentStart: segment.start,
+                sourceSegmentEnd: segment.end,
+                sinkDisplayId: sinkDisplay.displayId,
+                sinkEdge: segment.sinkEdge,
+                sinkSegmentStart: segment.start - sinkOffset,
+                sinkSegmentEnd: segment.end - sinkOffset,
+              ),
+            ]
+          : edgeMappings,
     );
+  }
+
+  static List<RemoteInputEdgeMapping> resolveSavedLayoutMappings({
+    required RemoteInputSavedLayout savedLayout,
+    required RemoteInputTopology sourceTopology,
+    required RemoteInputTopology sinkTopology,
+    int edgeTolerance = 0,
+  }) {
+    final sourceDisplay =
+        sourceTopology.displayById(savedLayout.sourceDisplayId);
+    if (sourceDisplay == null) {
+      return const <RemoteInputEdgeMapping>[];
+    }
+    final translatedSinks = sinkTopology.displays
+        .map(
+          (display) => display.translated(
+            dx: savedLayout.sinkOffsetX,
+            dy: savedLayout.sinkOffsetY,
+          ),
+        )
+        .toList(growable: false);
+    final mappings = <RemoteInputEdgeMapping>[];
+    for (final sourceEdge in RemoteInputEdge.values) {
+      final sinkEdge = oppositeEdge(sourceEdge);
+      for (var i = 0; i < translatedSinks.length; i++) {
+        final sinkInLayout = translatedSinks[i];
+        final sinkDisplay = sinkTopology.displays[i];
+        final segment = sharedEdgeSegment(
+          source: sourceDisplay,
+          sourceEdge: sourceEdge,
+          sinkInLayout: sinkInLayout,
+          sinkEdge: sinkEdge,
+          edgeTolerance: edgeTolerance,
+        );
+        if (segment == null) {
+          continue;
+        }
+        if (!isOuterEdgeSegment(
+          display: sourceDisplay,
+          edge: sourceEdge,
+          displays: sourceTopology.displays,
+          segmentStart: segment.start,
+          segmentEnd: segment.end,
+          edgeTolerance: edgeTolerance,
+        )) {
+          continue;
+        }
+        if (!isOuterEdgeSegment(
+          display: sinkInLayout,
+          edge: sinkEdge,
+          displays: translatedSinks,
+          segmentStart: segment.start,
+          segmentEnd: segment.end,
+          edgeTolerance: edgeTolerance,
+        )) {
+          continue;
+        }
+        final isVertical = segment.isVertical;
+        final sinkOffset =
+            isVertical ? savedLayout.sinkOffsetY : savedLayout.sinkOffsetX;
+        mappings.add(
+          RemoteInputEdgeMapping(
+            sourceDisplayId: sourceDisplay.displayId,
+            sourceEdge: sourceEdge,
+            sourceSegmentStart: segment.start,
+            sourceSegmentEnd: segment.end,
+            sinkDisplayId: sinkDisplay.displayId,
+            sinkEdge: sinkEdge,
+            sinkSegmentStart: segment.start - sinkOffset,
+            sinkSegmentEnd: segment.end - sinkOffset,
+          ),
+        );
+      }
+    }
+    mappings.sort((a, b) {
+      final startComparison =
+          a.sourceSegmentStart.compareTo(b.sourceSegmentStart);
+      if (startComparison != 0) {
+        return startComparison;
+      }
+      return a.sourceEdge.index.compareTo(b.sourceEdge.index);
+    });
+    return mappings;
+  }
+
+  static bool isOuterEdgeSegment({
+    required RemoteInputDisplay display,
+    required RemoteInputEdge edge,
+    required List<RemoteInputDisplay> displays,
+    required int segmentStart,
+    required int segmentEnd,
+    int edgeTolerance = 0,
+  }) {
+    for (final other in displays) {
+      if (other.displayId == display.displayId) {
+        continue;
+      }
+      final segment = sharedEdgeSegment(
+        source: display,
+        sourceEdge: edge,
+        sinkInLayout: other,
+        sinkEdge: oppositeEdge(edge),
+        edgeTolerance: edgeTolerance,
+      );
+      if (segment != null &&
+          _positiveOverlap(
+            segmentStart,
+            segmentEnd,
+            segment.start,
+            segment.end,
+          )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static RemoteInputEdge oppositeEdge(RemoteInputEdge edge) {
+    switch (edge) {
+      case RemoteInputEdge.left:
+        return RemoteInputEdge.right;
+      case RemoteInputEdge.right:
+        return RemoteInputEdge.left;
+      case RemoteInputEdge.top:
+        return RemoteInputEdge.bottom;
+      case RemoteInputEdge.bottom:
+        return RemoteInputEdge.top;
+    }
   }
 
   static double edgeUnitForCoordinate({
@@ -510,6 +663,19 @@ class RemoteInputLayoutGeometry {
     RemoteInputScreenRect b,
   ) {
     return math.min(a.bottom, b.bottom) - math.max(a.top, b.top);
+  }
+
+  static bool _positiveOverlap(
+    int startA,
+    int endA,
+    int startB,
+    int endB,
+  ) {
+    return math.min(endA, endB) > math.max(startA, startB);
+  }
+
+  static bool _sameCoordinate(int a, int b, int tolerance) {
+    return (a - b).abs() <= tolerance;
   }
 
   static int _edgeDistance(

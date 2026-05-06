@@ -225,6 +225,11 @@ void main() {
           releaseReason: 'edge',
           releaseSequence: 1,
           releaseActivationSequence: 1,
+          releaseEdgeUnit: 0.5,
+          sourceDisplayId: 'source-left',
+          sourceEdge: RemoteInputEdge.left,
+          sourceSegmentStart: 200,
+          sourceSegmentEnd: 800,
         ),
         localPeerId: 'mac',
         remoteHost: 'win.local',
@@ -238,6 +243,11 @@ void main() {
           calls.lastWhere((call) => call.method == 'pauseCapture');
       expect(pauseCall.arguments['releaseSequence'], 1);
       expect(pauseCall.arguments['releaseActivationSequence'], 1);
+      expect(pauseCall.arguments['releaseEdgeUnit'], 0.5);
+      expect(pauseCall.arguments['displayId'], 'source-left');
+      expect(pauseCall.arguments['edge'], 'left');
+      expect(pauseCall.arguments['segmentStart'], 200);
+      expect(pauseCall.arguments['segmentEnd'], 800);
       expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
       expect(coordinator.state.role, RemoteInputRuntimeRole.source);
       expect(transport.closed, isFalse);
@@ -910,6 +920,461 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
       expect(
           calls.map((call) => call.method), isNot(contains('stopInjection')));
+    });
+
+    test('sink routes active entry to the matching remote display segment',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.top,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.top,
+        sourceSegmentStart: 0,
+        sourceSegmentEnd: 2000,
+        sinkDisplayId: 'sink-left',
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkSegmentStart: 0,
+        sinkSegmentEnd: 1000,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 1000,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 1000,
+          ),
+          RemoteInputEdgeMapping(
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 1000,
+            sourceSegmentEnd: 2000,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 1000,
+            sinkSegmentEnd: 2000,
+          ),
+        ],
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        payload: const {
+          'activeStart': true,
+          'edge': 'top',
+          'edgeUnit': 0.75,
+          'deltaX': 0,
+          'deltaY': 0,
+        },
+      ));
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 8,
+        payload: const {
+          'activeStart': false,
+          'edge': 'top',
+          'deltaX': 0,
+          'deltaY': -20,
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final payloads =
+          calls.where((call) => call.method == 'injectEvent').map((call) {
+        return jsonDecode(
+          utf8.decode(call.arguments['payload'] as Uint8List),
+        ) as Map<String, dynamic>;
+      }).toList();
+      final payload = payloads.firstWhere(
+        (payload) => payload['activeStart'] == true,
+      );
+      expect(payload['sinkDisplayId'], 'sink-right');
+      expect(payload['sinkEdge'], 'bottom');
+      expect(payload['sinkSegmentStart'], 1000);
+      expect(payload['sinkSegmentEnd'], 2000);
+      expect(payload['edgeUnit'], closeTo(0.5, 0.001));
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onRelease', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'reason': 'edge',
+          'edgeUnit': 0.625,
+          'sourceEdgeUnit': true,
+          'sourceDisplayId': 'source-main',
+          'sourceEdge': 'left',
+          'sourceSegmentStart': 200,
+          'sourceSegmentEnd': 800,
+          'routeId': 'route-left',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sentControls, hasLength(2));
+      expect(sentControls.last.action, RemoteInputControlAction.release);
+      expect(sentControls.last.releaseEdgeUnit, closeTo(0.625, 0.001));
+      expect(sentControls.last.sourceDisplayId, 'source-main');
+      expect(sentControls.last.sourceEdge, RemoteInputEdge.left);
+      expect(sentControls.last.sourceSegmentStart, 200);
+      expect(sentControls.last.sourceSegmentEnd, 800);
+      expect(sentControls.last.routeId, 'route-left');
+    });
+
+    test('sink routes active entry by route id at shared segment endpoints',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.top,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.top,
+        sourceSegmentStart: 0,
+        sourceSegmentEnd: 2000,
+        sinkDisplayId: 'sink-left',
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkSegmentStart: 0,
+        sinkSegmentEnd: 1000,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            routeId: 'route-left',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 1000,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 1000,
+          ),
+          RemoteInputEdgeMapping(
+            routeId: 'route-right',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 1000,
+            sourceSegmentEnd: 2000,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 1000,
+            sinkSegmentEnd: 2000,
+          ),
+        ],
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        payload: const {
+          'activeStart': true,
+          'edge': 'top',
+          'x': 1000,
+          'edgeUnit': 0,
+          'routeId': 'route-right',
+          'deltaX': 0,
+          'deltaY': 0,
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final payload =
+          calls.where((call) => call.method == 'injectEvent').map((call) {
+        return jsonDecode(
+          utf8.decode(call.arguments['payload'] as Uint8List),
+        ) as Map<String, dynamic>;
+      }).firstWhere((payload) => payload['activeStart'] == true);
+
+      expect(payload['routeId'], 'route-right');
+      expect(payload['sinkDisplayId'], 'sink-right');
+      expect(payload['sinkEdge'], 'bottom');
+      expect(payload['sinkSegmentStart'], 1000);
+      expect(payload['sinkSegmentEnd'], 2000);
+      expect(payload['edgeUnit'], 0);
+    });
+
+    test('sink falls back to source coordinate when route id is unknown',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.top,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.top,
+        sourceSegmentStart: 0,
+        sourceSegmentEnd: 2000,
+        sinkDisplayId: 'sink-left',
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkSegmentStart: 0,
+        sinkSegmentEnd: 1000,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            routeId: 'route-left',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 1000,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 1000,
+          ),
+          RemoteInputEdgeMapping(
+            routeId: 'route-right',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 1000,
+            sourceSegmentEnd: 2000,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 1000,
+            sinkSegmentEnd: 2000,
+          ),
+        ],
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        payload: const {
+          'activeStart': true,
+          'edge': 'top',
+          'x': 1500,
+          'edgeUnit': 0.25,
+          'routeId': 'stale-route',
+          'deltaX': 0,
+          'deltaY': 0,
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final payload =
+          calls.where((call) => call.method == 'injectEvent').map((call) {
+        return jsonDecode(
+          utf8.decode(call.arguments['payload'] as Uint8List),
+        ) as Map<String, dynamic>;
+      }).firstWhere((payload) => payload['activeStart'] == true);
+
+      expect(payload['routeId'], 'route-right');
+      expect(payload['sinkDisplayId'], 'sink-right');
+      expect(payload['sinkEdge'], 'bottom');
+      expect(payload['edgeUnit'], closeTo(0.5, 0.001));
+    });
+
+    test('sink preserves route-local edge unit for routed active entry',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.top,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.top,
+        sourceSegmentStart: 0,
+        sourceSegmentEnd: 2000,
+        sinkDisplayId: 'sink-right',
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkSegmentStart: 1000,
+        sinkSegmentEnd: 2000,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            routeId: 'route-right',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 1000,
+            sourceSegmentEnd: 2000,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 1000,
+            sinkSegmentEnd: 2000,
+          ),
+        ],
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        payload: const {
+          'activeStart': true,
+          'edge': 'top',
+          'x': 1900,
+          'edgeUnit': 0.25,
+          'routeId': 'route-right',
+          'deltaX': 0,
+          'deltaY': 0,
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final payload =
+          calls.where((call) => call.method == 'injectEvent').map((call) {
+        return jsonDecode(
+          utf8.decode(call.arguments['payload'] as Uint8List),
+        ) as Map<String, dynamic>;
+      }).firstWhere((payload) => payload['activeStart'] == true);
+
+      expect(payload['routeId'], 'route-right');
+      expect(payload['edgeUnit'], 0.25);
+    });
+
+    test('sink routes active entry using the packet source edge', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.top,
+        releaseHotkey: 'ctrl+alt+esc',
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.top,
+        sourceSegmentStart: 800,
+        sourceSegmentEnd: 1600,
+        sinkDisplayId: 'sink-top',
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkSegmentStart: 1000,
+        sinkSegmentEnd: 1600,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.top,
+            sourceSegmentStart: 1000,
+            sourceSegmentEnd: 1600,
+            sinkDisplayId: 'sink-top',
+            sinkEdge: RemoteInputEdge.bottom,
+            sinkSegmentStart: 1000,
+            sinkSegmentEnd: 1600,
+          ),
+          RemoteInputEdgeMapping(
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.left,
+            sourceSegmentStart: 800,
+            sourceSegmentEnd: 1200,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.right,
+            sinkSegmentStart: 400,
+            sinkSegmentEnd: 800,
+          ),
+        ],
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      manager.handlePacketBytes(_mouseMoveFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        payload: const {
+          'activeStart': true,
+          'edge': 'left',
+          'edgeUnit': 0.5,
+          'x': 1000,
+          'y': 1000,
+          'deltaX': -12,
+          'deltaY': 0,
+        },
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final payload =
+          calls.where((call) => call.method == 'injectEvent').map((call) {
+        return jsonDecode(
+          utf8.decode(call.arguments['payload'] as Uint8List),
+        ) as Map<String, dynamic>;
+      }).firstWhere((payload) => payload['activeStart'] == true);
+
+      expect(payload['sinkDisplayId'], 'sink-left');
+      expect(payload['sinkEdge'], 'right');
+      expect(payload['sinkSegmentStart'], 400);
+      expect(payload['sinkSegmentEnd'], 800);
+      expect(payload['edgeUnit'], closeTo(0.5, 0.001));
     });
 
     test('sink reports a platform injection failure instead of accepting',

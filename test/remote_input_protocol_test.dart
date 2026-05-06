@@ -23,6 +23,30 @@ void main() {
         sinkEdge: RemoteInputEdge.left,
         sinkSegmentStart: 0,
         sinkSegmentEnd: 640,
+        edgeMappings: [
+          RemoteInputEdgeMapping(
+            routeId: 'route-left',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 260,
+            sourceSegmentEnd: 580,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 320,
+          ),
+          RemoteInputEdgeMapping(
+            routeId: 'route-right',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 580,
+            sourceSegmentEnd: 900,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 320,
+          ),
+        ],
         releaseHotkey: 'ctrl+alt+esc',
         sourcePlatform: 'macos',
         sinkPlatform: 'windows',
@@ -45,6 +69,11 @@ void main() {
       expect(decoded.sinkEdge, RemoteInputEdge.left);
       expect(decoded.sinkSegmentStart, 0);
       expect(decoded.sinkSegmentEnd, 640);
+      expect(decoded.edgeMappings, hasLength(2));
+      expect(decoded.edgeMappings.first.routeId, 'route-left');
+      expect(decoded.edgeMappings.first.sinkDisplayId, 'sink-left');
+      expect(decoded.edgeMappings.last.routeId, 'route-right');
+      expect(decoded.edgeMappings.last.sourceSegmentStart, 580);
       expect(decoded.releaseHotkey, 'ctrl+alt+esc');
       expect(decoded.sourcePlatform, 'macos');
       expect(decoded.sinkPlatform, 'windows');
@@ -76,6 +105,11 @@ void main() {
         releaseSequence: 7,
         releaseActivationSequence: 3,
         releaseEdgeUnit: 0.625,
+        routeId: 'route-left',
+        sourceDisplayId: 'source-left',
+        sourceEdge: RemoteInputEdge.left,
+        sourceSegmentStart: 200,
+        sourceSegmentEnd: 800,
       );
 
       final decoded = RemoteInputControlMessage.fromJson(message.toJson());
@@ -85,6 +119,11 @@ void main() {
       expect(decoded.releaseSequence, 7);
       expect(decoded.releaseActivationSequence, 3);
       expect(decoded.releaseEdgeUnit, 0.625);
+      expect(decoded.routeId, 'route-left');
+      expect(decoded.sourceDisplayId, 'source-left');
+      expect(decoded.sourceEdge, RemoteInputEdge.left);
+      expect(decoded.sourceSegmentStart, 200);
+      expect(decoded.sourceSegmentEnd, 800);
       expect(decoded.sessionId, 'input-1');
     });
 

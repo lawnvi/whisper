@@ -39,6 +39,30 @@ void main() {
         displayId: 'source-main',
         segmentStart: 260,
         segmentEnd: 900,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            routeId: 'route-left',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 260,
+            sourceSegmentEnd: 580,
+            sinkDisplayId: 'sink-left',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 320,
+          ),
+          RemoteInputEdgeMapping(
+            routeId: 'route-right',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 580,
+            sourceSegmentEnd: 900,
+            sinkDisplayId: 'sink-right',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 320,
+          ),
+        ],
       );
 
       expect(calls.single.method, 'startCapture');
@@ -48,6 +72,22 @@ void main() {
       expect(calls.single.arguments['displayId'], 'source-main');
       expect(calls.single.arguments['segmentStart'], 260);
       expect(calls.single.arguments['segmentEnd'], 900);
+      expect(calls.single.arguments['segments'], [
+        {
+          'displayId': 'source-main',
+          'edge': 'right',
+          'start': 260,
+          'end': 580,
+          'routeId': 'route-left',
+        },
+        {
+          'displayId': 'source-main',
+          'edge': 'right',
+          'start': 580,
+          'end': 900,
+          'routeId': 'route-right',
+        },
+      ]);
     });
 
     test('pauses capture without stopping the native capture session',
@@ -64,6 +104,27 @@ void main() {
       expect(calls.single.arguments['releaseSequence'], 7);
       expect(calls.single.arguments['releaseActivationSequence'], 3);
       expect(calls.single.arguments['releaseEdgeUnit'], 0.625);
+    });
+
+    test('pauses capture with the release source route override', () async {
+      await platform.pauseCapture(
+        sessionId: 'input-1',
+        releaseEdgeUnit: 0.625,
+        displayId: 'source-left',
+        edge: RemoteInputEdge.left,
+        segmentStart: 200,
+        segmentEnd: 800,
+        routeId: 'route-left',
+      );
+
+      expect(calls.single.method, 'pauseCapture');
+      expect(calls.single.arguments['sessionId'], 'input-1');
+      expect(calls.single.arguments['releaseEdgeUnit'], 0.625);
+      expect(calls.single.arguments['displayId'], 'source-left');
+      expect(calls.single.arguments['edge'], 'left');
+      expect(calls.single.arguments['segmentStart'], 200);
+      expect(calls.single.arguments['segmentEnd'], 800);
+      expect(calls.single.arguments['routeId'], 'route-left');
     });
 
     test('keeps zero release edge unit for segment-start returns', () async {
@@ -91,6 +152,19 @@ void main() {
         edge: RemoteInputEdge.left,
         segmentStart: 0,
         segmentEnd: 640,
+        edgeMappings: const [
+          RemoteInputEdgeMapping(
+            routeId: 'route-left',
+            sourceDisplayId: 'source-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 640,
+            sinkDisplayId: 'sink-main',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 640,
+          ),
+        ],
       );
       await platform.injectEvent(event);
       await platform.stopInjection(sessionId: 'input-1');
@@ -103,6 +177,8 @@ void main() {
       expect(calls[0].arguments['edge'], 'left');
       expect(calls[0].arguments['segmentStart'], 0);
       expect(calls[0].arguments['segmentEnd'], 640);
+      expect((calls[0].arguments['mappings'] as List).single['routeId'],
+          'route-left');
       expect(calls[1].arguments['eventType'], 'key');
       expect(calls[1].arguments['payload'], Uint8List.fromList(<int>[42]));
     });
@@ -164,6 +240,12 @@ void main() {
           'sequence': 7,
           'activationSequence': 3,
           'edgeUnit': 0.625,
+          'sourceEdgeUnit': true,
+          'sourceDisplayId': 'source-left',
+          'sourceEdge': 'left',
+          'sourceSegmentStart': 200,
+          'sourceSegmentEnd': 800,
+          'routeId': 'route-left',
         }),
       );
       await platform.handleNativeMethodCall(
@@ -180,6 +262,12 @@ void main() {
       expect(releases.single.sequence, 7);
       expect(releases.single.activationSequence, 3);
       expect(releases.single.edgeUnit, 0.625);
+      expect((releases.single as dynamic).sourceEdgeUnit, isTrue);
+      expect(releases.single.sourceDisplayId, 'source-left');
+      expect(releases.single.sourceEdge, RemoteInputEdge.left);
+      expect(releases.single.sourceSegmentStart, 200);
+      expect(releases.single.sourceSegmentEnd, 800);
+      expect(releases.single.routeId, 'route-left');
       expect(diagnostics.single.message, 'keyboard hook active');
 
       await eventSubscription.cancel();

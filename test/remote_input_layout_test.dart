@@ -274,6 +274,236 @@ void main() {
       expect(resolved.sinkSegmentStart, 0);
       expect(resolved.sinkSegmentEnd, 640);
     });
+
+    test('resolves multiple sink displays on the same shared source edge', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Built-in',
+            x: 0,
+            y: 0,
+            width: 2000,
+            height: 1000,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-left',
+            name: 'Left',
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 1,
+            isPrimary: true,
+          ),
+          RemoteInputDisplay(
+            displayId: 'sink-right',
+            name: 'Right',
+            x: 1000,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 1,
+            isPrimary: false,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'source-main',
+        sinkDisplayId: 'sink-left',
+        sourceEdge: RemoteInputEdge.top,
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkOffsetX: 0,
+        sinkOffsetY: -800,
+        sharedSegmentStart: 0,
+        sharedSegmentEnd: 1000,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.edgeMappings, hasLength(2));
+      expect(resolved.edgeMappings[0].sinkDisplayId, 'sink-left');
+      expect(resolved.edgeMappings[0].sourceSegmentStart, 0);
+      expect(resolved.edgeMappings[0].sourceSegmentEnd, 1000);
+      expect(resolved.edgeMappings[1].sinkDisplayId, 'sink-right');
+      expect(resolved.edgeMappings[1].sourceSegmentStart, 1000);
+      expect(resolved.edgeMappings[1].sourceSegmentEnd, 2000);
+    });
+
+    test('resolves adjacent sink displays across different source edges', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Built-in',
+            x: 1000,
+            y: 800,
+            width: 600,
+            height: 400,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'windows',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-left',
+            name: 'Left',
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'sink-top',
+            name: 'Top',
+            x: 1000,
+            y: 0,
+            width: 600,
+            height: 400,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'source-main',
+        sinkDisplayId: 'sink-top',
+        sourceEdge: RemoteInputEdge.top,
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkOffsetX: 0,
+        sinkOffsetY: 400,
+        sharedSegmentStart: 1000,
+        sharedSegmentEnd: 1600,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.edgeMappings, hasLength(2));
+      expect(
+        resolved.edgeMappings.map((mapping) => (
+              mapping.sourceEdge,
+              mapping.sinkDisplayId,
+              mapping.sinkEdge,
+              mapping.sourceSegmentStart,
+              mapping.sourceSegmentEnd,
+            )),
+        containsAll([
+          (
+            RemoteInputEdge.top,
+            'sink-top',
+            RemoteInputEdge.bottom,
+            1000,
+            1600,
+          ),
+          (
+            RemoteInputEdge.left,
+            'sink-left',
+            RemoteInputEdge.right,
+            800,
+            1200,
+          ),
+        ]),
+      );
+    });
+
+    test('resolves a nearly touching perpendicular edge within tolerance', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Built-in',
+            x: 0,
+            y: 0,
+            width: 1710,
+            height: 1107,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'windows',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-left',
+            name: 'Left',
+            x: -3840,
+            y: 0,
+            width: 3840,
+            height: 2160,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'sink-top',
+            name: 'Top',
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'source-main',
+        sinkDisplayId: 'sink-top',
+        sourceEdge: RemoteInputEdge.top,
+        sinkEdge: RemoteInputEdge.bottom,
+        sinkOffsetX: 6,
+        sinkOffsetY: -1080,
+        sharedSegmentStart: 6,
+        sharedSegmentEnd: 1710,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+        edgeTolerance: 6,
+      );
+
+      expect(resolved, isNotNull);
+      final leftMapping = resolved!.edgeMappings.singleWhere(
+        (mapping) => mapping.sourceEdge == RemoteInputEdge.left,
+      );
+      expect(leftMapping.sinkDisplayId, 'sink-left');
+      expect(leftMapping.sinkEdge, RemoteInputEdge.right);
+      expect(leftMapping.sourceSegmentStart, 0);
+      expect(leftMapping.sourceSegmentEnd, 1080);
+    });
   });
 
   group('RemoteInputTopology', () {

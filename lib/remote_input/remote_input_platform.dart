@@ -36,6 +36,8 @@ class RemoteInputPlatform {
     String displayId = '',
     int segmentStart = 0,
     int segmentEnd = 0,
+    List<RemoteInputEdgeMapping> edgeMappings =
+        const <RemoteInputEdgeMapping>[],
   }) {
     return _channel.invokeMethod<void>('startCapture', <String, dynamic>{
       'sessionId': sessionId,
@@ -44,6 +46,16 @@ class RemoteInputPlatform {
       if (displayId.isNotEmpty) 'displayId': displayId,
       'segmentStart': segmentStart,
       'segmentEnd': segmentEnd,
+      if (edgeMappings.isNotEmpty)
+        'segments': edgeMappings
+            .map((mapping) => <String, dynamic>{
+                  'displayId': mapping.sourceDisplayId,
+                  'edge': mapping.sourceEdge.name,
+                  'start': mapping.sourceSegmentStart,
+                  'end': mapping.sourceSegmentEnd,
+                  'routeId': mapping.effectiveRouteId,
+                })
+            .toList(),
     });
   }
 
@@ -60,12 +72,24 @@ class RemoteInputPlatform {
     int releaseSequence = 0,
     int releaseActivationSequence = 0,
     double releaseEdgeUnit = 0,
+    String displayId = '',
+    RemoteInputEdge? edge,
+    int segmentStart = 0,
+    int segmentEnd = 0,
+    String routeId = '',
   }) {
     return _channel.invokeMethod<void>('pauseCapture', <String, dynamic>{
       'sessionId': sessionId,
       'releaseSequence': releaseSequence,
       'releaseActivationSequence': releaseActivationSequence,
       'releaseEdgeUnit': releaseEdgeUnit,
+      if (displayId.isNotEmpty) 'displayId': displayId,
+      if (edge != null) 'edge': edge.name,
+      if (segmentStart != 0 || segmentEnd != 0) ...{
+        'segmentStart': segmentStart,
+        'segmentEnd': segmentEnd,
+      },
+      if (routeId.isNotEmpty) 'routeId': routeId,
     });
   }
 
@@ -75,6 +99,8 @@ class RemoteInputPlatform {
     RemoteInputEdge? edge,
     int segmentStart = 0,
     int segmentEnd = 0,
+    List<RemoteInputEdgeMapping> edgeMappings =
+        const <RemoteInputEdgeMapping>[],
   }) {
     return _channel.invokeMethod<void>('startInjection', <String, dynamic>{
       'sessionId': sessionId,
@@ -82,6 +108,8 @@ class RemoteInputPlatform {
       if (edge != null) 'edge': edge.name,
       'segmentStart': segmentStart,
       'segmentEnd': segmentEnd,
+      if (edgeMappings.isNotEmpty)
+        'mappings': edgeMappings.map((mapping) => mapping.toJson()).toList(),
     });
   }
 
@@ -141,6 +169,12 @@ class RemoteInputPlatform {
           sequence: arguments['sequence'] as int? ?? 0,
           activationSequence: arguments['activationSequence'] as int? ?? 0,
           edgeUnit: _doubleArgument(arguments['edgeUnit']),
+          sourceEdgeUnit: arguments['sourceEdgeUnit'] as bool? ?? false,
+          sourceDisplayId: arguments['sourceDisplayId'] as String? ?? '',
+          sourceEdge: _nullableEdgeArgument(arguments['sourceEdge']),
+          sourceSegmentStart: _intArgument(arguments['sourceSegmentStart']),
+          sourceSegmentEnd: _intArgument(arguments['sourceSegmentEnd']),
+          routeId: arguments['routeId'] as String? ?? '',
         ),
       );
       return null;
@@ -189,6 +223,23 @@ class RemoteInputPlatform {
     }
     return 0;
   }
+
+  int _intArgument(Object? value) {
+    if (value is num) {
+      return value.toInt();
+    }
+    return 0;
+  }
+
+  RemoteInputEdge? _nullableEdgeArgument(Object? value) {
+    final name = value as String?;
+    for (final edge in RemoteInputEdge.values) {
+      if (edge.name == name) {
+        return edge;
+      }
+    }
+    return null;
+  }
 }
 
 class PlatformRemoteInputRelease {
@@ -198,6 +249,12 @@ class PlatformRemoteInputRelease {
     this.sequence = 0,
     this.activationSequence = 0,
     this.edgeUnit = 0,
+    this.sourceEdgeUnit = false,
+    this.sourceDisplayId = '',
+    this.sourceEdge,
+    this.sourceSegmentStart = 0,
+    this.sourceSegmentEnd = 0,
+    this.routeId = '',
   });
 
   final String sessionId;
@@ -205,6 +262,12 @@ class PlatformRemoteInputRelease {
   final int sequence;
   final int activationSequence;
   final double edgeUnit;
+  final bool sourceEdgeUnit;
+  final String sourceDisplayId;
+  final RemoteInputEdge? sourceEdge;
+  final int sourceSegmentStart;
+  final int sourceSegmentEnd;
+  final String routeId;
 }
 
 class PlatformRemoteInputError {

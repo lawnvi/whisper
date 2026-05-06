@@ -1225,6 +1225,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             savedLayout: topologyLayout,
             sourceTopology: localTopology,
             sinkTopology: remoteTopology,
+            edgeTolerance: layout.edgeThresholdPx,
           );
         }
       }
@@ -1254,9 +1255,22 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
+      final topologyMappings = resolvedTopologyLayout?.edgeMappings ??
+          const <RemoteInputEdgeMapping>[];
+      final sourceSegmentStart = topologyMappings.isEmpty
+          ? resolvedTopologyLayout?.sharedSegment.start ?? 0
+          : topologyMappings
+              .map((mapping) => mapping.sourceSegmentStart)
+              .reduce(min);
+      final sourceSegmentEnd = topologyMappings.isEmpty
+          ? resolvedTopologyLayout?.sharedSegment.end ?? 0
+          : topologyMappings
+              .map((mapping) => mapping.sourceSegmentEnd)
+              .reduce(max);
       _traceRemoteInput(
         'remote input toggle starting peer=${device.uid} '
         'self=${self.uid} edge=${edge.name} '
+        'mappings=${topologyMappings.length} '
         'host=${device.host}:${device.port}',
       );
       await _remoteInputCoordinator.startSharingToConnectedPeer(
@@ -1271,12 +1285,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sendControl: socketManager.sendRemoteInputControl,
         sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
         sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
-        sourceSegmentStart: resolvedTopologyLayout?.sharedSegment.start ?? 0,
-        sourceSegmentEnd: resolvedTopologyLayout?.sharedSegment.end ?? 0,
+        sourceSegmentStart: sourceSegmentStart,
+        sourceSegmentEnd: sourceSegmentEnd,
         sinkDisplayId: resolvedTopologyLayout?.sinkDisplay.displayId ?? '',
         sinkEdge: resolvedTopologyLayout?.sharedSegment.sinkEdge,
         sinkSegmentStart: resolvedTopologyLayout?.sinkSegmentStart ?? 0,
         sinkSegmentEnd: resolvedTopologyLayout?.sinkSegmentEnd ?? 0,
+        edgeMappings: topologyMappings,
       );
       if (mounted && showToast) {
         showAppToast(l10n.remoteInputEnabledMoveToEdge);

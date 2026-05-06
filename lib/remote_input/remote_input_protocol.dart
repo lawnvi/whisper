@@ -30,6 +30,97 @@ enum RemoteInputEventType {
   release,
 }
 
+class RemoteInputEdgeMapping {
+  const RemoteInputEdgeMapping({
+    this.routeId = '',
+    required this.sourceDisplayId,
+    required this.sourceEdge,
+    required this.sourceSegmentStart,
+    required this.sourceSegmentEnd,
+    required this.sinkDisplayId,
+    required this.sinkEdge,
+    required this.sinkSegmentStart,
+    required this.sinkSegmentEnd,
+  });
+
+  final String routeId;
+  final String sourceDisplayId;
+  final RemoteInputEdge sourceEdge;
+  final int sourceSegmentStart;
+  final int sourceSegmentEnd;
+  final String sinkDisplayId;
+  final RemoteInputEdge sinkEdge;
+  final int sinkSegmentStart;
+  final int sinkSegmentEnd;
+
+  int get sourceLength => sourceSegmentEnd - sourceSegmentStart;
+  int get sinkLength => sinkSegmentEnd - sinkSegmentStart;
+  String get effectiveRouteId => routeId.isNotEmpty
+      ? routeId
+      : [
+          sourceDisplayId,
+          sourceEdge.name,
+          sourceSegmentStart,
+          sourceSegmentEnd,
+          sinkDisplayId,
+          sinkEdge.name,
+          sinkSegmentStart,
+          sinkSegmentEnd,
+        ].join('|');
+
+  bool containsSourceCoordinate(double coordinate, {double tolerance = 0}) {
+    return coordinate >= sourceSegmentStart - tolerance &&
+        coordinate <= sourceSegmentEnd + tolerance;
+  }
+
+  double edgeUnitForSourceCoordinate(double coordinate) {
+    if (sourceLength <= 0) {
+      return 0;
+    }
+    final unit = (coordinate - sourceSegmentStart) / sourceLength;
+    return unit.clamp(0, 1).toDouble();
+  }
+
+  double sourceCoordinateForEdgeUnit(double edgeUnit) {
+    final clamped = edgeUnit.clamp(0, 1).toDouble();
+    return sourceSegmentStart + sourceLength * clamped;
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'routeId': effectiveRouteId,
+        'sourceDisplayId': sourceDisplayId,
+        'sourceEdge': sourceEdge.name,
+        'sourceSegmentStart': sourceSegmentStart,
+        'sourceSegmentEnd': sourceSegmentEnd,
+        'sinkDisplayId': sinkDisplayId,
+        'sinkEdge': sinkEdge.name,
+        'sinkSegmentStart': sinkSegmentStart,
+        'sinkSegmentEnd': sinkSegmentEnd,
+      };
+
+  factory RemoteInputEdgeMapping.fromJson(Map<String, dynamic> json) {
+    return RemoteInputEdgeMapping(
+      routeId: json['routeId'] as String? ?? '',
+      sourceDisplayId: json['sourceDisplayId'] as String? ?? '',
+      sourceEdge: _enumByName(
+        RemoteInputEdge.values,
+        json['sourceEdge'] as String?,
+        RemoteInputEdge.right,
+      ),
+      sourceSegmentStart: _intJson(json['sourceSegmentStart']),
+      sourceSegmentEnd: _intJson(json['sourceSegmentEnd']),
+      sinkDisplayId: json['sinkDisplayId'] as String? ?? '',
+      sinkEdge: _enumByName(
+        RemoteInputEdge.values,
+        json['sinkEdge'] as String?,
+        RemoteInputEdge.left,
+      ),
+      sinkSegmentStart: _intJson(json['sinkSegmentStart']),
+      sinkSegmentEnd: _intJson(json['sinkSegmentEnd']),
+    );
+  }
+}
+
 class RemoteInputControlMessage {
   const RemoteInputControlMessage({
     required this.action,
@@ -47,6 +138,8 @@ class RemoteInputControlMessage {
     this.sinkEdge,
     this.sinkSegmentStart = 0,
     this.sinkSegmentEnd = 0,
+    this.edgeMappings = const <RemoteInputEdgeMapping>[],
+    this.routeId = '',
     this.releaseHotkey = '',
     this.releaseReason = '',
     this.releaseSequence = 0,
@@ -72,6 +165,8 @@ class RemoteInputControlMessage {
   final RemoteInputEdge? sinkEdge;
   final int sinkSegmentStart;
   final int sinkSegmentEnd;
+  final List<RemoteInputEdgeMapping> edgeMappings;
+  final String routeId;
   final String releaseHotkey;
   final String releaseReason;
   final int releaseSequence;
@@ -97,6 +192,10 @@ class RemoteInputControlMessage {
         if (sinkEdge != null) 'sinkEdge': sinkEdge!.name,
         if (sinkSegmentStart != 0) 'sinkSegmentStart': sinkSegmentStart,
         if (sinkSegmentEnd != 0) 'sinkSegmentEnd': sinkSegmentEnd,
+        if (edgeMappings.isNotEmpty)
+          'edgeMappings':
+              edgeMappings.map((mapping) => mapping.toJson()).toList(),
+        if (routeId.isNotEmpty) 'routeId': routeId,
         'releaseHotkey': releaseHotkey,
         'releaseReason': releaseReason,
         'releaseSequence': releaseSequence,
@@ -142,6 +241,17 @@ class RemoteInputControlMessage {
       ),
       sinkSegmentStart: _intJson(json['sinkSegmentStart']),
       sinkSegmentEnd: _intJson(json['sinkSegmentEnd']),
+      edgeMappings: (json['edgeMappings'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) =>
+              RemoteInputEdgeMapping.fromJson(Map<String, dynamic>.from(item)))
+          .where((mapping) =>
+              mapping.sourceDisplayId.isNotEmpty &&
+              mapping.sinkDisplayId.isNotEmpty &&
+              mapping.sourceSegmentEnd > mapping.sourceSegmentStart &&
+              mapping.sinkSegmentEnd > mapping.sinkSegmentStart)
+          .toList(growable: false),
+      routeId: json['routeId'] as String? ?? '',
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
       releaseReason: json['releaseReason'] as String? ?? '',
       releaseSequence: _intJson(json['releaseSequence']),

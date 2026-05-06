@@ -79,6 +79,8 @@ class RemoteInputManager {
     RemoteInputEdge? sinkEdge,
     int sinkSegmentStart = 0,
     int sinkSegmentEnd = 0,
+    List<RemoteInputEdgeMapping> edgeMappings =
+        const <RemoteInputEdgeMapping>[],
   }) {
     final sessionId = _uuid.v4();
     _sessions[sessionId] = RemoteInputSession(
@@ -108,6 +110,7 @@ class RemoteInputManager {
       sinkEdge: sinkEdge,
       sinkSegmentStart: sinkSegmentStart,
       sinkSegmentEnd: sinkSegmentEnd,
+      edgeMappings: edgeMappings,
     );
   }
 
@@ -148,6 +151,7 @@ class RemoteInputManager {
       sinkEdge: offer.sinkEdge,
       sinkSegmentStart: offer.sinkSegmentStart,
       sinkSegmentEnd: offer.sinkSegmentEnd,
+      edgeMappings: offer.edgeMappings,
       releaseHotkey: offer.releaseHotkey,
       sourcePlatform: offer.sourcePlatform,
       sinkPlatform: sinkPlatform.isNotEmpty ? sinkPlatform : offer.sinkPlatform,

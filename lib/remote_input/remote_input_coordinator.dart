@@ -122,6 +122,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   double _sinkEntryTravel = 0;
   double _scrollMultiplier = 1.0;
   RemoteInputPlatformKind _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
+  RemoteInputEdgeMapping? _sinkActiveEdgeMapping;
 
   RemoteInputRuntimeState get state => _state;
 
@@ -215,6 +216,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputEdge? sinkEdge,
     int sinkSegmentStart = 0,
     int sinkSegmentEnd = 0,
+    List<RemoteInputEdgeMapping> edgeMappings =
+        const <RemoteInputEdgeMapping>[],
   }) async {
     _trace(
       'remote input start share requested source=$sourcePeerId '
@@ -255,6 +258,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkEdge: sinkEdge,
       sinkSegmentStart: sinkSegmentStart,
       sinkSegmentEnd: sinkSegmentEnd,
+      edgeMappings: edgeMappings,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -371,6 +375,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _latestSinkActivationSequence = 0;
     _sinkEntryTravel = 0;
     _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
+    _sinkActiveEdgeMapping = null;
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
@@ -561,6 +566,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       edge: message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
       segmentStart: message.sinkSegmentStart,
       segmentEnd: message.sinkSegmentEnd,
+      edgeMappings: message.edgeMappings,
     );
     _trace(
       'remote input platform startInjection returned '
@@ -577,6 +583,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _latestSinkActivationSequence = 0;
     _sinkPacketTraceCount = 0;
     _sinkEntryTravel = 0;
+    _sinkActiveEdgeMapping =
+        message.edgeMappings.isNotEmpty ? message.edgeMappings.first : null;
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
@@ -604,7 +612,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
               releaseActivationSequence: release.activationSequence > 0
                   ? release.activationSequence
                   : _latestSinkActivationSequence,
-              releaseEdgeUnit: release.edgeUnit,
+              releaseEdgeUnit: _sourceReleaseEdgeUnit(
+                sinkEdgeUnit: release.edgeUnit,
+                sourceEdgeUnit: release.sourceEdgeUnit,
+                message: message,
+                routeId: release.routeId,
+              ),
+              sourceDisplayId: release.sourceDisplayId,
+              sourceEdge: release.sourceEdge,
+              sourceSegmentStart: release.sourceSegmentStart,
+              sourceSegmentEnd: release.sourceSegmentEnd,
+              routeId: release.routeId,
             ),
           );
         } else {
@@ -624,6 +642,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _manager.onPacket = (packet) {
+      final routedPacket = _routeSinkActiveStartPacket(packet, message);
       if (packet.sessionId == message.sessionId &&
           packet.sequence > _latestSinkPacketSequence) {
         _latestSinkPacketSequence = packet.sequence;
@@ -637,7 +656,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _sinkEntryTravel += _sinkEntryDelta(packet, message.layoutEdge);
       }
       final scrollNormalized = RemoteInputScrollNormalizer.normalizeForTarget(
-        packet,
+        routedPacket,
         targetPlatform: targetPlatform,
         scrollMultiplier: _scrollMultiplier,
         fallbackSourcePlatform: _sinkSourcePlatform,
@@ -847,6 +866,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       displayId: message.sourceDisplayId,
       segmentStart: message.sourceSegmentStart,
       segmentEnd: message.sourceSegmentEnd,
+      edgeMappings: message.edgeMappings,
     );
     _trace(
       'remote input platform startCapture returned '
@@ -883,6 +903,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
       releaseSequence: message.releaseSequence,
       releaseActivationSequence: message.releaseActivationSequence,
       releaseEdgeUnit: message.releaseEdgeUnit,
+      displayId: message.sourceDisplayId,
+      edge: message.sourceEdge,
+      segmentStart: message.sourceSegmentStart,
+      segmentEnd: message.sourceSegmentEnd,
+      routeId: message.routeId,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -892,6 +917,170 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: _state.peerId,
       ),
     );
+  }
+
+  RemoteInputPacketFrame _routeSinkActiveStartPacket(
+    RemoteInputPacketFrame packet,
+    RemoteInputControlMessage message,
+  ) {
+    if (packet.sessionId != message.sessionId ||
+        packet.eventType != RemoteInputEventType.mouseMove ||
+        message.edgeMappings.isEmpty) {
+      return packet;
+    }
+    final payload = _mousePayload(packet);
+    if (payload == null || payload['activeStart'] != true) {
+      return packet;
+    }
+    final sourceEdge = _sourceEdgeForPayload(payload) ??
+        message.sourceEdge ??
+        message.layoutEdge;
+    if (sourceEdge == null) {
+      return packet;
+    }
+    final sourceCoordinate = _sourceCoordinateForPayload(
+      payload,
+      message,
+      sourceEdge: sourceEdge,
+    );
+    final routeId = payload['routeId'] as String? ?? '';
+    final routeMapping = routeId.isNotEmpty
+        ? _edgeMappingForRouteId(routeId, message.edgeMappings)
+        : null;
+    final coordinateMapping = sourceCoordinate == null
+        ? null
+        : _edgeMappingForSourceCoordinate(
+            sourceCoordinate,
+            message.edgeMappings,
+            sourceEdge: sourceEdge,
+          );
+    final mapping = routeMapping ?? coordinateMapping;
+    if (mapping == null) {
+      return packet;
+    }
+    final routeEdgeUnit = routeMapping != null && payload['edgeUnit'] is num
+        ? _numberPayload(payload['edgeUnit']).clamp(0, 1).toDouble()
+        : null;
+    final mappedSourceCoordinate = routeEdgeUnit == null
+        ? sourceCoordinate ??
+            _sourceCoordinateForPayload(
+              payload,
+              message,
+              sourceEdge: mapping.sourceEdge,
+            )
+        : null;
+    if (routeEdgeUnit == null && mappedSourceCoordinate == null) {
+      return packet;
+    }
+    _sinkActiveEdgeMapping = mapping;
+    final routedPayload = Map<String, dynamic>.from(payload);
+    routedPayload['edgeUnit'] = routeEdgeUnit ??
+        mapping.edgeUnitForSourceCoordinate(mappedSourceCoordinate!);
+    routedPayload['routeId'] = mapping.effectiveRouteId;
+    routedPayload['sinkDisplayId'] = mapping.sinkDisplayId;
+    routedPayload['sinkEdge'] = mapping.sinkEdge.name;
+    routedPayload['sinkSegmentStart'] = mapping.sinkSegmentStart;
+    routedPayload['sinkSegmentEnd'] = mapping.sinkSegmentEnd;
+    return RemoteInputPacketFrame(
+      sessionId: packet.sessionId,
+      sequence: packet.sequence,
+      timestampMicros: packet.timestampMicros,
+      eventType: packet.eventType,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(routedPayload))),
+    );
+  }
+
+  double? _sourceCoordinateForPayload(
+    Map<String, dynamic> payload,
+    RemoteInputControlMessage message, {
+    required RemoteInputEdge sourceEdge,
+  }) {
+    final value = sourceEdge == RemoteInputEdge.left ||
+            sourceEdge == RemoteInputEdge.right
+        ? payload['y']
+        : payload['x'];
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (message.sourceSegmentEnd > message.sourceSegmentStart &&
+        payload['edgeUnit'] is num) {
+      final edgeUnit =
+          _numberPayload(payload['edgeUnit']).clamp(0, 1).toDouble();
+      final matchingMappings = message.edgeMappings
+          .where((mapping) => mapping.sourceEdge == sourceEdge)
+          .toList(growable: false);
+      if (matchingMappings.length == 1) {
+        return matchingMappings.single.sourceCoordinateForEdgeUnit(edgeUnit);
+      }
+      return message.sourceSegmentStart +
+          (message.sourceSegmentEnd - message.sourceSegmentStart) * edgeUnit;
+    }
+    return null;
+  }
+
+  RemoteInputEdgeMapping? _edgeMappingForRouteId(
+    String routeId,
+    List<RemoteInputEdgeMapping> mappings,
+  ) {
+    for (final mapping in mappings) {
+      if (mapping.effectiveRouteId == routeId) {
+        return mapping;
+      }
+    }
+    return null;
+  }
+
+  RemoteInputEdgeMapping? _edgeMappingForSourceCoordinate(
+    double coordinate,
+    List<RemoteInputEdgeMapping> mappings, {
+    required RemoteInputEdge sourceEdge,
+  }) {
+    for (final mapping in mappings) {
+      if (mapping.sourceEdge != sourceEdge) {
+        continue;
+      }
+      if (mapping.containsSourceCoordinate(coordinate, tolerance: 1)) {
+        return mapping;
+      }
+    }
+    return null;
+  }
+
+  RemoteInputEdge? _sourceEdgeForPayload(Map<String, dynamic> payload) {
+    final edgeName = payload['edge'];
+    if (edgeName is! String) {
+      return null;
+    }
+    for (final edge in RemoteInputEdge.values) {
+      if (edge.name == edgeName) {
+        return edge;
+      }
+    }
+    return null;
+  }
+
+  double _sourceReleaseEdgeUnit({
+    required double sinkEdgeUnit,
+    required bool sourceEdgeUnit,
+    required RemoteInputControlMessage message,
+    required String routeId,
+  }) {
+    if (sourceEdgeUnit) {
+      return sinkEdgeUnit;
+    }
+    final routeMapping = routeId.isNotEmpty
+        ? _edgeMappingForRouteId(routeId, message.edgeMappings)
+        : null;
+    final mapping = routeMapping ?? _sinkActiveEdgeMapping;
+    if (mapping == null ||
+        message.sourceSegmentEnd <= message.sourceSegmentStart) {
+      return sinkEdgeUnit;
+    }
+    final sourceCoordinate = mapping.sourceCoordinateForEdgeUnit(sinkEdgeUnit);
+    final sourceLength = message.sourceSegmentEnd - message.sourceSegmentStart;
+    return ((sourceCoordinate - message.sourceSegmentStart) / sourceLength)
+        .clamp(0, 1)
+        .toDouble();
   }
 
   bool _isActivationStartPacket(RemoteInputPacketFrame packet) {

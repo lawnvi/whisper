@@ -59,13 +59,61 @@ class MainFlutterWindow: NSWindow {
 }
 
 final class RemoteInputPlugin: NSObject, FlutterPlugin {
+  private struct CaptureRoute {
+    let routeId: String
+    let sourceDisplayId: String
+    let sourceEdge: String
+    let sourceSegmentStart: CGFloat
+    let sourceSegmentEnd: CGFloat
+  }
+
+  private struct InjectionRoute {
+    let routeId: String
+    let sourceDisplayId: String
+    let sourceEdge: String
+    let sinkDisplayId: String
+    let sinkEdge: String
+    let sinkSegmentStart: CGFloat
+    let sinkSegmentEnd: CGFloat
+    let sourceSegmentStart: CGFloat
+    let sourceSegmentEnd: CGFloat
+  }
+
+  private struct InjectionReleaseRoute {
+    let routeId: String
+    let sourceDisplayId: String
+    let sourceEdge: String
+    let sourceSegmentStart: CGFloat
+    let sourceSegmentEnd: CGFloat
+    let edgeUnit: CGFloat
+  }
+
+  private struct CaptureCrossing {
+    let route: CaptureRoute
+    let edgeUnit: CGFloat
+    let strictSegmentHit: Bool
+    let normalMotion: CGFloat
+    let travelToIntersection: CGFloat
+  }
+
+  private struct InjectionReleaseCrossing {
+    let route: InjectionRoute
+    let edgeUnit: CGFloat
+    let strictSegmentHit: Bool
+    let normalMotion: CGFloat
+    let travelToIntersection: CGFloat
+  }
+
   private let channel: FlutterMethodChannel
   private var captureSessionId = ""
   private var injectionSessionId = ""
   private var captureEdge = "right"
+  private var captureRouteId = ""
   private var captureDisplayId = ""
   private var captureSegmentStart: CGFloat = 0
   private var captureSegmentEnd: CGFloat = 0
+  private var captureSegments: [(start: CGFloat, end: CGFloat)] = []
+  private var captureRoutes: [CaptureRoute] = []
   private var releaseHotkey = "ctrl+alt+esc"
   private var captureActive = false
   private var eventTap: CFMachPort?
@@ -83,8 +131,11 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedCurrentClickCount = 1
   private var injectionDisplayId = ""
   private var injectionEdge = ""
+  private var injectionRouteId = ""
   private var injectionSegmentStart: CGFloat = 0
   private var injectionSegmentEnd: CGFloat = 0
+  private var injectionRoutes: [InjectionRoute] = []
+  private var captureActivationEdgeUnit: CGFloat?
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
@@ -120,12 +171,16 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let displayId = args["displayId"] as? String ?? ""
       let segmentStart = doubleValue(args["segmentStart"])
       let segmentEnd = doubleValue(args["segmentEnd"])
+      let segments = captureSegments(from: args["segments"])
+      let routes = captureRoutes(from: args["segments"])
       startCapture(
         sessionId: sessionId,
         edge: edge,
         displayId: displayId,
         segmentStart: segmentStart,
         segmentEnd: segmentEnd,
+        segments: segments,
+        routes: routes,
         releaseHotkey: releaseHotkey,
         result: result)
 
@@ -146,11 +201,21 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let releaseActivationSequence =
         args["releaseActivationSequence"] as? Int ?? 0
       let releaseEdgeUnit = doubleValue(args["releaseEdgeUnit"])
+      let displayId = args["displayId"] as? String ?? ""
+      let edge = args["edge"] as? String ?? ""
+      let routeId = args["routeId"] as? String ?? ""
+      let segmentStart = doubleValue(args["segmentStart"])
+      let segmentEnd = doubleValue(args["segmentEnd"])
       pauseCapture(
         sessionId: sessionId,
         releaseSequence: releaseSequence,
         releaseActivationSequence: releaseActivationSequence,
-        releaseEdgeUnit: releaseEdgeUnit)
+        releaseEdgeUnit: releaseEdgeUnit,
+        displayId: displayId,
+        edge: edge,
+        routeId: routeId,
+        segmentStart: segmentStart,
+        segmentEnd: segmentEnd)
       result(nil)
 
     case "startInjection":
@@ -182,8 +247,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectionSessionId = sessionId
       injectionDisplayId = args["displayId"] as? String ?? ""
       injectionEdge = args["edge"] as? String ?? ""
+      injectionRouteId = ""
       injectionSegmentStart = doubleValue(args["segmentStart"])
       injectionSegmentEnd = doubleValue(args["segmentEnd"])
+      injectionRoutes = injectionRoutes(from: args["mappings"])
       showCursorForRemoteInjection(at: nil)
       os_log(
         "remote input injection started session=%{public}@",
@@ -229,6 +296,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     displayId: String,
     segmentStart: CGFloat,
     segmentEnd: CGFloat,
+    segments: [(start: CGFloat, end: CGFloat)],
+    routes: [CaptureRoute],
     releaseHotkey: String,
     result: @escaping FlutterResult
   ) {
@@ -244,14 +313,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     stopCapture()
     captureSessionId = sessionId
     captureEdge = edge
+    captureRouteId = ""
     captureDisplayId = displayId
     captureSegmentStart = segmentStart
     captureSegmentEnd = segmentEnd
+    captureSegments = segments
+    captureRoutes = routes
     self.releaseHotkey = releaseHotkey
     captureActive = false
     captureMouseButtons = 0
     sequence = 0
     captureActivationSequence = 0
+    captureActivationEdgeUnit = nil
 
     let userInfo = Unmanaged.passUnretained(self).toOpaque()
     guard let tap = CGEvent.tapCreate(
@@ -288,11 +361,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     eventTap = nil
     captureSessionId = ""
     captureDisplayId = ""
+    captureRouteId = ""
     captureSegmentStart = 0
     captureSegmentEnd = 0
+    captureSegments = []
+    captureRoutes = []
     captureActive = false
     captureActivationSequence = 0
     captureMouseButtons = 0
+    captureActivationEdgeUnit = nil
     showCaptureCursorIfNeeded()
   }
 
@@ -316,15 +393,22 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectionSessionId = ""
     injectionDisplayId = ""
     injectionEdge = ""
+    injectionRouteId = ""
     injectionSegmentStart = 0
     injectionSegmentEnd = 0
+    injectionRoutes = []
   }
 
   private func pauseCapture(
     sessionId: String,
     releaseSequence: Int,
     releaseActivationSequence: Int,
-    releaseEdgeUnit: CGFloat
+    releaseEdgeUnit: CGFloat,
+    displayId: String,
+    edge: String,
+    routeId: String,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat
   ) {
     guard sessionId == captureSessionId else {
       return
@@ -344,6 +428,14 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureActive = false
     captureActivationSequence = 0
     captureMouseButtons = 0
+    if !edge.isEmpty {
+      applyCaptureRoute(CaptureRoute(
+        routeId: routeId,
+        sourceDisplayId: displayId,
+        sourceEdge: edge,
+        sourceSegmentStart: segmentStart,
+        sourceSegmentEnd: segmentEnd))
+    }
     moveCaptureCursorToLocalEdge(edgeUnit: releaseEdgeUnit)
     showCaptureCursorIfNeeded()
   }
@@ -358,14 +450,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     var activeStart = false
     if !captureActive {
-      if isEdgeActivationEvent(type: type, event: event) {
-        captureActive = true
-        activeStart = true
-        captureActivationSequence = sequence + 1
-        hideCaptureCursorIfNeeded()
-      } else {
+      guard let crossing = captureActivationCrossing(type: type, event: event) else {
         return false
       }
+      applyCaptureRoute(crossing.route)
+      captureActivationEdgeUnit = crossing.edgeUnit
+      captureActive = true
+      activeStart = true
+      captureActivationSequence = sequence + 1
+      hideCaptureCursorIfNeeded()
     }
     prepareCaptureButtonState(type: type)
     guard let encoded = encodePayload(
@@ -374,6 +467,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       activeStart: activeStart
     ) else {
       return true
+    }
+    if activeStart {
+      captureActivationEdgeUnit = nil
     }
     finishCaptureButtonState(type: type)
     sequence += 1
@@ -414,11 +510,21 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "unitY": normalized(point.y, start: bounds.minY, length: bounds.height)
       ]
       if hasCaptureSegment() {
-        payload["edgeUnit"] = Double(edgeUnitForPoint(
-          point,
-          edge: captureEdge,
-          segmentStart: captureSegmentStart,
-          segmentEnd: captureSegmentEnd))
+        let edgeUnit = activeStart
+          ? captureActivationEdgeUnit ?? edgeUnitForPoint(
+            point,
+            edge: captureEdge,
+            segmentStart: captureSegmentStart,
+            segmentEnd: captureSegmentEnd)
+          : edgeUnitForPoint(
+            point,
+            edge: captureEdge,
+            segmentStart: captureSegmentStart,
+            segmentEnd: captureSegmentEnd)
+        payload["edgeUnit"] = Double(edgeUnit)
+      }
+      if !captureRouteId.isEmpty {
+        payload["routeId"] = captureRouteId
       }
     case "mouseButton":
       payload = [
@@ -541,14 +647,31 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         injectedMousePoint ??
         CGEvent(source: nil)?.location ??
         fallbackPoint
-      if entryPoint == nil && injectedMouseEnteredInterior && isReverseInjectionRelease(
-        data,
-        currentPoint: currentPoint,
-        deltaX: deltaX,
-        deltaY: deltaY
-      ) {
-        emitInjectionRelease(reason: "edge")
-        return
+      if entryPoint == nil && injectedMouseEnteredInterior {
+        if let releaseRoute = reverseInjectionSourceEdgeUnit(
+          currentPoint: currentPoint,
+          deltaX: deltaX,
+          deltaY: deltaY) {
+          emitInjectionRelease(
+            reason: "edge",
+            edgeUnit: releaseRoute.edgeUnit,
+            sourceEdgeUnit: true,
+            routeId: releaseRoute.routeId,
+            sourceDisplayId: releaseRoute.sourceDisplayId,
+            sourceEdge: releaseRoute.sourceEdge,
+            sourceSegmentStart: releaseRoute.sourceSegmentStart,
+            sourceSegmentEnd: releaseRoute.sourceSegmentEnd)
+          return
+        }
+        if isReverseInjectionRelease(
+          data,
+          currentPoint: currentPoint,
+          deltaX: deltaX,
+          deltaY: deltaY
+        ) {
+          emitInjectionRelease(reason: "edge")
+          return
+        }
       }
       let shouldMove = entryPoint != nil || deltaX != 0 || deltaY != 0
       let requestedPoint = shouldMove
@@ -671,6 +794,82 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return 0
   }
 
+  private func captureSegments(from value: Any?) -> [(start: CGFloat, end: CGFloat)] {
+    guard let items = value as? [Any] else {
+      return []
+    }
+    return items.compactMap { item in
+      guard let item = item as? [String: Any] else {
+        return nil
+      }
+      let start = doubleValue(item["start"])
+      let end = doubleValue(item["end"])
+      return end > start ? (start: start, end: end) : nil
+    }
+  }
+
+  private func captureRoutes(from value: Any?) -> [CaptureRoute] {
+    guard let items = value as? [Any] else {
+      return []
+    }
+    return items.compactMap { item in
+      guard let item = item as? [String: Any] else {
+        return nil
+      }
+      let displayId = item["displayId"] as? String ?? ""
+      let edge = item["edge"] as? String ?? ""
+      let routeId = item["routeId"] as? String ?? ""
+      let start = doubleValue(item["start"])
+      let end = doubleValue(item["end"])
+      guard !edge.isEmpty, end > start else {
+        return nil
+      }
+      return CaptureRoute(
+        routeId: routeId,
+        sourceDisplayId: displayId,
+        sourceEdge: edge,
+        sourceSegmentStart: start,
+        sourceSegmentEnd: end)
+    }
+  }
+
+  private func injectionRoutes(from value: Any?) -> [InjectionRoute] {
+    guard let items = value as? [Any] else {
+      return []
+    }
+    return items.compactMap { item in
+      guard let item = item as? [String: Any] else {
+        return nil
+      }
+      let sourceDisplayId = item["sourceDisplayId"] as? String ?? ""
+      let sourceEdge = item["sourceEdge"] as? String ?? ""
+      let routeId = item["routeId"] as? String ?? ""
+      let sinkDisplayId = item["sinkDisplayId"] as? String ?? ""
+      let sinkEdge = item["sinkEdge"] as? String ?? ""
+      let sinkSegmentStart = doubleValue(item["sinkSegmentStart"])
+      let sinkSegmentEnd = doubleValue(item["sinkSegmentEnd"])
+      let sourceSegmentStart = doubleValue(item["sourceSegmentStart"])
+      let sourceSegmentEnd = doubleValue(item["sourceSegmentEnd"])
+      guard !sourceEdge.isEmpty,
+            !sinkDisplayId.isEmpty,
+            !sinkEdge.isEmpty,
+            sinkSegmentEnd > sinkSegmentStart,
+            sourceSegmentEnd > sourceSegmentStart else {
+        return nil
+      }
+      return InjectionRoute(
+        routeId: routeId,
+        sourceDisplayId: sourceDisplayId,
+        sourceEdge: sourceEdge,
+        sinkDisplayId: sinkDisplayId,
+        sinkEdge: sinkEdge,
+        sinkSegmentStart: sinkSegmentStart,
+        sinkSegmentEnd: sinkSegmentEnd,
+        sourceSegmentStart: sourceSegmentStart,
+        sourceSegmentEnd: sourceSegmentEnd)
+    }
+  }
+
   private func intValue(_ value: Any?) -> Int {
     if let number = value as? NSNumber {
       return number.intValue
@@ -720,6 +919,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard boolValue(data["activeStart"]) else {
       return nil
     }
+    updateInjectionRoute(from: data)
     if hasInjectionSegment(),
        !injectionEdge.isEmpty,
        data["edgeUnit"] != nil {
@@ -750,6 +950,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     default:
       return CGPoint(x: bounds.minX + inset, y: mappedY)
     }
+  }
+
+  private func updateInjectionRoute(from data: [String: Any]) {
+    guard let sinkEdge = data["sinkEdge"] as? String,
+          !sinkEdge.isEmpty else {
+      return
+    }
+    injectionDisplayId = data["sinkDisplayId"] as? String ?? injectionDisplayId
+    injectionEdge = sinkEdge
+    injectionRouteId = data["routeId"] as? String ?? injectionRouteId
+    injectionSegmentStart = doubleValue(data["sinkSegmentStart"])
+    injectionSegmentEnd = doubleValue(data["sinkSegmentEnd"])
   }
 
   private func virtualDisplayBounds() -> CGRect {
@@ -844,12 +1056,30 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return captureSegmentEnd > captureSegmentStart
   }
 
+  private func pointWithinCaptureSegments(
+    _ point: CGPoint,
+    tolerance: CGFloat = 0
+  ) -> Bool {
+    if captureSegments.isEmpty {
+      return !hasCaptureSegment() || pointWithinSegment(
+        point,
+        edge: captureEdge,
+        segmentStart: captureSegmentStart,
+        segmentEnd: captureSegmentEnd,
+        tolerance: tolerance)
+    }
+    let value = axisValue(point, edge: captureEdge)
+    return captureSegments.contains { segment in
+      value >= segment.start - tolerance && value <= segment.end + tolerance
+    }
+  }
+
   private func hasInjectionSegment() -> Bool {
     return injectionSegmentEnd > injectionSegmentStart
   }
 
   private func clampedInjectedMousePoint(_ point: CGPoint) -> CGPoint {
-    let bounds = injectionDisplayId.isEmpty ? virtualDisplayBounds() : injectionBounds()
+    let bounds = virtualDisplayBounds()
     let inset: CGFloat = 2
     return CGPoint(
       x: min(bounds.maxX - inset, max(bounds.minX + inset, point.x)),
@@ -1537,37 +1767,202 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       flags.contains(.maskAlternate)
   }
 
-  private func isEdgeActivationEvent(type: CGEventType, event: CGEvent) -> Bool {
+  private func captureActivationCrossing(
+    type: CGEventType,
+    event: CGEvent
+  ) -> CaptureCrossing? {
     switch type {
     case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
       let point = event.location
       let deltaX = event.getIntegerValueField(.mouseEventDeltaX)
       let deltaY = event.getIntegerValueField(.mouseEventDeltaY)
-      let bounds = captureBounds()
-      let threshold: CGFloat = 6
-      if hasCaptureSegment() &&
-          !pointWithinSegment(
-            point,
-            edge: captureEdge,
-            segmentStart: captureSegmentStart,
-            segmentEnd: captureSegmentEnd,
-            tolerance: threshold) {
-        return false
-      }
-      switch captureEdge {
-      case "left":
-        return point.x <= bounds.minX + threshold && deltaX < 0
-      case "top":
-        return point.y <= bounds.minY + threshold && deltaY < 0
-      case "bottom":
-        return point.y >= bounds.maxY - threshold && deltaY > 0
-      case "right":
-        fallthrough
-      default:
-        return point.x >= bounds.maxX - threshold && deltaX > 0
-      }
+      let previousPoint = CGPoint(
+        x: point.x - CGFloat(deltaX),
+        y: point.y - CGFloat(deltaY))
+      let routes = captureRoutes.isEmpty ? [CaptureRoute(
+        routeId: captureRouteId,
+        sourceDisplayId: captureDisplayId,
+        sourceEdge: captureEdge,
+        sourceSegmentStart: captureSegmentStart,
+        sourceSegmentEnd: captureSegmentEnd)] : captureRoutes
+      return resolveCaptureCrossing(
+        previousPoint: previousPoint,
+        currentPoint: point,
+        routes: routes)
     default:
+      return nil
+    }
+  }
+
+  private func isEdgeActivationEvent(type: CGEventType, event: CGEvent) -> Bool {
+    return captureActivationCrossing(type: type, event: event) != nil
+  }
+
+  private func applyCaptureRoute(_ route: CaptureRoute) {
+    captureRouteId = route.routeId
+    captureDisplayId = route.sourceDisplayId
+    captureEdge = route.sourceEdge
+    captureSegmentStart = route.sourceSegmentStart
+    captureSegmentEnd = route.sourceSegmentEnd
+  }
+
+  private func resolveCaptureCrossing(
+    previousPoint: CGPoint,
+    currentPoint: CGPoint,
+    routes: [CaptureRoute]
+  ) -> CaptureCrossing? {
+    let candidates = routes.compactMap { route in
+      captureCrossing(
+        route: route,
+        previousPoint: previousPoint,
+        currentPoint: currentPoint,
+        routes: routes)
+    }
+    return rankedCaptureCrossing(candidates)
+  }
+
+  private func captureCrossing(
+    route: CaptureRoute,
+    previousPoint: CGPoint,
+    currentPoint: CGPoint,
+    routes: [CaptureRoute]
+  ) -> CaptureCrossing? {
+    let bounds = screenBounds(displayId: route.sourceDisplayId) ??
+      virtualDisplayBounds()
+    let line = edgeLine(bounds: bounds, edge: route.sourceEdge)
+    let deltaX = currentPoint.x - previousPoint.x
+    let deltaY = currentPoint.y - previousPoint.y
+    guard deltaX != 0 || deltaY != 0,
+          let t = intersectionParameter(
+            edge: route.sourceEdge,
+            line: line,
+            previousPoint: previousPoint,
+            deltaX: deltaX,
+            deltaY: deltaY),
+          t >= 0,
+          t <= 1 else {
+      return nil
+    }
+    let normalMotion = edgeNormalMotion(
+      edge: route.sourceEdge,
+      deltaX: deltaX,
+      deltaY: deltaY)
+    guard normalMotion > 0 else {
+      return nil
+    }
+    let intersection = CGPoint(
+      x: previousPoint.x + deltaX * t,
+      y: previousPoint.y + deltaY * t)
+    let coordinate = axisCoordinate(point: intersection, edge: route.sourceEdge)
+    guard segmentContains(
+      coordinate: coordinate,
+      start: route.sourceSegmentStart,
+      end: route.sourceSegmentEnd,
+      displayId: route.sourceDisplayId,
+      edge: route.sourceEdge,
+      captureRoutes: routes) else {
+      return nil
+    }
+    let length = route.sourceSegmentEnd - route.sourceSegmentStart
+    guard length > 0 else {
+      return nil
+    }
+    let edgeUnit = min(1, max(0, (coordinate - route.sourceSegmentStart) / length))
+    return CaptureCrossing(
+      route: route,
+      edgeUnit: edgeUnit,
+      strictSegmentHit: coordinate > route.sourceSegmentStart &&
+        coordinate < route.sourceSegmentEnd,
+      normalMotion: normalMotion,
+      travelToIntersection: hypot(
+        intersection.x - previousPoint.x,
+        intersection.y - previousPoint.y))
+  }
+
+  private func rankedCaptureCrossing(_ candidates: [CaptureCrossing]) -> CaptureCrossing? {
+    return candidates.sorted { lhs, rhs in
+      if lhs.strictSegmentHit != rhs.strictSegmentHit {
+        return lhs.strictSegmentHit
+      }
+      if abs(lhs.normalMotion) != abs(rhs.normalMotion) {
+        return abs(lhs.normalMotion) > abs(rhs.normalMotion)
+      }
+      if lhs.travelToIntersection != rhs.travelToIntersection {
+        return lhs.travelToIntersection < rhs.travelToIntersection
+      }
+      return lhs.route.routeId < rhs.route.routeId
+    }.first
+  }
+
+  private func edgeLine(bounds: CGRect, edge: String) -> CGFloat {
+    switch edge {
+    case "left":
+      return bounds.minX
+    case "top":
+      return bounds.minY
+    case "bottom":
+      return max(bounds.minY, bounds.maxY - 1)
+    default:
+      return max(bounds.minX, bounds.maxX - 1)
+    }
+  }
+
+  private func intersectionParameter(
+    edge: String,
+    line: CGFloat,
+    previousPoint: CGPoint,
+    deltaX: CGFloat,
+    deltaY: CGFloat
+  ) -> CGFloat? {
+    if edge == "left" || edge == "right" {
+      return deltaX == 0 ? nil : (line - previousPoint.x) / deltaX
+    }
+    return deltaY == 0 ? nil : (line - previousPoint.y) / deltaY
+  }
+
+  private func edgeNormalMotion(
+    edge: String,
+    deltaX: CGFloat,
+    deltaY: CGFloat
+  ) -> CGFloat {
+    switch edge {
+    case "left":
+      return -deltaX
+    case "top":
+      return -deltaY
+    case "bottom":
+      return deltaY
+    default:
+      return deltaX
+    }
+  }
+
+  private func axisCoordinate(point: CGPoint, edge: String) -> CGFloat {
+    return edge == "left" || edge == "right" ? point.y : point.x
+  }
+
+  private func segmentContains(
+    coordinate: CGFloat,
+    start: CGFloat,
+    end: CGFloat,
+    displayId: String,
+    edge: String,
+    captureRoutes routes: [CaptureRoute]
+  ) -> Bool {
+    if coordinate < start {
       return false
+    }
+    if coordinate < end {
+      return true
+    }
+    if coordinate != end {
+      return false
+    }
+    return !routes.contains { other in
+      other.sourceDisplayId == displayId &&
+        other.sourceEdge == edge &&
+        other.sourceSegmentStart <= end &&
+        other.sourceSegmentEnd > end
     }
   }
 
@@ -1776,6 +2171,148 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func reverseInjectionSourceEdgeUnit(
+    currentPoint: CGPoint,
+    deltaX: CGFloat,
+    deltaY: CGFloat
+  ) -> InjectionReleaseRoute? {
+    guard !injectionRoutes.isEmpty else {
+      return nil
+    }
+    let nextPoint = CGPoint(
+      x: currentPoint.x + deltaX,
+      y: currentPoint.y + deltaY)
+    guard let crossing = resolveInjectionReleaseCrossing(
+      previousPoint: currentPoint,
+      currentPoint: nextPoint) else {
+      return nil
+    }
+    return InjectionReleaseRoute(
+      routeId: crossing.route.routeId,
+      sourceDisplayId: crossing.route.sourceDisplayId,
+      sourceEdge: crossing.route.sourceEdge,
+      sourceSegmentStart: crossing.route.sourceSegmentStart,
+      sourceSegmentEnd: crossing.route.sourceSegmentEnd,
+      edgeUnit: crossing.edgeUnit)
+  }
+
+  private func resolveInjectionReleaseCrossing(
+    previousPoint: CGPoint,
+    currentPoint: CGPoint
+  ) -> InjectionReleaseCrossing? {
+    let candidates = injectionRoutes.compactMap { route in
+      injectionReleaseCrossing(
+        route: route,
+        previousPoint: previousPoint,
+        currentPoint: currentPoint)
+    }
+    return rankedInjectionReleaseCrossing(candidates)
+  }
+
+  private func injectionReleaseCrossing(
+    route: InjectionRoute,
+    previousPoint: CGPoint,
+    currentPoint: CGPoint
+  ) -> InjectionReleaseCrossing? {
+    let bounds = screenBounds(displayId: route.sinkDisplayId) ??
+      virtualDisplayBounds()
+    let line = edgeLine(bounds: bounds, edge: route.sinkEdge)
+    let deltaX = currentPoint.x - previousPoint.x
+    let deltaY = currentPoint.y - previousPoint.y
+    guard deltaX != 0 || deltaY != 0,
+          let t = intersectionParameter(
+            edge: route.sinkEdge,
+            line: line,
+            previousPoint: previousPoint,
+            deltaX: deltaX,
+            deltaY: deltaY),
+          t >= 0,
+          t <= 1 else {
+      return nil
+    }
+    let normalMotion = edgeNormalMotion(
+      edge: route.sinkEdge,
+      deltaX: deltaX,
+      deltaY: deltaY)
+    guard normalMotion > 0 else {
+      return nil
+    }
+    let intersection = CGPoint(
+      x: previousPoint.x + deltaX * t,
+      y: previousPoint.y + deltaY * t)
+    let coordinate = axisCoordinate(point: intersection, edge: route.sinkEdge)
+    guard segmentContains(
+      coordinate: coordinate,
+      start: route.sinkSegmentStart,
+      end: route.sinkSegmentEnd,
+      displayId: route.sinkDisplayId,
+      edge: route.sinkEdge,
+      injectionRoutes: injectionRoutes) else {
+      return nil
+    }
+    let length = route.sinkSegmentEnd - route.sinkSegmentStart
+    guard length > 0 else {
+      return nil
+    }
+    let edgeUnit = min(1, max(0, (coordinate - route.sinkSegmentStart) / length))
+    return InjectionReleaseCrossing(
+      route: route,
+      edgeUnit: edgeUnit,
+      strictSegmentHit: coordinate > route.sinkSegmentStart &&
+        coordinate < route.sinkSegmentEnd,
+      normalMotion: normalMotion,
+      travelToIntersection: hypot(
+        intersection.x - previousPoint.x,
+        intersection.y - previousPoint.y))
+  }
+
+  private func rankedInjectionReleaseCrossing(
+    _ candidates: [InjectionReleaseCrossing]
+  ) -> InjectionReleaseCrossing? {
+    return candidates.sorted { lhs, rhs in
+      if lhs.strictSegmentHit != rhs.strictSegmentHit {
+        return lhs.strictSegmentHit
+      }
+      if abs(lhs.normalMotion) != abs(rhs.normalMotion) {
+        return abs(lhs.normalMotion) > abs(rhs.normalMotion)
+      }
+      if lhs.travelToIntersection != rhs.travelToIntersection {
+        return lhs.travelToIntersection < rhs.travelToIntersection
+      }
+      if !injectionRouteId.isEmpty &&
+          (lhs.route.routeId == injectionRouteId) !=
+          (rhs.route.routeId == injectionRouteId) {
+        return lhs.route.routeId == injectionRouteId
+      }
+      return lhs.route.routeId < rhs.route.routeId
+    }.first
+  }
+
+  private func segmentContains(
+    coordinate: CGFloat,
+    start: CGFloat,
+    end: CGFloat,
+    displayId: String,
+    edge: String,
+    injectionRoutes routes: [InjectionRoute]
+  ) -> Bool {
+    if coordinate < start {
+      return false
+    }
+    if coordinate < end {
+      return true
+    }
+    if coordinate != end {
+      return false
+    }
+    return !routes.contains { other in
+      other.sinkDisplayId == displayId &&
+        other.sinkEdge == edge &&
+        other.sinkSegmentStart <= end &&
+        other.sinkSegmentEnd > end
+    }
+  }
+
   private func emitCaptureRelease(reason: String) {
     let sessionId = captureSessionId
     let edgeUnit = captureEdgeUnitForCurrentPoint()
@@ -1786,9 +2323,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     emitRelease(sessionId: sessionId, reason: reason, edgeUnit: edgeUnit)
   }
 
-  private func emitInjectionRelease(reason: String) {
+  private func emitInjectionRelease(
+    reason: String,
+    edgeUnit: CGFloat? = nil,
+    sourceEdgeUnit: Bool = false,
+    routeId: String = "",
+    sourceDisplayId: String = "",
+    sourceEdge: String = "",
+    sourceSegmentStart: CGFloat = 0,
+    sourceSegmentEnd: CGFloat = 0
+  ) {
     let sessionId = injectionSessionId
-    let edgeUnit = injectionEdgeUnitForCurrentPoint()
+    let resolvedEdgeUnit = edgeUnit ?? injectionEdgeUnitForCurrentPoint()
     guard !sessionId.isEmpty else {
       return
     }
@@ -1799,7 +2345,16 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
     resetInjectedClickState()
-    emitRelease(sessionId: sessionId, reason: reason, edgeUnit: edgeUnit)
+    emitRelease(
+      sessionId: sessionId,
+      reason: reason,
+      edgeUnit: resolvedEdgeUnit,
+      sourceEdgeUnit: sourceEdgeUnit,
+      routeId: routeId,
+      sourceDisplayId: sourceDisplayId,
+      sourceEdge: sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd)
   }
 
   private func captureEdgeUnitForCurrentPoint() -> CGFloat {
@@ -1826,16 +2381,43 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       segmentEnd: injectionSegmentEnd)
   }
 
-  private func emitRelease(sessionId: String, reason: String, edgeUnit: CGFloat) {
+  private func emitRelease(
+    sessionId: String,
+    reason: String,
+    edgeUnit: CGFloat,
+    sourceEdgeUnit: Bool = false,
+    routeId: String = "",
+    sourceDisplayId: String = "",
+    sourceEdge: String = "",
+    sourceSegmentStart: CGFloat = 0,
+    sourceSegmentEnd: CGFloat = 0
+  ) {
     DispatchQueue.main.async { [weak self] in
       guard let self = self else {
         return
       }
-      self.channel.invokeMethod("onRelease", arguments: [
+      var arguments: [String: Any] = [
         "sessionId": sessionId,
         "reason": reason,
         "edgeUnit": Double(edgeUnit)
-      ])
+      ]
+      if sourceEdgeUnit {
+        arguments["sourceEdgeUnit"] = true
+      }
+      if !routeId.isEmpty {
+        arguments["routeId"] = routeId
+      }
+      if !sourceDisplayId.isEmpty {
+        arguments["sourceDisplayId"] = sourceDisplayId
+      }
+      if !sourceEdge.isEmpty {
+        arguments["sourceEdge"] = sourceEdge
+      }
+      if sourceSegmentEnd > sourceSegmentStart {
+        arguments["sourceSegmentStart"] = Int(sourceSegmentStart)
+        arguments["sourceSegmentEnd"] = Int(sourceSegmentEnd)
+      }
+      self.channel.invokeMethod("onRelease", arguments: arguments)
     }
   }
 }

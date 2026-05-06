@@ -35,6 +35,11 @@ void main() {
         source,
         contains(
           'ReleaseCommonModifierKeys();\n'
+          '      if (!release_edge.empty()) {\n'
+          '        ApplyCaptureRoute(\n'
+          '            CaptureRoute{release_route_id, release_display_id, release_edge,\n'
+          '                         release_segment});\n'
+          '      }\n'
           '      MoveCaptureCursorToLocalEdge(release_edge_unit);\n'
           '      capture_active_ = false;',
         ),
@@ -157,6 +162,71 @@ void main() {
       expect(source, contains('EdgeUnitForPoint'));
       expect(source, contains('"edgeUnit"'));
       expect(source, contains('PointInSegment'));
+      expect(source, contains('GetMapSegments'));
+      expect(source, contains('struct CaptureRoute'));
+      expect(source, contains('GetMapCaptureRoutes'));
+      expect(source, contains('capture_routes_'));
+      expect(source, contains('ApplyCaptureRoute'));
+      expect(source, contains('UpdateInjectionRouteFromPayload'));
+      expect(source, contains('JsonString(json, "sinkDisplayId"'));
+      expect(source, contains('injection_routes_'));
+      expect(source, contains('ReverseInjectionSourceEdgeUnit'));
+      expect(source, contains('"sourceEdgeUnit"'));
+    });
+
+    test('returns source route metadata for routed Windows reverse release',
+        () {
+      expect(source, contains('struct InjectionReleaseRoute'));
+      expect(
+        source,
+        contains(
+            'std::optional<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit'),
+      );
+      expect(source, contains('route.source_display_id'));
+      expect(source, contains('route.source_edge'));
+      expect(source, contains('"sourceDisplayId"'));
+      expect(source, contains('"sourceEdge"'));
+      expect(source, contains('"sourceSegmentStart"'));
+      expect(source, contains('"sourceSegmentEnd"'));
+    });
+
+    test(
+        'arms Windows reverse edge release only after entering screen interior',
+        () {
+      expect(source, contains('injected_cursor_entered_interior_'));
+      expect(source, contains('UpdateInjectedCursorInteriorState'));
+      expect(
+        source,
+        contains(
+            '!JsonBool(json, "activeStart") && injected_cursor_entered_interior_'),
+      );
+    });
+
+    test('routes Windows portals by crossing route id instead of first match',
+        () {
+      expect(source, contains('std::string route_id;'));
+      expect(source, contains('"routeId"'));
+      expect(source, contains('JsonEscapedString'));
+      expect(source, contains('JsonStringValue'));
+      expect(source, contains('ResolveCaptureCrossing'));
+      expect(source, contains('ResolveCaptureCursorRoute'));
+      expect(source, contains('ResolveInjectionReleaseCrossing'));
+      expect(source, contains('previous_point'));
+      expect(
+        source,
+        isNot(contains('for (const auto& route : capture_routes_) {\n'
+            '        if (IsEdgeActivationForRoute(route, point, delta_x, delta_y))')),
+      );
+      expect(
+        source,
+        isNot(contains('for (const auto& route : capture_routes_) {\n'
+            '        if (IsCursorAtRouteEdge(route, point))')),
+      );
+    });
+
+    test('keeps non-contiguous Windows portal endpoints enterable', () {
+      expect(source, contains('other.source_segment.start <= segment.end'));
+      expect(source, contains('other.sink_segment.start <= segment.end'));
     });
 
     test('suppresses mouse events even when drivers mark them injected', () {
@@ -170,6 +240,13 @@ void main() {
       expect(source, contains('void MoveCursorToPoint(POINT point)'));
       expect(source, contains('MOUSEEVENTF_ABSOLUTE'));
       expect(source, contains('MOUSEEVENTF_VIRTUALDESK'));
+
+      final clampToVirtualScreen = RegExp(
+        r'POINT ClampToVirtualScreen\(POINT point\) const[\s\S]*?\n  void MoveCursorToPoint',
+      ).firstMatch(source)!.group(0)!;
+      expect(clampToVirtualScreen, contains('VirtualScreenArea()'));
+      expect(clampToVirtualScreen, isNot(contains('InjectionArea()')));
+      expect(clampToVirtualScreen, isNot(contains('injection_display_id_')));
 
       final injectEvent = RegExp(
         r'void InjectEvent\([\s\S]*?\n  bool IsInjectionReverseRelease',
@@ -319,14 +396,22 @@ void main() {
       );
       expect(
         source,
-        contains(
-            'entryPoint == nil && injectedMouseEnteredInterior && isReverseInjectionRelease'),
+        contains('entryPoint == nil && injectedMouseEnteredInterior'),
       );
+      expect(source, contains('reverseInjectionSourceEdgeUnit'));
+      expect(source, contains('isReverseInjectionRelease('));
       expect(source, contains('injectedMousePoint = point'));
     });
 
-    test('clamps injected mouse movement to the controlled screen', () {
+    test('clamps injected mouse movement to the controlled desktop', () {
       expect(source, contains('private func clampedInjectedMousePoint'));
+
+      final clampedInjectedMousePoint = RegExp(
+        r'private func clampedInjectedMousePoint\(_ point: CGPoint\) -> CGPoint \{[\s\S]*?\n  \}',
+      ).firstMatch(source)!.group(0)!;
+      expect(clampedInjectedMousePoint, contains('virtualDisplayBounds()'));
+      expect(clampedInjectedMousePoint, isNot(contains('injectionBounds()')));
+      expect(clampedInjectedMousePoint, isNot(contains('injectionDisplayId')));
 
       final injectEvent = RegExp(
         r'private func injectEvent\([\s\S]*?\n  private func payloadData',
@@ -393,7 +478,7 @@ void main() {
       expect(source, contains('injectedMouseEnteredInterior = false'));
       expect(
         source,
-        contains('injectedMouseEnteredInterior && isReverseInjectionRelease'),
+        contains('entryPoint == nil && injectedMouseEnteredInterior'),
       );
       expect(source, contains('updateInjectedMouseInteriorState'));
       expect(source, contains('injectedMouseEnteredInterior = true'));
@@ -411,6 +496,51 @@ void main() {
       expect(source, contains('edgeUnitForPoint'));
       expect(source, contains('"edgeUnit"'));
       expect(source, contains('pointWithinSegment'));
+      expect(source, contains('captureSegments(from: args["segments"])'));
+      expect(source, contains('private struct CaptureRoute'));
+      expect(source, contains('captureRoutes(from: args["segments"])'));
+      expect(source, contains('applyCaptureRoute'));
+      expect(source, contains('pointWithinCaptureSegments'));
+      expect(source, contains('updateInjectionRoute(from: data)'));
+      expect(source, contains('data["sinkDisplayId"]'));
+      expect(source, contains('private struct InjectionRoute'));
+      expect(source, contains('reverseInjectionSourceEdgeUnit'));
+      expect(source, contains('"sourceEdgeUnit"'));
+    });
+
+    test('returns source route metadata for routed macOS reverse release', () {
+      expect(source, contains('private struct InjectionReleaseRoute'));
+      expect(
+        source,
+        contains(
+            'private func reverseInjectionSourceEdgeUnit(\n    currentPoint: CGPoint,\n    deltaX: CGFloat,\n    deltaY: CGFloat\n  ) -> InjectionReleaseRoute?'),
+      );
+      expect(source, contains('route.sourceDisplayId'));
+      expect(source, contains('route.sourceEdge'));
+      expect(source, contains('"sourceDisplayId"'));
+      expect(source, contains('"sourceEdge"'));
+      expect(source, contains('"sourceSegmentStart"'));
+      expect(source, contains('"sourceSegmentEnd"'));
+    });
+
+    test('routes macOS portals by crossing route id instead of first match',
+        () {
+      expect(source, contains('let routeId: String'));
+      expect(source, contains('"routeId"'));
+      expect(source, contains('resolveCaptureCrossing'));
+      expect(source, contains('resolveInjectionReleaseCrossing'));
+      expect(source, contains('max(bounds.minX, bounds.maxX - 1)'));
+      expect(source, contains('max(bounds.minY, bounds.maxY - 1)'));
+      expect(source, contains('previousPoint'));
+      expect(
+        source,
+        isNot(contains('return captureRoutes.first { route in')),
+      );
+    });
+
+    test('keeps non-contiguous macOS portal endpoints enterable', () {
+      expect(source, contains('other.sourceSegmentStart <= end'));
+      expect(source, contains('other.sinkSegmentStart <= end'));
     });
 
     test('keeps Windows Control and Meta distinct in native fallback mapping',

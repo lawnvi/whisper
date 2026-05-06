@@ -38,6 +38,52 @@ struct EdgeSegment {
   double end = 0;
 };
 
+struct DoublePoint {
+  double x = 0;
+  double y = 0;
+};
+
+struct CaptureRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  EdgeSegment source_segment;
+};
+
+struct InjectionRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  std::string sink_display_id;
+  std::string sink_edge;
+  EdgeSegment sink_segment;
+  EdgeSegment source_segment;
+};
+
+struct InjectionReleaseRoute {
+  std::string route_id;
+  std::string source_display_id;
+  std::string source_edge;
+  EdgeSegment source_segment;
+  double edge_unit = 0;
+};
+
+struct CaptureCrossing {
+  CaptureRoute route;
+  double edge_unit = 0;
+  bool strict_segment_hit = false;
+  double normal_motion = 0;
+  double travel_to_intersection = 0;
+};
+
+struct InjectionReleaseCrossing {
+  InjectionRoute route;
+  double edge_unit = 0;
+  bool strict_segment_hit = false;
+  double normal_motion = 0;
+  double travel_to_intersection = 0;
+};
+
 struct MonitorDisplay {
   std::string id;
   std::string name;
@@ -99,8 +145,258 @@ double GetMapDouble(const flutter::EncodableMap& map,
   return fallback;
 }
 
+std::vector<EdgeSegment> GetMapSegments(const flutter::EncodableMap& map,
+                                        const char* key) {
+  auto it = map.find(flutter::EncodableValue(std::string(key)));
+  if (it == map.end()) {
+    return {};
+  }
+  const auto* values = std::get_if<flutter::EncodableList>(&it->second);
+  if (values == nullptr) {
+    return {};
+  }
+  std::vector<EdgeSegment> segments;
+  for (const auto& value : *values) {
+    const auto* item = std::get_if<flutter::EncodableMap>(&value);
+    if (item == nullptr) {
+      continue;
+    }
+    EdgeSegment segment{
+        GetMapDouble(*item, "start"),
+        GetMapDouble(*item, "end"),
+    };
+    if (segment.end > segment.start) {
+      segments.push_back(segment);
+    }
+  }
+  return segments;
+}
+
+std::vector<CaptureRoute> GetMapCaptureRoutes(
+    const flutter::EncodableMap& map,
+    const char* key) {
+  auto it = map.find(flutter::EncodableValue(std::string(key)));
+  if (it == map.end()) {
+    return {};
+  }
+  const auto* values = std::get_if<flutter::EncodableList>(&it->second);
+  if (values == nullptr) {
+    return {};
+  }
+  std::vector<CaptureRoute> routes;
+  for (const auto& value : *values) {
+    const auto* item = std::get_if<flutter::EncodableMap>(&value);
+    if (item == nullptr) {
+      continue;
+    }
+    const auto* display_id = GetMapValue<std::string>(*item, "displayId");
+    const auto* edge = GetMapValue<std::string>(*item, "edge");
+    const auto* route_id = GetMapValue<std::string>(*item, "routeId");
+    CaptureRoute route;
+    route.route_id = route_id == nullptr ? "" : *route_id;
+    route.source_display_id = display_id == nullptr ? "" : *display_id;
+    route.source_edge = edge == nullptr ? "" : *edge;
+    route.source_segment = EdgeSegment{
+        GetMapDouble(*item, "start"),
+        GetMapDouble(*item, "end"),
+    };
+    if (!route.source_edge.empty() &&
+        route.source_segment.end > route.source_segment.start) {
+      routes.push_back(std::move(route));
+    }
+  }
+  return routes;
+}
+
+std::vector<InjectionRoute> GetMapInjectionRoutes(
+    const flutter::EncodableMap& map,
+    const char* key) {
+  auto it = map.find(flutter::EncodableValue(std::string(key)));
+  if (it == map.end()) {
+    return {};
+  }
+  const auto* values = std::get_if<flutter::EncodableList>(&it->second);
+  if (values == nullptr) {
+    return {};
+  }
+  std::vector<InjectionRoute> routes;
+  for (const auto& value : *values) {
+    const auto* item = std::get_if<flutter::EncodableMap>(&value);
+    if (item == nullptr) {
+      continue;
+    }
+    const auto* sink_display_id =
+        GetMapValue<std::string>(*item, "sinkDisplayId");
+    const auto* sink_edge = GetMapValue<std::string>(*item, "sinkEdge");
+    const auto* source_display_id =
+        GetMapValue<std::string>(*item, "sourceDisplayId");
+    const auto* source_edge = GetMapValue<std::string>(*item, "sourceEdge");
+    const auto* route_id = GetMapValue<std::string>(*item, "routeId");
+    InjectionRoute route;
+    route.route_id = route_id == nullptr ? "" : *route_id;
+    route.source_display_id =
+        source_display_id == nullptr ? "" : *source_display_id;
+    route.source_edge = source_edge == nullptr ? "" : *source_edge;
+    route.sink_display_id = sink_display_id == nullptr ? "" : *sink_display_id;
+    route.sink_edge = sink_edge == nullptr ? "" : *sink_edge;
+    route.sink_segment = EdgeSegment{
+        GetMapDouble(*item, "sinkSegmentStart"),
+        GetMapDouble(*item, "sinkSegmentEnd"),
+    };
+    route.source_segment = EdgeSegment{
+        GetMapDouble(*item, "sourceSegmentStart"),
+        GetMapDouble(*item, "sourceSegmentEnd"),
+    };
+    if (!route.source_edge.empty() &&
+        !route.sink_display_id.empty() && !route.sink_edge.empty() &&
+        route.sink_segment.end > route.sink_segment.start &&
+        route.source_segment.end > route.source_segment.start) {
+      routes.push_back(std::move(route));
+    }
+  }
+  return routes;
+}
+
 std::string PayloadString(const std::vector<uint8_t>& payload) {
   return std::string(payload.begin(), payload.end());
+}
+
+std::string JsonEscapedString(const std::string& value) {
+  std::ostringstream json;
+  const char* hex = "0123456789abcdef";
+  for (const unsigned char ch : value) {
+    switch (ch) {
+      case '"':
+        json << "\\\"";
+        break;
+      case '\\':
+        json << "\\\\";
+        break;
+      case '\b':
+        json << "\\b";
+        break;
+      case '\f':
+        json << "\\f";
+        break;
+      case '\n':
+        json << "\\n";
+        break;
+      case '\r':
+        json << "\\r";
+        break;
+      case '\t':
+        json << "\\t";
+        break;
+      default:
+        if (ch < 0x20) {
+          json << "\\u00" << hex[(ch >> 4) & 0x0f] << hex[ch & 0x0f];
+        } else {
+          json << static_cast<char>(ch);
+        }
+        break;
+    }
+  }
+  return json.str();
+}
+
+std::optional<uint32_t> JsonHexCodePoint(const std::string& json,
+                                         size_t offset) {
+  if (offset + 4 > json.size()) {
+    return std::nullopt;
+  }
+  uint32_t value = 0;
+  for (size_t i = offset; i < offset + 4; ++i) {
+    const char ch = json[i];
+    value <<= 4;
+    if (ch >= '0' && ch <= '9') {
+      value += static_cast<uint32_t>(ch - '0');
+    } else if (ch >= 'a' && ch <= 'f') {
+      value += static_cast<uint32_t>(ch - 'a' + 10);
+    } else if (ch >= 'A' && ch <= 'F') {
+      value += static_cast<uint32_t>(ch - 'A' + 10);
+    } else {
+      return std::nullopt;
+    }
+  }
+  return value;
+}
+
+void AppendUtf8(std::string& output, uint32_t code_point) {
+  if (code_point <= 0x7f) {
+    output.push_back(static_cast<char>(code_point));
+  } else if (code_point <= 0x7ff) {
+    output.push_back(static_cast<char>(0xc0 | (code_point >> 6)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+  } else {
+    output.push_back(static_cast<char>(0xe0 | (code_point >> 12)));
+    output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+  }
+}
+
+std::optional<std::string> JsonStringValue(const std::string& json,
+                                           const std::string& key) {
+  const auto key_pos = json.find("\"" + key + "\"");
+  if (key_pos == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto colon = json.find(':', key_pos);
+  if (colon == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto quote = json.find('"', colon + 1);
+  if (quote == std::string::npos) {
+    return std::nullopt;
+  }
+  std::string result;
+  for (size_t i = quote + 1; i < json.size(); ++i) {
+    const char ch = json[i];
+    if (ch == '"') {
+      return result;
+    }
+    if (ch != '\\') {
+      result.push_back(ch);
+      continue;
+    }
+    if (++i >= json.size()) {
+      return std::nullopt;
+    }
+    const char escaped = json[i];
+    switch (escaped) {
+      case '"':
+      case '\\':
+      case '/':
+        result.push_back(escaped);
+        break;
+      case 'b':
+        result.push_back('\b');
+        break;
+      case 'f':
+        result.push_back('\f');
+        break;
+      case 'n':
+        result.push_back('\n');
+        break;
+      case 'r':
+        result.push_back('\r');
+        break;
+      case 't':
+        result.push_back('\t');
+        break;
+      case 'u': {
+        const auto code_point = JsonHexCodePoint(json, i + 1);
+        if (!code_point.has_value()) {
+          return std::nullopt;
+        }
+        AppendUtf8(result, code_point.value());
+        i += 4;
+        break;
+      }
+      default:
+        return std::nullopt;
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<double> JsonNumber(const std::string& json,
@@ -141,23 +437,7 @@ bool JsonBool(const std::string& json, const std::string& key) {
 std::string JsonString(const std::string& json,
                        const std::string& key,
                        const std::string& fallback = "") {
-  const auto key_pos = json.find("\"" + key + "\"");
-  if (key_pos == std::string::npos) {
-    return fallback;
-  }
-  const auto colon = json.find(':', key_pos);
-  if (colon == std::string::npos) {
-    return fallback;
-  }
-  const auto quote = json.find('"', colon + 1);
-  if (quote == std::string::npos) {
-    return fallback;
-  }
-  const auto end = json.find('"', quote + 1);
-  if (end == std::string::npos) {
-    return fallback;
-  }
-  return json.substr(quote + 1, end - quote - 1);
+  return JsonStringValue(json, key).value_or(fallback);
 }
 
 std::vector<uint8_t> JsonBytes(const std::string& json) {
@@ -350,19 +630,27 @@ std::string MouseMovePayload(POINT point,
                              LONG delta_y,
                              bool active_start,
                              const std::string& edge,
+                             const std::string& route_id,
                              int buttons,
                              const ScreenArea& area,
-                             const EdgeSegment& segment) {
+                             const EdgeSegment& segment,
+                             std::optional<double> edge_unit_override) {
   std::ostringstream json;
   json << "{\"x\":" << point.x << ",\"y\":" << point.y
        << ",\"deltaX\":" << delta_x << ",\"deltaY\":" << delta_y
        << ",\"activeStart\":" << (active_start ? "true" : "false")
-       << ",\"edge\":\"" << edge << "\""
+       << ",\"edge\":\"" << JsonEscapedString(edge) << "\""
        << ",\"buttons\":" << buttons
        << ",\"unitX\":" << Normalized(point.x, area.left, area.width())
        << ",\"unitY\":" << Normalized(point.y, area.top, area.height());
+  if (!route_id.empty()) {
+    json << ",\"routeId\":\"" << JsonEscapedString(route_id) << "\"";
+  }
   if (HasSegment(segment)) {
-    json << ",\"edgeUnit\":" << EdgeUnitForPoint(point, edge, segment);
+    json << ",\"edgeUnit\":"
+         << (edge_unit_override.has_value()
+                 ? ClampedUnit(edge_unit_override.value())
+                 : EdgeUnitForPoint(point, edge, segment));
   }
   json << "}";
   return json.str();
@@ -679,9 +967,15 @@ class RemoteInputPlugin : public flutter::Plugin {
           args == nullptr ? 0 : GetMapDouble(*args, "segmentStart"),
           args == nullptr ? 0 : GetMapDouble(*args, "segmentEnd"),
       };
+      const auto segments =
+          args == nullptr ? std::vector<EdgeSegment>{}
+                          : GetMapSegments(*args, "segments");
+      const auto routes =
+          args == nullptr ? std::vector<CaptureRoute>{}
+                          : GetMapCaptureRoutes(*args, "segments");
       const auto error = StartCapture(
           *session_id, edge == nullptr ? "right" : *edge,
-          display_id == nullptr ? "" : *display_id, segment,
+          display_id == nullptr ? "" : *display_id, segment, segments, routes,
           release_hotkey == nullptr ? "ctrl+alt+esc" : *release_hotkey);
       if (error.has_value()) {
         result->Error("remote-input-capture-unavailable", error.value());
@@ -711,8 +1005,22 @@ class RemoteInputPlugin : public flutter::Plugin {
           args == nullptr ? 0 : GetMapInt64(*args, "releaseActivationSequence");
       const auto release_edge_unit =
           args == nullptr ? 0 : GetMapDouble(*args, "releaseEdgeUnit");
+      const auto* display_id =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "displayId");
+      const auto* edge =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "edge");
+      const auto* route_id =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "routeId");
+      const EdgeSegment segment{
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentStart"),
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentEnd"),
+      };
       PauseCapture(*session_id, release_sequence, release_activation_sequence,
-                   release_edge_unit);
+                   release_edge_unit,
+                   display_id == nullptr ? "" : *display_id,
+                   edge == nullptr ? "" : *edge,
+                   route_id == nullptr ? "" : *route_id,
+                   segment);
       result->Success();
       return;
     }
@@ -729,6 +1037,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       ReleaseInjectedKeys();
       ReleaseCommonModifierKeys();
       injection_session_id_ = *session_id;
+      injected_cursor_entered_interior_ = false;
       const auto* display_id = args == nullptr
                                    ? nullptr
                                    : GetMapValue<std::string>(*args, "displayId");
@@ -736,10 +1045,14 @@ class RemoteInputPlugin : public flutter::Plugin {
           args == nullptr ? nullptr : GetMapValue<std::string>(*args, "edge");
       injection_display_id_ = display_id == nullptr ? "" : *display_id;
       injection_edge_ = edge == nullptr ? "" : *edge;
+      injection_route_id_.clear();
       injection_segment_ = EdgeSegment{
           args == nullptr ? 0 : GetMapDouble(*args, "segmentStart"),
           args == nullptr ? 0 : GetMapDouble(*args, "segmentEnd"),
       };
+      injection_routes_ =
+          args == nullptr ? std::vector<InjectionRoute>{}
+                          : GetMapInjectionRoutes(*args, "mappings");
       result->Success();
       return;
     }
@@ -782,18 +1095,24 @@ class RemoteInputPlugin : public flutter::Plugin {
                                           std::string edge,
                                           std::string display_id,
                                           EdgeSegment segment,
+                                          std::vector<EdgeSegment> segments,
+                                          std::vector<CaptureRoute> routes,
                                           std::string release_hotkey) {
     StopCapture();
     capture_session_id_ = std::move(session_id);
     capture_edge_ = std::move(edge);
+    capture_route_id_.clear();
     capture_display_id_ = std::move(display_id);
     capture_segment_ = segment;
+    capture_segments_ = std::move(segments);
+    capture_routes_ = std::move(routes);
     release_hotkey_ = std::move(release_hotkey);
     capture_active_ = false;
     pending_active_start_ = false;
     capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
     last_hook_mouse_point_.reset();
+    capture_activation_edge_unit_.reset();
     keyboard_diagnostic_count_ = 0;
     inactive_keyboard_diagnostic_count_ = 0;
     sequence_ = 0;
@@ -825,19 +1144,27 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseCommonModifierKeys();
     capture_session_id_.clear();
     capture_display_id_.clear();
+    capture_route_id_.clear();
     capture_segment_ = EdgeSegment{};
+    capture_segments_.clear();
+    capture_routes_.clear();
     capture_active_ = false;
     pending_active_start_ = false;
     capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
     last_hook_mouse_point_.reset();
+    capture_activation_edge_unit_.reset();
     inactive_keyboard_diagnostic_count_ = 0;
   }
 
   void PauseCapture(const std::string& session_id,
                     int64_t release_sequence,
                     int64_t release_activation_sequence,
-                    double release_edge_unit) {
+                    double release_edge_unit,
+                    const std::string& release_display_id,
+                    const std::string& release_edge,
+                    const std::string& release_route_id,
+                    EdgeSegment release_segment) {
     if (session_id == capture_session_id_) {
       if (release_activation_sequence > 0 &&
           capture_activation_sequence_ >
@@ -862,12 +1189,18 @@ class RemoteInputPlugin : public flutter::Plugin {
                  << " wasActive=" << (capture_active_ ? 1 : 0);
       EmitDiagnostic(diagnostic.str());
       ReleaseCommonModifierKeys();
+      if (!release_edge.empty()) {
+        ApplyCaptureRoute(
+            CaptureRoute{release_route_id, release_display_id, release_edge,
+                         release_segment});
+      }
       MoveCaptureCursorToLocalEdge(release_edge_unit);
       capture_active_ = false;
       pending_active_start_ = false;
       capture_activation_sequence_ = 0;
       capture_buttons_ = 0;
       last_hook_mouse_point_.reset();
+      capture_activation_edge_unit_.reset();
       keyboard_diagnostic_count_ = 0;
       inactive_keyboard_diagnostic_count_ = 0;
     }
@@ -878,9 +1211,12 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseInjectedKeys();
     ReleaseCommonModifierKeys();
     injection_session_id_.clear();
+    injected_cursor_entered_interior_ = false;
     injection_display_id_.clear();
     injection_edge_.clear();
+    injection_route_id_.clear();
     injection_segment_ = EdgeSegment{};
+    injection_routes_.clear();
   }
 
   bool InstallHooks(std::string* error_message) {
@@ -995,8 +1331,15 @@ class RemoteInputPlugin : public flutter::Plugin {
       EmitInputEvent(
           "mouseMove",
           JsonBytes(MouseMovePayload(point, delta_x, delta_y, active_start,
-                                     capture_edge_, capture_buttons_,
-                                     CaptureArea(), capture_segment_)));
+                                     capture_edge_, capture_route_id_,
+                                     capture_buttons_, CaptureArea(),
+                                     capture_segment_,
+                                     active_start
+                                         ? capture_activation_edge_unit_
+                                         : std::nullopt)));
+      if (active_start) {
+        capture_activation_edge_unit_.reset();
+      }
     }
 
     if (flags & RI_MOUSE_LEFT_BUTTON_UP) {
@@ -1063,52 +1406,339 @@ class RemoteInputPlugin : public flutter::Plugin {
     SetCursorPos(target.x, target.y);
   }
 
-  bool IsEdgeActivation(POINT point, LONG delta_x, LONG delta_y) const {
-    const ScreenArea area = CaptureArea();
-    const int left = area.left;
-    const int top = area.top;
-    const int right = area.right;
-    const int bottom = area.bottom;
-
-    if (!PointInSegment(point, capture_edge_, capture_segment_,
-                        kEdgeThreshold)) {
-      return false;
-    }
-
-    if (capture_edge_ == "left") {
-      return point.x <= left + kEdgeThreshold && delta_x < 0;
-    }
-    if (capture_edge_ == "top") {
-      return point.y <= top + kEdgeThreshold && delta_y < 0;
-    }
-    if (capture_edge_ == "bottom") {
-      return point.y >= bottom - kEdgeThreshold && delta_y > 0;
-    }
-    return point.x >= right - kEdgeThreshold && delta_x > 0;
+  ScreenArea CaptureAreaForDisplay(const std::string& display_id) const {
+    const auto display = MonitorDisplayForId(display_id);
+    return display.has_value() ? display->area : VirtualScreenArea();
   }
 
-  bool IsCursorAtCaptureEdge(POINT point) const {
-    const ScreenArea area = CaptureArea();
+  bool IsEdgeActivation(POINT point, LONG delta_x, LONG delta_y) {
+    const DoublePoint current_point{static_cast<double>(point.x),
+                                    static_cast<double>(point.y)};
+    const DoublePoint previous_point{
+        static_cast<double>(point.x - delta_x),
+        static_cast<double>(point.y - delta_y)};
+    const auto crossing =
+        ResolveCaptureCrossing(previous_point, current_point);
+    if (!crossing.has_value()) {
+      return false;
+    }
+    ApplyCaptureRoute(crossing->route);
+    capture_activation_edge_unit_ = crossing->edge_unit;
+    return true;
+  }
+
+  std::optional<CaptureCrossing> ResolveCaptureCrossing(
+      DoublePoint previous_point,
+      DoublePoint current_point) const {
+    const std::vector<CaptureRoute> routes = CaptureRoutesForMatching();
+    std::vector<CaptureCrossing> candidates;
+    for (const auto& route : routes) {
+      const auto crossing =
+          CaptureCrossingForRoute(route, previous_point, current_point, routes);
+      if (crossing.has_value()) {
+        candidates.push_back(crossing.value());
+      }
+    }
+    if (candidates.empty()) {
+      return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const CaptureCrossing& lhs, const CaptureCrossing& rhs) {
+                if (lhs.strict_segment_hit != rhs.strict_segment_hit) {
+                  return lhs.strict_segment_hit;
+                }
+                if (std::abs(lhs.normal_motion) !=
+                    std::abs(rhs.normal_motion)) {
+                  return std::abs(lhs.normal_motion) >
+                         std::abs(rhs.normal_motion);
+                }
+                if (lhs.travel_to_intersection !=
+                    rhs.travel_to_intersection) {
+                  return lhs.travel_to_intersection <
+                         rhs.travel_to_intersection;
+                }
+                return lhs.route.route_id < rhs.route.route_id;
+              });
+    return candidates.front();
+  }
+
+  std::vector<CaptureRoute> CaptureRoutesForMatching() const {
+    if (!capture_routes_.empty()) {
+      return capture_routes_;
+    }
+    return std::vector<CaptureRoute>{CaptureRoute{
+        capture_route_id_,
+        capture_display_id_,
+        capture_edge_,
+        capture_segment_,
+    }};
+  }
+
+  std::optional<CaptureCrossing> CaptureCrossingForRoute(
+      const CaptureRoute& route,
+      DoublePoint previous_point,
+      DoublePoint current_point,
+      const std::vector<CaptureRoute>& routes) const {
+    const ScreenArea area = CaptureAreaForDisplay(route.source_display_id);
+    const double delta_x = current_point.x - previous_point.x;
+    const double delta_y = current_point.y - previous_point.y;
+    if (delta_x == 0 && delta_y == 0) {
+      return std::nullopt;
+    }
+    const double line = EdgeLine(area, route.source_edge);
+    const auto t = IntersectionParameter(route.source_edge, line,
+                                         previous_point, delta_x, delta_y);
+    if (!t.has_value() || t.value() < 0 || t.value() > 1) {
+      return std::nullopt;
+    }
+    const double normal_motion =
+        EdgeNormalMotion(route.source_edge, delta_x, delta_y);
+    if (normal_motion <= 0) {
+      return std::nullopt;
+    }
+    const DoublePoint intersection{
+        previous_point.x + delta_x * t.value(),
+        previous_point.y + delta_y * t.value()};
+    const double coordinate =
+        AxisCoordinate(intersection, route.source_edge);
+    if (!SegmentContains(coordinate, route.source_segment,
+                         route.source_display_id, route.source_edge, routes)) {
+      return std::nullopt;
+    }
+    const double length = route.source_segment.end - route.source_segment.start;
+    if (length <= 0) {
+      return std::nullopt;
+    }
+    CaptureCrossing crossing;
+    crossing.route = route;
+    crossing.edge_unit =
+        ClampedUnit((coordinate - route.source_segment.start) / length);
+    crossing.strict_segment_hit = coordinate > route.source_segment.start &&
+                                  coordinate < route.source_segment.end;
+    crossing.normal_motion = normal_motion;
+    crossing.travel_to_intersection =
+        std::hypot(intersection.x - previous_point.x,
+                   intersection.y - previous_point.y);
+    return crossing;
+  }
+
+  double EdgeLine(const ScreenArea& area, const std::string& edge) const {
+    if (edge == "left") {
+      return static_cast<double>(area.left);
+    }
+    if (edge == "top") {
+      return static_cast<double>(area.top);
+    }
+    if (edge == "bottom") {
+      return static_cast<double>(area.bottom);
+    }
+    return static_cast<double>(area.right);
+  }
+
+  std::optional<double> IntersectionParameter(const std::string& edge,
+                                              double line,
+                                              DoublePoint previous_point,
+                                              double delta_x,
+                                              double delta_y) const {
+    if (edge == "left" || edge == "right") {
+      if (delta_x == 0) {
+        return std::nullopt;
+      }
+      return (line - previous_point.x) / delta_x;
+    }
+    if (delta_y == 0) {
+      return std::nullopt;
+    }
+    return (line - previous_point.y) / delta_y;
+  }
+
+  double EdgeNormalMotion(const std::string& edge,
+                          double delta_x,
+                          double delta_y) const {
+    if (edge == "left") {
+      return -delta_x;
+    }
+    if (edge == "top") {
+      return -delta_y;
+    }
+    if (edge == "bottom") {
+      return delta_y;
+    }
+    return delta_x;
+  }
+
+  double AxisCoordinate(DoublePoint point, const std::string& edge) const {
+    if (edge == "left" || edge == "right") {
+      return point.y;
+    }
+    return point.x;
+  }
+
+  bool SegmentContains(double coordinate,
+                       const EdgeSegment& segment,
+                       const std::string& display_id,
+                       const std::string& edge,
+                       const std::vector<CaptureRoute>& routes) const {
+    if (!HasSegment(segment)) {
+      return true;
+    }
+    if (coordinate < segment.start) {
+      return false;
+    }
+    if (coordinate < segment.end) {
+      return true;
+    }
+    if (coordinate != segment.end) {
+      return false;
+    }
+    for (const auto& other : routes) {
+      if (other.source_display_id == display_id &&
+          other.source_edge == edge &&
+          other.source_segment.start <= segment.end &&
+          other.source_segment.end > segment.end) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool IsCursorAtRouteEdge(
+      const CaptureRoute& route,
+      POINT point,
+      const std::vector<CaptureRoute>& routes) const {
+    const ScreenArea area = CaptureAreaForDisplay(route.source_display_id);
     const int left = area.left;
     const int top = area.top;
     const int right = area.right;
     const int bottom = area.bottom;
 
-    if (!PointInSegment(point, capture_edge_, capture_segment_,
-                        kEdgeThreshold)) {
+    if (!CursorCoordinateInRouteSegment(route, point, routes)) {
       return false;
     }
 
-    if (capture_edge_ == "left") {
+    if (route.source_edge == "left") {
       return point.x <= left + kEdgeThreshold;
     }
-    if (capture_edge_ == "top") {
+    if (route.source_edge == "top") {
       return point.y <= top + kEdgeThreshold;
     }
-    if (capture_edge_ == "bottom") {
+    if (route.source_edge == "bottom") {
       return point.y >= bottom - kEdgeThreshold;
     }
     return point.x >= right - kEdgeThreshold;
+  }
+
+  bool CursorCoordinateInRouteSegment(
+      const CaptureRoute& route,
+      POINT point,
+      const std::vector<CaptureRoute>& routes) const {
+    if (!HasSegment(route.source_segment)) {
+      return true;
+    }
+    const double coordinate = AxisValue(point, route.source_edge);
+    if (coordinate < route.source_segment.start - kEdgeThreshold ||
+        coordinate > route.source_segment.end + kEdgeThreshold) {
+      return false;
+    }
+    if (coordinate >= route.source_segment.start &&
+        coordinate <= route.source_segment.end) {
+      return SegmentContains(coordinate, route.source_segment,
+                             route.source_display_id, route.source_edge,
+                             routes);
+    }
+    return true;
+  }
+
+  bool IsStrictCaptureSegmentHit(const CaptureRoute& route,
+                                 POINT point) const {
+    if (!HasSegment(route.source_segment)) {
+      return true;
+    }
+    const double coordinate = AxisValue(point, route.source_edge);
+    return coordinate > route.source_segment.start &&
+           coordinate < route.source_segment.end;
+  }
+
+  double CaptureRouteEdgeDistance(const CaptureRoute& route,
+                                  POINT point) const {
+    const ScreenArea area = CaptureAreaForDisplay(route.source_display_id);
+    const double edge_line = EdgeLine(area, route.source_edge);
+    if (route.source_edge == "left" || route.source_edge == "right") {
+      return std::abs(static_cast<double>(point.x) - edge_line);
+    }
+    return std::abs(static_cast<double>(point.y) - edge_line);
+  }
+
+  double CaptureRouteSegmentDistance(const CaptureRoute& route,
+                                     POINT point) const {
+    if (!HasSegment(route.source_segment)) {
+      return 0;
+    }
+    const double coordinate = AxisValue(point, route.source_edge);
+    if (coordinate < route.source_segment.start) {
+      return route.source_segment.start - coordinate;
+    }
+    if (coordinate > route.source_segment.end) {
+      return coordinate - route.source_segment.end;
+    }
+    return 0;
+  }
+
+  std::optional<CaptureRoute> ResolveCaptureCursorRoute(POINT point) const {
+    struct CaptureCursorCandidate {
+      CaptureRoute route;
+      bool strict_segment_hit = false;
+      double segment_distance = 0;
+      double edge_distance = 0;
+    };
+
+    const std::vector<CaptureRoute> routes = CaptureRoutesForMatching();
+    std::vector<CaptureCursorCandidate> candidates;
+    for (const auto& route : routes) {
+      if (!IsCursorAtRouteEdge(route, point, routes)) {
+        continue;
+      }
+      candidates.push_back(CaptureCursorCandidate{
+          route,
+          IsStrictCaptureSegmentHit(route, point),
+          CaptureRouteSegmentDistance(route, point),
+          CaptureRouteEdgeDistance(route, point),
+      });
+    }
+    if (candidates.empty()) {
+      return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const CaptureCursorCandidate& lhs,
+                 const CaptureCursorCandidate& rhs) {
+                if (lhs.strict_segment_hit != rhs.strict_segment_hit) {
+                  return lhs.strict_segment_hit;
+                }
+                if (lhs.segment_distance != rhs.segment_distance) {
+                  return lhs.segment_distance < rhs.segment_distance;
+                }
+                if (lhs.edge_distance != rhs.edge_distance) {
+                  return lhs.edge_distance < rhs.edge_distance;
+                }
+                return lhs.route.route_id < rhs.route.route_id;
+              });
+    return candidates.front().route;
+  }
+
+  bool IsCursorAtCaptureEdge(POINT point) {
+    const auto route = ResolveCaptureCursorRoute(point);
+    if (!route.has_value()) {
+      return false;
+    }
+    ApplyCaptureRoute(route.value());
+    return true;
+  }
+
+  void ApplyCaptureRoute(const CaptureRoute& route) {
+    capture_route_id_ = route.route_id;
+    capture_display_id_ = route.source_display_id;
+    capture_edge_ = route.source_edge;
+    capture_segment_ = route.source_segment;
   }
 
   void EmitInactiveKeyboardDiagnostic(USHORT virtual_key,
@@ -1162,8 +1792,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   ScreenArea CaptureArea() const {
-    const auto display = MonitorDisplayForId(capture_display_id_);
-    return display.has_value() ? display->area : VirtualScreenArea();
+    return CaptureAreaForDisplay(capture_display_id_);
   }
 
   ScreenArea InjectionArea() const {
@@ -1180,6 +1809,149 @@ class RemoteInputPlugin : public flutter::Plugin {
       return 0;
     }
     return EdgeUnitForPoint(point, injection_edge_, injection_segment_);
+  }
+
+  std::optional<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit(
+      POINT point,
+      int delta_x,
+      int delta_y) const {
+    if (injection_routes_.empty()) {
+      return std::nullopt;
+    }
+    const DoublePoint previous_point{static_cast<double>(point.x),
+                                     static_cast<double>(point.y)};
+    const DoublePoint current_point{static_cast<double>(point.x + delta_x),
+                                    static_cast<double>(point.y + delta_y)};
+    const auto crossing =
+        ResolveInjectionReleaseCrossing(previous_point, current_point);
+    if (!crossing.has_value()) {
+      return std::nullopt;
+    }
+    const auto route = crossing->route;
+    return InjectionReleaseRoute{
+        route.route_id,
+        route.source_display_id,
+        route.source_edge,
+        route.source_segment,
+        crossing->edge_unit,
+    };
+  }
+
+  std::optional<InjectionReleaseCrossing> ResolveInjectionReleaseCrossing(
+      DoublePoint previous_point,
+      DoublePoint current_point) const {
+    std::vector<InjectionReleaseCrossing> candidates;
+    for (const auto& route : injection_routes_) {
+      const auto crossing =
+          InjectionReleaseCrossingForRoute(route, previous_point, current_point);
+      if (crossing.has_value()) {
+        candidates.push_back(crossing.value());
+      }
+    }
+    if (candidates.empty()) {
+      return std::nullopt;
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [this](const InjectionReleaseCrossing& lhs,
+                     const InjectionReleaseCrossing& rhs) {
+                if (lhs.strict_segment_hit != rhs.strict_segment_hit) {
+                  return lhs.strict_segment_hit;
+                }
+                if (std::abs(lhs.normal_motion) !=
+                    std::abs(rhs.normal_motion)) {
+                  return std::abs(lhs.normal_motion) >
+                         std::abs(rhs.normal_motion);
+                }
+                if (lhs.travel_to_intersection !=
+                    rhs.travel_to_intersection) {
+                  return lhs.travel_to_intersection <
+                         rhs.travel_to_intersection;
+                }
+                if (!injection_route_id_.empty() &&
+                    (lhs.route.route_id == injection_route_id_) !=
+                        (rhs.route.route_id == injection_route_id_)) {
+                  return lhs.route.route_id == injection_route_id_;
+                }
+                return lhs.route.route_id < rhs.route.route_id;
+              });
+    return candidates.front();
+  }
+
+  std::optional<InjectionReleaseCrossing> InjectionReleaseCrossingForRoute(
+      const InjectionRoute& route,
+      DoublePoint previous_point,
+      DoublePoint current_point) const {
+    const auto display = MonitorDisplayForId(route.sink_display_id);
+    const ScreenArea area =
+        display.has_value() ? display->area : VirtualScreenArea();
+    const double delta_x = current_point.x - previous_point.x;
+    const double delta_y = current_point.y - previous_point.y;
+    if (delta_x == 0 && delta_y == 0) {
+      return std::nullopt;
+    }
+    const double line = EdgeLine(area, route.sink_edge);
+    const auto t = IntersectionParameter(route.sink_edge, line,
+                                         previous_point, delta_x, delta_y);
+    if (!t.has_value() || t.value() < 0 || t.value() > 1) {
+      return std::nullopt;
+    }
+    const double normal_motion =
+        EdgeNormalMotion(route.sink_edge, delta_x, delta_y);
+    if (normal_motion <= 0) {
+      return std::nullopt;
+    }
+    const DoublePoint intersection{
+        previous_point.x + delta_x * t.value(),
+        previous_point.y + delta_y * t.value()};
+    const double coordinate = AxisCoordinate(intersection, route.sink_edge);
+    if (!SegmentContains(coordinate, route.sink_segment,
+                         route.sink_display_id, route.sink_edge,
+                         injection_routes_)) {
+      return std::nullopt;
+    }
+    const double length = route.sink_segment.end - route.sink_segment.start;
+    if (length <= 0) {
+      return std::nullopt;
+    }
+    InjectionReleaseCrossing crossing;
+    crossing.route = route;
+    crossing.edge_unit =
+        ClampedUnit((coordinate - route.sink_segment.start) / length);
+    crossing.strict_segment_hit = coordinate > route.sink_segment.start &&
+                                  coordinate < route.sink_segment.end;
+    crossing.normal_motion = normal_motion;
+    crossing.travel_to_intersection =
+        std::hypot(intersection.x - previous_point.x,
+                   intersection.y - previous_point.y);
+    return crossing;
+  }
+
+  bool SegmentContains(double coordinate,
+                       const EdgeSegment& segment,
+                       const std::string& display_id,
+                       const std::string& edge,
+                       const std::vector<InjectionRoute>& routes) const {
+    if (!HasSegment(segment)) {
+      return true;
+    }
+    if (coordinate < segment.start) {
+      return false;
+    }
+    if (coordinate < segment.end) {
+      return true;
+    }
+    if (coordinate != segment.end) {
+      return false;
+    }
+    for (const auto& other : routes) {
+      if (other.sink_display_id == display_id &&
+          other.sink_edge == edge &&
+          other.sink_segment.start <= segment.end &&
+          other.sink_segment.end > segment.end) {
+        return false;
+      }
+    }
+    return true;
   }
 
   flutter::EncodableValue DisplayTopologyValue() const {
@@ -1214,7 +1986,23 @@ class RemoteInputPlugin : public flutter::Plugin {
     return flutter::EncodableValue(std::move(topology));
   }
 
-  POINT CursorPointForEntry(const std::string& json) const {
+  void UpdateInjectionRouteFromPayload(const std::string& json) {
+    const std::string sink_edge = JsonString(json, "sinkEdge", "");
+    if (sink_edge.empty()) {
+      return;
+    }
+    injection_display_id_ =
+        JsonString(json, "sinkDisplayId", injection_display_id_);
+    injection_edge_ = sink_edge;
+    injection_route_id_ = JsonString(json, "routeId", injection_route_id_);
+    injection_segment_ = EdgeSegment{
+        JsonNumber(json, "sinkSegmentStart").value_or(0),
+        JsonNumber(json, "sinkSegmentEnd").value_or(0),
+    };
+  }
+
+  POINT CursorPointForEntry(const std::string& json) {
+    UpdateInjectionRouteFromPayload(json);
     const auto edge_unit = JsonNumber(json, "edgeUnit");
     if (edge_unit.has_value() && HasSegment(injection_segment_) &&
         !injection_edge_.empty()) {
@@ -1267,8 +2055,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   POINT ClampToVirtualScreen(POINT point) const {
-    const ScreenArea area =
-        injection_display_id_.empty() ? VirtualScreenArea() : InjectionArea();
+    const ScreenArea area = VirtualScreenArea();
     const int left = area.left;
     const int top = area.top;
     const int right = area.right;
@@ -1526,6 +2313,27 @@ class RemoteInputPlugin : public flutter::Plugin {
       const int delta_x = static_cast<int>(std::round(JsonNumber(json, "deltaX").value_or(0)));
       const int delta_y = static_cast<int>(std::round(JsonNumber(json, "deltaY").value_or(0)));
       POINT current = CurrentCursorPoint();
+      const auto routed_edge_unit =
+          !JsonBool(json, "activeStart") && injected_cursor_entered_interior_
+              ? ReverseInjectionSourceEdgeUnit(current, delta_x, delta_y)
+              : std::nullopt;
+      if (routed_edge_unit.has_value()) {
+        const std::string release_session_id = injection_session_id_;
+        ReleaseInjectedButtons();
+        ReleaseInjectedKeys();
+        ReleaseCommonModifierKeys();
+        const auto release_route = routed_edge_unit.value();
+        EmitReleaseForSession(
+            release_session_id,
+            "edge",
+            release_route.edge_unit,
+            true,
+            release_route.route_id,
+            release_route.source_display_id,
+            release_route.source_edge,
+            release_route.source_segment);
+        return;
+      }
       if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
         const double edge_unit = InjectionEdgeUnit(current);
@@ -1538,7 +2346,9 @@ class RemoteInputPlugin : public flutter::Plugin {
       if (JsonBool(json, "activeStart")) {
         current = CursorPointForEntry(json);
         MoveCursorToPoint(current);
+        injected_cursor_entered_interior_ = false;
       }
+      POINT final_point = current;
       const auto buttons = JsonNumber(json, "buttons");
       if (buttons.has_value()) {
         SyncInjectedButtons(static_cast<int>(std::round(buttons.value())));
@@ -1548,7 +2358,9 @@ class RemoteInputPlugin : public flutter::Plugin {
         POINT target = {current.x + delta_x, current.y + delta_y};
         target = ClampToVirtualScreen(target);
         MoveCursorToPoint(target);
+        final_point = target;
       }
+      UpdateInjectedCursorInteriorState(json, final_point);
       return;
     }
 
@@ -1641,6 +2453,47 @@ class RemoteInputPlugin : public flutter::Plugin {
     return point.x <= left + kEdgeThreshold && delta_x < 0;
   }
 
+  void UpdateInjectedCursorInteriorState(const std::string& json,
+                                         POINT point) {
+    if (JsonBool(json, "activeStart")) {
+      injected_cursor_entered_interior_ = false;
+      return;
+    }
+    if (injected_cursor_entered_interior_) {
+      return;
+    }
+    const bool using_configured_edge =
+        HasSegment(injection_segment_) && !injection_edge_.empty();
+    const ScreenArea area =
+        using_configured_edge ? InjectionArea() : VirtualScreenArea();
+    const std::string edge =
+        using_configured_edge ? injection_edge_ : JsonString(json, "edge", "right");
+    constexpr int distance = 32;
+    bool interior = false;
+    if (using_configured_edge) {
+      if (edge == "left") {
+        interior = point.x >= area.left + distance;
+      } else if (edge == "right") {
+        interior = point.x <= area.right - distance;
+      } else if (edge == "top") {
+        interior = point.y >= area.top + distance;
+      } else if (edge == "bottom") {
+        interior = point.y <= area.bottom - distance;
+      }
+    } else if (edge == "left") {
+      interior = point.x <= area.right - distance;
+    } else if (edge == "top") {
+      interior = point.y <= area.bottom - distance;
+    } else if (edge == "bottom") {
+      interior = point.y >= area.top + distance;
+    } else {
+      interior = point.x >= area.left + distance;
+    }
+    if (interior) {
+      injected_cursor_entered_interior_ = true;
+    }
+  }
+
   void EmitInputEvent(const std::string& event_type,
                       std::vector<uint8_t> payload) {
     flutter::EncodableMap arguments;
@@ -1668,7 +2521,12 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void EmitReleaseForSession(const std::string& session_id,
                              const std::string& reason,
-                             double edge_unit = 0) {
+                             double edge_unit = 0,
+                             bool source_edge_unit = false,
+                             const std::string& route_id = "",
+                             const std::string& source_display_id = "",
+                             const std::string& source_edge = "",
+                             EdgeSegment source_segment = EdgeSegment{}) {
     if (session_id.empty()) {
       return;
     }
@@ -1679,6 +2537,28 @@ class RemoteInputPlugin : public flutter::Plugin {
         flutter::EncodableValue(reason);
     arguments[flutter::EncodableValue("edgeUnit")] =
         flutter::EncodableValue(edge_unit);
+    if (source_edge_unit) {
+      arguments[flutter::EncodableValue("sourceEdgeUnit")] =
+          flutter::EncodableValue(true);
+    }
+    if (!route_id.empty()) {
+      arguments[flutter::EncodableValue("routeId")] =
+          flutter::EncodableValue(route_id);
+    }
+    if (!source_display_id.empty()) {
+      arguments[flutter::EncodableValue("sourceDisplayId")] =
+          flutter::EncodableValue(source_display_id);
+    }
+    if (!source_edge.empty()) {
+      arguments[flutter::EncodableValue("sourceEdge")] =
+          flutter::EncodableValue(source_edge);
+    }
+    if (source_segment.end > source_segment.start) {
+      arguments[flutter::EncodableValue("sourceSegmentStart")] =
+          flutter::EncodableValue(source_segment.start);
+      arguments[flutter::EncodableValue("sourceSegmentEnd")] =
+          flutter::EncodableValue(source_segment.end);
+    }
 
     std::lock_guard<std::mutex> lock(channel_mutex_);
     channel_->InvokeMethod(
@@ -1709,10 +2589,15 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::string injection_session_id_;
   std::string capture_edge_ = "right";
   std::string capture_display_id_;
+  std::string capture_route_id_;
   EdgeSegment capture_segment_;
+  std::vector<EdgeSegment> capture_segments_;
+  std::vector<CaptureRoute> capture_routes_;
   std::string injection_display_id_;
   std::string injection_edge_;
+  std::string injection_route_id_;
   EdgeSegment injection_segment_;
+  std::vector<InjectionRoute> injection_routes_;
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
   bool pending_active_start_ = false;
@@ -1721,8 +2606,10 @@ class RemoteInputPlugin : public flutter::Plugin {
   int inactive_keyboard_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
   int pending_injected_buttons_ = 0;
+  bool injected_cursor_entered_interior_ = false;
   std::vector<WORD> injected_keys_;
   std::optional<POINT> last_hook_mouse_point_;
+  std::optional<double> capture_activation_edge_unit_;
   uint64_t sequence_ = 0;
   uint64_t capture_activation_sequence_ = 0;
   HHOOK mouse_hook_ = nullptr;
