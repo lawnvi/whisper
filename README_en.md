@@ -4,7 +4,7 @@
 
 Whisper is a cross-platform LAN collaboration app for nearby devices. It brings text, files, clipboard sharing, Android notifications, system audio sharing, and desktop keyboard/mouse sharing into a chat-style interface.
 
-Current version: `0.0.29`
+Current version: `0.0.31`
 
 ### Features
 
