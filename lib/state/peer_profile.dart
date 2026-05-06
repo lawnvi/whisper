@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 
 class PeerProfile {
   const PeerProfile({
@@ -10,6 +11,7 @@ class PeerProfile {
     required this.autoConnectEnabled,
     this.protocolVersion = 1,
     this.capabilities = const PeerCapabilities(),
+    this.displayTopology,
   });
 
   final DeviceData device;
@@ -18,6 +20,7 @@ class PeerProfile {
   final bool autoConnectEnabled;
   final int protocolVersion;
   final PeerCapabilities capabilities;
+  final RemoteInputTopology? displayTopology;
 
   bool trustsPeer(String peerId) {
     return trustedPeerIds.contains(peerId);
@@ -31,6 +34,7 @@ class PeerProfile {
       'autoConnectEnabled': autoConnectEnabled,
       'protocolVersion': protocolVersion,
       'capabilities': capabilities.toJson(),
+      if (displayTopology != null) 'displayTopology': displayTopology!.toJson(),
     };
   }
 
@@ -49,6 +53,7 @@ class PeerProfile {
         capabilities: PeerCapabilities.fromJson(
           json['capabilities'] as Map<String, dynamic>? ?? const {},
         ),
+        displayTopology: _topologyFromJson(json['displayTopology']),
       );
     }
 
@@ -59,6 +64,7 @@ class PeerProfile {
       autoConnectEnabled: true,
       protocolVersion: 1,
       capabilities: const PeerCapabilities(),
+      displayTopology: null,
     );
   }
 
@@ -80,6 +86,16 @@ class PeerProfile {
   }
 }
 
+RemoteInputTopology? _topologyFromJson(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return RemoteInputTopology.fromJson(value);
+  }
+  if (value is Map) {
+    return RemoteInputTopology.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
+}
+
 class PeerCapabilities {
   const PeerCapabilities({
     this.fileResumeV1 = false,
@@ -87,6 +103,7 @@ class PeerCapabilities {
     this.speakerSinkV1 = false,
     this.remoteInputSourceV1 = false,
     this.remoteInputSinkV1 = false,
+    this.remoteInputTopologyV1 = false,
   });
 
   final bool fileResumeV1;
@@ -94,6 +111,7 @@ class PeerCapabilities {
   final bool speakerSinkV1;
   final bool remoteInputSourceV1;
   final bool remoteInputSinkV1;
+  final bool remoteInputTopologyV1;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -102,6 +120,7 @@ class PeerCapabilities {
       'speakerSinkV1': speakerSinkV1,
       'remoteInputSourceV1': remoteInputSourceV1,
       'remoteInputSinkV1': remoteInputSinkV1,
+      'remoteInputTopologyV1': remoteInputTopologyV1,
     };
   }
 
@@ -112,6 +131,7 @@ class PeerCapabilities {
       speakerSinkV1: json['speakerSinkV1'] as bool? ?? false,
       remoteInputSourceV1: json['remoteInputSourceV1'] as bool? ?? false,
       remoteInputSinkV1: json['remoteInputSinkV1'] as bool? ?? false,
+      remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
     );
   }
 }

@@ -15,6 +15,14 @@ void main() {
         transport: RemoteInputTransport.websocket,
         path: '/input',
         layoutEdge: RemoteInputEdge.right,
+        sourceDisplayId: 'source-main',
+        sourceEdge: RemoteInputEdge.right,
+        sourceSegmentStart: 260,
+        sourceSegmentEnd: 900,
+        sinkDisplayId: 'sink-main',
+        sinkEdge: RemoteInputEdge.left,
+        sinkSegmentStart: 0,
+        sinkSegmentEnd: 640,
         releaseHotkey: 'ctrl+alt+esc',
         sourcePlatform: 'macos',
         sinkPlatform: 'windows',
@@ -29,6 +37,14 @@ void main() {
       expect(decoded.transport, RemoteInputTransport.websocket);
       expect(decoded.path, '/input');
       expect(decoded.layoutEdge, RemoteInputEdge.right);
+      expect(decoded.sourceDisplayId, 'source-main');
+      expect(decoded.sourceEdge, RemoteInputEdge.right);
+      expect(decoded.sourceSegmentStart, 260);
+      expect(decoded.sourceSegmentEnd, 900);
+      expect(decoded.sinkDisplayId, 'sink-main');
+      expect(decoded.sinkEdge, RemoteInputEdge.left);
+      expect(decoded.sinkSegmentStart, 0);
+      expect(decoded.sinkSegmentEnd, 640);
       expect(decoded.releaseHotkey, 'ctrl+alt+esc');
       expect(decoded.sourcePlatform, 'macos');
       expect(decoded.sinkPlatform, 'windows');
@@ -59,6 +75,7 @@ void main() {
         releaseReason: 'edge',
         releaseSequence: 7,
         releaseActivationSequence: 3,
+        releaseEdgeUnit: 0.625,
       );
 
       final decoded = RemoteInputControlMessage.fromJson(message.toJson());
@@ -67,7 +84,25 @@ void main() {
       expect(decoded.releaseReason, 'edge');
       expect(decoded.releaseSequence, 7);
       expect(decoded.releaseActivationSequence, 3);
+      expect(decoded.releaseEdgeUnit, 0.625);
       expect(decoded.sessionId, 'input-1');
+    });
+
+    test('keeps zero edge unit on release messages', () {
+      const message = RemoteInputControlMessage(
+        action: RemoteInputControlAction.release,
+        sessionId: 'input-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        releaseReason: 'edge',
+        releaseEdgeUnit: 0,
+      );
+
+      final json = message.toJson();
+      final decoded = RemoteInputControlMessage.fromJson(json);
+
+      expect(json['releaseEdgeUnit'], 0);
+      expect(decoded.releaseEdgeUnit, 0);
     });
   });
 

@@ -28,7 +28,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +44,11 @@ class LocalDatabase extends _$LocalDatabase {
           } else if (from < 4) {
             await m.addColumn(remoteInputLayout, remoteInputLayout.autoRole);
           }
+          if (from < 5 && from >= 3) {
+            await m.addColumn(
+                remoteInputLayout, remoteInputLayout.layoutVersion);
+            await m.addColumn(remoteInputLayout, remoteInputLayout.layoutJson);
+          }
         },
         beforeOpen: (_) async {
           await _repairRemoteInputLayoutAutoRole();
@@ -57,9 +62,23 @@ class LocalDatabase extends _$LocalDatabase {
       return;
     }
     final hasAutoRole = columns.any((row) => row.data['name'] == 'auto_role');
+    final hasLayoutVersion =
+        columns.any((row) => row.data['name'] == 'layout_version');
+    final hasLayoutJson =
+        columns.any((row) => row.data['name'] == 'layout_json');
     if (!hasAutoRole) {
       await customStatement(
         "ALTER TABLE remote_input_layout ADD COLUMN auto_role TEXT DEFAULT '${RemoteInputAutoRole.source.name}'",
+      );
+    }
+    if (!hasLayoutVersion) {
+      await customStatement(
+        'ALTER TABLE remote_input_layout ADD COLUMN layout_version INTEGER DEFAULT 1',
+      );
+    }
+    if (!hasLayoutJson) {
+      await customStatement(
+        "ALTER TABLE remote_input_layout ADD COLUMN layout_json TEXT DEFAULT ''",
       );
     }
     await customUpdate(
@@ -386,6 +405,17 @@ extension RemoteInputLayoutDataAutoRoleX on RemoteInputLayoutData {
       }
     }
     return RemoteInputAutoRole.source;
+  }
+
+  RemoteInputSavedLayout? get savedLayout {
+    if (layoutJson.isEmpty) {
+      return null;
+    }
+    try {
+      return RemoteInputSavedLayout.fromJsonString(layoutJson);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

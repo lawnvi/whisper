@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -13,10 +14,12 @@ class RemoteInputLayoutEditorScreen extends StatefulWidget {
     super.key,
     required this.initialLayout,
     required this.peerName,
+    this.remoteTopology,
   });
 
   final RemoteInputLayoutData initialLayout;
   final String peerName;
+  final RemoteInputTopology? remoteTopology;
 
   @override
   State<RemoteInputLayoutEditorScreen> createState() =>
@@ -25,24 +28,40 @@ class RemoteInputLayoutEditorScreen extends StatefulWidget {
 
 class _RemoteInputLayoutEditorScreenState
     extends State<RemoteInputLayoutEditorScreen> {
-  static const RemoteInputScreenRect _localScreen = RemoteInputScreenRect(
-    x: 0,
-    y: 0,
-    width: 1000,
-    height: 800,
-  );
-
-  late RemoteInputScreenRect _peerScreen;
+  late RemoteInputTopology _localTopology;
+  late RemoteInputTopology _remoteTopology;
+  late int _sinkOffsetX;
+  late int _sinkOffsetY;
 
   @override
   void initState() {
     super.initState();
-    _peerScreen = RemoteInputScreenRect(
-      x: widget.initialLayout.x,
-      y: widget.initialLayout.y,
-      width: widget.initialLayout.width,
-      height: widget.initialLayout.height,
-    );
+    _localTopology = RemoteInputTopology.fallback();
+    _remoteTopology = widget.remoteTopology ??
+        RemoteInputTopology.fallback(
+          width: widget.initialLayout.width,
+          height: widget.initialLayout.height,
+        );
+    final saved = widget.initialLayout.savedLayout;
+    final remotePrimary = _remoteTopology.primaryDisplay;
+    _sinkOffsetX =
+        saved?.sinkOffsetX ?? widget.initialLayout.x - remotePrimary.x;
+    _sinkOffsetY =
+        saved?.sinkOffsetY ?? widget.initialLayout.y - remotePrimary.y;
+    _loadLocalTopology();
+  }
+
+  Future<void> _loadLocalTopology() async {
+    try {
+      final topology = await RemoteInputCoordinator.shared.displayTopology();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _localTopology =
+            topology.isNotEmpty ? topology : RemoteInputTopology.fallback();
+      });
+    } catch (_) {}
   }
 
   @override
@@ -50,10 +69,8 @@ class _RemoteInputLayoutEditorScreenState
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
-    final edge = RemoteInputLayoutGeometry.adjacentEdge(
-      local: _localScreen,
-      peer: _peerScreen,
-    );
+    final connection = _currentConnection();
+    final edge = connection?.segment.sourceEdge;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -71,17 +88,7 @@ class _RemoteInputLayoutEditorScreenState
         actions: [
           IconButton(
             tooltip: l10n.remoteInputLayoutSave,
-            onPressed: () {
-              Navigator.of(context).pop(
-                widget.initialLayout.copyWith(
-                  x: _peerScreen.x,
-                  y: _peerScreen.y,
-                  width: _peerScreen.width,
-                  height: _peerScreen.height,
-                  enabled: true,
-                ),
-              );
-            },
+            onPressed: connection == null ? null : () => _save(connection),
             icon: const Icon(Icons.check_rounded),
           ),
         ],
@@ -164,11 +171,11 @@ class _RemoteInputLayoutEditorScreenState
         );
         final transform = _ArrangementTransform.forScreens(
           size: size,
-          local: _localScreen,
-          peer: _peerScreen,
+          screens: [
+            ..._localTopology.displays.map((display) => display.rect),
+            ..._translatedRemoteDisplays().map((display) => display.rect),
+          ],
         );
-        final localRect = transform.toCanvasRect(_localScreen);
-        final peerRect = transform.toCanvasRect(_peerScreen);
 
         return DecoratedBox(
           decoration: BoxDecoration(
@@ -187,54 +194,48 @@ class _RemoteInputLayoutEditorScreenState
                     ),
                   ),
                 ),
-                Positioned.fromRect(
-                  rect: localRect,
-                  child: _ScreenRectView(
-                    label: l10n.remoteInputLocalScreen,
-                    color: colorScheme.primary.withValues(alpha: 0.12),
-                    borderColor: colorScheme.primary,
-                    textColor: colorScheme.onSurface,
+                for (final display in _localTopology.displays)
+                  Positioned.fromRect(
+                    rect: transform.toCanvasRect(display.rect),
+                    child: _ScreenRectView(
+                      label: display.name.isEmpty
+                          ? l10n.remoteInputLocalScreen
+                          : display.name,
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      borderColor: colorScheme.primary,
+                      textColor: colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                Positioned.fromRect(
-                  rect: peerRect,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.move,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onPanUpdate: (details) {
-                        setState(() {
-                          _peerScreen = RemoteInputScreenRect(
-                            x: _peerScreen.x +
-                                (details.delta.dx / transform.scale).round(),
-                            y: _peerScreen.y +
-                                (details.delta.dy / transform.scale).round(),
-                            width: _peerScreen.width,
-                            height: _peerScreen.height,
-                          );
-                        });
-                      },
-                      onPanEnd: (_) {
-                        setState(() {
-                          _peerScreen =
-                              RemoteInputLayoutGeometry.snapToNearestEdge(
-                            local: _localScreen,
-                            peer: _peerScreen,
-                          );
-                        });
-                      },
-                      child: _ScreenRectView(
-                        label: widget.peerName.isEmpty
-                            ? l10n.remoteInputPeerScreen
-                            : widget.peerName,
-                        color: palette.trusted.withValues(alpha: 0.14),
-                        borderColor: palette.trusted,
-                        textColor: colorScheme.onSurface,
-                        selected: true,
+                for (final display in _translatedRemoteDisplays())
+                  Positioned.fromRect(
+                    rect: transform.toCanvasRect(display.rect),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.move,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _sinkOffsetX +=
+                                (details.delta.dx / transform.scale).round();
+                            _sinkOffsetY +=
+                                (details.delta.dy / transform.scale).round();
+                          });
+                        },
+                        onPanEnd: (_) => _snapToNearestEdge(),
+                        child: _ScreenRectView(
+                          label: display.name.isEmpty
+                              ? widget.peerName.isEmpty
+                                  ? l10n.remoteInputPeerScreen
+                                  : widget.peerName
+                              : display.name,
+                          color: palette.trusted.withValues(alpha: 0.14),
+                          borderColor: palette.trusted,
+                          textColor: colorScheme.onSurface,
+                          selected: true,
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -244,42 +245,236 @@ class _RemoteInputLayoutEditorScreenState
   }
 
   void _snapTo(RemoteInputEdge edge) {
+    final source = _localTopology.primaryDisplay;
+    final sink = _remoteTopology.primaryDisplay;
     setState(() {
       switch (edge) {
         case RemoteInputEdge.left:
-          _peerScreen = RemoteInputScreenRect(
-            x: _localScreen.left - _peerScreen.width,
-            y: 0,
-            width: _peerScreen.width,
-            height: _peerScreen.height,
-          );
+          _sinkOffsetX = source.left - sink.right;
+          _sinkOffsetY = source.top - sink.top;
           break;
         case RemoteInputEdge.right:
-          _peerScreen = RemoteInputScreenRect(
-            x: _localScreen.right,
-            y: 0,
-            width: _peerScreen.width,
-            height: _peerScreen.height,
-          );
+          _sinkOffsetX = source.right - sink.left;
+          _sinkOffsetY = source.top - sink.top;
           break;
         case RemoteInputEdge.top:
-          _peerScreen = RemoteInputScreenRect(
-            x: 0,
-            y: _localScreen.top - _peerScreen.height,
-            width: _peerScreen.width,
-            height: _peerScreen.height,
-          );
+          _sinkOffsetX = source.left - sink.left;
+          _sinkOffsetY = source.top - sink.bottom;
           break;
         case RemoteInputEdge.bottom:
-          _peerScreen = RemoteInputScreenRect(
-            x: 0,
-            y: _localScreen.bottom,
-            width: _peerScreen.width,
-            height: _peerScreen.height,
-          );
+          _sinkOffsetX = source.left - sink.left;
+          _sinkOffsetY = source.bottom - sink.top;
           break;
       }
     });
+  }
+
+  void _snapToNearestEdge() {
+    _SnapCandidate? best;
+    final remoteDisplays = _translatedRemoteDisplays();
+    for (final source in _localTopology.displays) {
+      for (var i = 0; i < remoteDisplays.length; i++) {
+        final sink = remoteDisplays[i];
+        final originalSink = _remoteTopology.displays[i];
+        for (final edge in RemoteInputEdge.values) {
+          final sinkEdge = _oppositeEdge(edge);
+          if (!_isOuterEdge(source, edge, _localTopology.displays) ||
+              !_isOuterEdge(sink, sinkEdge, remoteDisplays)) {
+            continue;
+          }
+          final candidate = _snapCandidateFor(
+            source: source,
+            sink: sink,
+            originalSink: originalSink,
+            edge: edge,
+          );
+          if (best == null || candidate.score < best.score) {
+            best = candidate;
+          }
+        }
+      }
+    }
+    if (best == null) {
+      return;
+    }
+    final winner = best;
+    setState(() {
+      _sinkOffsetX = winner.offsetX;
+      _sinkOffsetY = winner.offsetY;
+    });
+  }
+
+  _SnapCandidate _snapCandidateFor({
+    required RemoteInputDisplay source,
+    required RemoteInputDisplay sink,
+    required RemoteInputDisplay originalSink,
+    required RemoteInputEdge edge,
+  }) {
+    var offsetX = _sinkOffsetX;
+    var offsetY = _sinkOffsetY;
+    switch (edge) {
+      case RemoteInputEdge.left:
+        offsetX = source.left - originalSink.right;
+        offsetY = _clampInt(
+              sink.top,
+              source.top - sink.height + 1,
+              source.bottom - 1,
+            ) -
+            originalSink.top;
+        break;
+      case RemoteInputEdge.right:
+        offsetX = source.right - originalSink.left;
+        offsetY = _clampInt(
+              sink.top,
+              source.top - sink.height + 1,
+              source.bottom - 1,
+            ) -
+            originalSink.top;
+        break;
+      case RemoteInputEdge.top:
+        offsetX = _clampInt(
+              sink.left,
+              source.left - sink.width + 1,
+              source.right - 1,
+            ) -
+            originalSink.left;
+        offsetY = source.top - originalSink.bottom;
+        break;
+      case RemoteInputEdge.bottom:
+        offsetX = _clampInt(
+              sink.left,
+              source.left - sink.width + 1,
+              source.right - 1,
+            ) -
+            originalSink.left;
+        offsetY = source.bottom - originalSink.top;
+        break;
+    }
+    final dx = offsetX - _sinkOffsetX;
+    final dy = offsetY - _sinkOffsetY;
+    return _SnapCandidate(
+      offsetX: offsetX,
+      offsetY: offsetY,
+      score: dx * dx + dy * dy,
+    );
+  }
+
+  int _clampInt(int value, int minimum, int maximum) {
+    if (value < minimum) {
+      return minimum;
+    }
+    if (value > maximum) {
+      return maximum;
+    }
+    return value;
+  }
+
+  List<RemoteInputDisplay> _translatedRemoteDisplays() {
+    return _remoteTopology.displays
+        .map(
+          (display) => display.translated(
+            dx: _sinkOffsetX,
+            dy: _sinkOffsetY,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  _LayoutConnection? _currentConnection() {
+    _LayoutConnection? best;
+    final remoteDisplays = _translatedRemoteDisplays();
+    for (final source in _localTopology.displays) {
+      for (var i = 0; i < remoteDisplays.length; i++) {
+        final sink = remoteDisplays[i];
+        final originalSink = _remoteTopology.displays[i];
+        for (final edge in RemoteInputEdge.values) {
+          final sinkEdge = _oppositeEdge(edge);
+          if (!_isOuterEdge(source, edge, _localTopology.displays) ||
+              !_isOuterEdge(sink, sinkEdge, remoteDisplays)) {
+            continue;
+          }
+          final segment = RemoteInputLayoutGeometry.sharedEdgeSegment(
+            source: source,
+            sourceEdge: edge,
+            sinkInLayout: sink,
+            sinkEdge: sinkEdge,
+          );
+          if (segment == null) {
+            continue;
+          }
+          final candidate = _LayoutConnection(
+            source: source,
+            sink: originalSink,
+            sinkInLayout: sink,
+            segment: segment,
+          );
+          if (best == null || candidate.segment.length > best.segment.length) {
+            best = candidate;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  bool _isOuterEdge(
+    RemoteInputDisplay display,
+    RemoteInputEdge edge,
+    List<RemoteInputDisplay> displays,
+  ) {
+    for (final other in displays) {
+      if (other.displayId == display.displayId) {
+        continue;
+      }
+      final segment = RemoteInputLayoutGeometry.sharedEdgeSegment(
+        source: display,
+        sourceEdge: edge,
+        sinkInLayout: other,
+        sinkEdge: _oppositeEdge(edge),
+      );
+      if (segment != null) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  RemoteInputEdge _oppositeEdge(RemoteInputEdge edge) {
+    switch (edge) {
+      case RemoteInputEdge.left:
+        return RemoteInputEdge.right;
+      case RemoteInputEdge.right:
+        return RemoteInputEdge.left;
+      case RemoteInputEdge.top:
+        return RemoteInputEdge.bottom;
+      case RemoteInputEdge.bottom:
+        return RemoteInputEdge.top;
+    }
+  }
+
+  void _save(_LayoutConnection connection) {
+    final segment = connection.segment;
+    final saved = RemoteInputSavedLayout(
+      sourceDisplayId: connection.source.displayId,
+      sinkDisplayId: connection.sink.displayId,
+      sourceEdge: segment.sourceEdge,
+      sinkEdge: segment.sinkEdge,
+      sinkOffsetX: _sinkOffsetX,
+      sinkOffsetY: _sinkOffsetY,
+      sharedSegmentStart: segment.start,
+      sharedSegmentEnd: segment.end,
+    );
+    Navigator.of(context).pop(
+      widget.initialLayout.copyWith(
+        x: connection.sinkInLayout.x,
+        y: connection.sinkInLayout.y,
+        width: connection.sinkInLayout.width,
+        height: connection.sinkInLayout.height,
+        enabled: true,
+        layoutVersion: 2,
+        layoutJson: saved.toJsonString(),
+      ),
+    );
   }
 
   String _edgeLabel(AppLocalizations l10n, RemoteInputEdge? edge) {
@@ -309,14 +504,26 @@ class _ArrangementTransform {
 
   factory _ArrangementTransform.forScreens({
     required Size size,
-    required RemoteInputScreenRect local,
-    required RemoteInputScreenRect peer,
+    required List<RemoteInputScreenRect> screens,
   }) {
     const padding = 28.0;
-    final left = math.min(local.left, peer.left).toDouble() - 160;
-    final top = math.min(local.top, peer.top).toDouble() - 160;
-    final right = math.max(local.right, peer.right).toDouble() + 160;
-    final bottom = math.max(local.bottom, peer.bottom).toDouble() + 160;
+    final safeScreens = screens.isEmpty
+        ? const [RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800)]
+        : screens;
+    var left = safeScreens.first.left.toDouble();
+    var top = safeScreens.first.top.toDouble();
+    var right = safeScreens.first.right.toDouble();
+    var bottom = safeScreens.first.bottom.toDouble();
+    for (final screen in safeScreens.skip(1)) {
+      left = math.min(left, screen.left.toDouble());
+      top = math.min(top, screen.top.toDouble());
+      right = math.max(right, screen.right.toDouble());
+      bottom = math.max(bottom, screen.bottom.toDouble());
+    }
+    left -= 160;
+    top -= 160;
+    right += 160;
+    bottom += 160;
     final worldWidth = right - left;
     final worldHeight = bottom - top;
     final widthScale = (size.width - padding * 2) / worldWidth;
@@ -339,6 +546,32 @@ class _ArrangementTransform {
       screen.height * scale,
     );
   }
+}
+
+class _LayoutConnection {
+  const _LayoutConnection({
+    required this.source,
+    required this.sink,
+    required this.sinkInLayout,
+    required this.segment,
+  });
+
+  final RemoteInputDisplay source;
+  final RemoteInputDisplay sink;
+  final RemoteInputDisplay sinkInLayout;
+  final RemoteInputSharedEdgeSegment segment;
+}
+
+class _SnapCandidate {
+  const _SnapCandidate({
+    required this.offsetX,
+    required this.offsetY,
+    required this.score,
+  });
+
+  final int offsetX;
+  final int offsetY;
+  final int score;
 }
 
 class _ScreenRectView extends StatelessWidget {

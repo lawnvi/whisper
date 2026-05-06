@@ -23,6 +23,29 @@ namespace {
 constexpr char kRemoteInputChannel[] = "com.vireen.whisper/remote_input";
 constexpr int kEdgeThreshold = 6;
 
+struct ScreenArea {
+  int left = 0;
+  int top = 0;
+  int right = 0;
+  int bottom = 0;
+
+  int width() const { return std::max(1, right - left + 1); }
+  int height() const { return std::max(1, bottom - top + 1); }
+};
+
+struct EdgeSegment {
+  double start = 0;
+  double end = 0;
+};
+
+struct MonitorDisplay {
+  std::string id;
+  std::string name;
+  ScreenArea area;
+  bool primary = false;
+  double scale = 1.0;
+};
+
 WORD MacVirtualKeyToWindows(int key_code);
 int WindowsVirtualKeyToMac(USHORT virtual_key);
 
@@ -53,6 +76,25 @@ int64_t GetMapInt64(const flutter::EncodableMap& map,
   }
   if (const auto* value = std::get_if<int32_t>(&it->second)) {
     return *value;
+  }
+  return fallback;
+}
+
+double GetMapDouble(const flutter::EncodableMap& map,
+                    const char* key,
+                    double fallback = 0) {
+  auto it = map.find(flutter::EncodableValue(std::string(key)));
+  if (it == map.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<double>(&it->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int64_t>(&it->second)) {
+    return static_cast<double>(*value);
+  }
+  if (const auto* value = std::get_if<int32_t>(&it->second)) {
+    return static_cast<double>(*value);
   }
   return fallback;
 }
@@ -142,6 +184,145 @@ int ClampInt(int value, int minimum, int maximum) {
   return value;
 }
 
+bool HasSegment(const EdgeSegment& segment) {
+  return segment.end > segment.start;
+}
+
+ScreenArea VirtualScreenArea() {
+  const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+  const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+  const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+  const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  return ScreenArea{left, top, left + width - 1, top + height - 1};
+}
+
+std::string Utf8FromWide(const wchar_t* value) {
+  if (value == nullptr || value[0] == L'\0') {
+    return "";
+  }
+  const int length = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0,
+                                         nullptr, nullptr);
+  if (length <= 1) {
+    return "";
+  }
+  std::string result(static_cast<size_t>(length - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value, -1, &result[0], length, nullptr,
+                      nullptr);
+  return result;
+}
+
+BOOL CALLBACK EnumMonitorDisplayProc(HMONITOR monitor,
+                                     HDC,
+                                     LPRECT,
+                                     LPARAM data) {
+  auto* displays = reinterpret_cast<std::vector<MonitorDisplay>*>(data);
+  MONITORINFOEXW info = {};
+  info.cbSize = sizeof(info);
+  if (GetMonitorInfoW(monitor, &info) != TRUE) {
+    return TRUE;
+  }
+  const std::string id = Utf8FromWide(info.szDevice);
+  MonitorDisplay display;
+  display.id = id.empty() ? std::to_string(displays->size()) : id;
+  display.name = display.id;
+  display.area = ScreenArea{
+      info.rcMonitor.left,
+      info.rcMonitor.top,
+      info.rcMonitor.right - 1,
+      info.rcMonitor.bottom - 1,
+  };
+  display.primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+  displays->push_back(display);
+  return TRUE;
+}
+
+std::vector<MonitorDisplay> MonitorDisplays() {
+  std::vector<MonitorDisplay> displays;
+  EnumDisplayMonitors(nullptr, nullptr, EnumMonitorDisplayProc,
+                      reinterpret_cast<LPARAM>(&displays));
+  if (displays.empty()) {
+    MonitorDisplay fallback;
+    fallback.id = "primary";
+    fallback.name = "Primary";
+    fallback.area = VirtualScreenArea();
+    fallback.primary = true;
+    displays.push_back(fallback);
+  }
+  return displays;
+}
+
+std::optional<MonitorDisplay> MonitorDisplayForId(const std::string& id) {
+  if (id.empty()) {
+    return std::nullopt;
+  }
+  for (const auto& display : MonitorDisplays()) {
+    if (display.id == id) {
+      return display;
+    }
+  }
+  return std::nullopt;
+}
+
+double AxisValue(POINT point, const std::string& edge) {
+  if (edge == "left" || edge == "right") {
+    return static_cast<double>(point.y);
+  }
+  return static_cast<double>(point.x);
+}
+
+bool PointInSegment(POINT point,
+                    const std::string& edge,
+                    const EdgeSegment& segment,
+                    double tolerance = 0) {
+  if (!HasSegment(segment)) {
+    return true;
+  }
+  const double value = AxisValue(point, edge);
+  return value >= segment.start - tolerance && value <= segment.end + tolerance;
+}
+
+double EdgeUnitForPoint(POINT point,
+                        const std::string& edge,
+                        const EdgeSegment& segment) {
+  if (!HasSegment(segment)) {
+    return 0;
+  }
+  return ClampedUnit((AxisValue(point, edge) - segment.start) /
+                     (segment.end - segment.start));
+}
+
+int SegmentCoordinate(double edge_unit, const EdgeSegment& segment) {
+  return static_cast<int>(
+      std::lround(segment.start + (segment.end - segment.start) *
+                                      ClampedUnit(edge_unit)));
+}
+
+POINT EdgePoint(const ScreenArea& area,
+                const std::string& edge,
+                double edge_unit,
+                const EdgeSegment& segment) {
+  constexpr int inset = 2;
+  const int coordinate = SegmentCoordinate(edge_unit, segment);
+  if (edge == "left") {
+    return POINT{area.left + inset,
+                 ClampInt(coordinate, area.top + inset, area.bottom - inset)};
+  }
+  if (edge == "right") {
+    return POINT{area.right - inset,
+                 ClampInt(coordinate, area.top + inset, area.bottom - inset)};
+  }
+  if (edge == "top") {
+    return POINT{ClampInt(coordinate, area.left + inset, area.right - inset),
+                 area.top + inset};
+  }
+  if (edge == "bottom") {
+    return POINT{ClampInt(coordinate, area.left + inset, area.right - inset),
+                 area.bottom - inset};
+  }
+  return POINT{area.left + inset,
+               ClampInt(coordinate, area.top + inset, area.bottom - inset)};
+}
+
 double Normalized(int value, int start, int length) {
   if (length <= 0) {
     return 0;
@@ -169,19 +350,21 @@ std::string MouseMovePayload(POINT point,
                              LONG delta_y,
                              bool active_start,
                              const std::string& edge,
-                             int buttons) {
-  const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-  const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-  const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-  const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                             int buttons,
+                             const ScreenArea& area,
+                             const EdgeSegment& segment) {
   std::ostringstream json;
   json << "{\"x\":" << point.x << ",\"y\":" << point.y
        << ",\"deltaX\":" << delta_x << ",\"deltaY\":" << delta_y
        << ",\"activeStart\":" << (active_start ? "true" : "false")
        << ",\"edge\":\"" << edge << "\""
        << ",\"buttons\":" << buttons
-       << ",\"unitX\":" << Normalized(point.x, left, width)
-       << ",\"unitY\":" << Normalized(point.y, top, height) << "}";
+       << ",\"unitX\":" << Normalized(point.x, area.left, area.width())
+       << ",\"unitY\":" << Normalized(point.y, area.top, area.height());
+  if (HasSegment(segment)) {
+    json << ",\"edgeUnit\":" << EdgeUnitForPoint(point, edge, segment);
+  }
+  json << "}";
   return json.str();
 }
 
@@ -489,8 +672,16 @@ class RemoteInputPlugin : public flutter::Plugin {
                                        ? nullptr
                                        : GetMapValue<std::string>(
                                              *args, "releaseHotkey");
+      const auto* display_id = args == nullptr
+                                   ? nullptr
+                                   : GetMapValue<std::string>(*args, "displayId");
+      const EdgeSegment segment = {
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentStart"),
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentEnd"),
+      };
       const auto error = StartCapture(
           *session_id, edge == nullptr ? "right" : *edge,
+          display_id == nullptr ? "" : *display_id, segment,
           release_hotkey == nullptr ? "ctrl+alt+esc" : *release_hotkey);
       if (error.has_value()) {
         result->Error("remote-input-capture-unavailable", error.value());
@@ -518,7 +709,10 @@ class RemoteInputPlugin : public flutter::Plugin {
           args == nullptr ? 0 : GetMapInt64(*args, "releaseSequence");
       const auto release_activation_sequence =
           args == nullptr ? 0 : GetMapInt64(*args, "releaseActivationSequence");
-      PauseCapture(*session_id, release_sequence, release_activation_sequence);
+      const auto release_edge_unit =
+          args == nullptr ? 0 : GetMapDouble(*args, "releaseEdgeUnit");
+      PauseCapture(*session_id, release_sequence, release_activation_sequence,
+                   release_edge_unit);
       result->Success();
       return;
     }
@@ -535,6 +729,17 @@ class RemoteInputPlugin : public flutter::Plugin {
       ReleaseInjectedKeys();
       ReleaseCommonModifierKeys();
       injection_session_id_ = *session_id;
+      const auto* display_id = args == nullptr
+                                   ? nullptr
+                                   : GetMapValue<std::string>(*args, "displayId");
+      const auto* edge =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "edge");
+      injection_display_id_ = display_id == nullptr ? "" : *display_id;
+      injection_edge_ = edge == nullptr ? "" : *edge;
+      injection_segment_ = EdgeSegment{
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentStart"),
+          args == nullptr ? 0 : GetMapDouble(*args, "segmentEnd"),
+      };
       result->Success();
       return;
     }
@@ -565,15 +770,24 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
 
+    if (method == "getDisplayTopology") {
+      result->Success(DisplayTopologyValue());
+      return;
+    }
+
     result->NotImplemented();
   }
 
   std::optional<std::string> StartCapture(std::string session_id,
                                           std::string edge,
+                                          std::string display_id,
+                                          EdgeSegment segment,
                                           std::string release_hotkey) {
     StopCapture();
     capture_session_id_ = std::move(session_id);
     capture_edge_ = std::move(edge);
+    capture_display_id_ = std::move(display_id);
+    capture_segment_ = segment;
     release_hotkey_ = std::move(release_hotkey);
     capture_active_ = false;
     pending_active_start_ = false;
@@ -610,6 +824,8 @@ class RemoteInputPlugin : public flutter::Plugin {
     UninstallHooks();
     ReleaseCommonModifierKeys();
     capture_session_id_.clear();
+    capture_display_id_.clear();
+    capture_segment_ = EdgeSegment{};
     capture_active_ = false;
     pending_active_start_ = false;
     capture_activation_sequence_ = 0;
@@ -620,7 +836,8 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void PauseCapture(const std::string& session_id,
                     int64_t release_sequence,
-                    int64_t release_activation_sequence) {
+                    int64_t release_activation_sequence,
+                    double release_edge_unit) {
     if (session_id == capture_session_id_) {
       if (release_activation_sequence > 0 &&
           capture_activation_sequence_ >
@@ -645,7 +862,7 @@ class RemoteInputPlugin : public flutter::Plugin {
                  << " wasActive=" << (capture_active_ ? 1 : 0);
       EmitDiagnostic(diagnostic.str());
       ReleaseCommonModifierKeys();
-      MoveCaptureCursorToLocalEdge();
+      MoveCaptureCursorToLocalEdge(release_edge_unit);
       capture_active_ = false;
       pending_active_start_ = false;
       capture_activation_sequence_ = 0;
@@ -661,6 +878,9 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseInjectedKeys();
     ReleaseCommonModifierKeys();
     injection_session_id_.clear();
+    injection_display_id_.clear();
+    injection_edge_.clear();
+    injection_segment_ = EdgeSegment{};
   }
 
   bool InstallHooks(std::string* error_message) {
@@ -775,7 +995,8 @@ class RemoteInputPlugin : public flutter::Plugin {
       EmitInputEvent(
           "mouseMove",
           JsonBytes(MouseMovePayload(point, delta_x, delta_y, active_start,
-                                     capture_edge_, capture_buttons_)));
+                                     capture_edge_, capture_buttons_,
+                                     CaptureArea(), capture_segment_)));
     }
 
     if (flags & RI_MOUSE_LEFT_BUTTON_UP) {
@@ -802,24 +1023,35 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void HandleRawKeyboard(const RAWKEYBOARD&) {}
 
-  void MoveCaptureCursorToLocalEdge() const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
+  void MoveCaptureCursorToLocalEdge(double edge_unit = -1) const {
+    const ScreenArea area = CaptureArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
     constexpr int inset = 2;
 
     POINT current = {};
     if (GetCursorPos(&current) != TRUE) {
-      current.x = left + width / 2;
-      current.y = top + height / 2;
+      current.x = left + area.width() / 2;
+      current.y = top + area.height() / 2;
     }
-    const int x =
+    int x =
         ClampInt(static_cast<int>(current.x), left + inset, right - inset);
-    const int y =
+    int y =
         ClampInt(static_cast<int>(current.y), top + inset, bottom - inset);
+    if (HasSegment(capture_segment_)) {
+      const double unit = edge_unit >= 0
+                              ? ClampedUnit(edge_unit)
+                              : EdgeUnitForPoint(current, capture_edge_,
+                                                 capture_segment_);
+      const int coordinate = SegmentCoordinate(unit, capture_segment_);
+      if (capture_edge_ == "left" || capture_edge_ == "right") {
+        y = ClampInt(coordinate, top + inset, bottom - inset);
+      } else {
+        x = ClampInt(coordinate, left + inset, right - inset);
+      }
+    }
     POINT target = {right - inset, y};
     if (capture_edge_ == "left") {
       target = {left + inset, y};
@@ -832,12 +1064,16 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   bool IsEdgeActivation(POINT point, LONG delta_x, LONG delta_y) const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
+    const ScreenArea area = CaptureArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
+
+    if (!PointInSegment(point, capture_edge_, capture_segment_,
+                        kEdgeThreshold)) {
+      return false;
+    }
 
     if (capture_edge_ == "left") {
       return point.x <= left + kEdgeThreshold && delta_x < 0;
@@ -852,12 +1088,16 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   bool IsCursorAtCaptureEdge(POINT point) const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
+    const ScreenArea area = CaptureArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
+
+    if (!PointInSegment(point, capture_edge_, capture_segment_,
+                        kEdgeThreshold)) {
+      return false;
+    }
 
     if (capture_edge_ == "left") {
       return point.x <= left + kEdgeThreshold;
@@ -921,15 +1161,73 @@ class RemoteInputPlugin : public flutter::Plugin {
            (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
   }
 
+  ScreenArea CaptureArea() const {
+    const auto display = MonitorDisplayForId(capture_display_id_);
+    return display.has_value() ? display->area : VirtualScreenArea();
+  }
+
+  ScreenArea InjectionArea() const {
+    const auto display = MonitorDisplayForId(injection_display_id_);
+    return display.has_value() ? display->area : VirtualScreenArea();
+  }
+
+  double CaptureEdgeUnit(POINT point) const {
+    return EdgeUnitForPoint(point, capture_edge_, capture_segment_);
+  }
+
+  double InjectionEdgeUnit(POINT point) const {
+    if (injection_edge_.empty()) {
+      return 0;
+    }
+    return EdgeUnitForPoint(point, injection_edge_, injection_segment_);
+  }
+
+  flutter::EncodableValue DisplayTopologyValue() const {
+    flutter::EncodableList displays;
+    for (const auto& display : MonitorDisplays()) {
+      flutter::EncodableMap item;
+      item[flutter::EncodableValue("displayId")] =
+          flutter::EncodableValue(display.id);
+      item[flutter::EncodableValue("name")] =
+          flutter::EncodableValue(display.name);
+      item[flutter::EncodableValue("x")] =
+          flutter::EncodableValue(static_cast<int32_t>(display.area.left));
+      item[flutter::EncodableValue("y")] =
+          flutter::EncodableValue(static_cast<int32_t>(display.area.top));
+      item[flutter::EncodableValue("width")] =
+          flutter::EncodableValue(static_cast<int32_t>(display.area.width()));
+      item[flutter::EncodableValue("height")] =
+          flutter::EncodableValue(static_cast<int32_t>(display.area.height()));
+      item[flutter::EncodableValue("scale")] =
+          flutter::EncodableValue(display.scale);
+      item[flutter::EncodableValue("isPrimary")] =
+          flutter::EncodableValue(display.primary);
+      displays.push_back(flutter::EncodableValue(std::move(item)));
+    }
+    flutter::EncodableMap topology;
+    topology[flutter::EncodableValue("platform")] =
+        flutter::EncodableValue("windows");
+    topology[flutter::EncodableValue("updatedAt")] =
+        flutter::EncodableValue(static_cast<int64_t>(NowMicros() / 1000));
+    topology[flutter::EncodableValue("displays")] =
+        flutter::EncodableValue(std::move(displays));
+    return flutter::EncodableValue(std::move(topology));
+  }
+
   POINT CursorPointForEntry(const std::string& json) const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
-    const int unit_width = width > 1 ? width - 1 : 1;
-    const int unit_height = height > 1 ? height - 1 : 1;
+    const auto edge_unit = JsonNumber(json, "edgeUnit");
+    if (edge_unit.has_value() && HasSegment(injection_segment_) &&
+        !injection_edge_.empty()) {
+      return EdgePoint(InjectionArea(), injection_edge_, edge_unit.value(),
+                       injection_segment_);
+    }
+    const ScreenArea area = VirtualScreenArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
+    const int unit_width = area.width() > 1 ? area.width() - 1 : 1;
+    const int unit_height = area.height() > 1 ? area.height() - 1 : 1;
     const int inset = 2;
     const double unit_x = ClampedUnit(JsonNumber(json, "unitX").value_or(0));
     const double unit_y = ClampedUnit(JsonNumber(json, "unitY").value_or(0));
@@ -959,25 +1257,22 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   POINT CurrentCursorPoint() const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const ScreenArea area = InjectionArea();
     POINT current = {};
     if (GetCursorPos(&current) != TRUE) {
-      current.x = left + width / 2;
-      current.y = top + height / 2;
+      current.x = area.left + area.width() / 2;
+      current.y = area.top + area.height() / 2;
     }
     return current;
   }
 
   POINT ClampToVirtualScreen(POINT point) const {
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
+    const ScreenArea area =
+        injection_display_id_.empty() ? VirtualScreenArea() : InjectionArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
     constexpr int inset = 2;
     point.x = ClampInt(static_cast<int>(point.x), left + inset, right - inset);
     point.y = ClampInt(static_cast<int>(point.y), top + inset, bottom - inset);
@@ -1233,10 +1528,11 @@ class RemoteInputPlugin : public flutter::Plugin {
       POINT current = CurrentCursorPoint();
       if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
+        const double edge_unit = InjectionEdgeUnit(current);
         ReleaseInjectedButtons();
         ReleaseInjectedKeys();
         ReleaseCommonModifierKeys();
-        EmitReleaseForSession(release_session_id, "edge");
+        EmitReleaseForSession(release_session_id, "edge", edge_unit);
         return;
       }
       if (JsonBool(json, "activeStart")) {
@@ -1307,12 +1603,30 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (injection_session_id_.empty() || JsonBool(json, "activeStart")) {
       return false;
     }
-    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const int right = left + width - 1;
-    const int bottom = top + height - 1;
+    if (HasSegment(injection_segment_) && !injection_edge_.empty()) {
+      const ScreenArea area = InjectionArea();
+      if (!PointInSegment(point, injection_edge_, injection_segment_,
+                          kEdgeThreshold)) {
+        return false;
+      }
+      if (injection_edge_ == "left") {
+        return point.x <= area.left + kEdgeThreshold && delta_x < 0;
+      }
+      if (injection_edge_ == "right") {
+        return point.x >= area.right - kEdgeThreshold && delta_x > 0;
+      }
+      if (injection_edge_ == "top") {
+        return point.y <= area.top + kEdgeThreshold && delta_y < 0;
+      }
+      if (injection_edge_ == "bottom") {
+        return point.y >= area.bottom - kEdgeThreshold && delta_y > 0;
+      }
+    }
+    const ScreenArea area = VirtualScreenArea();
+    const int left = area.left;
+    const int top = area.top;
+    const int right = area.right;
+    const int bottom = area.bottom;
     const std::string edge = JsonString(json, "edge", "right");
 
     if (edge == "left") {
@@ -1348,11 +1662,13 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   void EmitRelease(const std::string& reason) {
-    EmitReleaseForSession(capture_session_id_, reason);
+    EmitReleaseForSession(capture_session_id_, reason,
+                          CaptureEdgeUnit(CurrentCursorPoint()));
   }
 
   void EmitReleaseForSession(const std::string& session_id,
-                             const std::string& reason) {
+                             const std::string& reason,
+                             double edge_unit = 0) {
     if (session_id.empty()) {
       return;
     }
@@ -1361,6 +1677,8 @@ class RemoteInputPlugin : public flutter::Plugin {
         flutter::EncodableValue(session_id);
     arguments[flutter::EncodableValue("reason")] =
         flutter::EncodableValue(reason);
+    arguments[flutter::EncodableValue("edgeUnit")] =
+        flutter::EncodableValue(edge_unit);
 
     std::lock_guard<std::mutex> lock(channel_mutex_);
     channel_->InvokeMethod(
@@ -1390,6 +1708,11 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::string capture_session_id_;
   std::string injection_session_id_;
   std::string capture_edge_ = "right";
+  std::string capture_display_id_;
+  EdgeSegment capture_segment_;
+  std::string injection_display_id_;
+  std::string injection_edge_;
+  EdgeSegment injection_segment_;
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
   bool pending_active_start_ = false;

@@ -19,9 +19,14 @@ void main() {
       expect(plugin, contains('startCapture'));
       expect(plugin, contains('startInjection'));
       expect(plugin, contains('injectEvent'));
+      expect(plugin, contains('getDisplayTopology'));
+      expect(plugin, contains('DisplayTopologyValue'));
       expect(plugin, contains('XGrabPointer'));
       expect(plugin, contains('XGrabKeyboard'));
       expect(plugin, contains('XTestFake'));
+      expect(plugin, contains('EdgeUnitForPoint'));
+      expect(plugin, contains('PointInSegment'));
+      expect(plugin, contains('"edgeUnit"'));
       expect(plugin, contains('sourcePlatform'));
       expect(plugin, contains('linuxKeyCode'));
       expect(plugin, contains('"linux remote input capture started'));
@@ -86,7 +91,11 @@ void main() {
 
       expect(cmake, contains('XI_REMOTE_INPUT'));
       expect(cmake, contains('HAVE_XI_REMOTE_INPUT'));
+      expect(cmake, contains('XRANDR_REMOTE_INPUT'));
+      expect(cmake, contains('HAVE_XRANDR_REMOTE_INPUT'));
       expect(plugin, contains('#include <X11/extensions/XInput2.h>'));
+      expect(plugin, contains('#include <X11/extensions/Xrandr.h>'));
+      expect(plugin, contains('XRRGetMonitors'));
       expect(plugin, contains('XI_RawMotion'));
       expect(plugin, contains('XGetEventData'));
       expect(plugin, contains('RawMotionDelta'));

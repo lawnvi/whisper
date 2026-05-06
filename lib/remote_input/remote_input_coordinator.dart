@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -128,6 +129,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _scrollMultiplier = RemoteInputScrollNormalizer.clampMultiplier(multiplier);
   }
 
+  Future<RemoteInputTopology> displayTopology() {
+    return _platform.displayTopology();
+  }
+
   bool get _hasLiveSession =>
       _state.status != RemoteInputRuntimeStatus.idle &&
       _state.status != RemoteInputRuntimeStatus.failed;
@@ -202,6 +207,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool isMutuallyTrusted,
     required bool remoteCanInject,
     required RemoteInputControlSender sendControl,
+    String sourceDisplayId = '',
+    RemoteInputEdge? sourceEdge,
+    int sourceSegmentStart = 0,
+    int sourceSegmentEnd = 0,
+    String sinkDisplayId = '',
+    RemoteInputEdge? sinkEdge,
+    int sinkSegmentStart = 0,
+    int sinkSegmentEnd = 0,
   }) async {
     _trace(
       'remote input start share requested source=$sourcePeerId '
@@ -234,6 +247,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
       sourcePlatform: _platformKindProvider().name,
+      sourceDisplayId: sourceDisplayId,
+      sourceEdge: sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd,
+      sinkDisplayId: sinkDisplayId,
+      sinkEdge: sinkEdge,
+      sinkSegmentStart: sinkSegmentStart,
+      sinkSegmentEnd: sinkSegmentEnd,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -534,7 +555,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
-    await _platform.startInjection(sessionId: message.sessionId);
+    await _platform.startInjection(
+      sessionId: message.sessionId,
+      displayId: message.sinkDisplayId,
+      edge: message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
+      segmentStart: message.sinkSegmentStart,
+      segmentEnd: message.sinkSegmentEnd,
+    );
     _trace(
       'remote input platform startInjection returned '
       'session=${_shortSessionId(message.sessionId)}',
@@ -577,6 +604,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
               releaseActivationSequence: release.activationSequence > 0
                   ? release.activationSequence
                   : _latestSinkActivationSequence,
+              releaseEdgeUnit: release.edgeUnit,
             ),
           );
         } else {
@@ -814,8 +842,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     await _platform.startCapture(
       sessionId: message.sessionId,
-      edge: edge,
+      edge: message.sourceEdge ?? edge,
       releaseHotkey: message.releaseHotkey,
+      displayId: message.sourceDisplayId,
+      segmentStart: message.sourceSegmentStart,
+      segmentEnd: message.sourceSegmentEnd,
     );
     _trace(
       'remote input platform startCapture returned '
@@ -851,6 +882,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sessionId: message.sessionId,
       releaseSequence: message.releaseSequence,
       releaseActivationSequence: message.releaseActivationSequence,
+      releaseEdgeUnit: message.releaseEdgeUnit,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -917,6 +949,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return value.toDouble();
     }
     return 0;
+  }
+
+  RemoteInputEdge? _oppositeEdge(RemoteInputEdge? edge) {
+    switch (edge) {
+      case RemoteInputEdge.left:
+        return RemoteInputEdge.right;
+      case RemoteInputEdge.right:
+        return RemoteInputEdge.left;
+      case RemoteInputEdge.top:
+        return RemoteInputEdge.bottom;
+      case RemoteInputEdge.bottom:
+        return RemoteInputEdge.top;
+      case null:
+        return null;
+    }
   }
 
   Uri _inputUri({

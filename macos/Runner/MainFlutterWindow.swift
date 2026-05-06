@@ -63,6 +63,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var captureSessionId = ""
   private var injectionSessionId = ""
   private var captureEdge = "right"
+  private var captureDisplayId = ""
+  private var captureSegmentStart: CGFloat = 0
+  private var captureSegmentEnd: CGFloat = 0
   private var releaseHotkey = "ctrl+alt+esc"
   private var captureActive = false
   private var eventTap: CFMachPort?
@@ -78,6 +81,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedLastClickTimeMicros: Int64 = 0
   private var injectedLastClickPoint = CGPoint.zero
   private var injectedCurrentClickCount = 1
+  private var injectionDisplayId = ""
+  private var injectionEdge = ""
+  private var injectionSegmentStart: CGFloat = 0
+  private var injectionSegmentEnd: CGFloat = 0
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
@@ -110,9 +117,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       }
       let edge = args["edge"] as? String ?? "right"
       let releaseHotkey = args["releaseHotkey"] as? String ?? "ctrl+alt+esc"
+      let displayId = args["displayId"] as? String ?? ""
+      let segmentStart = doubleValue(args["segmentStart"])
+      let segmentEnd = doubleValue(args["segmentEnd"])
       startCapture(
         sessionId: sessionId,
         edge: edge,
+        displayId: displayId,
+        segmentStart: segmentStart,
+        segmentEnd: segmentEnd,
         releaseHotkey: releaseHotkey,
         result: result)
 
@@ -132,10 +145,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let releaseSequence = args["releaseSequence"] as? Int ?? 0
       let releaseActivationSequence =
         args["releaseActivationSequence"] as? Int ?? 0
+      let releaseEdgeUnit = doubleValue(args["releaseEdgeUnit"])
       pauseCapture(
         sessionId: sessionId,
         releaseSequence: releaseSequence,
-        releaseActivationSequence: releaseActivationSequence)
+        releaseActivationSequence: releaseActivationSequence,
+        releaseEdgeUnit: releaseEdgeUnit)
       result(nil)
 
     case "startInjection":
@@ -165,6 +180,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectionKeyDiagnosticCount = 0
       injectionMouseDiagnosticCount = 0
       injectionSessionId = sessionId
+      injectionDisplayId = args["displayId"] as? String ?? ""
+      injectionEdge = args["edge"] as? String ?? ""
+      injectionSegmentStart = doubleValue(args["segmentStart"])
+      injectionSegmentEnd = doubleValue(args["segmentEnd"])
       showCursorForRemoteInjection(at: nil)
       os_log(
         "remote input injection started session=%{public}@",
@@ -196,6 +215,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       stopInjection()
       result(nil)
 
+    case "getDisplayTopology":
+      result(displayTopology())
+
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -204,6 +226,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func startCapture(
     sessionId: String,
     edge: String,
+    displayId: String,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat,
     releaseHotkey: String,
     result: @escaping FlutterResult
   ) {
@@ -219,6 +244,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     stopCapture()
     captureSessionId = sessionId
     captureEdge = edge
+    captureDisplayId = displayId
+    captureSegmentStart = segmentStart
+    captureSegmentEnd = segmentEnd
     self.releaseHotkey = releaseHotkey
     captureActive = false
     captureMouseButtons = 0
@@ -259,6 +287,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     runLoopSource = nil
     eventTap = nil
     captureSessionId = ""
+    captureDisplayId = ""
+    captureSegmentStart = 0
+    captureSegmentEnd = 0
     captureActive = false
     captureActivationSequence = 0
     captureMouseButtons = 0
@@ -283,12 +314,17 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectionKeyDiagnosticCount = 0
     injectionMouseDiagnosticCount = 0
     injectionSessionId = ""
+    injectionDisplayId = ""
+    injectionEdge = ""
+    injectionSegmentStart = 0
+    injectionSegmentEnd = 0
   }
 
   private func pauseCapture(
     sessionId: String,
     releaseSequence: Int,
-    releaseActivationSequence: Int
+    releaseActivationSequence: Int,
+    releaseEdgeUnit: CGFloat
   ) {
     guard sessionId == captureSessionId else {
       return
@@ -308,7 +344,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureActive = false
     captureActivationSequence = 0
     captureMouseButtons = 0
-    moveCaptureCursorToLocalEdge()
+    moveCaptureCursorToLocalEdge(edgeUnit: releaseEdgeUnit)
     showCaptureCursorIfNeeded()
   }
 
@@ -365,7 +401,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     var payload: [String: Any] = [:]
     switch remoteInputEventType(type) {
     case "mouseMove":
-      let bounds = virtualDisplayBounds()
+      let bounds = captureBounds()
       payload = [
         "x": point.x,
         "y": point.y,
@@ -377,6 +413,13 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         "unitX": normalized(point.x, start: bounds.minX, length: bounds.width),
         "unitY": normalized(point.y, start: bounds.minY, length: bounds.height)
       ]
+      if hasCaptureSegment() {
+        payload["edgeUnit"] = Double(edgeUnitForPoint(
+          point,
+          edge: captureEdge,
+          segmentStart: captureSegmentStart,
+          segmentEnd: captureSegmentEnd))
+      }
     case "mouseButton":
       payload = [
         "button": buttonNumber(type: type, event: event),
@@ -677,6 +720,17 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard boolValue(data["activeStart"]) else {
       return nil
     }
+    if hasInjectionSegment(),
+       !injectionEdge.isEmpty,
+       data["edgeUnit"] != nil {
+      let edgeUnit = clampedUnit(doubleValue(data["edgeUnit"]))
+      return edgePoint(
+        bounds: injectionBounds(),
+        edge: injectionEdge,
+        edgeUnit: edgeUnit,
+        segmentStart: injectionSegmentStart,
+        segmentEnd: injectionSegmentEnd)
+    }
     let bounds = virtualDisplayBounds()
     let edge = data["edge"] as? String ?? "right"
     let unitX = clampedUnit(doubleValue(data["unitX"]))
@@ -709,8 +763,93 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return bounds
   }
 
+  private func displayTopology() -> [String: Any] {
+    let displays = NSScreen.screens.map { screen -> [String: Any] in
+      let displayId = screenDisplayId(screen)
+      let frame = cgDisplayBounds(displayId: displayId) ?? screen.frame
+      return [
+        "displayId": displayId,
+        "name": screenName(screen),
+        "x": Int(frame.origin.x.rounded()),
+        "y": Int(frame.origin.y.rounded()),
+        "width": max(1, Int(frame.width.rounded())),
+        "height": max(1, Int(frame.height.rounded())),
+        "scale": Double(screen.backingScaleFactor),
+        "isPrimary": isMainDisplay(displayId: displayId, screen: screen)
+      ]
+    }
+    return [
+      "platform": "macos",
+      "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+      "displays": displays
+    ]
+  }
+
+  private func screenDisplayId(_ screen: NSScreen) -> String {
+    if let number = screen.deviceDescription[
+      NSDeviceDescriptionKey("NSScreenNumber")
+    ] as? NSNumber {
+      return "\(number.uint32Value)"
+    }
+    return "\(Int(screen.frame.origin.x)):\(Int(screen.frame.origin.y)):\(Int(screen.frame.width))x\(Int(screen.frame.height))"
+  }
+
+  private func screenName(_ screen: NSScreen) -> String {
+    if #available(macOS 10.15, *) {
+      return screen.localizedName
+    }
+    return screenDisplayId(screen)
+  }
+
+  private func cgDisplayBounds(displayId: String) -> CGRect? {
+    guard let id = UInt32(displayId) else {
+      return nil
+    }
+    let bounds = CGDisplayBounds(id)
+    if bounds.isNull || bounds.isEmpty {
+      return nil
+    }
+    return bounds
+  }
+
+  private func isMainDisplay(displayId: String, screen: NSScreen) -> Bool {
+    if let id = UInt32(displayId) {
+      return CGDisplayIsMain(id) != 0
+    }
+    return screen.isEqual(NSScreen.main)
+  }
+
+  private func screenBounds(displayId: String) -> CGRect? {
+    guard !displayId.isEmpty else {
+      return nil
+    }
+    if let bounds = cgDisplayBounds(displayId: displayId) {
+      return bounds
+    }
+    for screen in NSScreen.screens where screenDisplayId(screen) == displayId {
+      return screen.frame
+    }
+    return nil
+  }
+
+  private func captureBounds() -> CGRect {
+    return screenBounds(displayId: captureDisplayId) ?? virtualDisplayBounds()
+  }
+
+  private func injectionBounds() -> CGRect {
+    return screenBounds(displayId: injectionDisplayId) ?? virtualDisplayBounds()
+  }
+
+  private func hasCaptureSegment() -> Bool {
+    return captureSegmentEnd > captureSegmentStart
+  }
+
+  private func hasInjectionSegment() -> Bool {
+    return injectionSegmentEnd > injectionSegmentStart
+  }
+
   private func clampedInjectedMousePoint(_ point: CGPoint) -> CGPoint {
-    let bounds = virtualDisplayBounds()
+    let bounds = injectionDisplayId.isEmpty ? virtualDisplayBounds() : injectionBounds()
     let inset: CGFloat = 2
     return CGPoint(
       x: min(bounds.maxX - inset, max(bounds.minX + inset, point.x)),
@@ -726,6 +865,85 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
   private func clampedUnit(_ value: CGFloat) -> CGFloat {
     return min(1, max(0, value))
+  }
+
+  private func axisValue(_ point: CGPoint, edge: String) -> CGFloat {
+    if edge == "left" || edge == "right" {
+      return point.y
+    }
+    return point.x
+  }
+
+  private func segmentCoordinate(
+    edgeUnit: CGFloat,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat
+  ) -> CGFloat {
+    return segmentStart + (segmentEnd - segmentStart) * clampedUnit(edgeUnit)
+  }
+
+  private func pointWithinSegment(
+    _ point: CGPoint,
+    edge: String,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat,
+    tolerance: CGFloat = 0
+  ) -> Bool {
+    guard segmentEnd > segmentStart else {
+      return true
+    }
+    let value = axisValue(point, edge: edge)
+    return value >= segmentStart - tolerance && value <= segmentEnd + tolerance
+  }
+
+  private func edgeUnitForPoint(
+    _ point: CGPoint,
+    edge: String,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat
+  ) -> CGFloat {
+    guard segmentEnd > segmentStart else {
+      return 0
+    }
+    return clampedUnit(
+      (axisValue(point, edge: edge) - segmentStart) /
+      (segmentEnd - segmentStart))
+  }
+
+  private func edgePoint(
+    bounds: CGRect,
+    edge: String,
+    edgeUnit: CGFloat,
+    segmentStart: CGFloat,
+    segmentEnd: CGFloat
+  ) -> CGPoint {
+    let inset: CGFloat = 2
+    let coordinate = segmentCoordinate(
+      edgeUnit: edgeUnit,
+      segmentStart: segmentStart,
+      segmentEnd: segmentEnd)
+    switch edge {
+    case "left":
+      return CGPoint(
+        x: bounds.minX + inset,
+        y: min(bounds.maxY - inset, max(bounds.minY + inset, coordinate)))
+    case "right":
+      return CGPoint(
+        x: bounds.maxX - inset,
+        y: min(bounds.maxY - inset, max(bounds.minY + inset, coordinate)))
+    case "top":
+      return CGPoint(
+        x: min(bounds.maxX - inset, max(bounds.minX + inset, coordinate)),
+        y: bounds.minY + inset)
+    case "bottom":
+      return CGPoint(
+        x: min(bounds.maxX - inset, max(bounds.minX + inset, coordinate)),
+        y: bounds.maxY - inset)
+    default:
+      return CGPoint(
+        x: bounds.minX + inset,
+        y: min(bounds.maxY - inset, max(bounds.minY + inset, coordinate)))
+    }
   }
 
   private func cgMouseButton(_ button: Int) -> CGMouseButton {
@@ -1325,8 +1543,17 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let point = event.location
       let deltaX = event.getIntegerValueField(.mouseEventDeltaX)
       let deltaY = event.getIntegerValueField(.mouseEventDeltaY)
-      let bounds = virtualDisplayBounds()
+      let bounds = captureBounds()
       let threshold: CGFloat = 6
+      if hasCaptureSegment() &&
+          !pointWithinSegment(
+            point,
+            edge: captureEdge,
+            segmentStart: captureSegmentStart,
+            segmentEnd: captureSegmentEnd,
+            tolerance: threshold) {
+        return false
+      }
       switch captureEdge {
       case "left":
         return point.x <= bounds.minX + threshold && deltaX < 0
@@ -1409,14 +1636,35 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  private func moveCaptureCursorToLocalEdge() {
-    let bounds = virtualDisplayBounds()
+  private func moveCaptureCursorToLocalEdge(edgeUnit: CGFloat? = nil) {
+    let bounds = captureBounds()
     let currentPoint = CGEvent(source: nil)?.location ?? CGPoint(
       x: bounds.midX,
       y: bounds.midY)
     let inset: CGFloat = 2
-    let x = min(bounds.maxX - inset, max(bounds.minX + inset, currentPoint.x))
-    let y = min(bounds.maxY - inset, max(bounds.minY + inset, currentPoint.y))
+    var x = min(bounds.maxX - inset, max(bounds.minX + inset, currentPoint.x))
+    var y = min(bounds.maxY - inset, max(bounds.minY + inset, currentPoint.y))
+    if hasCaptureSegment() {
+      let unit: CGFloat
+      if let edgeUnit = edgeUnit {
+        unit = clampedUnit(edgeUnit)
+      } else {
+        unit = edgeUnitForPoint(
+          currentPoint,
+          edge: captureEdge,
+          segmentStart: captureSegmentStart,
+          segmentEnd: captureSegmentEnd)
+      }
+      let coordinate = segmentCoordinate(
+        edgeUnit: unit,
+        segmentStart: captureSegmentStart,
+        segmentEnd: captureSegmentEnd)
+      if captureEdge == "left" || captureEdge == "right" {
+        y = min(bounds.maxY - inset, max(bounds.minY + inset, coordinate))
+      } else {
+        x = min(bounds.maxX - inset, max(bounds.minX + inset, coordinate))
+      }
+    }
     let point: CGPoint
     switch captureEdge {
     case "left":
@@ -1440,21 +1688,39 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard !injectedMouseEnteredInterior else {
       return
     }
-    let bounds = virtualDisplayBounds()
+    let usingConfiguredEdge = hasInjectionSegment() && !injectionEdge.isEmpty
+    let bounds = usingConfiguredEdge ? injectionBounds() : virtualDisplayBounds()
     let distance: CGFloat = 32
-    let edge = data["edge"] as? String ?? "right"
+    let edge = usingConfiguredEdge
+      ? injectionEdge
+      : (data["edge"] as? String ?? "right")
     let isInterior: Bool
-    switch edge {
-    case "left":
-      isInterior = point.x <= bounds.maxX - distance
-    case "top":
-      isInterior = point.y <= bounds.maxY - distance
-    case "bottom":
-      isInterior = point.y >= bounds.minY + distance
-    case "right":
-      fallthrough
-    default:
-      isInterior = point.x >= bounds.minX + distance
+    if usingConfiguredEdge {
+      switch edge {
+      case "left":
+        isInterior = point.x >= bounds.minX + distance
+      case "right":
+        isInterior = point.x <= bounds.maxX - distance
+      case "top":
+        isInterior = point.y >= bounds.minY + distance
+      case "bottom":
+        isInterior = point.y <= bounds.maxY - distance
+      default:
+        isInterior = point.x >= bounds.minX + distance
+      }
+    } else {
+      switch edge {
+      case "left":
+        isInterior = point.x <= bounds.maxX - distance
+      case "top":
+        isInterior = point.y <= bounds.maxY - distance
+      case "bottom":
+        isInterior = point.y >= bounds.minY + distance
+      case "right":
+        fallthrough
+      default:
+        isInterior = point.x >= bounds.minX + distance
+      }
     }
     if isInterior {
       injectedMouseEnteredInterior = true
@@ -1470,8 +1736,31 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard !boolValue(data["activeStart"]) else {
       return false
     }
-    let bounds = virtualDisplayBounds()
     let threshold: CGFloat = 6
+    if hasInjectionSegment() && !injectionEdge.isEmpty {
+      let bounds = injectionBounds()
+      guard pointWithinSegment(
+        currentPoint,
+        edge: injectionEdge,
+        segmentStart: injectionSegmentStart,
+        segmentEnd: injectionSegmentEnd,
+        tolerance: threshold) else {
+        return false
+      }
+      switch injectionEdge {
+      case "left":
+        return currentPoint.x <= bounds.minX + threshold && deltaX < 0
+      case "right":
+        return currentPoint.x >= bounds.maxX - threshold && deltaX > 0
+      case "top":
+        return currentPoint.y <= bounds.minY + threshold && deltaY < 0
+      case "bottom":
+        return currentPoint.y >= bounds.maxY - threshold && deltaY > 0
+      default:
+        return currentPoint.x <= bounds.minX + threshold && deltaX < 0
+      }
+    }
+    let bounds = virtualDisplayBounds()
     let edge = data["edge"] as? String ?? "right"
     switch edge {
     case "left":
@@ -1489,15 +1778,17 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
   private func emitCaptureRelease(reason: String) {
     let sessionId = captureSessionId
+    let edgeUnit = captureEdgeUnitForCurrentPoint()
     guard !sessionId.isEmpty else {
       return
     }
     stopCapture()
-    emitRelease(sessionId: sessionId, reason: reason)
+    emitRelease(sessionId: sessionId, reason: reason, edgeUnit: edgeUnit)
   }
 
   private func emitInjectionRelease(reason: String) {
     let sessionId = injectionSessionId
+    let edgeUnit = injectionEdgeUnitForCurrentPoint()
     guard !sessionId.isEmpty else {
       return
     }
@@ -1508,17 +1799,42 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
     resetInjectedClickState()
-    emitRelease(sessionId: sessionId, reason: reason)
+    emitRelease(sessionId: sessionId, reason: reason, edgeUnit: edgeUnit)
   }
 
-  private func emitRelease(sessionId: String, reason: String) {
+  private func captureEdgeUnitForCurrentPoint() -> CGFloat {
+    guard hasCaptureSegment() else {
+      return 0
+    }
+    let point = CGEvent(source: nil)?.location ?? CGPoint.zero
+    return edgeUnitForPoint(
+      point,
+      edge: captureEdge,
+      segmentStart: captureSegmentStart,
+      segmentEnd: captureSegmentEnd)
+  }
+
+  private func injectionEdgeUnitForCurrentPoint() -> CGFloat {
+    guard hasInjectionSegment(), !injectionEdge.isEmpty else {
+      return 0
+    }
+    let point = injectedMousePoint ?? CGEvent(source: nil)?.location ?? CGPoint.zero
+    return edgeUnitForPoint(
+      point,
+      edge: injectionEdge,
+      segmentStart: injectionSegmentStart,
+      segmentEnd: injectionSegmentEnd)
+  }
+
+  private func emitRelease(sessionId: String, reason: String, edgeUnit: CGFloat) {
     DispatchQueue.main.async { [weak self] in
       guard let self = self else {
         return
       }
       self.channel.invokeMethod("onRelease", arguments: [
         "sessionId": sessionId,
-        "reason": reason
+        "reason": reason,
+        "edgeUnit": Double(edgeUnit)
       ])
     }
   }

@@ -2161,6 +2161,22 @@ class $RemoteInputLayoutTable extends RemoteInputLayout
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: Constant(RemoteInputAutoRole.source.name));
+  static const VerificationMeta _layoutVersionMeta =
+      const VerificationMeta('layoutVersion');
+  @override
+  late final GeneratedColumn<int> layoutVersion = GeneratedColumn<int>(
+      'layout_version', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _layoutJsonMeta =
+      const VerificationMeta('layoutJson');
+  @override
+  late final GeneratedColumn<String> layoutJson = GeneratedColumn<String>(
+      'layout_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
   static const VerificationMeta _edgeThresholdPxMeta =
       const VerificationMeta('edgeThresholdPx');
   @override
@@ -2194,6 +2210,8 @@ class $RemoteInputLayoutTable extends RemoteInputLayout
         enabled,
         autoActivate,
         autoRole,
+        layoutVersion,
+        layoutJson,
         edgeThresholdPx,
         releaseHotkey,
         updatedAt
@@ -2247,6 +2265,18 @@ class $RemoteInputLayoutTable extends RemoteInputLayout
       context.handle(_autoRoleMeta,
           autoRole.isAcceptableOrUnknown(data['auto_role']!, _autoRoleMeta));
     }
+    if (data.containsKey('layout_version')) {
+      context.handle(
+          _layoutVersionMeta,
+          layoutVersion.isAcceptableOrUnknown(
+              data['layout_version']!, _layoutVersionMeta));
+    }
+    if (data.containsKey('layout_json')) {
+      context.handle(
+          _layoutJsonMeta,
+          layoutJson.isAcceptableOrUnknown(
+              data['layout_json']!, _layoutJsonMeta));
+    }
     if (data.containsKey('edge_threshold_px')) {
       context.handle(
           _edgeThresholdPxMeta,
@@ -2292,6 +2322,10 @@ class $RemoteInputLayoutTable extends RemoteInputLayout
           .read(DriftSqlType.bool, data['${effectivePrefix}auto_activate'])!,
       autoRole: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}auto_role'])!,
+      layoutVersion: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}layout_version'])!,
+      layoutJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}layout_json'])!,
       edgeThresholdPx: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}edge_threshold_px'])!,
       releaseHotkey: attachedDatabase.typeMapping
@@ -2318,6 +2352,8 @@ class RemoteInputLayoutData extends DataClass
   final bool enabled;
   final bool autoActivate;
   final String autoRole;
+  final int layoutVersion;
+  final String layoutJson;
   final int edgeThresholdPx;
   final String releaseHotkey;
   final int updatedAt;
@@ -2331,6 +2367,8 @@ class RemoteInputLayoutData extends DataClass
       required this.enabled,
       required this.autoActivate,
       required this.autoRole,
+      required this.layoutVersion,
+      required this.layoutJson,
       required this.edgeThresholdPx,
       required this.releaseHotkey,
       required this.updatedAt});
@@ -2346,6 +2384,8 @@ class RemoteInputLayoutData extends DataClass
     map['enabled'] = Variable<bool>(enabled);
     map['auto_activate'] = Variable<bool>(autoActivate);
     map['auto_role'] = Variable<String>(autoRole);
+    map['layout_version'] = Variable<int>(layoutVersion);
+    map['layout_json'] = Variable<String>(layoutJson);
     map['edge_threshold_px'] = Variable<int>(edgeThresholdPx);
     map['release_hotkey'] = Variable<String>(releaseHotkey);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -2363,6 +2403,8 @@ class RemoteInputLayoutData extends DataClass
       enabled: Value(enabled),
       autoActivate: Value(autoActivate),
       autoRole: Value(autoRole),
+      layoutVersion: Value(layoutVersion),
+      layoutJson: Value(layoutJson),
       edgeThresholdPx: Value(edgeThresholdPx),
       releaseHotkey: Value(releaseHotkey),
       updatedAt: Value(updatedAt),
@@ -2382,6 +2424,8 @@ class RemoteInputLayoutData extends DataClass
       enabled: serializer.fromJson<bool>(json['enabled']),
       autoActivate: serializer.fromJson<bool>(json['autoActivate']),
       autoRole: serializer.fromJson<String>(json['autoRole']),
+      layoutVersion: serializer.fromJson<int>(json['layoutVersion']),
+      layoutJson: serializer.fromJson<String>(json['layoutJson']),
       edgeThresholdPx: serializer.fromJson<int>(json['edgeThresholdPx']),
       releaseHotkey: serializer.fromJson<String>(json['releaseHotkey']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
@@ -2400,6 +2444,8 @@ class RemoteInputLayoutData extends DataClass
       'enabled': serializer.toJson<bool>(enabled),
       'autoActivate': serializer.toJson<bool>(autoActivate),
       'autoRole': serializer.toJson<String>(autoRole),
+      'layoutVersion': serializer.toJson<int>(layoutVersion),
+      'layoutJson': serializer.toJson<String>(layoutJson),
       'edgeThresholdPx': serializer.toJson<int>(edgeThresholdPx),
       'releaseHotkey': serializer.toJson<String>(releaseHotkey),
       'updatedAt': serializer.toJson<int>(updatedAt),
@@ -2416,6 +2462,8 @@ class RemoteInputLayoutData extends DataClass
           bool? enabled,
           bool? autoActivate,
           String? autoRole,
+          int? layoutVersion,
+          String? layoutJson,
           int? edgeThresholdPx,
           String? releaseHotkey,
           int? updatedAt}) =>
@@ -2429,6 +2477,8 @@ class RemoteInputLayoutData extends DataClass
         enabled: enabled ?? this.enabled,
         autoActivate: autoActivate ?? this.autoActivate,
         autoRole: autoRole ?? this.autoRole,
+        layoutVersion: layoutVersion ?? this.layoutVersion,
+        layoutJson: layoutJson ?? this.layoutJson,
         edgeThresholdPx: edgeThresholdPx ?? this.edgeThresholdPx,
         releaseHotkey: releaseHotkey ?? this.releaseHotkey,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -2446,6 +2496,11 @@ class RemoteInputLayoutData extends DataClass
           ? data.autoActivate.value
           : this.autoActivate,
       autoRole: data.autoRole.present ? data.autoRole.value : this.autoRole,
+      layoutVersion: data.layoutVersion.present
+          ? data.layoutVersion.value
+          : this.layoutVersion,
+      layoutJson:
+          data.layoutJson.present ? data.layoutJson.value : this.layoutJson,
       edgeThresholdPx: data.edgeThresholdPx.present
           ? data.edgeThresholdPx.value
           : this.edgeThresholdPx,
@@ -2468,6 +2523,8 @@ class RemoteInputLayoutData extends DataClass
           ..write('enabled: $enabled, ')
           ..write('autoActivate: $autoActivate, ')
           ..write('autoRole: $autoRole, ')
+          ..write('layoutVersion: $layoutVersion, ')
+          ..write('layoutJson: $layoutJson, ')
           ..write('edgeThresholdPx: $edgeThresholdPx, ')
           ..write('releaseHotkey: $releaseHotkey, ')
           ..write('updatedAt: $updatedAt')
@@ -2486,6 +2543,8 @@ class RemoteInputLayoutData extends DataClass
       enabled,
       autoActivate,
       autoRole,
+      layoutVersion,
+      layoutJson,
       edgeThresholdPx,
       releaseHotkey,
       updatedAt);
@@ -2502,6 +2561,8 @@ class RemoteInputLayoutData extends DataClass
           other.enabled == this.enabled &&
           other.autoActivate == this.autoActivate &&
           other.autoRole == this.autoRole &&
+          other.layoutVersion == this.layoutVersion &&
+          other.layoutJson == this.layoutJson &&
           other.edgeThresholdPx == this.edgeThresholdPx &&
           other.releaseHotkey == this.releaseHotkey &&
           other.updatedAt == this.updatedAt);
@@ -2518,6 +2579,8 @@ class RemoteInputLayoutCompanion
   final Value<bool> enabled;
   final Value<bool> autoActivate;
   final Value<String> autoRole;
+  final Value<int> layoutVersion;
+  final Value<String> layoutJson;
   final Value<int> edgeThresholdPx;
   final Value<String> releaseHotkey;
   final Value<int> updatedAt;
@@ -2532,6 +2595,8 @@ class RemoteInputLayoutCompanion
     this.enabled = const Value.absent(),
     this.autoActivate = const Value.absent(),
     this.autoRole = const Value.absent(),
+    this.layoutVersion = const Value.absent(),
+    this.layoutJson = const Value.absent(),
     this.edgeThresholdPx = const Value.absent(),
     this.releaseHotkey = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2547,6 +2612,8 @@ class RemoteInputLayoutCompanion
     this.enabled = const Value.absent(),
     this.autoActivate = const Value.absent(),
     this.autoRole = const Value.absent(),
+    this.layoutVersion = const Value.absent(),
+    this.layoutJson = const Value.absent(),
     this.edgeThresholdPx = const Value.absent(),
     this.releaseHotkey = const Value.absent(),
     required int updatedAt,
@@ -2563,6 +2630,8 @@ class RemoteInputLayoutCompanion
     Expression<bool>? enabled,
     Expression<bool>? autoActivate,
     Expression<String>? autoRole,
+    Expression<int>? layoutVersion,
+    Expression<String>? layoutJson,
     Expression<int>? edgeThresholdPx,
     Expression<String>? releaseHotkey,
     Expression<int>? updatedAt,
@@ -2578,6 +2647,8 @@ class RemoteInputLayoutCompanion
       if (enabled != null) 'enabled': enabled,
       if (autoActivate != null) 'auto_activate': autoActivate,
       if (autoRole != null) 'auto_role': autoRole,
+      if (layoutVersion != null) 'layout_version': layoutVersion,
+      if (layoutJson != null) 'layout_json': layoutJson,
       if (edgeThresholdPx != null) 'edge_threshold_px': edgeThresholdPx,
       if (releaseHotkey != null) 'release_hotkey': releaseHotkey,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -2595,6 +2666,8 @@ class RemoteInputLayoutCompanion
       Value<bool>? enabled,
       Value<bool>? autoActivate,
       Value<String>? autoRole,
+      Value<int>? layoutVersion,
+      Value<String>? layoutJson,
       Value<int>? edgeThresholdPx,
       Value<String>? releaseHotkey,
       Value<int>? updatedAt,
@@ -2609,6 +2682,8 @@ class RemoteInputLayoutCompanion
       enabled: enabled ?? this.enabled,
       autoActivate: autoActivate ?? this.autoActivate,
       autoRole: autoRole ?? this.autoRole,
+      layoutVersion: layoutVersion ?? this.layoutVersion,
+      layoutJson: layoutJson ?? this.layoutJson,
       edgeThresholdPx: edgeThresholdPx ?? this.edgeThresholdPx,
       releaseHotkey: releaseHotkey ?? this.releaseHotkey,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -2646,6 +2721,12 @@ class RemoteInputLayoutCompanion
     if (autoRole.present) {
       map['auto_role'] = Variable<String>(autoRole.value);
     }
+    if (layoutVersion.present) {
+      map['layout_version'] = Variable<int>(layoutVersion.value);
+    }
+    if (layoutJson.present) {
+      map['layout_json'] = Variable<String>(layoutJson.value);
+    }
     if (edgeThresholdPx.present) {
       map['edge_threshold_px'] = Variable<int>(edgeThresholdPx.value);
     }
@@ -2673,6 +2754,8 @@ class RemoteInputLayoutCompanion
           ..write('enabled: $enabled, ')
           ..write('autoActivate: $autoActivate, ')
           ..write('autoRole: $autoRole, ')
+          ..write('layoutVersion: $layoutVersion, ')
+          ..write('layoutJson: $layoutJson, ')
           ..write('edgeThresholdPx: $edgeThresholdPx, ')
           ..write('releaseHotkey: $releaseHotkey, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3838,6 +3921,8 @@ typedef $$RemoteInputLayoutTableCreateCompanionBuilder
   Value<bool> enabled,
   Value<bool> autoActivate,
   Value<String> autoRole,
+  Value<int> layoutVersion,
+  Value<String> layoutJson,
   Value<int> edgeThresholdPx,
   Value<String> releaseHotkey,
   required int updatedAt,
@@ -3854,6 +3939,8 @@ typedef $$RemoteInputLayoutTableUpdateCompanionBuilder
   Value<bool> enabled,
   Value<bool> autoActivate,
   Value<String> autoRole,
+  Value<int> layoutVersion,
+  Value<String> layoutJson,
   Value<int> edgeThresholdPx,
   Value<String> releaseHotkey,
   Value<int> updatedAt,
@@ -3895,6 +3982,12 @@ class $$RemoteInputLayoutTableFilterComposer
 
   ColumnFilters<String> get autoRole => $composableBuilder(
       column: $table.autoRole, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get layoutVersion => $composableBuilder(
+      column: $table.layoutVersion, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get layoutJson => $composableBuilder(
+      column: $table.layoutJson, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get edgeThresholdPx => $composableBuilder(
       column: $table.edgeThresholdPx,
@@ -3944,6 +4037,13 @@ class $$RemoteInputLayoutTableOrderingComposer
   ColumnOrderings<String> get autoRole => $composableBuilder(
       column: $table.autoRole, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get layoutVersion => $composableBuilder(
+      column: $table.layoutVersion,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get layoutJson => $composableBuilder(
+      column: $table.layoutJson, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get edgeThresholdPx => $composableBuilder(
       column: $table.edgeThresholdPx,
       builder: (column) => ColumnOrderings(column));
@@ -3991,6 +4091,12 @@ class $$RemoteInputLayoutTableAnnotationComposer
 
   GeneratedColumn<String> get autoRole =>
       $composableBuilder(column: $table.autoRole, builder: (column) => column);
+
+  GeneratedColumn<int> get layoutVersion => $composableBuilder(
+      column: $table.layoutVersion, builder: (column) => column);
+
+  GeneratedColumn<String> get layoutJson => $composableBuilder(
+      column: $table.layoutJson, builder: (column) => column);
 
   GeneratedColumn<int> get edgeThresholdPx => $composableBuilder(
       column: $table.edgeThresholdPx, builder: (column) => column);
@@ -4040,6 +4146,8 @@ class $$RemoteInputLayoutTableTableManager extends RootTableManager<
             Value<bool> enabled = const Value.absent(),
             Value<bool> autoActivate = const Value.absent(),
             Value<String> autoRole = const Value.absent(),
+            Value<int> layoutVersion = const Value.absent(),
+            Value<String> layoutJson = const Value.absent(),
             Value<int> edgeThresholdPx = const Value.absent(),
             Value<String> releaseHotkey = const Value.absent(),
             Value<int> updatedAt = const Value.absent(),
@@ -4055,6 +4163,8 @@ class $$RemoteInputLayoutTableTableManager extends RootTableManager<
             enabled: enabled,
             autoActivate: autoActivate,
             autoRole: autoRole,
+            layoutVersion: layoutVersion,
+            layoutJson: layoutJson,
             edgeThresholdPx: edgeThresholdPx,
             releaseHotkey: releaseHotkey,
             updatedAt: updatedAt,
@@ -4070,6 +4180,8 @@ class $$RemoteInputLayoutTableTableManager extends RootTableManager<
             Value<bool> enabled = const Value.absent(),
             Value<bool> autoActivate = const Value.absent(),
             Value<String> autoRole = const Value.absent(),
+            Value<int> layoutVersion = const Value.absent(),
+            Value<String> layoutJson = const Value.absent(),
             Value<int> edgeThresholdPx = const Value.absent(),
             Value<String> releaseHotkey = const Value.absent(),
             required int updatedAt,
@@ -4085,6 +4197,8 @@ class $$RemoteInputLayoutTableTableManager extends RootTableManager<
             enabled: enabled,
             autoActivate: autoActivate,
             autoRole: autoRole,
+            layoutVersion: layoutVersion,
+            layoutJson: layoutJson,
             edgeThresholdPx: edgeThresholdPx,
             releaseHotkey: releaseHotkey,
             updatedAt: updatedAt,

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
@@ -35,12 +36,18 @@ void main() {
         sessionId: 'input-1',
         edge: RemoteInputEdge.right,
         releaseHotkey: 'ctrl+alt+esc',
+        displayId: 'source-main',
+        segmentStart: 260,
+        segmentEnd: 900,
       );
 
       expect(calls.single.method, 'startCapture');
       expect(calls.single.arguments['sessionId'], 'input-1');
       expect(calls.single.arguments['edge'], 'right');
       expect(calls.single.arguments['releaseHotkey'], 'ctrl+alt+esc');
+      expect(calls.single.arguments['displayId'], 'source-main');
+      expect(calls.single.arguments['segmentStart'], 260);
+      expect(calls.single.arguments['segmentEnd'], 900);
     });
 
     test('pauses capture without stopping the native capture session',
@@ -49,12 +56,24 @@ void main() {
         sessionId: 'input-1',
         releaseSequence: 7,
         releaseActivationSequence: 3,
+        releaseEdgeUnit: 0.625,
       );
 
       expect(calls.single.method, 'pauseCapture');
       expect(calls.single.arguments['sessionId'], 'input-1');
       expect(calls.single.arguments['releaseSequence'], 7);
       expect(calls.single.arguments['releaseActivationSequence'], 3);
+      expect(calls.single.arguments['releaseEdgeUnit'], 0.625);
+    });
+
+    test('keeps zero release edge unit for segment-start returns', () async {
+      await platform.pauseCapture(
+        sessionId: 'input-1',
+        releaseEdgeUnit: 0,
+      );
+
+      expect(calls.single.method, 'pauseCapture');
+      expect(calls.single.arguments['releaseEdgeUnit'], 0);
     });
 
     test('starts injection and injects events', () async {
@@ -66,7 +85,13 @@ void main() {
         payload: Uint8List.fromList(<int>[42]),
       );
 
-      await platform.startInjection(sessionId: 'input-1');
+      await platform.startInjection(
+        sessionId: 'input-1',
+        displayId: 'sink-main',
+        edge: RemoteInputEdge.left,
+        segmentStart: 0,
+        segmentEnd: 640,
+      );
       await platform.injectEvent(event);
       await platform.stopInjection(sessionId: 'input-1');
 
@@ -74,8 +99,44 @@ void main() {
         calls.map((call) => call.method),
         <String>['startInjection', 'injectEvent', 'stopInjection'],
       );
+      expect(calls[0].arguments['displayId'], 'sink-main');
+      expect(calls[0].arguments['edge'], 'left');
+      expect(calls[0].arguments['segmentStart'], 0);
+      expect(calls[0].arguments['segmentEnd'], 640);
       expect(calls[1].arguments['eventType'], 'key');
       expect(calls[1].arguments['payload'], Uint8List.fromList(<int>[42]));
+    });
+
+    test('loads display topology from native method channel', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'getDisplayTopology') {
+          return <String, dynamic>{
+            'platform': 'macos',
+            'updatedAt': 1234,
+            'displays': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'displayId': 'source-main',
+                'name': 'Built-in',
+                'x': 0,
+                'y': 0,
+                'width': 1440,
+                'height': 900,
+                'scale': 2.0,
+                'isPrimary': true,
+              },
+            ],
+          };
+        }
+        return null;
+      });
+
+      final topology = await platform.displayTopology();
+
+      expect(calls.single.method, 'getDisplayTopology');
+      expect(topology.platform, 'macos');
+      expect(topology.primaryDisplay.displayId, 'source-main');
     });
 
     test('emits native input events and release callbacks', () async {
@@ -102,6 +163,7 @@ void main() {
           'reason': 'hotkey',
           'sequence': 7,
           'activationSequence': 3,
+          'edgeUnit': 0.625,
         }),
       );
       await platform.handleNativeMethodCall(
@@ -117,6 +179,7 @@ void main() {
       expect(releases.single.reason, 'hotkey');
       expect(releases.single.sequence, 7);
       expect(releases.single.activationSequence, 3);
+      expect(releases.single.edgeUnit, 0.625);
       expect(diagnostics.single.message, 'keyboard hook active');
 
       await eventSubscription.cancel();

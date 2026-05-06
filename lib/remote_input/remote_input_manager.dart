@@ -71,6 +71,14 @@ class RemoteInputManager {
     required String releaseHotkey,
     String sourcePlatform = '',
     String sinkPlatform = '',
+    String sourceDisplayId = '',
+    RemoteInputEdge? sourceEdge,
+    int sourceSegmentStart = 0,
+    int sourceSegmentEnd = 0,
+    String sinkDisplayId = '',
+    RemoteInputEdge? sinkEdge,
+    int sinkSegmentStart = 0,
+    int sinkSegmentEnd = 0,
   }) {
     final sessionId = _uuid.v4();
     _sessions[sessionId] = RemoteInputSession(
@@ -92,6 +100,14 @@ class RemoteInputManager {
       path: '/input',
       sourcePlatform: sourcePlatform,
       sinkPlatform: sinkPlatform,
+      sourceDisplayId: sourceDisplayId,
+      sourceEdge: sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd,
+      sinkDisplayId: sinkDisplayId,
+      sinkEdge: sinkEdge,
+      sinkSegmentStart: sinkSegmentStart,
+      sinkSegmentEnd: sinkSegmentEnd,
     );
   }
 
@@ -124,6 +140,14 @@ class RemoteInputManager {
       transport: offer.transport,
       path: offer.path,
       layoutEdge: offer.layoutEdge,
+      sourceDisplayId: offer.sourceDisplayId,
+      sourceEdge: offer.sourceEdge,
+      sourceSegmentStart: offer.sourceSegmentStart,
+      sourceSegmentEnd: offer.sourceSegmentEnd,
+      sinkDisplayId: offer.sinkDisplayId,
+      sinkEdge: offer.sinkEdge,
+      sinkSegmentStart: offer.sinkSegmentStart,
+      sinkSegmentEnd: offer.sinkSegmentEnd,
       releaseHotkey: offer.releaseHotkey,
       sourcePlatform: offer.sourcePlatform,
       sinkPlatform: sinkPlatform.isNotEmpty ? sinkPlatform : offer.sinkPlatform,

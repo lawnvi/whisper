@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 class RemoteInputPlatform {
@@ -32,11 +33,17 @@ class RemoteInputPlatform {
     required String sessionId,
     required RemoteInputEdge edge,
     required String releaseHotkey,
+    String displayId = '',
+    int segmentStart = 0,
+    int segmentEnd = 0,
   }) {
     return _channel.invokeMethod<void>('startCapture', <String, dynamic>{
       'sessionId': sessionId,
       'edge': edge.name,
       'releaseHotkey': releaseHotkey,
+      if (displayId.isNotEmpty) 'displayId': displayId,
+      'segmentStart': segmentStart,
+      'segmentEnd': segmentEnd,
     });
   }
 
@@ -52,20 +59,40 @@ class RemoteInputPlatform {
     required String sessionId,
     int releaseSequence = 0,
     int releaseActivationSequence = 0,
+    double releaseEdgeUnit = 0,
   }) {
     return _channel.invokeMethod<void>('pauseCapture', <String, dynamic>{
       'sessionId': sessionId,
       'releaseSequence': releaseSequence,
       'releaseActivationSequence': releaseActivationSequence,
+      'releaseEdgeUnit': releaseEdgeUnit,
     });
   }
 
   Future<void> startInjection({
     required String sessionId,
+    String displayId = '',
+    RemoteInputEdge? edge,
+    int segmentStart = 0,
+    int segmentEnd = 0,
   }) {
     return _channel.invokeMethod<void>('startInjection', <String, dynamic>{
       'sessionId': sessionId,
+      if (displayId.isNotEmpty) 'displayId': displayId,
+      if (edge != null) 'edge': edge.name,
+      'segmentStart': segmentStart,
+      'segmentEnd': segmentEnd,
     });
+  }
+
+  Future<RemoteInputTopology> displayTopology() async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'getDisplayTopology',
+    );
+    if (result == null) {
+      return RemoteInputTopology.fallback();
+    }
+    return RemoteInputTopology.fromJson(result);
   }
 
   Future<void> injectEvent(RemoteInputPacketFrame event) {
@@ -113,6 +140,7 @@ class RemoteInputPlatform {
           reason: arguments['reason'] as String? ?? 'release',
           sequence: arguments['sequence'] as int? ?? 0,
           activationSequence: arguments['activationSequence'] as int? ?? 0,
+          edgeUnit: _doubleArgument(arguments['edgeUnit']),
         ),
       );
       return null;
@@ -154,6 +182,13 @@ class RemoteInputPlatform {
     }
     return RemoteInputEventType.release;
   }
+
+  double _doubleArgument(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return 0;
+  }
 }
 
 class PlatformRemoteInputRelease {
@@ -162,12 +197,14 @@ class PlatformRemoteInputRelease {
     required this.reason,
     this.sequence = 0,
     this.activationSequence = 0,
+    this.edgeUnit = 0,
   });
 
   final String sessionId;
   final String reason;
   final int sequence;
   final int activationSequence;
+  final double edgeUnit;
 }
 
 class PlatformRemoteInputError {

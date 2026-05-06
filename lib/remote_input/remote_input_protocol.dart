@@ -39,10 +39,19 @@ class RemoteInputControlMessage {
     this.transport = RemoteInputTransport.websocket,
     this.path = '/input',
     this.layoutEdge,
+    this.sourceDisplayId = '',
+    this.sourceEdge,
+    this.sourceSegmentStart = 0,
+    this.sourceSegmentEnd = 0,
+    this.sinkDisplayId = '',
+    this.sinkEdge,
+    this.sinkSegmentStart = 0,
+    this.sinkSegmentEnd = 0,
     this.releaseHotkey = '',
     this.releaseReason = '',
     this.releaseSequence = 0,
     this.releaseActivationSequence = 0,
+    this.releaseEdgeUnit = 0,
     this.errorMessage = '',
     this.sourcePlatform = '',
     this.sinkPlatform = '',
@@ -55,10 +64,19 @@ class RemoteInputControlMessage {
   final RemoteInputTransport transport;
   final String path;
   final RemoteInputEdge? layoutEdge;
+  final String sourceDisplayId;
+  final RemoteInputEdge? sourceEdge;
+  final int sourceSegmentStart;
+  final int sourceSegmentEnd;
+  final String sinkDisplayId;
+  final RemoteInputEdge? sinkEdge;
+  final int sinkSegmentStart;
+  final int sinkSegmentEnd;
   final String releaseHotkey;
   final String releaseReason;
   final int releaseSequence;
   final int releaseActivationSequence;
+  final double releaseEdgeUnit;
   final String errorMessage;
   final String sourcePlatform;
   final String sinkPlatform;
@@ -71,10 +89,20 @@ class RemoteInputControlMessage {
         'transport': transport.name,
         'path': path,
         if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
+        if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
+        if (sourceEdge != null) 'sourceEdge': sourceEdge!.name,
+        if (sourceSegmentStart != 0) 'sourceSegmentStart': sourceSegmentStart,
+        if (sourceSegmentEnd != 0) 'sourceSegmentEnd': sourceSegmentEnd,
+        if (sinkDisplayId.isNotEmpty) 'sinkDisplayId': sinkDisplayId,
+        if (sinkEdge != null) 'sinkEdge': sinkEdge!.name,
+        if (sinkSegmentStart != 0) 'sinkSegmentStart': sinkSegmentStart,
+        if (sinkSegmentEnd != 0) 'sinkSegmentEnd': sinkSegmentEnd,
         'releaseHotkey': releaseHotkey,
         'releaseReason': releaseReason,
         'releaseSequence': releaseSequence,
         'releaseActivationSequence': releaseActivationSequence,
+        if (releaseEdgeUnit != 0 || action == RemoteInputControlAction.release)
+          'releaseEdgeUnit': releaseEdgeUnit,
         'errorMessage': errorMessage,
         if (sourcePlatform.isNotEmpty) 'sourcePlatform': sourcePlatform,
         if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
@@ -100,10 +128,25 @@ class RemoteInputControlMessage {
         RemoteInputEdge.values,
         json['layoutEdge'] as String?,
       ),
+      sourceDisplayId: json['sourceDisplayId'] as String? ?? '',
+      sourceEdge: _nullableEnumByName(
+        RemoteInputEdge.values,
+        json['sourceEdge'] as String?,
+      ),
+      sourceSegmentStart: _intJson(json['sourceSegmentStart']),
+      sourceSegmentEnd: _intJson(json['sourceSegmentEnd']),
+      sinkDisplayId: json['sinkDisplayId'] as String? ?? '',
+      sinkEdge: _nullableEnumByName(
+        RemoteInputEdge.values,
+        json['sinkEdge'] as String?,
+      ),
+      sinkSegmentStart: _intJson(json['sinkSegmentStart']),
+      sinkSegmentEnd: _intJson(json['sinkSegmentEnd']),
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
       releaseReason: json['releaseReason'] as String? ?? '',
-      releaseSequence: json['releaseSequence'] as int? ?? 0,
-      releaseActivationSequence: json['releaseActivationSequence'] as int? ?? 0,
+      releaseSequence: _intJson(json['releaseSequence']),
+      releaseActivationSequence: _intJson(json['releaseActivationSequence']),
+      releaseEdgeUnit: _doubleJson(json['releaseEdgeUnit']),
       errorMessage: json['errorMessage'] as String? ?? '',
       sourcePlatform: json['sourcePlatform'] as String? ?? '',
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
@@ -207,4 +250,21 @@ T? _nullableEnumByName<T extends Enum>(
     }
   }
   return null;
+}
+
+int _intJson(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.round();
+  }
+  return 0;
+}
+
+double _doubleJson(Object? value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  return 0;
 }

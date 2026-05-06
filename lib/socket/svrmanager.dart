@@ -21,6 +21,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -114,6 +115,12 @@ class WsSvrManager {
   bool get supportsRemoteInput =>
       _remoteProfile?.capabilities.remoteInputSourceV1 == true &&
       _remoteProfile?.capabilities.remoteInputSinkV1 == true;
+  bool get supportsRemoteInputTopology =>
+      supportsRemoteInput &&
+      _remoteProfile?.capabilities.remoteInputTopologyV1 == true &&
+      _remoteProfile?.displayTopology?.isNotEmpty == true;
+  RemoteInputTopology? get remoteDisplayTopology =>
+      _remoteProfile?.displayTopology;
   bool get _supportsResumableTransfer =>
       _remoteProfile?.capabilities.fileResumeV1 == true;
 
@@ -634,6 +641,7 @@ class WsSvrManager {
           if (message.sender == sender) {
             return;
           }
+          _refreshRemoteProfileFromHeartbeat(message);
           _ackMessage(message);
           break;
         }
@@ -903,32 +911,67 @@ class WsSvrManager {
   }
 
   Future<void> _auth(bool allow) async {
+    final profile = await _localPeerProfile();
+    final device = profile.device;
+    final topology = profile.displayTopology;
+    final topologyCount = topology?.displays.length ?? 0;
+    _remoteInputTrace(
+      'AUTH local capabilities uid=${device.uid} '
+      'protocol=${profile.protocolVersion} '
+      'remoteInputSource=${profile.capabilities.remoteInputSourceV1} '
+      'remoteInputSink=${profile.capabilities.remoteInputSinkV1} '
+      'remoteInputTopology=${profile.capabilities.remoteInputTopologyV1} '
+      'displays=$topologyCount '
+      'display=${Platform.environment['DISPLAY'] ?? ''}',
+    );
+    var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
+        allow ? "" : "拒绝连接", "", 0, false);
+    _send(message.toJsonString());
+  }
+
+  Future<PeerProfile> _localPeerProfile() async {
     var device = await LocalSetting().instance(online: true);
     final trustedPeerIds = await LocalDatabase().fetchTrustedPeerIds();
+    RemoteInputTopology? topology;
+    if (supportsNativeRemoteInput()) {
+      try {
+        topology = await RemoteInputCoordinator.shared.displayTopology();
+      } catch (error) {
+        _remoteInputTrace('display topology unavailable: $error');
+      }
+    }
+    final hasTopology = topology?.isNotEmpty == true;
     final profile = PeerProfile(
       device: device,
       trustedPeerIds: trustedPeerIds,
       autoApproveNewDevices: await LocalSetting().autoApproveNewDevices(),
       autoConnectEnabled: await LocalSetting().autoConnectEnabled(),
-      protocolVersion: 3,
+      protocolVersion: 4,
       capabilities: PeerCapabilities(
         fileResumeV1: true,
         systemAudioSourceV1: supportsNativeSystemAudio(),
         speakerSinkV1: true,
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
+        remoteInputTopologyV1: hasTopology,
       ),
+      displayTopology: topology,
     );
-    _remoteInputTrace(
-      'AUTH local capabilities uid=${device.uid} '
-      'protocol=${profile.protocolVersion} '
-      'remoteInputSource=${profile.capabilities.remoteInputSourceV1} '
-      'remoteInputSink=${profile.capabilities.remoteInputSinkV1} '
-      'display=${Platform.environment['DISPLAY'] ?? ''}',
-    );
-    var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
-        allow ? "" : "拒绝连接", "", 0, false);
-    _send(message.toJsonString());
+    return profile;
+  }
+
+  void _refreshRemoteProfileFromHeartbeat(MessageData message) {
+    final content = message.content;
+    if (content == null || content.isEmpty) {
+      return;
+    }
+    try {
+      _remoteProfile = PeerProfile.fromJson(
+        jsonDecode(content) as Map<String, dynamic>,
+      );
+    } catch (error) {
+      _remoteInputTrace('heartbeat profile parse failed: $error');
+    }
   }
 
   void _ackMessage(MessageData data) {
@@ -943,8 +986,10 @@ class WsSvrManager {
     if (_sink == null) {
       return;
     }
-    var message =
-        _buildMessage(MessageEnum.Heartbeat, "", "", "", 0, false, uid: "");
+    final profile = await _localPeerProfile();
+    var message = _buildMessage(
+        MessageEnum.Heartbeat, profile.toJsonString(), "", "", 0, false,
+        uid: "");
     _send(message.toJsonString());
   }
 

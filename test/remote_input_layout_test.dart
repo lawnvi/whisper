@@ -125,6 +125,194 @@ void main() {
         RemoteInputEdge.top,
       );
     });
+
+    test('creates a shared edge segment for offset vertical edges', () {
+      const source = RemoteInputDisplay(
+        displayId: 'source-main',
+        name: 'Built-in',
+        x: 0,
+        y: 0,
+        width: 1440,
+        height: 900,
+        scale: 2,
+        isPrimary: true,
+      );
+      const sink = RemoteInputDisplay(
+        displayId: 'sink-main',
+        name: 'Desk',
+        x: 1440,
+        y: 260,
+        width: 1920,
+        height: 1080,
+        scale: 1,
+        isPrimary: true,
+      );
+
+      final segment = RemoteInputLayoutGeometry.sharedEdgeSegment(
+        source: source,
+        sourceEdge: RemoteInputEdge.right,
+        sinkInLayout: sink,
+        sinkEdge: RemoteInputEdge.left,
+      );
+
+      expect(segment, isNotNull);
+      expect(segment!.sourceDisplayId, 'source-main');
+      expect(segment.sinkDisplayId, 'sink-main');
+      expect(segment.start, 260);
+      expect(segment.end, 900);
+      expect(segment.length, 640);
+    });
+
+    test('does not create a segment for non-overlapping edges', () {
+      const source = RemoteInputDisplay(
+        displayId: 'source-main',
+        name: 'Built-in',
+        x: 0,
+        y: 0,
+        width: 1440,
+        height: 900,
+        scale: 2,
+        isPrimary: true,
+      );
+      const sink = RemoteInputDisplay(
+        displayId: 'sink-main',
+        name: 'Desk',
+        x: 1440,
+        y: 960,
+        width: 1920,
+        height: 1080,
+        scale: 1,
+        isPrimary: true,
+      );
+
+      final segment = RemoteInputLayoutGeometry.sharedEdgeSegment(
+        source: source,
+        sourceEdge: RemoteInputEdge.right,
+        sinkInLayout: sink,
+        sinkEdge: RemoteInputEdge.left,
+      );
+
+      expect(segment, isNull);
+    });
+
+    test('maps entry and return points through the shared segment', () {
+      const segment = RemoteInputSharedEdgeSegment(
+        sourceDisplayId: 'source-main',
+        sinkDisplayId: 'sink-main',
+        sourceEdge: RemoteInputEdge.right,
+        sinkEdge: RemoteInputEdge.left,
+        start: 260,
+        end: 900,
+      );
+
+      final entryUnit = RemoteInputLayoutGeometry.edgeUnitForCoordinate(
+        segment: segment,
+        coordinate: 580,
+      );
+      final returnCoordinate = RemoteInputLayoutGeometry.coordinateForEdgeUnit(
+        segment: segment,
+        edgeUnit: entryUnit,
+      );
+
+      expect(entryUnit, closeTo(0.5, 0.001));
+      expect(returnCoordinate, 580);
+    });
+
+    test('resolves saved layout into source and sink capture segments', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Built-in',
+            x: 0,
+            y: 0,
+            width: 1440,
+            height: 900,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'windows',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-main',
+            name: 'Desk',
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'source-main',
+        sinkDisplayId: 'sink-main',
+        sourceEdge: RemoteInputEdge.right,
+        sinkEdge: RemoteInputEdge.left,
+        sinkOffsetX: 1440,
+        sinkOffsetY: 260,
+        sharedSegmentStart: 260,
+        sharedSegmentEnd: 900,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.sharedSegment.start, 260);
+      expect(resolved.sharedSegment.end, 900);
+      expect(resolved.sinkSegmentStart, 0);
+      expect(resolved.sinkSegmentEnd, 640);
+    });
+  });
+
+  group('RemoteInputTopology', () {
+    test('round-trips display topology json', () {
+      const topology = RemoteInputTopology(
+        platform: 'macos',
+        displays: [
+          RemoteInputDisplay(
+            displayId: '1',
+            name: 'Built-in',
+            x: 0,
+            y: 0,
+            width: 1440,
+            height: 900,
+            scale: 2,
+            isPrimary: true,
+          ),
+          RemoteInputDisplay(
+            displayId: '2',
+            name: 'Studio',
+            x: 0,
+            y: -1080,
+            width: 1920,
+            height: 1080,
+            scale: 1,
+            isPrimary: false,
+          ),
+        ],
+        updatedAt: 1234,
+      );
+
+      final decoded = RemoteInputTopology.fromJson(topology.toJson());
+
+      expect(decoded.platform, 'macos');
+      expect(decoded.displays, hasLength(2));
+      expect(decoded.primaryDisplay.displayId, '1');
+      expect(decoded.virtualBounds.top, -1080);
+      expect(decoded.virtualBounds.height, 1980);
+    });
   });
 
   group('RemoteInputLayout persistence', () {
@@ -149,6 +337,17 @@ void main() {
         enabled: true,
         autoActivate: true,
         autoRole: RemoteInputAutoRole.sink.name,
+        layoutVersion: 2,
+        layoutJson: RemoteInputSavedLayout(
+          sourceDisplayId: 'source-main',
+          sinkDisplayId: 'sink-main',
+          sourceEdge: RemoteInputEdge.right,
+          sinkEdge: RemoteInputEdge.left,
+          sinkOffsetX: 1440,
+          sinkOffsetY: 260,
+          sharedSegmentStart: 260,
+          sharedSegmentEnd: 900,
+        ).toJsonString(),
         edgeThresholdPx: 6,
         releaseHotkey: 'ctrl+alt+esc',
         updatedAt: 1234,
@@ -162,6 +361,9 @@ void main() {
       expect(loaded.enabled, isTrue);
       expect(loaded.autoActivate, isTrue);
       expect(loaded.autoRoleValue, RemoteInputAutoRole.sink);
+      expect(loaded.layoutVersion, 2);
+      expect(loaded.savedLayout?.sourceDisplayId, 'source-main');
+      expect(loaded.savedLayout?.sharedSegmentEnd, 900);
       expect(loaded.edgeThresholdPx, 6);
     });
 

@@ -1214,7 +1214,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return;
       }
       final layout = await _remoteInputLayoutForCurrentPeer();
-      final edge = RemoteInputLayoutGeometry.adjacentEdge(
+      final topologyLayout = layout.savedLayout;
+      RemoteInputResolvedLayout? resolvedTopologyLayout;
+      if (topologyLayout != null && socketManager.supportsRemoteInputTopology) {
+        final remoteTopology = socketManager.remoteDisplayTopology;
+        if (remoteTopology != null) {
+          final localTopology =
+              await RemoteInputCoordinator.shared.displayTopology();
+          resolvedTopologyLayout = RemoteInputLayoutGeometry.resolveSavedLayout(
+            savedLayout: topologyLayout,
+            sourceTopology: localTopology,
+            sinkTopology: remoteTopology,
+          );
+        }
+      }
+      final legacyEdge = RemoteInputLayoutGeometry.adjacentEdge(
         local: const RemoteInputScreenRect(
           x: 0,
           y: 0,
@@ -1228,6 +1242,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
           height: layout.height,
         ),
       );
+      final edge =
+          resolvedTopologyLayout?.sharedSegment.sourceEdge ?? legacyEdge;
       if (edge == null) {
         _traceRemoteInput(
           'remote input toggle blocked: no adjacent edge peer=${device.uid} '
@@ -1248,11 +1264,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sinkPeerId: device.uid,
         sinkHost: device.host,
         sinkPort: device.port,
-        layoutEdge: edge,
+        layoutEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge ?? edge,
         releaseHotkey: layout.releaseHotkey,
         isMutuallyTrusted: isMutuallyTrusted,
         remoteCanInject: socketManager.supportsRemoteInput,
         sendControl: socketManager.sendRemoteInputControl,
+        sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
+        sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
+        sourceSegmentStart: resolvedTopologyLayout?.sharedSegment.start ?? 0,
+        sourceSegmentEnd: resolvedTopologyLayout?.sharedSegment.end ?? 0,
+        sinkDisplayId: resolvedTopologyLayout?.sinkDisplay.displayId ?? '',
+        sinkEdge: resolvedTopologyLayout?.sharedSegment.sinkEdge,
+        sinkSegmentStart: resolvedTopologyLayout?.sinkSegmentStart ?? 0,
+        sinkSegmentEnd: resolvedTopologyLayout?.sinkSegmentEnd ?? 0,
       );
       if (mounted && showToast) {
         showAppToast(l10n.remoteInputEnabledMoveToEdge);
@@ -1306,6 +1330,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       enabled: true,
       autoActivate: false,
       autoRole: RemoteInputAutoRole.source.name,
+      layoutVersion: 1,
+      layoutJson: '',
       edgeThresholdPx: 6,
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: now,

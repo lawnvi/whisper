@@ -1245,6 +1245,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       enabled: true,
       autoActivate: false,
       autoRole: RemoteInputAutoRole.source.name,
+      layoutVersion: 1,
+      layoutJson: '',
       edgeThresholdPx: 6,
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -1566,6 +1568,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         builder: (context) => RemoteInputLayoutEditorScreen(
           initialLayout: layout,
           peerName: device.name,
+          remoteTopology: WsSvrManager().remoteDisplayTopology,
         ),
       ),
     );

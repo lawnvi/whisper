@@ -56,6 +56,7 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(PULSE IMPORTED_TARGET libpulse libpulse-simple)
 pkg_check_modules(X11_REMOTE_INPUT IMPORTED_TARGET x11 xtst)
 pkg_check_modules(XI_REMOTE_INPUT IMPORTED_TARGET xi)
+pkg_check_modules(XRANDR_REMOTE_INPUT IMPORTED_TARGET xrandr)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
@@ -88,6 +89,10 @@ if(X11_REMOTE_INPUT_FOUND)
   if(XI_REMOTE_INPUT_FOUND)
     target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_XI_REMOTE_INPUT=1)
     target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XI_REMOTE_INPUT)
+  endif()
+  if(XRANDR_REMOTE_INPUT_FOUND)
+    target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_XRANDR_REMOTE_INPUT=1)
+    target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XRANDR_REMOTE_INPUT)
   endif()
 endif()
 

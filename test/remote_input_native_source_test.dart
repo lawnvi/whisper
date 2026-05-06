@@ -35,7 +35,7 @@ void main() {
         source,
         contains(
           'ReleaseCommonModifierKeys();\n'
-          '      MoveCaptureCursorToLocalEdge();\n'
+          '      MoveCaptureCursorToLocalEdge(release_edge_unit);\n'
           '      capture_active_ = false;',
         ),
       );
@@ -45,13 +45,16 @@ void main() {
       final pauseCapture = RegExp(
         r'void PauseCapture\([\s\S]*?\n  void StopInjection',
       ).firstMatch(source)!.group(0)!;
-      expect(pauseCapture, contains('MoveCaptureCursorToLocalEdge();'));
+      expect(pauseCapture,
+          contains('MoveCaptureCursorToLocalEdge(release_edge_unit);'));
 
       final moveCaptureCursor = RegExp(
         r'void MoveCaptureCursorToLocalEdge\([\s\S]*?\n  bool IsEdgeActivation',
       ).firstMatch(source)!.group(0)!;
       expect(moveCaptureCursor, contains('SetCursorPos('));
-      expect(moveCaptureCursor, contains('SM_XVIRTUALSCREEN'));
+      expect(moveCaptureCursor, contains('CaptureArea()'));
+      expect(moveCaptureCursor, contains('capture_segment_'));
+      expect(moveCaptureCursor, contains('SegmentCoordinate'));
       expect(moveCaptureCursor, contains('capture_edge_ == "left"'));
       expect(
           moveCaptureCursor, contains('ClampInt(static_cast<int>(current.x)'));
@@ -141,6 +144,19 @@ void main() {
         source,
         isNot(contains('sequence_ > static_cast<uint64_t>(release_sequence)')),
       );
+    });
+
+    test('uses monitor topology and shared edge units for multi-screen input',
+        () {
+      expect(source, contains('EnumDisplayMonitors'));
+      expect(source, contains('GetMonitorInfoW'));
+      expect(source, contains('getDisplayTopology'));
+      expect(source, contains('DisplayTopologyValue'));
+      expect(source, contains('capture_display_id_'));
+      expect(source, contains('injection_display_id_'));
+      expect(source, contains('EdgeUnitForPoint'));
+      expect(source, contains('"edgeUnit"'));
+      expect(source, contains('PointInSegment'));
     });
 
     test('suppresses mouse events even when drivers mark them injected', () {
@@ -381,6 +397,20 @@ void main() {
       );
       expect(source, contains('updateInjectedMouseInteriorState'));
       expect(source, contains('injectedMouseEnteredInterior = true'));
+    });
+
+    test('uses NSScreen topology and shared edge units for multi-screen input',
+        () {
+      expect(source, contains('case "getDisplayTopology"'));
+      expect(source, contains('NSScreen.screens'));
+      expect(source, contains('CGDisplayBounds'));
+      expect(source, contains('CGDisplayIsMain'));
+      expect(source, contains('screenDisplayId'));
+      expect(source, contains('captureDisplayId'));
+      expect(source, contains('injectionDisplayId'));
+      expect(source, contains('edgeUnitForPoint'));
+      expect(source, contains('"edgeUnit"'));
+      expect(source, contains('pointWithinSegment'));
     });
 
     test('keeps Windows Control and Meta distinct in native fallback mapping',
