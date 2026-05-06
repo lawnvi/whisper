@@ -251,26 +251,78 @@ void pickFile(var callback) async {
   }
 }
 
+final RegExp _verificationKeywordPattern = RegExp(
+  r'验证码|驗證碼|校验码|校驗碼|动态码|動態碼|'
+  r'verification\s+code|security\s+code|login\s+code|'
+  r'auth(?:entication)?\s+code|one[-\s]?time(?:\s+(?:password|passcode|code))?|'
+  r'otp|passcode|code|'
+  r'c[oó]digo(?:\s+de\s+verificaci[oó]n)?|'
+  r'contrase(?:ñ|n)a\s+de\s+un\s+solo\s+uso',
+  caseSensitive: false,
+);
+
+final RegExp _verificationCodePattern = RegExp(
+  r'(?:^|[^\d])((?:\d[\s-]?){4,8})(?=$|[^\d])',
+);
+
+const Set<String> _verificationCodeNotificationPackages = {
+  'com.android.mms',
+  'com.android.messaging',
+  'com.google.android.apps.messaging',
+  'com.samsung.android.messaging',
+  'com.samsung.android.messaging.open',
+  'com.oneplus.mms',
+  'com.coloros.mms',
+  'com.sonyericsson.conversations',
+};
+
+bool isVerificationCodeNotificationPackage(String? packageName) {
+  final normalizedPackageName = packageName?.trim();
+  if (normalizedPackageName == null || normalizedPackageName.isEmpty) {
+    return false;
+  }
+  return _verificationCodeNotificationPackages.contains(normalizedPackageName);
+}
+
 String verifyCode(String content) {
-  if (!content.contains("验证码")) {
+  final keywordMatches = _verificationKeywordPattern.allMatches(content);
+  if (keywordMatches.isEmpty) {
     return "";
   }
-  RegExp regExp = RegExp(r'\b\d+\b');
-  Iterable<Match> matches = regExp.allMatches(content);
 
-  List<String> verificationCodes = [];
-  for (Match match in matches) {
-    print(match);
-    var code = match.group(0);
-    if (code == null || code.length < 4) {
+  var bestCode = "";
+  int? bestDistance;
+  for (final codeMatch in _verificationCodePattern.allMatches(content)) {
+    final rawCode = codeMatch.group(1) ?? "";
+    final code = rawCode.replaceAll(RegExp(r'[\s-]'), "");
+    if (code.length < 4 || code.length > 8) {
       continue;
     }
-    verificationCodes.add(code);
+
+    final distance = _nearestMatchDistance(codeMatch, keywordMatches);
+    if (distance > 80) {
+      continue;
+    }
+    if (bestDistance == null || distance < bestDistance) {
+      bestDistance = distance;
+      bestCode = code;
+    }
   }
 
-  if (verificationCodes.isEmpty) {
-    return "";
+  return bestCode;
+}
+
+int _nearestMatchDistance(Match codeMatch, Iterable<Match> keywordMatches) {
+  var nearest = 1 << 30;
+  for (final keywordMatch in keywordMatches) {
+    final distance = codeMatch.end < keywordMatch.start
+        ? keywordMatch.start - codeMatch.end
+        : keywordMatch.end < codeMatch.start
+            ? codeMatch.start - keywordMatch.end
+            : 0;
+    if (distance < nearest) {
+      nearest = distance;
+    }
   }
-  print("提取到的验证码是: $verificationCodes");
-  return verificationCodes[0];
+  return nearest;
 }

@@ -163,183 +163,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
               16,
             ),
             children: [
-              Card(
-                elevation: 0,
-                color: palette.surfaceElevated,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20.0),
-                  side: BorderSide(color: palette.borderSubtle),
+              _buildSettingsSection(
+                _settingsSectionText(locale, '设备与外观', 'Device & appearance'),
+                _settingsSectionText(
+                  locale,
+                  '主题模式和本机昵称',
+                  'Theme mode and local device name',
                 ),
-                child: Column(
-                  children: [
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.themeMode ?? '主题模式',
-                      Icon(Icons.dark_mode,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey),
-                      desc: _themeMode == ThemeMode.system
-                          ? AppLocalizations.of(context)?.followSystem ?? '跟随系统'
-                          : _themeMode == ThemeMode.dark
-                              ? AppLocalizations.of(context)?.darkMode ?? '暗黑'
-                              : AppLocalizations.of(context)?.lightMode ?? '明亮',
-                      onTap: _showThemeModeSheet,
-                      trailing: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 14,
-                        color: palette.textMuted,
-                      ),
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.nickname ?? '昵称',
-                      Icon(
-                        platformIcon(device?.platform ?? ""),
+                [
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.themeMode ?? '主题模式',
+                    Icon(Icons.dark_mode,
                         color: isDark
                             ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: device?.name ?? "",
-                      onTap: () {
-                        showInputAlertDialog(
-                          context,
-                          title: AppLocalizations.of(context)?.nickname ?? '昵称',
-                          description:
-                              AppLocalizations.of(context)?.nicknameDesc ??
-                                  '请输入昵称',
-                          inputHints: [
-                            {device?.name ?? "localhost": false}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            if (inputValues[0].isEmpty) {
-                              inputValues[0] = await deviceName();
+                            : CupertinoColors.systemGrey),
+                    desc: _themeMode == ThemeMode.system
+                        ? AppLocalizations.of(context)?.followSystem ?? '跟随系统'
+                        : _themeMode == ThemeMode.dark
+                            ? AppLocalizations.of(context)?.darkMode ?? '暗黑'
+                            : AppLocalizations.of(context)?.lightMode ?? '明亮',
+                    onTap: _showThemeModeSheet,
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: palette.textMuted,
+                    ),
+                  ),
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.nickname ?? '昵称',
+                    Icon(
+                      platformIcon(device?.platform ?? ""),
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: device?.name ?? "",
+                    onTap: () {
+                      showInputAlertDialog(
+                        context,
+                        title: AppLocalizations.of(context)?.nickname ?? '昵称',
+                        description:
+                            AppLocalizations.of(context)?.nicknameDesc ??
+                                '请输入昵称',
+                        inputHints: [
+                          {device?.name ?? "localhost": false}
+                        ],
+                        confirmButtonText:
+                            AppLocalizations.of(context)?.confirm ?? '确定',
+                        cancelButtonText:
+                            AppLocalizations.of(context)?.cancel ?? '取消',
+                        onConfirm: (List<String> inputValues) async {
+                          if (inputValues[0].isEmpty) {
+                            inputValues[0] = await deviceName();
+                          }
+                          await LocalSetting().updateNickname(inputValues[0]);
+                          await _refreshDevice();
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _buildSettingsSection(
+                _settingsSectionText(locale, '连接与传输', 'Connection & transfer'),
+                _settingsSectionText(
+                  locale,
+                  '端口、FTP 和可信设备自动连接',
+                  'Ports, FTP, and trusted device auto-connect',
+                ),
+                [
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.serverPortTitle ?? '服务端口',
+                    Icon(
+                      Icons.wifi_tethering,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: AppLocalizations.of(context)
+                            ?.serverPort(device?.port ?? 10002) ??
+                        '服务端口 ${device?.port}',
+                    onTap: () {
+                      showInputAlertDialog(
+                        context,
+                        title: AppLocalizations.of(context)?.serverPortTitle ??
+                            '服务端口',
+                        description: AppLocalizations.of(context)?.portDesc ??
+                            '请输入服务端口 [1000, 65535]',
+                        inputHints: [
+                          {'${device?.port ?? "10002"}': true}
+                        ],
+                        confirmButtonText:
+                            AppLocalizations.of(context)?.confirm ?? '确定',
+                        cancelButtonText:
+                            AppLocalizations.of(context)?.cancel ?? '取消',
+                        onConfirm: (List<String> inputValues) async {
+                          try {
+                            final port = int.parse(inputValues[0]);
+                            if (port > 1000 && port <= 65535) {
+                              await LocalSetting().updatePort(port);
+                              await _refreshDevice();
                             }
-                            await LocalSetting().updateNickname(inputValues[0]);
-                            await _refreshDevice();
-                          },
-                        );
-                      },
+                          } on Exception catch (_) {}
+                        },
+                      );
+                    },
+                  ),
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.ftpService ?? 'FTP服务',
+                    Icon(
+                      Icons.folder_shared_outlined,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
                     ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.serverPortTitle ?? '服务端口',
-                      Icon(
-                        Icons.wifi_tethering,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: AppLocalizations.of(context)
-                              ?.serverPort(device?.port ?? 10002) ??
-                          '服务端口 ${device?.port}',
-                      onTap: () {
-                        showInputAlertDialog(
-                          context,
-                          title:
-                              AppLocalizations.of(context)?.serverPortTitle ??
-                                  '服务端口',
-                          description: AppLocalizations.of(context)?.portDesc ??
-                              '请输入服务端口 [1000, 65535]',
-                          inputHints: [
-                            {'${device?.port ?? "10002"}': true}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            try {
-                              final port = int.parse(inputValues[0]);
-                              if (port > 1000 && port <= 65535) {
-                                await LocalSetting().updatePort(port);
-                                await _refreshDevice();
-                              }
-                            } on Exception catch (_) {}
-                          },
-                        );
-                      },
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.ftpService ?? 'FTP服务',
-                      Icon(
-                        Icons.folder_shared_outlined,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: 'Port $_ftpPort',
-                      onTap: _pickFTPDir,
-                      onLongPress: () {
-                        if (_ftpServer) {
+                    desc: 'Port $_ftpPort',
+                    onTap: _pickFTPDir,
+                    onLongPress: () {
+                      if (_ftpServer) {
+                        return;
+                      }
+                      showInputAlertDialog(
+                        context,
+                        title:
+                            'FTP${AppLocalizations.of(context)?.serverPortTitle ?? '服务端口'}',
+                        description: AppLocalizations.of(context)?.portDesc ??
+                            '请输入服务端口 [1000, 65535]',
+                        inputHints: [
+                          {'$_ftpPort': true}
+                        ],
+                        confirmButtonText:
+                            AppLocalizations.of(context)?.confirm ?? '确定',
+                        cancelButtonText:
+                            AppLocalizations.of(context)?.cancel ?? '取消',
+                        onConfirm: (List<String> inputValues) async {
+                          try {
+                            final port = int.parse(inputValues[0]);
+                            if (port > 1000 && port <= 65535) {
+                              await LocalSetting().setFTPPort(port);
+                              setState(() {
+                                _ftpPort = port;
+                              });
+                            }
+                          } on Exception catch (_) {}
+                        },
+                      );
+                    },
+                    trailing: CupertinoSwitch(
+                      value: _ftpServer,
+                      onChanged: (bool value) async {
+                        var path = await LocalSetting().ftpDir();
+                        if (path.isEmpty) {
+                          path = await _pickFTPDir();
+                        }
+
+                        if (path.isEmpty) {
                           return;
                         }
-                        showInputAlertDialog(
-                          context,
-                          title:
-                              'FTP${AppLocalizations.of(context)?.serverPortTitle ?? '服务端口'}',
-                          description: AppLocalizations.of(context)?.portDesc ??
-                              '请输入服务端口 [1000, 65535]',
-                          inputHints: [
-                            {'$_ftpPort': true}
-                          ],
-                          confirmButtonText:
-                              AppLocalizations.of(context)?.confirm ?? '确定',
-                          cancelButtonText:
-                              AppLocalizations.of(context)?.cancel ?? '取消',
-                          onConfirm: (List<String> inputValues) async {
-                            try {
-                              final port = int.parse(inputValues[0]);
-                              if (port > 1000 && port <= 65535) {
-                                await LocalSetting().setFTPPort(port);
-                                setState(() {
-                                  _ftpPort = port;
-                                });
-                              }
-                            } on Exception catch (_) {}
-                          },
-                        );
+
+                        value
+                            ? SimpleFtpServer().start(path, defaultFtpPort)
+                            : SimpleFtpServer().stop();
+                        setState(() {
+                          _ftpServer = value;
+                        });
                       },
-                      trailing: CupertinoSwitch(
-                        value: _ftpServer,
-                        onChanged: (bool value) async {
-                          var path = await LocalSetting().ftpDir();
-                          if (path.isEmpty) {
-                            path = await _pickFTPDir();
-                          }
-
-                          if (path.isEmpty) {
-                            return;
-                          }
-
-                          value
-                              ? SimpleFtpServer().start(path, defaultFtpPort)
-                              : SimpleFtpServer().stop();
-                          setState(() {
-                            _ftpServer = value;
-                          });
-                        },
-                      ),
                     ),
-                    _buildSettingItem(
-                      _autoConnectLabel(context),
-                      Icon(
-                        Icons.auto_mode_rounded,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: _autoConnect,
-                        onChanged: (bool value) async {
-                          await LocalSetting().setAutoConnectEnabled(value);
-                          setState(() {
-                            _autoConnect = value;
-                          });
-                        },
-                      ),
+                  ),
+                  _buildSettingItem(
+                    _autoConnectLabel(context),
+                    Icon(
+                      Icons.auto_mode_rounded,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
                     ),
+                    trailing: CupertinoSwitch(
+                      value: _autoConnect,
+                      onChanged: (bool value) async {
+                        await LocalSetting().setAutoConnectEnabled(value);
+                        setState(() {
+                          _autoConnect = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              if (isDesktop() || !isMobile())
+                _buildSettingsSection(
+                  _settingsSectionText(locale, '系统行为', 'System behavior'),
+                  _settingsSectionText(
+                    locale,
+                    '启动和窗口相关偏好',
+                    'Startup and window preferences',
+                  ),
+                  [
                     if (isDesktop())
                       _buildSettingItem(
                         l10n.launchAtStartup,
@@ -372,80 +391,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                       ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.trustNewDevice ?? '自动通过新设备',
-                      Icon(
-                        Icons.lock_open,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: device?.auth ?? false,
-                        onChanged: (bool value) async {
-                          await LocalSetting().updateNoAuth(value);
-                          await _refreshDevice();
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.accessClipboard ??
-                          '允许访问剪切板',
-                      Icon(
-                        Icons.copy,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: device?.clipboard ?? false,
-                        onChanged: (bool value) async {
-                          await LocalSetting().updateClipboard(value);
-                          await _refreshDevice();
-                        },
-                      ),
-                    ),
-                    _buildSettingItem(
-                      l10n.audioSharePlaybackGainSetting(
-                        _audioSharePlaybackGainLabel(
-                          _audioSharePlaybackGain,
-                        ),
-                      ),
-                      Icon(
-                        Icons.graphic_eq_rounded,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: l10n.audioSharePlaybackGainDesc,
-                      onTap: _showAudioSharePlaybackGainSheet,
-                      trailing: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 14,
-                        color: palette.textMuted,
-                      ),
-                    ),
-                    if (isDesktop())
-                      _buildSettingItem(
-                        l10n.remoteInputScrollMultiplierSetting(
-                          _remoteInputScrollMultiplierLabel(
-                            _remoteInputScrollMultiplier,
-                          ),
-                        ),
-                        Icon(
-                          Icons.mouse_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        desc: l10n.remoteInputScrollMultiplierDesc,
-                        onTap: _showRemoteInputScrollMultiplierSheet,
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 14,
-                          color: palette.textMuted,
-                        ),
-                      ),
                     if (!isMobile())
                       _buildSettingItem(
                         AppLocalizations.of(context)?.close2tray ?? '关闭时隐藏到托盘',
@@ -465,6 +410,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                       ),
+                  ],
+                ),
+              _buildSettingsSection(
+                _settingsSectionText(locale, '权限与共享', 'Permissions & sharing'),
+                _settingsSectionText(
+                  locale,
+                  '新设备信任、剪贴板、音频和键鼠共享',
+                  'Device trust, clipboard, audio, and input sharing',
+                ),
+                [
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.trustNewDevice ?? '自动通过新设备',
+                    Icon(
+                      Icons.lock_open,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: device?.auth ?? false,
+                      onChanged: (bool value) async {
+                        await LocalSetting().updateNoAuth(value);
+                        await _refreshDevice();
+                      },
+                    ),
+                  ),
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.accessClipboard ?? '允许访问剪切板',
+                    Icon(
+                      Icons.copy,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: device?.clipboard ?? false,
+                      onChanged: (bool value) async {
+                        await LocalSetting().updateClipboard(value);
+                        await _refreshDevice();
+                      },
+                    ),
+                  ),
+                  _buildSettingItem(
+                    l10n.audioSharePlaybackGainSetting(
+                      _audioSharePlaybackGainLabel(
+                        _audioSharePlaybackGain,
+                      ),
+                    ),
+                    Icon(
+                      Icons.graphic_eq_rounded,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: l10n.audioSharePlaybackGainDesc,
+                    onTap: _showAudioSharePlaybackGainSheet,
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: palette.textMuted,
+                    ),
+                  ),
+                  if (isDesktop())
+                    _buildSettingItem(
+                      l10n.remoteInputScrollMultiplierSetting(
+                        _remoteInputScrollMultiplierLabel(
+                          _remoteInputScrollMultiplier,
+                        ),
+                      ),
+                      Icon(
+                        Icons.mouse_rounded,
+                        color: isDark
+                            ? Colors.grey[400]
+                            : CupertinoColors.systemGrey,
+                      ),
+                      desc: l10n.remoteInputScrollMultiplierDesc,
+                      onTap: _showRemoteInputScrollMultiplierSheet,
+                      trailing: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: palette.textMuted,
+                      ),
+                    ),
+                ],
+              ),
+              if (Platform.isAndroid)
+                _buildSettingsSection(
+                  _settingsSectionText(locale, '移动端集成', 'Mobile integration'),
+                  _settingsSectionText(
+                    locale,
+                    '后台保活、电池优化和系统通知',
+                    'Background keep-alive, battery optimization, and notifications',
+                  ),
+                  [
                     if (Platform.isAndroid)
                       _buildSettingItem(
                         AppLocalizations.of(context)
@@ -569,95 +608,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                       ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.ignoreNotification ??
-                          '忽略安卓通知',
-                      Icon(
-                        Icons.notifications_off,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      trailing: CupertinoSwitch(
-                        value: _ignoreAndroid,
-                        onChanged: (bool value) async {
-                          await LocalSetting().setAndroidNotification(value);
-                          setState(() {
-                            _ignoreAndroid = value;
-                          });
-                        },
-                      ),
-                    ),
-                    if (Localizations.localeOf(context).languageCode == "zh")
-                      _buildSettingItem(
-                        AppLocalizations.of(context)?.copyVerifyCode ??
-                            '提取短信验证码写入剪切板',
-                        Icon(
-                          Icons.verified_user_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        trailing: CupertinoSwitch(
-                          value: _copyVerifyCode,
-                          onChanged: (bool value) async {
-                            await LocalSetting().setCopyVerify(value);
-                            setState(() {
-                              _copyVerifyCode = value;
-                            });
-                          },
-                        ),
-                      ),
-                    _buildSettingItem(
-                      AppLocalizations.of(context)?.selectLanguage ?? '选择语言',
-                      Icon(
-                        Icons.language_rounded,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: _localeLabel(context, locale.languageCode),
-                      onTap: _showLanguageSheet,
-                      trailing: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 14,
-                        color: palette.textMuted,
-                      ),
-                    ),
-                    _buildSettingItem(
-                      'Save directory',
-                      Icon(
-                        Icons.file_download_outlined,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: _path,
-                      onLongPress: () async {
-                        openDir((await downloadDir()).path);
-                      },
-                      onTap: _pickSaveDir,
-                    ),
-                    _buildSettingItem(
-                      'Version',
-                      Icon(
-                        Icons.copyright,
-                        color: isDark
-                            ? Colors.grey[400]
-                            : CupertinoColors.systemGrey,
-                      ),
-                      desc: _packageInfo?.version ?? "UNKNOWN",
-                      onTap: () async {
-                        final toLaunch = Uri(
-                          scheme: 'https',
-                          host: 'whisper.127014.xyz',
-                          path: '/zh',
-                        );
-                        _launchInBrowser(toLaunch);
-                      },
-                    ),
                   ],
                 ),
+              _buildSettingsSection(
+                _settingsSectionText(
+                    locale, '通知与安全', 'Notifications & security'),
+                _settingsSectionText(
+                  locale,
+                  '安卓通知处理和验证码辅助',
+                  'Android notification handling and verification helpers',
+                ),
+                [
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.ignoreNotification ??
+                        '忽略安卓通知',
+                    Icon(
+                      Icons.notifications_off,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: _ignoreAndroid,
+                      onChanged: (bool value) async {
+                        await LocalSetting().setAndroidNotification(value);
+                        setState(() {
+                          _ignoreAndroid = value;
+                        });
+                      },
+                    ),
+                  ),
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.copyVerifyCode ??
+                        '提取短信验证码写入剪切板',
+                    Icon(
+                      Icons.verified_user_rounded,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: _copyVerifyCode,
+                      onChanged: (bool value) async {
+                        await LocalSetting().setCopyVerify(value);
+                        setState(() {
+                          _copyVerifyCode = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              _buildSettingsSection(
+                _settingsSectionText(locale, '语言与文件', 'Language & files'),
+                _settingsSectionText(
+                  locale,
+                  '界面语言、保存位置和版本信息',
+                  'Interface language, save location, and version',
+                ),
+                [
+                  _buildSettingItem(
+                    AppLocalizations.of(context)?.selectLanguage ?? '选择语言',
+                    Icon(
+                      Icons.language_rounded,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: _localeLabel(context, locale.languageCode),
+                    onTap: _showLanguageSheet,
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: palette.textMuted,
+                    ),
+                  ),
+                  _buildSettingItem(
+                    'Save directory',
+                    Icon(
+                      Icons.file_download_outlined,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: _path,
+                    onLongPress: () async {
+                      openDir((await downloadDir()).path);
+                    },
+                    onTap: _pickSaveDir,
+                  ),
+                  _buildSettingItem(
+                    'Version',
+                    Icon(
+                      Icons.copyright,
+                      color: isDark
+                          ? Colors.grey[400]
+                          : CupertinoColors.systemGrey,
+                    ),
+                    desc: _packageInfo?.version ?? "UNKNOWN",
+                    onTap: () async {
+                      final toLaunch = Uri(
+                        scheme: 'https',
+                        host: 'whisper.127014.xyz',
+                        path: '/zh',
+                      );
+                      _launchInBrowser(toLaunch);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -815,6 +873,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  String _settingsSectionText(Locale locale, String zhHans, String english) {
+    return locale.languageCode == 'zh' ? zhHans : english;
+  }
+
+  Widget _buildSettingsSection(
+    String title,
+    String subtitle,
+    List<Widget> children,
+  ) {
+    final palette = context.whisperPalette;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSettingsSectionHeader(title),
+          Card(
+            elevation: 0,
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            color: palette.surfaceElevated,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14.0),
+              side: BorderSide(color: palette.borderSubtle),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsSectionHeader(String title) {
+    final palette = context.whisperPalette;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: palette.textMuted,
+        ),
+      ),
     );
   }
 
@@ -1186,124 +1301,129 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               16,
             ),
             children: [
-              Card(
-                elevation: 0,
-                color: palette.surfaceElevated,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20.0),
-                  side: BorderSide(color: palette.borderSubtle),
-                ),
-                child: Column(
-                  children: [
+              _buildClientSettingsCard(
+                [
+                  _DeviceSettingTile(
+                    title: AppLocalizations.of(context)?.trust ?? '自动接入',
+                    icon: Icon(
+                      Icons.wifi_rounded,
+                      color: palette.textMuted,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: device.auth,
+                      onChanged: (bool value) async {
+                        await LocalDatabase().authDevice(device.uid, value);
+                        await ConnectionCoordinator().refreshTrustState();
+                        _refreshDevice();
+                      },
+                    ),
+                  ),
+                  _DeviceSettingTile(
+                    title:
+                        AppLocalizations.of(context)?.writeClipboard ?? '写入剪切板',
+                    icon: Icon(
+                      Icons.copy,
+                      color: palette.textMuted,
+                    ),
+                    trailing: CupertinoSwitch(
+                      value: device.clipboard,
+                      onChanged: (bool value) async {
+                        await LocalDatabase()
+                            .clipboardDevice(device.uid, value);
+                        _refreshDevice();
+                      },
+                    ),
+                  ),
+                  if (showRemoteInputSettings)
                     _DeviceSettingTile(
-                      title: AppLocalizations.of(context)?.trust ?? '自动接入',
+                      title: l10n.remoteInputAutoModeSetting(
+                        _remoteInputAutoModeLabel(l10n, _remoteInputLayout),
+                      ),
                       icon: Icon(
-                        Icons.wifi_rounded,
+                        Icons.keyboard_option_key_rounded,
                         color: palette.textMuted,
                       ),
-                      trailing: CupertinoSwitch(
-                        value: device.auth,
-                        onChanged: (bool value) async {
-                          await LocalDatabase().authDevice(device.uid, value);
-                          await ConnectionCoordinator().refreshTrustState();
-                          _refreshDevice();
-                        },
-                      ),
-                    ),
-                    _DeviceSettingTile(
-                      title: AppLocalizations.of(context)?.writeClipboard ??
-                          '写入剪切板',
-                      icon: Icon(
-                        Icons.copy,
+                      trailing: Icon(
+                        Icons.chevron_right_rounded,
                         color: palette.textMuted,
                       ),
-                      trailing: CupertinoSwitch(
-                        value: device.clipboard,
-                        onChanged: (bool value) async {
-                          await LocalDatabase()
-                              .clipboardDevice(device.uid, value);
-                          _refreshDevice();
-                        },
-                      ),
-                      showDivider: showRemoteInputSettings,
+                      onTap: _openRemoteInputAutoModePickerWithTrustPrompt,
                     ),
-                    if (showRemoteInputSettings)
-                      _DeviceSettingTile(
-                        title: l10n.remoteInputAutoModeSetting(
-                          _remoteInputAutoModeLabel(l10n, _remoteInputLayout),
-                        ),
-                        icon: Icon(
-                          Icons.keyboard_option_key_rounded,
-                          color: palette.textMuted,
-                        ),
-                        trailing: Icon(
-                          Icons.chevron_right_rounded,
-                          color: palette.textMuted,
-                        ),
-                        onTap: _openRemoteInputAutoModePickerWithTrustPrompt,
+                  if (showRemoteInputSettings)
+                    _DeviceSettingTile(
+                      title: l10n.remoteInputLayoutSetting(
+                        _remoteInputEdgeLabel(l10n, _remoteInputLayout),
                       ),
-                    if (showRemoteInputSettings)
-                      _DeviceSettingTile(
-                        title: l10n.remoteInputLayoutSetting(
-                          _remoteInputEdgeLabel(l10n, _remoteInputLayout),
-                        ),
-                        icon: Icon(
-                          Icons.splitscreen_rounded,
-                          color: palette.textMuted,
-                        ),
-                        showDivider: false,
-                        onTap: () async {
-                          await _openRemoteInputLayoutEditor();
-                        },
+                      icon: Icon(
+                        Icons.splitscreen_rounded,
+                        color: palette.textMuted,
                       ),
+                      onTap: () async {
+                        await _openRemoteInputLayoutEditor();
+                      },
+                    ),
+                ],
+              ),
+              if (device.uid != WsSvrManager().receiver)
+                _buildClientSettingsCard(
+                  [
+                    _DeviceSettingTile(
+                      title:
+                          AppLocalizations.of(context)?.deleteDevice ?? '删除设备',
+                      icon: Icon(
+                        Icons.delete_rounded,
+                        color: CupertinoColors.destructiveRed,
+                      ),
+                      onTap: () {
+                        showConfirmationDialog(
+                          context,
+                          title: AppLocalizations.of(context)
+                                  ?.deleteDeviceTitle(device.name) ??
+                              "删除${device.name}",
+                          description:
+                              AppLocalizations.of(context)?.deleteDeviceDesc ??
+                                  "删除与此设备的所有消息，不可恢复",
+                          confirmButtonText:
+                              AppLocalizations.of(context)?.confirm ?? "确定",
+                          cancelButtonText:
+                              AppLocalizations.of(context)?.cancel ?? "取消",
+                          onConfirm: () {
+                            LocalDatabase().clearDevices([device.uid]);
+                            Navigator.popUntil(context, (route) {
+                              return route.isFirst;
+                            });
+                          },
+                        );
+                      },
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              if (device.uid != WsSvrManager().receiver)
-                Card(
-                  elevation: 0,
-                  color: palette.surfaceElevated,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20.0),
-                    side: BorderSide(color: palette.borderSubtle),
-                  ),
-                  child: Column(
-                    children: [
-                      _DeviceSettingTile(
-                        title: AppLocalizations.of(context)?.deleteDevice ??
-                            '删除设备',
-                        icon: Icon(
-                          Icons.delete_rounded,
-                          color: CupertinoColors.destructiveRed,
-                        ),
-                        showDivider: false,
-                        onTap: () {
-                          showConfirmationDialog(
-                            context,
-                            title: AppLocalizations.of(context)
-                                    ?.deleteDeviceTitle(device.name) ??
-                                "删除${device.name}",
-                            description: AppLocalizations.of(context)
-                                    ?.deleteDeviceDesc ??
-                                "删除与此设备的所有消息，不可恢复",
-                            confirmButtonText:
-                                AppLocalizations.of(context)?.confirm ?? "确定",
-                            cancelButtonText:
-                                AppLocalizations.of(context)?.cancel ?? "取消",
-                            onConfirm: () {
-                              LocalDatabase().clearDevices([device.uid]);
-                              Navigator.popUntil(context, (route) {
-                                return route.isFirst;
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClientSettingsCard(List<Widget> children) {
+    final palette = context.whisperPalette;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        color: palette.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14.0),
+          side: BorderSide(color: palette.borderSubtle),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
       ),
@@ -1459,67 +1579,50 @@ class _DeviceSettingTile extends StatelessWidget {
   final String title;
   final Icon icon;
   final Widget? trailing;
-  final bool showDivider;
   final VoidCallback? onTap;
 
   const _DeviceSettingTile({
     required this.title,
     required this.icon,
     this.trailing,
-    this.showDivider = true,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        child: Column(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: icon,
-                  ),
-                  const SizedBox(width: 12.0),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16.5,
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w500,
-                        fontFamily:
-                            Platform.isWindows ? null : 'SF Pro Display',
-                      ),
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: trailing!,
-                    ),
-                  ],
-                ],
+            icon,
+            const SizedBox(width: 12.0),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16.5,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: Platform.isWindows ? null : 'SF Pro Display',
+                ),
               ),
             ),
-            if (showDivider)
-              Divider(
-                height: 1,
-                color: palette.borderSubtle,
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: trailing!,
               ),
+            ],
           ],
         ),
       ),

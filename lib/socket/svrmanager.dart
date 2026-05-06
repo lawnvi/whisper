@@ -616,8 +616,9 @@ class WsSvrManager {
               NotificationHelper().showNotification(
                   title: "【${data['app']}】 ${data['title']}",
                   body: data['text'] ?? "");
-              if (data['package'] == "com.android.mms") {
-                var code = verifyCode(data["text"]);
+              if (isVerificationCodeNotificationPackage(data['package'])) {
+                var code =
+                    verifyCode('${data["title"] ?? ""}\n${data["text"] ?? ""}');
                 if (code.isNotEmpty && await LocalSetting().copyVerify()) {
                   copyToClipboard(code);
                 }

@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
+import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 
 import '../l10n/app_localizations.dart';
@@ -32,10 +33,23 @@ class _AppListScreenState extends State<AppListScreen> {
     setState(() {
       isLoading = true;
     });
-    List<AppInfo> installedApps = await InstalledApps.getInstalledApps(
+    final userApps = await InstalledApps.getInstalledApps(
       excludeSystemApps: true,
       withIcon: true,
     );
+    final allApps = await InstalledApps.getInstalledApps(
+      excludeSystemApps: false,
+      withIcon: true,
+    );
+    final installedAppsByPackage = <String, AppInfo>{
+      for (final app in userApps) app.packageName: app,
+    };
+    for (final app in allApps) {
+      if (isVerificationCodeNotificationPackage(app.packageName)) {
+        installedAppsByPackage[app.packageName] = app;
+      }
+    }
+    final installedApps = installedAppsByPackage.values.toList();
     Map<String, int> appMap = await LocalSetting().listenAppNotifyList();
     installedApps.sort(
         (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0));
@@ -68,10 +82,12 @@ class _AppListScreenState extends State<AppListScreen> {
     return CupertinoPageScaffold(
       // backgroundColor: isDark?Colors.black87:Colors.white,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
+        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知',
+            style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.back ?? 'Back', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
+          child: Text(AppLocalizations.of(context)?.back ?? 'Back',
+              style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
           onPressed: () {
             // Handle back button press
             Navigator.pop(context);
@@ -79,7 +95,8 @@ class _AppListScreenState extends State<AppListScreen> {
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选', style: TextStyle(color: isDark?Colors.grey:Colors.black87)),
+          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选',
+              style: TextStyle(color: isDark ? Colors.grey : Colors.black87)),
           onPressed: () {
             bool selectAll = checkedApps.length < apps.length ||
                 checkedApps.values.contains(false);
@@ -165,10 +182,18 @@ class AppListTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(app.name, style: TextStyle(fontSize: 14, color: isDark?Colors.white70: Colors.black87, decoration: TextDecoration.none)),
+                Text(app.name,
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                        decoration: TextDecoration.none)),
                 const SizedBox(height: 4),
-                Text(app.versionName,
-                  style: const TextStyle(fontSize: 12, color: CupertinoColors.systemGrey, decoration: TextDecoration.none),
+                Text(
+                  app.versionName,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.systemGrey,
+                      decoration: TextDecoration.none),
                 ),
               ],
             ),
