@@ -362,20 +362,33 @@ void main() {
       expect(source, isNot(contains('(1 << CGEventType.mouseMoved.rawValue)')));
     });
 
-    test('preserves native modifier event flags while adding active modifiers',
+    test('preserves native non-modifier flags while using injected modifiers',
         () {
       final postKeyboardEvent = RegExp(
         r'private func postKeyboardEvent\([\s\S]*?\n  private func setInjectedKey',
       ).firstMatch(source)!.group(0)!;
 
+      expect(source, contains('remoteInputNativeModifierFlags'));
+      final nativeModifierFlags = RegExp(
+        r'private let remoteInputNativeModifierFlags:[\s\S]*?\n\]',
+      ).firstMatch(source)!.group(0)!;
+      expect(nativeModifierFlags, isNot(contains('.maskSecondaryFn')));
       expect(
         postKeyboardEvent,
         contains(
-            'keyEvent.flags = keyEvent.flags.union(injectedModifierFlags)'),
+            'let nativeFlags = keyEvent.flags.subtracting(remoteInputNativeModifierFlags)'),
+      );
+      expect(
+        postKeyboardEvent,
+        contains('keyEvent.flags = nativeFlags.union(injectedModifierFlags)'),
       );
       expect(
         postKeyboardEvent,
         isNot(contains('keyEvent.flags = injectedModifierFlags')),
+      );
+      expect(
+        postKeyboardEvent,
+        isNot(contains('keyEvent.flags = keyEvent.flags.union')),
       );
     });
 
