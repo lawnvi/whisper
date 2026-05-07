@@ -967,7 +967,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func virtualDisplayBounds() -> CGRect {
     var bounds = CGRect.null
     for screen in NSScreen.screens {
-      bounds = bounds.union(screen.frame)
+      let frame = cgDisplayBounds(displayId: screenDisplayId(screen)) ?? screen.frame
+      bounds = bounds.union(frame)
     }
     if bounds.isNull || bounds.isEmpty {
       return CGDisplayBounds(CGMainDisplayID())

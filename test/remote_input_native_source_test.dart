@@ -508,6 +508,16 @@ void main() {
       expect(source, contains('"sourceEdgeUnit"'));
     });
 
+    test('uses CG display bounds for macOS virtual mouse bounds', () {
+      expect(
+        source,
+        contains(
+          'let frame = cgDisplayBounds(displayId: screenDisplayId(screen)) ?? screen.frame',
+        ),
+      );
+      expect(source, isNot(contains('bounds = bounds.union(screen.frame)')));
+    });
+
     test('returns source route metadata for routed macOS reverse release', () {
       expect(source, contains('private struct InjectionReleaseRoute'));
       expect(

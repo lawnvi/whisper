@@ -448,6 +448,43 @@ class RemoteInputLayoutGeometry {
     required RemoteInputTopology sinkTopology,
     int edgeTolerance = 0,
   }) {
+    final edgeMappings = resolveSavedLayoutMappings(
+      savedLayout: savedLayout,
+      sourceTopology: sourceTopology,
+      sinkTopology: sinkTopology,
+      edgeTolerance: edgeTolerance,
+    );
+    if (edgeMappings.isNotEmpty) {
+      final primaryMapping =
+          _primaryMappingForSavedLayout(savedLayout, edgeMappings);
+      final sourceDisplay =
+          sourceTopology.displayById(primaryMapping.sourceDisplayId);
+      final sinkDisplay =
+          sinkTopology.displayById(primaryMapping.sinkDisplayId);
+      if (sourceDisplay == null || sinkDisplay == null) {
+        return null;
+      }
+      return RemoteInputResolvedLayout(
+        savedLayout: savedLayout,
+        sourceDisplay: sourceDisplay,
+        sinkDisplay: sinkDisplay,
+        sinkDisplayInLayout: sinkDisplay.translated(
+          dx: savedLayout.sinkOffsetX,
+          dy: savedLayout.sinkOffsetY,
+        ),
+        sharedSegment: RemoteInputSharedEdgeSegment(
+          sourceDisplayId: primaryMapping.sourceDisplayId,
+          sinkDisplayId: primaryMapping.sinkDisplayId,
+          sourceEdge: primaryMapping.sourceEdge,
+          sinkEdge: primaryMapping.sinkEdge,
+          start: primaryMapping.sourceSegmentStart,
+          end: primaryMapping.sourceSegmentEnd,
+        ),
+        sinkSegmentStart: primaryMapping.sinkSegmentStart,
+        sinkSegmentEnd: primaryMapping.sinkSegmentEnd,
+        edgeMappings: edgeMappings,
+      );
+    }
     final sourceDisplay =
         sourceTopology.displayById(savedLayout.sourceDisplayId);
     final sinkDisplay = sinkTopology.displayById(savedLayout.sinkDisplayId);
@@ -471,12 +508,6 @@ class RemoteInputLayoutGeometry {
     final isVertical = segment.isVertical;
     final sinkOffset =
         isVertical ? savedLayout.sinkOffsetY : savedLayout.sinkOffsetX;
-    final edgeMappings = resolveSavedLayoutMappings(
-      savedLayout: savedLayout,
-      sourceTopology: sourceTopology,
-      sinkTopology: sinkTopology,
-      edgeTolerance: edgeTolerance,
-    );
     return RemoteInputResolvedLayout(
       savedLayout: savedLayout,
       sourceDisplay: sourceDisplay,
@@ -502,6 +533,45 @@ class RemoteInputLayoutGeometry {
     );
   }
 
+  static RemoteInputEdgeMapping _primaryMappingForSavedLayout(
+    RemoteInputSavedLayout savedLayout,
+    List<RemoteInputEdgeMapping> mappings,
+  ) {
+    RemoteInputEdgeMapping? best;
+    for (final mapping in mappings) {
+      final matchesSavedDisplay =
+          mapping.sinkDisplayId == savedLayout.sinkDisplayId &&
+              mapping.sourceEdge == savedLayout.sourceEdge &&
+              mapping.sinkEdge == savedLayout.sinkEdge;
+      if (!matchesSavedDisplay) {
+        continue;
+      }
+      if (best == null || mapping.sourceLength > best.sourceLength) {
+        best = mapping;
+      }
+    }
+    if (best != null) {
+      return best;
+    }
+    for (final mapping in mappings) {
+      final matchesSavedEdge = mapping.sourceEdge == savedLayout.sourceEdge &&
+          mapping.sinkEdge == savedLayout.sinkEdge;
+      if (!matchesSavedEdge) {
+        continue;
+      }
+      if (best == null || mapping.sourceLength > best.sourceLength) {
+        best = mapping;
+      }
+    }
+    if (best != null) {
+      return best;
+    }
+    return mappings.reduce(
+      (best, mapping) =>
+          mapping.sourceLength > best.sourceLength ? mapping : best,
+    );
+  }
+
   static List<RemoteInputEdgeMapping> resolveSavedLayoutMappings({
     required RemoteInputSavedLayout savedLayout,
     required RemoteInputTopology sourceTopology,
@@ -510,7 +580,10 @@ class RemoteInputLayoutGeometry {
   }) {
     final sourceDisplay =
         sourceTopology.displayById(savedLayout.sourceDisplayId);
-    if (sourceDisplay == null) {
+    final sourceDisplays = sourceDisplay == null
+        ? sourceTopology.displays
+        : <RemoteInputDisplay>[sourceDisplay];
+    if (sourceDisplays.isEmpty) {
       return const <RemoteInputEdgeMapping>[];
     }
     final translatedSinks = sinkTopology.displays
@@ -522,56 +595,58 @@ class RemoteInputLayoutGeometry {
         )
         .toList(growable: false);
     final mappings = <RemoteInputEdgeMapping>[];
-    for (final sourceEdge in RemoteInputEdge.values) {
-      final sinkEdge = oppositeEdge(sourceEdge);
-      for (var i = 0; i < translatedSinks.length; i++) {
-        final sinkInLayout = translatedSinks[i];
-        final sinkDisplay = sinkTopology.displays[i];
-        final segment = sharedEdgeSegment(
-          source: sourceDisplay,
-          sourceEdge: sourceEdge,
-          sinkInLayout: sinkInLayout,
-          sinkEdge: sinkEdge,
-          edgeTolerance: edgeTolerance,
-        );
-        if (segment == null) {
-          continue;
-        }
-        if (!isOuterEdgeSegment(
-          display: sourceDisplay,
-          edge: sourceEdge,
-          displays: sourceTopology.displays,
-          segmentStart: segment.start,
-          segmentEnd: segment.end,
-          edgeTolerance: edgeTolerance,
-        )) {
-          continue;
-        }
-        if (!isOuterEdgeSegment(
-          display: sinkInLayout,
-          edge: sinkEdge,
-          displays: translatedSinks,
-          segmentStart: segment.start,
-          segmentEnd: segment.end,
-          edgeTolerance: edgeTolerance,
-        )) {
-          continue;
-        }
-        final isVertical = segment.isVertical;
-        final sinkOffset =
-            isVertical ? savedLayout.sinkOffsetY : savedLayout.sinkOffsetX;
-        mappings.add(
-          RemoteInputEdgeMapping(
-            sourceDisplayId: sourceDisplay.displayId,
+    for (final sourceDisplay in sourceDisplays) {
+      for (final sourceEdge in RemoteInputEdge.values) {
+        final sinkEdge = oppositeEdge(sourceEdge);
+        for (var i = 0; i < translatedSinks.length; i++) {
+          final sinkInLayout = translatedSinks[i];
+          final sinkDisplay = sinkTopology.displays[i];
+          final segment = sharedEdgeSegment(
+            source: sourceDisplay,
             sourceEdge: sourceEdge,
-            sourceSegmentStart: segment.start,
-            sourceSegmentEnd: segment.end,
-            sinkDisplayId: sinkDisplay.displayId,
+            sinkInLayout: sinkInLayout,
             sinkEdge: sinkEdge,
-            sinkSegmentStart: segment.start - sinkOffset,
-            sinkSegmentEnd: segment.end - sinkOffset,
-          ),
-        );
+            edgeTolerance: edgeTolerance,
+          );
+          if (segment == null) {
+            continue;
+          }
+          if (!isOuterEdgeSegment(
+            display: sourceDisplay,
+            edge: sourceEdge,
+            displays: sourceTopology.displays,
+            segmentStart: segment.start,
+            segmentEnd: segment.end,
+            edgeTolerance: edgeTolerance,
+          )) {
+            continue;
+          }
+          if (!isOuterEdgeSegment(
+            display: sinkInLayout,
+            edge: sinkEdge,
+            displays: translatedSinks,
+            segmentStart: segment.start,
+            segmentEnd: segment.end,
+            edgeTolerance: edgeTolerance,
+          )) {
+            continue;
+          }
+          final isVertical = segment.isVertical;
+          final sinkOffset =
+              isVertical ? savedLayout.sinkOffsetY : savedLayout.sinkOffsetX;
+          mappings.add(
+            RemoteInputEdgeMapping(
+              sourceDisplayId: sourceDisplay.displayId,
+              sourceEdge: sourceEdge,
+              sourceSegmentStart: segment.start,
+              sourceSegmentEnd: segment.end,
+              sinkDisplayId: sinkDisplay.displayId,
+              sinkEdge: sinkEdge,
+              sinkSegmentStart: segment.start - sinkOffset,
+              sinkSegmentEnd: segment.end - sinkOffset,
+            ),
+          );
+        }
       }
     }
     mappings.sort((a, b) {

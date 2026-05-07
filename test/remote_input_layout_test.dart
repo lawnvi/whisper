@@ -434,6 +434,151 @@ void main() {
       );
     });
 
+    test('resolves layout when saved sink anchor is not the touching display',
+        () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'dell',
+            name: 'DELL P2418D',
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'redmi',
+            name: 'Redmi 27 NQ',
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'built-in',
+            name: 'Built-in Retina Display',
+            x: 420,
+            y: 1440,
+            width: 1710,
+            height: 1107,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'dell',
+        sinkDisplayId: 'built-in',
+        sourceEdge: RemoteInputEdge.right,
+        sinkEdge: RemoteInputEdge.left,
+        sinkOffsetX: 2560,
+        sinkOffsetY: 0,
+        sharedSegmentStart: 0,
+        sharedSegmentEnd: 1440,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.sinkDisplay.displayId, 'redmi');
+      expect(resolved.sharedSegment.sourceEdge, RemoteInputEdge.right);
+      expect(resolved.sharedSegment.sinkEdge, RemoteInputEdge.left);
+      expect(resolved.sharedSegment.start, 0);
+      expect(resolved.sharedSegment.end, 1440);
+      expect(resolved.edgeMappings, hasLength(1));
+      expect(resolved.edgeMappings.single.sinkDisplayId, 'redmi');
+    });
+
+    test('resolves layout when saved source display id is stale', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'dell-current',
+            name: 'DELL P2418D',
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'redmi',
+            name: 'Redmi 27 NQ',
+            x: -429,
+            y: -1440,
+            width: 2560,
+            height: 1440,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'built-in',
+            name: 'Built-in Retina Display',
+            x: 0,
+            y: 0,
+            width: 1710,
+            height: 1107,
+            scale: 2,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'dell-stale',
+        sinkDisplayId: 'built-in',
+        sourceEdge: RemoteInputEdge.right,
+        sinkEdge: RemoteInputEdge.left,
+        sinkOffsetX: 2989,
+        sinkOffsetY: 1440,
+        sharedSegmentStart: 0,
+        sharedSegmentEnd: 1440,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.sourceDisplay.displayId, 'dell-current');
+      expect(resolved.sinkDisplay.displayId, 'redmi');
+      expect(resolved.sharedSegment.sourceEdge, RemoteInputEdge.right);
+      expect(resolved.sharedSegment.sinkEdge, RemoteInputEdge.left);
+      expect(resolved.sharedSegment.start, 0);
+      expect(resolved.sharedSegment.end, 1440);
+      expect(resolved.sinkSegmentStart, -1440);
+      expect(resolved.sinkSegmentEnd, 0);
+      expect(resolved.edgeMappings, hasLength(1));
+      expect(resolved.edgeMappings.single.sourceDisplayId, 'dell-current');
+      expect(resolved.edgeMappings.single.sinkDisplayId, 'redmi');
+    });
+
     test('resolves a nearly touching perpendicular edge within tolerance', () {
       const sourceTopology = RemoteInputTopology(
         platform: 'macos',
