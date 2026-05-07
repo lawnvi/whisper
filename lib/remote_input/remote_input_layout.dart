@@ -578,11 +578,7 @@ class RemoteInputLayoutGeometry {
     required RemoteInputTopology sinkTopology,
     int edgeTolerance = 0,
   }) {
-    final sourceDisplay =
-        sourceTopology.displayById(savedLayout.sourceDisplayId);
-    final sourceDisplays = sourceDisplay == null
-        ? sourceTopology.displays
-        : <RemoteInputDisplay>[sourceDisplay];
+    final sourceDisplays = sourceTopology.displays;
     if (sourceDisplays.isEmpty) {
       return const <RemoteInputEdgeMapping>[];
     }

@@ -345,6 +345,103 @@ void main() {
       expect(resolved.edgeMappings[1].sourceSegmentEnd, 2000);
     });
 
+    test('resolves multiple source displays on the same shared sink edge', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-left',
+            name: 'Left',
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 1,
+            isPrimary: true,
+          ),
+          RemoteInputDisplay(
+            displayId: 'source-right',
+            name: 'Right',
+            x: 1000,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 1,
+            isPrimary: false,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-main',
+            name: 'Desk',
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 700,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+      const saved = RemoteInputSavedLayout(
+        sourceDisplayId: 'source-left',
+        sinkDisplayId: 'sink-main',
+        sourceEdge: RemoteInputEdge.bottom,
+        sinkEdge: RemoteInputEdge.top,
+        sinkOffsetX: 500,
+        sinkOffsetY: 800,
+        sharedSegmentStart: 500,
+        sharedSegmentEnd: 1000,
+      );
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+
+      expect(resolved, isNotNull);
+      expect(
+        resolved!.edgeMappings.map((mapping) => (
+              mapping.sourceDisplayId,
+              mapping.sourceEdge,
+              mapping.sinkDisplayId,
+              mapping.sinkEdge,
+              mapping.sourceSegmentStart,
+              mapping.sourceSegmentEnd,
+              mapping.sinkSegmentStart,
+              mapping.sinkSegmentEnd,
+            )),
+        containsAll([
+          (
+            'source-left',
+            RemoteInputEdge.bottom,
+            'sink-main',
+            RemoteInputEdge.top,
+            500,
+            1000,
+            0,
+            500,
+          ),
+          (
+            'source-right',
+            RemoteInputEdge.bottom,
+            'sink-main',
+            RemoteInputEdge.top,
+            1000,
+            1500,
+            500,
+            1000,
+          ),
+        ]),
+      );
+    });
+
     test('resolves adjacent sink displays across different source edges', () {
       const sourceTopology = RemoteInputTopology(
         platform: 'macos',
