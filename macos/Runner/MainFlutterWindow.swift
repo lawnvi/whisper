@@ -138,6 +138,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var captureActivationEdgeUnit: CGFloat?
   private var injectedKeyCodes: [Int] = []
   private var injectedModifierFlags = CGEventFlags()
+  private var injectedCapsLockEnabled = false
+  private var suppressedAppCommandShortcutKeyCodes: [Int] = []
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
   private var injectionKeyDiagnosticCount = 0
   private var injectionMouseDiagnosticCount = 0
@@ -242,6 +244,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectedMouseEnteredInterior = false
       resetInjectedClickState()
       injectedModifierFlags = []
+      injectedCapsLockEnabled = CGEventSource.flagsState(.hidSystemState)
+        .contains(.maskAlphaShift)
+      suppressedAppCommandShortcutKeyCodes = []
       injectionKeyDiagnosticCount = 0
       injectionMouseDiagnosticCount = 0
       injectionSessionId = sessionId
@@ -388,6 +393,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedMouseEnteredInterior = false
     resetInjectedClickState()
     injectedModifierFlags = []
+    injectedCapsLockEnabled = false
+    suppressedAppCommandShortcutKeyCodes = []
     injectionKeyDiagnosticCount = 0
     injectionMouseDiagnosticCount = 0
     injectionSessionId = ""
@@ -757,13 +764,16 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         injectedModifierFlags.rawValue)
       emitKeyDiagnostic(
         message: "mac remote key inject down=\(down ? 1 : 0) nativeMac=\(nativeKeyCode) keyCode=\(intValue(data["keyCode"])) mac=\(intValue(data["macKeyCode"])) win=\(intValue(data["windowsKeyCode"])) linux=\(intValue(data["linuxKeyCode"])) semantic=\(semantic) flags=\(injectedModifierFlags.rawValue)")
-      if isCapsLockInputSourceSwitch(nativeKeyCode: nativeKeyCode, semantic: semantic) {
+      if isCapsLockKey(nativeKeyCode: nativeKeyCode, semantic: semantic) {
         if down {
-          toggleKeyboardInputSource()
+          handleCapsLockKey()
         }
         return
       }
       updateInjectedModifierFlags(macKeyCode: nativeKeyCode, down: down)
+      if handleAppCommandTextShortcut(keyCode: keyCode, down: down) {
+        return
+      }
       postKeyboardEvent(keyCode: keyCode, down: down)
       setInjectedKey(nativeKeyCode, down: down)
     default:
@@ -1282,43 +1292,120 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return keyCode != 57 && modifierFlag(forMacKeyCode: keyCode) != nil
   }
 
-  private func isCapsLockInputSourceSwitch(nativeKeyCode: Int, semantic: String) -> Bool {
+  private func handleAppCommandTextShortcut(keyCode: CGKeyCode, down: Bool) -> Bool {
+    let key = Int(keyCode)
+    if let index = suppressedAppCommandShortcutKeyCodes.firstIndex(of: key) {
+      if !down {
+        suppressedAppCommandShortcutKeyCodes.remove(at: index)
+      }
+      return true
+    }
+
+    let unsupportedModifiers: CGEventFlags = [
+      .maskShift,
+      .maskControl,
+      .maskAlternate,
+    ]
+    guard down,
+          NSApp.isActive,
+          injectedModifierFlags.contains(.maskCommand),
+          injectedModifierFlags.intersection(unsupportedModifiers).isEmpty,
+          let shortcut = appCommandTextShortcut(for: key) else {
+      return false
+    }
+
+    suppressedAppCommandShortcutKeyCodes.append(key)
+    sendFlutterTextShortcut(shortcut)
+    return true
+  }
+
+  private func appCommandTextShortcut(for keyCode: Int) -> String? {
+    switch keyCode {
+    case 0:
+      return "selectAll"
+    case 8:
+      return "copy"
+    case 7:
+      return "cut"
+    case 9:
+      return "paste"
+    default:
+      return nil
+    }
+  }
+
+  private func sendFlutterTextShortcut(_ shortcut: String) {
+    let arguments: [String: Any] = [
+      "shortcut": shortcut
+    ]
+    DispatchQueue.main.async { [channel] in
+      channel.invokeMethod("onTextShortcut", arguments: arguments)
+    }
+    emitKeyDiagnostic(
+      message: "mac app command text shortcut=\(shortcut) target=flutter")
+  }
+
+  private func isCapsLockKey(nativeKeyCode: Int, semantic: String) -> Bool {
     return nativeKeyCode == 57 || semantic == "capsLock"
   }
 
-  private func toggleKeyboardInputSource() {
-    guard let sources = selectableKeyboardInputSources(), !sources.isEmpty else {
-      emitDiagnostic(message: "mac caps input source switch skipped no candidates")
-      os_log(
-        "remote caps input source switch skipped no candidates",
-        log: remoteInputLog,
-        type: .info)
+  private func handleCapsLockKey() {
+    if hasMultipleSelectableKeyboardInputSources() &&
+        postInputSourceShortcut() {
       return
     }
+    postCapsLockEvent()
+  }
 
-    let currentId = currentKeyboardInputSourceId()
-    let currentIndex: Int
-    if let currentId = currentId,
-       let index = sources.firstIndex(where: {
-         inputSourceStringProperty($0, kTISPropertyInputSourceID) == currentId
-       }) {
-      currentIndex = index
-    } else {
-      currentIndex = -1
+  private func hasMultipleSelectableKeyboardInputSources() -> Bool {
+    guard let sources = selectableKeyboardInputSources() else {
+      return false
+    }
+    return sources.count > 1
+  }
+
+  private func postInputSourceShortcut() -> Bool {
+    let controlKey = CGKeyCode(59)
+    let spaceKey = CGKeyCode(49)
+    let controlFlags: CGEventFlags = [.maskControl]
+    guard let controlDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: controlKey,
+            keyDown: true),
+          let spaceDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: spaceKey,
+            keyDown: true),
+          let spaceUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: spaceKey,
+            keyDown: false),
+          let controlUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: controlKey,
+            keyDown: false) else {
+      return false
     }
 
-    let nextSource = sources[(currentIndex + 1) % sources.count]
-    let nextId = inputSourceStringProperty(nextSource, kTISPropertyInputSourceID)
-    let status = TISSelectInputSource(nextSource)
-    emitDiagnostic(
-      message: "mac caps input source switched current=\(currentId ?? "") next=\(nextId) status=\(status) candidates=\(sources.count)")
+    controlDown.type = .flagsChanged
+    controlDown.flags = controlFlags
+    spaceDown.flags = controlFlags
+    spaceUp.flags = controlFlags
+    controlUp.type = .flagsChanged
+    controlUp.flags = []
+
+    controlDown.post(tap: .cghidEventTap)
+    spaceDown.post(tap: .cghidEventTap)
+    spaceUp.post(tap: .cghidEventTap)
+    controlUp.post(tap: .cghidEventTap)
+
+    emitDiagnostic(message: "mac caps input source shortcut posted control+space tap=hid")
     os_log(
-      "remote caps input source switched current=%{public}@ next=%{public}@ status=%{public}d",
+      "mac caps input source shortcut posted control+space tap=%{public}@",
       log: remoteInputLog,
       type: .info,
-      currentId ?? "",
-      nextId,
-      status)
+      "hid")
+    return true
   }
 
   private func selectableKeyboardInputSources() -> [TISInputSource]? {
@@ -1332,14 +1419,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         inputSourceStringProperty($0, kTISPropertyInputSourceCategory) ==
           kTISCategoryKeyboardInputSource as String
     }
-  }
-
-  private func currentKeyboardInputSourceId() -> String? {
-    guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
-      return nil
-    }
-    let sourceId = inputSourceStringProperty(source, kTISPropertyInputSourceID)
-    return sourceId.isEmpty ? nil : sourceId
   }
 
   private func inputSourceBoolProperty(_ source: TISInputSource, _ key: CFString) -> Bool {
@@ -1358,6 +1437,31 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return Unmanaged<CFString>
       .fromOpaque(value)
       .takeUnretainedValue() as String
+  }
+
+  private func postCapsLockEvent() {
+    injectedCapsLockEnabled.toggle()
+    let nextFlags = injectedCapsLockEnabled
+      ? injectedModifierFlags.union(.maskAlphaShift)
+      : injectedModifierFlags
+    guard let capsEvent = CGEvent(
+      keyboardEventSource: keyboardEventSource,
+      virtualKey: CGKeyCode(57),
+      keyDown: true) else {
+      return
+    }
+    capsEvent.type = .flagsChanged
+    capsEvent.flags = nextFlags
+    capsEvent.post(tap: .cghidEventTap)
+    emitDiagnostic(
+      message: "mac post remote caps lock enabled=\(injectedCapsLockEnabled ? 1 : 0) flags=\(nextFlags.rawValue) tap=hid")
+    os_log(
+      "post remote caps lock enabled=%{public}d flags=%{public}llu tap=%{public}@",
+      log: remoteInputLog,
+      type: .info,
+      injectedCapsLockEnabled ? 1 : 0,
+      nextFlags.rawValue,
+      "hid")
   }
 
   private func emitKeyDiagnostic(message: String) {

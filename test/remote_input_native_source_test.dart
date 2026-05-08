@@ -313,12 +313,35 @@ void main() {
       expect(source, contains('isInjectedModifierKey(Int(keyCode))'));
     });
 
-    test('uses HID keyboard events and handles Caps Lock as input switching',
+    test('uses system input source shortcut for remote Caps Lock with HID fallback',
         () {
       expect(source, contains('import Carbon.HIToolbox'));
       expect(source, contains('CGEventSource(stateID: .hidSystemState)'));
-      expect(source, contains('toggleKeyboardInputSource()'));
-      expect(source, contains('TISSelectInputSource'));
+      expect(source, contains('handleCapsLockKey()'));
+      expect(source, contains('hasMultipleSelectableKeyboardInputSources()'));
+      expect(source, contains('postInputSourceShortcut()'));
+      expect(source, contains('CGKeyCode(59)'));
+      expect(source, contains('CGKeyCode(49)'));
+      expect(source, contains('.maskControl'));
+      expect(source, contains('mac caps input source shortcut posted'));
+      expect(source, contains('postCapsLockEvent()'));
+      expect(source, contains('private var injectedCapsLockEnabled = false'));
+      expect(
+        source,
+        contains(
+          'injectedCapsLockEnabled = CGEventSource.flagsState(.hidSystemState)',
+        ),
+      );
+      expect(source, contains('injectedCapsLockEnabled.toggle()'));
+      expect(source, contains('let nextFlags = injectedCapsLockEnabled'));
+      expect(source, contains('.maskAlphaShift'));
+      expect(source, contains('TISCreateInputSourceList'));
+      expect(source, isNot(contains('TISSelectInputSource')));
+
+      final capsLockEvent = RegExp(
+        r'private func postCapsLockEvent\([\s\S]*?\n  private func emitKeyDiagnostic',
+      ).firstMatch(source)!.group(0)!;
+      expect(capsLockEvent, isNot(contains('flagsState')));
     });
 
     test('normalizes macOS Caps Lock input-source switch events', () {
@@ -330,6 +353,13 @@ void main() {
       expect(source, contains('"down": isCapturedCapsLockEvent'));
     });
 
+    test('does not deduplicate captured Caps Lock events without evidence', () {
+      expect(source, isNot(contains('lastCapturedCapsLockTimeMicros')));
+      expect(source, isNot(contains('capturedCapsLockDuplicateWindowMicros')));
+      expect(source, isNot(contains('shouldEmitCapturedCapsLockEvent')));
+      expect(source, isNot(contains('mac captured duplicate caps lock skipped')));
+    });
+
     test('emits sink-side diagnostics for key injection and caps switching',
         () {
       expect(source, contains('"onDiagnostic"'));
@@ -337,7 +367,8 @@ void main() {
       expect(source, contains('mac remote input injection started'));
       expect(source, contains('mac remote input injection release reason='));
       expect(source, contains('mac remote key inject'));
-      expect(source, contains('mac caps input source switched'));
+      expect(source, contains('mac caps input source shortcut posted'));
+      expect(source, contains('mac post remote caps lock'));
     });
 
     test('requires accessibility permission before accepting sink injection',
@@ -418,6 +449,38 @@ void main() {
       expect(nativeFlags, contains('.maskSecondaryFn'));
       expect(nativeFlags, contains('.maskNumericPad'));
       expect(nativeFlags, contains('return CGEventFlags()'));
+    });
+
+    test(
+        'routes app-local Command text shortcuts through Flutter focus actions',
+        () {
+      expect(source, contains('suppressedAppCommandShortcutKeyCodes'));
+      expect(source, contains('handleAppCommandTextShortcut'));
+      expect(source, contains('appCommandTextShortcut'));
+      expect(source, contains('sendFlutterTextShortcut'));
+      expect(source, contains('NSApp.isActive'));
+      expect(source, contains('"onTextShortcut"'));
+      expect(source, contains('"selectAll"'));
+      expect(source, contains('"copy"'));
+      expect(source, contains('"cut"'));
+      expect(source, contains('"paste"'));
+
+      final injectEvent = RegExp(
+        r'private func injectEvent\([\s\S]*?\n  private func payloadData',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        injectEvent,
+        contains(
+            'if handleAppCommandTextShortcut(keyCode: keyCode, down: down)'),
+      );
+      expect(
+        injectEvent.indexOf('updateInjectedModifierFlags'),
+        lessThan(injectEvent.indexOf('handleAppCommandTextShortcut')),
+      );
+      expect(
+        injectEvent.indexOf('handleAppCommandTextShortcut'),
+        lessThan(injectEvent.indexOf('postKeyboardEvent')),
+      );
     });
 
     test('lets Control arrow shortcuts use the normal HID key path', () {

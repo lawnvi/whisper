@@ -13,12 +13,20 @@ void main() {
   group('RemoteInputPlatform', () {
     late MethodChannel channel;
     late List<MethodCall> calls;
+    late List<RemoteInputTextShortcut> textShortcuts;
     late RemoteInputPlatform platform;
 
     setUp(() {
       channel = const MethodChannel('test_remote_input');
       calls = <MethodCall>[];
-      platform = RemoteInputPlatform(channel: channel);
+      textShortcuts = <RemoteInputTextShortcut>[];
+      platform = RemoteInputPlatform(
+        channel: channel,
+        textShortcutHandler: (shortcut) {
+          textShortcuts.add(shortcut);
+          return true;
+        },
+      );
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
@@ -273,6 +281,31 @@ void main() {
       await eventSubscription.cancel();
       await releaseSubscription.cancel();
       await diagnosticSubscription.cancel();
+    });
+
+    test('dispatches native app-local text shortcuts', () async {
+      for (final entry in const {
+        'selectAll': RemoteInputTextShortcut.selectAll,
+        'copy': RemoteInputTextShortcut.copy,
+        'cut': RemoteInputTextShortcut.cut,
+        'paste': RemoteInputTextShortcut.paste,
+      }.entries) {
+        final handled = await platform.handleNativeMethodCall(
+          MethodCall('onTextShortcut', <String, dynamic>{
+            'shortcut': entry.key,
+          }),
+        );
+
+        expect(handled, isTrue, reason: entry.key);
+        expect(textShortcuts.last, entry.value, reason: entry.key);
+      }
+
+      expect(textShortcuts, <RemoteInputTextShortcut>[
+        RemoteInputTextShortcut.selectAll,
+        RemoteInputTextShortcut.copy,
+        RemoteInputTextShortcut.cut,
+        RemoteInputTextShortcut.paste,
+      ]);
     });
   });
 

@@ -2,19 +2,77 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+
+typedef RemoteInputTextShortcutHandler = FutureOr<bool> Function(
+  RemoteInputTextShortcut shortcut,
+);
+
+enum RemoteInputTextShortcut {
+  selectAll,
+  copy,
+  cut,
+  paste,
+}
+
+bool handleRemoteInputTextShortcut(RemoteInputTextShortcut shortcut) {
+  final context = primaryFocus?.context;
+  if (context == null || !context.mounted) {
+    return false;
+  }
+
+  switch (shortcut) {
+    case RemoteInputTextShortcut.selectAll:
+      return _invokeRemoteInputTextIntent(
+        context,
+        const SelectAllTextIntent(SelectionChangedCause.keyboard),
+      );
+    case RemoteInputTextShortcut.copy:
+      return _invokeRemoteInputTextIntent(
+        context,
+        CopySelectionTextIntent.copy,
+      );
+    case RemoteInputTextShortcut.cut:
+      return _invokeRemoteInputTextIntent(
+        context,
+        const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard),
+      );
+    case RemoteInputTextShortcut.paste:
+      return _invokeRemoteInputTextIntent(
+        context,
+        const PasteTextIntent(SelectionChangedCause.keyboard),
+      );
+  }
+}
+
+bool _invokeRemoteInputTextIntent<T extends Intent>(
+  BuildContext context,
+  T intent,
+) {
+  final handler = Actions.handler<T>(context, intent);
+  if (handler == null) {
+    return false;
+  }
+  handler();
+  return true;
+}
 
 class RemoteInputPlatform {
   RemoteInputPlatform({
     MethodChannel? channel,
-  }) : _channel = channel ?? const MethodChannel(channelName) {
+    RemoteInputTextShortcutHandler? textShortcutHandler,
+  })  : _channel = channel ?? const MethodChannel(channelName),
+        _textShortcutHandler =
+            textShortcutHandler ?? handleRemoteInputTextShortcut {
     _channel.setMethodCallHandler(handleNativeMethodCall);
   }
 
   static const String channelName = 'com.vireen.whisper/remote_input';
 
   final MethodChannel _channel;
+  final RemoteInputTextShortcutHandler _textShortcutHandler;
   final StreamController<RemoteInputPacketFrame> _inputEvents =
       StreamController<RemoteInputPacketFrame>.broadcast();
   final StreamController<PlatformRemoteInputRelease> _releases =
@@ -202,6 +260,15 @@ class RemoteInputPlatform {
       return null;
     }
 
+    if (call.method == 'onTextShortcut') {
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
+      final shortcut = _textShortcutArgument(arguments['shortcut']);
+      if (shortcut == null) {
+        return false;
+      }
+      return Future<bool>.value(_textShortcutHandler(shortcut));
+    }
+
     throw MissingPluginException(
       'No remote input platform handler for ${call.method}',
     );
@@ -215,6 +282,16 @@ class RemoteInputPlatform {
       }
     }
     return RemoteInputEventType.release;
+  }
+
+  RemoteInputTextShortcut? _textShortcutArgument(Object? value) {
+    final name = value as String?;
+    for (final shortcut in RemoteInputTextShortcut.values) {
+      if (shortcut.name == name) {
+        return shortcut;
+      }
+    }
+    return null;
   }
 
   double _doubleArgument(Object? value) {
