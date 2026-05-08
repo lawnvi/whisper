@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+case "${BASH:-}" in
+  */bash|bash) ;;
+  *) exec /usr/bin/env bash "$0" "$@" ;;
+esac
+
 set -euo pipefail
 
 MODE="${1:-run}"
@@ -8,6 +13,7 @@ RELEASE_APP_BUNDLE="build/macos/Build/Products/Release/whisper.app"
 DEBUG_ENTITLEMENTS="macos/Runner/DebugProfile.entitlements"
 RELEASE_ENTITLEMENTS="macos/Runner/Release.entitlements"
 SIGN_IDENTITY="${WHISPER_MACOS_SIGN_IDENTITY:-Whisper Local Development}"
+RESOLVED_SIGN_IDENTITY=""
 KEYCHAIN="${WHISPER_MACOS_KEYCHAIN:-${HOME}/Library/Keychains/login.keychain-db}"
 KEYCHAIN_PASSWORD="${WHISPER_MACOS_KEYCHAIN_PASSWORD:-whisper-ci}"
 CERTIFICATE_P12_BASE64="${WHISPER_MACOS_CERTIFICATE_P12_BASE64:-}"
@@ -15,9 +21,22 @@ CERTIFICATE_PASSWORD="${WHISPER_MACOS_CERTIFICATE_PASSWORD:-}"
 REQUIRE_STABLE_SIGNING="${WHISPER_MACOS_REQUIRE_STABLE_SIGNING:-0}"
 DMG_ROOT="${WHISPER_MACOS_DMG_ROOT:-dmg-root}"
 DMG_PATH="${WHISPER_MACOS_DMG_PATH:-whisper.dmg}"
+TEMP_DIRS=()
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+cleanup_temp_dirs() {
+  if [[ ${#TEMP_DIRS[@]} -eq 0 ]]; then
+    return
+  fi
+
+  local temp_dir
+  for temp_dir in "${TEMP_DIRS[@]}"; do
+    rm -rf "$temp_dir"
+  done
+}
+trap cleanup_temp_dirs EXIT
 
 ensure_local_signing_identity() {
   if security find-certificate -c "$SIGN_IDENTITY" "$KEYCHAIN" >/dev/null 2>&1; then
@@ -26,7 +45,7 @@ ensure_local_signing_identity() {
 
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
+  TEMP_DIRS+=("$tmpdir")
 
   openssl req -newkey rsa:2048 -nodes \
     -keyout "$tmpdir/key.pem" \
@@ -64,9 +83,18 @@ unlock_signing_keychain() {
   security set-keychain-settings -lut 21600 "$KEYCHAIN"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 
-  local existing_keychains
-  existing_keychains="$(security list-keychains -d user | tr -d '"' | xargs)"
-  security list-keychains -d user -s "$KEYCHAIN" $existing_keychains
+  local existing_keychain
+  local existing_keychains=()
+  while IFS= read -r existing_keychain; do
+    existing_keychain="$(
+      printf '%s\n' "$existing_keychain" |
+        sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//'
+    )"
+    if [[ -n "$existing_keychain" && "$existing_keychain" != "$KEYCHAIN" ]]; then
+      existing_keychains+=("$existing_keychain")
+    fi
+  done < <(security list-keychains -d user)
+  security list-keychains -d user -s "$KEYCHAIN" "${existing_keychains[@]}"
 }
 
 import_stable_signing_identity() {
@@ -88,7 +116,7 @@ import_stable_signing_identity() {
 
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
+  TEMP_DIRS+=("$tmpdir")
 
   printf '%s' "$CERTIFICATE_P12_BASE64" |
     openssl base64 -A -d -out "$tmpdir/cert.p12"
@@ -103,18 +131,31 @@ import_stable_signing_identity() {
       -S apple-tool:,apple:,codesign: \
       -s \
       -k "$KEYCHAIN_PASSWORD" \
-      "$KEYCHAIN"
+      "$KEYCHAIN" >/dev/null
   fi
+}
 
-  if ! security find-identity -p codesigning -v "$KEYCHAIN" |
-      grep -F "$SIGN_IDENTITY" >/dev/null; then
+resolve_signing_identity() {
+  local identity_line
+  identity_line="$(
+    security find-identity -p codesigning "$KEYCHAIN" |
+      awk -v identity="$SIGN_IDENTITY" \
+        'index($0, "\"" identity "\"") || $2 == identity { print; exit }'
+  )"
+
+  if [[ -z "$identity_line" ]]; then
     echo "Signing identity '$SIGN_IDENTITY' was not found in $KEYCHAIN" >&2
+    echo "Available code signing identities in $KEYCHAIN:" >&2
+    security find-identity -p codesigning "$KEYCHAIN" >&2 || true
     exit 1
   fi
+
+  RESOLVED_SIGN_IDENTITY="$(awk '{print $2}' <<<"$identity_line")"
 }
 
 ensure_signing_identity() {
   import_stable_signing_identity
+  resolve_signing_identity
 }
 
 sign_app() {
@@ -122,7 +163,8 @@ sign_app() {
   local entitlements="$2"
   ensure_signing_identity
   /usr/bin/codesign --force --deep \
-    --sign "$SIGN_IDENTITY" \
+    --sign "$RESOLVED_SIGN_IDENTITY" \
+    --keychain "$KEYCHAIN" \
     --entitlements "$entitlements" \
     "$app_bundle"
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_bundle"

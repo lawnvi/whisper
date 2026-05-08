@@ -48,5 +48,28 @@ void main() {
     expect(script, contains(r'security import "$tmpdir/cert.p12"'));
     expect(script, contains('security set-key-partition-list'));
     expect(script, contains('WHISPER_MACOS_REQUIRE_STABLE_SIGNING'));
+    expect(script, contains(r'security find-identity -p codesigning "$KEYCHAIN"'));
+    expect(
+      script,
+      isNot(contains(r'security find-identity -p codesigning -v "$KEYCHAIN"')),
+    );
+    expect(script, contains('RESOLVED_SIGN_IDENTITY'));
+    expect(script, contains(r'--sign "$RESOLVED_SIGN_IDENTITY"'));
+    expect(script, contains(r'--keychain "$KEYCHAIN"'));
+    expect(script, contains('TEMP_DIRS=()'));
+    expect(script, contains('cleanup_temp_dirs'));
+    expect(script, isNot(contains("trap 'rm -rf \"\$tmpdir\"' RETURN")));
   });
+
+  test('macOS package script can be launched through sh', () async {
+    final result = await Process.run(
+      'sh',
+      ['script/build_and_run.sh', '__invalid__'],
+    );
+
+    expect(result.exitCode, 2);
+    expect(result.stderr, contains('usage:'));
+    expect(result.stderr, isNot(contains('syntax error')));
+    expect(result.stderr, isNot(contains('unbound variable')));
+  }, skip: Platform.isWindows);
 }
