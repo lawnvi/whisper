@@ -362,21 +362,16 @@ void main() {
       expect(source, isNot(contains('(1 << CGEventType.mouseMoved.rawValue)')));
     });
 
-    test('preserves native non-modifier flags while using injected modifiers',
-        () {
+    test('preserves required arrow flags while using injected modifiers', () {
       final postKeyboardEvent = RegExp(
         r'private func postKeyboardEvent\([\s\S]*?\n  private func setInjectedKey',
       ).firstMatch(source)!.group(0)!;
 
-      expect(source, contains('remoteInputNativeModifierFlags'));
-      final nativeModifierFlags = RegExp(
-        r'private let remoteInputNativeModifierFlags:[\s\S]*?\n\]',
-      ).firstMatch(source)!.group(0)!;
-      expect(nativeModifierFlags, isNot(contains('.maskSecondaryFn')));
+      expect(source, isNot(contains('remoteInputNativeModifierFlags')));
       expect(
         postKeyboardEvent,
         contains(
-            'let nativeFlags = keyEvent.flags.subtracting(remoteInputNativeModifierFlags)'),
+            'let nativeFlags = nativeFlagsForRemoteKey(keyCode: Int(keyCode))'),
       );
       expect(
         postKeyboardEvent,
@@ -390,6 +385,39 @@ void main() {
         postKeyboardEvent,
         isNot(contains('keyEvent.flags = keyEvent.flags.union')),
       );
+
+      final nativeFlags = RegExp(
+        r'private func nativeFlagsForRemoteKey\([\s\S]*?\n  private func setInjectedKey',
+      ).firstMatch(source)!.group(0)!;
+      expect(nativeFlags, contains('case 123, 124, 125, 126'));
+      expect(nativeFlags, contains('.maskSecondaryFn'));
+      expect(nativeFlags, contains('.maskNumericPad'));
+    });
+
+    test('keeps generated native flags off regular macOS key injection', () {
+      final postKeyboardEvent = RegExp(
+        r'private func postKeyboardEvent\([\s\S]*?\n  private func setInjectedKey',
+      ).firstMatch(source)!.group(0)!;
+
+      expect(source, contains('nativeFlagsForRemoteKey(keyCode:'));
+      expect(
+        postKeyboardEvent,
+        contains(
+            'let nativeFlags = nativeFlagsForRemoteKey(keyCode: Int(keyCode))'),
+      );
+      expect(
+        postKeyboardEvent,
+        isNot(contains(
+            'keyEvent.flags.subtracting(remoteInputNativeModifierFlags)')),
+      );
+
+      final nativeFlags = RegExp(
+        r'private func nativeFlagsForRemoteKey\([\s\S]*?\n  private func setInjectedKey',
+      ).firstMatch(source)!.group(0)!;
+      expect(nativeFlags, contains('case 123, 124, 125, 126'));
+      expect(nativeFlags, contains('.maskSecondaryFn'));
+      expect(nativeFlags, contains('.maskNumericPad'));
+      expect(nativeFlags, contains('return CGEventFlags()'));
     });
 
     test('lets Control arrow shortcuts use the normal HID key path', () {

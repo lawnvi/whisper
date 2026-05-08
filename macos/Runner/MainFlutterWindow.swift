@@ -36,14 +36,6 @@ private let remoteInputCaptureEventMask: CGEventMask = [
   mask | remoteInputEventMask(for: type)
 }
 
-private let remoteInputNativeModifierFlags: CGEventFlags = [
-  .maskAlphaShift,
-  .maskShift,
-  .maskControl,
-  .maskAlternate,
-  .maskCommand,
-]
-
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -1435,7 +1427,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func postKeyboardEvent(keyCode: CGKeyCode, down: Bool) {
     if let keyEvent = CGEvent(keyboardEventSource: keyboardEventSource, virtualKey: keyCode, keyDown: down) {
       let isModifier = isInjectedModifierKey(Int(keyCode))
-      let nativeFlags = keyEvent.flags.subtracting(remoteInputNativeModifierFlags)
+      let nativeFlags = nativeFlagsForRemoteKey(keyCode: Int(keyCode))
       if isModifier {
         keyEvent.type = .flagsChanged
         keyEvent.flags = nativeFlags.union(injectedModifierFlags)
@@ -1455,6 +1447,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       emitKeyDiagnostic(
         message: "mac post remote key mac=\(Int(keyCode)) down=\(down ? 1 : 0) type=\(eventType) flags=\(keyEvent.flags.rawValue) tap=hid")
       keyEvent.post(tap: .cghidEventTap)
+    }
+  }
+
+  private func nativeFlagsForRemoteKey(keyCode: Int) -> CGEventFlags {
+    switch keyCode {
+    case 123, 124, 125, 126:
+      return [.maskSecondaryFn, .maskNumericPad]
+    default:
+      return CGEventFlags()
     }
   }
 
