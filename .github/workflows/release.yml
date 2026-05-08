@@ -39,8 +39,15 @@ jobs:
           cd ../ios
           pod install --repo-update
 
-      - name: Build macOS app
-        run: flutter build macos
+      - name: Build signed macOS DMG
+        env:
+          WHISPER_MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          WHISPER_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          WHISPER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
+          WHISPER_MACOS_DMG_PATH: whisper.dmg
+        run: script/build_and_run.sh package-macos
 
       - name: Build iOS IPA
         run: |
@@ -51,15 +58,6 @@ jobs:
           ln -s ../Runner.app
           cd ..
           zip -r app.ipa Payload
-
-      - name: Package DMG
-        run: |
-          rm -rf dmg-root whisper.dmg
-          mkdir -p dmg-root
-          cp -R build/macos/Build/Products/Release/whisper.app dmg-root/
-          ln -s /Applications dmg-root/Applications
-          hdiutil create -volname "Whisper" -srcfolder dmg-root -ov -format UDZO whisper.dmg
-          hdiutil verify whisper.dmg
 
       - name: Upload macOS and iOS artifacts
         uses: actions/upload-artifact@v4
