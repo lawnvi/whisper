@@ -28,6 +28,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
+Depends: libpulse0
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
 Description: Cross-platform local network file and message transfer
@@ -62,6 +63,6 @@ EOF
 chmod 0755 "${BUILD_DIR}/DEBIAN/postinst" "${BUILD_DIR}/DEBIAN/postrm"
 
 mkdir -p "${OUTPUT_DIR}"
-dpkg-deb --build "${BUILD_DIR}" "${OUTPUT_DIR}/${APP_NAME}-${ARCHITECTURE}.deb"
+dpkg-deb --root-owner-group --build "${BUILD_DIR}" "${OUTPUT_DIR}/${APP_NAME}-${ARCHITECTURE}.deb"
 
 echo "Created ${OUTPUT_DIR}/${APP_NAME}-${ARCHITECTURE}.deb"

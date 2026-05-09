@@ -3,6 +3,30 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Linux builds require PulseAudio development libraries', () {
+    final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+    final releaseWorkflow =
+        File('.github/workflows/release.yml').readAsStringSync();
+    final debScript = File('linux/build_deb.sh').readAsStringSync();
+
+    expect(
+      cmake,
+      contains('pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET'),
+    );
+    expect(releaseWorkflow, contains('lld'));
+    expect(releaseWorkflow, contains('pkg-config'));
+    expect(releaseWorkflow, contains('libpulse-dev'));
+    expect(debScript, contains('Depends: libpulse0'));
+    expect(debScript, contains('--root-owner-group'));
+  });
+
+  test('Ubuntu 26 builds tolerate tray manager deprecation warnings', () {
+    final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+
+    expect(cmake, contains('if(TARGET tray_manager_plugin)'));
+    expect(cmake, contains('-Wno-deprecated-declarations'));
+  });
+
   test('Linux audio share configures PulseAudio low-latency buffers', () {
     final plugin = File('linux/audio_share_plugin.cc').readAsStringSync();
 

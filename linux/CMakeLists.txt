@@ -53,7 +53,7 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
-pkg_check_modules(PULSE IMPORTED_TARGET libpulse libpulse-simple)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse libpulse-simple)
 pkg_check_modules(X11_REMOTE_INPUT IMPORTED_TARGET x11 xtst)
 pkg_check_modules(XI_REMOTE_INPUT IMPORTED_TARGET xi)
 pkg_check_modules(XRANDR_REMOTE_INPUT IMPORTED_TARGET xrandr)
@@ -79,10 +79,8 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
-if(PULSE_FOUND)
-  target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_PULSE_AUDIO=1)
-  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::PULSE)
-endif()
+target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_PULSE_AUDIO=1)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::PULSE)
 if(X11_REMOTE_INPUT_FOUND)
   target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_X11_REMOTE_INPUT=1)
   target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11_REMOTE_INPUT)
@@ -112,6 +110,9 @@ set_target_properties(${BINARY_NAME}
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+if(TARGET tray_manager_plugin)
+  target_compile_options(tray_manager_plugin PRIVATE -Wno-deprecated-declarations)
+endif()
 
 
 # === Installation ===
