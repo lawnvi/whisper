@@ -41,21 +41,17 @@ class LocalDatabase extends _$LocalDatabase {
           }
           if (from < 3) {
             await m.createTable(remoteInputLayout);
-          } else if (from < 4) {
-            await m.addColumn(remoteInputLayout, remoteInputLayout.autoRole);
           }
-          if (from < 5 && from >= 3) {
-            await m.addColumn(
-                remoteInputLayout, remoteInputLayout.layoutVersion);
-            await m.addColumn(remoteInputLayout, remoteInputLayout.layoutJson);
+          if (from < 5) {
+            await _repairRemoteInputLayoutColumns();
           }
         },
         beforeOpen: (_) async {
-          await _repairRemoteInputLayoutAutoRole();
+          await _repairRemoteInputLayoutColumns();
         },
       );
 
-  Future<void> _repairRemoteInputLayoutAutoRole() async {
+  Future<void> _repairRemoteInputLayoutColumns() async {
     final columns =
         await customSelect('PRAGMA table_info(remote_input_layout)').get();
     if (columns.isEmpty) {
@@ -73,12 +69,12 @@ class LocalDatabase extends _$LocalDatabase {
     }
     if (!hasLayoutVersion) {
       await customStatement(
-        'ALTER TABLE remote_input_layout ADD COLUMN layout_version INTEGER DEFAULT 1',
+        'ALTER TABLE remote_input_layout ADD COLUMN layout_version INTEGER NOT NULL DEFAULT 1',
       );
     }
     if (!hasLayoutJson) {
       await customStatement(
-        "ALTER TABLE remote_input_layout ADD COLUMN layout_json TEXT DEFAULT ''",
+        "ALTER TABLE remote_input_layout ADD COLUMN layout_json TEXT NOT NULL DEFAULT ''",
       );
     }
     await customUpdate(
@@ -86,6 +82,22 @@ class LocalDatabase extends _$LocalDatabase {
       'WHERE auto_role IS NULL OR auto_role = ?',
       variables: [
         Variable<String>(RemoteInputAutoRole.source.name),
+        const Variable<String>(''),
+      ],
+      updates: {remoteInputLayout},
+    );
+    await customUpdate(
+      'UPDATE remote_input_layout SET layout_version = ? '
+      'WHERE layout_version IS NULL',
+      variables: [
+        const Variable<int>(1),
+      ],
+      updates: {remoteInputLayout},
+    );
+    await customUpdate(
+      'UPDATE remote_input_layout SET layout_json = ? '
+      'WHERE layout_json IS NULL',
+      variables: [
         const Variable<String>(''),
       ],
       updates: {remoteInputLayout},

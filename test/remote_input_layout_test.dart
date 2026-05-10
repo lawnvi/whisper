@@ -880,5 +880,52 @@ void main() {
       expect(loaded, isNotNull);
       expect(loaded!.autoRoleValue, RemoteInputAutoRole.source);
     });
+
+    test(
+        'skips existing layout version column when upgrading repaired v4 databases',
+        () async {
+      await database.close();
+      database = LocalDatabase.forTesting(
+        NativeDatabase.memory(
+          setup: (db) {
+            db.execute('''
+              CREATE TABLE remote_input_layout (
+                peer_id TEXT NOT NULL PRIMARY KEY,
+                peer_name TEXT NOT NULL DEFAULT '',
+                x INTEGER NOT NULL DEFAULT 1000,
+                y INTEGER NOT NULL DEFAULT 0,
+                width INTEGER NOT NULL DEFAULT 900,
+                height INTEGER NOT NULL DEFAULT 600,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+                auto_activate INTEGER NOT NULL DEFAULT 0 CHECK (auto_activate IN (0, 1)),
+                auto_role TEXT NOT NULL DEFAULT 'source',
+                layout_version INTEGER NOT NULL DEFAULT 1,
+                edge_threshold_px INTEGER NOT NULL DEFAULT 6,
+                release_hotkey TEXT NOT NULL DEFAULT 'ctrl+alt+esc',
+                updated_at INTEGER NOT NULL
+              )
+            ''');
+            db.execute('''
+              INSERT INTO remote_input_layout (
+                peer_id, peer_name, x, y, width, height, enabled,
+                auto_activate, auto_role, layout_version, edge_threshold_px,
+                release_hotkey, updated_at
+              ) VALUES (
+                'peer-repaired-v4', 'Windows PC', 1000, 0, 900, 600, 1,
+                1, 'sink', 1, 6, 'ctrl+alt+esc', 1234
+              )
+            ''');
+            db.execute('PRAGMA user_version = 4');
+          },
+        ),
+      );
+
+      final loaded = await database.fetchRemoteInputLayout('peer-repaired-v4');
+
+      expect(loaded, isNotNull);
+      expect(loaded!.layoutVersion, 1);
+      expect(loaded.layoutJson, '');
+      expect(loaded.autoRoleValue, RemoteInputAutoRole.sink);
+    });
   });
 }
