@@ -57,6 +57,8 @@ pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse libpulse-simple)
 pkg_check_modules(X11_REMOTE_INPUT IMPORTED_TARGET x11 xtst)
 pkg_check_modules(XI_REMOTE_INPUT IMPORTED_TARGET xi)
 pkg_check_modules(XRANDR_REMOTE_INPUT IMPORTED_TARGET xrandr)
+pkg_check_modules(LIBEI_REMOTE_INPUT IMPORTED_TARGET libei-1.0)
+pkg_check_modules(GIO_UNIX_REMOTE_INPUT IMPORTED_TARGET gio-unix-2.0)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
@@ -92,6 +94,11 @@ if(X11_REMOTE_INPUT_FOUND)
     target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_XRANDR_REMOTE_INPUT=1)
     target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XRANDR_REMOTE_INPUT)
   endif()
+endif()
+if(LIBEI_REMOTE_INPUT_FOUND AND GIO_UNIX_REMOTE_INPUT_FOUND)
+  target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_LIBEI_REMOTE_INPUT=1)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::LIBEI_REMOTE_INPUT)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO_UNIX_REMOTE_INPUT)
 endif()
 
 # Run the Flutter tool portions of the build. This must not be removed.

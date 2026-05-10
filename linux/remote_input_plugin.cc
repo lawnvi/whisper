@@ -1,9 +1,13 @@
 #include "remote_input_plugin.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gio/gio.h>
+#include <gio/gunixfdlist.h>
+#include <glib/gstdio.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -15,6 +19,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include <poll.h>
+#include <unistd.h>
 
 #if HAVE_X11_REMOTE_INPUT
 #include <X11/XKBlib.h>
@@ -29,6 +36,11 @@
 
 #if HAVE_XI_REMOTE_INPUT
 #include <X11/extensions/XInput2.h>
+#endif
+
+#if HAVE_LIBEI_REMOTE_INPUT
+#include <libei.h>
+#include <linux/input-event-codes.h>
 #endif
 
 namespace {
@@ -379,6 +391,433 @@ void TraceRemoteInput(const std::string& message) {
   g_printerr("%s\n", message.c_str());
 }
 
+#if HAVE_X11_REMOTE_INPUT
+bool IsLinuxDesktopLocked() {
+  GError* error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (connection == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return false;
+  }
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, "org.gnome.ScreenSaver", "/org/gnome/ScreenSaver",
+      "org.gnome.ScreenSaver", "GetActive", nullptr, G_VARIANT_TYPE("(b)"),
+      G_DBUS_CALL_FLAGS_NONE, 300, nullptr, &error);
+  g_object_unref(connection);
+  if (result == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return false;
+  }
+  gboolean active = FALSE;
+  g_variant_get(result, "(b)", &active);
+  g_variant_unref(result);
+  return active == TRUE;
+}
+#endif
+
+#if HAVE_LIBEI_REMOTE_INPUT && HAVE_X11_REMOTE_INPUT
+constexpr char kPortalBusName[] = "org.freedesktop.portal.Desktop";
+constexpr char kPortalObjectPath[] = "/org/freedesktop/portal/desktop";
+constexpr char kPortalRemoteDesktopInterface[] =
+    "org.freedesktop.portal.RemoteDesktop";
+constexpr uint32_t kPortalKeyboardDevice = 1;
+constexpr uint32_t kPortalPointerDevice = 2;
+
+struct PortalResponse {
+  uint32_t response = 2;
+  GVariant* results = nullptr;
+};
+
+struct PortalResponseWaiter {
+  GMainLoop* loop = nullptr;
+  bool done = false;
+  bool timed_out = false;
+  PortalResponse response;
+};
+
+gboolean PortalResponseTimeout(gpointer user_data) {
+  auto* waiter = static_cast<PortalResponseWaiter*>(user_data);
+  waiter->timed_out = true;
+  waiter->done = true;
+  if (waiter->loop != nullptr) {
+    g_main_loop_quit(waiter->loop);
+  }
+  return G_SOURCE_REMOVE;
+}
+
+void PortalResponseCallback(GDBusConnection*,
+                            const gchar*,
+                            const gchar*,
+                            const gchar*,
+                            const gchar*,
+                            GVariant* parameters,
+                            gpointer user_data) {
+  auto* waiter = static_cast<PortalResponseWaiter*>(user_data);
+  guint32 response = 2;
+  GVariant* results = nullptr;
+  g_variant_get(parameters, "(u@a{sv})", &response, &results);
+  waiter->response.response = response;
+  waiter->response.results = results;
+  waiter->done = true;
+  if (waiter->loop != nullptr) {
+    g_main_loop_quit(waiter->loop);
+  }
+}
+
+bool WaitPortalResponse(GDBusConnection* connection,
+                        const std::string& request_path,
+                        int timeout_ms,
+                        PortalResponse* response,
+                        std::string* error) {
+  PortalResponseWaiter waiter;
+  waiter.loop = g_main_loop_new(nullptr, FALSE);
+  const guint signal_id = g_dbus_connection_signal_subscribe(
+      connection, kPortalBusName, "org.freedesktop.portal.Request", "Response",
+      request_path.c_str(), nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+      PortalResponseCallback, &waiter, nullptr);
+  const guint timeout_id =
+      g_timeout_add(timeout_ms, PortalResponseTimeout, &waiter);
+  g_main_loop_run(waiter.loop);
+  if (timeout_id != 0 && !waiter.timed_out) {
+    g_source_remove(timeout_id);
+  }
+  g_dbus_connection_signal_unsubscribe(connection, signal_id);
+  g_main_loop_unref(waiter.loop);
+  if (!waiter.done || waiter.response.results == nullptr) {
+    *error = "Timed out waiting for Linux remote desktop permission";
+    return false;
+  }
+  if (waiter.response.response != 0) {
+    if (waiter.response.results != nullptr) {
+      g_variant_unref(waiter.response.results);
+    }
+    *error = waiter.response.response == 1
+                 ? "Linux remote desktop permission was cancelled"
+                 : "Linux remote desktop permission was denied";
+    return false;
+  }
+  *response = waiter.response;
+  return true;
+}
+
+std::string PortalHandleToken(const char* prefix) {
+  std::ostringstream token;
+  token << prefix << "_" << NowMicros();
+  return token.str();
+}
+
+std::string StringFromVariantDict(GVariant* dict, const char* key) {
+  if (dict == nullptr) {
+    return "";
+  }
+  GVariant* value = g_variant_lookup_value(dict, key, nullptr);
+  if (value == nullptr) {
+    return "";
+  }
+  const gchar* text = g_variant_get_string(value, nullptr);
+  std::string result = text == nullptr ? "" : text;
+  g_variant_unref(value);
+  return result;
+}
+
+bool PortalPropertyUint32(GDBusConnection* connection,
+                          const char* property,
+                          uint32_t* value) {
+  GError* error = nullptr;
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, kPortalBusName, kPortalObjectPath,
+      "org.freedesktop.DBus.Properties", "Get",
+      g_variant_new("(ss)", kPortalRemoteDesktopInterface, property),
+      G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, 500, nullptr, &error);
+  if (result == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return false;
+  }
+  GVariant* variant = nullptr;
+  g_variant_get(result, "(v)", &variant);
+  if (variant == nullptr || !g_variant_is_of_type(variant, G_VARIANT_TYPE_UINT32)) {
+    if (variant != nullptr) {
+      g_variant_unref(variant);
+    }
+    g_variant_unref(result);
+    return false;
+  }
+  *value = g_variant_get_uint32(variant);
+  g_variant_unref(variant);
+  g_variant_unref(result);
+  return true;
+}
+
+bool RemoteDesktopPortalAvailable() {
+  GError* error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (connection == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return false;
+  }
+  uint32_t version = 0;
+  uint32_t devices = 0;
+  const bool available =
+      PortalPropertyUint32(connection, "version", &version) &&
+      PortalPropertyUint32(connection, "AvailableDeviceTypes", &devices) &&
+      version >= 2 &&
+      (devices & (kPortalKeyboardDevice | kPortalPointerDevice)) ==
+          (kPortalKeyboardDevice | kPortalPointerDevice);
+  g_object_unref(connection);
+  return available;
+}
+
+std::string PortalRestoreTokenPath() {
+  gchar* directory =
+      g_build_filename(g_get_user_config_dir(), "whisper", nullptr);
+  gchar* path =
+      g_build_filename(directory, "remote-input-portal-token", nullptr);
+  std::string result = path == nullptr ? "" : path;
+  g_free(path);
+  g_free(directory);
+  return result;
+}
+
+std::string LoadPortalRestoreToken() {
+  const std::string path = PortalRestoreTokenPath();
+  if (path.empty()) {
+    return "";
+  }
+  gchar* contents = nullptr;
+  gsize length = 0;
+  if (!g_file_get_contents(path.c_str(), &contents, &length, nullptr) ||
+      contents == nullptr) {
+    return "";
+  }
+  gchar* stripped = g_strstrip(contents);
+  std::string result = stripped == nullptr ? "" : stripped;
+  g_free(contents);
+  return result;
+}
+
+void SavePortalRestoreToken(const std::string& token) {
+  if (token.empty()) {
+    return;
+  }
+  gchar* directory =
+      g_build_filename(g_get_user_config_dir(), "whisper", nullptr);
+  if (directory == nullptr) {
+    return;
+  }
+  g_mkdir_with_parents(directory, 0700);
+  gchar* path =
+      g_build_filename(directory, "remote-input-portal-token", nullptr);
+  if (path != nullptr) {
+    g_file_set_contents(path, token.c_str(),
+                        static_cast<gssize>(token.size()), nullptr);
+    g_free(path);
+  }
+  g_free(directory);
+}
+
+bool PortalRequest(GDBusConnection* connection,
+                   const char* method,
+                   GVariant* parameters,
+                   int timeout_ms,
+                   PortalResponse* response,
+                   std::string* error) {
+  GError* call_error = nullptr;
+  GVariant* result = g_dbus_connection_call_sync(
+      connection, kPortalBusName, kPortalObjectPath,
+      kPortalRemoteDesktopInterface, method, parameters, G_VARIANT_TYPE("(o)"),
+      G_DBUS_CALL_FLAGS_NONE, timeout_ms, nullptr, &call_error);
+  if (result == nullptr) {
+    if (call_error != nullptr) {
+      *error = call_error->message == nullptr ? "" : call_error->message;
+      g_error_free(call_error);
+    } else {
+      *error = "Unable to call Linux remote desktop portal";
+    }
+    return false;
+  }
+  const gchar* request_path = nullptr;
+  g_variant_get(result, "(&o)", &request_path);
+  std::string path = request_path == nullptr ? "" : request_path;
+  g_variant_unref(result);
+  return WaitPortalResponse(connection, path, timeout_ms, response, error);
+}
+
+struct PortalSession {
+  GDBusConnection* connection = nullptr;
+  std::string session_handle;
+  int eis_fd = -1;
+};
+
+bool ConnectToEis(GDBusConnection* connection,
+                  const std::string& session_handle,
+                  int* eis_fd,
+                  std::string* error) {
+  GVariantBuilder options;
+  g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+  GError* call_error = nullptr;
+  GUnixFDList* fd_list = nullptr;
+  GVariant* result = g_dbus_connection_call_with_unix_fd_list_sync(
+      connection, kPortalBusName, kPortalObjectPath,
+      kPortalRemoteDesktopInterface, "ConnectToEIS",
+      g_variant_new("(oa{sv})", session_handle.c_str(), &options),
+      G_VARIANT_TYPE("(h)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &fd_list,
+      nullptr, &call_error);
+  if (result == nullptr) {
+    if (call_error != nullptr) {
+      *error = call_error->message == nullptr ? "" : call_error->message;
+      g_error_free(call_error);
+    } else {
+      *error = "Unable to connect Linux remote desktop portal to EIS";
+    }
+    return false;
+  }
+  gint32 fd_index = -1;
+  g_variant_get(result, "(h)", &fd_index);
+  g_variant_unref(result);
+  if (fd_list == nullptr || fd_index < 0) {
+    if (fd_list != nullptr) {
+      g_object_unref(fd_list);
+    }
+    *error = "Linux remote desktop portal did not return an EIS fd";
+    return false;
+  }
+  GError* fd_error = nullptr;
+  const int fd = g_unix_fd_list_get(fd_list, fd_index, &fd_error);
+  g_object_unref(fd_list);
+  if (fd < 0) {
+    if (fd_error != nullptr) {
+      *error = fd_error->message == nullptr ? "" : fd_error->message;
+      g_error_free(fd_error);
+    } else {
+      *error = "Unable to read the Linux remote desktop EIS fd";
+    }
+    return false;
+  }
+  *eis_fd = fd;
+  return true;
+}
+
+void ClosePortalSession(GDBusConnection* connection,
+                        const std::string& session_handle) {
+  if (connection == nullptr || session_handle.empty()) {
+    return;
+  }
+  g_dbus_connection_call_sync(
+      connection, kPortalBusName, session_handle.c_str(),
+      "org.freedesktop.portal.Session", "Close", nullptr, nullptr,
+      G_DBUS_CALL_FLAGS_NONE, 500, nullptr, nullptr);
+}
+
+bool StartRemoteDesktopPortalSession(PortalSession* session,
+                                     std::string* error) {
+  GError* bus_error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  if (connection == nullptr) {
+    if (bus_error != nullptr) {
+      *error = bus_error->message == nullptr ? "" : bus_error->message;
+      g_error_free(bus_error);
+    } else {
+      *error = "Unable to connect to Linux session bus";
+    }
+    return false;
+  }
+
+  PortalResponse create_response;
+  GVariantBuilder create_options;
+  g_variant_builder_init(&create_options, G_VARIANT_TYPE_VARDICT);
+  const std::string create_token = PortalHandleToken("whisper_create");
+  const std::string session_token = PortalHandleToken("whisper_session");
+  g_variant_builder_add(&create_options, "{sv}", "handle_token",
+                        g_variant_new_string(create_token.c_str()));
+  g_variant_builder_add(&create_options, "{sv}", "session_handle_token",
+                        g_variant_new_string(session_token.c_str()));
+  if (!PortalRequest(connection, "CreateSession",
+                     g_variant_new("(a{sv})", &create_options), 3000,
+                     &create_response, error)) {
+    g_object_unref(connection);
+    return false;
+  }
+  const std::string session_handle =
+      StringFromVariantDict(create_response.results, "session_handle");
+  g_variant_unref(create_response.results);
+  if (session_handle.empty()) {
+    *error = "Linux remote desktop portal did not return a session";
+    g_object_unref(connection);
+    return false;
+  }
+
+  PortalResponse select_response;
+  GVariantBuilder select_options;
+  g_variant_builder_init(&select_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(&select_options, "{sv}", "handle_token",
+                        g_variant_new_string(
+                            PortalHandleToken("whisper_select").c_str()));
+  g_variant_builder_add(
+      &select_options, "{sv}", "types",
+      g_variant_new_uint32(kPortalKeyboardDevice | kPortalPointerDevice));
+  g_variant_builder_add(&select_options, "{sv}", "persist_mode",
+                        g_variant_new_uint32(2));
+  const std::string restore_token = LoadPortalRestoreToken();
+  if (!restore_token.empty()) {
+    g_variant_builder_add(&select_options, "{sv}", "restore_token",
+                          g_variant_new_string(restore_token.c_str()));
+  }
+  if (!PortalRequest(connection, "SelectDevices",
+                     g_variant_new("(oa{sv})", session_handle.c_str(),
+                                   &select_options),
+                     30000, &select_response, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+  g_variant_unref(select_response.results);
+
+  PortalResponse start_response;
+  GVariantBuilder start_options;
+  g_variant_builder_init(&start_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(&start_options, "{sv}", "handle_token",
+                        g_variant_new_string(
+                            PortalHandleToken("whisper_start").c_str()));
+  if (!PortalRequest(connection, "Start",
+                     g_variant_new("(osa{sv})", session_handle.c_str(), "",
+                                   &start_options),
+                     30000, &start_response, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+  const std::string next_restore_token =
+      StringFromVariantDict(start_response.results, "restore_token");
+  if (!next_restore_token.empty()) {
+    SavePortalRestoreToken(next_restore_token);
+  }
+  g_variant_unref(start_response.results);
+
+  int eis_fd = -1;
+  if (!ConnectToEis(connection, session_handle, &eis_fd, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  session->connection = connection;
+  session->session_handle = session_handle;
+  session->eis_fd = eis_fd;
+  return true;
+}
+#endif
+
 struct MainThreadEvent {
   FlMethodChannel* channel = nullptr;
   std::string method;
@@ -532,8 +971,23 @@ struct DisplayInfo {
   double scale = 1.0;
 };
 
+enum class InjectionBackend {
+  kNone,
+  kX11,
+  kPortal,
+};
+
 bool HasSegment(const EdgeSegment& segment) {
   return segment.end > segment.start;
+}
+
+std::string SegmentTrace(const EdgeSegment& segment) {
+  if (!HasSegment(segment)) {
+    return "-";
+  }
+  std::ostringstream trace;
+  trace << segment.start << ".." << segment.end;
+  return trace.str();
 }
 
 std::vector<CaptureRoute> CaptureRoutesValue(FlValue* map, const char* key) {
@@ -602,6 +1056,9 @@ std::vector<InjectionRoute> InjectionRoutesValue(FlValue* map,
 }
 
 ScreenBounds BoundsFor(Display* display) {
+  if (display == nullptr) {
+    return ScreenBounds{};
+  }
   const int screen = DefaultScreen(display);
   ScreenBounds bounds;
   bounds.width = std::max(1, DisplayWidth(display, screen));
@@ -611,6 +1068,9 @@ ScreenBounds BoundsFor(Display* display) {
 
 std::vector<DisplayInfo> DisplayInfos(Display* display) {
   std::vector<DisplayInfo> infos;
+  if (display == nullptr) {
+    return infos;
+  }
 #if HAVE_XRANDR_REMOTE_INPUT
   Window root = DefaultRootWindow(display);
   int monitor_count = 0;
@@ -1047,12 +1507,47 @@ class RemoteInputPlugin {
                       std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
     StopInjection("");
+    if (IsLinuxDesktopLocked()) {
+      *error = "Unlock the Linux desktop before sharing keyboard and mouse";
+      TraceRemoteInput(
+          "linux remote input injection blocked because desktop is locked");
+      return false;
+    }
+    bool portal_attempted = false;
+    if (TryStartPortalInjection(session_id, display_id, edge, segment, routes,
+                                &portal_attempted, error)) {
+      return true;
+    }
+    if (portal_attempted) {
+      return false;
+    }
+    return StartX11Injection(session_id, display_id, edge, segment,
+                             std::move(routes), error);
+#else
+    (void)session_id;
+    (void)display_id;
+    (void)edge;
+    (void)segment;
+    (void)routes;
+    *error = "X11 remote input support is not available in this Linux build";
+    return false;
+#endif
+  }
+
+  bool StartX11Injection(const std::string& session_id,
+                         const std::string& display_id,
+                         const std::string& edge,
+                         EdgeSegment segment,
+                         std::vector<InjectionRoute> routes,
+                         std::string* error) {
+#if HAVE_X11_REMOTE_INPUT
     Display* display = XOpenDisplay(nullptr);
     if (display == nullptr) {
       *error = "Unable to open X11 display for remote input injection";
       return false;
     }
     std::lock_guard<std::mutex> lock(injection_mutex_);
+    injection_backend_ = InjectionBackend::kX11;
     injection_display_ = display;
     injection_session_id_ = session_id;
     injection_display_id_ = display_id;
@@ -1061,9 +1556,20 @@ class RemoteInputPlugin {
     injection_route_id_.clear();
     injection_routes_ = routes;
     injected_cursor_entered_interior_ = false;
+    has_injected_cursor_position_ = false;
+    injected_cursor_x_ = 0;
+    injected_cursor_y_ = 0;
     injected_buttons_ = 0;
     injected_keys_.clear();
-    EmitDiagnosticForSession(session_id, "linux remote input injection started");
+    std::ostringstream trace;
+    trace << "linux remote input injection started session=" << session_id
+          << " edge=" << (edge.empty() ? "-" : edge)
+          << " display=" << (display_id.empty() ? "-" : display_id)
+          << " segment=" << SegmentTrace(segment)
+          << " routes=" << routes.size();
+    TraceRemoteInput(trace.str());
+    EmitDiagnosticForSession(session_id,
+                             "linux remote input x11 injection started");
     return true;
 #else
     (void)session_id;
@@ -1076,8 +1582,427 @@ class RemoteInputPlugin {
 #endif
   }
 
+  bool TryStartPortalInjection(const std::string& session_id,
+                               const std::string& display_id,
+                               const std::string& edge,
+                               EdgeSegment segment,
+                               std::vector<InjectionRoute> routes,
+                               bool* attempted,
+                               std::string* error) {
+#if HAVE_LIBEI_REMOTE_INPUT
+    *attempted = false;
+    if (!RemoteDesktopPortalAvailable()) {
+      return false;
+    }
+    *attempted = true;
+    return StartPortalInjection(session_id, display_id, edge, segment,
+                                std::move(routes), error);
+#else
+    (void)session_id;
+    (void)display_id;
+    (void)edge;
+    (void)segment;
+    (void)routes;
+    (void)error;
+    *attempted = false;
+    return false;
+#endif
+  }
+
+#if HAVE_LIBEI_REMOTE_INPUT
+  bool StartPortalInjection(const std::string& session_id,
+                            const std::string& display_id,
+                            const std::string& edge,
+                            EdgeSegment segment,
+                            std::vector<InjectionRoute> routes,
+                            std::string* error) {
+    PortalSession session;
+    if (!StartRemoteDesktopPortalSession(&session, error)) {
+      return false;
+    }
+    struct ei* portal_ei = ei_new_sender(nullptr);
+    if (portal_ei == nullptr) {
+      *error = "Unable to create Linux remote desktop input client";
+      if (session.eis_fd >= 0) {
+        close(session.eis_fd);
+      }
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+    ei_configure_name(portal_ei, "Whisper");
+    const int setup_result = ei_setup_backend_fd(portal_ei, session.eis_fd);
+    session.eis_fd = -1;
+    if (setup_result < 0) {
+      *error = "Unable to connect Linux remote desktop input client";
+      ei_unref(portal_ei);
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+    Display* x_display = XOpenDisplay(nullptr);
+    std::lock_guard<std::mutex> lock(injection_mutex_);
+    injection_backend_ = InjectionBackend::kPortal;
+    injection_session_id_ = session_id;
+    injection_display_id_ = display_id;
+    injection_edge_ = edge;
+    injection_segment_ = segment;
+    injection_route_id_.clear();
+    injection_routes_ = routes;
+    injected_cursor_entered_interior_ = false;
+    has_injected_cursor_position_ = false;
+    injected_cursor_x_ = 0;
+    injected_cursor_y_ = 0;
+    injected_buttons_ = 0;
+    injected_keys_.clear();
+    portal_connection_ = session.connection;
+    portal_session_handle_ = session.session_handle;
+    portal_ei_ = portal_ei;
+    portal_x_display_ = x_display;
+    portal_running_.store(true);
+    ResetPortalDeviceStateLocked();
+    if (!WaitForPortalDevicesLocked(error)) {
+      portal_running_.store(false);
+      ReleaseInjectedButtonsLocked();
+      ReleaseInjectedKeysLocked();
+      ReleaseCommonModifierKeysLocked();
+      ClearPortalInjectionLocked();
+      injection_backend_ = InjectionBackend::kNone;
+      injection_session_id_.clear();
+      return false;
+    }
+    portal_thread_ = std::thread([this, session_id] {
+      PortalEventLoop(session_id);
+    });
+    TraceRemoteInput("linux remote input portal injection started session=" +
+                     session_id);
+    EmitDiagnosticForSession(session_id,
+                             "linux remote input portal injection started");
+    return true;
+  }
+
+  void ResetPortalDeviceStateLocked() {
+    portal_pointer_ready_ = false;
+    portal_absolute_pointer_ready_ = false;
+    portal_button_ready_ = false;
+    portal_scroll_ready_ = false;
+    portal_keyboard_ready_ = false;
+    portal_emulation_sequence_ = 0;
+  }
+
+  bool WaitForPortalDevicesLocked(std::string* error) {
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!PortalDevicesReadyLocked()) {
+      const int fd = portal_ei_ == nullptr ? -1 : ei_get_fd(portal_ei_);
+      if (fd < 0) {
+        *error = "Linux remote desktop input client has no event fd";
+        return false;
+      }
+      const auto now = std::chrono::steady_clock::now();
+      if (now >= deadline) {
+        *error = "Timed out waiting for Linux remote desktop input devices";
+        return false;
+      }
+      const int remaining_ms = static_cast<int>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)
+              .count());
+      pollfd pfd = {};
+      pfd.fd = fd;
+      pfd.events = POLLIN;
+      const int poll_result = poll(&pfd, 1, std::min(100, remaining_ms));
+      if (poll_result < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        *error = "Unable to poll Linux remote desktop input client";
+        return false;
+      }
+      if (poll_result == 0) {
+        continue;
+      }
+      DispatchPortalEiLocked(error);
+      if (!error->empty()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool PortalDevicesReadyLocked() const {
+    return portal_pointer_device_ != nullptr && portal_keyboard_device_ != nullptr &&
+           portal_button_device_ != nullptr && portal_pointer_ready_ &&
+           portal_keyboard_ready_ && portal_button_ready_;
+  }
+
+  void PortalEventLoop(const std::string& session_id) {
+    while (portal_running_.load()) {
+      int fd = -1;
+      {
+        std::lock_guard<std::mutex> lock(injection_mutex_);
+        if (portal_ei_ == nullptr || injection_session_id_ != session_id) {
+          return;
+        }
+        fd = ei_get_fd(portal_ei_);
+      }
+      if (fd < 0) {
+        return;
+      }
+      pollfd pfd = {};
+      pfd.fd = fd;
+      pfd.events = POLLIN;
+      const int poll_result = poll(&pfd, 1, 100);
+      if (poll_result <= 0) {
+        continue;
+      }
+      std::string error;
+      {
+        std::lock_guard<std::mutex> lock(injection_mutex_);
+        if (portal_ei_ == nullptr || injection_session_id_ != session_id) {
+          return;
+        }
+        DispatchPortalEiLocked(&error);
+      }
+      if (!error.empty()) {
+        EmitErrorForSession(session_id, error);
+        portal_running_.store(false);
+        return;
+      }
+    }
+  }
+
+  void DispatchPortalEiLocked(std::string* error) {
+    error->clear();
+    if (portal_ei_ == nullptr) {
+      return;
+    }
+    ei_dispatch(portal_ei_);
+    struct ei_event* event = nullptr;
+    while ((event = ei_get_event(portal_ei_)) != nullptr) {
+      HandlePortalEiEventLocked(event, error);
+      ei_event_unref(event);
+      if (!error->empty()) {
+        return;
+      }
+    }
+  }
+
+  void HandlePortalEiEventLocked(struct ei_event* event, std::string* error) {
+    switch (ei_event_get_type(event)) {
+      case EI_EVENT_CONNECT:
+        return;
+      case EI_EVENT_DISCONNECT:
+        *error = "Linux remote desktop input client disconnected";
+        return;
+      case EI_EVENT_SEAT_ADDED: {
+        struct ei_seat* seat = ei_event_get_seat(event);
+        if (seat != nullptr) {
+          ei_seat_bind_capabilities(seat, EI_DEVICE_CAP_POINTER,
+                                    EI_DEVICE_CAP_POINTER_ABSOLUTE,
+                                    EI_DEVICE_CAP_BUTTON,
+                                    EI_DEVICE_CAP_SCROLL,
+                                    EI_DEVICE_CAP_KEYBOARD, NULL);
+        }
+        return;
+      }
+      case EI_EVENT_DEVICE_ADDED:
+        StorePortalDeviceLocked(ei_event_get_device(event));
+        return;
+      case EI_EVENT_DEVICE_REMOVED:
+        RemovePortalDeviceLocked(ei_event_get_device(event));
+        return;
+      case EI_EVENT_DEVICE_PAUSED:
+        MarkPortalDeviceReadyLocked(ei_event_get_device(event), false);
+        return;
+      case EI_EVENT_DEVICE_RESUMED: {
+        struct ei_device* device = ei_event_get_device(event);
+        StorePortalDeviceLocked(device);
+        if (device != nullptr) {
+          ei_device_start_emulating(device, ++portal_emulation_sequence_);
+          MarkPortalDeviceReadyLocked(device, true);
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  void StorePortalDeviceLocked(struct ei_device* device) {
+    if (device == nullptr) {
+      return;
+    }
+    if (portal_pointer_device_ == nullptr &&
+        ei_device_has_capability(device, EI_DEVICE_CAP_POINTER)) {
+      portal_pointer_device_ = ei_device_ref(device);
+    }
+    if (portal_absolute_pointer_device_ == nullptr &&
+        ei_device_has_capability(device, EI_DEVICE_CAP_POINTER_ABSOLUTE)) {
+      portal_absolute_pointer_device_ = ei_device_ref(device);
+    }
+    if (portal_button_device_ == nullptr &&
+        ei_device_has_capability(device, EI_DEVICE_CAP_BUTTON)) {
+      portal_button_device_ = ei_device_ref(device);
+    }
+    if (portal_scroll_device_ == nullptr &&
+        ei_device_has_capability(device, EI_DEVICE_CAP_SCROLL)) {
+      portal_scroll_device_ = ei_device_ref(device);
+    }
+    if (portal_keyboard_device_ == nullptr &&
+        ei_device_has_capability(device, EI_DEVICE_CAP_KEYBOARD)) {
+      portal_keyboard_device_ = ei_device_ref(device);
+    }
+  }
+
+  void RemovePortalDeviceLocked(struct ei_device* device) {
+    if (device == nullptr) {
+      return;
+    }
+    if (device == portal_pointer_device_) {
+      portal_pointer_device_ = ei_device_unref(portal_pointer_device_);
+      portal_pointer_ready_ = false;
+    }
+    if (device == portal_absolute_pointer_device_) {
+      portal_absolute_pointer_device_ =
+          ei_device_unref(portal_absolute_pointer_device_);
+      portal_absolute_pointer_ready_ = false;
+    }
+    if (device == portal_button_device_) {
+      portal_button_device_ = ei_device_unref(portal_button_device_);
+      portal_button_ready_ = false;
+    }
+    if (device == portal_scroll_device_) {
+      portal_scroll_device_ = ei_device_unref(portal_scroll_device_);
+      portal_scroll_ready_ = false;
+    }
+    if (device == portal_keyboard_device_) {
+      portal_keyboard_device_ = ei_device_unref(portal_keyboard_device_);
+      portal_keyboard_ready_ = false;
+    }
+  }
+
+  void MarkPortalDeviceReadyLocked(struct ei_device* device, bool ready) {
+    if (device == nullptr) {
+      return;
+    }
+    if (device == portal_pointer_device_) {
+      portal_pointer_ready_ = ready;
+    }
+    if (device == portal_absolute_pointer_device_) {
+      portal_absolute_pointer_ready_ = ready;
+    }
+    if (device == portal_button_device_) {
+      portal_button_ready_ = ready;
+    }
+    if (device == portal_scroll_device_) {
+      portal_scroll_ready_ = ready;
+    }
+    if (device == portal_keyboard_device_) {
+      portal_keyboard_ready_ = ready;
+    }
+  }
+
+  void AddUniquePortalDevice(std::vector<ei_device*>* devices,
+                             ei_device* device) const {
+    if (device == nullptr) {
+      return;
+    }
+    if (std::find(devices->begin(), devices->end(), device) ==
+        devices->end()) {
+      devices->push_back(device);
+    }
+  }
+
+  std::vector<ei_device*> UniquePortalDevicesLocked() const {
+    std::vector<ei_device*> devices;
+    AddUniquePortalDevice(&devices, portal_pointer_device_);
+    AddUniquePortalDevice(&devices, portal_absolute_pointer_device_);
+    AddUniquePortalDevice(&devices, portal_button_device_);
+    AddUniquePortalDevice(&devices, portal_scroll_device_);
+    AddUniquePortalDevice(&devices, portal_keyboard_device_);
+    return devices;
+  }
+
+  std::vector<ei_device*> UniquePortalReadyDevicesLocked() const {
+    std::vector<ei_device*> devices;
+    if (portal_pointer_ready_) {
+      AddUniquePortalDevice(&devices, portal_pointer_device_);
+    }
+    if (portal_absolute_pointer_ready_) {
+      AddUniquePortalDevice(&devices, portal_absolute_pointer_device_);
+    }
+    if (portal_button_ready_) {
+      AddUniquePortalDevice(&devices, portal_button_device_);
+    }
+    if (portal_scroll_ready_) {
+      AddUniquePortalDevice(&devices, portal_scroll_device_);
+    }
+    if (portal_keyboard_ready_) {
+      AddUniquePortalDevice(&devices, portal_keyboard_device_);
+    }
+    return devices;
+  }
+
+  void ClearPortalInjectionLocked() {
+    if (portal_ei_ != nullptr) {
+      for (auto* device : UniquePortalReadyDevicesLocked()) {
+        ei_device_stop_emulating(device);
+      }
+    }
+    if (portal_pointer_device_ != nullptr) {
+      portal_pointer_device_ = ei_device_unref(portal_pointer_device_);
+    }
+    if (portal_absolute_pointer_device_ != nullptr) {
+      portal_absolute_pointer_device_ =
+          ei_device_unref(portal_absolute_pointer_device_);
+    }
+    if (portal_button_device_ != nullptr) {
+      portal_button_device_ = ei_device_unref(portal_button_device_);
+    }
+    if (portal_scroll_device_ != nullptr) {
+      portal_scroll_device_ = ei_device_unref(portal_scroll_device_);
+    }
+    if (portal_keyboard_device_ != nullptr) {
+      portal_keyboard_device_ = ei_device_unref(portal_keyboard_device_);
+    }
+    ResetPortalDeviceStateLocked();
+    if (portal_ei_ != nullptr) {
+      ei_disconnect(portal_ei_);
+      portal_ei_ = ei_unref(portal_ei_);
+    }
+    if (portal_connection_ != nullptr) {
+      ClosePortalSession(portal_connection_, portal_session_handle_);
+      g_object_unref(portal_connection_);
+      portal_connection_ = nullptr;
+    }
+    portal_session_handle_.clear();
+    if (portal_x_display_ != nullptr) {
+      XCloseDisplay(portal_x_display_);
+      portal_x_display_ = nullptr;
+    }
+  }
+#endif
+
   void StopInjection(const std::string& session_id) {
 #if HAVE_X11_REMOTE_INPUT
+    std::thread portal_thread_to_join;
+#if HAVE_LIBEI_REMOTE_INPUT
+    {
+      std::lock_guard<std::mutex> lock(injection_mutex_);
+      if (!session_id.empty() && session_id != injection_session_id_) {
+        return;
+      }
+      if (injection_backend_ == InjectionBackend::kPortal) {
+        portal_running_.store(false);
+        if (portal_thread_.joinable()) {
+          portal_thread_to_join = std::move(portal_thread_);
+        }
+      }
+    }
+    if (portal_thread_to_join.joinable()) {
+      portal_thread_to_join.join();
+    }
+#endif
     std::lock_guard<std::mutex> lock(injection_mutex_);
     if (!session_id.empty() && session_id != injection_session_id_) {
       return;
@@ -1085,6 +2010,9 @@ class RemoteInputPlugin {
     ReleaseInjectedButtonsLocked();
     ReleaseInjectedKeysLocked();
     ReleaseCommonModifierKeysLocked();
+#if HAVE_LIBEI_REMOTE_INPUT
+    ClearPortalInjectionLocked();
+#endif
     if (injection_display_ != nullptr) {
       XCloseDisplay(injection_display_);
       injection_display_ = nullptr;
@@ -1096,6 +2024,10 @@ class RemoteInputPlugin {
     injection_segment_ = EdgeSegment{};
     injection_routes_.clear();
     injected_cursor_entered_interior_ = false;
+    has_injected_cursor_position_ = false;
+    injected_cursor_x_ = 0;
+    injected_cursor_y_ = 0;
+    injection_backend_ = InjectionBackend::kNone;
 #else
     (void)session_id;
 #endif
@@ -1106,10 +2038,20 @@ class RemoteInputPlugin {
                    const std::vector<uint8_t>& payload) {
 #if HAVE_X11_REMOTE_INPUT
     std::lock_guard<std::mutex> lock(injection_mutex_);
-    if (session_id != injection_session_id_ || injection_display_ == nullptr) {
+    if (session_id != injection_session_id_ ||
+        injection_backend_ == InjectionBackend::kNone) {
       return;
     }
     const std::string json = PayloadString(payload);
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (injection_backend_ == InjectionBackend::kPortal) {
+      InjectPortalEventLocked(event_type, json);
+      return;
+    }
+#endif
+    if (injection_display_ == nullptr) {
+      return;
+    }
     if (event_type == "mouseMove") {
       InjectMouseMoveLocked(json);
       return;
@@ -1146,6 +2088,225 @@ class RemoteInputPlugin {
     (void)payload;
 #endif
   }
+
+#if HAVE_X11_REMOTE_INPUT && HAVE_LIBEI_REMOTE_INPUT
+  void InjectPortalEventLocked(const std::string& event_type,
+                               const std::string& json) {
+    if (event_type == "mouseMove") {
+      InjectPortalMouseMoveLocked(json);
+      return;
+    }
+    if (event_type == "mouseButton") {
+      const int button =
+          static_cast<int>(std::lround(JsonNumber(json, "button")));
+      const bool down = JsonBool(json, "down");
+      SendPortalMouseButtonLocked(button, down);
+      SetInjectedButton(button, down);
+      return;
+    }
+    if (event_type == "mouseWheel") {
+      const int delta_x =
+          static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
+      const int delta_y =
+          static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
+      SendPortalMouseWheelLocked(delta_x, delta_y);
+      return;
+    }
+    if (event_type == "key") {
+      const int linux_key = static_cast<int>(std::lround(
+          JsonNumber(json, "linuxKeyCode", JsonNumber(json, "keyCode"))));
+      const bool down = JsonBool(json, "down");
+      SendPortalKeyboardKeyLocked(linux_key, down);
+      SetInjectedKey(linux_key, down);
+    }
+  }
+
+  void InjectPortalMouseMoveLocked(const std::string& json) {
+    const int delta_x =
+        static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
+    const int delta_y =
+        static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
+    int current_x = 0;
+    int current_y = 0;
+    unsigned int mask = 0;
+    InjectedCursorPositionLocked(&current_x, &current_y, &mask);
+    const bool active_start = JsonBool(json, "activeStart");
+    Maybe<InjectionReleaseRoute> routed_release;
+    if (!active_start && injected_cursor_entered_interior_) {
+      routed_release =
+          ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
+                                         delta_y);
+    }
+    if (routed_release.has_value()) {
+      const std::string session_id = injection_session_id_;
+      const auto release_route = routed_release.value();
+      ReleaseInjectedButtonsLocked();
+      ReleaseInjectedKeysLocked();
+      ReleaseCommonModifierKeysLocked();
+      injected_cursor_entered_interior_ = false;
+      has_injected_cursor_position_ = false;
+      EmitReleaseForSession(
+          session_id, "edge", 0, 0, release_route.edge_unit, true,
+          release_route.route_id, release_route.source_display_id,
+          release_route.source_edge, release_route.source_segment.start,
+          release_route.source_segment.end);
+      return;
+    }
+    if (!active_start && injected_cursor_entered_interior_ &&
+        IsInjectionReverseRelease(json, current_x, current_y, delta_x,
+                                  delta_y)) {
+      const std::string session_id = injection_session_id_;
+      const double edge_unit = InjectionEdgeUnit(current_x, current_y);
+      ReleaseInjectedButtonsLocked();
+      ReleaseInjectedKeysLocked();
+      ReleaseCommonModifierKeysLocked();
+      injected_cursor_entered_interior_ = false;
+      has_injected_cursor_position_ = false;
+      EmitReleaseForSession(session_id, "edge", 0, 0, edge_unit);
+      return;
+    }
+    int final_x = current_x;
+    int final_y = current_y;
+    if (active_start) {
+      SetPortalCursorPosForEntryLocked(json);
+      injected_cursor_entered_interior_ = false;
+      InjectedCursorPositionLocked(&current_x, &current_y, &mask);
+      final_x = current_x;
+      final_y = current_y;
+    }
+    const int buttons =
+        static_cast<int>(std::lround(JsonNumber(json, "buttons", -1)));
+    if (buttons >= 0) {
+      SyncInjectedButtonsLocked(buttons);
+    }
+    if (delta_x != 0 || delta_y != 0) {
+      SendPortalPointerMotionLocked(delta_x, delta_y);
+      if (has_injected_cursor_position_) {
+        final_x = injected_cursor_x_ + delta_x;
+        final_y = injected_cursor_y_ + delta_y;
+      } else {
+        final_x += delta_x;
+        final_y += delta_y;
+      }
+      RememberInjectedCursorPositionLocked(final_x, final_y);
+    }
+    UpdateInjectedCursorInteriorState(json, final_x, final_y);
+  }
+
+  void SetPortalCursorPosForEntryLocked(const std::string& json) {
+    UpdateInjectionRouteFromPayload(json);
+    if (portal_absolute_pointer_device_ == nullptr ||
+        !portal_absolute_pointer_ready_) {
+      return;
+    }
+    const double edge_unit = JsonNumber(json, "edgeUnit", -1);
+    int x = 0;
+    int y = 0;
+    if (edge_unit >= 0 && HasSegment(injection_segment_) &&
+        !injection_edge_.empty()) {
+      const ScreenBounds bounds =
+          BoundsForDisplay(InjectionBoundsDisplayLocked(),
+                           injection_display_id_);
+      const int coordinate = SegmentCoordinate(edge_unit, injection_segment_);
+      x = bounds.left + kCaptureCursorInset;
+      y = ClampInt(coordinate, bounds.top + kCaptureCursorInset,
+                   bounds.bottom() - kCaptureCursorInset);
+      if (injection_edge_ == "right") {
+        x = bounds.right() - kCaptureCursorInset;
+      } else if (injection_edge_ == "top") {
+        x = ClampInt(coordinate, bounds.left + kCaptureCursorInset,
+                     bounds.right() - kCaptureCursorInset);
+        y = bounds.top + kCaptureCursorInset;
+      } else if (injection_edge_ == "bottom") {
+        x = ClampInt(coordinate, bounds.left + kCaptureCursorInset,
+                     bounds.right() - kCaptureCursorInset);
+        y = bounds.bottom() - kCaptureCursorInset;
+      }
+    } else {
+      const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
+      const int unit_width = bounds.width > 1 ? bounds.width - 1 : 1;
+      const int unit_height = bounds.height > 1 ? bounds.height - 1 : 1;
+      const double unit_x = ClampedUnit(JsonNumber(json, "unitX"));
+      const double unit_y = ClampedUnit(JsonNumber(json, "unitY"));
+      const std::string edge = JsonString(json, "edge", "right");
+      x = bounds.left + kCaptureCursorInset;
+      y = ClampInt(
+          bounds.top + static_cast<int>(std::lround(unit_y * unit_height)),
+          bounds.top, bounds.bottom());
+      if (edge == "left") {
+        x = bounds.right() - kCaptureCursorInset;
+      } else if (edge == "top") {
+        x = ClampInt(
+            bounds.left + static_cast<int>(std::lround(unit_x * unit_width)),
+            bounds.left, bounds.right());
+        y = bounds.bottom() - kCaptureCursorInset;
+      } else if (edge == "bottom") {
+        x = ClampInt(
+            bounds.left + static_cast<int>(std::lround(unit_x * unit_width)),
+            bounds.left, bounds.right());
+        y = bounds.top + kCaptureCursorInset;
+      }
+    }
+    ei_device_pointer_motion_absolute(portal_absolute_pointer_device_, x, y);
+    PortalDeviceFrameLocked(portal_absolute_pointer_device_);
+    RememberInjectedCursorPositionLocked(x, y);
+  }
+
+  void PortalDeviceFrameLocked(struct ei_device* device) {
+    if (portal_ei_ == nullptr || device == nullptr) {
+      return;
+    }
+    ei_device_frame(device, ei_now(portal_ei_));
+  }
+
+  void SendPortalPointerMotionLocked(int delta_x, int delta_y) {
+    if (portal_pointer_device_ == nullptr || !portal_pointer_ready_) {
+      return;
+    }
+    ei_device_pointer_motion(portal_pointer_device_, delta_x, delta_y);
+    PortalDeviceFrameLocked(portal_pointer_device_);
+  }
+
+  int EvdevButtonForProtocolButton(int button) const {
+    if (button == 1) {
+      return BTN_RIGHT;
+    }
+    if (button == 2) {
+      return BTN_MIDDLE;
+    }
+    return BTN_LEFT;
+  }
+
+  void SendPortalMouseButtonLocked(int button, bool down) {
+    if (portal_button_device_ == nullptr || !portal_button_ready_) {
+      return;
+    }
+    ei_device_button_button(portal_button_device_,
+                            EvdevButtonForProtocolButton(button), down);
+    PortalDeviceFrameLocked(portal_button_device_);
+  }
+
+  void SendPortalMouseWheelLocked(int delta_x, int delta_y) {
+    if (portal_scroll_device_ == nullptr || !portal_scroll_ready_) {
+      return;
+    }
+    if (delta_x == 0 && delta_y == 0) {
+      return;
+    }
+    ei_device_scroll_discrete(portal_scroll_device_, delta_x, delta_y);
+    PortalDeviceFrameLocked(portal_scroll_device_);
+  }
+
+  void SendPortalKeyboardKeyLocked(int linux_key, bool down) {
+    if (linux_key <= 0 || portal_keyboard_device_ == nullptr ||
+        !portal_keyboard_ready_) {
+      return;
+    }
+    ei_device_keyboard_key(portal_keyboard_device_,
+                           static_cast<uint32_t>(linux_key), down);
+    PortalDeviceFrameLocked(portal_keyboard_device_);
+  }
+#endif
 
 #if HAVE_X11_REMOTE_INPUT
   void CaptureLoop(const std::string& session_id,
@@ -2004,6 +3165,7 @@ class RemoteInputPlugin {
       }
       XTestFakeMotionEvent(injection_display_, DefaultScreen(injection_display_),
                            x, y, CurrentTime);
+      RememberInjectedCursorPositionLocked(x, y);
       return;
     }
     const ScreenBounds bounds = BoundsFor(injection_display_);
@@ -2031,6 +3193,7 @@ class RemoteInputPlugin {
     }
     XTestFakeMotionEvent(injection_display_, DefaultScreen(injection_display_),
                          x, y, CurrentTime);
+    RememberInjectedCursorPositionLocked(x, y);
   }
 
   void InjectMouseMoveLocked(const std::string& json) {
@@ -2041,9 +3204,24 @@ class RemoteInputPlugin {
     int current_x = 0;
     int current_y = 0;
     unsigned int mask = 0;
-    QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
-                 &current_x, &current_y, &mask);
+    InjectedCursorPositionLocked(&current_x, &current_y, &mask);
     const bool active_start = JsonBool(json, "activeStart");
+    if (ShouldTraceRemoteInput()) {
+      std::ostringstream trace;
+      trace << "linux remote input injection move session="
+            << injection_session_id_
+            << " activeStart=" << (active_start ? 1 : 0)
+            << " dx=" << delta_x << " dy=" << delta_y
+            << " current=" << current_x << "," << current_y
+            << " edge=" << (injection_edge_.empty() ? "-" : injection_edge_)
+            << " display="
+            << (injection_display_id_.empty() ? "-" : injection_display_id_)
+            << " segment=" << SegmentTrace(injection_segment_)
+            << " interior="
+            << (injected_cursor_entered_interior_ ? 1 : 0)
+            << " routes=" << injection_routes_.size();
+      TraceRemoteInput(trace.str());
+    }
     Maybe<InjectionReleaseRoute> routed_release;
     if (!active_start && injected_cursor_entered_interior_) {
       routed_release =
@@ -2053,9 +3231,25 @@ class RemoteInputPlugin {
     if (routed_release.has_value()) {
       const std::string session_id = injection_session_id_;
       const auto release_route = routed_release.value();
+      if (ShouldTraceRemoteInput()) {
+        std::ostringstream trace;
+        trace << "linux remote input injection release routed session="
+              << session_id << " requested=" << current_x << "," << current_y
+              << "->" << (current_x + delta_x) << ","
+              << (current_y + delta_y)
+              << " edgeUnit=" << release_route.edge_unit
+              << " route=" << release_route.route_id
+              << " sourceDisplay=" << release_route.source_display_id
+              << " sourceEdge=" << release_route.source_edge
+              << " sourceSegment="
+              << SegmentTrace(release_route.source_segment);
+        TraceRemoteInput(trace.str());
+      }
       ReleaseInjectedButtonsLocked();
       ReleaseInjectedKeysLocked();
       ReleaseCommonModifierKeysLocked();
+      injected_cursor_entered_interior_ = false;
+      has_injected_cursor_position_ = false;
       EmitReleaseForSession(
           session_id, "edge", 0, 0, release_route.edge_unit, true,
           release_route.route_id, release_route.source_display_id,
@@ -2068,9 +3262,22 @@ class RemoteInputPlugin {
                                   delta_y)) {
       const std::string session_id = injection_session_id_;
       const double edge_unit = InjectionEdgeUnit(current_x, current_y);
+      if (ShouldTraceRemoteInput()) {
+        std::ostringstream trace;
+        trace << "linux remote input injection release legacy session="
+              << session_id << " requested=" << current_x << "," << current_y
+              << "->" << (current_x + delta_x) << ","
+              << (current_y + delta_y)
+              << " edgeUnit=" << edge_unit
+              << " edge=" << (injection_edge_.empty() ? "-" : injection_edge_)
+              << " segment=" << SegmentTrace(injection_segment_);
+        TraceRemoteInput(trace.str());
+      }
       ReleaseInjectedButtonsLocked();
       ReleaseInjectedKeysLocked();
       ReleaseCommonModifierKeysLocked();
+      injected_cursor_entered_interior_ = false;
+      has_injected_cursor_position_ = false;
       EmitReleaseForSession(session_id, "edge", 0, 0, edge_unit);
       return;
     }
@@ -2079,8 +3286,7 @@ class RemoteInputPlugin {
     if (active_start) {
       SetCursorPosForEntryLocked(json);
       injected_cursor_entered_interior_ = false;
-      QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
-                   &current_x, &current_y, &mask);
+      InjectedCursorPositionLocked(&current_x, &current_y, &mask);
       final_x = current_x;
       final_y = current_y;
     }
@@ -2092,11 +3298,61 @@ class RemoteInputPlugin {
     if (delta_x != 0 || delta_y != 0) {
       XTestFakeRelativeMotionEvent(injection_display_, delta_x, delta_y,
                                    CurrentTime);
-      final_x += delta_x;
-      final_y += delta_y;
+      if (has_injected_cursor_position_) {
+        final_x = injected_cursor_x_ + delta_x;
+        final_y = injected_cursor_y_ + delta_y;
+      } else {
+        final_x += delta_x;
+        final_y += delta_y;
+      }
+      RememberInjectedCursorPositionLocked(final_x, final_y);
     }
     UpdateInjectedCursorInteriorState(json, final_x, final_y);
     XFlush(injection_display_);
+    if (ShouldTraceRemoteInput()) {
+      int actual_x = final_x;
+      int actual_y = final_y;
+      QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
+                   &actual_x, &actual_y, &mask);
+      std::ostringstream trace;
+      trace << "linux remote input injection applied session="
+            << injection_session_id_
+            << " requested=" << final_x << "," << final_y
+            << " actual=" << actual_x << "," << actual_y
+            << " interior="
+            << (injected_cursor_entered_interior_ ? 1 : 0);
+      TraceRemoteInput(trace.str());
+    }
+  }
+
+  Display* InjectionBoundsDisplayLocked() const {
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (injection_backend_ == InjectionBackend::kPortal) {
+      return portal_x_display_;
+    }
+#endif
+    return injection_display_;
+  }
+
+  void RememberInjectedCursorPositionLocked(int x, int y) {
+    const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
+    injected_cursor_x_ = ClampInt(x, bounds.left, bounds.right());
+    injected_cursor_y_ = ClampInt(y, bounds.top, bounds.bottom());
+    has_injected_cursor_position_ = true;
+  }
+
+  bool InjectedCursorPositionLocked(int* x, int* y, unsigned int* mask) {
+    if (has_injected_cursor_position_) {
+      *x = injected_cursor_x_;
+      *y = injected_cursor_y_;
+      return true;
+    }
+    // XQueryPointer can remain stale under XWayland after XTest injection.
+    Display* display = InjectionBoundsDisplayLocked();
+    if (display == nullptr) {
+      return false;
+    }
+    return QueryPointer(display, DefaultRootWindow(display), x, y, mask);
   }
 
   Maybe<InjectionReleaseRoute> ReverseInjectionSourceEdgeUnit(
@@ -2172,7 +3428,7 @@ class RemoteInputPlugin {
       DoublePoint previous_point,
       DoublePoint current_point) const {
     const ScreenBounds bounds =
-        BoundsForDisplay(injection_display_, route.sink_display_id);
+        BoundsForDisplay(InjectionBoundsDisplayLocked(), route.sink_display_id);
     const double delta_x = current_point.x - previous_point.x;
     const double delta_y = current_point.y - previous_point.y;
     if (delta_x == 0 && delta_y == 0) {
@@ -2252,38 +3508,41 @@ class RemoteInputPlugin {
     if (injection_session_id_.empty() || JsonBool(json, "activeStart")) {
       return false;
     }
+    const int next_x = x + delta_x;
+    const int next_y = y + delta_y;
     if (HasSegment(injection_segment_) && !injection_edge_.empty()) {
       const ScreenBounds bounds =
-          BoundsForDisplay(injection_display_, injection_display_id_);
+          BoundsForDisplay(InjectionBoundsDisplayLocked(),
+                           injection_display_id_);
       if (!PointInSegment(x, y, injection_edge_, injection_segment_,
                           kEdgeThreshold)) {
         return false;
       }
       if (injection_edge_ == "left") {
-        return x <= bounds.left + kEdgeThreshold && delta_x < 0;
+        return x + delta_x <= bounds.left + kEdgeThreshold && delta_x < 0;
       }
       if (injection_edge_ == "right") {
-        return x >= bounds.right() - kEdgeThreshold && delta_x > 0;
+        return next_x >= bounds.right() - kEdgeThreshold && delta_x > 0;
       }
       if (injection_edge_ == "top") {
-        return y <= bounds.top + kEdgeThreshold && delta_y < 0;
+        return next_y <= bounds.top + kEdgeThreshold && delta_y < 0;
       }
       if (injection_edge_ == "bottom") {
-        return y >= bounds.bottom() - kEdgeThreshold && delta_y > 0;
+        return next_y >= bounds.bottom() - kEdgeThreshold && delta_y > 0;
       }
     }
-    const ScreenBounds bounds = BoundsFor(injection_display_);
+    const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
     const std::string edge = JsonString(json, "edge", "right");
     if (edge == "left") {
-      return x >= bounds.right() - kEdgeThreshold && delta_x > 0;
+      return next_x >= bounds.right() - kEdgeThreshold && delta_x > 0;
     }
     if (edge == "top") {
-      return y >= bounds.bottom() - kEdgeThreshold && delta_y > 0;
+      return next_y >= bounds.bottom() - kEdgeThreshold && delta_y > 0;
     }
     if (edge == "bottom") {
-      return y <= bounds.top + kEdgeThreshold && delta_y < 0;
+      return next_y <= bounds.top + kEdgeThreshold && delta_y < 0;
     }
-    return x <= bounds.left + kEdgeThreshold && delta_x < 0;
+    return next_x <= bounds.left + kEdgeThreshold && delta_x < 0;
   }
 
   void UpdateInjectedCursorInteriorState(const std::string& json,
@@ -2300,8 +3559,9 @@ class RemoteInputPlugin {
         HasSegment(injection_segment_) && !injection_edge_.empty();
     const ScreenBounds bounds =
         using_configured_edge
-            ? BoundsForDisplay(injection_display_, injection_display_id_)
-            : BoundsFor(injection_display_);
+            ? BoundsForDisplay(InjectionBoundsDisplayLocked(),
+                               injection_display_id_)
+            : BoundsFor(InjectionBoundsDisplayLocked());
     const std::string edge =
         using_configured_edge ? injection_edge_ : JsonString(json, "edge", "right");
     constexpr int distance = 32;
@@ -2331,11 +3591,23 @@ class RemoteInputPlugin {
   }
 
   void SendMouseButtonLocked(int button, bool down) {
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (injection_backend_ == InjectionBackend::kPortal) {
+      SendPortalMouseButtonLocked(button, down);
+      return;
+    }
+#endif
     XTestFakeButtonEvent(injection_display_, XButtonForProtocolButton(button),
                          down ? True : False, CurrentTime);
   }
 
   void SendMouseWheelLocked(int delta_x, int delta_y) {
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (injection_backend_ == InjectionBackend::kPortal) {
+      SendPortalMouseWheelLocked(delta_x, delta_y);
+      return;
+    }
+#endif
     const int vertical_button = delta_y > 0 ? Button4 : Button5;
     const int horizontal_button = delta_x > 0 ? 7 : 6;
     const int vertical_clicks = std::min(8, std::abs(delta_y) / 120);
@@ -2389,11 +3661,16 @@ class RemoteInputPlugin {
   }
 
   void ReleaseInjectedButtonsLocked() {
-    if (injected_buttons_ == 0 || injection_display_ == nullptr) {
+    if (injection_backend_ == InjectionBackend::kNone ||
+        injected_buttons_ == 0 ||
+        (injection_backend_ == InjectionBackend::kX11 &&
+         injection_display_ == nullptr)) {
       return;
     }
     SyncInjectedButtonsLocked(0);
-    XFlush(injection_display_);
+    if (injection_backend_ == InjectionBackend::kX11) {
+      XFlush(injection_display_);
+    }
   }
 
   void SetInjectedKey(int x_keycode, bool down) {
@@ -2414,26 +3691,47 @@ class RemoteInputPlugin {
   }
 
   void ReleaseInjectedKeysLocked() {
-    if (injected_keys_.empty() || injection_display_ == nullptr) {
+    if (injection_backend_ == InjectionBackend::kNone ||
+        injected_keys_.empty() ||
+        (injection_backend_ == InjectionBackend::kX11 &&
+         injection_display_ == nullptr)) {
       return;
     }
     const auto keys = injected_keys_;
     injected_keys_.clear();
     for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+#if HAVE_LIBEI_REMOTE_INPUT
+      if (injection_backend_ == InjectionBackend::kPortal) {
+        SendPortalKeyboardKeyLocked(*it, false);
+        continue;
+      }
+#endif
       SendKeyboardKeyLocked(*it, false);
     }
-    XFlush(injection_display_);
+    if (injection_backend_ == InjectionBackend::kX11) {
+      XFlush(injection_display_);
+    }
   }
 
   void ReleaseCommonModifierKeysLocked() {
-    if (injection_display_ == nullptr) {
+    if (injection_backend_ == InjectionBackend::kNone ||
+        (injection_backend_ == InjectionBackend::kX11 &&
+         injection_display_ == nullptr)) {
       return;
     }
     constexpr int linux_modifiers[] = {29, 97, 42, 54, 56, 100, 125, 126};
     for (const int linux_key : linux_modifiers) {
+#if HAVE_LIBEI_REMOTE_INPUT
+      if (injection_backend_ == InjectionBackend::kPortal) {
+        SendPortalKeyboardKeyLocked(linux_key, false);
+        continue;
+      }
+#endif
       SendKeyboardKeyLocked(linux_key + 8, false);
     }
-    XFlush(injection_display_);
+    if (injection_backend_ == InjectionBackend::kX11) {
+      XFlush(injection_display_);
+    }
   }
 #endif
 
@@ -2563,6 +3861,7 @@ class RemoteInputPlugin {
   EdgeSegment capture_pause_release_segment_;
 
   std::mutex injection_mutex_;
+  InjectionBackend injection_backend_ = InjectionBackend::kNone;
   Display* injection_display_ = nullptr;
   std::string injection_session_id_;
   std::string injection_display_id_;
@@ -2571,8 +3870,30 @@ class RemoteInputPlugin {
   EdgeSegment injection_segment_;
   std::vector<InjectionRoute> injection_routes_;
   bool injected_cursor_entered_interior_ = false;
+  bool has_injected_cursor_position_ = false;
+  int injected_cursor_x_ = 0;
+  int injected_cursor_y_ = 0;
   int injected_buttons_ = 0;
   std::vector<int> injected_keys_;
+#if HAVE_LIBEI_REMOTE_INPUT
+  GDBusConnection* portal_connection_ = nullptr;
+  std::string portal_session_handle_;
+  struct ei* portal_ei_ = nullptr;
+  Display* portal_x_display_ = nullptr;
+  std::thread portal_thread_;
+  std::atomic<bool> portal_running_{false};
+  struct ei_device* portal_pointer_device_ = nullptr;
+  struct ei_device* portal_absolute_pointer_device_ = nullptr;
+  struct ei_device* portal_button_device_ = nullptr;
+  struct ei_device* portal_scroll_device_ = nullptr;
+  struct ei_device* portal_keyboard_device_ = nullptr;
+  bool portal_pointer_ready_ = false;
+  bool portal_absolute_pointer_ready_ = false;
+  bool portal_button_ready_ = false;
+  bool portal_scroll_ready_ = false;
+  bool portal_keyboard_ready_ = false;
+  uint32_t portal_emulation_sequence_ = 0;
+#endif
 #endif
 };
 
