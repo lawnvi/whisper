@@ -4,6 +4,7 @@
 #include <flutter_windows.h>
 
 #include "resource.h"
+#include "single_instance.h"
 
 namespace {
 
@@ -16,7 +17,7 @@ namespace {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr const wchar_t kWindowClassName[] = L"WHISPER_RUNNER_WIN32_WINDOW";
 
 /// Registry key for app theme preference.
 ///
@@ -120,6 +121,10 @@ Win32Window::~Win32Window() {
   Destroy();
 }
 
+const wchar_t* Win32Window::GetWindowClassName() {
+  return kWindowClassName;
+}
+
 bool Win32Window::Create(const std::wstring& title,
                          const Point& origin,
                          const Size& size) {
@@ -180,6 +185,21 @@ Win32Window::MessageHandler(HWND hwnd,
                             UINT const message,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
+  const UINT single_instance_wake_message = GetSingleInstanceWakeMessage();
+  if (single_instance_wake_message != 0 &&
+      message == single_instance_wake_message) {
+    if (IsIconic(hwnd)) {
+      ShowWindow(hwnd, SW_RESTORE);
+    } else {
+      ShowWindow(hwnd, SW_SHOWNORMAL);
+    }
+    SetForegroundWindow(hwnd);
+    if (child_content_ != nullptr) {
+      SetFocus(child_content_);
+    }
+    return 0;
+  }
+
   switch (message) {
     case WM_DESTROY:
       window_handle_ = nullptr;
