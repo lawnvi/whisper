@@ -425,6 +425,8 @@ constexpr char kPortalBusName[] = "org.freedesktop.portal.Desktop";
 constexpr char kPortalObjectPath[] = "/org/freedesktop/portal/desktop";
 constexpr char kPortalRemoteDesktopInterface[] =
     "org.freedesktop.portal.RemoteDesktop";
+constexpr char kPortalInputCaptureInterface[] =
+    "org.freedesktop.portal.InputCapture";
 constexpr uint32_t kPortalKeyboardDevice = 1;
 constexpr uint32_t kPortalPointerDevice = 2;
 
@@ -525,14 +527,15 @@ std::string StringFromVariantDict(GVariant* dict, const char* key) {
   return result;
 }
 
-bool PortalPropertyUint32(GDBusConnection* connection,
-                          const char* property,
-                          uint32_t* value) {
+bool PortalPropertyUint32ForInterface(GDBusConnection* connection,
+                                      const char* interface,
+                                      const char* property,
+                                      uint32_t* value) {
   GError* error = nullptr;
   GVariant* result = g_dbus_connection_call_sync(
       connection, kPortalBusName, kPortalObjectPath,
       "org.freedesktop.DBus.Properties", "Get",
-      g_variant_new("(ss)", kPortalRemoteDesktopInterface, property),
+      g_variant_new("(ss)", interface, property),
       G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, 500, nullptr, &error);
   if (result == nullptr) {
     if (error != nullptr) {
@@ -553,6 +556,13 @@ bool PortalPropertyUint32(GDBusConnection* connection,
   g_variant_unref(variant);
   g_variant_unref(result);
   return true;
+}
+
+bool PortalPropertyUint32(GDBusConnection* connection,
+                          const char* property,
+                          uint32_t* value) {
+  return PortalPropertyUint32ForInterface(
+      connection, kPortalRemoteDesktopInterface, property, value);
 }
 
 bool RemoteDesktopPortalAvailable() {
@@ -577,19 +587,67 @@ bool RemoteDesktopPortalAvailable() {
   return available;
 }
 
-std::string PortalRestoreTokenPath() {
+bool InputCapturePortalAvailable() {
+  GError* error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (connection == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return false;
+  }
+  uint32_t version = 0;
+  uint32_t capabilities = 0;
+  const bool available =
+      PortalPropertyUint32ForInterface(connection, kPortalInputCaptureInterface,
+                                       "version", &version) &&
+      PortalPropertyUint32ForInterface(connection, kPortalInputCaptureInterface,
+                                       "SupportedCapabilities",
+                                       &capabilities) &&
+      version >= 1 &&
+      (capabilities & (kPortalKeyboardDevice | kPortalPointerDevice)) ==
+          (kPortalKeyboardDevice | kPortalPointerDevice);
+  g_object_unref(connection);
+  return available;
+}
+
+uint32_t InputCapturePortalVersion() {
+  GError* error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (connection == nullptr) {
+    if (error != nullptr) {
+      g_error_free(error);
+    }
+    return 0;
+  }
+  uint32_t version = 0;
+  PortalPropertyUint32ForInterface(connection, kPortalInputCaptureInterface,
+                                   "version", &version);
+  g_object_unref(connection);
+  return version;
+}
+
+std::string PortalRestoreTokenPathForFile(const char* filename) {
   gchar* directory =
       g_build_filename(g_get_user_config_dir(), "whisper", nullptr);
-  gchar* path =
-      g_build_filename(directory, "remote-input-portal-token", nullptr);
+  gchar* path = g_build_filename(directory, filename, nullptr);
   std::string result = path == nullptr ? "" : path;
   g_free(path);
   g_free(directory);
   return result;
 }
 
-std::string LoadPortalRestoreToken() {
-  const std::string path = PortalRestoreTokenPath();
+std::string PortalRestoreTokenPath() {
+  return PortalRestoreTokenPathForFile("remote-input-portal-token");
+}
+
+std::string InputCapturePortalRestoreTokenPath() {
+  return PortalRestoreTokenPathForFile("input-capture-portal-token");
+}
+
+std::string LoadPortalRestoreTokenFromPath(const std::string& path) {
   if (path.empty()) {
     return "";
   }
@@ -605,7 +663,16 @@ std::string LoadPortalRestoreToken() {
   return result;
 }
 
-void SavePortalRestoreToken(const std::string& token) {
+std::string LoadPortalRestoreToken() {
+  return LoadPortalRestoreTokenFromPath(PortalRestoreTokenPath());
+}
+
+std::string LoadInputCapturePortalRestoreToken() {
+  return LoadPortalRestoreTokenFromPath(InputCapturePortalRestoreTokenPath());
+}
+
+void SavePortalRestoreTokenToPath(const std::string& path,
+                                  const std::string& token) {
   if (token.empty()) {
     return;
   }
@@ -615,26 +682,32 @@ void SavePortalRestoreToken(const std::string& token) {
     return;
   }
   g_mkdir_with_parents(directory, 0700);
-  gchar* path =
-      g_build_filename(directory, "remote-input-portal-token", nullptr);
-  if (path != nullptr) {
-    g_file_set_contents(path, token.c_str(),
+  if (!path.empty()) {
+    g_file_set_contents(path.c_str(), token.c_str(),
                         static_cast<gssize>(token.size()), nullptr);
-    g_free(path);
   }
   g_free(directory);
 }
 
-bool PortalRequest(GDBusConnection* connection,
-                   const char* method,
-                   GVariant* parameters,
-                   int timeout_ms,
-                   PortalResponse* response,
-                   std::string* error) {
+void SavePortalRestoreToken(const std::string& token) {
+  SavePortalRestoreTokenToPath(PortalRestoreTokenPath(), token);
+}
+
+void SaveInputCapturePortalRestoreToken(const std::string& token) {
+  SavePortalRestoreTokenToPath(InputCapturePortalRestoreTokenPath(), token);
+}
+
+bool PortalRequestForInterface(GDBusConnection* connection,
+                               const char* interface,
+                               const char* method,
+                               GVariant* parameters,
+                               int timeout_ms,
+                               PortalResponse* response,
+                               std::string* error) {
   GError* call_error = nullptr;
   GVariant* result = g_dbus_connection_call_sync(
-      connection, kPortalBusName, kPortalObjectPath,
-      kPortalRemoteDesktopInterface, method, parameters, G_VARIANT_TYPE("(o)"),
+      connection, kPortalBusName, kPortalObjectPath, interface, method,
+      parameters, G_VARIANT_TYPE("(o)"),
       G_DBUS_CALL_FLAGS_NONE, timeout_ms, nullptr, &call_error);
   if (result == nullptr) {
     if (call_error != nullptr) {
@@ -652,23 +725,70 @@ bool PortalRequest(GDBusConnection* connection,
   return WaitPortalResponse(connection, path, timeout_ms, response, error);
 }
 
+bool PortalRequest(GDBusConnection* connection,
+                   const char* method,
+                   GVariant* parameters,
+                   int timeout_ms,
+                   PortalResponse* response,
+                   std::string* error) {
+  return PortalRequestForInterface(connection, kPortalRemoteDesktopInterface,
+                                   method, parameters, timeout_ms, response,
+                                   error);
+}
+
 struct PortalSession {
   GDBusConnection* connection = nullptr;
   std::string session_handle;
   int eis_fd = -1;
 };
 
-bool ConnectToEis(GDBusConnection* connection,
-                  const std::string& session_handle,
-                  int* eis_fd,
-                  std::string* error) {
+struct PortalZone {
+  uint32_t width = 0;
+  uint32_t height = 0;
+  int32_t x = 0;
+  int32_t y = 0;
+};
+
+bool Uint32FromVariantDict(GVariant* dict, const char* key, uint32_t* value) {
+  if (dict == nullptr) {
+    return false;
+  }
+  GVariant* variant = g_variant_lookup_value(dict, key, G_VARIANT_TYPE_UINT32);
+  if (variant == nullptr) {
+    return false;
+  }
+  *value = g_variant_get_uint32(variant);
+  g_variant_unref(variant);
+  return true;
+}
+
+bool DoublePairFromVariantDict(GVariant* dict,
+                               const char* key,
+                               double* x,
+                               double* y) {
+  if (dict == nullptr) {
+    return false;
+  }
+  GVariant* variant = g_variant_lookup_value(dict, key, G_VARIANT_TYPE("(dd)"));
+  if (variant == nullptr) {
+    return false;
+  }
+  g_variant_get(variant, "(dd)", x, y);
+  g_variant_unref(variant);
+  return true;
+}
+
+bool ConnectToEisForInterface(GDBusConnection* connection,
+                              const char* interface,
+                              const std::string& session_handle,
+                              int* eis_fd,
+                              std::string* error) {
   GVariantBuilder options;
   g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
   GError* call_error = nullptr;
   GUnixFDList* fd_list = nullptr;
   GVariant* result = g_dbus_connection_call_with_unix_fd_list_sync(
-      connection, kPortalBusName, kPortalObjectPath,
-      kPortalRemoteDesktopInterface, "ConnectToEIS",
+      connection, kPortalBusName, kPortalObjectPath, interface, "ConnectToEIS",
       g_variant_new("(oa{sv})", session_handle.c_str(), &options),
       G_VARIANT_TYPE("(h)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &fd_list,
       nullptr, &call_error);
@@ -705,6 +825,14 @@ bool ConnectToEis(GDBusConnection* connection,
   }
   *eis_fd = fd;
   return true;
+}
+
+bool ConnectToEis(GDBusConnection* connection,
+                  const std::string& session_handle,
+                  int* eis_fd,
+                  std::string* error) {
+  return ConnectToEisForInterface(connection, kPortalRemoteDesktopInterface,
+                                  session_handle, eis_fd, error);
 }
 
 void ClosePortalSession(GDBusConnection* connection,
@@ -815,6 +943,281 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
   session->session_handle = session_handle;
   session->eis_fd = eis_fd;
   return true;
+}
+
+bool StartInputCapturePortalSessionV2(PortalSession* session,
+                                      std::vector<PortalZone>* zones,
+                                      uint32_t* zone_set,
+                                      std::string* error) {
+  GError* bus_error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  if (connection == nullptr) {
+    if (bus_error != nullptr) {
+      *error = bus_error->message == nullptr ? "" : bus_error->message;
+      g_error_free(bus_error);
+    } else {
+      *error = "Unable to connect to Linux session bus";
+    }
+    return false;
+  }
+
+  GVariantBuilder create_options;
+  g_variant_builder_init(&create_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &create_options, "{sv}", "session_handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_session").c_str()));
+  GError* create_error = nullptr;
+  GVariant* create_result = g_dbus_connection_call_sync(
+      connection, kPortalBusName, kPortalObjectPath,
+      kPortalInputCaptureInterface, "CreateSession2",
+      g_variant_new("(a{sv})", &create_options), G_VARIANT_TYPE("(a{sv})"),
+      G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &create_error);
+  if (create_result == nullptr) {
+    if (create_error != nullptr) {
+      *error = create_error->message == nullptr ? "" : create_error->message;
+      g_error_free(create_error);
+    } else {
+      *error = "Unable to create Linux input capture portal session";
+    }
+    g_object_unref(connection);
+    return false;
+  }
+  GVariant* create_results = nullptr;
+  g_variant_get(create_result, "(@a{sv})", &create_results);
+  g_variant_unref(create_result);
+  const std::string session_handle =
+      StringFromVariantDict(create_results, "session_handle");
+  if (create_results != nullptr) {
+    g_variant_unref(create_results);
+  }
+  if (session_handle.empty()) {
+    *error = "Linux input capture portal did not return a session";
+    g_object_unref(connection);
+    return false;
+  }
+
+  PortalResponse start_response;
+  GVariantBuilder start_options;
+  g_variant_builder_init(&start_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &start_options, "{sv}", "handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_start").c_str()));
+  g_variant_builder_add(
+      &start_options, "{sv}", "capabilities",
+      g_variant_new_uint32(kPortalKeyboardDevice | kPortalPointerDevice));
+  g_variant_builder_add(&start_options, "{sv}", "persist_mode",
+                        g_variant_new_uint32(2));
+  const std::string restore_token = LoadInputCapturePortalRestoreToken();
+  if (!restore_token.empty()) {
+    g_variant_builder_add(&start_options, "{sv}", "restore_token",
+                          g_variant_new_string(restore_token.c_str()));
+  }
+  if (!PortalRequestForInterface(
+          connection, kPortalInputCaptureInterface, "Start",
+          g_variant_new("(osa{sv})", session_handle.c_str(), "",
+                        &start_options),
+          30000, &start_response, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+  uint32_t capabilities = 0;
+  const bool has_capabilities =
+      Uint32FromVariantDict(start_response.results, "capabilities",
+                            &capabilities);
+  const std::string next_restore_token =
+      StringFromVariantDict(start_response.results, "restore_token");
+  if (!next_restore_token.empty()) {
+    SaveInputCapturePortalRestoreToken(next_restore_token);
+  }
+  g_variant_unref(start_response.results);
+  if (has_capabilities &&
+      (capabilities & (kPortalKeyboardDevice | kPortalPointerDevice)) !=
+          (kPortalKeyboardDevice | kPortalPointerDevice)) {
+    *error = "Linux input capture portal did not grant keyboard and pointer";
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  int eis_fd = -1;
+  if (!ConnectToEisForInterface(connection, kPortalInputCaptureInterface,
+                                session_handle, &eis_fd, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  PortalResponse zones_response;
+  GVariantBuilder zones_options;
+  g_variant_builder_init(&zones_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &zones_options, "{sv}", "handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_zones").c_str()));
+  if (!PortalRequestForInterface(
+          connection, kPortalInputCaptureInterface, "GetZones",
+          g_variant_new("(oa{sv})", session_handle.c_str(), &zones_options),
+          3000, &zones_response, error)) {
+    close(eis_fd);
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+  GVariant* zones_value =
+      g_variant_lookup_value(zones_response.results, "zones",
+                             G_VARIANT_TYPE("a(uuii)"));
+  if (zones_value != nullptr) {
+    GVariantIter iter;
+    g_variant_iter_init(&iter, zones_value);
+    guint32 width = 0;
+    guint32 height = 0;
+    gint32 x = 0;
+    gint32 y = 0;
+    while (g_variant_iter_loop(&iter, "(uuii)", &width, &height, &x, &y)) {
+      if (width > 0 && height > 0) {
+        zones->push_back(PortalZone{width, height, x, y});
+      }
+    }
+    g_variant_unref(zones_value);
+  }
+  Uint32FromVariantDict(zones_response.results, "zone_set", zone_set);
+  g_variant_unref(zones_response.results);
+  if (zones->empty()) {
+    close(eis_fd);
+    *error = "Linux input capture portal did not return input zones";
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  session->connection = connection;
+  session->session_handle = session_handle;
+  session->eis_fd = eis_fd;
+  return true;
+}
+
+bool StartInputCapturePortalSessionV1(PortalSession* session,
+                                      std::vector<PortalZone>* zones,
+                                      uint32_t* zone_set,
+                                      std::string* error) {
+  GError* bus_error = nullptr;
+  GDBusConnection* connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
+  if (connection == nullptr) {
+    if (bus_error != nullptr) {
+      *error = bus_error->message == nullptr ? "" : bus_error->message;
+      g_error_free(bus_error);
+    } else {
+      *error = "Unable to connect to Linux session bus";
+    }
+    return false;
+  }
+
+  PortalResponse create_response;
+  GVariantBuilder create_options;
+  g_variant_builder_init(&create_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &create_options, "{sv}", "handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_create").c_str()));
+  g_variant_builder_add(
+      &create_options, "{sv}", "session_handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_session").c_str()));
+  g_variant_builder_add(
+      &create_options, "{sv}", "capabilities",
+      g_variant_new_uint32(kPortalKeyboardDevice | kPortalPointerDevice));
+  if (!PortalRequestForInterface(
+          connection, kPortalInputCaptureInterface, "CreateSession",
+          g_variant_new("(sa{sv})", "", &create_options), 30000,
+          &create_response, error)) {
+    g_object_unref(connection);
+    return false;
+  }
+  const std::string session_handle =
+      StringFromVariantDict(create_response.results, "session_handle");
+  uint32_t capabilities = 0;
+  const bool has_capabilities =
+      Uint32FromVariantDict(create_response.results, "capabilities",
+                            &capabilities);
+  g_variant_unref(create_response.results);
+  if (session_handle.empty()) {
+    *error = "Linux input capture portal did not return a session";
+    g_object_unref(connection);
+    return false;
+  }
+  if (has_capabilities &&
+      (capabilities & (kPortalKeyboardDevice | kPortalPointerDevice)) !=
+      (kPortalKeyboardDevice | kPortalPointerDevice)) {
+    *error = "Linux input capture portal did not grant keyboard and pointer";
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  int eis_fd = -1;
+  if (!ConnectToEisForInterface(connection, kPortalInputCaptureInterface,
+                                session_handle, &eis_fd, error)) {
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  PortalResponse zones_response;
+  GVariantBuilder zones_options;
+  g_variant_builder_init(&zones_options, G_VARIANT_TYPE_VARDICT);
+  g_variant_builder_add(
+      &zones_options, "{sv}", "handle_token",
+      g_variant_new_string(PortalHandleToken("whisper_capture_zones").c_str()));
+  if (!PortalRequestForInterface(
+          connection, kPortalInputCaptureInterface, "GetZones",
+          g_variant_new("(oa{sv})", session_handle.c_str(), &zones_options),
+          3000, &zones_response, error)) {
+    close(eis_fd);
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+  GVariant* zones_value =
+      g_variant_lookup_value(zones_response.results, "zones",
+                             G_VARIANT_TYPE("a(uuii)"));
+  if (zones_value != nullptr) {
+    GVariantIter iter;
+    g_variant_iter_init(&iter, zones_value);
+    guint32 width = 0;
+    guint32 height = 0;
+    gint32 x = 0;
+    gint32 y = 0;
+    while (g_variant_iter_loop(&iter, "(uuii)", &width, &height, &x, &y)) {
+      if (width > 0 && height > 0) {
+        zones->push_back(PortalZone{width, height, x, y});
+      }
+    }
+    g_variant_unref(zones_value);
+  }
+  Uint32FromVariantDict(zones_response.results, "zone_set", zone_set);
+  g_variant_unref(zones_response.results);
+  if (zones->empty()) {
+    close(eis_fd);
+    *error = "Linux input capture portal did not return input zones";
+    ClosePortalSession(connection, session_handle);
+    g_object_unref(connection);
+    return false;
+  }
+
+  session->connection = connection;
+  session->session_handle = session_handle;
+  session->eis_fd = eis_fd;
+  return true;
+}
+
+bool StartInputCapturePortalSession(PortalSession* session,
+                                    std::vector<PortalZone>* zones,
+                                    uint32_t* zone_set,
+                                    std::string* error) {
+  if (InputCapturePortalVersion() >= 2) {
+    return StartInputCapturePortalSessionV2(session, zones, zone_set, error);
+  }
+  return StartInputCapturePortalSessionV1(session, zones, zone_set, error);
 }
 #endif
 
@@ -955,6 +1358,15 @@ struct CaptureCrossing {
   double travel_to_intersection = 0;
 };
 
+struct InputCaptureBarrier {
+  uint32_t id = 0;
+  CaptureRoute route;
+  int x1 = 0;
+  int y1 = 0;
+  int x2 = 0;
+  int y2 = 0;
+};
+
 struct InjectionReleaseCrossing {
   InjectionRoute route;
   double edge_unit = 0;
@@ -972,6 +1384,12 @@ struct DisplayInfo {
 };
 
 enum class InjectionBackend {
+  kNone,
+  kX11,
+  kPortal,
+};
+
+enum class CaptureBackend {
   kNone,
   kX11,
   kPortal,
@@ -1263,14 +1681,17 @@ std::string MouseWheelPayload(int delta_x, int delta_y) {
   return json.str();
 }
 
-std::string KeyPayload(unsigned int x_keycode, bool down) {
-  const int linux_keycode = static_cast<int>(x_keycode) - 8;
+std::string LinuxKeyPayload(int linux_keycode, bool down) {
   std::ostringstream json;
   json << "{\"sourcePlatform\":\"linux\""
        << ",\"keyCode\":" << linux_keycode
        << ",\"linuxKeyCode\":" << linux_keycode
        << ",\"down\":" << (down ? "true" : "false") << "}";
   return json.str();
+}
+
+std::string KeyPayload(unsigned int x_keycode, bool down) {
+  return LinuxKeyPayload(static_cast<int>(x_keycode) - 8, down);
 }
 #endif
 
@@ -1407,9 +1828,40 @@ class RemoteInputPlugin {
                     std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
     StopCapture("");
+    bool portal_attempted = false;
+    if (TryStartPortalCapture(session_id, edge, display_id, segment, routes,
+                              release_hotkey, &portal_attempted, error)) {
+      return true;
+    }
+    if (portal_attempted) {
+      return false;
+    }
+    return StartX11Capture(session_id, edge, display_id, segment,
+                           std::move(routes), release_hotkey, error);
+#else
+    (void)session_id;
+    (void)edge;
+    (void)display_id;
+    (void)segment;
+    (void)routes;
+    (void)release_hotkey;
+    *error = "X11 remote input support is not available in this Linux build";
+    return false;
+#endif
+  }
+
+  bool StartX11Capture(const std::string& session_id,
+                       const std::string& edge,
+                       const std::string& display_id,
+                       EdgeSegment segment,
+                       std::vector<CaptureRoute> routes,
+                       const std::string& release_hotkey,
+                       std::string* error) {
+#if HAVE_X11_REMOTE_INPUT
     capture_running_.store(true);
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
+      capture_backend_ = CaptureBackend::kX11;
       capture_session_id_ = session_id;
       capture_edge_ = edge;
       capture_display_id_ = display_id;
@@ -1441,6 +1893,24 @@ class RemoteInputPlugin {
 
   void StopCapture(const std::string& session_id) {
 #if HAVE_X11_REMOTE_INPUT
+    std::thread portal_thread_to_join;
+#if HAVE_LIBEI_REMOTE_INPUT
+    {
+      std::lock_guard<std::mutex> lock(capture_mutex_);
+      if (!session_id.empty() && session_id != capture_session_id_) {
+        return;
+      }
+      if (capture_backend_ == CaptureBackend::kPortal) {
+        input_capture_running_.store(false);
+        if (input_capture_thread_.joinable()) {
+          portal_thread_to_join = std::move(input_capture_thread_);
+        }
+      }
+    }
+    if (portal_thread_to_join.joinable()) {
+      portal_thread_to_join.join();
+    }
+#endif
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
       if (!session_id.empty() && session_id != capture_session_id_) {
@@ -1452,6 +1922,10 @@ class RemoteInputPlugin {
       capture_thread_.join();
     }
     std::lock_guard<std::mutex> lock(capture_mutex_);
+#if HAVE_LIBEI_REMOTE_INPUT
+    ClearInputCapturePortalLocked();
+#endif
+    capture_backend_ = CaptureBackend::kNone;
     capture_session_id_.clear();
     capture_route_id_.clear();
     capture_display_id_.clear();
@@ -1479,6 +1953,14 @@ class RemoteInputPlugin {
     if (session_id != capture_session_id_) {
       return;
     }
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (capture_backend_ == CaptureBackend::kPortal) {
+      ReleaseInputCapturePortalLocked(release_edge_unit, release_display_id,
+                                      release_edge, release_segment,
+                                      release_route_id);
+      return;
+    }
+#endif
     capture_pause_requested_ = true;
     capture_pause_release_sequence_ = release_sequence;
     capture_pause_release_activation_sequence_ = release_activation_sequence;
@@ -1498,6 +1980,860 @@ class RemoteInputPlugin {
     (void)release_route_id;
 #endif
   }
+
+  bool TryStartPortalCapture(const std::string& session_id,
+                             const std::string& edge,
+                             const std::string& display_id,
+                             EdgeSegment segment,
+                             std::vector<CaptureRoute> routes,
+                             const std::string& release_hotkey,
+                             bool* attempted,
+                             std::string* error) {
+#if HAVE_LIBEI_REMOTE_INPUT
+    (void)release_hotkey;
+    *attempted = false;
+    if (!InputCapturePortalAvailable()) {
+      return false;
+    }
+    *attempted = true;
+    return StartPortalCapture(session_id, edge, display_id, segment,
+                              std::move(routes), error);
+#else
+    (void)session_id;
+    (void)edge;
+    (void)display_id;
+    (void)segment;
+    (void)routes;
+    (void)release_hotkey;
+    (void)error;
+    *attempted = false;
+    return false;
+#endif
+  }
+
+#if HAVE_LIBEI_REMOTE_INPUT
+  bool StartPortalCapture(const std::string& session_id,
+                          const std::string& edge,
+                          const std::string& display_id,
+                          EdgeSegment segment,
+                          std::vector<CaptureRoute> routes,
+                          std::string* error) {
+    PortalSession session;
+    std::vector<PortalZone> zones;
+    uint32_t zone_set = 0;
+    if (!StartInputCapturePortalSession(&session, &zones, &zone_set, error)) {
+      return false;
+    }
+    Display* x_display = XOpenDisplay(nullptr);
+    std::vector<InputCaptureBarrier> barriers =
+        BuildInputCaptureBarriers(x_display, zones, display_id, edge, segment,
+                                  routes);
+    if (barriers.empty()) {
+      *error = "Linux input capture portal did not expose a usable edge";
+      if (session.eis_fd >= 0) {
+        close(session.eis_fd);
+      }
+      if (x_display != nullptr) {
+        XCloseDisplay(x_display);
+      }
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+    if (!SetInputCapturePointerBarriers(session.connection,
+                                        session.session_handle, barriers,
+                                        zone_set, error)) {
+      if (session.eis_fd >= 0) {
+        close(session.eis_fd);
+      }
+      if (x_display != nullptr) {
+        XCloseDisplay(x_display);
+      }
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+
+    struct ei* portal_ei = ei_new_receiver(nullptr);
+    if (portal_ei == nullptr) {
+      *error = "Unable to create Linux input capture client";
+      if (session.eis_fd >= 0) {
+        close(session.eis_fd);
+      }
+      if (x_display != nullptr) {
+        XCloseDisplay(x_display);
+      }
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+    ei_configure_name(portal_ei, "Whisper");
+    const int setup_result = ei_setup_backend_fd(portal_ei, session.eis_fd);
+    session.eis_fd = -1;
+    if (setup_result < 0) {
+      *error = "Unable to connect Linux input capture client";
+      ei_unref(portal_ei);
+      if (x_display != nullptr) {
+        XCloseDisplay(x_display);
+      }
+      ClosePortalSession(session.connection, session.session_handle);
+      g_object_unref(session.connection);
+      return false;
+    }
+
+    const guint activated_signal_id = g_dbus_connection_signal_subscribe(
+        session.connection, kPortalBusName, kPortalInputCaptureInterface,
+        "Activated", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        InputCaptureActivatedCallback, this, nullptr);
+    const guint deactivated_signal_id = g_dbus_connection_signal_subscribe(
+        session.connection, kPortalBusName, kPortalInputCaptureInterface,
+        "Deactivated", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        InputCaptureDeactivatedCallback, this, nullptr);
+    const guint disabled_signal_id = g_dbus_connection_signal_subscribe(
+        session.connection, kPortalBusName, kPortalInputCaptureInterface,
+        "Disabled", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        InputCaptureDisabledCallback, this, nullptr);
+    const guint zones_changed_signal_id = g_dbus_connection_signal_subscribe(
+        session.connection, kPortalBusName, kPortalInputCaptureInterface,
+        "ZonesChanged", kPortalObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        InputCaptureZonesChangedCallback, this, nullptr);
+
+    {
+      std::lock_guard<std::mutex> lock(capture_mutex_);
+      capture_backend_ = CaptureBackend::kPortal;
+      capture_session_id_ = session_id;
+      capture_edge_ = edge;
+      capture_display_id_ = display_id;
+      capture_segment_ = segment;
+      capture_route_id_.clear();
+      capture_routes_ = routes;
+      capture_pause_release_display_id_.clear();
+      capture_pause_release_edge_.clear();
+      capture_pause_release_route_id_.clear();
+      capture_pause_release_segment_ = EdgeSegment{};
+      input_capture_connection_ = session.connection;
+      input_capture_session_handle_ = session.session_handle;
+      input_capture_ei_ = portal_ei;
+      input_capture_x_display_ = x_display;
+      input_capture_barriers_ = barriers;
+      input_capture_zone_set_ = zone_set;
+      input_capture_activated_signal_id_ = activated_signal_id;
+      input_capture_deactivated_signal_id_ = deactivated_signal_id;
+      input_capture_disabled_signal_id_ = disabled_signal_id;
+      input_capture_zones_changed_signal_id_ = zones_changed_signal_id;
+      ResetInputCaptureStateLocked();
+      capture_running_.store(true);
+      input_capture_running_.store(true);
+    }
+    input_capture_thread_ = std::thread([this, session_id] {
+      InputCaptureEventLoop(session_id);
+    });
+    if (!EnableInputCapturePortal(session.connection, session.session_handle,
+                                  error)) {
+      StopCapture(session_id);
+      return false;
+    }
+    TraceRemoteInput("linux remote input portal capture started session=" +
+                     session_id + " barriers=" +
+                     std::to_string(barriers.size()));
+    EmitDiagnosticForSession(session_id,
+                             "linux remote input portal capture started");
+    return true;
+  }
+
+  bool EnableInputCapturePortal(GDBusConnection* connection,
+                                const std::string& session_handle,
+                                std::string* error) {
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+    GError* call_error = nullptr;
+    GVariant* result = g_dbus_connection_call_sync(
+        connection, kPortalBusName, kPortalObjectPath,
+        kPortalInputCaptureInterface, "Enable",
+        g_variant_new("(oa{sv})", session_handle.c_str(), &options), nullptr,
+        G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &call_error);
+    if (result == nullptr) {
+      if (call_error != nullptr) {
+        *error = call_error->message == nullptr ? "" : call_error->message;
+        g_error_free(call_error);
+      } else {
+        *error = "Unable to enable Linux input capture portal";
+      }
+      return false;
+    }
+    g_variant_unref(result);
+    return true;
+  }
+
+  void ResetInputCaptureStateLocked() {
+    input_capture_active_ = false;
+    input_capture_pending_active_start_ = false;
+    input_capture_activation_id_ = 0;
+    input_capture_sequence_ = 0;
+    input_capture_activation_sequence_ = 0;
+    input_capture_buttons_ = 0;
+    input_capture_x_ = 0;
+    input_capture_y_ = 0;
+    input_capture_activation_edge_unit_ = -1;
+    input_capture_active_route_id_.clear();
+    input_capture_active_display_id_ = capture_display_id_;
+    input_capture_active_edge_ = capture_edge_;
+    input_capture_active_segment_ = capture_segment_;
+    input_capture_active_bounds_ =
+        BoundsForDisplay(input_capture_x_display_, input_capture_active_display_id_);
+  }
+
+  bool PortalZonesTouchOnEdge(const PortalZone& zone,
+                              const PortalZone& other,
+                              const std::string& edge) const {
+    if (edge == "left" || edge == "right") {
+      const int zone_top = zone.y;
+      const int zone_bottom = zone.y + static_cast<int>(zone.height);
+      const int other_top = other.y;
+      const int other_bottom = other.y + static_cast<int>(other.height);
+      const bool overlaps =
+          std::max(zone_top, other_top) < std::min(zone_bottom, other_bottom);
+      if (!overlaps) {
+        return false;
+      }
+      if (edge == "left") {
+        return other.x + static_cast<int>(other.width) == zone.x;
+      }
+      return zone.x + static_cast<int>(zone.width) == other.x;
+    }
+    const int zone_left = zone.x;
+    const int zone_right = zone.x + static_cast<int>(zone.width);
+    const int other_left = other.x;
+    const int other_right = other.x + static_cast<int>(other.width);
+    const bool overlaps =
+        std::max(zone_left, other_left) < std::min(zone_right, other_right);
+    if (!overlaps) {
+      return false;
+    }
+    if (edge == "top") {
+      return other.y + static_cast<int>(other.height) == zone.y;
+    }
+    return zone.y + static_cast<int>(zone.height) == other.y;
+  }
+
+  bool PortalZoneHasOutsideEdge(const PortalZone& zone,
+                                const std::vector<PortalZone>& zones,
+                                const std::string& edge) const {
+    for (const auto& other : zones) {
+      if (&other == &zone) {
+        continue;
+      }
+      if (PortalZonesTouchOnEdge(zone, other, edge)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  std::vector<InputCaptureBarrier> BuildInputCaptureBarriers(
+      Display* display,
+      const std::vector<PortalZone>& zones,
+      const std::string& display_id,
+      const std::string& edge,
+      const EdgeSegment& segment,
+      const std::vector<CaptureRoute>& configured_routes) const {
+    std::vector<InputCaptureBarrier> barriers;
+    uint32_t next_id = 1;
+    const std::vector<CaptureRoute> routes =
+        CaptureRoutesForMatching(configured_routes, display_id, edge, segment);
+    for (const auto& route : routes) {
+      for (const auto& zone : zones) {
+        if (!PortalZoneHasOutsideEdge(zone, zones, route.source_edge)) {
+          continue;
+        }
+        const bool vertical =
+            route.source_edge == "left" || route.source_edge == "right";
+        const int zone_start = vertical ? zone.y : zone.x;
+        const int zone_end = vertical
+                                 ? zone.y + static_cast<int>(zone.height) - 1
+                                 : zone.x + static_cast<int>(zone.width) - 1;
+        int start = zone_start;
+        int end = zone_end;
+        if (HasSegment(route.source_segment)) {
+          start = std::max(start, static_cast<int>(std::floor(
+                                      route.source_segment.start)));
+          end = std::min(end,
+                         static_cast<int>(std::ceil(route.source_segment.end)) -
+                             1);
+        }
+        if (start > end) {
+          continue;
+        }
+        InputCaptureBarrier barrier;
+        barrier.id = next_id++;
+        barrier.route = route;
+        barrier.route.source_segment =
+            EdgeSegment{static_cast<double>(start), static_cast<double>(end)};
+        if (route.source_edge == "left") {
+          barrier.x1 = zone.x;
+          barrier.y1 = start;
+          barrier.x2 = zone.x;
+          barrier.y2 = end;
+        } else if (route.source_edge == "top") {
+          barrier.x1 = start;
+          barrier.y1 = zone.y;
+          barrier.x2 = end;
+          barrier.y2 = zone.y;
+        } else if (route.source_edge == "bottom") {
+          barrier.x1 = start;
+          barrier.y1 = zone.y + static_cast<int>(zone.height);
+          barrier.x2 = end;
+          barrier.y2 = zone.y + static_cast<int>(zone.height);
+        } else {
+          barrier.x1 = zone.x + static_cast<int>(zone.width);
+          barrier.y1 = start;
+          barrier.x2 = zone.x + static_cast<int>(zone.width);
+          barrier.y2 = end;
+        }
+        barriers.push_back(barrier);
+      }
+    }
+    (void)display;
+    return barriers;
+  }
+
+  bool SetInputCapturePointerBarriers(
+      GDBusConnection* connection,
+      const std::string& session_handle,
+      const std::vector<InputCaptureBarrier>& barriers,
+      uint32_t zone_set,
+      std::string* error) {
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(
+        &options, "{sv}", "handle_token",
+        g_variant_new_string(
+            PortalHandleToken("whisper_capture_barriers").c_str()));
+    GVariantBuilder barrier_values;
+    g_variant_builder_init(&barrier_values, G_VARIANT_TYPE("aa{sv}"));
+    for (const auto& barrier : barriers) {
+      GVariantBuilder item;
+      g_variant_builder_init(&item, G_VARIANT_TYPE_VARDICT);
+      g_variant_builder_add(&item, "{sv}", "barrier_id",
+                            g_variant_new_uint32(barrier.id));
+      g_variant_builder_add(
+          &item, "{sv}", "position",
+          g_variant_new("(iiii)", barrier.x1, barrier.y1, barrier.x2,
+                        barrier.y2));
+      g_variant_builder_add_value(&barrier_values, g_variant_builder_end(&item));
+    }
+    PortalResponse response;
+    if (!PortalRequestForInterface(
+            connection, kPortalInputCaptureInterface, "SetPointerBarriers",
+            g_variant_new("(oa{sv}aa{sv}u)", session_handle.c_str(), &options,
+                          &barrier_values, zone_set),
+            3000, &response, error)) {
+      return false;
+    }
+    GVariant* failed =
+        g_variant_lookup_value(response.results, "failed_barriers",
+                               G_VARIANT_TYPE("au"));
+    const bool all_failed =
+        failed != nullptr &&
+        g_variant_n_children(failed) >= static_cast<gsize>(barriers.size());
+    if (failed != nullptr) {
+      g_variant_unref(failed);
+    }
+    g_variant_unref(response.results);
+    if (all_failed) {
+      *error = "Linux input capture portal rejected pointer barriers";
+      return false;
+    }
+    return true;
+  }
+
+  const InputCaptureBarrier* InputCaptureBarrierByIdLocked(
+      uint32_t barrier_id) const {
+    for (const auto& barrier : input_capture_barriers_) {
+      if (barrier.id == barrier_id) {
+        return &barrier;
+      }
+    }
+    return nullptr;
+  }
+
+  void HandleInputCaptureActivated(GVariant* parameters) {
+    const gchar* session_handle = nullptr;
+    GVariant* options = nullptr;
+    g_variant_get(parameters, "(&o@a{sv})", &session_handle, &options);
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (input_capture_session_handle_ !=
+        (session_handle == nullptr ? "" : session_handle)) {
+      if (options != nullptr) {
+        g_variant_unref(options);
+      }
+      return;
+    }
+    uint32_t barrier_id = 0;
+    Uint32FromVariantDict(options, "barrier_id", &barrier_id);
+    uint32_t activation_id = 0;
+    Uint32FromVariantDict(options, "activation_id", &activation_id);
+    const InputCaptureBarrier* barrier =
+        InputCaptureBarrierByIdLocked(barrier_id);
+    if (barrier != nullptr) {
+      input_capture_active_route_id_ = barrier->route.route_id;
+      input_capture_active_display_id_ = barrier->route.source_display_id;
+      input_capture_active_edge_ = barrier->route.source_edge;
+      input_capture_active_segment_ = barrier->route.source_segment;
+      input_capture_active_bounds_ =
+          BoundsForDisplay(input_capture_x_display_,
+                           input_capture_active_display_id_);
+    } else {
+      input_capture_active_route_id_.clear();
+      input_capture_active_display_id_ = capture_display_id_;
+      input_capture_active_edge_ = capture_edge_;
+      input_capture_active_segment_ = capture_segment_;
+      input_capture_active_bounds_ =
+          BoundsForDisplay(input_capture_x_display_,
+                           input_capture_active_display_id_);
+    }
+    double cursor_x = 0;
+    double cursor_y = 0;
+    if (!DoublePairFromVariantDict(options, "cursor_position", &cursor_x,
+                                   &cursor_y) &&
+        barrier != nullptr) {
+      cursor_x = (barrier->x1 + barrier->x2) / 2.0;
+      cursor_y = (barrier->y1 + barrier->y2) / 2.0;
+    }
+    input_capture_x_ = static_cast<int>(std::lround(cursor_x));
+    input_capture_y_ = static_cast<int>(std::lround(cursor_y));
+    input_capture_active_ = true;
+    input_capture_pending_active_start_ = true;
+    input_capture_activation_id_ = activation_id;
+    input_capture_activation_sequence_ = input_capture_sequence_ + 1;
+    input_capture_activation_edge_unit_ =
+        EdgeUnitForPoint(input_capture_x_, input_capture_y_,
+                         input_capture_active_edge_,
+                         input_capture_active_segment_);
+    capture_route_id_ = input_capture_active_route_id_;
+    std::ostringstream trace;
+    trace << "linux remote input portal capture active edge="
+          << input_capture_active_edge_ << " barrier=" << barrier_id
+          << " activation=" << activation_id << " cursor=" << input_capture_x_
+          << "," << input_capture_y_;
+    TraceRemoteInput(trace.str());
+    EmitDiagnosticForSession(capture_session_id_,
+                             "linux remote input portal capture active edge=" +
+                                 input_capture_active_edge_);
+    if (options != nullptr) {
+      g_variant_unref(options);
+    }
+  }
+
+  void HandleInputCaptureDeactivated(GVariant* parameters) {
+    const gchar* session_handle = nullptr;
+    GVariant* options = nullptr;
+    g_variant_get(parameters, "(&o@a{sv})", &session_handle, &options);
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (input_capture_session_handle_ ==
+        (session_handle == nullptr ? "" : session_handle)) {
+      input_capture_active_ = false;
+      input_capture_pending_active_start_ = false;
+      input_capture_buttons_ = 0;
+      TraceRemoteInput("linux remote input portal capture deactivated");
+    }
+    if (options != nullptr) {
+      g_variant_unref(options);
+    }
+  }
+
+  void HandleInputCaptureDisabled(GVariant* parameters) {
+    const gchar* session_handle = nullptr;
+    GVariant* options = nullptr;
+    g_variant_get(parameters, "(&o@a{sv})", &session_handle, &options);
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (input_capture_session_handle_ ==
+        (session_handle == nullptr ? "" : session_handle)) {
+      input_capture_active_ = false;
+      input_capture_pending_active_start_ = false;
+      input_capture_buttons_ = 0;
+      TraceRemoteInput("linux remote input portal capture disabled");
+    }
+    if (options != nullptr) {
+      g_variant_unref(options);
+    }
+  }
+
+  void HandleInputCaptureZonesChanged(GVariant* parameters) {
+    const gchar* session_handle = nullptr;
+    GVariant* options = nullptr;
+    g_variant_get(parameters, "(&o@a{sv})", &session_handle, &options);
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    if (input_capture_session_handle_ ==
+        (session_handle == nullptr ? "" : session_handle)) {
+      EmitDiagnosticForSession(capture_session_id_,
+                               "linux remote input portal zones changed");
+    }
+    if (options != nullptr) {
+      g_variant_unref(options);
+    }
+  }
+
+  static void InputCaptureActivatedCallback(GDBusConnection*,
+                                            const gchar*,
+                                            const gchar*,
+                                            const gchar*,
+                                            const gchar*,
+                                            GVariant* parameters,
+                                            gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleInputCaptureActivated(
+        parameters);
+  }
+
+  static void InputCaptureDeactivatedCallback(GDBusConnection*,
+                                              const gchar*,
+                                              const gchar*,
+                                              const gchar*,
+                                              const gchar*,
+                                              GVariant* parameters,
+                                              gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleInputCaptureDeactivated(
+        parameters);
+  }
+
+  static void InputCaptureDisabledCallback(GDBusConnection*,
+                                           const gchar*,
+                                           const gchar*,
+                                           const gchar*,
+                                           const gchar*,
+                                           GVariant* parameters,
+                                           gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleInputCaptureDisabled(
+        parameters);
+  }
+
+  static void InputCaptureZonesChangedCallback(GDBusConnection*,
+                                               const gchar*,
+                                               const gchar*,
+                                               const gchar*,
+                                               const gchar*,
+                                               GVariant* parameters,
+                                               gpointer user_data) {
+    static_cast<RemoteInputPlugin*>(user_data)->HandleInputCaptureZonesChanged(
+        parameters);
+  }
+
+  void InputCaptureEventLoop(const std::string& session_id) {
+    while (input_capture_running_.load()) {
+      int fd = -1;
+      {
+        std::lock_guard<std::mutex> lock(capture_mutex_);
+        if (input_capture_ei_ == nullptr || capture_session_id_ != session_id) {
+          return;
+        }
+        fd = ei_get_fd(input_capture_ei_);
+      }
+      if (fd < 0) {
+        return;
+      }
+      pollfd pfd = {};
+      pfd.fd = fd;
+      pfd.events = POLLIN;
+      const int poll_result = poll(&pfd, 1, 100);
+      if (poll_result <= 0) {
+        continue;
+      }
+      std::string error;
+      {
+        std::lock_guard<std::mutex> lock(capture_mutex_);
+        if (input_capture_ei_ == nullptr || capture_session_id_ != session_id) {
+          return;
+        }
+        DispatchInputCaptureEiLocked(&error);
+      }
+      if (!error.empty()) {
+        EmitErrorForSession(session_id, error);
+        input_capture_running_.store(false);
+        return;
+      }
+    }
+  }
+
+  void DispatchInputCaptureEiLocked(std::string* error) {
+    error->clear();
+    if (input_capture_ei_ == nullptr) {
+      return;
+    }
+    ei_dispatch(input_capture_ei_);
+    struct ei_event* event = nullptr;
+    while ((event = ei_get_event(input_capture_ei_)) != nullptr) {
+      HandleInputCaptureEiEventLocked(event, error);
+      ei_event_unref(event);
+      if (!error->empty()) {
+        return;
+      }
+    }
+  }
+
+  void HandleInputCaptureEiEventLocked(struct ei_event* event,
+                                       std::string* error) {
+    switch (ei_event_get_type(event)) {
+      case EI_EVENT_CONNECT:
+        return;
+      case EI_EVENT_DISCONNECT:
+        *error = "Linux input capture client disconnected";
+        return;
+      case EI_EVENT_SEAT_ADDED: {
+        struct ei_seat* seat = ei_event_get_seat(event);
+        if (seat != nullptr) {
+          ei_seat_bind_capabilities(seat, EI_DEVICE_CAP_POINTER,
+                                    EI_DEVICE_CAP_BUTTON, EI_DEVICE_CAP_SCROLL,
+                                    EI_DEVICE_CAP_KEYBOARD, NULL);
+        }
+        return;
+      }
+      case EI_EVENT_DEVICE_START_EMULATING:
+        input_capture_active_ = true;
+        if (input_capture_activation_sequence_ == 0) {
+          input_capture_pending_active_start_ = true;
+          input_capture_activation_sequence_ = input_capture_sequence_ + 1;
+        }
+        return;
+      case EI_EVENT_DEVICE_STOP_EMULATING:
+        input_capture_active_ = false;
+        input_capture_pending_active_start_ = false;
+        input_capture_buttons_ = 0;
+        return;
+      case EI_EVENT_POINTER_MOTION:
+        EmitInputCaptureMouseMoveLocked(
+            static_cast<int>(std::lround(ei_event_pointer_get_dx(event))),
+            static_cast<int>(std::lround(ei_event_pointer_get_dy(event))));
+        return;
+      case EI_EVENT_POINTER_MOTION_ABSOLUTE:
+        EmitInputCaptureAbsoluteMoveLocked(
+            static_cast<int>(std::lround(
+                ei_event_pointer_get_absolute_x(event))),
+            static_cast<int>(std::lround(
+                ei_event_pointer_get_absolute_y(event))));
+        return;
+      case EI_EVENT_BUTTON_BUTTON:
+        EmitInputCaptureButtonLocked(
+            ProtocolButtonForEvdevButton(ei_event_button_get_button(event)),
+            ei_event_button_get_is_press(event));
+        return;
+      case EI_EVENT_SCROLL_DISCRETE:
+        EmitInputEvent(capture_session_id_, "mouseWheel",
+                       ++input_capture_sequence_,
+                       JsonBytes(MouseWheelPayload(
+                           ei_event_scroll_get_discrete_dx(event),
+                           ei_event_scroll_get_discrete_dy(event))));
+        return;
+      case EI_EVENT_SCROLL_DELTA:
+        EmitInputEvent(capture_session_id_, "mouseWheel",
+                       ++input_capture_sequence_,
+                       JsonBytes(MouseWheelPayload(
+                           static_cast<int>(std::lround(
+                               ei_event_scroll_get_dx(event))),
+                           static_cast<int>(std::lround(
+                               ei_event_scroll_get_dy(event))))));
+        return;
+      case EI_EVENT_KEYBOARD_KEY:
+        EmitInputEvent(capture_session_id_, "key", ++input_capture_sequence_,
+                       JsonBytes(LinuxKeyPayload(
+                           static_cast<int>(ei_event_keyboard_get_key(event)),
+                           ei_event_keyboard_get_key_is_press(event))));
+        return;
+      default:
+        return;
+    }
+  }
+
+  void EmitInputCaptureMouseMoveLocked(int delta_x, int delta_y) {
+    if (!input_capture_active_ && !input_capture_pending_active_start_) {
+      return;
+    }
+    const bool active_start = input_capture_pending_active_start_;
+    input_capture_pending_active_start_ = false;
+    const int payload_x =
+        active_start ? input_capture_x_ : input_capture_x_ + delta_x;
+    const int payload_y =
+        active_start ? input_capture_y_ : input_capture_y_ + delta_y;
+    input_capture_x_ += delta_x;
+    input_capture_y_ += delta_y;
+    if (delta_x == 0 && delta_y == 0 && !active_start) {
+      return;
+    }
+    EmitInputEvent(
+        capture_session_id_, "mouseMove", ++input_capture_sequence_,
+        JsonBytes(MouseMovePayload(
+            input_capture_x_display_, payload_x, payload_y, delta_x, delta_y,
+            active_start, input_capture_active_edge_,
+            input_capture_active_route_id_, input_capture_buttons_,
+            input_capture_active_bounds_, input_capture_active_segment_,
+            active_start ? input_capture_activation_edge_unit_ : -1)));
+    if (active_start) {
+      input_capture_activation_edge_unit_ = -1;
+    }
+  }
+
+  void EmitInputCaptureAbsoluteMoveLocked(int x, int y) {
+    const int delta_x = x - input_capture_x_;
+    const int delta_y = y - input_capture_y_;
+    EmitInputCaptureMouseMoveLocked(delta_x, delta_y);
+  }
+
+  int ProtocolButtonForEvdevButton(uint32_t button) const {
+    if (button == BTN_RIGHT) {
+      return 1;
+    }
+    if (button == BTN_MIDDLE) {
+      return 2;
+    }
+    if (button == BTN_LEFT) {
+      return 0;
+    }
+    return -1;
+  }
+
+  void EmitInputCaptureButtonLocked(int button, bool down) {
+    if (button < 0) {
+      return;
+    }
+    const int bit = MouseButtonBit(button);
+    if (down) {
+      input_capture_buttons_ |= bit;
+    } else {
+      input_capture_buttons_ &= ~bit;
+    }
+    EmitInputEvent(capture_session_id_, "mouseButton",
+                   ++input_capture_sequence_,
+                   JsonBytes(MouseButtonPayload(input_capture_x_,
+                                                input_capture_y_, button,
+                                                down)));
+  }
+
+  DoublePoint ReleaseCursorPositionForInputCapture(
+      double release_edge_unit,
+      const std::string& release_display_id,
+      const std::string& release_edge,
+      const EdgeSegment& release_segment) const {
+    const std::string display_id =
+        release_display_id.empty() ? input_capture_active_display_id_
+                                   : release_display_id;
+    const std::string edge =
+        release_edge.empty() ? input_capture_active_edge_ : release_edge;
+    const EdgeSegment segment =
+        HasSegment(release_segment) ? release_segment
+                                    : input_capture_active_segment_;
+    const ScreenBounds bounds =
+        BoundsForDisplay(input_capture_x_display_, display_id);
+    int x = ClampInt(input_capture_x_, bounds.left + kCaptureCursorInset,
+                     bounds.right() - kCaptureCursorInset);
+    int y = ClampInt(input_capture_y_, bounds.top + kCaptureCursorInset,
+                     bounds.bottom() - kCaptureCursorInset);
+    if (HasSegment(segment)) {
+      const int coordinate = SegmentCoordinate(release_edge_unit, segment);
+      if (edge == "left" || edge == "right") {
+        y = ClampInt(coordinate, bounds.top + kCaptureCursorInset,
+                     bounds.bottom() - kCaptureCursorInset);
+      } else {
+        x = ClampInt(coordinate, bounds.left + kCaptureCursorInset,
+                     bounds.right() - kCaptureCursorInset);
+      }
+    }
+    if (edge == "left") {
+      x = bounds.left + kCaptureCursorInset;
+    } else if (edge == "top") {
+      y = bounds.top + kCaptureCursorInset;
+    } else if (edge == "bottom") {
+      y = bounds.bottom() - kCaptureCursorInset;
+    } else {
+      x = bounds.right() - kCaptureCursorInset;
+    }
+    return DoublePoint{static_cast<double>(x), static_cast<double>(y)};
+  }
+
+  void ReleaseInputCapturePortalLocked(double release_edge_unit,
+                                       const std::string& release_display_id,
+                                       const std::string& release_edge,
+                                       const EdgeSegment& release_segment,
+                                       const std::string& release_route_id) {
+    if (input_capture_connection_ == nullptr ||
+        input_capture_session_handle_.empty()) {
+      return;
+    }
+    const DoublePoint cursor = ReleaseCursorPositionForInputCapture(
+        release_edge_unit, release_display_id, release_edge, release_segment);
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+    if (input_capture_activation_id_ != 0) {
+      g_variant_builder_add(&options, "{sv}", "activation_id",
+                            g_variant_new_uint32(input_capture_activation_id_));
+    }
+    g_variant_builder_add(&options, "{sv}", "cursor_position",
+                          g_variant_new("(dd)", cursor.x, cursor.y));
+    GError* call_error = nullptr;
+    GVariant* result = g_dbus_connection_call_sync(
+        input_capture_connection_, kPortalBusName, kPortalObjectPath,
+        kPortalInputCaptureInterface, "Release",
+        g_variant_new("(oa{sv})", input_capture_session_handle_.c_str(),
+                      &options),
+        nullptr, G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &call_error);
+    if (result != nullptr) {
+      g_variant_unref(result);
+    } else if (call_error != nullptr) {
+      TraceRemoteInput(std::string("linux remote input portal release failed: ") +
+                       (call_error->message == nullptr ? ""
+                                                       : call_error->message));
+      g_error_free(call_error);
+    }
+    input_capture_active_ = false;
+    input_capture_pending_active_start_ = false;
+    input_capture_activation_id_ = 0;
+    input_capture_buttons_ = 0;
+    input_capture_x_ = static_cast<int>(std::lround(cursor.x));
+    input_capture_y_ = static_cast<int>(std::lround(cursor.y));
+    input_capture_active_route_id_ = release_route_id;
+  }
+
+  void ClearInputCapturePortalLocked() {
+    if (input_capture_connection_ != nullptr) {
+      if (input_capture_activated_signal_id_ != 0) {
+        g_dbus_connection_signal_unsubscribe(
+            input_capture_connection_, input_capture_activated_signal_id_);
+      }
+      if (input_capture_deactivated_signal_id_ != 0) {
+        g_dbus_connection_signal_unsubscribe(
+            input_capture_connection_, input_capture_deactivated_signal_id_);
+      }
+      if (input_capture_disabled_signal_id_ != 0) {
+        g_dbus_connection_signal_unsubscribe(
+            input_capture_connection_, input_capture_disabled_signal_id_);
+      }
+      if (input_capture_zones_changed_signal_id_ != 0) {
+        g_dbus_connection_signal_unsubscribe(
+            input_capture_connection_, input_capture_zones_changed_signal_id_);
+      }
+    }
+    input_capture_activated_signal_id_ = 0;
+    input_capture_deactivated_signal_id_ = 0;
+    input_capture_disabled_signal_id_ = 0;
+    input_capture_zones_changed_signal_id_ = 0;
+    if (input_capture_ei_ != nullptr) {
+      ei_disconnect(input_capture_ei_);
+      input_capture_ei_ = ei_unref(input_capture_ei_);
+    }
+    if (input_capture_connection_ != nullptr) {
+      ClosePortalSession(input_capture_connection_, input_capture_session_handle_);
+      g_object_unref(input_capture_connection_);
+      input_capture_connection_ = nullptr;
+    }
+    input_capture_session_handle_.clear();
+    if (input_capture_x_display_ != nullptr) {
+      XCloseDisplay(input_capture_x_display_);
+      input_capture_x_display_ = nullptr;
+    }
+    input_capture_barriers_.clear();
+    input_capture_zone_set_ = 0;
+    ResetInputCaptureStateLocked();
+  }
+
+#endif
 
   bool StartInjection(const std::string& session_id,
                       const std::string& display_id,
@@ -3843,6 +5179,7 @@ class RemoteInputPlugin {
 
 #if HAVE_X11_REMOTE_INPUT
   std::mutex capture_mutex_;
+  CaptureBackend capture_backend_ = CaptureBackend::kNone;
   std::string capture_session_id_;
   std::string capture_route_id_;
   std::string capture_edge_ = "right";
@@ -3876,6 +5213,33 @@ class RemoteInputPlugin {
   int injected_buttons_ = 0;
   std::vector<int> injected_keys_;
 #if HAVE_LIBEI_REMOTE_INPUT
+  GDBusConnection* input_capture_connection_ = nullptr;
+  std::string input_capture_session_handle_;
+  struct ei* input_capture_ei_ = nullptr;
+  Display* input_capture_x_display_ = nullptr;
+  std::thread input_capture_thread_;
+  std::atomic<bool> input_capture_running_{false};
+  guint input_capture_activated_signal_id_ = 0;
+  guint input_capture_deactivated_signal_id_ = 0;
+  guint input_capture_disabled_signal_id_ = 0;
+  guint input_capture_zones_changed_signal_id_ = 0;
+  std::vector<InputCaptureBarrier> input_capture_barriers_;
+  uint32_t input_capture_zone_set_ = 0;
+  bool input_capture_active_ = false;
+  bool input_capture_pending_active_start_ = false;
+  uint32_t input_capture_activation_id_ = 0;
+  uint64_t input_capture_sequence_ = 0;
+  uint64_t input_capture_activation_sequence_ = 0;
+  int input_capture_buttons_ = 0;
+  int input_capture_x_ = 0;
+  int input_capture_y_ = 0;
+  double input_capture_activation_edge_unit_ = -1;
+  std::string input_capture_active_route_id_;
+  std::string input_capture_active_display_id_;
+  std::string input_capture_active_edge_;
+  EdgeSegment input_capture_active_segment_;
+  ScreenBounds input_capture_active_bounds_;
+
   GDBusConnection* portal_connection_ = nullptr;
   std::string portal_session_handle_;
   struct ei* portal_ei_ = nullptr;

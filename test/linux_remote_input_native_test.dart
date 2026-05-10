@@ -71,6 +71,44 @@ void main() {
       expect(plugin, contains('linux remote input x11 injection started'));
     });
 
+    test('prefers InputCapture portal capture and falls back to X11 capture',
+        () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+
+      expect(plugin, contains('CaptureBackend::kPortal'));
+      expect(plugin, contains('TryStartPortalCapture'));
+      expect(plugin, contains('StartX11Capture'));
+      expect(plugin, contains('StartInputCapturePortalSession'));
+      expect(plugin, contains('org.freedesktop.portal.InputCapture'));
+      expect(plugin, contains('SetPointerBarriers'));
+      expect(plugin, contains('InputCaptureActivatedCallback'));
+      expect(plugin, contains('ei_new_receiver'));
+      expect(plugin, contains('EI_EVENT_POINTER_MOTION'));
+      expect(
+        plugin.indexOf('TryStartPortalCapture'),
+        lessThan(plugin.indexOf('StartX11Capture(')),
+      );
+    });
+
+    test('uses persistent InputCapture portal sessions when version 2 is available',
+        () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+
+      expect(plugin, contains('InputCapturePortalVersion'));
+      expect(plugin, contains('StartInputCapturePortalSessionV2'));
+      expect(plugin, contains('StartInputCapturePortalSessionV1'));
+      expect(plugin, contains('CreateSession2'));
+      expect(plugin, contains('LoadInputCapturePortalRestoreToken'));
+      expect(plugin, contains('SaveInputCapturePortalRestoreToken'));
+      expect(plugin, contains('input-capture-portal-token'));
+      expect(plugin, contains('persist_mode'));
+      expect(plugin, contains('restore_token'));
+      expect(
+        plugin.indexOf('StartInputCapturePortalSessionV2'),
+        lessThan(plugin.indexOf('StartInputCapturePortalSessionV1')),
+      );
+    });
+
     test('does not release X11 keys when no injection backend is active', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
       final releaseModifiers = RegExp(
