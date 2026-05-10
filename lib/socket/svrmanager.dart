@@ -54,6 +54,7 @@ abstract class ISocketEvent {
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
+  static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const int defaultTransferChunkSize = 32 * 1024 * 1024;
   static const int transferFramePayloadSize = 4 * 1024 * 1024;
   static const int transferRawFramePayloadSize = 64 * 1024;
@@ -94,6 +95,9 @@ class WsSvrManager {
   Future<void> _receiveQueue = Future<void>.value();
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
+  int _remoteProfileRevision = 0;
+  final List<Completer<PeerProfile?>> _remoteProfileRefreshWaiters =
+      <Completer<PeerProfile?>>[];
   IOSink? _receivingTransferSink;
   FileTransferData? _receivingTransfer;
   StreamingChecksum? _receivingChecksum;
@@ -415,6 +419,7 @@ class WsSvrManager {
     }
     await closeResumableHandles;
     _remoteProfile = null;
+    _completeRemoteProfileRefreshWaiters();
     receiver = "";
     logger.i("服务已关闭");
     _dispatchToAll((event) => event.onClose());
@@ -553,7 +558,7 @@ class WsSvrManager {
             if ((self.auth || localTemp != null && localTemp.auth)) {
               await _auth(true);
               receiver = device?.uid ?? "";
-              _remoteProfile = profile;
+              _setRemoteProfile(profile);
               _dispatchToAll((event) => event.onConnect());
               unawaited(_resumeRecoverableOutgoingTransfers());
               _dispatchToAll((event) => event.afterAuth(true, device));
@@ -571,7 +576,7 @@ class WsSvrManager {
               }
               if (allow) {
                 receiver = device?.uid ?? "";
-                _remoteProfile = profile;
+                _setRemoteProfile(profile);
                 _dispatchToAll((event) => event.onConnect());
                 unawaited(_resumeRecoverableOutgoingTransfers());
               } else {
@@ -642,6 +647,9 @@ class WsSvrManager {
             return;
           }
           _refreshRemoteProfileFromHeartbeat(message);
+          if (message.message == _profileRefreshRequestMessage) {
+            unawaited(_heartBeat());
+          }
           _ackMessage(message);
           break;
         }
@@ -960,14 +968,66 @@ class WsSvrManager {
     return profile;
   }
 
+  Future<PeerProfile?> requestRemoteProfileRefresh({
+    Duration timeout = const Duration(milliseconds: 1200),
+  }) async {
+    if (_sink == null) {
+      return _remoteProfile;
+    }
+
+    final startRevision = _remoteProfileRevision;
+    final completer = Completer<PeerProfile?>();
+    _remoteProfileRefreshWaiters.add(completer);
+    final timer = Timer(timeout, () {
+      _remoteProfileRefreshWaiters.remove(completer);
+      if (!completer.isCompleted) {
+        completer.complete(_remoteProfile);
+      }
+    });
+
+    try {
+      await _heartBeat(profileRefreshRequest: true);
+      if (_remoteProfileRevision != startRevision && !completer.isCompleted) {
+        _remoteProfileRefreshWaiters.remove(completer);
+        completer.complete(_remoteProfile);
+      }
+    } catch (_) {
+      _remoteProfileRefreshWaiters.remove(completer);
+      timer.cancel();
+      if (!completer.isCompleted) {
+        completer.complete(_remoteProfile);
+      }
+    }
+
+    return completer.future.whenComplete(timer.cancel);
+  }
+
+  void _setRemoteProfile(PeerProfile? profile) {
+    _remoteProfile = profile;
+    _remoteProfileRevision++;
+    _completeRemoteProfileRefreshWaiters();
+  }
+
+  void _completeRemoteProfileRefreshWaiters() {
+    final waiters = _remoteProfileRefreshWaiters.toList(growable: false);
+    _remoteProfileRefreshWaiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) {
+        waiter.complete(_remoteProfile);
+      }
+    }
+  }
+
   void _refreshRemoteProfileFromHeartbeat(MessageData message) {
     final content = message.content;
     if (content == null || content.isEmpty) {
       return;
     }
     try {
-      _remoteProfile = PeerProfile.fromJson(
-        jsonDecode(content) as Map<String, dynamic>,
+      _setRemoteProfile(
+        PeerProfile.fromJson(
+          jsonDecode(content) as Map<String, dynamic>,
+        ),
       );
     } catch (error) {
       _remoteInputTrace('heartbeat profile parse failed: $error');
@@ -982,13 +1042,18 @@ class WsSvrManager {
     _send(MessageData.fromJson(json).toJsonString());
   }
 
-  Future<void> _heartBeat() async {
+  Future<void> _heartBeat({bool profileRefreshRequest = false}) async {
     if (_sink == null) {
       return;
     }
     final profile = await _localPeerProfile();
     var message = _buildMessage(
-        MessageEnum.Heartbeat, profile.toJsonString(), "", "", 0, false,
+        MessageEnum.Heartbeat,
+        profile.toJsonString(),
+        profileRefreshRequest ? _profileRefreshRequestMessage : "",
+        "",
+        0,
+        false,
         uid: "");
     _send(message.toJsonString());
   }

@@ -84,4 +84,40 @@ void main() {
     expect(tile, contains('CrossAxisAlignment.center'));
     expect(tile, isNot(contains('Divider(')));
   });
+
+  test('screen layout editor opens immediately and reapplies active sharing',
+      () {
+    final source = File('lib/page/settings.dart').readAsStringSync();
+    final clientSettings = RegExp(
+      r'class _ClientSettingsScreenState[\s\S]*?class _DeviceSettingTile',
+    ).firstMatch(source)!.group(0)!;
+    final openEditorStart =
+        clientSettings.indexOf('Future<void> _openRemoteInputLayoutEditor');
+    final restartStart = clientSettings
+        .indexOf('Future<void> _restartRemoteInputSharingIfActive');
+    expect(openEditorStart, isNonNegative);
+    expect(restartStart, isNonNegative);
+    final openEditor = clientSettings.substring(openEditorStart, restartStart);
+    final saveLayoutStart =
+        clientSettings.indexOf('Future<void> _saveRemoteInputLayout');
+    expect(saveLayoutStart, isNonNegative);
+    final saveLayout =
+        clientSettings.substring(saveLayoutStart, openEditorStart);
+
+    expect(openEditor,
+        isNot(contains('await WsSvrManager().requestRemoteProfileRefresh')));
+    expect(openEditor, contains('WsSvrManager().remoteDisplayTopology'));
+    expect(openEditor, contains('remoteTopologyLoader'));
+    expect(openEditor, contains('WsSvrManager().requestRemoteProfileRefresh'));
+
+    expect(saveLayout, contains('_restartRemoteInputSharingIfActive(next)'));
+    expect(clientSettings,
+        contains('Future<void> _restartRemoteInputSharingIfActive'));
+    expect(clientSettings, contains('RemoteInputRuntimeRole.source'));
+    expect(clientSettings, contains('state.isForPeer(device.uid)'));
+    expect(clientSettings, contains('stopSharing('));
+    expect(clientSettings,
+        contains('sendControl: socketManager.sendRemoteInputControl'));
+    expect(clientSettings, contains('startSharingToConnectedPeer'));
+  });
 }

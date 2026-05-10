@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -1267,6 +1268,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     setState(() {
       _remoteInputLayout = next;
     });
+    await _restartRemoteInputSharingIfActive(next);
   }
 
   @override
@@ -1569,6 +1571,11 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           initialLayout: layout,
           peerName: device.name,
           remoteTopology: WsSvrManager().remoteDisplayTopology,
+          remoteTopologyLoader: () async {
+            final refreshProfile = WsSvrManager().requestRemoteProfileRefresh;
+            await refreshProfile();
+            return WsSvrManager().remoteDisplayTopology;
+          },
         ),
       ),
     );
@@ -1576,6 +1583,163 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       await _saveRemoteInputLayout(updated);
     }
   }
+
+  Future<void> _restartRemoteInputSharingIfActive(
+    RemoteInputLayoutData layout,
+  ) async {
+    final coordinator = RemoteInputCoordinator.shared;
+    final state = coordinator.state;
+    if (state.role != RemoteInputRuntimeRole.source ||
+        !state.isForPeer(device.uid)) {
+      return;
+    }
+
+    final socketManager = WsSvrManager();
+    if (!socketManager.isConnected || !socketManager.supportsRemoteInput) {
+      return;
+    }
+
+    final self = await LocalSetting().instance();
+    final storedDevice = await LocalDatabase().fetchDevice(device.uid);
+    final localTrustsRemote = storedDevice?.auth == true;
+    final remoteTrustsLocal = socketManager.remoteTrustsPeer(self.uid);
+    final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
+    if (!isMutuallyTrusted) {
+      return;
+    }
+
+    try {
+      final sharingPlan = await _sharingPlanForLayout(
+        layout,
+        coordinator: coordinator,
+        socketManager: socketManager,
+      );
+      if (sharingPlan == null) {
+        return;
+      }
+      await coordinator.stopSharing(
+        sendControl: socketManager.sendRemoteInputControl,
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: self.uid,
+        sinkPeerId: device.uid,
+        sinkHost: device.host,
+        sinkPort: device.port,
+        layoutEdge: sharingPlan.layoutEdge,
+        releaseHotkey: layout.releaseHotkey,
+        isMutuallyTrusted: isMutuallyTrusted,
+        remoteCanInject: socketManager.supportsRemoteInput,
+        sendControl: socketManager.sendRemoteInputControl,
+        sourceDisplayId: sharingPlan.sourceDisplayId,
+        sourceEdge: sharingPlan.sourceEdge,
+        sourceSegmentStart: sharingPlan.sourceSegmentStart,
+        sourceSegmentEnd: sharingPlan.sourceSegmentEnd,
+        sinkDisplayId: sharingPlan.sinkDisplayId,
+        sinkEdge: sharingPlan.sinkEdge,
+        sinkSegmentStart: sharingPlan.sinkSegmentStart,
+        sinkSegmentEnd: sharingPlan.sinkSegmentEnd,
+        edgeMappings: sharingPlan.edgeMappings,
+      );
+    } catch (error, stackTrace) {
+      logger.e(
+        'restart remote input sharing after layout save failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  Future<_RemoteInputSharingPlan?> _sharingPlanForLayout(
+    RemoteInputLayoutData layout, {
+    required RemoteInputCoordinator coordinator,
+    required WsSvrManager socketManager,
+  }) async {
+    final savedLayout = layout.savedLayout;
+    RemoteInputResolvedLayout? resolvedTopologyLayout;
+    if (savedLayout != null && socketManager.supportsRemoteInputTopology) {
+      final remoteTopology = socketManager.remoteDisplayTopology;
+      if (remoteTopology != null) {
+        final localTopology = await coordinator.displayTopology();
+        resolvedTopologyLayout = RemoteInputLayoutGeometry.resolveSavedLayout(
+          savedLayout: savedLayout,
+          sourceTopology: localTopology,
+          sinkTopology: remoteTopology,
+          edgeTolerance: layout.edgeThresholdPx,
+        );
+      }
+    }
+
+    final legacyEdge = RemoteInputLayoutGeometry.adjacentEdge(
+      local: const RemoteInputScreenRect(
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 800,
+      ),
+      peer: RemoteInputScreenRect(
+        x: layout.x,
+        y: layout.y,
+        width: layout.width,
+        height: layout.height,
+      ),
+    );
+    final edge = resolvedTopologyLayout?.sharedSegment.sourceEdge ?? legacyEdge;
+    if (edge == null) {
+      return null;
+    }
+
+    final topologyMappings = resolvedTopologyLayout?.edgeMappings ??
+        const <RemoteInputEdgeMapping>[];
+    final sourceSegmentStart = topologyMappings.isEmpty
+        ? resolvedTopologyLayout?.sharedSegment.start ?? 0
+        : topologyMappings
+            .map((mapping) => mapping.sourceSegmentStart)
+            .reduce(math.min);
+    final sourceSegmentEnd = topologyMappings.isEmpty
+        ? resolvedTopologyLayout?.sharedSegment.end ?? 0
+        : topologyMappings
+            .map((mapping) => mapping.sourceSegmentEnd)
+            .reduce(math.max);
+
+    return _RemoteInputSharingPlan(
+      layoutEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge ?? edge,
+      sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
+      sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd,
+      sinkDisplayId: resolvedTopologyLayout?.sinkDisplay.displayId ?? '',
+      sinkEdge: resolvedTopologyLayout?.sharedSegment.sinkEdge,
+      sinkSegmentStart: resolvedTopologyLayout?.sinkSegmentStart ?? 0,
+      sinkSegmentEnd: resolvedTopologyLayout?.sinkSegmentEnd ?? 0,
+      edgeMappings: topologyMappings,
+    );
+  }
+}
+
+class _RemoteInputSharingPlan {
+  const _RemoteInputSharingPlan({
+    required this.layoutEdge,
+    required this.sourceDisplayId,
+    required this.sourceEdge,
+    required this.sourceSegmentStart,
+    required this.sourceSegmentEnd,
+    required this.sinkDisplayId,
+    required this.sinkEdge,
+    required this.sinkSegmentStart,
+    required this.sinkSegmentEnd,
+    required this.edgeMappings,
+  });
+
+  final RemoteInputEdge layoutEdge;
+  final String sourceDisplayId;
+  final RemoteInputEdge? sourceEdge;
+  final int sourceSegmentStart;
+  final int sourceSegmentEnd;
+  final String sinkDisplayId;
+  final RemoteInputEdge? sinkEdge;
+  final int sinkSegmentStart;
+  final int sinkSegmentEnd;
+  final List<RemoteInputEdgeMapping> edgeMappings;
 }
 
 class _DeviceSettingTile extends StatelessWidget {

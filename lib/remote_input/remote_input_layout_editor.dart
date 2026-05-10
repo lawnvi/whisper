@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -9,17 +10,21 @@ import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/theme/app_theme.dart';
 
+typedef RemoteInputTopologyLoader = Future<RemoteInputTopology?> Function();
+
 class RemoteInputLayoutEditorScreen extends StatefulWidget {
   const RemoteInputLayoutEditorScreen({
     super.key,
     required this.initialLayout,
     required this.peerName,
     this.remoteTopology,
+    this.remoteTopologyLoader,
   });
 
   final RemoteInputLayoutData initialLayout;
   final String peerName;
   final RemoteInputTopology? remoteTopology;
+  final RemoteInputTopologyLoader? remoteTopologyLoader;
 
   @override
   State<RemoteInputLayoutEditorScreen> createState() =>
@@ -32,6 +37,7 @@ class _RemoteInputLayoutEditorScreenState
   late RemoteInputTopology _remoteTopology;
   late int _sinkOffsetX;
   late int _sinkOffsetY;
+  bool _hasUserAdjustedLayout = false;
 
   @override
   void initState() {
@@ -49,6 +55,7 @@ class _RemoteInputLayoutEditorScreenState
     _sinkOffsetY =
         saved?.sinkOffsetY ?? widget.initialLayout.y - remotePrimary.y;
     _loadLocalTopology();
+    unawaited(_loadRemoteTopology());
   }
 
   Future<void> _loadLocalTopology() async {
@@ -62,6 +69,32 @@ class _RemoteInputLayoutEditorScreenState
             topology.isNotEmpty ? topology : RemoteInputTopology.fallback();
       });
     } catch (_) {}
+  }
+
+  Future<void> _loadRemoteTopology() async {
+    try {
+      final topology = await widget.remoteTopologyLoader?.call();
+      if (!mounted || !(topology != null && topology.isNotEmpty)) {
+        return;
+      }
+      setState(() {
+        _applyRemoteTopology(topology);
+      });
+    } catch (_) {}
+  }
+
+  void _applyRemoteTopology(RemoteInputTopology topology) {
+    if (_hasUserAdjustedLayout) {
+      return;
+    }
+    final saved = widget.initialLayout.savedLayout;
+    final previousPrimary = _remoteTopology.primaryDisplay;
+    _remoteTopology = topology;
+    final remotePrimary = _remoteTopology.primaryDisplay;
+    _sinkOffsetX = saved?.sinkOffsetX ??
+        _sinkOffsetX + previousPrimary.x - remotePrimary.x;
+    _sinkOffsetY = saved?.sinkOffsetY ??
+        _sinkOffsetY + previousPrimary.y - remotePrimary.y;
   }
 
   @override
@@ -215,6 +248,7 @@ class _RemoteInputLayoutEditorScreenState
                         behavior: HitTestBehavior.opaque,
                         onPanUpdate: (details) {
                           setState(() {
+                            _hasUserAdjustedLayout = true;
                             _sinkOffsetX +=
                                 (details.delta.dx / transform.scale).round();
                             _sinkOffsetY +=
@@ -248,6 +282,7 @@ class _RemoteInputLayoutEditorScreenState
     final source = _localTopology.primaryDisplay;
     final sink = _remoteTopology.primaryDisplay;
     setState(() {
+      _hasUserAdjustedLayout = true;
       switch (edge) {
         case RemoteInputEdge.left:
           _sinkOffsetX = source.left - sink.right;
@@ -299,6 +334,7 @@ class _RemoteInputLayoutEditorScreenState
     }
     final winner = best;
     setState(() {
+      _hasUserAdjustedLayout = true;
       _sinkOffsetX = winner.offsetX;
       _sinkOffsetY = winner.offsetY;
     });
