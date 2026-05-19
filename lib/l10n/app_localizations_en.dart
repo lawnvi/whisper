@@ -582,4 +582,69 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputEdgeNotAdjacent => 'Not adjacent';
+
+  @override
+  String get remoteInputWorkspaceTitle => 'Keyboard and mouse workspace';
+
+  @override
+  String get remoteInputWorkspaceTooltip => 'Keyboard and mouse workspace';
+
+  @override
+  String get remoteInputWorkspaceStart => 'Start';
+
+  @override
+  String get remoteInputWorkspaceStop => 'Stop';
+
+  @override
+  String get remoteInputWorkspaceNoTargets =>
+      'No available desktop control targets';
+
+  @override
+  String get remoteInputWorkspaceSelectTargets => 'Control targets';
+
+  @override
+  String get remoteInputWorkspaceCanvasTitle => 'Screen arrangement';
+
+  @override
+  String get remoteInputWorkspaceDetailsTitle => 'Device details';
+
+  @override
+  String get remoteInputWorkspaceFocusTarget => 'Inspect device';
+
+  @override
+  String get remoteInputWorkspaceAddTarget => 'Add to workspace';
+
+  @override
+  String get remoteInputWorkspaceRemoveTarget => 'Remove from workspace';
+
+  @override
+  String get remoteInputWorkspaceState => 'State';
+
+  @override
+  String get remoteInputWorkspaceConflict => 'Edge overlap';
+
+  @override
+  String get remoteInputWorkspaceTargetIdle => 'Not enabled';
+
+  @override
+  String get remoteInputWorkspaceStatusIdle =>
+      'Keyboard and mouse workspace is off';
+
+  @override
+  String get remoteInputWorkspaceStatusOffering =>
+      'Waiting for targets to accept';
+
+  @override
+  String get remoteInputWorkspaceStatusArmed =>
+      'Move to a screen edge to control a target';
+
+  @override
+  String remoteInputWorkspaceStatusActive(String peer) {
+    return 'Controlling $peer';
+  }
+
+  @override
+  String remoteInputWorkspaceStatusFailed(String error) {
+    return 'Keyboard and mouse workspace failed: $error';
+  }
 }

@@ -547,4 +547,65 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteInputEdgeNotAdjacent => '未贴边';
+
+  @override
+  String get remoteInputWorkspaceTitle => '键鼠工作区';
+
+  @override
+  String get remoteInputWorkspaceTooltip => '键鼠工作区';
+
+  @override
+  String get remoteInputWorkspaceStart => '启动';
+
+  @override
+  String get remoteInputWorkspaceStop => '停止';
+
+  @override
+  String get remoteInputWorkspaceNoTargets => '没有可用的桌面被控设备';
+
+  @override
+  String get remoteInputWorkspaceSelectTargets => '被控设备';
+
+  @override
+  String get remoteInputWorkspaceCanvasTitle => '屏幕排列';
+
+  @override
+  String get remoteInputWorkspaceDetailsTitle => '设备详情';
+
+  @override
+  String get remoteInputWorkspaceFocusTarget => '查看设备';
+
+  @override
+  String get remoteInputWorkspaceAddTarget => '加入工作区';
+
+  @override
+  String get remoteInputWorkspaceRemoveTarget => '移出工作区';
+
+  @override
+  String get remoteInputWorkspaceState => '状态';
+
+  @override
+  String get remoteInputWorkspaceConflict => '边缘重叠';
+
+  @override
+  String get remoteInputWorkspaceTargetIdle => '未启用';
+
+  @override
+  String get remoteInputWorkspaceStatusIdle => '键鼠工作区未启用';
+
+  @override
+  String get remoteInputWorkspaceStatusOffering => '正在等待被控设备确认';
+
+  @override
+  String get remoteInputWorkspaceStatusArmed => '移动到屏幕边缘开始控制目标设备';
+
+  @override
+  String remoteInputWorkspaceStatusActive(String peer) {
+    return '正在控制 $peer';
+  }
+
+  @override
+  String remoteInputWorkspaceStatusFailed(String error) {
+    return '键鼠工作区失败：$error';
+  }
 }

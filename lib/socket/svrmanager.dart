@@ -27,6 +27,7 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/resumable_transfer_window.dart';
 import 'package:path/path.dart' as p;
@@ -175,6 +176,33 @@ class WsSvrManager {
     final devices = <DeviceData>[];
     for (final peerId in connectedPeerIds) {
       if (!supportsAudioGroupSinkFor(peerId)) {
+        continue;
+      }
+      final profile = _remoteProfilesByPeerId[peerId] ??
+          (peerId == receiver ? _remoteProfile : null);
+      final device = profile?.device;
+      if (device != null) {
+        devices.add(device);
+      }
+    }
+    devices.sort((left, right) {
+      if (left.uid == preferredPeerId) {
+        return -1;
+      }
+      if (right.uid == preferredPeerId) {
+        return 1;
+      }
+      return left.name.compareTo(right.name);
+    });
+    return devices;
+  }
+
+  List<DeviceData> connectedRemoteInputDevices({
+    String preferredPeerId = '',
+  }) {
+    final devices = <DeviceData>[];
+    for (final peerId in connectedPeerIds) {
+      if (!supportsRemoteInputFor(peerId)) {
         continue;
       }
       final profile = _remoteProfilesByPeerId[peerId] ??
@@ -1030,6 +1058,32 @@ class WsSvrManager {
             'localCanInject=$localCanInject '
             'remoteSupports=$supportsRemoteInput',
           );
+          final handledByWorkspaceBusy = await RemoteInputWorkspaceCoordinator
+              .shared
+              .handleIncomingOfferIfBusy(
+            control,
+            localPeerId: self.uid,
+            sendControlTo: (_, control) => incomingPeerId == null
+                ? sendRemoteInputControl(control)
+                : sendRemoteInputControlTo(incomingPeerId, control),
+          );
+          if (handledByWorkspaceBusy) {
+            _ackMessage(message);
+            break;
+          }
+          final handledByWorkspace =
+              await RemoteInputWorkspaceCoordinator.shared.handleControlMessage(
+            control,
+            localPeerId: self.uid,
+            remoteHost: remoteDevice?.host ?? '',
+            remotePort: remoteDevice?.port ?? 0,
+            sendControlTo: (peerId, control) =>
+                sendRemoteInputControlTo(peerId, control),
+          );
+          if (handledByWorkspace) {
+            _ackMessage(message);
+            break;
+          }
           await RemoteInputCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,

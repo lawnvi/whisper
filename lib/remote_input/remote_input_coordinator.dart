@@ -125,6 +125,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputEdgeMapping? _sinkActiveEdgeMapping;
 
   RemoteInputRuntimeState get state => _state;
+  RemoteInputPlatform get platform => _platform;
 
   void updateScrollMultiplier(double multiplier) {
     _scrollMultiplier = RemoteInputScrollNormalizer.clampMultiplier(multiplier);

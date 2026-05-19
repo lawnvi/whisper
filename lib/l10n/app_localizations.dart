@@ -1107,6 +1107,120 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'未贴边'**
   String get remoteInputEdgeNotAdjacent;
+
+  /// No description provided for @remoteInputWorkspaceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠工作区'**
+  String get remoteInputWorkspaceTitle;
+
+  /// No description provided for @remoteInputWorkspaceTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠工作区'**
+  String get remoteInputWorkspaceTooltip;
+
+  /// No description provided for @remoteInputWorkspaceStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动'**
+  String get remoteInputWorkspaceStart;
+
+  /// No description provided for @remoteInputWorkspaceStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get remoteInputWorkspaceStop;
+
+  /// No description provided for @remoteInputWorkspaceNoTargets.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可用的桌面被控设备'**
+  String get remoteInputWorkspaceNoTargets;
+
+  /// No description provided for @remoteInputWorkspaceSelectTargets.
+  ///
+  /// In zh, this message translates to:
+  /// **'被控设备'**
+  String get remoteInputWorkspaceSelectTargets;
+
+  /// No description provided for @remoteInputWorkspaceCanvasTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕排列'**
+  String get remoteInputWorkspaceCanvasTitle;
+
+  /// No description provided for @remoteInputWorkspaceDetailsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备详情'**
+  String get remoteInputWorkspaceDetailsTitle;
+
+  /// No description provided for @remoteInputWorkspaceFocusTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看设备'**
+  String get remoteInputWorkspaceFocusTarget;
+
+  /// No description provided for @remoteInputWorkspaceAddTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'加入工作区'**
+  String get remoteInputWorkspaceAddTarget;
+
+  /// No description provided for @remoteInputWorkspaceRemoveTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'移出工作区'**
+  String get remoteInputWorkspaceRemoveTarget;
+
+  /// No description provided for @remoteInputWorkspaceState.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get remoteInputWorkspaceState;
+
+  /// No description provided for @remoteInputWorkspaceConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'边缘重叠'**
+  String get remoteInputWorkspaceConflict;
+
+  /// No description provided for @remoteInputWorkspaceTargetIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未启用'**
+  String get remoteInputWorkspaceTargetIdle;
+
+  /// No description provided for @remoteInputWorkspaceStatusIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠工作区未启用'**
+  String get remoteInputWorkspaceStatusIdle;
+
+  /// No description provided for @remoteInputWorkspaceStatusOffering.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等待被控设备确认'**
+  String get remoteInputWorkspaceStatusOffering;
+
+  /// No description provided for @remoteInputWorkspaceStatusArmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动到屏幕边缘开始控制目标设备'**
+  String get remoteInputWorkspaceStatusArmed;
+
+  /// No description provided for @remoteInputWorkspaceStatusActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制 {peer}'**
+  String remoteInputWorkspaceStatusActive(String peer);
+
+  /// No description provided for @remoteInputWorkspaceStatusFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'键鼠工作区失败：{error}'**
+  String remoteInputWorkspaceStatusFailed(String error);
 }
 
 class _AppLocalizationsDelegate

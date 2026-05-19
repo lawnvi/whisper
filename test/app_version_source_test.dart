@@ -6,6 +6,6 @@ void main() {
   test('pubspec declares the next app version', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
-    expect(pubspec, contains(RegExp(r'^version: 0\.0\.36$', multiLine: true)));
+    expect(pubspec, contains(RegExp(r'^version: 0\.0\.37$', multiLine: true)));
   });
 }

@@ -25,6 +25,9 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -66,7 +69,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
   static const double _desktopToolbarGap = 10;
-  static const double _desktopToolbarToolGroupWidth = 106;
+  static const double _desktopToolbarToolGroupWidth = 140;
   static const Duration _desktopToolbarAnimationDuration =
       Duration(milliseconds: 220);
   static const Curve _desktopToolbarAnimationCurve = Curves.easeOutCubic;
@@ -76,6 +79,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
   final AudioGroupCoordinator _audioGroupCoordinator =
       AudioGroupCoordinator.shared;
+  final RemoteInputCoordinator _remoteInputCoordinator =
+      RemoteInputCoordinator.shared;
+  final RemoteInputWorkspaceCoordinator _remoteInputWorkspaceCoordinator =
+      RemoteInputWorkspaceCoordinator.shared;
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -121,6 +128,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
+    _remoteInputCoordinator.addListener(
+      _handleDesktopRemoteInputWorkspaceChanged,
+    );
+    _remoteInputWorkspaceCoordinator.addListener(
+      _handleDesktopRemoteInputWorkspaceChanged,
+    );
     clipboardWatcher.addListener(this);
     // start watch
     clipboardWatcher.start();
@@ -300,6 +313,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
+    _remoteInputCoordinator.removeListener(
+      _handleDesktopRemoteInputWorkspaceChanged,
+    );
+    _remoteInputWorkspaceCoordinator.removeListener(
+      _handleDesktopRemoteInputWorkspaceChanged,
+    );
     _desktopSearchController.dispose();
     _desktopSearchFocusNode.dispose();
     // stop watch
@@ -324,6 +343,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _handleDesktopAudioChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleDesktopRemoteInputWorkspaceChanged() {
     if (mounted) {
       setState(() {});
     }
@@ -1050,6 +1075,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
             const SizedBox(width: 2),
             _buildDesktopAudioShareAction(),
             const SizedBox(width: 2),
+            _buildDesktopRemoteInputWorkspaceAction(),
+            const SizedBox(width: 2),
             _buildDesktopToolButton(
               icon: Icons.settings_outlined,
               tooltip: AppLocalizations.of(context)?.setting ?? '设置',
@@ -1081,6 +1108,26 @@ class _DeviceListScreen extends State<DeviceListScreen>
       ),
       iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
       onPressed: isBusy ? null : _toggleDesktopAudioShare,
+    );
+  }
+
+  Widget _buildDesktopRemoteInputWorkspaceAction() {
+    final palette = context.whisperPalette;
+    final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
+    final legacyState = _remoteInputCoordinator.state;
+    final legacyLive = legacyState.status != RemoteInputRuntimeStatus.idle &&
+        legacyState.status != RemoteInputRuntimeStatus.failed;
+    final isActive =
+        snapshot.isControllerLive || snapshot.isControlledLive || legacyLive;
+    final isBusy = snapshot.status == RemoteInputWorkspaceStatus.offering ||
+        legacyState.status == RemoteInputRuntimeStatus.offering ||
+        legacyState.status == RemoteInputRuntimeStatus.connecting;
+    return _buildDesktopToolButton(
+      icon: Icons.keyboard_alt_outlined,
+      tooltip:
+          AppLocalizations.of(context)?.remoteInputWorkspaceTooltip ?? '键鼠工作区',
+      iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
+      onPressed: _openRemoteInputWorkspace,
     );
   }
 
@@ -1218,6 +1265,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
         showAppToast(l10n.audioShareFailed(error.toString()));
       }
     }
+  }
+
+  Future<void> _openRemoteInputWorkspace() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RemoteInputWorkspaceScreen(
+          initialDevices: socketManager.connectedRemoteInputDevices(
+            preferredPeerId: _selectedDesktopPeerId ?? '',
+          ),
+          preferredPeerId: _selectedDesktopPeerId ?? '',
+        ),
+      ),
+    );
+    _refreshDevice();
   }
 
   Future<Map<String, AudioChannelRole>?> _showAudioGroupSetupSheet(

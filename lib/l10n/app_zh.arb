@@ -277,5 +277,38 @@
   "remoteInputEdgeRight": "右侧",
   "remoteInputEdgeTop": "上方",
   "remoteInputEdgeBottom": "下方",
-  "remoteInputEdgeNotAdjacent": "未贴边"
+  "remoteInputEdgeNotAdjacent": "未贴边",
+  "remoteInputWorkspaceTitle": "键鼠工作区",
+  "remoteInputWorkspaceTooltip": "键鼠工作区",
+  "remoteInputWorkspaceStart": "启动",
+  "remoteInputWorkspaceStop": "停止",
+  "remoteInputWorkspaceNoTargets": "没有可用的桌面被控设备",
+  "remoteInputWorkspaceSelectTargets": "被控设备",
+  "remoteInputWorkspaceCanvasTitle": "屏幕排列",
+  "remoteInputWorkspaceDetailsTitle": "设备详情",
+  "remoteInputWorkspaceFocusTarget": "查看设备",
+  "remoteInputWorkspaceAddTarget": "加入工作区",
+  "remoteInputWorkspaceRemoveTarget": "移出工作区",
+  "remoteInputWorkspaceState": "状态",
+  "remoteInputWorkspaceConflict": "边缘重叠",
+  "remoteInputWorkspaceTargetIdle": "未启用",
+  "remoteInputWorkspaceStatusIdle": "键鼠工作区未启用",
+  "remoteInputWorkspaceStatusOffering": "正在等待被控设备确认",
+  "remoteInputWorkspaceStatusArmed": "移动到屏幕边缘开始控制目标设备",
+  "remoteInputWorkspaceStatusActive": "正在控制 {peer}",
+  "@remoteInputWorkspaceStatusActive": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInputWorkspaceStatusFailed": "键鼠工作区失败：{error}",
+  "@remoteInputWorkspaceStatusFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

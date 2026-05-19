@@ -586,4 +586,69 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteInputEdgeNotAdjacent => 'Sin borde compartido';
+
+  @override
+  String get remoteInputWorkspaceTitle => 'Espacio de teclado y mouse';
+
+  @override
+  String get remoteInputWorkspaceTooltip => 'Espacio de teclado y mouse';
+
+  @override
+  String get remoteInputWorkspaceStart => 'Iniciar';
+
+  @override
+  String get remoteInputWorkspaceStop => 'Detener';
+
+  @override
+  String get remoteInputWorkspaceNoTargets =>
+      'No hay equipos de escritorio disponibles';
+
+  @override
+  String get remoteInputWorkspaceSelectTargets => 'Equipos controlados';
+
+  @override
+  String get remoteInputWorkspaceCanvasTitle => 'Distribucion de pantalla';
+
+  @override
+  String get remoteInputWorkspaceDetailsTitle => 'Detalles del dispositivo';
+
+  @override
+  String get remoteInputWorkspaceFocusTarget => 'Ver dispositivo';
+
+  @override
+  String get remoteInputWorkspaceAddTarget => 'Agregar al espacio';
+
+  @override
+  String get remoteInputWorkspaceRemoveTarget => 'Quitar del espacio';
+
+  @override
+  String get remoteInputWorkspaceState => 'Estado';
+
+  @override
+  String get remoteInputWorkspaceConflict => 'Bordes superpuestos';
+
+  @override
+  String get remoteInputWorkspaceTargetIdle => 'No activado';
+
+  @override
+  String get remoteInputWorkspaceStatusIdle =>
+      'El espacio de teclado y mouse esta desactivado';
+
+  @override
+  String get remoteInputWorkspaceStatusOffering =>
+      'Esperando confirmacion de los equipos';
+
+  @override
+  String get remoteInputWorkspaceStatusArmed =>
+      'Mueve al borde de la pantalla para controlar un equipo';
+
+  @override
+  String remoteInputWorkspaceStatusActive(String peer) {
+    return 'Controlando $peer';
+  }
+
+  @override
+  String remoteInputWorkspaceStatusFailed(String error) {
+    return 'Error del espacio de teclado y mouse: $error';
+  }
 }

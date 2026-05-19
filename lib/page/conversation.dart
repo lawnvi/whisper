@@ -874,6 +874,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool get _shouldShowRemoteInputAction {
     return !_isLocalhost &&
         _isConnectedSession &&
+        !widget.embedded &&
         isDesktop() &&
         supportsNativeRemoteInput() &&
         socketManager.supportsRemoteInputFor(device.uid);
