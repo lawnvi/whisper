@@ -425,6 +425,35 @@ class AppLocalizationsEn extends AppLocalizations {
       'Requesting peer to play this device\'s audio';
 
   @override
+  String get audioGroupShareStart => 'Sync to multiple speakers';
+
+  @override
+  String get audioGroupSelectSinks => 'Select playback devices';
+
+  @override
+  String get audioGroupStart => 'Start synced playback';
+
+  @override
+  String get audioGroupRoleStereo => 'Stereo';
+
+  @override
+  String get audioGroupRoleLeft => 'Left channel';
+
+  @override
+  String get audioGroupRoleRight => 'Right channel';
+
+  @override
+  String get audioGroupRoleMono => 'Mono';
+
+  @override
+  String get audioGroupRequestingPlayback =>
+      'Requesting synced playback on selected devices';
+
+  @override
+  String get audioGroupSelectAtLeastOne =>
+      'Select at least one playback device';
+
+  @override
   String audioShareFailed(String error) {
     return 'Audio sharing failed: $error';
   }

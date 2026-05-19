@@ -22,6 +22,17 @@ void main() {
     expect(service, contains('.setProgress(100, progress'));
     expect(service, contains('EXTRA_PROGRESS'));
     expect(service, contains('EXTRA_INDETERMINATE_PROGRESS'));
+    expect(
+      service,
+      matches(
+        RegExp(
+          r'override fun onCreate\(\)[\s\S]*'
+          r'startForeground\([\s\S]*'
+          r'NOTIFICATION_ID,[\s\S]*'
+          r'buildNotification\(',
+        ),
+      ),
+    );
 
     expect(plugin, contains('call.argument<Int>("progress")'));
     expect(plugin, contains('call.argument<Boolean>("indeterminateProgress")'));

@@ -428,6 +428,36 @@ class AppLocalizationsEs extends AppLocalizations {
       'Solicitando al otro dispositivo que reproduzca este audio';
 
   @override
+  String get audioGroupShareStart => 'Sincronizar con varios altavoces';
+
+  @override
+  String get audioGroupSelectSinks =>
+      'Seleccionar dispositivos de reproduccion';
+
+  @override
+  String get audioGroupStart => 'Iniciar reproduccion sincronizada';
+
+  @override
+  String get audioGroupRoleStereo => 'Estereo';
+
+  @override
+  String get audioGroupRoleLeft => 'Canal izquierdo';
+
+  @override
+  String get audioGroupRoleRight => 'Canal derecho';
+
+  @override
+  String get audioGroupRoleMono => 'Mono';
+
+  @override
+  String get audioGroupRequestingPlayback =>
+      'Solicitando reproduccion sincronizada en los dispositivos seleccionados';
+
+  @override
+  String get audioGroupSelectAtLeastOne =>
+      'Selecciona al menos un dispositivo de reproduccion';
+
+  @override
   String audioShareFailed(String error) {
     return 'Error al compartir audio: $error';
   }

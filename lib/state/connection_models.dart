@@ -72,21 +72,34 @@ class DevicePresence {
 class ConnectionSnapshot {
   const ConnectionSnapshot({
     this.activePeerId,
+    this.activePeerIds = const <String>{},
     this.state = ConnectionLifecycleState.idle,
     this.errorMessage,
   });
 
   final String? activePeerId;
+  final Set<String> activePeerIds;
   final ConnectionLifecycleState state;
   final String? errorMessage;
 
+  Set<String> get connectedPeerIds => <String>{
+        ...activePeerIds,
+        if (activePeerId?.isNotEmpty ?? false) activePeerId!,
+      };
+
+  bool get hasActiveConnections => connectedPeerIds.isNotEmpty;
+
+  bool isConnectedTo(String peerId) => connectedPeerIds.contains(peerId);
+
   ConnectionSnapshot copyWith({
     String? activePeerId,
+    Set<String>? activePeerIds,
     ConnectionLifecycleState? state,
     String? errorMessage,
   }) {
     return ConnectionSnapshot(
       activePeerId: activePeerId ?? this.activePeerId,
+      activePeerIds: activePeerIds ?? this.activePeerIds,
       state: state ?? this.state,
       errorMessage: errorMessage ?? this.errorMessage,
     );

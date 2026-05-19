@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
@@ -20,6 +21,8 @@ import 'package:whisper/helper/local.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/peer_connection.dart';
+import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -75,6 +78,12 @@ class WsSvrManager {
 
   HttpServer? _server;
   WebSocketSink? _sink;
+  final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
+  final Map<WebSocketSink, String> _peerIdsBySink = <WebSocketSink, String>{};
+  final Map<String, PeerProfile> _remoteProfilesByPeerId =
+      <String, PeerProfile>{};
+  final Map<WebSocketSink, Timer> _clientTimersBySink =
+      <WebSocketSink, Timer>{};
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
   IOSink? _ioSink;
@@ -98,38 +107,128 @@ class WsSvrManager {
   int _remoteProfileRevision = 0;
   final List<Completer<PeerProfile?>> _remoteProfileRefreshWaiters =
       <Completer<PeerProfile?>>[];
-  IOSink? _receivingTransferSink;
-  FileTransferData? _receivingTransfer;
-  StreamingChecksum? _receivingChecksum;
-  String? _receivingTransferId;
-  int _receivingTransferOffset = 0;
-  String? _activeOutgoingTransferId;
+  final MultiPeerTransferRuntime _transferRuntime = MultiPeerTransferRuntime();
+  final Map<String, IOSink> _receivingTransferSinks = <String, IOSink>{};
+  final Map<String, FileTransferData> _receivingTransfers =
+      <String, FileTransferData>{};
+  final Map<String, StreamingChecksum> _receivingChecksums =
+      <String, StreamingChecksum>{};
+  final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _incomingBytesSinceProgress = <String, int>{};
   final Map<String, int> _incomingFramesSinceProgress = <String, int>{};
   final Map<String, int> _incomingWindowStartedAt = <String, int>{};
   final Map<String, int> _outgoingWindowSentAt = <String, int>{};
   final Map<String, int> _incomingWindowEndOffsets = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
-  TransferChunkFrame? _pendingIncomingChunkHeader;
-  int _pendingIncomingRawOffset = 0;
-  int _pendingIncomingRawRemaining = 0;
+  final Map<String, TransferChunkFrame> _pendingIncomingChunkHeadersByPeer =
+      <String, TransferChunkFrame>{};
+  final Map<String, int> _pendingIncomingRawOffsetsByPeer = <String, int>{};
+  final Map<String, int> _pendingIncomingRawRemainingByPeer = <String, int>{};
 
-  bool get isConnected => _sink != null;
+  PeerProfile? get _selectedRemoteProfile =>
+      _remoteProfilesByPeerId[receiver] ?? _remoteProfile;
+
+  Set<String> get connectedPeerIds => _peerConnections.connectedPeerIds;
+  bool get isConnected =>
+      _sink != null || _peerConnections.connectedPeerIds.isNotEmpty;
   bool get supportsResumableTransfer => _supportsResumableTransfer;
   bool get supportsRemoteInput =>
-      _remoteProfile?.capabilities.remoteInputSourceV1 == true &&
-      _remoteProfile?.capabilities.remoteInputSinkV1 == true;
+      _selectedRemoteProfile?.capabilities.remoteInputSourceV1 == true &&
+      _selectedRemoteProfile?.capabilities.remoteInputSinkV1 == true;
   bool get supportsRemoteInputTopology =>
       supportsRemoteInput &&
-      _remoteProfile?.capabilities.remoteInputTopologyV1 == true &&
-      _remoteProfile?.displayTopology?.isNotEmpty == true;
+      _selectedRemoteProfile?.capabilities.remoteInputTopologyV1 == true &&
+      _selectedRemoteProfile?.displayTopology?.isNotEmpty == true;
   RemoteInputTopology? get remoteDisplayTopology =>
-      _remoteProfile?.displayTopology;
+      _selectedRemoteProfile?.displayTopology;
   bool get _supportsResumableTransfer =>
-      _remoteProfile?.capabilities.fileResumeV1 == true;
+      _selectedRemoteProfile?.capabilities.fileResumeV1 == true;
+
+  bool _supportsResumableTransferFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return profile?.capabilities.fileResumeV1 == true;
+  }
+
+  bool supportsRemoteInputFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return profile?.capabilities.remoteInputSourceV1 == true &&
+        profile?.capabilities.remoteInputSinkV1 == true;
+  }
+
+  bool supportsAudioGroupSourceFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return profile?.capabilities.audioGroupSourceV1 == true;
+  }
+
+  bool supportsAudioGroupSinkFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return profile?.capabilities.audioGroupSinkV1 == true;
+  }
+
+  List<DeviceData> connectedAudioGroupSinkDevices({
+    String preferredPeerId = '',
+  }) {
+    final devices = <DeviceData>[];
+    for (final peerId in connectedPeerIds) {
+      if (!supportsAudioGroupSinkFor(peerId)) {
+        continue;
+      }
+      final profile = _remoteProfilesByPeerId[peerId] ??
+          (peerId == receiver ? _remoteProfile : null);
+      final device = profile?.device;
+      if (device != null) {
+        devices.add(device);
+      }
+    }
+    devices.sort((left, right) {
+      if (left.uid == preferredPeerId) {
+        return -1;
+      }
+      if (right.uid == preferredPeerId) {
+        return 1;
+      }
+      return left.name.compareTo(right.name);
+    });
+    return devices;
+  }
+
+  bool supportsRemoteInputTopologyFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return supportsRemoteInputFor(peerId) &&
+        profile?.capabilities.remoteInputTopologyV1 == true &&
+        profile?.displayTopology?.isNotEmpty == true;
+  }
+
+  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) {
+    final profile = _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return profile?.displayTopology;
+  }
 
   bool remoteTrustsPeer(String peerId) {
-    return _remoteProfile?.trustsPeer(peerId) ?? false;
+    return _selectedRemoteProfile?.trustsPeer(peerId) ?? false;
+  }
+
+  bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) {
+    final profile = _remoteProfilesByPeerId[remotePeerId] ??
+        (remotePeerId == receiver ? _remoteProfile : null);
+    return profile?.trustsPeer(trustedPeerId) ?? false;
+  }
+
+  bool isConnectedTo(String peerId) {
+    return _peerConnections.isConnectedTo(peerId);
+  }
+
+  void selectPeer(String peerId) {
+    if (!_peerConnections.isConnectedTo(peerId)) {
+      return;
+    }
+    receiver = peerId;
   }
 
   String _shortSessionId(String sessionId) {
@@ -191,11 +290,30 @@ class WsSvrManager {
   }
 
   void _clearPendingIncomingChunk(String transferId) {
-    if (_pendingIncomingChunkHeader?.transferId == transferId) {
-      _pendingIncomingChunkHeader = null;
-      _pendingIncomingRawOffset = 0;
-      _pendingIncomingRawRemaining = 0;
+    final keys = _pendingIncomingChunkHeadersByPeer.entries
+        .where((entry) => entry.value.transferId == transferId)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    for (final key in keys) {
+      _pendingIncomingChunkHeadersByPeer.remove(key);
+      _pendingIncomingRawOffsetsByPeer.remove(key);
+      _pendingIncomingRawRemainingByPeer.remove(key);
     }
+  }
+
+  String? _peerIdForSink(WebSocketSink? sink) {
+    return sink == null ? null : _peerIdsBySink[sink];
+  }
+
+  String _streamPeerKey(WebSocketSink? sink) {
+    final peerId = _peerIdForSink(sink);
+    if (peerId != null && peerId.isNotEmpty) {
+      return peerId;
+    }
+    if (receiver.isNotEmpty) {
+      return receiver;
+    }
+    return '_legacy';
   }
 
   void setSender(String uid) {
@@ -260,6 +378,16 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onTransferUpdated(snapshot));
   }
 
+  Future<void> debugRegisterPeerConnection(
+    String peerId,
+    PeerConnection connection,
+  ) async {
+    await _peerConnections.register(connection);
+    if (receiver.isEmpty) {
+      receiver = peerId;
+    }
+  }
+
   void _dispatchTransferData(FileTransferData data) {
     final snapshot = LocalDatabase().snapshotForTransfer(data);
     _dispatchToAll((event) => event.onTransferUpdated(snapshot));
@@ -277,6 +405,55 @@ class WsSvrManager {
     await LocalDatabase().upsertFileTransfer(data);
     _dispatchTransferData(data);
     return data;
+  }
+
+  Future<void> _registerPeerConnection({
+    required String peerId,
+    required WebSocketSink sink,
+    PeerProfile? profile,
+  }) async {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _peerIdsBySink[sink] = peerId;
+    await _peerConnections.register(
+      PeerConnection(
+        peerId: peerId,
+        send: sink.add,
+        close: () async {
+          _peerIdsBySink.remove(sink);
+          await sink.close();
+        },
+      ),
+    );
+    receiver = peerId;
+    _sink = sink;
+    _setRemoteProfile(profile, peerId: peerId);
+  }
+
+  Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
+    _clientTimersBySink.remove(sink)?.cancel();
+    final peerId = _peerIdsBySink.remove(sink);
+    if (peerId == null) {
+      if (identical(_sink, sink)) {
+        _sink = null;
+      }
+      return;
+    }
+    await _peerConnections.disconnect(peerId);
+    _remoteProfilesByPeerId.remove(peerId);
+    if (receiver == peerId) {
+      receiver = _peerConnections.connectedPeerIds.isEmpty
+          ? ''
+          : _peerConnections.connectedPeerIds.first;
+      if (receiver.isEmpty) {
+        _sink = null;
+        _setRemoteProfile(null);
+      } else {
+        _setRemoteProfile(_remoteProfilesByPeerId[receiver], peerId: receiver);
+      }
+    }
+    _dispatchToAll((event) => event.onClose());
   }
 
   Future<FileTransferData?> _updateTransfer(
@@ -305,24 +482,20 @@ class WsSvrManager {
 
   void startServer(int port, var callback) {
     close(closeServer: true);
+    AudioShareManager.shared.onGroupPacket = (packet) {
+      unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
+    };
     final chatHandler = webSocketHandler((WebSocketChannel webSocket) async {
-      if (_sink != null) {
-        var device = await LocalSetting().instance();
-        var message = _buildMessage(
-            MessageEnum.Auth, device.toJsonString(), "服务占线/busy", "", 0, false);
-        webSocket.sink.add(utf8.encode(message.toJsonString()));
-        return;
-      }
       asServer = true;
       _sink = webSocket.sink;
       webSocket.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message));
+        unawaited(_handleIncomingMessage(message, sink: webSocket.sink));
       }, onError: (Object error, StackTrace stackTrace) {
         logger.i("连接服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
       }, onDone: () {
         logger.i("连接服务done");
-        close();
+        unawaited(_handlePeerSocketDone(webSocket.sink));
       });
     }, pingInterval: _serverPingInterval);
     final audioHandler = AudioShareManager.shared.webSocketHandler(
@@ -356,7 +529,6 @@ class WsSvrManager {
 
   Future<void> connectToServer(String host, int port, var callback) async {
     try {
-      close();
       final wsUrl = Uri.parse('ws://$host:$port');
       WebSocketChannel channel = IOWebSocketChannel(
         WebSocket.connect(
@@ -367,21 +539,23 @@ class WsSvrManager {
       await channel.ready;
       asServer = false;
       _sink = channel.sink;
-      _auth(true);
+      await _auth(true, sink: channel.sink);
       channel.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message));
+        unawaited(_handleIncomingMessage(message, sink: channel.sink));
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
       }, onDone: () {
         logger.i("客户端服务done");
-        close();
+        unawaited(_handlePeerSocketDone(channel.sink));
       });
       // 开启一个定时器，每秒执行一次
-      _clientTimer = Timer.periodic(_clientHeartbeatInterval, (timer) {
+      final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
         // 在这里执行你想要重复执行的代码
-        _heartBeat();
+        unawaited(_heartBeat(sink: channel.sink));
       });
+      _clientTimersBySink[channel.sink] = timer;
+      _clientTimer = timer;
       callback(true, "");
     } on Exception catch (e1) {
       callback(false, "连接失败：$e1");
@@ -395,7 +569,8 @@ class WsSvrManager {
     final hadActiveConnection = _sink != null ||
         _ioSink != null ||
         _clientTimer != null ||
-        _receivingTransferSink != null ||
+        _receivingTransferSinks.isNotEmpty ||
+        _peerConnections.connectedPeerIds.isNotEmpty ||
         receiver.isNotEmpty;
     if (!hadActiveConnection && !closeServer) {
       return;
@@ -403,14 +578,20 @@ class WsSvrManager {
 
     _clientTimer?.cancel();
     _clientTimer = null;
+    for (final timer in _clientTimersBySink.values) {
+      timer.cancel();
+    }
+    _clientTimersBySink.clear();
     unawaited(_markRecoverableTransfersWaitingReconnect());
     final closeResumableHandles = _closeResumableHandles();
     await _freeIoSink(freeAll: true);
     await AudioShareCoordinator.shared.stopLocal();
+    await AudioGroupCoordinator.shared.stopLocal();
     await RemoteInputCoordinator.shared.stopLocal();
-    final currentSink = _sink;
     _sink = null;
-    await currentSink?.close();
+    await _peerConnections.disconnectAll();
+    _peerIdsBySink.clear();
+    _remoteProfilesByPeerId.clear();
     if (closeServer) {
       started = false;
       final server = _server;
@@ -425,18 +606,76 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onClose());
   }
 
+  Future<void> disconnectPeer(String peerId) async {
+    if (peerId.isEmpty || !_peerConnections.isConnectedTo(peerId)) {
+      return;
+    }
+    await _peerConnections.disconnect(peerId);
+    _remoteProfilesByPeerId.remove(peerId);
+    if (receiver == peerId) {
+      receiver = _peerConnections.connectedPeerIds.isEmpty
+          ? ''
+          : _peerConnections.connectedPeerIds.first;
+      _sink = receiver.isEmpty ? null : _sink;
+      _setRemoteProfile(
+        receiver.isEmpty ? null : _remoteProfilesByPeerId[receiver],
+        peerId: receiver.isEmpty ? null : receiver,
+      );
+    }
+    _dispatchToAll((event) => event.onClose());
+  }
+
   void close({bool closeServer = false}) {
     unawaited(closeGracefully(closeServer: closeServer));
   }
 
-  void _send(String message) {
-    _sink?.add(utf8.encode(message));
+  bool _sendTo(String peerId, String message) {
+    if (peerId.isEmpty) {
+      return false;
+    }
+    return _peerConnections.sendTo(peerId, utf8.encode(message));
   }
 
-  Future<void> _handleIncomingMessage(dynamic message) {
+  void _sendMessageData(
+    MessageData message, {
+    String? peerId,
+    WebSocketSink? sink,
+  }) {
+    final payload = utf8.encode(message.toJsonString());
+    if (sink != null) {
+      sink.add(payload);
+      return;
+    }
+    if (peerId != null && _peerConnections.sendTo(peerId, payload)) {
+      return;
+    }
+    _send(message.toJsonString());
+  }
+
+  bool _sendBytesToPeer(String peerId, Object bytes) {
+    if (peerId.isNotEmpty && _peerConnections.sendTo(peerId, bytes)) {
+      return true;
+    }
+    if (peerId.isEmpty || peerId == receiver) {
+      _sink?.add(bytes);
+      return _sink != null;
+    }
+    return false;
+  }
+
+  void _send(String message) {
+    if (!_sendTo(receiver, message)) {
+      _sink?.add(utf8.encode(message));
+    }
+  }
+
+  Future<void> _handleIncomingMessage(
+    dynamic message, {
+    WebSocketSink? sink,
+  }) {
     _receiveQueue = _receiveQueue.then((_) async {
       try {
-        await _listen(_incomingBytes(message));
+        await _listen(_incomingBytes(message), sink: sink);
       } catch (error, stackTrace) {
         logger.i('处理 websocket 消息失败: $error\n$stackTrace');
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -458,25 +697,34 @@ class WsSvrManager {
     throw FormatException('unsupported websocket message: $message');
   }
 
-  Future<void> _listen(Uint8List data) async {
-    final pendingHeader = _pendingIncomingChunkHeader;
-    if (_supportsResumableTransfer &&
+  Future<void> _listen(Uint8List data, {WebSocketSink? sink}) async {
+    final streamPeerId = _peerIdForSink(sink);
+    final streamPeerKey = _streamPeerKey(sink);
+    final supportsResumableTransferForStream = streamPeerId == null
+        ? _supportsResumableTransfer
+        : _supportsResumableTransferFor(streamPeerId);
+    final pendingHeader = _pendingIncomingChunkHeadersByPeer[streamPeerKey];
+    final pendingRawRemaining =
+        _pendingIncomingRawRemainingByPeer[streamPeerKey] ?? 0;
+    if (supportsResumableTransferForStream &&
         pendingHeader != null &&
-        _pendingIncomingRawRemaining > 0) {
-      final offset = _pendingIncomingRawOffset;
-      if (data.length > _pendingIncomingRawRemaining) {
+        pendingRawRemaining > 0) {
+      final offset = _pendingIncomingRawOffsetsByPeer[streamPeerKey] ?? 0;
+      if (data.length > pendingRawRemaining) {
         await _recoverIncomingTransferChunk(
           transferId: pendingHeader.transferId,
           reason:
-              'raw payload length mismatch remaining=$_pendingIncomingRawRemaining actual=${data.length}',
+              'raw payload length mismatch remaining=$pendingRawRemaining actual=${data.length}',
         );
         return;
       }
-      _pendingIncomingRawOffset += data.length;
-      _pendingIncomingRawRemaining -= data.length;
-      if (_pendingIncomingRawRemaining == 0) {
-        _pendingIncomingChunkHeader = null;
-        _pendingIncomingRawOffset = 0;
+      final nextRemaining = pendingRawRemaining - data.length;
+      _pendingIncomingRawOffsetsByPeer[streamPeerKey] = offset + data.length;
+      _pendingIncomingRawRemainingByPeer[streamPeerKey] = nextRemaining;
+      if (nextRemaining == 0) {
+        _pendingIncomingChunkHeadersByPeer.remove(streamPeerKey);
+        _pendingIncomingRawOffsetsByPeer.remove(streamPeerKey);
+        _pendingIncomingRawRemainingByPeer.remove(streamPeerKey);
       }
       await _handleTransferChunk(
         TransferChunkFrame(
@@ -489,7 +737,8 @@ class WsSvrManager {
       return;
     }
 
-    if (_supportsResumableTransfer && TransferChunkFrame.looksLikeFrame(data)) {
+    if (supportsResumableTransferForStream &&
+        TransferChunkFrame.looksLikeFrame(data)) {
       final frame = TransferChunkFrame.decode(data);
       if (frame.payloadInNextFrame) {
         if (frame.payloadLength <= 0) {
@@ -499,9 +748,9 @@ class WsSvrManager {
           );
           return;
         }
-        _pendingIncomingChunkHeader = frame;
-        _pendingIncomingRawOffset = frame.offset;
-        _pendingIncomingRawRemaining = frame.payloadLength;
+        _pendingIncomingChunkHeadersByPeer[streamPeerKey] = frame;
+        _pendingIncomingRawOffsetsByPeer[streamPeerKey] = frame.offset;
+        _pendingIncomingRawRemainingByPeer[streamPeerKey] = frame.payloadLength;
         _incomingWindowEndOffsets[frame.transferId] =
             frame.offset + frame.payloadLength;
         return;
@@ -531,6 +780,8 @@ class WsSvrManager {
     } on Exception {
       // str = "";
     }
+    final incomingPeerId =
+        message.sender.isNotEmpty ? message.sender : streamPeerId;
 
     switch (message.type) {
       case MessageEnum.Auth:
@@ -556,9 +807,17 @@ class WsSvrManager {
                 await LocalDatabase().fetchDevice(device?.uid ?? "");
             var self = await LocalSetting().instance();
             if ((self.auth || localTemp != null && localTemp.auth)) {
-              await _auth(true);
-              receiver = device?.uid ?? "";
-              _setRemoteProfile(profile);
+              final peerId = device?.uid ?? "";
+              await _auth(true, sink: sink, peerId: peerId);
+              receiver = peerId;
+              if (peerId.isNotEmpty && sink != null) {
+                await _registerPeerConnection(
+                  peerId: peerId,
+                  sink: sink,
+                  profile: profile,
+                );
+              }
+              _setRemoteProfile(profile, peerId: peerId);
               _dispatchToAll((event) => event.onConnect());
               unawaited(_resumeRecoverableOutgoingTransfers());
               _dispatchToAll((event) => event.afterAuth(true, device));
@@ -571,12 +830,20 @@ class WsSvrManager {
             event.onAuth(device, asServer, message.message ?? "",
                 (allow) async {
               logger.i("AUTH message: ${message.message} ||| $allow");
+              final peerId = device?.uid ?? "";
               if (asServer) {
-                await _auth(allow);
+                await _auth(allow, sink: sink, peerId: peerId);
               }
               if (allow) {
-                receiver = device?.uid ?? "";
-                _setRemoteProfile(profile);
+                receiver = peerId;
+                if (peerId.isNotEmpty && sink != null) {
+                  await _registerPeerConnection(
+                    peerId: peerId,
+                    sink: sink,
+                    profile: profile,
+                  );
+                }
+                _setRemoteProfile(profile, peerId: peerId);
                 _dispatchToAll((event) => event.onConnect());
                 unawaited(_resumeRecoverableOutgoingTransfers());
               } else {
@@ -646,9 +913,9 @@ class WsSvrManager {
           if (message.sender == sender) {
             return;
           }
-          _refreshRemoteProfileFromHeartbeat(message);
+          _refreshRemoteProfileFromHeartbeat(message, peerId: incomingPeerId);
           if (message.message == _profileRefreshRequestMessage) {
-            unawaited(_heartBeat());
+            unawaited(_heartBeat(peerId: incomingPeerId, sink: sink));
           }
           _ackMessage(message);
           break;
@@ -694,13 +961,43 @@ class WsSvrManager {
               jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
           final control = AudioControlMessage.fromJson(json);
           final self = await LocalSetting().instance();
-          final remoteDevice = _remoteProfile?.device;
+          final remoteProfile = incomingPeerId == null
+              ? _selectedRemoteProfile
+              : _remoteProfilesByPeerId[incomingPeerId] ??
+                  _selectedRemoteProfile;
+          final remoteDevice = remoteProfile?.device;
           await AudioShareCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
             remoteHost: remoteDevice?.host ?? '',
             remotePort: remoteDevice?.port ?? 0,
-            sendControl: sendAudioControl,
+            sendControl: incomingPeerId == null
+                ? sendAudioControl
+                : (control) => sendAudioControlTo(incomingPeerId, control),
+          );
+          _ackMessage(message);
+          break;
+        }
+      case MessageEnum.AudioGroupControl:
+        {
+          final json =
+              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          final control = AudioGroupControlMessage.fromJson(json);
+          final self = await LocalSetting().instance();
+          final remoteProfile = incomingPeerId == null
+              ? _selectedRemoteProfile
+              : _remoteProfilesByPeerId[incomingPeerId] ??
+                  _selectedRemoteProfile;
+          final remoteDevice = remoteProfile?.device;
+          await AudioGroupCoordinator.shared.handleControlMessage(
+            control,
+            localPeerId: self.uid,
+            remoteHost: remoteDevice?.host ?? '',
+            remotePort: remoteDevice?.port ?? 0,
+            sendControl: incomingPeerId == null
+                ? (_, control) => sendAudioGroupControl(control)
+                : (_, control) =>
+                    sendAudioGroupControlTo(incomingPeerId, control),
           );
           _ackMessage(message);
           break;
@@ -711,12 +1008,16 @@ class WsSvrManager {
               jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
           final control = RemoteInputControlMessage.fromJson(json);
           final self = await LocalSetting().instance();
-          final remoteDevice = _remoteProfile?.device;
+          final remoteProfile = incomingPeerId == null
+              ? _selectedRemoteProfile
+              : _remoteProfilesByPeerId[incomingPeerId] ??
+                  _selectedRemoteProfile;
+          final remoteDevice = remoteProfile?.device;
           final storedRemote = remoteDevice == null
               ? null
               : await LocalDatabase().fetchDevice(remoteDevice.uid);
           final isMutuallyTrusted = storedRemote?.auth == true &&
-              (_remoteProfile?.trustsPeer(self.uid) ?? false);
+              (remoteProfile?.trustsPeer(self.uid) ?? false);
           final localCanInject = supportsNativeRemoteInput();
           _remoteInputTrace(
             'remote input recv control ${_remoteInputControlSummary(control)} '
@@ -724,7 +1025,7 @@ class WsSvrManager {
             'remote=${remoteDevice?.uid ?? ''} '
             'remoteAddress=${remoteDevice?.host ?? ''}:${remoteDevice?.port ?? 0} '
             'storedAuth=${storedRemote?.auth == true} '
-            'remoteTrustsLocal=${_remoteProfile?.trustsPeer(self.uid) ?? false} '
+            'remoteTrustsLocal=${remoteProfile?.trustsPeer(self.uid) ?? false} '
             'mutualTrust=$isMutuallyTrusted '
             'localCanInject=$localCanInject '
             'remoteSupports=$supportsRemoteInput',
@@ -736,7 +1037,10 @@ class WsSvrManager {
             remotePort: remoteDevice?.port ?? 0,
             isMutuallyTrusted: isMutuallyTrusted,
             localCanInject: localCanInject,
-            sendControl: sendRemoteInputControl,
+            sendControl: incomingPeerId == null
+                ? sendRemoteInputControl
+                : (control) =>
+                    sendRemoteInputControlTo(incomingPeerId, control),
             remotePlatform: remoteDevice?.platform ?? '',
           );
           final inputState = RemoteInputCoordinator.shared.state;
@@ -899,11 +1203,15 @@ class WsSvrManager {
 
   MessageData _buildMessage(
       MessageEnum type, String content, msg, fileName, int size, bool clipboard,
-      {String md5 = "", path = "", uid, fileTimestamp = 0}) {
+      {String md5 = "",
+      path = "",
+      uid,
+      fileTimestamp = 0,
+      String? receiverOverride}) {
     return MessageData(
         id: 0,
         sender: sender,
-        receiver: receiver,
+        receiver: receiverOverride ?? receiver,
         name: fileName,
         clipboard: clipboard,
         size: size,
@@ -918,7 +1226,7 @@ class WsSvrManager {
         fileTimestamp: fileTimestamp);
   }
 
-  Future<void> _auth(bool allow) async {
+  Future<void> _auth(bool allow, {WebSocketSink? sink, String? peerId}) async {
     final profile = await _localPeerProfile();
     final device = profile.device;
     final topology = profile.displayTopology;
@@ -933,8 +1241,9 @@ class WsSvrManager {
       'display=${Platform.environment['DISPLAY'] ?? ''}',
     );
     var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
-        allow ? "" : "拒绝连接", "", 0, false);
-    _send(message.toJsonString());
+        allow ? "" : "拒绝连接", "", 0, false,
+        receiverOverride: peerId);
+    _sendMessageData(message, peerId: peerId, sink: sink);
   }
 
   Future<PeerProfile> _localPeerProfile() async {
@@ -962,6 +1271,10 @@ class WsSvrManager {
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
         remoteInputTopologyV1: hasTopology,
+        audioGroupSourceV1: supportsNativeSystemAudio(),
+        audioGroupSinkV1: true,
+        audioSyncClockV1: true,
+        audioChannelRoleV1: true,
       ),
       displayTopology: topology,
     );
@@ -1002,7 +1315,16 @@ class WsSvrManager {
     return completer.future.whenComplete(timer.cancel);
   }
 
-  void _setRemoteProfile(PeerProfile? profile) {
+  void _setRemoteProfile(PeerProfile? profile, {String? peerId}) {
+    if (peerId != null && peerId.isNotEmpty) {
+      if (profile == null) {
+        _remoteProfilesByPeerId.remove(peerId);
+      } else {
+        _remoteProfilesByPeerId[peerId] = profile;
+      }
+    } else if (profile == null) {
+      _remoteProfilesByPeerId.clear();
+    }
     _remoteProfile = profile;
     _remoteProfileRevision++;
     _completeRemoteProfileRefreshWaiters();
@@ -1018,17 +1340,19 @@ class WsSvrManager {
     }
   }
 
-  void _refreshRemoteProfileFromHeartbeat(MessageData message) {
+  void _refreshRemoteProfileFromHeartbeat(
+    MessageData message, {
+    String? peerId,
+  }) {
     final content = message.content;
     if (content == null || content.isEmpty) {
       return;
     }
     try {
-      _setRemoteProfile(
-        PeerProfile.fromJson(
-          jsonDecode(content) as Map<String, dynamic>,
-        ),
+      final profile = PeerProfile.fromJson(
+        jsonDecode(content) as Map<String, dynamic>,
       );
+      _setRemoteProfile(profile, peerId: peerId ?? message.sender);
     } catch (error) {
       _remoteInputTrace('heartbeat profile parse failed: $error');
     }
@@ -1039,11 +1363,15 @@ class WsSvrManager {
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
     // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
-    _send(MessageData.fromJson(json).toJsonString());
+    _sendMessageData(MessageData.fromJson(json), peerId: data.sender);
   }
 
-  Future<void> _heartBeat({bool profileRefreshRequest = false}) async {
-    if (_sink == null) {
+  Future<void> _heartBeat({
+    bool profileRefreshRequest = false,
+    WebSocketSink? sink,
+    String? peerId,
+  }) async {
+    if (sink == null && peerId == null && _sink == null) {
       return;
     }
     final profile = await _localPeerProfile();
@@ -1054,8 +1382,9 @@ class WsSvrManager {
         "",
         0,
         false,
-        uid: "");
-    _send(message.toJsonString());
+        uid: "",
+        receiverOverride: peerId);
+    _sendMessageData(message, peerId: peerId, sink: sink);
   }
 
   Future<void> refreshConnectionLiveness() async {
@@ -1063,6 +1392,10 @@ class WsSvrManager {
   }
 
   void sendAudioControl(AudioControlMessage control) {
+    sendAudioControlTo(receiver, control);
+  }
+
+  void sendAudioControlTo(String peerId, AudioControlMessage control) {
     final message = _buildMessage(
       MessageEnum.AudioControl,
       jsonEncode(control.toJson()),
@@ -1071,14 +1404,43 @@ class WsSvrManager {
       0,
       false,
       uid: control.sessionId,
+      receiverOverride: peerId,
     );
-    _send(message.toJsonString());
+    _sendMessageData(message, peerId: peerId);
+  }
+
+  void sendAudioGroupControl(AudioGroupControlMessage control) {
+    sendAudioGroupControlTo(receiver, control);
+  }
+
+  void sendAudioGroupControlTo(
+    String peerId,
+    AudioGroupControlMessage control,
+  ) {
+    final message = _buildMessage(
+      MessageEnum.AudioGroupControl,
+      jsonEncode(control.toJson()),
+      "",
+      "",
+      0,
+      false,
+      uid: control.sessionId,
+      receiverOverride: peerId,
+    );
+    _sendMessageData(message, peerId: peerId);
   }
 
   void sendRemoteInputControl(RemoteInputControlMessage control) {
+    sendRemoteInputControlTo(receiver, control);
+  }
+
+  void sendRemoteInputControlTo(
+    String peerId,
+    RemoteInputControlMessage control,
+  ) {
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '
-      'sender=$sender receiver=$receiver connected=$isConnected '
+      'sender=$sender receiver=$peerId connected=$isConnected '
       'remoteSupports=$supportsRemoteInput',
     );
     final message = _buildMessage(
@@ -1089,8 +1451,9 @@ class WsSvrManager {
       0,
       false,
       uid: control.sessionId,
+      receiverOverride: peerId,
     );
-    _send(message.toJsonString());
+    _sendMessageData(message, peerId: peerId);
   }
 
   Future<void> retryTransfer(String transferId) async {
@@ -1102,9 +1465,8 @@ class WsSvrManager {
         transfer.state == FileTransferState.completed) {
       return;
     }
-    if (_sink == null ||
-        !_supportsResumableTransfer ||
-        transfer.peerUid != receiver) {
+    if (!_supportsResumableTransferFor(transfer.peerUid) ||
+        !isConnectedTo(transfer.peerUid)) {
       await _updateTransfer(
         transferId,
         state: FileTransferState.waitingReconnect,
@@ -1118,7 +1480,8 @@ class WsSvrManager {
         state: FileTransferState.negotiating,
         lastError: '',
       );
-      _sendTransferControl(
+      _sendTransferControlTo(
+        transfer.peerUid,
         TransferControl(
           action: TransferAction.resumeProbe,
           transferId: transfer.transferId,
@@ -1154,10 +1517,10 @@ class WsSvrManager {
       state: FileTransferState.canceled,
       lastError: '',
     );
-    if (_sink != null &&
-        _supportsResumableTransfer &&
-        transfer.peerUid == receiver) {
-      _sendTransferControl(
+    if (_supportsResumableTransferFor(transfer.peerUid) &&
+        isConnectedTo(transfer.peerUid)) {
+      _sendTransferControlTo(
+        transfer.peerUid,
         TransferControl(
           action: TransferAction.cancel,
           transferId: transfer.transferId,
@@ -1174,19 +1537,32 @@ class WsSvrManager {
         ),
       );
     }
-    if (_receivingTransferId == transferId) {
+    if (_transferRuntime.activeIncomingFor(transfer.peerUid) == transferId) {
       await _clearActiveIncomingTransfer(transferId, flush: true);
-      await _startNextQueuedIncomingTransfer();
+      await _startNextQueuedIncomingTransfer(peerId: transfer.peerUid);
     }
-    if (_activeOutgoingTransferId == transferId) {
-      _activeOutgoingTransferId = null;
+    if (_transferRuntime.activeOutgoingFor(transfer.peerUid) == transferId) {
+      _transferRuntime.complete(
+        peerId: transfer.peerUid,
+        transferId: transferId,
+        direction: FileTransferDirection.outgoing,
+      );
     }
     _outgoingWindowSentAt.remove(transferId);
     _outgoingWindowEndOffsets.remove(transferId);
   }
 
   Future<void> sendMessage(String content, {clipboard = false}) async {
-    if (_sink == null) {
+    await sendMessageTo(receiver, content, clipboard: clipboard);
+  }
+
+  Future<void> sendMessageTo(
+    String peerId,
+    String content, {
+    bool clipboard = false,
+  }) async {
+    final canUseLegacySink = peerId == receiver && _sink != null;
+    if (peerId.isEmpty || (!isConnectedTo(peerId) && !canUseLegacySink)) {
       return;
     }
     if (clipboard && content.isEmpty) {
@@ -1196,11 +1572,18 @@ class WsSvrManager {
     if (content.trim().isEmpty) {
       return;
     }
-    var message =
-        _buildMessage(MessageEnum.Text, content, "", "", 0, clipboard);
+    var message = _buildMessage(
+      MessageEnum.Text,
+      content,
+      "",
+      "",
+      0,
+      clipboard,
+      receiverOverride: peerId,
+    );
     await LocalDatabase().insertMessage(message);
     logger.i("创建新消息, uuid: ${message.uuid}");
-    _send(message.toJsonString());
+    _sendMessageData(message, peerId: peerId);
   }
 
   Future<void> sendNotification(
@@ -1221,8 +1604,13 @@ class WsSvrManager {
   }
 
   Future<void> sendFile(String path) async {
+    await sendFileTo(receiver, path);
+  }
+
+  Future<void> sendFileTo(String peerId, String path) async {
     await _sendFileLock.synchronized(() async {
-      if (_sink == null) {
+      final canUseLegacySink = peerId == receiver && _sink != null;
+      if (peerId.isEmpty || (!isConnectedTo(peerId) && !canUseLegacySink)) {
         return;
       }
       final file = File(path);
@@ -1236,7 +1624,8 @@ class WsSvrManager {
       final now = DateTime.now().millisecondsSinceEpoch;
       String md5 = '';
       String content = '';
-      if (_supportsResumableTransfer) {
+      final supportsResumableTransfer = _supportsResumableTransferFor(peerId);
+      if (supportsResumableTransfer) {
         const checksumAlgorithm = defaultTransferChecksumAlgorithm;
         const checksumValue = '';
         content = jsonEncode(
@@ -1252,9 +1641,12 @@ class WsSvrManager {
       }
       var message = _buildMessage(
           MessageEnum.File, content, "", fileName, size, false,
-          path: path, md5: md5, fileTimestamp: timestamp);
+          path: path,
+          md5: md5,
+          fileTimestamp: timestamp,
+          receiverOverride: peerId);
       await LocalDatabase().insertMessage(message);
-      if (_supportsResumableTransfer) {
+      if (supportsResumableTransfer) {
         final metadata = _FileTransferMetadata.fromJson(
           jsonDecode(content) as Map<String, dynamic>,
         );
@@ -1266,7 +1658,7 @@ class WsSvrManager {
           FileTransferData(
             transferId: message.uuid,
             messageUuid: message.uuid,
-            peerUid: receiver,
+            peerUid: peerId,
             direction: FileTransferDirection.outgoing,
             state: FileTransferState.queued,
             finalPath: path,
@@ -1282,11 +1674,15 @@ class WsSvrManager {
           ),
         );
       }
-      _send(message.toJsonString());
+      _sendMessageData(message, peerId: peerId);
     });
   }
 
   void _sendTransferControl(TransferControl control) {
+    _sendTransferControlTo(receiver, control);
+  }
+
+  void _sendTransferControlTo(String peerId, TransferControl control) {
     final message = _buildMessage(
       MessageEnum.TransferControl,
       jsonEncode(control.toJson()),
@@ -1294,8 +1690,9 @@ class WsSvrManager {
       '',
       0,
       false,
+      receiverOverride: peerId,
     );
-    _send(message.toJsonString());
+    _sendMessageData(message, peerId: peerId);
   }
 
   Future<void> _handleResumableFileMsg(MessageData message) async {
@@ -1335,7 +1732,8 @@ class WsSvrManager {
           updatedAt: now,
         );
         await _persistTransfer(transfer);
-        _sendTransferControl(
+        _sendTransferControlTo(
+          transfer.peerUid,
           TransferControl(
             action: TransferAction.error,
             transferId: message.uuid,
@@ -1355,12 +1753,17 @@ class WsSvrManager {
         return;
       }
       final now = DateTime.now().millisecondsSinceEpoch;
+      final runtimeDecision = _transferRuntime.enqueue(
+        peerId: message.sender,
+        transferId: message.uuid,
+        direction: FileTransferDirection.incoming,
+      );
       transfer = FileTransferData(
         transferId: message.uuid,
         messageUuid: message.uuid,
         peerUid: message.sender,
         direction: FileTransferDirection.incoming,
-        state: _receivingTransferId == null
+        state: runtimeDecision == TransferRuntimeDecision.started
             ? FileTransferState.negotiating
             : FileTransferState.queued,
         finalPath: finalPath,
@@ -1375,6 +1778,12 @@ class WsSvrManager {
         updatedAt: now,
       );
       await _persistTransfer(transfer);
+    } else if (!isTerminalFileTransferState(transfer.state)) {
+      _transferRuntime.enqueue(
+        peerId: transfer.peerUid,
+        transferId: transfer.transferId,
+        direction: FileTransferDirection.incoming,
+      );
     }
 
     final existingMessage = await db.fetchMessageByUuid(message.uuid);
@@ -1387,8 +1796,8 @@ class WsSvrManager {
     }
     _ackMessage(message);
 
-    if (_receivingTransferId == null ||
-        _receivingTransferId == transfer.transferId) {
+    if (_transferRuntime.activeIncomingFor(transfer.peerUid) ==
+        transfer.transferId) {
       await _sendReadyForIncomingTransfer(transfer.transferId);
     }
   }
@@ -1432,8 +1841,12 @@ class WsSvrManager {
         isTerminalFileTransferState(transfer.state)) {
       return;
     }
-    if (_receivingTransferId != null &&
-        _receivingTransferId != transfer.transferId) {
+    final decision = _transferRuntime.enqueue(
+      peerId: transfer.peerUid,
+      transferId: transfer.transferId,
+      direction: FileTransferDirection.incoming,
+    );
+    if (decision == TransferRuntimeDecision.queued) {
       return;
     }
     await _sendReadyForIncomingTransfer(transfer.transferId);
@@ -1447,6 +1860,14 @@ class WsSvrManager {
     if (isTerminalFileTransferState(transfer.state)) {
       return;
     }
+    final decision = _transferRuntime.enqueue(
+      peerId: transfer.peerUid,
+      transferId: transfer.transferId,
+      direction: FileTransferDirection.incoming,
+    );
+    if (decision == TransferRuntimeDecision.queued) {
+      return;
+    }
     final tempFile = File(transfer.tempPath);
     if (!tempFile.existsSync()) {
       await tempFile.parent.create(recursive: true);
@@ -1457,7 +1878,6 @@ class WsSvrManager {
       resumeOffset = 0;
       await tempFile.writeAsBytes(const <int>[], flush: true);
     }
-    _receivingTransferId = transfer.transferId;
     final proof = await resumeProofHash(
       tempFile,
       resumeOffset: resumeOffset,
@@ -1469,7 +1889,8 @@ class WsSvrManager {
       committedBytes: resumeOffset,
       lastError: '',
     );
-    _sendTransferControl(
+    _sendTransferControlTo(
+      transfer.peerUid,
       TransferControl(
         action: TransferAction.ready,
         transferId: transfer.transferId,
@@ -1541,7 +1962,8 @@ class WsSvrManager {
         chunkSize: transfer.chunkSize,
       );
       if (proof != control.resumeProofHash) {
-        _sendTransferControl(
+        _sendTransferControlTo(
+          transfer.peerUid,
           TransferControl(
             action: TransferAction.restart,
             transferId: transfer.transferId,
@@ -1560,7 +1982,18 @@ class WsSvrManager {
         return;
       }
     }
-    _activeOutgoingTransferId = transfer.transferId;
+    final activeOutgoing = _transferRuntime.activeOutgoingFor(transfer.peerUid);
+    if (activeOutgoing != null && activeOutgoing != transfer.transferId) {
+      return;
+    }
+    final decision = _transferRuntime.enqueue(
+      peerId: transfer.peerUid,
+      transferId: transfer.transferId,
+      direction: FileTransferDirection.outgoing,
+    );
+    if (decision == TransferRuntimeDecision.queued) {
+      return;
+    }
     final updated = await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.transferring,
@@ -1582,12 +2015,11 @@ class WsSvrManager {
         isTerminalFileTransferState(transfer.state)) {
       return;
     }
-    if (_receivingTransferId == transfer.transferId) {
-      await _closeReceivingTransferFile(flush: false);
-      _receivingTransfer = null;
-      _receivingChecksum = null;
-      _receivingTransferOffset = 0;
-    }
+    await _clearActiveIncomingTransfer(
+      transfer.transferId,
+      flush: false,
+      releaseRuntime: false,
+    );
     final tempFile = File(transfer.tempPath);
     if (tempFile.existsSync()) {
       await tempFile.writeAsBytes(const <int>[], flush: true);
@@ -1629,6 +2061,17 @@ class WsSvrManager {
         updated.direction != FileTransferDirection.outgoing) {
       return;
     }
+    if (_transferRuntime.activeOutgoingFor(updated.peerUid) !=
+        updated.transferId) {
+      final decision = _transferRuntime.enqueue(
+        peerId: updated.peerUid,
+        transferId: updated.transferId,
+        direction: FileTransferDirection.outgoing,
+      );
+      if (decision == TransferRuntimeDecision.queued) {
+        return;
+      }
+    }
     if (control.resumeOffset >= updated.size) {
       _outgoingWindowSentAt.remove(control.transferId);
       _outgoingWindowEndOffsets.remove(control.transferId);
@@ -1663,8 +2106,16 @@ class WsSvrManager {
       committedBytes: control.size,
       lastError: '',
     );
-    if (_activeOutgoingTransferId == control.transferId) {
-      _activeOutgoingTransferId = null;
+    final transfer =
+        await LocalDatabase().fetchFileTransfer(control.transferId);
+    if (transfer != null &&
+        _transferRuntime.activeOutgoingFor(transfer.peerUid) ==
+            control.transferId) {
+      _transferRuntime.complete(
+        peerId: transfer.peerUid,
+        transferId: control.transferId,
+        direction: FileTransferDirection.outgoing,
+      );
     }
     _outgoingWindowSentAt.remove(control.transferId);
     _outgoingWindowEndOffsets.remove(control.transferId);
@@ -1684,12 +2135,22 @@ class WsSvrManager {
       state: FileTransferState.canceled,
       lastError: control.errorMessage,
     );
-    if (_receivingTransferId == control.transferId) {
+    final transfer =
+        await LocalDatabase().fetchFileTransfer(control.transferId);
+    if (transfer != null &&
+        _transferRuntime.activeIncomingFor(transfer.peerUid) ==
+            control.transferId) {
       await _clearActiveIncomingTransfer(control.transferId, flush: true);
-      await _startNextQueuedIncomingTransfer();
+      await _startNextQueuedIncomingTransfer(peerId: transfer.peerUid);
     }
-    if (_activeOutgoingTransferId == control.transferId) {
-      _activeOutgoingTransferId = null;
+    if (transfer != null &&
+        _transferRuntime.activeOutgoingFor(transfer.peerUid) ==
+            control.transferId) {
+      _transferRuntime.complete(
+        peerId: transfer.peerUid,
+        transferId: control.transferId,
+        direction: FileTransferDirection.outgoing,
+      );
     }
     _outgoingWindowSentAt.remove(control.transferId);
     _outgoingWindowEndOffsets.remove(control.transferId);
@@ -1701,12 +2162,22 @@ class WsSvrManager {
       state: FileTransferState.failed,
       lastError: control.errorMessage,
     );
-    if (_receivingTransferId == control.transferId) {
+    final transfer =
+        await LocalDatabase().fetchFileTransfer(control.transferId);
+    if (transfer != null &&
+        _transferRuntime.activeIncomingFor(transfer.peerUid) ==
+            control.transferId) {
       await _clearActiveIncomingTransfer(control.transferId, flush: true);
-      await _startNextQueuedIncomingTransfer();
+      await _startNextQueuedIncomingTransfer(peerId: transfer.peerUid);
     }
-    if (_activeOutgoingTransferId == control.transferId) {
-      _activeOutgoingTransferId = null;
+    if (transfer != null &&
+        _transferRuntime.activeOutgoingFor(transfer.peerUid) ==
+            control.transferId) {
+      _transferRuntime.complete(
+        peerId: transfer.peerUid,
+        transferId: control.transferId,
+        direction: FileTransferDirection.outgoing,
+      );
     }
     _outgoingWindowSentAt.remove(control.transferId);
     _outgoingWindowEndOffsets.remove(control.transferId);
@@ -1723,7 +2194,11 @@ class WsSvrManager {
     _clearIncomingTransferPerf(transferId);
     _clearPendingIncomingChunk(transferId);
     _incomingBytesSinceProgress[transferId] = 0;
-    await _clearActiveIncomingTransfer(transferId, flush: true);
+    await _clearActiveIncomingTransfer(
+      transferId,
+      flush: true,
+      releaseRuntime: false,
+    );
     final transfer = await LocalDatabase().fetchFileTransfer(transferId);
     if (transfer == null || isTerminalFileTransferState(transfer.state)) {
       return;
@@ -1736,10 +2211,11 @@ class WsSvrManager {
     MessageData message, {
     required int offset,
   }) async {
-    if (_sink == null) {
+    if (!isConnectedTo(transfer.peerUid) && transfer.peerUid != receiver) {
       return;
     }
-    if (_activeOutgoingTransferId != transfer.transferId) {
+    if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
+        transfer.transferId) {
       return;
     }
     final file = File(message.path);
@@ -1757,7 +2233,8 @@ class WsSvrManager {
     _outgoingWindowSentAt[transfer.transferId] =
         DateTime.now().microsecondsSinceEpoch;
     _outgoingWindowEndOffsets[transfer.transferId] = offset + windowLength;
-    _sink?.add(
+    if (!_sendBytesToPeer(
+      transfer.peerUid,
       TransferChunkFrame(
         transferId: transfer.transferId,
         offset: offset,
@@ -1765,12 +2242,15 @@ class WsSvrManager {
         payloadLength: windowLength,
         payloadInNextFrame: true,
       ).encode(),
-    );
+    )) {
+      return;
+    }
     final reader = await file.open();
     var frameCount = 0;
     try {
       for (final range in ranges) {
-        if (_activeOutgoingTransferId != transfer.transferId) {
+        if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
+            transfer.transferId) {
           return;
         }
         await reader.setPosition(range.offset);
@@ -1787,16 +2267,20 @@ class WsSvrManager {
           rawFramePayloadSize: transferRawFramePayloadSize,
         );
         for (final rawRange in rawRanges) {
-          if (_activeOutgoingTransferId != transfer.transferId) {
+          if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
+              transfer.transferId) {
             return;
           }
-          _sink?.add(
+          if (!_sendBytesToPeer(
+            transfer.peerUid,
             Uint8List.sublistView(
               buffer,
               rawRange.offset,
               rawRange.offset + rawRange.length,
             ),
-          );
+          )) {
+            return;
+          }
           frameCount++;
         }
       }
@@ -1814,9 +2298,7 @@ class WsSvrManager {
   }
 
   Future<void> _handleTransferChunk(TransferChunkFrame frame) async {
-    var transfer = _receivingTransfer?.transferId == frame.transferId
-        ? _receivingTransfer
-        : null;
+    var transfer = _receivingTransfers[frame.transferId];
     transfer ??= await LocalDatabase().fetchFileTransfer(frame.transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.incoming) {
@@ -1827,13 +2309,15 @@ class WsSvrManager {
         transfer.state == FileTransferState.completed) {
       return;
     }
-    if (_receivingTransferId != null &&
-        _receivingTransferId != transfer.transferId) {
+    if (_transferRuntime.activeIncomingFor(transfer.peerUid) !=
+        transfer.transferId) {
       return;
     }
-    final expectedOffset = _receivingTransferSink == null
+    final currentSink = _receivingTransferSinks[transfer.transferId];
+    final expectedOffset = currentSink == null
         ? transfer.committedBytes
-        : _receivingTransferOffset;
+        : _receivingTransferOffsets[transfer.transferId] ??
+            transfer.committedBytes;
     if (frame.offset != expectedOffset) {
       await _recoverIncomingTransferChunk(
         transferId: transfer.transferId,
@@ -1848,8 +2332,7 @@ class WsSvrManager {
       await tempFile.parent.create(recursive: true);
       await tempFile.create(recursive: true);
     }
-    if (_receivingTransferSink == null ||
-        _receivingTransfer?.transferId != transfer.transferId) {
+    if (currentSink == null) {
       final currentLength = await tempFile.length();
       if (currentLength > frame.offset) {
         final writer = await tempFile.open(mode: FileMode.write);
@@ -1866,28 +2349,29 @@ class WsSvrManager {
         );
         return;
       }
-      _receivingTransferSink = tempFile.openWrite(mode: FileMode.append);
-      _receivingTransfer = transfer;
-      _receivingTransferId = transfer.transferId;
-      _receivingTransferOffset = frame.offset;
+      _receivingTransferSinks[transfer.transferId] =
+          tempFile.openWrite(mode: FileMode.append);
+      _receivingTransfers[transfer.transferId] = transfer;
+      _receivingTransferOffsets[transfer.transferId] = frame.offset;
       if (_shouldStreamChecksum(
         transfer.checksumAlgorithm,
         transfer.checksumValue,
       )) {
-        _receivingChecksum = await streamingChecksumForFilePrefix(
+        _receivingChecksums[transfer.transferId] =
+            await streamingChecksumForFilePrefix(
           tempFile,
           algorithm: transfer.checksumAlgorithm,
           end: frame.offset,
         );
       } else {
-        _receivingChecksum = null;
+        _receivingChecksums.remove(transfer.transferId);
       }
     }
 
-    _receivingTransferSink?.add(frame.payload);
-    _receivingChecksum?.add(frame.payload);
+    _receivingTransferSinks[transfer.transferId]?.add(frame.payload);
+    _receivingChecksums[transfer.transferId]?.add(frame.payload);
     final committedBytes = frame.offset + frame.payload.length;
-    _receivingTransferOffset = committedBytes;
+    _receivingTransferOffsets[transfer.transferId] = committedBytes;
 
     final bytesSinceProgress =
         (_incomingBytesSinceProgress[transfer.transferId] ?? 0) +
@@ -1942,9 +2426,10 @@ class WsSvrManager {
     if (updated == null) {
       return;
     }
-    _receivingTransfer = updated;
+    _receivingTransfers[updated.transferId] = updated;
 
-    _sendTransferControl(
+    _sendTransferControlTo(
+      updated.peerUid,
       TransferControl(
         action: TransferAction.progress,
         transferId: updated.transferId,
@@ -1986,24 +2471,26 @@ class WsSvrManager {
 
   Future<void> _finalizeIncomingResumableTransfer(
       FileTransferData transfer) async {
-    await _closeReceivingTransferFile(flush: true);
+    await _closeReceivingTransferFile(transfer.transferId, flush: true);
     final tempFile = File(transfer.tempPath);
     if (_hasExpectedChecksum(
       transfer.checksumAlgorithm,
       transfer.checksumValue,
     )) {
-      final actualChecksum = _receivingChecksum?.close() ??
-          await fileChecksum(
-            tempFile,
-            algorithm: transfer.checksumAlgorithm,
-          );
+      final actualChecksum =
+          _receivingChecksums.remove(transfer.transferId)?.close() ??
+              await fileChecksum(
+                tempFile,
+                algorithm: transfer.checksumAlgorithm,
+              );
       if (actualChecksum != transfer.checksumValue) {
         await _updateTransfer(
           transfer.transferId,
           state: FileTransferState.failed,
           lastError: '文件校验失败，已暂停续传',
         );
-        _sendTransferControl(
+        _sendTransferControlTo(
+          transfer.peerUid,
           TransferControl(
             action: TransferAction.error,
             transferId: transfer.transferId,
@@ -2019,11 +2506,11 @@ class WsSvrManager {
             errorMessage: '文件校验失败，已暂停续传',
           ),
         );
-        _receivingTransferId = null;
-        _receivingTransfer = null;
-        _receivingChecksum = null;
-        _clearIncomingTransferPerf(transfer.transferId);
-        await _startNextQueuedIncomingTransfer();
+        await _clearActiveIncomingTransfer(
+          transfer.transferId,
+          flush: false,
+        );
+        await _startNextQueuedIncomingTransfer(peerId: transfer.peerUid);
         return;
       }
     }
@@ -2045,7 +2532,8 @@ class WsSvrManager {
       committedBytes: transfer.size,
       lastError: '',
     );
-    _sendTransferControl(
+    _sendTransferControlTo(
+      transfer.peerUid,
       TransferControl(
         action: TransferAction.complete,
         transferId: transfer.transferId,
@@ -2061,54 +2549,77 @@ class WsSvrManager {
         errorMessage: '',
       ),
     );
-    _receivingTransferId = null;
-    _receivingTransfer = null;
-    _receivingChecksum = null;
-    _clearIncomingTransferPerf(transfer.transferId);
-    await _startNextQueuedIncomingTransfer();
+    await _clearActiveIncomingTransfer(
+      transfer.transferId,
+      flush: false,
+    );
+    await _startNextQueuedIncomingTransfer(peerId: transfer.peerUid);
   }
 
-  Future<void> _startNextQueuedIncomingTransfer() async {
-    if (receiver.isEmpty) {
-      return;
-    }
-    final items = await LocalDatabase().fetchRecoverableFileTransfersForPeer(
-      receiver,
-      direction: FileTransferDirection.incoming,
-    );
-    items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    for (final item in items) {
-      if (item.state == FileTransferState.queued ||
-          item.state == FileTransferState.waitingReconnect) {
-        await _sendReadyForIncomingTransfer(item.transferId);
-        return;
+  Future<void> _startNextQueuedIncomingTransfer({String? peerId}) async {
+    final peerIds = <String>{
+      if (peerId?.isNotEmpty ?? false) peerId!,
+      ...connectedPeerIds,
+      if (receiver.isNotEmpty) receiver,
+    };
+    for (final candidatePeerId in peerIds) {
+      if (_transferRuntime.activeIncomingFor(candidatePeerId) != null) {
+        continue;
+      }
+      final items = await LocalDatabase().fetchRecoverableFileTransfersForPeer(
+        candidatePeerId,
+        direction: FileTransferDirection.incoming,
+      );
+      items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      for (final item in items) {
+        if (item.state == FileTransferState.queued ||
+            item.state == FileTransferState.waitingReconnect) {
+          await _sendReadyForIncomingTransfer(item.transferId);
+          return;
+        }
       }
     }
   }
 
   Future<void> _markRecoverableTransfersWaitingReconnect() async {
-    if (receiver.isEmpty) {
-      return;
-    }
-    final items =
-        await LocalDatabase().fetchRecoverableFileTransfersForPeer(receiver);
-    for (final item in items) {
-      if (item.state == FileTransferState.completed ||
-          item.state == FileTransferState.failed ||
-          item.state == FileTransferState.canceled) {
-        continue;
+    final peerIds = <String>{
+      ...connectedPeerIds,
+      if (receiver.isNotEmpty) receiver,
+    };
+    for (final peerId in peerIds) {
+      final items =
+          await LocalDatabase().fetchRecoverableFileTransfersForPeer(peerId);
+      for (final item in items) {
+        if (item.state == FileTransferState.completed ||
+            item.state == FileTransferState.failed ||
+            item.state == FileTransferState.canceled) {
+          continue;
+        }
+        await _updateTransfer(
+          item.transferId,
+          state: FileTransferState.waitingReconnect,
+        );
       }
-      await _updateTransfer(
-        item.transferId,
-        state: FileTransferState.waitingReconnect,
-      );
     }
   }
 
-  Future<void> _closeReceivingTransferFile({bool flush = false}) async {
-    final sink = _receivingTransferSink;
-    _receivingTransferSink = null;
+  Future<void> _closeReceivingTransferFile(
+    String transferId, {
+    bool flush = false,
+  }) async {
+    final sink = _receivingTransferSinks.remove(transferId);
     if (sink != null) {
+      if (flush) {
+        await sink.flush();
+      }
+      await sink.close();
+    }
+  }
+
+  Future<void> _closeAllReceivingTransferFiles({bool flush = false}) async {
+    final sinks = _receivingTransferSinks.values.toList(growable: false);
+    _receivingTransferSinks.clear();
+    for (final sink in sinks) {
       if (flush) {
         await sink.flush();
       }
@@ -2119,30 +2630,34 @@ class WsSvrManager {
   Future<void> _clearActiveIncomingTransfer(
     String transferId, {
     bool flush = false,
+    bool releaseRuntime = true,
   }) async {
-    await _closeReceivingTransferFile(flush: flush);
-    if (_receivingTransfer?.transferId == transferId) {
-      _receivingTransfer = null;
+    final transfer = _receivingTransfers[transferId] ??
+        await LocalDatabase().fetchFileTransfer(transferId);
+    await _closeReceivingTransferFile(transferId, flush: flush);
+    _receivingTransfers.remove(transferId);
+    _receivingChecksums.remove(transferId);
+    _receivingTransferOffsets.remove(transferId);
+    if (releaseRuntime && transfer != null) {
+      _transferRuntime.complete(
+        peerId: transfer.peerUid,
+        transferId: transferId,
+        direction: FileTransferDirection.incoming,
+      );
     }
-    _receivingChecksum = null;
-    if (_receivingTransferId == transferId) {
-      _receivingTransferId = null;
-    }
-    _receivingTransferOffset = 0;
     _clearIncomingTransferPerf(transferId);
     _clearPendingIncomingChunk(transferId);
   }
 
   Future<void> _closeResumableHandles() async {
-    await _closeReceivingTransferFile(flush: true);
-    _receivingTransfer = null;
-    _receivingChecksum = null;
-    _receivingTransferId = null;
-    _receivingTransferOffset = 0;
-    _activeOutgoingTransferId = null;
-    _pendingIncomingChunkHeader = null;
-    _pendingIncomingRawOffset = 0;
-    _pendingIncomingRawRemaining = 0;
+    await _closeAllReceivingTransferFiles(flush: true);
+    _receivingTransfers.clear();
+    _receivingChecksums.clear();
+    _receivingTransferOffsets.clear();
+    _transferRuntime.clearAll();
+    _pendingIncomingChunkHeadersByPeer.clear();
+    _pendingIncomingRawOffsetsByPeer.clear();
+    _pendingIncomingRawRemainingByPeer.clear();
     _incomingBytesSinceProgress.clear();
     _incomingFramesSinceProgress.clear();
     _incomingWindowStartedAt.clear();
@@ -2152,40 +2667,47 @@ class WsSvrManager {
   }
 
   Future<void> _resumeRecoverableOutgoingTransfers() async {
-    if (!_supportsResumableTransfer || receiver.isEmpty) {
-      return;
-    }
-    final items = await LocalDatabase().fetchRecoverableFileTransfersForPeer(
-      receiver,
-      direction: FileTransferDirection.outgoing,
-    );
-    items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    for (final item in items) {
-      if (item.state == FileTransferState.completed ||
-          item.state == FileTransferState.failed ||
-          item.state == FileTransferState.canceled) {
+    final peerIds = <String>{
+      ...connectedPeerIds,
+      if (receiver.isNotEmpty) receiver,
+    };
+    for (final peerId in peerIds) {
+      if (!_supportsResumableTransferFor(peerId)) {
         continue;
       }
-      _sendTransferControl(
-        TransferControl(
-          action: TransferAction.resumeProbe,
-          transferId: item.transferId,
-          name: '',
-          size: item.size,
-          fileTimestamp: 0,
-          checksumAlgorithm: item.checksumAlgorithm,
-          checksumValue: item.checksumValue,
-          chunkSize: item.chunkSize,
-          resumeOffset: item.committedBytes,
-          resumeProofHash: '',
-          errorCode: '',
-          errorMessage: '',
-        ),
+      final items = await LocalDatabase().fetchRecoverableFileTransfersForPeer(
+        peerId,
+        direction: FileTransferDirection.outgoing,
       );
-      await _updateTransfer(
-        item.transferId,
-        state: FileTransferState.negotiating,
-      );
+      items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      for (final item in items) {
+        if (item.state == FileTransferState.completed ||
+            item.state == FileTransferState.failed ||
+            item.state == FileTransferState.canceled) {
+          continue;
+        }
+        _sendTransferControlTo(
+          item.peerUid,
+          TransferControl(
+            action: TransferAction.resumeProbe,
+            transferId: item.transferId,
+            name: '',
+            size: item.size,
+            fileTimestamp: 0,
+            checksumAlgorithm: item.checksumAlgorithm,
+            checksumValue: item.checksumValue,
+            chunkSize: item.chunkSize,
+            resumeOffset: item.committedBytes,
+            resumeProofHash: '',
+            errorCode: '',
+            errorMessage: '',
+          ),
+        );
+        await _updateTransfer(
+          item.transferId,
+          state: FileTransferState.negotiating,
+        );
+      }
     }
   }
 

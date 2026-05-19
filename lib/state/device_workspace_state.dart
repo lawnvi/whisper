@@ -25,10 +25,15 @@ class DeviceWorkspaceStateBuilder {
     required List<DeviceData> devices,
     required Map<String, DevicePresence> presences,
     required String? selectedPeerId,
-    required String? activePeerId,
+    String? activePeerId,
+    Set<String> connectedPeerIds = const <String>{},
     required String connectedTitle,
     required String trustedTitle,
   }) {
+    final connectedPeerSet = <String>{
+      ...connectedPeerIds,
+      if (activePeerId?.isNotEmpty ?? false) activePeerId!,
+    };
     final connected = <DeviceWorkspaceItemData>[];
     final trusted = <DeviceWorkspaceItemData>[];
     final pending = <DeviceWorkspaceItemData>[];
@@ -37,7 +42,7 @@ class DeviceWorkspaceStateBuilder {
 
     for (final item in devices) {
       final presence = presences[item.uid];
-      final isConnected = activePeerId == item.uid;
+      final isConnected = connectedPeerSet.contains(item.uid);
       final isTrusted = presence?.locallyTrusted ?? item.auth;
       final isNearby = presence?.discovered ?? (item.around == true);
       final remoteTrusted = presence?.remotelyTrusted ?? false;
@@ -101,7 +106,7 @@ class DeviceWorkspaceStateBuilder {
       selectedDevice: _selectedDevice(
         devices: devices,
         selectedPeerId: selectedPeerId,
-        activePeerId: activePeerId,
+        connectedPeerIds: connectedPeerSet,
       ),
       connectedCount: connected.length,
       trustedCount:
@@ -112,7 +117,7 @@ class DeviceWorkspaceStateBuilder {
   static DeviceData? _selectedDevice({
     required List<DeviceData> devices,
     required String? selectedPeerId,
-    required String? activePeerId,
+    required Set<String> connectedPeerIds,
   }) {
     if (devices.isEmpty) {
       return null;
@@ -126,7 +131,7 @@ class DeviceWorkspaceStateBuilder {
       }
     }
 
-    if (activePeerId != null && activePeerId.isNotEmpty) {
+    for (final activePeerId in connectedPeerIds) {
       for (final item in devices) {
         if (item.uid == activePeerId) {
           return item;

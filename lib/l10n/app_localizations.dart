@@ -838,6 +838,60 @@ abstract class AppLocalizations {
   /// **'正在请求对端播放本机声音'**
   String get audioShareRequestingPlayback;
 
+  /// No description provided for @audioGroupShareStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步到多台扬声器'**
+  String get audioGroupShareStart;
+
+  /// No description provided for @audioGroupSelectSinks.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择播放设备'**
+  String get audioGroupSelectSinks;
+
+  /// No description provided for @audioGroupStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始同步播放'**
+  String get audioGroupStart;
+
+  /// No description provided for @audioGroupRoleStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声'**
+  String get audioGroupRoleStereo;
+
+  /// No description provided for @audioGroupRoleLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左声道'**
+  String get audioGroupRoleLeft;
+
+  /// No description provided for @audioGroupRoleRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右声道'**
+  String get audioGroupRoleRight;
+
+  /// No description provided for @audioGroupRoleMono.
+  ///
+  /// In zh, this message translates to:
+  /// **'单声道'**
+  String get audioGroupRoleMono;
+
+  /// No description provided for @audioGroupRequestingPlayback.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在请求多台设备同步播放'**
+  String get audioGroupRequestingPlayback;
+
+  /// No description provided for @audioGroupSelectAtLeastOne.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少选择一台播放设备'**
+  String get audioGroupSelectAtLeastOne;
+
   /// No description provided for @audioShareFailed.
   ///
   /// In zh, this message translates to:

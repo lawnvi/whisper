@@ -6,6 +6,7 @@ import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_diagnostics.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -205,6 +206,52 @@ void main() {
     expect(calls.single.arguments, <String, dynamic>{
       'sessionId': 'audio-1',
     });
+  });
+
+  test('logs native capture frames and encoded audio packets', () async {
+    final platform = AudioPlatform();
+    final logs = <String>[];
+    final packets = <AudioPacketFrame>[];
+    final source = AudioCaptureSource(
+      codec: PcmPassthroughAudioCodec(config),
+      platform: platform,
+      onPacket: packets.add,
+      diagnostics: AudioShareDiagnostics(sink: logs.add),
+    );
+    final pcm = Int16List(config.frameSize * config.channels);
+
+    await source.start(sessionId: 'audio-1', format: format);
+    await platform.handleNativeMethodCall(
+      MethodCall('onCapturePcm', <String, dynamic>{
+        'sessionId': 'audio-1',
+        'sequence': 5,
+        'captureTimeMicros': 1000,
+        'pcm': _pcmBytes(pcm),
+      }),
+    );
+
+    expect(
+      logs,
+      contains(
+        allOf(
+          contains('audio capture frame'),
+          contains('session=audio-1'),
+          contains('nativeSeq=5'),
+        ),
+      ),
+    );
+    expect(
+      logs,
+      contains(
+        allOf(
+          contains('audio capture packet'),
+          contains('session=audio-1'),
+          contains('seq=0'),
+          contains('payload=${pcm.length * 2}'),
+        ),
+      ),
+    );
+    await source.stop();
   });
 }
 

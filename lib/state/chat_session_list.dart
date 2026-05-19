@@ -58,15 +58,21 @@ class ChatSessionListBuilder {
   static List<ChatSessionItem> build({
     required List<DeviceData> devices,
     required Map<String, MessageData> latestMessages,
-    required String? activePeerId,
+    String? activePeerId,
+    Set<String> connectedPeerIds = const <String>{},
+    String? selectedPeerId,
     required ChatSessionPreviewStrings strings,
   }) {
+    final connected = <String>{
+      ...connectedPeerIds,
+      if (activePeerId?.isNotEmpty ?? false) activePeerId!,
+    };
     final sessions = devices
         .map(
           (device) => _buildItem(
             device: device,
             latestMessage: latestMessages[device.uid],
-            activePeerId: activePeerId,
+            connectedPeerIds: connected,
             strings: strings,
           ),
         )
@@ -99,10 +105,10 @@ class ChatSessionListBuilder {
   static ChatSessionItem _buildItem({
     required DeviceData device,
     required MessageData? latestMessage,
-    required String? activePeerId,
+    required Set<String> connectedPeerIds,
     required ChatSessionPreviewStrings strings,
   }) {
-    final isConnected = device.uid == activePeerId;
+    final isConnected = connectedPeerIds.contains(device.uid);
     final isNearby = device.around == true;
     final hasHistory = latestMessage != null;
     final lastTimestamp = latestMessage?.timestamp ?? device.lastTime;

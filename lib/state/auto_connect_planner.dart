@@ -9,17 +9,26 @@ class AutoConnectPlanner {
 
   static DevicePresence? selectCandidate({
     required bool autoConnectEnabled,
-    required String? activePeerId,
+    String? activePeerId,
+    Set<String> connectedPeerIds = const <String>{},
     required String? lastManualPeerId,
     required Iterable<DevicePresence> candidates,
   }) {
-    if (!autoConnectEnabled || (activePeerId?.isNotEmpty ?? false)) {
+    if (!autoConnectEnabled) {
       return null;
     }
+    final connected = <String>{
+      ...connectedPeerIds,
+      if (activePeerId?.isNotEmpty ?? false) activePeerId!,
+    };
 
     final trustedCandidates = candidates
         .where(
-            (candidate) => candidate.discovered && isMutuallyTrusted(candidate))
+          (candidate) =>
+              candidate.discovered &&
+              isMutuallyTrusted(candidate) &&
+              !connected.contains(candidate.peerId),
+        )
         .toList()
       ..sort((left, right) => right.lastSeenAt.compareTo(left.lastSeenAt));
 

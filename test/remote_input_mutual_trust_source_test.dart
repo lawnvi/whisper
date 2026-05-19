@@ -8,11 +8,13 @@ void main() {
     final socketManager = File('lib/socket/svrmanager.dart').readAsStringSync();
 
     expect(socketManager, contains('bool remoteTrustsPeer(String peerId)'));
-    expect(conversation, contains('socketManager.remoteTrustsPeer(self.uid)'));
+    expect(socketManager, contains('bool remotePeerTrustsPeer'));
+    expect(conversation,
+        contains('socketManager.remotePeerTrustsPeer(device.uid, self.uid)'));
     expect(conversation, contains('remoteInputPeerMustTrustThisDevice'));
     expect(conversation, contains('isMutuallyTrusted: isMutuallyTrusted'));
     expect(conversation,
-        contains('remoteCanInject: socketManager.supportsRemoteInput'));
+        contains('remoteCanInject: socketManager.supportsRemoteInputFor'));
 
     final toggleMethod = RegExp(
       r'Future<void> _toggleRemoteInput[\s\S]*?Future<void> _maybeAutoStartRemoteInput',
@@ -21,11 +23,15 @@ void main() {
     expect(toggleMethod, isNot(contains('remoteCanInject: true')));
     expect(
       toggleMethod.indexOf('final localTrustsRemote'),
-      lessThan(toggleMethod.indexOf('if (!socketManager.supportsRemoteInput)')),
+      lessThan(
+        toggleMethod.indexOf(
+          'if (!socketManager.supportsRemoteInputFor(device.uid))',
+        ),
+      ),
     );
   });
 
-  test('conversation keeps remote input action visible for trust prompts', () {
+  test('conversation keeps remote input action visible for capable peers', () {
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
     final getter = RegExp(
       r'bool get _shouldShowRemoteInputAction \{[\s\S]*?\n  \}',
@@ -33,7 +39,8 @@ void main() {
 
     expect(getter, contains('_isConnectedSession'));
     expect(getter, contains('supportsNativeRemoteInput()'));
-    expect(getter, isNot(contains('socketManager.supportsRemoteInput')));
+    expect(
+        getter, contains('socketManager.supportsRemoteInputFor(device.uid)'));
   });
 
   test('settings remote input entry explains missing mutual trust', () {
@@ -48,6 +55,7 @@ void main() {
         contains('showAppToast(l10n.remoteInputRequiresMutualTrust)'));
     expect(settings,
         contains('showAppToast(l10n.remoteInputPeerMustTrustThisDevice)'));
-    expect(settings, contains('WsSvrManager().remoteTrustsPeer(self.uid)'));
+    expect(settings,
+        contains('WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)'));
   });
 }

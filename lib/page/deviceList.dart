@@ -156,7 +156,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // try to send the event to ui
     print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.receiver.isNotEmpty &&
+    if (soc.isConnected &&
         filterNotification(evt) &&
         listenApps.containsKey(evt.packageName)) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
@@ -204,7 +204,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             key: 'pick_file',
             label: AppLocalizations.of(context)?.menuSendFile ?? "发送文件",
             onClick: (MenuItem item) async {
-              if (socketManager.receiver.isEmpty) {
+              if (!socketManager.isConnected) {
                 return;
               }
               FilePickerResult? result =
@@ -538,7 +538,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (aroundIds.contains(item.uid)) {
         continue;
       }
-      if (item.uid == socketManager.receiver) {
+      if (socketManager.isConnectedTo(item.uid)) {
         newArr.insert(0, item);
         aroundIds.add(item.uid);
         continue;
@@ -571,6 +571,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       latestMessages: latestMessages,
       activePeerId:
           socketManager.receiver.isEmpty ? null : socketManager.receiver,
+      connectedPeerIds: socketManager.connectedPeerIds,
+      selectedPeerId: _selectedDesktopPeerId,
       strings: _sessionPreviewStrings(context),
     );
     final selectedPeerId = _selectedDesktopPeerId != null &&
@@ -645,14 +647,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       appBar: AppBar(
         leading: IconButton(
           onPressed: _showManualConnectDialog,
-          color: socketManager.receiver.isNotEmpty
-              ? Colors.redAccent
-              : Colors.grey,
-          icon: Icon(
-              socketManager.receiver.isNotEmpty
-                  ? Icons.power_settings_new
-                  : Icons.add,
-              size: 32), // 调整圆角以获得更圆的按钮
+          color: Colors.grey,
+          icon: const Icon(Icons.add, size: 32), // 调整圆角以获得更圆的按钮
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -778,16 +774,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
                         ),
                         const SizedBox(width: 10),
                         _buildSidebarAction(
-                          icon: socketManager.receiver.isNotEmpty
-                              ? Icons.power_settings_new
-                              : Icons.add,
-                          iconColor: socketManager.receiver.isNotEmpty
-                              ? Colors.redAccent
-                              : null,
-                          tooltip: socketManager.receiver.isNotEmpty
-                              ? (AppLocalizations.of(context)?.disconnect ??
-                                  '断开')
-                              : (AppLocalizations.of(context)?.connect ?? '连接'),
+                          icon: Icons.add,
+                          tooltip:
+                              AppLocalizations.of(context)?.connect ?? '连接',
                           onPressed: _showManualConnectDialog,
                         ),
                         const SizedBox(width: 6),
@@ -983,15 +972,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
   List<ContextMenuActionItem> _buildSessionContextActions(
       DeviceData deviceItem) {
     final l10n = AppLocalizations.of(context);
+    final isConnected = socketManager.isConnectedTo(deviceItem.uid);
     return [
-      if (deviceItem.uid == socketManager.receiver)
+      if (isConnected)
         ContextMenuActionItem(
           label: l10n?.disconnect ?? '断开',
-          onSelected: () {
-            socketManager.close();
+          onSelected: () async {
+            await socketManager.disconnectPeer(deviceItem.uid);
           },
         ),
-      if (socketManager.receiver.isEmpty)
+      if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.connect ?? '连接',
           onSelected: () {
@@ -1002,7 +992,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             );
           },
         ),
-      if (deviceItem.uid != socketManager.receiver)
+      if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.delete ?? '删除',
           onSelected: () {
@@ -1061,10 +1051,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _showManualConnectDialog() {
-    if (socketManager.receiver.isNotEmpty) {
-      socketManager.close();
-      return;
-    }
     showInputAlertDialog(
       context,
       title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
@@ -1083,6 +1069,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _openConv(DeviceData deviceItem) async {
+    if (socketManager.isConnectedTo(deviceItem.uid)) {
+      socketManager.selectPeer(deviceItem.uid);
+    }
     if (isDesktop()) {
       setState(() {
         _selectedDesktopPeerId = deviceItem.uid;
@@ -1112,18 +1101,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _handleDeviceConnect(DeviceData deviceItem) {
+    final isConnected = socketManager.isConnectedTo(deviceItem.uid);
     showConfirmationDialog(
       context,
-      title: deviceItem.uid == socketManager.receiver
+      title: isConnected
           ? AppLocalizations.of(context)?.brokeConnectTitle ?? "断开连接"
           : AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
       description:
-          '${deviceItem.uid == socketManager.receiver ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
+          '${isConnected ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
       confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
       cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-      onConfirm: () {
-        if (deviceItem.uid == socketManager.receiver) {
-          socketManager.close();
+      onConfirm: () async {
+        if (isConnected) {
+          await socketManager.disconnectPeer(deviceItem.uid);
         } else {
           _connectServer(
             deviceItem.host,
@@ -1180,7 +1170,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               /// 设置了content就不要设置title和icon了
               content: _getIconButton(Colors.red, Icons.delete),
               onTap: (handler) {
-                if (socketManager.receiver == deviceItem.uid) {
+                if (socketManager.isConnectedTo(deviceItem.uid)) {
                   showLoadingDialog(
                     context,
                     title: AppLocalizations.of(context)?.warning ?? '警告',
@@ -1329,7 +1319,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     socketManager.connectToServer(host, port, (ok, message) {
       // _showToast(message);
       if (!ok) {
-        ConnectionCoordinator().markDisconnected(error: message.toString());
+        ConnectionCoordinator()
+            .markDisconnected(peerId: peerId, error: message.toString());
         if (_pendingAutoConnectPeerId == peerId) {
           _pendingAutoConnectPeerId = null;
         }
@@ -1360,9 +1351,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _attemptAutoConnect() async {
-    if (socketManager.receiver.isNotEmpty) {
-      return;
-    }
     final candidate =
         await ConnectionCoordinator().chooseAutoConnectCandidate();
     if (candidate == null) {
@@ -1479,7 +1467,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClose() {
-    ConnectionCoordinator().markDisconnected();
+    final coordinator = ConnectionCoordinator();
+    final stillConnected = socketManager.connectedPeerIds;
+    final previouslyConnected = coordinator.snapshot.connectedPeerIds;
+    for (final peerId in previouslyConnected) {
+      if (!stillConnected.contains(peerId)) {
+        coordinator.markDisconnected(peerId: peerId);
+      }
+    }
+    if (previouslyConnected.isEmpty && stillConnected.isEmpty) {
+      coordinator.markDisconnected();
+    }
     _pendingAutoConnectPeerId = null;
     _refreshDevice();
   }

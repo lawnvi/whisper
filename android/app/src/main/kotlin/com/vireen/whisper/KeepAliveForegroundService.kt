@@ -14,9 +14,22 @@ import androidx.core.app.NotificationCompat
 class KeepAliveForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(
+                DEFAULT_TITLE,
+                DEFAULT_DESCRIPTION,
+                NO_PROGRESS,
+                true
+            )
+        )
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Whisper"
-        val description = intent?.getStringExtra(EXTRA_DESCRIPTION) ?: "Keeping connection alive"
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
+        val description = intent?.getStringExtra(EXTRA_DESCRIPTION) ?: DEFAULT_DESCRIPTION
         val progress = intent?.getIntExtra(EXTRA_PROGRESS, NO_PROGRESS) ?: NO_PROGRESS
         val indeterminateProgress =
             intent?.getBooleanExtra(EXTRA_INDETERMINATE_PROGRESS, false) ?: false
@@ -93,6 +106,8 @@ class KeepAliveForegroundService : Service() {
         private const val CHANNEL_ID = "whisper.keep_alive"
         private const val NOTIFICATION_ID = 10021
         private const val NO_PROGRESS = -1
+        private const val DEFAULT_TITLE = "Whisper"
+        private const val DEFAULT_DESCRIPTION = "Keeping connection alive"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_DESCRIPTION = "description"
         private const val EXTRA_PROGRESS = "progress"

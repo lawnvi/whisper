@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:whisper/audio/audio_group_coordinator.dart';
+import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
@@ -70,6 +72,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
   final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
+  final AudioGroupCoordinator _audioGroupCoordinator =
+      AudioGroupCoordinator.shared;
   final RemoteInputCoordinator _remoteInputCoordinator =
       RemoteInputCoordinator.shared;
   DeviceData device;
@@ -196,6 +200,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
     _audioCoordinator.addListener(_handleAudioShareChanged);
+    _audioGroupCoordinator.addListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.addListener(_handleRemoteInputChanged);
     _textController.addListener(() {
       setState(() {
@@ -212,6 +217,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     WidgetsBinding.instance.removeObserver(this);
     socketManager.unregisterEvent(this);
     _audioCoordinator.removeListener(_handleAudioShareChanged);
+    _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.removeListener(_handleRemoteInputChanged);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
@@ -221,6 +227,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _handleAudioShareChanged() {
+    unawaited(_syncAndroidKeepAliveService());
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleAudioGroupChanged() {
     unawaited(_syncAndroidKeepAliveService());
     if (mounted) {
       setState(() {});
@@ -326,7 +339,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     // 开启通知监听
     if (Platform.isAndroid &&
         !isLocal &&
-        currentDevice.uid == socketManager.receiver &&
+        socketManager.isConnectedTo(currentDevice.uid) &&
         (await LocalSetting().isListenAndroid())) {
       startAndroidListening();
     }
@@ -575,7 +588,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           return;
         }
         for (var item in detail.files) {
-          await socketManager.sendFile(item.path);
+          await socketManager.sendFileTo(device.uid, item.path);
         }
       },
       onDragEntered: (detail) {},
@@ -585,15 +598,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   bool get _canSendCurrentDevice {
-    return _isLocalhost || device.uid == socketManager.receiver;
+    return _isLocalhost || socketManager.isConnectedTo(device.uid);
   }
 
   bool get _isConnectedSession {
-    return device.uid == socketManager.receiver;
+    return socketManager.isConnectedTo(device.uid);
   }
 
   bool get _canToggleConnection {
-    return _isConnectedSession || socketManager.receiver.isEmpty;
+    return _isLocalhost ||
+        _isConnectedSession ||
+        device.around == true ||
+        device.host.isNotEmpty;
   }
 
   PreferredSizeWidget _buildStandaloneAppBar(bool isDark) {
@@ -737,8 +753,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     if (_shouldShowAudioShareAction) {
       final audioState = _audioCoordinator.state;
+      final audioGroupSession = _audioGroupCoordinator.session;
       final isCurrentAudioSession = audioState.isForPeer(device.uid);
-      final isActive = isCurrentAudioSession && audioState.isActive;
+      final isCurrentAudioGroup =
+          _audioGroupCoordinator.isForPeer(device.uid) &&
+              audioGroupSession?.isLive == true;
+      final isActive =
+          (isCurrentAudioSession && audioState.isActive) || isCurrentAudioGroup;
       final isBusy = isCurrentAudioSession && audioState.isBusy;
       final role = isCurrentAudioSession
           ? audioState.role
@@ -749,7 +770,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
           constraints: actionConstraints,
           visualDensity: actionVisualDensity,
           onPressed: isBusy ? null : _toggleAudioShare,
-          tooltip: _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
+          tooltip: isCurrentAudioGroup
+              ? l10n.audioShareCaptureActiveStop
+              : _audioShareTooltip(
+                  role,
+                  isActive: isActive,
+                  isBusy: isBusy,
+                ),
           icon: Icon(_audioShareIcon(role)),
           color: _audioShareIconColor(
             isActive: isActive,
@@ -844,7 +871,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return !_isLocalhost &&
         _isConnectedSession &&
         isDesktop() &&
-        supportsNativeRemoteInput();
+        supportsNativeRemoteInput() &&
+        socketManager.supportsRemoteInputFor(device.uid);
   }
 
   IconData _audioShareIcon(AudioShareRuntimeRole role) {
@@ -985,7 +1013,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         if (item.path == null || item.path!.isEmpty) {
           continue;
         }
-        await socketManager.sendFile(item.path!);
+        await socketManager.sendFileTo(device.uid, item.path!);
       }
     } catch (error, stackTrace) {
       logger.e('pick files failed', error: error, stackTrace: stackTrace);
@@ -1014,8 +1042,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
             '${AppLocalizations.of(context)?.disconnect ?? "断开"} ${device.name}',
         confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
         cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-        onConfirm: () {
-          socketManager.close();
+        onConfirm: () async {
+          await socketManager.disconnectPeer(device.uid);
         },
       );
       return;
@@ -1076,7 +1104,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (!mounted) {
         return false;
       }
-      if (_isConnectedSession || socketManager.receiver == device.uid) {
+      if (_isConnectedSession || socketManager.isConnectedTo(device.uid)) {
         return true;
       }
       await Future.delayed(const Duration(milliseconds: 200));
@@ -1091,7 +1119,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final l10n = this.l10n;
     final audioState = _audioCoordinator.state;
     final isCurrentAudioSession = audioState.isForPeer(device.uid);
+    final audioGroupSession = _audioGroupCoordinator.session;
+    final isCurrentAudioGroup = _audioGroupCoordinator.isForPeer(device.uid) &&
+        audioGroupSession?.isLive == true;
     try {
+      if (isCurrentAudioGroup) {
+        await _audioGroupCoordinator.stopGroup(
+          sendControl: socketManager.sendAudioGroupControlTo,
+        );
+        if (mounted) {
+          showAppToast(l10n.audioShareCaptureStopped);
+        }
+        return;
+      }
       if (isCurrentAudioSession) {
         final role = audioState.role;
         await _audioCoordinator.stopSharing(
@@ -1111,6 +1151,39 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return;
       }
       final self = this.self ?? await LocalSetting().instance();
+      final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
+        preferredPeerId: device.uid,
+      );
+      if (socketManager.supportsAudioGroupSinkFor(device.uid) &&
+          groupCandidates.isNotEmpty) {
+        final Map<String, AudioChannelRole> sinks;
+        if (groupCandidates.length == 1) {
+          sinks = <String, AudioChannelRole>{
+            device.uid: AudioChannelRole.stereo,
+          };
+        } else {
+          final selectedSinks =
+              await _showAudioGroupSetupSheet(groupCandidates);
+          if (selectedSinks == null) {
+            return;
+          }
+          if (selectedSinks.isEmpty) {
+            showAppToast(l10n.audioGroupSelectAtLeastOne);
+            return;
+          }
+          sinks = selectedSinks;
+        }
+        _audioGroupCoordinator.startGroup(
+          sourcePeerId: self.uid,
+          sinks: sinks,
+          format: AudioShareCoordinator.defaultFormat,
+          sendControl: socketManager.sendAudioGroupControlTo,
+        );
+        if (mounted) {
+          showAppToast(l10n.audioGroupRequestingPlayback);
+        }
+        return;
+      }
       await _audioCoordinator.startSharingToConnectedPeer(
         sourcePeerId: self.uid,
         sinkPeerId: device.uid,
@@ -1127,6 +1200,125 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted) {
         showAppToast(l10n.audioShareFailed(error.toString()));
       }
+    }
+  }
+
+  Future<Map<String, AudioChannelRole>?> _showAudioGroupSetupSheet(
+    List<DeviceData> candidates,
+  ) {
+    final selected = <String, bool>{
+      for (final candidate in candidates)
+        candidate.uid: candidate.uid == device.uid,
+    };
+    final roles = <String, AudioChannelRole>{
+      for (var index = 0; index < candidates.length; index++)
+        candidates[index].uid: index == 0
+            ? AudioChannelRole.left
+            : (index == 1 ? AudioChannelRole.right : AudioChannelRole.stereo),
+    };
+    return showModalBottomSheet<Map<String, AudioChannelRole>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final selectedCount =
+                selected.values.where((value) => value).length;
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.audioGroupSelectSinks,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: candidates.length,
+                        itemBuilder: (context, index) {
+                          final candidate = candidates[index];
+                          final isSelected = selected[candidate.uid] ?? false;
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (value) {
+                              setSheetState(() {
+                                selected[candidate.uid] = value ?? false;
+                              });
+                            },
+                            title: Text(candidate.name),
+                            subtitle: Text(candidate.platform),
+                            secondary: DropdownButton<AudioChannelRole>(
+                              value: roles[candidate.uid],
+                              underline: const SizedBox.shrink(),
+                              onChanged: isSelected
+                                  ? (role) {
+                                      if (role == null) {
+                                        return;
+                                      }
+                                      setSheetState(() {
+                                        roles[candidate.uid] = role;
+                                      });
+                                    }
+                                  : null,
+                              items: AudioChannelRole.values
+                                  .map(
+                                    (role) => DropdownMenuItem(
+                                      value: role,
+                                      child: Text(_audioGroupRoleLabel(role)),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: selectedCount == 0
+                          ? null
+                          : () {
+                              Navigator.of(context).pop(
+                                <String, AudioChannelRole>{
+                                  for (final candidate in candidates)
+                                    if (selected[candidate.uid] == true)
+                                      candidate.uid: roles[candidate.uid] ??
+                                          AudioChannelRole.stereo,
+                                },
+                              );
+                            },
+                      icon: const Icon(Icons.spatial_audio_off_rounded),
+                      label: Text(
+                        selectedCount > 1
+                            ? l10n.audioGroupStart
+                            : l10n.audioShareStart,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _audioGroupRoleLabel(AudioChannelRole role) {
+    switch (role) {
+      case AudioChannelRole.stereo:
+        return l10n.audioGroupRoleStereo;
+      case AudioChannelRole.mono:
+        return l10n.audioGroupRoleMono;
+      case AudioChannelRole.left:
+        return l10n.audioGroupRoleLeft;
+      case AudioChannelRole.right:
+        return l10n.audioGroupRoleRight;
     }
   }
 
@@ -1148,7 +1340,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       'stateSession=${inputState.sessionId} '
       'isCurrent=$isCurrentInputSession '
       'supportsNative=${supportsNativeRemoteInput()} '
-      'remoteSupports=${socketManager.supportsRemoteInput}',
+      'remoteSupports=${socketManager.supportsRemoteInputFor(device.uid)}',
     );
     try {
       if (isCurrentInputSession) {
@@ -1184,7 +1376,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final self = this.self ?? await LocalSetting().instance();
       final storedDevice = await LocalDatabase().fetchDevice(device.uid);
       final localTrustsRemote = storedDevice?.auth == true;
-      final remoteTrustsLocal = socketManager.remoteTrustsPeer(self.uid);
+      final remoteTrustsLocal =
+          socketManager.remotePeerTrustsPeer(device.uid, self.uid);
       final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
       if (!localTrustsRemote) {
         _traceRemoteInput(
@@ -1205,7 +1398,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         return;
       }
-      if (!socketManager.supportsRemoteInput) {
+      if (!socketManager.supportsRemoteInputFor(device.uid)) {
         _traceRemoteInput(
             'remote input toggle blocked: remote peer lacks capability');
         if (showToast) {
@@ -1216,8 +1409,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final layout = await _remoteInputLayoutForCurrentPeer();
       final topologyLayout = layout.savedLayout;
       RemoteInputResolvedLayout? resolvedTopologyLayout;
-      if (topologyLayout != null && socketManager.supportsRemoteInputTopology) {
-        final remoteTopology = socketManager.remoteDisplayTopology;
+      if (topologyLayout != null &&
+          socketManager.supportsRemoteInputTopologyFor(device.uid)) {
+        final remoteTopology = socketManager.remoteDisplayTopologyFor(
+          device.uid,
+        );
         if (remoteTopology != null) {
           final localTopology =
               await RemoteInputCoordinator.shared.displayTopology();
@@ -1281,7 +1477,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         layoutEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge ?? edge,
         releaseHotkey: layout.releaseHotkey,
         isMutuallyTrusted: isMutuallyTrusted,
-        remoteCanInject: socketManager.supportsRemoteInput,
+        remoteCanInject: socketManager.supportsRemoteInputFor(device.uid),
         sendControl: socketManager.sendRemoteInputControl,
         sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
         sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
@@ -1381,8 +1577,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
           md5: "");
       LocalDatabase().insertMessage(message);
       onMessage(message);
-    } else if (socketManager.receiver == device.uid) {
-      await socketManager.sendMessage(content, clipboard: isClipboard);
+    } else if (socketManager.isConnectedTo(device.uid)) {
+      await socketManager.sendMessageTo(
+        device.uid,
+        content,
+        clipboard: isClipboard,
+      );
     }
   }
 
@@ -1647,9 +1847,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onMessage(MessageData messageData) {
     logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
     if (_isLocalhost && messageData.receiver.isEmpty ||
-        device.uid == socketManager.receiver &&
-            (messageData.sender == device.uid ||
-                messageData.receiver == device.uid)) {
+        messageData.sender == device.uid ||
+        messageData.receiver == device.uid) {
       _insertItem(0, messageData);
       unawaited(_loadTransferSnapshotsForMessages(<MessageData>[messageData]));
     }
@@ -1657,7 +1856,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onProgress(int size, length) {
-    if (device.uid != socketManager.receiver) {
+    if (!socketManager.isConnectedTo(device.uid)) {
       return;
     }
     // TODO: implement onProgress

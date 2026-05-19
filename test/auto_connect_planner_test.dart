@@ -37,7 +37,7 @@ void main() {
       final now = DateTime(2026, 1, 1, 12, 0);
       final result = AutoConnectPlanner.selectCandidate(
         autoConnectEnabled: true,
-        activePeerId: null,
+        connectedPeerIds: const {},
         lastManualPeerId: 'peer-b',
         candidates: [
           DevicePresence(
@@ -70,10 +70,10 @@ void main() {
       expect(result?.peerId, 'peer-b');
     });
 
-    test('does not pick a new candidate while another peer is active', () {
+    test('does not pick a peer that is already connected', () {
       final result = AutoConnectPlanner.selectCandidate(
         autoConnectEnabled: true,
-        activePeerId: 'connected-peer',
+        connectedPeerIds: const {'peer-a'},
         lastManualPeerId: 'peer-a',
         candidates: [
           DevicePresence(
@@ -94,11 +94,61 @@ void main() {
       expect(result, isNull);
     });
 
+    test('continues selecting other trusted candidates with peers connected',
+        () {
+      final now = DateTime(2026, 1, 1, 12, 0);
+      final result = AutoConnectPlanner.selectCandidate(
+        autoConnectEnabled: true,
+        connectedPeerIds: const {'peer-a'},
+        lastManualPeerId: 'peer-a',
+        candidates: [
+          DevicePresence(
+            peerId: 'peer-a',
+            name: 'Peer A',
+            host: '192.168.1.21',
+            port: 10002,
+            platform: 'linux',
+            state: ConnectionLifecycleState.connected,
+            discovered: true,
+            locallyTrusted: true,
+            remotelyTrusted: true,
+            lastSeenAt: now,
+          ),
+          DevicePresence(
+            peerId: 'peer-b',
+            name: 'Peer B',
+            host: '192.168.1.22',
+            port: 10002,
+            platform: 'android',
+            state: ConnectionLifecycleState.candidate,
+            discovered: true,
+            locallyTrusted: true,
+            remotelyTrusted: true,
+            lastSeenAt: now.subtract(const Duration(minutes: 1)),
+          ),
+          DevicePresence(
+            peerId: 'peer-c',
+            name: 'Peer C',
+            host: '192.168.1.23',
+            port: 10002,
+            platform: 'macos',
+            state: ConnectionLifecycleState.candidate,
+            discovered: true,
+            locallyTrusted: true,
+            remotelyTrusted: true,
+            lastSeenAt: now.subtract(const Duration(minutes: 5)),
+          ),
+        ],
+      );
+
+      expect(result?.peerId, 'peer-b');
+    });
+
     test('falls back to the freshest mutually trusted candidate', () {
       final now = DateTime(2026, 1, 1, 12, 0);
       final result = AutoConnectPlanner.selectCandidate(
         autoConnectEnabled: true,
-        activePeerId: null,
+        connectedPeerIds: const {},
         lastManualPeerId: 'missing-peer',
         candidates: [
           DevicePresence(
@@ -146,7 +196,7 @@ void main() {
     test('returns null when auto-connect is disabled', () {
       final result = AutoConnectPlanner.selectCandidate(
         autoConnectEnabled: false,
-        activePeerId: null,
+        connectedPeerIds: const {},
         lastManualPeerId: null,
         candidates: [
           DevicePresence(

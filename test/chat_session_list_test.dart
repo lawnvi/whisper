@@ -92,7 +92,7 @@ void main() {
             timestamp: 200,
           ),
         },
-        activePeerId: 'connected',
+        connectedPeerIds: const {'connected'},
         strings: strings,
       );
 
@@ -101,6 +101,49 @@ void main() {
         'nearby',
         'history',
       ]);
+    });
+
+    test('marks multiple connected peers at the same time', () {
+      final sessions = ChatSessionListBuilder.build(
+        devices: [
+          buildDevice(
+            'peer-b',
+            name: 'Peer B',
+            host: '192.168.1.10',
+            around: true,
+          ),
+          buildDevice(
+            'peer-c',
+            name: 'Peer C',
+            host: '192.168.1.11',
+            around: true,
+          ),
+          buildDevice(
+            'nearby',
+            name: 'Nearby',
+            host: '192.168.1.12',
+            around: true,
+          ),
+        ],
+        latestMessages: const {},
+        connectedPeerIds: const {'peer-b', 'peer-c'},
+        selectedPeerId: 'nearby',
+        strings: strings,
+      );
+
+      expect(
+        sessions
+            .where((item) => item.isConnected)
+            .map((item) => item.device.uid),
+        unorderedEquals(['peer-b', 'peer-c']),
+      );
+      expect(sessions.take(2).map((item) => item.device.uid), [
+        'peer-b',
+        'peer-c',
+      ]);
+      expect(
+          sessions.singleWhere((item) => item.device.uid == 'nearby').preview,
+          'Available nearby');
     });
 
     test('uses short localized status preview when a device has no messages',
@@ -126,7 +169,7 @@ void main() {
           ),
         ],
         latestMessages: const {},
-        activePeerId: 'connected',
+        connectedPeerIds: const {'connected'},
         strings: strings,
       );
 
@@ -152,7 +195,7 @@ void main() {
           ),
         ],
         latestMessages: const {},
-        activePeerId: 'connected',
+        connectedPeerIds: const {'connected'},
         strings: strings,
       );
 

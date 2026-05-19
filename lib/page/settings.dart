@@ -527,7 +527,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             setState(() {
                               _androidBackgroundKeepAlive = value;
                             });
-                            if (WsSvrManager().receiver.isNotEmpty) {
+                            if (WsSvrManager().isConnected) {
                               if (value) {
                                 await startAndroidBackgroundKeepAlive(
                                   title: AppLocalizations.of(context)
@@ -589,7 +589,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _listenAndroid = value;
                             });
                             if (Platform.isAndroid &&
-                                WsSvrManager().receiver.isNotEmpty) {
+                                WsSvrManager().isConnected) {
                               value
                                   ? startAndroidListening()
                                   : stopAndroidListening();
@@ -1206,9 +1206,19 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     super.initState();
     device = widget.device;
     _refreshDevice();
-    if (isDesktop()) {
+    if (_canConfigureRemoteInput) {
       _loadRemoteInputLayout();
     }
+  }
+
+  bool get _canConfigureRemoteInput {
+    final platform = device.platform.toLowerCase();
+    final isDesktopPeer = platform.contains('mac') ||
+        platform.contains('windows') ||
+        platform.contains('linux');
+    return isDesktop() &&
+        supportsNativeRemoteInput() &&
+        (isDesktopPeer || WsSvrManager().supportsRemoteInputFor(device.uid));
   }
 
   Future<void> _refreshDevice() async {
@@ -1278,7 +1288,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
-    final showRemoteInputSettings = isDesktop();
+    final showRemoteInputSettings = _canConfigureRemoteInput;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -1368,7 +1378,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     ),
                 ],
               ),
-              if (device.uid != WsSvrManager().receiver)
+              if (!WsSvrManager().isConnectedTo(device.uid))
                 _buildClientSettingsCard(
                   [
                     _DeviceSettingTile(
@@ -1490,9 +1500,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       showAppToast(l10n.remoteInputRequiresMutualTrust);
       return;
     }
-    if (device.uid == WsSvrManager().receiver) {
+    if (WsSvrManager().isConnectedTo(device.uid)) {
       final self = await LocalSetting().instance();
-      if (!WsSvrManager().remoteTrustsPeer(self.uid)) {
+      if (!WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)) {
         showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
         return;
       }

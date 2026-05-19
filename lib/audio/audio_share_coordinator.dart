@@ -102,6 +102,10 @@ class AudioShareCoordinator extends ChangeNotifier {
 
   AudioShareRuntimeState get state => _state;
 
+  bool get _hasLiveSession =>
+      _state.status != AudioShareRuntimeStatus.idle &&
+      _state.status != AudioShareRuntimeStatus.failed;
+
   Future<void> startSharingToConnectedPeer({
     required String sourcePeerId,
     required String sinkPeerId,
@@ -110,7 +114,9 @@ class AudioShareCoordinator extends ChangeNotifier {
     required AudioControlSender sendControl,
     AudioStreamFormat format = defaultFormat,
   }) async {
-    await stopLocal();
+    if (_hasLiveSession) {
+      throw StateError('An audio session is already active');
+    }
     final offer = _manager.createOffer(
       sourcePeerId: sourcePeerId,
       sinkPeerId: sinkPeerId,
@@ -228,6 +234,18 @@ class AudioShareCoordinator extends ChangeNotifier {
       _manager.handleControlMessage(offer);
       return;
     }
+    if (_hasLiveSession && _state.sessionId != offer.sessionId) {
+      sendControl(
+        AudioControlMessage(
+          action: AudioControlAction.reject,
+          sessionId: offer.sessionId,
+          sourcePeerId: offer.sourcePeerId,
+          sinkPeerId: offer.sinkPeerId,
+          errorMessage: 'Another audio session is already active',
+        ),
+      );
+      return;
+    }
 
     final accept = _manager.acceptOffer(offer);
     if (accept.action == AudioControlAction.error) {
@@ -248,6 +266,9 @@ class AudioShareCoordinator extends ChangeNotifier {
   }) async {
     _manager.handleControlMessage(accept);
     if (accept.sourcePeerId != localPeerId) {
+      return;
+    }
+    if (_hasLiveSession && _state.sessionId != accept.sessionId) {
       return;
     }
     try {

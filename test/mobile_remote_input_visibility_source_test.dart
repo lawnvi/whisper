@@ -9,9 +9,11 @@ void main() {
       r'class _ClientSettingsScreenState[\s\S]*?class _DeviceSettingTile',
     ).firstMatch(source)!.group(0)!;
 
-    expect(clientSettings, contains('if (isDesktop()) {'));
+    expect(clientSettings, contains('if (_canConfigureRemoteInput) {'));
+    expect(clientSettings, contains('bool get _canConfigureRemoteInput'));
+    expect(clientSettings, contains('supportsNativeRemoteInput()'));
     expect(clientSettings,
-        contains('final showRemoteInputSettings = isDesktop();'));
+        contains('final showRemoteInputSettings = _canConfigureRemoteInput;'));
     expect(
       RegExp(r'if \(showRemoteInputSettings\)[\s\S]*remoteInputAutoModeSetting')
           .hasMatch(clientSettings),

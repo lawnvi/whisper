@@ -38,6 +38,7 @@ enum MessageEnum {
   TransferControl,
   AudioControl,
   RemoteInputControl,
+  AudioGroupControl,
 }
 
 class FileSignal {

@@ -18,9 +18,12 @@ void main() {
       r'case MessageEnum\.Heartbeat:[\s\S]*?case MessageEnum\.FileSignal:',
     ).firstMatch(source)!.group(0)!;
     expect(
-        heartbeatCase, contains('_refreshRemoteProfileFromHeartbeat(message)'));
+        heartbeatCase,
+        contains(
+            '_refreshRemoteProfileFromHeartbeat(message, peerId: incomingPeerId)'));
     expect(heartbeatCase,
         contains('message.message == _profileRefreshRequestMessage'));
-    expect(heartbeatCase, contains('unawaited(_heartBeat())'));
+    expect(heartbeatCase,
+        contains('unawaited(_heartBeat(peerId: incomingPeerId, sink: sink))'));
   });
 }

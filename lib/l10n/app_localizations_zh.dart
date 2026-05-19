@@ -404,6 +404,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioShareRequestingPlayback => '正在请求对端播放本机声音';
 
   @override
+  String get audioGroupShareStart => '同步到多台扬声器';
+
+  @override
+  String get audioGroupSelectSinks => '选择播放设备';
+
+  @override
+  String get audioGroupStart => '开始同步播放';
+
+  @override
+  String get audioGroupRoleStereo => '立体声';
+
+  @override
+  String get audioGroupRoleLeft => '左声道';
+
+  @override
+  String get audioGroupRoleRight => '右声道';
+
+  @override
+  String get audioGroupRoleMono => '单声道';
+
+  @override
+  String get audioGroupRequestingPlayback => '正在请求多台设备同步播放';
+
+  @override
+  String get audioGroupSelectAtLeastOne => '至少选择一台播放设备';
+
+  @override
   String audioShareFailed(String error) {
     return '共享声音失败：$error';
   }

@@ -98,7 +98,8 @@ class ConnectionCoordinator extends ChangeNotifier {
 
   void markConnecting(String peerId, {bool reconnecting = false}) {
     _snapshot = ConnectionSnapshot(
-      activePeerId: peerId,
+      activePeerId: _snapshot.activePeerId ?? peerId,
+      activePeerIds: _snapshot.activePeerIds,
       state: reconnecting
           ? ConnectionLifecycleState.reconnecting
           : ConnectionLifecycleState.connecting,
@@ -123,8 +124,13 @@ class ConnectionCoordinator extends ChangeNotifier {
   }
 
   void markConnected(DeviceData device) {
+    final connectedPeerIds = <String>{
+      ..._snapshot.activePeerIds,
+      device.uid,
+    };
     _snapshot = ConnectionSnapshot(
       activePeerId: device.uid,
+      activePeerIds: connectedPeerIds,
       state: ConnectionLifecycleState.connected,
     );
     final previous = _presenceByPeerId[device.uid];
@@ -138,20 +144,35 @@ class ConnectionCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  void markDisconnected({String? error}) {
-    final activePeerId = _snapshot.activePeerId;
-    if (activePeerId != null && _presenceByPeerId.containsKey(activePeerId)) {
-      _presenceByPeerId[activePeerId] =
-          _presenceByPeerId[activePeerId]!.copyWith(
+  void markDisconnected({String? peerId, String? error}) {
+    final peersToDisconnect =
+        peerId == null ? _snapshot.connectedPeerIds : <String>{peerId};
+    for (final disconnectedPeerId in peersToDisconnect) {
+      if (!_presenceByPeerId.containsKey(disconnectedPeerId)) {
+        continue;
+      }
+      _presenceByPeerId[disconnectedPeerId] =
+          _presenceByPeerId[disconnectedPeerId]!.copyWith(
         state: ConnectionLifecycleState.disconnected,
         lastError: error,
       );
     }
+    final remainingPeerIds = peerId == null
+        ? <String>{}
+        : _snapshot.connectedPeerIds
+            .where((connectedPeerId) => connectedPeerId != peerId)
+            .toSet();
+    final selectedPeerId = remainingPeerIds.contains(_snapshot.activePeerId)
+        ? _snapshot.activePeerId
+        : (remainingPeerIds.isEmpty ? null : remainingPeerIds.first);
     _snapshot = ConnectionSnapshot(
-      activePeerId: null,
-      state: error == null
-          ? ConnectionLifecycleState.disconnected
-          : ConnectionLifecycleState.rejected,
+      activePeerId: selectedPeerId,
+      activePeerIds: remainingPeerIds,
+      state: remainingPeerIds.isNotEmpty
+          ? ConnectionLifecycleState.connected
+          : (error == null
+              ? ConnectionLifecycleState.disconnected
+              : ConnectionLifecycleState.rejected),
       errorMessage: error,
     );
     notifyListeners();
@@ -160,8 +181,7 @@ class ConnectionCoordinator extends ChangeNotifier {
   DevicePresence? peer(String peerId) => _presenceByPeerId[peerId];
 
   bool isConnectedTo(String peerId) {
-    return _snapshot.activePeerId == peerId &&
-        _snapshot.state == ConnectionLifecycleState.connected;
+    return _snapshot.isConnectedTo(peerId);
   }
 
   Future<DevicePresence?> chooseAutoConnectCandidate() async {
@@ -170,6 +190,7 @@ class ConnectionCoordinator extends ChangeNotifier {
     return AutoConnectPlanner.selectCandidate(
       autoConnectEnabled: autoConnectEnabled,
       activePeerId: _snapshot.activePeerId,
+      connectedPeerIds: _snapshot.connectedPeerIds,
       lastManualPeerId: lastManualPeerId,
       candidates: peers,
     );
@@ -190,7 +211,7 @@ class ConnectionCoordinator extends ChangeNotifier {
       platform: device.platform,
       state: state ??
           existing?.state ??
-          (_snapshot.activePeerId == device.uid
+          (_snapshot.isConnectedTo(device.uid)
               ? ConnectionLifecycleState.connected
               : ConnectionLifecycleState.idle),
       discovered: discovered ?? existing?.discovered ?? (device.around == true),

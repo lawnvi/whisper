@@ -198,6 +198,15 @@
   "remoteInputScrollMultiplierDesc": "只影响本机作为被控端时接收的远端滚轮事件",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
   "audioShareRequestingPlayback": "正在请求对端播放本机声音",
+  "audioGroupShareStart": "同步到多台扬声器",
+  "audioGroupSelectSinks": "选择播放设备",
+  "audioGroupStart": "开始同步播放",
+  "audioGroupRoleStereo": "立体声",
+  "audioGroupRoleLeft": "左声道",
+  "audioGroupRoleRight": "右声道",
+  "audioGroupRoleMono": "单声道",
+  "audioGroupRequestingPlayback": "正在请求多台设备同步播放",
+  "audioGroupSelectAtLeastOne": "至少选择一台播放设备",
   "audioShareFailed": "共享声音失败：{error}",
   "@audioShareFailed": {
     "placeholders": {

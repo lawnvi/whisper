@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_diagnostics.dart';
 
 typedef AudioPacketSink = void Function(AudioPacketFrame packet);
 
@@ -12,13 +13,16 @@ class AudioCaptureSource {
     required AudioCodec codec,
     required AudioPlatform platform,
     required AudioPacketSink onPacket,
+    AudioShareDiagnostics? diagnostics,
   })  : _codec = codec,
         _platform = platform,
-        _onPacket = onPacket;
+        _onPacket = onPacket,
+        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   final AudioCodec _codec;
   final AudioPlatform _platform;
   final AudioPacketSink _onPacket;
+  final AudioShareDiagnostics _diagnostics;
   StreamSubscription<PlatformPcmFrame>? _subscription;
   final List<int> _pendingPcm = <int>[];
   String _sessionId = '';
@@ -35,6 +39,11 @@ class AudioCaptureSource {
     _nextPacketSequence = 0;
     _pendingCaptureTimeMicros = 0;
     _subscription = _platform.captureFrames.listen(_handleFrame);
+    _diagnostics.captureStarted(
+      sessionId: sessionId,
+      sampleRate: format.sampleRate,
+      channels: format.channels,
+    );
     await _platform.startCapture(sessionId: sessionId, format: format);
   }
 
@@ -60,6 +69,13 @@ class AudioCaptureSource {
     if (samplesPerPacket <= 0) {
       return;
     }
+    _diagnostics.captureFrame(
+      sessionId: frame.sessionId,
+      nativeSequence: frame.sequence,
+      samples: frame.pcm.length,
+      sampleRate: frame.sampleRate,
+      channels: frame.channels,
+    );
 
     final convertedPcm = _convertToCodecFormat(frame);
     if (convertedPcm.isEmpty) {
@@ -75,13 +91,20 @@ class AudioCaptureSource {
         _pendingPcm.sublist(0, samplesPerPacket),
       );
       _pendingPcm.removeRange(0, samplesPerPacket);
+      final payload = _codec.encode(packetPcm);
+      final sequence = _nextPacketSequence++;
       _onPacket(
         AudioPacketFrame(
           sessionId: frame.sessionId,
-          sequence: _nextPacketSequence++,
+          sequence: sequence,
           captureTimeMicros: _pendingCaptureTimeMicros,
-          payload: _codec.encode(packetPcm),
+          payload: payload,
         ),
+      );
+      _diagnostics.capturePacket(
+        sessionId: frame.sessionId,
+        sequence: sequence,
+        payloadBytes: payload.length,
       );
       _pendingCaptureTimeMicros = _pendingPcm.isEmpty
           ? 0

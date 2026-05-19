@@ -104,6 +104,10 @@ class PeerCapabilities {
     this.remoteInputSourceV1 = false,
     this.remoteInputSinkV1 = false,
     this.remoteInputTopologyV1 = false,
+    this.audioGroupSourceV1 = false,
+    this.audioGroupSinkV1 = false,
+    this.audioSyncClockV1 = false,
+    this.audioChannelRoleV1 = false,
   });
 
   final bool fileResumeV1;
@@ -112,6 +116,10 @@ class PeerCapabilities {
   final bool remoteInputSourceV1;
   final bool remoteInputSinkV1;
   final bool remoteInputTopologyV1;
+  final bool audioGroupSourceV1;
+  final bool audioGroupSinkV1;
+  final bool audioSyncClockV1;
+  final bool audioChannelRoleV1;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -121,6 +129,10 @@ class PeerCapabilities {
       'remoteInputSourceV1': remoteInputSourceV1,
       'remoteInputSinkV1': remoteInputSinkV1,
       'remoteInputTopologyV1': remoteInputTopologyV1,
+      'audioGroupSourceV1': audioGroupSourceV1,
+      'audioGroupSinkV1': audioGroupSinkV1,
+      'audioSyncClockV1': audioSyncClockV1,
+      'audioChannelRoleV1': audioChannelRoleV1,
     };
   }
 
@@ -132,6 +144,10 @@ class PeerCapabilities {
       remoteInputSourceV1: json['remoteInputSourceV1'] as bool? ?? false,
       remoteInputSinkV1: json['remoteInputSinkV1'] as bool? ?? false,
       remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
+      audioGroupSourceV1: json['audioGroupSourceV1'] as bool? ?? false,
+      audioGroupSinkV1: json['audioGroupSinkV1'] as bool? ?? false,
+      audioSyncClockV1: json['audioSyncClockV1'] as bool? ?? false,
+      audioChannelRoleV1: json['audioChannelRoleV1'] as bool? ?? false,
     );
   }
 }

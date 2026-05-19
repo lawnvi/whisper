@@ -2799,11 +2799,18 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
 
 @available(macOS 13.0, *)
 private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamOutput {
+  private struct CapturedPcm {
+    let data: Data
+    let sampleRate: Int
+    let channels: Int
+  }
+
   private let channel: FlutterMethodChannel
   private let sampleQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture")
   private var stream: SCStream?
   private var sessionId = ""
   private var sequence: Int64 = 0
+  private var frameLogCount = 0
 
   init(channel: FlutterMethodChannel) {
     self.channel = channel
@@ -2813,6 +2820,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   func start(sessionId: String, format: [String: Any]) async throws {
     self.sessionId = sessionId
     sequence = 0
+    frameLogCount = 0
 
     let sampleRate = format["sampleRate"] as? Int ?? 48000
     let channels = max(1, min(format["channels"] as? Int ?? 2, 2))
@@ -2862,18 +2870,27 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   ) {
     guard type == .audio,
           sampleBuffer.isValid,
-          let pcm = pcm16Data(from: sampleBuffer) else {
+          let captured = pcm16Data(from: sampleBuffer) else {
       return
     }
     let currentSequence = sequence
     sequence += 1
+    frameLogCount += 1
     let captureTimeMicros = Int64(Date().timeIntervalSince1970 * 1_000_000)
-    DispatchQueue.main.async { [channel, sessionId] in
+    if frameLogCount <= 3 || frameLogCount % 100 == 0 {
+      NSLog(
+        "WhisperAudioCapture frame session=\(sessionId) seq=\(currentSequence) " +
+          "sampleRate=\(captured.sampleRate) channels=\(captured.channels) " +
+          "bytes=\(captured.data.count) count=\(frameLogCount)")
+    }
+    DispatchQueue.main.async { [channel, sessionId, captured] in
       channel.invokeMethod("onCapturePcm", arguments: [
         "sessionId": sessionId,
         "sequence": currentSequence,
         "captureTimeMicros": captureTimeMicros,
-        "pcm": FlutterStandardTypedData(bytes: pcm),
+        "sampleRate": captured.sampleRate,
+        "channels": captured.channels,
+        "pcm": FlutterStandardTypedData(bytes: captured.data),
       ])
     }
   }
@@ -2891,7 +2908,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     }
   }
 
-  private func pcm16Data(from sampleBuffer: CMSampleBuffer) -> Data? {
+  private func pcm16Data(from sampleBuffer: CMSampleBuffer) -> CapturedPcm? {
     guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
           let streamDescription =
             CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
@@ -2899,6 +2916,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     }
     let asbd = streamDescription.pointee
     let channels = Int(asbd.mChannelsPerFrame)
+    let sampleRate = Int(asbd.mSampleRate.rounded())
     let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
     guard channels > 0, frameCount > 0 else {
       return nil
@@ -2970,7 +2988,11 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       return nil
     }
 
-    return output.withUnsafeBufferPointer { Data(buffer: $0) }
+    let data = output.withUnsafeBufferPointer { Data(buffer: $0) }
+    return CapturedPcm(
+      data: data,
+      sampleRate: sampleRate > 0 ? sampleRate : 48000,
+      channels: channels)
   }
 
   private func copyFloat32(
@@ -2982,8 +3004,10 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   ) {
     if nonInterleaved {
       for channel in 0..<channels {
-        guard channel < buffers.count,
-              let data = buffers[channel].mData else {
+        let sourceChannel = buffers.count == 1 ? 0 : min(channel, buffers.count - 1)
+        guard sourceChannel >= 0,
+              sourceChannel < buffers.count,
+              let data = buffers[sourceChannel].mData else {
           continue
         }
         let source = data.assumingMemoryBound(to: Float.self)
@@ -2994,13 +3018,22 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       return
     }
 
-    guard let data = buffers.first?.mData else {
+    guard let buffer = buffers.first,
+          let data = buffer.mData else {
       return
     }
     let source = data.assumingMemoryBound(to: Float.self)
-    for index in 0..<(frameCount * channels) {
-      output[index] = floatToInt16(source[index])
-    }
+    let sourceChannels = sourceChannelsForInterleavedBuffer(
+      byteCount: Int(buffer.mDataByteSize),
+      frameCount: frameCount,
+      bytesPerSample: MemoryLayout<Float>.size,
+      targetChannels: channels)
+    copyInterleavedFloat32(
+      from: source,
+      frameCount: frameCount,
+      sourceChannels: sourceChannels,
+      targetChannels: channels,
+      to: &output)
   }
 
   private func copyInt16(
@@ -3012,8 +3045,10 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   ) {
     if nonInterleaved {
       for channel in 0..<channels {
-        guard channel < buffers.count,
-              let data = buffers[channel].mData else {
+        let sourceChannel = buffers.count == 1 ? 0 : min(channel, buffers.count - 1)
+        guard sourceChannel >= 0,
+              sourceChannel < buffers.count,
+              let data = buffers[sourceChannel].mData else {
           continue
         }
         let source = data.assumingMemoryBound(to: Int16.self)
@@ -3024,13 +3059,68 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       return
     }
 
-    guard let data = buffers.first?.mData else {
+    guard let buffer = buffers.first,
+          let data = buffer.mData else {
       return
     }
     let source = data.assumingMemoryBound(to: Int16.self)
-    for index in 0..<(frameCount * channels) {
-      output[index] = source[index]
+    let sourceChannels = sourceChannelsForInterleavedBuffer(
+      byteCount: Int(buffer.mDataByteSize),
+      frameCount: frameCount,
+      bytesPerSample: MemoryLayout<Int16>.size,
+      targetChannels: channels)
+    copyInterleavedInt16(
+      from: source,
+      frameCount: frameCount,
+      sourceChannels: sourceChannels,
+      targetChannels: channels,
+      to: &output)
+  }
+
+  private func copyInterleavedFloat32(
+    from source: UnsafePointer<Float>,
+    frameCount: Int,
+    sourceChannels: Int,
+    targetChannels: Int,
+    to output: inout [Int16]
+  ) {
+    for frame in 0..<frameCount {
+      for channel in 0..<targetChannels {
+        let sourceChannel = sourceChannels == 1 ? 0 : min(channel, sourceChannels - 1)
+        output[frame * targetChannels + channel] =
+          floatToInt16(source[frame * sourceChannels + sourceChannel])
+      }
     }
+  }
+
+  private func copyInterleavedInt16(
+    from source: UnsafePointer<Int16>,
+    frameCount: Int,
+    sourceChannels: Int,
+    targetChannels: Int,
+    to output: inout [Int16]
+  ) {
+    for frame in 0..<frameCount {
+      for channel in 0..<targetChannels {
+        let sourceChannel = sourceChannels == 1 ? 0 : min(channel, sourceChannels - 1)
+        output[frame * targetChannels + channel] =
+          source[frame * sourceChannels + sourceChannel]
+      }
+    }
+  }
+
+  private func sourceChannelsForInterleavedBuffer(
+    byteCount: Int,
+    frameCount: Int,
+    bytesPerSample: Int,
+    targetChannels: Int
+  ) -> Int {
+    guard frameCount > 0, bytesPerSample > 0 else {
+      return max(1, targetChannels)
+    }
+    let sampleCount = byteCount / bytesPerSample
+    let detectedChannels = sampleCount / frameCount
+    return max(1, min(max(1, detectedChannels), targetChannels))
   }
 
   private func floatToInt16(_ value: Float) -> Int16 {

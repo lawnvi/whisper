@@ -203,6 +203,105 @@ void main() {
       final arguments = writeCall.arguments as Map<Object?, Object?>;
       expect(arguments['pcm'], Uint8List.fromList(<int>[2, 0, 4, 0]));
     });
+
+    test('rejects a competing offer while an audio session is live', () async {
+      final sentControls = <AudioControlMessage>[];
+      final manager = AudioShareManager();
+      final coordinator = AudioShareCoordinator(
+        manager: manager,
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => _FakeAudioTransport(),
+        playbackGainProvider: () async => 1.0,
+      );
+
+      await coordinator.handleControlMessage(
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
+          sessionId: 'audio-1',
+          sourcePeerId: 'pc-a',
+          sinkPeerId: 'phone',
+          format: format,
+          path: '/audio',
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'pc-a.local',
+        remotePort: 10002,
+        sendControl: sentControls.add,
+      );
+
+      await coordinator.handleControlMessage(
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
+          sessionId: 'audio-2',
+          sourcePeerId: 'pc-b',
+          sinkPeerId: 'phone',
+          format: format,
+          path: '/audio',
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'pc-b.local',
+        remotePort: 10002,
+        sendControl: sentControls.add,
+      );
+
+      expect(sentControls.first.action, AudioControlAction.accept);
+      expect(sentControls.last.action, AudioControlAction.reject);
+      expect(sentControls.last.sessionId, 'audio-2');
+      expect(coordinator.state.sessionId, 'audio-1');
+      expect(coordinator.state.status, AudioShareRuntimeStatus.active);
+    });
+
+    test('does not start a second local audio sharing session', () async {
+      final transport = _FakeAudioTransport();
+      final sentControls = <AudioControlMessage>[];
+      final manager = AudioShareManager();
+      final coordinator = AudioShareCoordinator(
+        manager: manager,
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'pc',
+        sinkPeerId: 'phone-a',
+        sinkHost: 'phone-a.local',
+        sinkPort: 10002,
+        sendControl: sentControls.add,
+        format: format,
+      );
+      final offer = sentControls.single;
+      await coordinator.handleControlMessage(
+        AudioControlMessage(
+          action: AudioControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'pc',
+          sinkPeerId: 'phone-a',
+          format: format,
+          path: '/audio',
+        ),
+        localPeerId: 'pc',
+        remoteHost: 'phone-a.local',
+        remotePort: 10002,
+        sendControl: sentControls.add,
+      );
+
+      await expectLater(
+        coordinator.startSharingToConnectedPeer(
+          sourcePeerId: 'pc',
+          sinkPeerId: 'phone-b',
+          sinkHost: 'phone-b.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
+          format: format,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(coordinator.state.sessionId, offer.sessionId);
+      expect(coordinator.state.peerId, 'phone-a');
+      expect(sentControls, hasLength(1));
+    });
   });
 }
 

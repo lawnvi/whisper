@@ -75,7 +75,7 @@ void main() {
         ),
       },
       selectedPeerId: null,
-      activePeerId: 'connected',
+      connectedPeerIds: const {'connected'},
       connectedTitle: 'Connected',
       trustedTitle: 'Trusted',
     );
@@ -99,11 +99,37 @@ void main() {
       ],
       presences: const {},
       selectedPeerId: 'second',
-      activePeerId: 'first',
+      connectedPeerIds: const {'first'},
       connectedTitle: 'Connected',
       trustedTitle: 'Trusted',
     );
 
     expect(state.selectedDevice?.uid, 'second');
+  });
+
+  test('keeps explicit selection independent from multiple connected peers',
+      () {
+    final state = DeviceWorkspaceStateBuilder.build(
+      devices: [
+        buildDevice('peer-b', name: 'Peer B'),
+        buildDevice('peer-c', name: 'Peer C'),
+        buildDevice('selected', name: 'Selected'),
+      ],
+      presences: const {},
+      selectedPeerId: 'selected',
+      connectedPeerIds: const {'peer-b', 'peer-c'},
+      connectedTitle: 'Connected',
+      trustedTitle: 'Trusted',
+    );
+
+    expect(state.connectedCount, 2);
+    expect(state.selectedDevice?.uid, 'selected');
+    expect(
+      state.sections
+          .firstWhere((section) => section.title == 'Connected')
+          .items
+          .map((item) => item.device.uid),
+      unorderedEquals(['peer-b', 'peer-c']),
+    );
   });
 }

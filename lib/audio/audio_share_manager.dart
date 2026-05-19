@@ -7,8 +7,10 @@ import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_diagnostics.dart';
 
 typedef AudioPacketCallback = void Function(AudioPacketFrame packet);
+typedef AudioGroupPacketCallback = void Function(AudioGroupPacketFrame packet);
 
 enum AudioShareSessionState {
   offering,
@@ -48,13 +50,18 @@ class AudioShareSession {
 class AudioShareManager {
   AudioShareManager({
     this.onPacket,
+    this.onGroupPacket,
     Uuid? uuid,
-  }) : _uuid = uuid ?? const Uuid();
+    AudioShareDiagnostics? diagnostics,
+  })  : _uuid = uuid ?? const Uuid(),
+        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   static final AudioShareManager shared = AudioShareManager();
 
   AudioPacketCallback? onPacket;
+  AudioGroupPacketCallback? onGroupPacket;
   final Uuid _uuid;
+  final AudioShareDiagnostics _diagnostics;
   final Map<String, AudioShareSession> _sessions =
       <String, AudioShareSession>{};
 
@@ -165,21 +172,58 @@ class AudioShareManager {
   }
 
   void handlePacketBytes(Uint8List bytes) {
-    final packet = AudioPacketFrame.decode(bytes);
-    final activeSession = _sessions[packet.sessionId];
-    if (activeSession?.state != AudioShareSessionState.connected) {
+    try {
+      final packet = AudioPacketFrame.decode(bytes);
+      final activeSession = _sessions[packet.sessionId];
+      if (activeSession?.state != AudioShareSessionState.connected) {
+        _diagnostics.audioPacketDropped(
+          sessionId: packet.sessionId,
+          sequence: packet.sequence,
+          payloadBytes: packet.payload.length,
+          state: activeSession?.state.name ?? 'missing',
+        );
+        return;
+      }
+      _diagnostics.audioPacketDelivered(
+        sessionId: packet.sessionId,
+        sequence: packet.sequence,
+        payloadBytes: packet.payload.length,
+      );
+      onPacket?.call(packet);
       return;
+    } on FormatException catch (legacyError) {
+      try {
+        final packet = AudioGroupPacketFrame.decode(bytes);
+        _diagnostics.groupPacketDelivered(
+          groupId: packet.groupId,
+          streamId: packet.streamId,
+          sequence: packet.sequence,
+          payloadBytes: packet.payload.length,
+        );
+        onGroupPacket?.call(packet);
+        return;
+      } on FormatException catch (groupError) {
+        _diagnostics.packetDecodeFailed(
+          bytes: bytes.length,
+          legacyError: legacyError,
+          groupError: groupError,
+        );
+        throw legacyError;
+      }
     }
-    onPacket?.call(packet);
   }
 
   void attachChannel(WebSocketChannel channel) {
+    _diagnostics.audioChannelAttached();
     channel.stream.listen((message) {
       final bytes = _messageBytes(message);
       if (bytes != null) {
+        _diagnostics.audioChannelMessageBytes(bytes.length);
         handlePacketBytes(bytes);
       }
-    });
+    },
+        onError: _diagnostics.audioChannelError,
+        onDone: _diagnostics.audioChannelClosed);
   }
 
   shelf.Handler webSocketHandler({

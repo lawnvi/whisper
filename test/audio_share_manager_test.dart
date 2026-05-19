@@ -68,6 +68,30 @@ void main() {
     expect(received.single.payload, <int>[7, 8, 9]);
   });
 
+  test('routes audio group packet bytes to the group packet handler', () {
+    final received = <AudioGroupPacketFrame>[];
+    final manager = AudioShareManager(onGroupPacket: received.add);
+    final packet = AudioGroupPacketFrame(
+      groupId: 'group-1',
+      streamId: 'stream-1',
+      sessionId: 'stream-1',
+      sourcePeerId: 'peer-a',
+      sequence: 1,
+      captureTimeMicros: 100,
+      targetPlaybackTimeMicros: 260,
+      durationMicros: 20000,
+      channelMask: AudioChannelMask.stereo,
+      payload: Uint8List.fromList(<int>[7, 8, 9]),
+    );
+
+    manager.handlePacketBytes(packet.encode());
+
+    expect(received, hasLength(1));
+    expect(received.single.groupId, 'group-1');
+    expect(received.single.streamId, 'stream-1');
+    expect(received.single.sequence, 1);
+  });
+
   test('drops packet bytes for unknown or stopped sessions', () {
     final received = <AudioPacketFrame>[];
     final manager = AudioShareManager(onPacket: received.add);
