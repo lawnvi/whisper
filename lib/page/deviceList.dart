@@ -6,6 +6,9 @@ import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/audio/audio_group_coordinator.dart';
+import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -61,8 +64,18 @@ class DeviceListScreen extends StatefulWidget {
 
 class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
+  static const double _desktopToolbarPillHeight = 38;
+  static const double _desktopToolbarGap = 10;
+  static const double _desktopToolbarToolGroupWidth = 106;
+  static const Duration _desktopToolbarAnimationDuration =
+      Duration(milliseconds: 220);
+  static const Curve _desktopToolbarAnimationCurve = Curves.easeOutCubic;
+
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
+  final AudioShareCoordinator _audioCoordinator = AudioShareCoordinator.shared;
+  final AudioGroupCoordinator _audioGroupCoordinator =
+      AudioGroupCoordinator.shared;
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -83,13 +96,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
   var _clipboardText = "";
   final TextEditingController _desktopSearchController =
       TextEditingController();
+  final FocusNode _desktopSearchFocusNode = FocusNode();
   final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
+  bool _isDesktopSearchExpanded = false;
   String? _selectedDesktopPeerId;
   String? _pendingAutoConnectPeerId;
   Future<void>? _desktopShutdownFuture;
   bool _isDestroyingWindow = false;
+
+  BorderRadius get _desktopToolbarPillRadius => BorderRadius.circular(14);
+
+  Color get _desktopToolbarPillColor => context.whisperPalette.surfaceMuted;
 
   @override
   void initState() {
@@ -99,6 +118,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // }
     _setDesktopWindow();
     _requestPermission();
+    _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
+    _audioCoordinator.addListener(_handleDesktopAudioChanged);
+    _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
     clipboardWatcher.addListener(this);
     // start watch
     clipboardWatcher.start();
@@ -275,7 +297,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
     socketManager.unregisterEvent(this);
+    _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
+    _audioCoordinator.removeListener(_handleDesktopAudioChanged);
+    _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
     _desktopSearchController.dispose();
+    _desktopSearchFocusNode.dispose();
     // stop watch
     unawaited(clipboardWatcher.stop());
     super.dispose();
@@ -289,6 +315,44 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _destroyTray() async {
     trayManager.removeListener(this);
     await trayManager.destroy();
+  }
+
+  void _handleDesktopSearchFocusChanged() {
+    if (!_desktopSearchFocusNode.hasFocus) {
+      _collapseDesktopSearchIfIdle();
+    }
+  }
+
+  void _handleDesktopAudioChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _expandDesktopSearch() {
+    if (_isDesktopSearchExpanded) {
+      _desktopSearchFocusNode.requestFocus();
+      return;
+    }
+    setState(() {
+      _isDesktopSearchExpanded = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _desktopSearchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _collapseDesktopSearchIfIdle() {
+    if (!_isDesktopSearchExpanded ||
+        _desktopSearchFocusNode.hasFocus ||
+        _desktopSearchController.text.isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _isDesktopSearchExpanded = false;
+    });
   }
 
   String _serviceResolveKey(BonsoirService service) {
@@ -755,47 +819,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               ),
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: CupertinoSearchTextField(
-                            controller: _desktopSearchController,
-                            placeholder:
-                                AppLocalizations.of(context)?.searchChats ??
-                                    '搜索',
-                            onChanged: (value) {
-                              setState(() {
-                                _desktopSearchQuery = value;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _buildSidebarAction(
-                          icon: Icons.add,
-                          tooltip:
-                              AppLocalizations.of(context)?.connect ?? '连接',
-                          onPressed: _showManualConnectDialog,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildSidebarAction(
-                          icon: Icons.settings_outlined,
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const app_settings.SettingsScreen(),
-                              ),
-                            );
-                            _refreshDevice();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildDesktopSidebarToolbar(),
                   Expanded(
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
@@ -829,22 +853,252 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildSidebarAction({
+  Widget _buildDesktopSidebarToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: SizedBox(
+        height: 40,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxWidth = constraints.maxWidth;
+            final collapsedSearchWidth =
+                (maxWidth - _desktopToolbarGap - _desktopToolbarToolGroupWidth)
+                    .clamp(0.0, maxWidth)
+                    .toDouble();
+            final searchWidth =
+                _isDesktopSearchExpanded ? maxWidth : collapsedSearchWidth;
+            final gapWidth =
+                _isDesktopSearchExpanded ? 0.0 : _desktopToolbarGap;
+            final toolGroupWidth =
+                _isDesktopSearchExpanded ? 0.0 : _desktopToolbarToolGroupWidth;
+
+            return ClipRect(
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: _desktopToolbarAnimationDuration,
+                    curve: _desktopToolbarAnimationCurve,
+                    width: searchWidth,
+                    child: _buildDesktopSearchPill(
+                      expanded: _isDesktopSearchExpanded,
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: _desktopToolbarAnimationDuration,
+                    curve: _desktopToolbarAnimationCurve,
+                    width: gapWidth,
+                  ),
+                  _buildCollapsibleDesktopToolGroup(width: toolGroupWidth),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopSearchPill({required bool expanded}) {
+    final palette = context.whisperPalette;
+    final label = AppLocalizations.of(context)?.searchChats ?? '搜索';
+    return Container(
+      height: _desktopToolbarPillHeight,
+      decoration: BoxDecoration(
+        color: _desktopToolbarPillColor,
+        borderRadius: _desktopToolbarPillRadius,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            ignoring: expanded,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 120),
+              opacity: expanded ? 0 : 1,
+              child: Tooltip(
+                message: label,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  borderRadius: _desktopToolbarPillRadius,
+                  onPressed: _expandDesktopSearch,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: palette.textMuted,
+                      ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: palette.textMuted,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          IgnorePointer(
+            ignoring: !expanded,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: expanded ? 1 : 0,
+              child: CupertinoTextField(
+                controller: _desktopSearchController,
+                focusNode: _desktopSearchFocusNode,
+                clearButtonMode: OverlayVisibilityMode.editing,
+                cursorColor: Colors.lightBlue,
+                decoration: const BoxDecoration(
+                  color: Colors.transparent,
+                ),
+                padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+                prefix: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 7),
+                  child: Icon(
+                    Icons.search_rounded,
+                    size: 19,
+                    color: palette.textMuted,
+                  ),
+                ),
+                placeholder: label,
+                placeholderStyle: TextStyle(
+                  color: palette.textMuted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _desktopSearchQuery = value;
+                  });
+                  if (value.isEmpty) {
+                    _desktopSearchFocusNode.unfocus();
+                  }
+                },
+                onSubmitted: (_) {
+                  if (_desktopSearchController.text.isEmpty) {
+                    _desktopSearchFocusNode.unfocus();
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollapsibleDesktopToolGroup({required double width}) {
+    return ClipRect(
+      child: AnimatedContainer(
+        duration: _desktopToolbarAnimationDuration,
+        curve: _desktopToolbarAnimationCurve,
+        width: width,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: OverflowBox(
+            alignment: Alignment.centerRight,
+            minWidth: _desktopToolbarToolGroupWidth,
+            maxWidth: _desktopToolbarToolGroupWidth,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 140),
+              opacity: _isDesktopSearchExpanded ? 0 : 1,
+              child: IgnorePointer(
+                ignoring: _isDesktopSearchExpanded,
+                child: _buildDesktopToolGroup(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopToolGroup() {
+    return SizedBox(
+      width: _desktopToolbarToolGroupWidth,
+      child: Container(
+        height: _desktopToolbarPillHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          color: _desktopToolbarPillColor,
+          borderRadius: _desktopToolbarPillRadius,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildDesktopToolButton(
+              icon: Icons.add,
+              tooltip: AppLocalizations.of(context)?.connect ?? '连接',
+              onPressed: _showManualConnectDialog,
+            ),
+            const SizedBox(width: 2),
+            _buildDesktopAudioShareAction(),
+            const SizedBox(width: 2),
+            _buildDesktopToolButton(
+              icon: Icons.settings_outlined,
+              tooltip: AppLocalizations.of(context)?.setting ?? '设置',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const app_settings.SettingsScreen(),
+                  ),
+                );
+                _refreshDevice();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopAudioShareAction() {
+    final palette = context.whisperPalette;
+    final isActive = _isDesktopAudioShareActive;
+    final isBusy = _isDesktopAudioShareBusy;
+    return _buildDesktopToolButton(
+      icon: isBusy ? Icons.sync_rounded : Icons.volume_up_outlined,
+      tooltip: _desktopAudioShareTooltip(
+        isActive: isActive,
+        isBusy: isBusy,
+      ),
+      iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
+      onPressed: isBusy ? null : _toggleDesktopAudioShare,
+    );
+  }
+
+  Widget _buildDesktopToolButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     Color? iconColor,
     String? tooltip,
   }) {
     final palette = context.whisperPalette;
     return SizedBox(
-      width: 38,
-      height: 38,
+      width: 32,
+      height: 32,
       child: Tooltip(
         message: tooltip ?? '',
         child: CupertinoButton(
           padding: EdgeInsets.zero,
-          color: palette.surfaceMuted,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(11),
           onPressed: onPressed,
           child: Icon(
             icon,
@@ -854,6 +1108,241 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ),
       ),
     );
+  }
+
+  bool get _isDesktopAudioShareActive {
+    final groupSession = _audioGroupCoordinator.session;
+    if (groupSession?.isLive == true) {
+      return true;
+    }
+    return _audioCoordinator.state.isActive;
+  }
+
+  bool get _isDesktopAudioShareBusy {
+    final audioState = _audioCoordinator.state;
+    return audioState.isBusy;
+  }
+
+  String _desktopAudioShareTooltip({
+    required bool isActive,
+    required bool isBusy,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    if (isBusy) {
+      return l10n.audioShareCaptureConnecting;
+    }
+    if (isActive) {
+      return l10n.audioShareCaptureActiveStop;
+    }
+    return l10n.audioGroupShareStart;
+  }
+
+  Future<void> _toggleDesktopAudioShare() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final audioGroupSession = _audioGroupCoordinator.session;
+      if (audioGroupSession?.isLive == true) {
+        await _audioGroupCoordinator.stopGroup(
+          sendControl: socketManager.sendAudioGroupControlTo,
+        );
+        if (mounted) {
+          showAppToast(l10n.audioShareCaptureStopped);
+        }
+        return;
+      }
+
+      final audioState = _audioCoordinator.state;
+      if (audioState.status != AudioShareRuntimeStatus.idle &&
+          audioState.status != AudioShareRuntimeStatus.failed) {
+        final role = audioState.role;
+        await _audioCoordinator.stopSharing(
+          sendControl: socketManager.sendAudioControl,
+        );
+        if (mounted) {
+          showAppToast(
+            role == AudioShareRuntimeRole.sink
+                ? l10n.audioSharePlaybackStopped
+                : l10n.audioShareCaptureStopped,
+          );
+        }
+        return;
+      }
+
+      if (!supportsNativeSystemAudio()) {
+        showAppToast(l10n.audioShareUnsupportedCapture);
+        return;
+      }
+
+      final self = device ?? await LocalSetting().instance();
+      final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
+        preferredPeerId: _selectedDesktopPeerId ?? '',
+      );
+      if (groupCandidates.isEmpty) {
+        showAppToast(l10n.audioGroupSelectAtLeastOne);
+        return;
+      }
+
+      final Map<String, AudioChannelRole> sinks;
+      if (groupCandidates.length == 1) {
+        sinks = <String, AudioChannelRole>{
+          groupCandidates.single.uid: AudioChannelRole.stereo,
+        };
+      } else {
+        final selectedSinks = await _showAudioGroupSetupSheet(
+          groupCandidates,
+          preferredPeerId: _selectedDesktopPeerId ?? '',
+        );
+        if (selectedSinks == null) {
+          return;
+        }
+        if (selectedSinks.isEmpty) {
+          showAppToast(l10n.audioGroupSelectAtLeastOne);
+          return;
+        }
+        sinks = selectedSinks;
+      }
+
+      _audioGroupCoordinator.startGroup(
+        sourcePeerId: self.uid,
+        sinks: sinks,
+        format: AudioShareCoordinator.defaultFormat,
+        sendControl: socketManager.sendAudioGroupControlTo,
+      );
+      if (mounted) {
+        showAppToast(l10n.audioGroupRequestingPlayback);
+      }
+    } catch (error, stackTrace) {
+      logger.e('desktop audio share toggle failed',
+          error: error, stackTrace: stackTrace);
+      if (mounted) {
+        showAppToast(l10n.audioShareFailed(error.toString()));
+      }
+    }
+  }
+
+  Future<Map<String, AudioChannelRole>?> _showAudioGroupSetupSheet(
+    List<DeviceData> candidates, {
+    String preferredPeerId = '',
+  }) {
+    final selected = <String, bool>{
+      for (final candidate in candidates)
+        candidate.uid: candidate.uid ==
+            (preferredPeerId.isNotEmpty
+                ? preferredPeerId
+                : candidates.first.uid),
+    };
+    final roles = <String, AudioChannelRole>{
+      for (var index = 0; index < candidates.length; index++)
+        candidates[index].uid: index == 0
+            ? AudioChannelRole.left
+            : (index == 1 ? AudioChannelRole.right : AudioChannelRole.stereo),
+    };
+    final l10n = AppLocalizations.of(context)!;
+    return showModalBottomSheet<Map<String, AudioChannelRole>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final selectedCount =
+                selected.values.where((value) => value).length;
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.audioGroupSelectSinks,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: candidates.length,
+                        itemBuilder: (context, index) {
+                          final candidate = candidates[index];
+                          final isSelected = selected[candidate.uid] ?? false;
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (value) {
+                              setSheetState(() {
+                                selected[candidate.uid] = value ?? false;
+                              });
+                            },
+                            title: Text(candidate.name),
+                            subtitle: Text(candidate.platform),
+                            secondary: DropdownButton<AudioChannelRole>(
+                              value: roles[candidate.uid],
+                              underline: const SizedBox.shrink(),
+                              onChanged: isSelected
+                                  ? (role) {
+                                      if (role == null) {
+                                        return;
+                                      }
+                                      setSheetState(() {
+                                        roles[candidate.uid] = role;
+                                      });
+                                    }
+                                  : null,
+                              items: AudioChannelRole.values
+                                  .map(
+                                    (role) => DropdownMenuItem(
+                                      value: role,
+                                      child: Text(_audioGroupRoleLabel(role)),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: selectedCount == 0
+                          ? null
+                          : () {
+                              Navigator.of(context).pop(
+                                <String, AudioChannelRole>{
+                                  for (final candidate in candidates)
+                                    if (selected[candidate.uid] == true)
+                                      candidate.uid: roles[candidate.uid] ??
+                                          AudioChannelRole.stereo,
+                                },
+                              );
+                            },
+                      icon: const Icon(Icons.spatial_audio_off_rounded),
+                      label: Text(
+                        selectedCount > 1
+                            ? l10n.audioGroupStart
+                            : l10n.audioShareStart,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _audioGroupRoleLabel(AudioChannelRole role) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (role) {
+      case AudioChannelRole.stereo:
+        return l10n.audioGroupRoleStereo;
+      case AudioChannelRole.mono:
+        return l10n.audioGroupRoleMono;
+      case AudioChannelRole.left:
+        return l10n.audioGroupRoleLeft;
+      case AudioChannelRole.right:
+        return l10n.audioGroupRoleRight;
+    }
   }
 
   Widget _buildDesktopPlaceholder(bool isDark) {

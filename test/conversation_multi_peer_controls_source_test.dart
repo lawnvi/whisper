@@ -24,6 +24,16 @@ void main() {
     );
   });
 
+  test('desktop conversation header does not own audio group sharing', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final shouldShowAudioShareAction = RegExp(
+      r'bool get _shouldShowAudioShareAction \{[\s\S]*?\n  \}',
+    ).firstMatch(source)!.group(0)!;
+
+    expect(shouldShowAudioShareAction, contains('!isDesktop()'));
+    expect(shouldShowAudioShareAction, isNot(contains('isDesktop() ||')));
+  });
+
   test('client settings hide remote input for non desktop peers', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
 

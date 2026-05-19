@@ -862,9 +862,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   bool get _shouldShowAudioShareAction {
     final audioState = _audioCoordinator.state;
+    final audioGroupSession = _audioGroupCoordinator.session;
+    final isCurrentAudioGroup = _audioGroupCoordinator.isForPeer(device.uid) &&
+        audioGroupSession?.isLive == true;
     return !_isLocalhost &&
         _isConnectedSession &&
-        (isDesktop() || audioState.isForPeer(device.uid));
+        !isDesktop() &&
+        (audioState.isForPeer(device.uid) || isCurrentAudioGroup);
   }
 
   bool get _shouldShowRemoteInputAction {
