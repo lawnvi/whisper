@@ -28,6 +28,9 @@ jobs:
           channel: stable
           architecture: x64
 
+      - name: Disable Flutter Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install dependencies
         run: flutter pub get
 

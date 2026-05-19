@@ -21,6 +21,18 @@ void main() {
     );
   });
 
+  test('release workflow disables experimental Flutter Swift Package Manager',
+      () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    final disableSpm =
+        workflow.indexOf('flutter config --no-enable-swift-package-manager');
+    final installDependencies = workflow.indexOf('name: Install dependencies');
+
+    expect(disableSpm, isNot(-1));
+    expect(installDependencies, isNot(-1));
+    expect(disableSpm, lessThan(installDependencies));
+  });
+
   test('release DMG contains an Applications drop target', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final packageScript = File('script/build_and_run.sh').readAsStringSync();
