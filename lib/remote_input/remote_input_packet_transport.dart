@@ -11,6 +11,11 @@ abstract class RemoteInputPacketTransport {
   Future<void> close();
 }
 
+abstract class RemoteInputObservablePacketTransport
+    implements RemoteInputPacketTransport {
+  Stream<void> get done;
+}
+
 class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
   RemoteInputPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
@@ -40,16 +45,29 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
   }
 }
 
-class RemoteInputWebSocketPacketTransport
-    extends RemoteInputPacketByteTransport {
+class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
+    implements RemoteInputObservablePacketTransport {
   RemoteInputWebSocketPacketTransport._(WebSocketChannel channel)
-      : _channel = channel,
+      : _stream = channel.stream.asBroadcastStream(),
         super(
           sendBytes: channel.sink.add,
           closeSink: () => channel.sink.close(),
-        );
+        ) {
+    _streamSubscription = _stream.listen(
+      (_) {},
+      onError: (_, __) {
+        _notifyDone();
+      },
+      onDone: _notifyDone,
+      cancelOnError: false,
+    );
+  }
 
-  final WebSocketChannel _channel;
+  final Stream<dynamic> _stream;
+  final StreamController<void> _doneController =
+      StreamController<void>.broadcast();
+  late final StreamSubscription<dynamic> _streamSubscription;
+  bool _doneNotified = false;
 
   static Future<RemoteInputWebSocketPacketTransport> connect(Uri uri) async {
     final channel = IOWebSocketChannel.connect(uri);
@@ -57,5 +75,25 @@ class RemoteInputWebSocketPacketTransport
     return RemoteInputWebSocketPacketTransport._(channel);
   }
 
-  Stream<dynamic> get stream => _channel.stream;
+  @override
+  Stream<void> get done => _doneController.stream;
+
+  Stream<dynamic> get stream => _stream;
+
+  void _notifyDone() {
+    if (_doneNotified || _doneController.isClosed) {
+      return;
+    }
+    _doneNotified = true;
+    _doneController.add(null);
+  }
+
+  @override
+  Future<void> close() async {
+    await _streamSubscription.cancel();
+    await super.close();
+    if (!_doneController.isClosed) {
+      await _doneController.close();
+    }
+  }
 }

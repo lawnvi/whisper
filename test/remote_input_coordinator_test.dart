@@ -152,6 +152,58 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
     });
 
+    test('source stops capture when packet transport closes unexpectedly',
+        () async {
+      final transport = _ObservableFakeRemoteInputTransport();
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => transport,
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final offer = sentControls.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
+
+      transport.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        isNotEmpty,
+      );
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+    });
+
     test('source pauses capture when peer releases back across the edge',
         () async {
       final transport = _FakeRemoteInputTransport();
@@ -1467,5 +1519,34 @@ class _FakeRemoteInputTransport implements RemoteInputPacketTransport {
   @override
   Future<void> close() async {
     closed = true;
+  }
+}
+
+class _ObservableFakeRemoteInputTransport
+    implements
+        RemoteInputPacketTransport,
+        RemoteInputObservablePacketTransport {
+  final sentPackets = <RemoteInputPacketFrame>[];
+  final _doneController = StreamController<void>.broadcast();
+  bool closed = false;
+
+  @override
+  Stream<void> get done => _doneController.stream;
+
+  void complete() {
+    _doneController.add(null);
+  }
+
+  @override
+  void send(RemoteInputPacketFrame packet) {
+    if (!closed) {
+      sentPackets.add(packet);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    await _doneController.close();
   }
 }

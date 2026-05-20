@@ -508,6 +508,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         path: path.startsWith('/') ? path.substring(1) : path,
       ),
     );
+    target.transportDoneSubscription = _listenForTargetTransportDone(target);
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.connected,
       errorMessage: '',
@@ -549,6 +550,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
+    await _releaseCaptureForActiveTargetIfNeeded(target);
+    await target.transportDoneSubscription?.cancel();
+    target.transportDoneSubscription = null;
     await target.transport?.close();
     target.transport = null;
     _manager.stopSession(message.sessionId);
@@ -568,6 +572,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
+    await _releaseCaptureForActiveTargetIfNeeded(target);
+    await target.transportDoneSubscription?.cancel();
+    target.transportDoneSubscription = null;
     await target.transport?.close();
     target.transport = null;
     target.snapshot = target.snapshot.copyWith(
@@ -648,6 +655,62 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           primaryTarget.request.sourceSegmentEnd,
       edgeMappings: mappings,
     );
+  }
+
+  StreamSubscription<void>? _listenForTargetTransportDone(
+    _RemoteInputWorkspaceTargetRuntime target,
+  ) {
+    final transport = target.transport;
+    if (transport is! RemoteInputObservablePacketTransport) {
+      return null;
+    }
+    return transport.done.listen((_) {
+      if (_snapshot.role != RemoteInputWorkspaceRole.controller ||
+          _targets[target.request.peerId] != target ||
+          !target.snapshot.isConnected) {
+        return;
+      }
+      debugPrint(
+        '[WhisperRemoteInputWorkspace] packet transport closed '
+        'peer=${target.request.peerId}',
+      );
+      unawaited(_handleTargetTransportClosed(target));
+    });
+  }
+
+  Future<void> _handleTargetTransportClosed(
+    _RemoteInputWorkspaceTargetRuntime target,
+  ) async {
+    await _releaseCaptureForActiveTargetIfNeeded(target);
+    await target.transportDoneSubscription?.cancel();
+    target.transportDoneSubscription = null;
+    await target.transport?.close();
+    target.transport = null;
+    _manager.stopSession(target.offer.sessionId);
+    target.snapshot = target.snapshot.copyWith(
+      status: RemoteInputWorkspaceTargetStatus.stopped,
+      errorMessage: 'Remote input transport closed',
+    );
+    await _publishAfterTargetClosed(
+      terminalStatus: RemoteInputWorkspaceStatus.idle,
+      errorMessage: 'Remote input transport closed',
+    );
+  }
+
+  Future<void> _releaseCaptureForActiveTargetIfNeeded(
+    _RemoteInputWorkspaceTargetRuntime target,
+  ) async {
+    if (_snapshot.activePeerId != target.request.peerId ||
+        _snapshot.workspaceSessionId.isEmpty) {
+      return;
+    }
+    final hasOtherConnectedTarget = _targets.values.any(
+      (candidate) => candidate != target && candidate.snapshot.isConnected,
+    );
+    if (!hasOtherConnectedTarget) {
+      return;
+    }
+    await _platform.stopCapture(sessionId: _snapshot.workspaceSessionId);
   }
 
   void _ensureSubscriptions() {
@@ -835,6 +898,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       await _platform.stopCapture(sessionId: workspaceSessionId);
     }
     for (final target in _targets.values) {
+      await target.transportDoneSubscription?.cancel();
+      target.transportDoneSubscription = null;
       await target.transport?.close();
       target.transport = null;
       _manager.stopSession(target.offer.sessionId);
@@ -884,4 +949,5 @@ class _RemoteInputWorkspaceTargetRuntime {
   final List<RemoteInputEdgeMapping> routedMappings;
   RemoteInputWorkspaceTargetSnapshot snapshot;
   RemoteInputPacketTransport? transport;
+  StreamSubscription<void>? transportDoneSubscription;
 }

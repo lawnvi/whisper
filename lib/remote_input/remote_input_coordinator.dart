@@ -113,6 +113,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
   StreamSubscription<PlatformRemoteInputError>? _errorSubscription;
   StreamSubscription<PlatformRemoteInputDiagnostic>? _diagnosticSubscription;
+  StreamSubscription<void>? _transportDoneSubscription;
   int _latestSourceInputSequence = 0;
   int _latestSourceActivationSequence = 0;
   int _latestSinkPacketSequence = 0;
@@ -384,10 +385,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
     await _releaseSubscription?.cancel();
     await _errorSubscription?.cancel();
     await _diagnosticSubscription?.cancel();
+    await _transportDoneSubscription?.cancel();
     _inputSubscription = null;
     _releaseSubscription = null;
     _errorSubscription = null;
     _diagnosticSubscription = null;
+    _transportDoneSubscription = null;
     if (current.sessionId.isNotEmpty) {
       if (current.role == RemoteInputRuntimeRole.source) {
         await _platform.stopCapture(sessionId: current.sessionId);
@@ -808,6 +811,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       uri,
     );
     _transport = transport;
+    _transportDoneSubscription = _listenForSourceTransportDone(
+      transport,
+      sessionId: message.sessionId,
+    );
     _trace(
       'remote input transport connected session=${_shortSessionId(message.sessionId)}',
     );
@@ -881,6 +888,26 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sinkPeerId,
       ),
     );
+  }
+
+  StreamSubscription<void>? _listenForSourceTransportDone(
+    RemoteInputPacketTransport transport, {
+    required String sessionId,
+  }) {
+    if (transport is! RemoteInputObservablePacketTransport) {
+      return null;
+    }
+    return transport.done.listen((_) {
+      if (_state.role != RemoteInputRuntimeRole.source ||
+          _state.sessionId != sessionId) {
+        return;
+      }
+      _trace(
+        'remote input packet transport closed '
+        'session=${_shortSessionId(sessionId)}',
+      );
+      unawaited(stopLocal());
+    });
   }
 
   Future<void> _handleRelease(RemoteInputControlMessage message) async {

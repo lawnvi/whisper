@@ -327,6 +327,151 @@ void main() {
       expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
       expect(coordinator.snapshot.liveTargetPeerIds, isEmpty);
     });
+
+    test('stops capture when the only target packet transport closes',
+        () async {
+      final transport = _ObservableFakeRemoteInputTransport();
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (_) async => transport,
+        workspaceSessionIdFactory: () => 'workspace-1',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+
+      final offer = sentControls['peer-b']!.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'peer-b',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+          path: '/input',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'peer-b.local',
+        remotePort: 10002,
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.armed);
+
+      transport.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        isNotEmpty,
+      );
+      expect(coordinator.snapshot.role, RemoteInputWorkspaceRole.idle);
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
+    });
+
+    test('releases capture when the active target transport closes', () async {
+      final transports = <String, _ObservableFakeRemoteInputTransport>{};
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (uri) async {
+          final transport = _ObservableFakeRemoteInputTransport();
+          transports[uri.host] = transport;
+          return transport;
+        },
+        workspaceSessionIdFactory: () => 'workspace-1',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+          _targetRequest(
+            peerId: 'peer-c',
+            host: 'peer-c.local',
+            routeId: 'route-c',
+            start: 400,
+            end: 800,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      for (final peerId in ['peer-b', 'peer-c']) {
+        final offer = sentControls[peerId]!.single;
+        await coordinator.handleControlMessage(
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'mac',
+            sinkPeerId: peerId,
+            layoutEdge: RemoteInputEdge.right,
+            releaseHotkey: 'ctrl+alt+esc',
+            path: '/input',
+          ),
+          localPeerId: 'mac',
+          remoteHost: '$peerId.local',
+          remotePort: 10002,
+          sendControlTo: (peerId, control) {
+            sentControls.putIfAbsent(peerId, () => []).add(control);
+          },
+        );
+      }
+      calls.clear();
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': 'workspace-1',
+          'sequence': 1,
+          'timestampMicros': 1,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(
+            utf8.encode(jsonEncode(<String, dynamic>{
+              'activeStart': true,
+              'routeId': 'workspace-1|peer-c|route-c',
+              'deltaX': 8,
+              'deltaY': 0,
+            })),
+          ),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.snapshot.activePeerId, 'peer-c');
+
+      transports['peer-c.local']!.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder(['stopCapture', 'startCapture']),
+      );
+      expect(coordinator.snapshot.activePeerId, isEmpty);
+      expect(
+        coordinator.snapshot.connectedTargetPeerIds,
+        unorderedEquals(['peer-b']),
+      );
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.armed);
+    });
   });
 }
 
@@ -376,5 +521,34 @@ class _FakeRemoteInputTransport implements RemoteInputPacketTransport {
   @override
   Future<void> close() async {
     closed = true;
+  }
+}
+
+class _ObservableFakeRemoteInputTransport
+    implements
+        RemoteInputPacketTransport,
+        RemoteInputObservablePacketTransport {
+  final sentPackets = <RemoteInputPacketFrame>[];
+  final _doneController = StreamController<void>.broadcast();
+  bool closed = false;
+
+  @override
+  Stream<void> get done => _doneController.stream;
+
+  void complete() {
+    _doneController.add(null);
+  }
+
+  @override
+  void send(RemoteInputPacketFrame packet) {
+    if (!closed) {
+      sentPackets.add(packet);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    await _doneController.close();
   }
 }
