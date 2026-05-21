@@ -98,7 +98,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
     minimumInterval: const Duration(seconds: 5),
   );
-  var lastClickCloseTimestamp = 0;
   static var listenApps = {};
   var _clipboardText = "";
   final TextEditingController _desktopSearchController =
@@ -2112,23 +2111,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onWindowClose() async {
-    var timestamp = DateTime.now().millisecondsSinceEpoch;
     if (_isDestroyingWindow) {
       return;
     }
     if (await LocalSetting().isClose2Tray() &&
         await windowManager.isPreventClose()) {
-      if (Platform.isMacOS &&
-          (timestamp - lastClickCloseTimestamp > 1000) &&
-          await windowManager.isFocused()) {
-        await windowManager.blur();
-      } else {
-        await windowManager.hide();
-      }
+      await windowManager.hide();
     } else {
       await _shutdownAndDestroyWindow();
     }
-    lastClickCloseTimestamp = timestamp;
   }
 
   @override
