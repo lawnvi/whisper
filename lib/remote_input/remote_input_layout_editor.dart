@@ -32,7 +32,7 @@ class RemoteInputLayoutEditorScreen extends StatefulWidget {
 }
 
 class _RemoteInputLayoutEditorScreenState
-    extends State<RemoteInputLayoutEditorScreen> {
+    extends State<RemoteInputLayoutEditorScreen> with WidgetsBindingObserver {
   late RemoteInputTopology _localTopology;
   late RemoteInputTopology _remoteTopology;
   late int _sinkOffsetX;
@@ -42,6 +42,7 @@ class _RemoteInputLayoutEditorScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _localTopology = RemoteInputTopology.fallback();
     _remoteTopology = widget.remoteTopology ??
         RemoteInputTopology.fallback(
@@ -55,6 +56,18 @@ class _RemoteInputLayoutEditorScreenState
     _sinkOffsetY =
         saved?.sinkOffsetY ?? widget.initialLayout.y - remotePrimary.y;
     _loadLocalTopology();
+    unawaited(_loadRemoteTopology());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    unawaited(_loadLocalTopology());
     unawaited(_loadRemoteTopology());
   }
 

@@ -472,6 +472,146 @@ void main() {
       );
       expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.armed);
     });
+
+    test('peer disconnect removes the active target and keeps others armed',
+        () async {
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (uri) async {
+          final transport = _FakeRemoteInputTransport();
+          transports[uri.host] = transport;
+          return transport;
+        },
+        workspaceSessionIdFactory: () => 'workspace-1',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+          _targetRequest(
+            peerId: 'peer-c',
+            host: 'peer-c.local',
+            routeId: 'route-c',
+            start: 400,
+            end: 800,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      for (final peerId in ['peer-b', 'peer-c']) {
+        final offer = sentControls[peerId]!.single;
+        await coordinator.handleControlMessage(
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'mac',
+            sinkPeerId: peerId,
+            layoutEdge: RemoteInputEdge.right,
+            releaseHotkey: 'ctrl+alt+esc',
+            path: '/input',
+          ),
+          localPeerId: 'mac',
+          remoteHost: '$peerId.local',
+          remotePort: 10002,
+          sendControlTo: (peerId, control) {
+            sentControls.putIfAbsent(peerId, () => []).add(control);
+          },
+        );
+      }
+      calls.clear();
+      await platform.handleNativeMethodCall(
+        MethodCall('onInputEvent', <String, dynamic>{
+          'sessionId': 'workspace-1',
+          'sequence': 1,
+          'timestampMicros': 1,
+          'eventType': 'mouseMove',
+          'payload': Uint8List.fromList(
+            utf8.encode(jsonEncode(<String, dynamic>{
+              'activeStart': true,
+              'routeId': 'workspace-1|peer-c|route-c',
+              'deltaX': 8,
+              'deltaY': 0,
+            })),
+          ),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.snapshot.activePeerId, 'peer-c');
+
+      await coordinator.handlePeerDisconnected('peer-c');
+
+      expect(
+        calls.map((call) => call.method),
+        containsAllInOrder(['stopCapture', 'startCapture']),
+      );
+      expect(coordinator.snapshot.activePeerId, isEmpty);
+      expect(
+        coordinator.snapshot.connectedTargetPeerIds,
+        unorderedEquals(['peer-b']),
+      );
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.armed);
+    });
+
+    test('peer disconnect returns to idle when it was the last target',
+        () async {
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        workspaceSessionIdFactory: () => 'workspace-1',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      final offer = sentControls['peer-b']!.single;
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'peer-b',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+          path: '/input',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'peer-b.local',
+        remotePort: 10002,
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.armed);
+
+      await coordinator.handlePeerDisconnected('peer-b');
+
+      expect(coordinator.snapshot.role, RemoteInputWorkspaceRole.idle);
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
+      expect(coordinator.snapshot.liveTargetPeerIds, isEmpty);
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        isNotEmpty,
+      );
+    });
   });
 }
 

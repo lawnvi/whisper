@@ -656,6 +656,88 @@ class RemoteInputLayoutGeometry {
     return mappings;
   }
 
+  static RemoteInputSavedLayout? savedLayoutForTranslatedSinkTopology({
+    required RemoteInputTopology sourceTopology,
+    required RemoteInputTopology sinkTopology,
+    required int sinkOffsetX,
+    required int sinkOffsetY,
+    String preferredSinkDisplayId = '',
+    int edgeTolerance = 0,
+  }) {
+    final sourceDisplays = sourceTopology.displays;
+    final sinkDisplays = sinkTopology.displays;
+    if (sourceDisplays.isEmpty || sinkDisplays.isEmpty) {
+      return null;
+    }
+    final translatedSinks = sinkDisplays
+        .map(
+          (display) => display.translated(
+            dx: sinkOffsetX,
+            dy: sinkOffsetY,
+          ),
+        )
+        .toList(growable: false);
+    _TranslatedSinkLayoutCandidate? best;
+    for (final sourceDisplay in sourceDisplays) {
+      for (final sourceEdge in RemoteInputEdge.values) {
+        final sinkEdge = oppositeEdge(sourceEdge);
+        for (var i = 0; i < translatedSinks.length; i++) {
+          final sinkInLayout = translatedSinks[i];
+          final sinkDisplay = sinkDisplays[i];
+          final segment = sharedEdgeSegment(
+            source: sourceDisplay,
+            sourceEdge: sourceEdge,
+            sinkInLayout: sinkInLayout,
+            sinkEdge: sinkEdge,
+            edgeTolerance: edgeTolerance,
+          );
+          if (segment == null) {
+            continue;
+          }
+          if (!isOuterEdgeSegment(
+            display: sourceDisplay,
+            edge: sourceEdge,
+            displays: sourceDisplays,
+            segmentStart: segment.start,
+            segmentEnd: segment.end,
+            edgeTolerance: edgeTolerance,
+          )) {
+            continue;
+          }
+          if (!isOuterEdgeSegment(
+            display: sinkInLayout,
+            edge: sinkEdge,
+            displays: translatedSinks,
+            segmentStart: segment.start,
+            segmentEnd: segment.end,
+            edgeTolerance: edgeTolerance,
+          )) {
+            continue;
+          }
+          final candidate = _TranslatedSinkLayoutCandidate(
+            savedLayout: RemoteInputSavedLayout(
+              sourceDisplayId: sourceDisplay.displayId,
+              sinkDisplayId: sinkDisplay.displayId,
+              sourceEdge: sourceEdge,
+              sinkEdge: sinkEdge,
+              sinkOffsetX: sinkOffsetX,
+              sinkOffsetY: sinkOffsetY,
+              sharedSegmentStart: segment.start,
+              sharedSegmentEnd: segment.end,
+            ),
+            length: segment.length,
+            preferredSink: preferredSinkDisplayId.isNotEmpty &&
+                sinkDisplay.displayId == preferredSinkDisplayId,
+          );
+          if (best == null || candidate.isBetterThan(best)) {
+            best = candidate;
+          }
+        }
+      }
+    }
+    return best?.savedLayout;
+  }
+
   static bool isOuterEdgeSegment({
     required RemoteInputDisplay display,
     required RemoteInputEdge edge,
@@ -781,6 +863,30 @@ class RemoteInputLayoutGeometry {
         (a == RemoteInputEdge.right && b == RemoteInputEdge.left) ||
         (a == RemoteInputEdge.top && b == RemoteInputEdge.bottom) ||
         (a == RemoteInputEdge.bottom && b == RemoteInputEdge.top);
+  }
+}
+
+class _TranslatedSinkLayoutCandidate {
+  const _TranslatedSinkLayoutCandidate({
+    required this.savedLayout,
+    required this.length,
+    required this.preferredSink,
+  });
+
+  final RemoteInputSavedLayout savedLayout;
+  final int length;
+  final bool preferredSink;
+
+  bool isBetterThan(_TranslatedSinkLayoutCandidate other) {
+    if (preferredSink != other.preferredSink) {
+      return preferredSink;
+    }
+    if (length != other.length) {
+      return length > other.length;
+    }
+    return savedLayout.sourceDisplayId
+            .compareTo(other.savedLayout.sourceDisplayId) <
+        0;
   }
 }
 

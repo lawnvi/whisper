@@ -458,6 +458,22 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     }
   }
 
+  Future<void> handlePeerDisconnected(String peerId) async {
+    if (peerId.isEmpty ||
+        _snapshot.role != RemoteInputWorkspaceRole.controller) {
+      return;
+    }
+    final target = _targets[peerId];
+    if (target == null) {
+      return;
+    }
+    await _closeControllerTarget(
+      target,
+      terminalStatus: RemoteInputWorkspaceStatus.idle,
+      errorMessage: 'Peer disconnected',
+    );
+  }
+
   Future<void> stopControllerWorkspace({
     RemoteInputPeerControlSender? sendControlTo,
   }) async {
@@ -681,6 +697,18 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   Future<void> _handleTargetTransportClosed(
     _RemoteInputWorkspaceTargetRuntime target,
   ) async {
+    await _closeControllerTarget(
+      target,
+      terminalStatus: RemoteInputWorkspaceStatus.idle,
+      errorMessage: 'Remote input transport closed',
+    );
+  }
+
+  Future<void> _closeControllerTarget(
+    _RemoteInputWorkspaceTargetRuntime target, {
+    required RemoteInputWorkspaceStatus terminalStatus,
+    required String errorMessage,
+  }) async {
     await _releaseCaptureForActiveTargetIfNeeded(target);
     await target.transportDoneSubscription?.cancel();
     target.transportDoneSubscription = null;
@@ -689,11 +717,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     _manager.stopSession(target.offer.sessionId);
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.stopped,
-      errorMessage: 'Remote input transport closed',
+      errorMessage: errorMessage,
     );
     await _publishAfterTargetClosed(
-      terminalStatus: RemoteInputWorkspaceStatus.idle,
-      errorMessage: 'Remote input transport closed',
+      terminalStatus: terminalStatus,
+      errorMessage: errorMessage,
     );
   }
 

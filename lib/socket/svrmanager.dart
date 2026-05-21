@@ -469,6 +469,7 @@ class WsSvrManager {
       return;
     }
     await _peerConnections.disconnect(peerId);
+    await _handlePeerDisconnected(peerId);
     _remoteProfilesByPeerId.remove(peerId);
     if (receiver == peerId) {
       receiver = _peerConnections.connectedPeerIds.isEmpty
@@ -615,6 +616,9 @@ class WsSvrManager {
     await _freeIoSink(freeAll: true);
     await AudioShareCoordinator.shared.stopLocal();
     await AudioGroupCoordinator.shared.stopLocal();
+    await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
+      sendControlTo: sendRemoteInputControlTo,
+    );
     await RemoteInputCoordinator.shared.stopLocal();
     _sink = null;
     await _peerConnections.disconnectAll();
@@ -639,6 +643,7 @@ class WsSvrManager {
       return;
     }
     await _peerConnections.disconnect(peerId);
+    await _handlePeerDisconnected(peerId);
     _remoteProfilesByPeerId.remove(peerId);
     if (receiver == peerId) {
       receiver = _peerConnections.connectedPeerIds.isEmpty
@@ -651,6 +656,13 @@ class WsSvrManager {
       );
     }
     _dispatchToAll((event) => event.onClose());
+  }
+
+  Future<void> _handlePeerDisconnected(String peerId) async {
+    await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
+    if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
+      await RemoteInputCoordinator.shared.stopLocal();
+    }
   }
 
   void close({bool closeServer = false}) {

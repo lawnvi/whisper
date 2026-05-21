@@ -676,6 +676,78 @@ void main() {
       expect(resolved.edgeMappings.single.sinkDisplayId, 'redmi');
     });
 
+    test('creates a saved layout from translated sink topology', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Built-in',
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 800,
+            scale: 2,
+            isPrimary: true,
+          ),
+          RemoteInputDisplay(
+            displayId: 'source-external',
+            name: 'External',
+            x: 1000,
+            y: 0,
+            width: 1200,
+            height: 800,
+            scale: 1,
+            isPrimary: false,
+          ),
+        ],
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'windows',
+        updatedAt: 1,
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-main',
+            name: 'Peer',
+            x: 0,
+            y: 0,
+            width: 900,
+            height: 600,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+      );
+
+      final saved =
+          RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+        sinkOffsetX: 2200,
+        sinkOffsetY: 100,
+        preferredSinkDisplayId: 'sink-main',
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.sourceDisplayId, 'source-external');
+      expect(saved.sinkDisplayId, 'sink-main');
+      expect(saved.sourceEdge, RemoteInputEdge.right);
+      expect(saved.sinkEdge, RemoteInputEdge.left);
+      expect(saved.sinkOffsetX, 2200);
+      expect(saved.sinkOffsetY, 100);
+      expect(saved.sharedSegmentStart, 100);
+      expect(saved.sharedSegmentEnd, 700);
+
+      final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
+        savedLayout: saved,
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+      );
+      expect(resolved?.sourceDisplay.displayId, 'source-external');
+      expect(resolved?.sinkDisplay.displayId, 'sink-main');
+    });
+
     test('resolves a nearly touching perpendicular edge within tolerance', () {
       const sourceTopology = RemoteInputTopology(
         platform: 'macos',
