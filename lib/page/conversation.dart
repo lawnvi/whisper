@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +16,7 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
@@ -68,6 +68,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     with WidgetsBindingObserver
     implements ISocketEvent {
   static const int _transferUiSpeedRefreshMs = 300;
+  static const Duration _transferProgressAnimationDuration =
+      Duration(milliseconds: 180);
 
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
@@ -284,6 +286,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
     unawaited(_syncAndroidKeepAliveService());
   }
 
+  Widget _buildAnimatedTransferProgress({
+    required double value,
+    required Widget Function(BuildContext context, double value) builder,
+  }) {
+    final target = value.clamp(0, 1).toDouble();
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: target),
+      duration: _transferProgressAnimationDuration,
+      curve: Curves.easeOutCubic,
+      builder: (context, animatedValue, child) {
+        return builder(context, animatedValue.clamp(0, 1).toDouble());
+      },
+    );
+  }
+
   Future<void> _loadTransferSnapshotsForMessages(
     Iterable<MessageData> messages,
   ) async {
@@ -384,6 +401,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   _insertItem(index, item) {
+    final existingIndex = item.uuid.isEmpty
+        ? -1
+        : messageList.indexWhere((message) => message.uuid == item.uuid);
+    if (existingIndex >= 0) {
+      setState(() {
+        messageList[existingIndex] = item;
+      });
+      return;
+    }
     messageList.insert(index, item);
     key.currentState
         ?.insertItem(index, duration: const Duration(milliseconds: 500));
@@ -405,7 +431,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         state == FileTransferState.canceled;
   }
 
-  String _fileStatusText(MessageData message, TransferSnapshot? transfer) {
+  String _fileStatusText(
+    MessageData message,
+    TransferSnapshot? transfer, {
+    double? progressOverride,
+  }) {
     if (transfer == null) {
       if (_isConnectedSession &&
           !socketManager.supportsResumableTransfer &&
@@ -414,20 +444,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       return formatSize(message.size);
     }
+    final progress = progressOverride ?? transfer.progress;
     switch (transfer.state) {
       case FileTransferState.queued:
         return l10n.fileTransferQueued;
       case FileTransferState.negotiating:
         return transfer.committedBytes > 0
             ? l10n.fileTransferPreparingResume(
-                (transfer.progress * 100).toStringAsFixed(0),
+                (progress * 100).toStringAsFixed(0),
               )
             : l10n.fileTransferNegotiating;
       case FileTransferState.transferring:
-        return '${formatSize(message.size)}  ${(transfer.progress * 100).toStringAsFixed(0)}%';
+        return '${formatSize(message.size)}  ${(progress * 100).toStringAsFixed(0)}%';
       case FileTransferState.waitingReconnect:
         return l10n.fileTransferWaitingReconnect(
-          (transfer.progress * 100).toStringAsFixed(0),
+          (progress * 100).toStringAsFixed(0),
         );
       case FileTransferState.paused:
         return l10n.fileTransferPaused;
@@ -537,9 +568,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
       children: [
         if (embedded) _buildEmbeddedHeader(isDark),
         if (percent > 0 && percent < 1)
-          LinearProgressIndicator(
+          _buildAnimatedTransferProgress(
             value: percent,
-            color: Colors.lightGreen,
+            builder: (context, value) => LinearProgressIndicator(
+              value: value,
+              color: Colors.lightGreen,
+            ),
           ),
         Expanded(
           child: ChatMessageList(
@@ -711,25 +745,28 @@ class _SendMessageScreen extends State<SendMessageScreen>
       actions.add(
         Padding(
           padding: const EdgeInsets.only(right: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _speed,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: palette.textMuted,
+          child: _buildAnimatedTransferProgress(
+            value: percent,
+            builder: (context, value) => Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _speed,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: palette.textMuted,
+                  ),
                 ),
-              ),
-              Text(
-                "${(100 * percent).toStringAsFixed(2)}%",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: palette.textMuted,
+                Text(
+                  "${(100 * value).toStringAsFixed(2)}%",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: palette.textMuted,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -998,8 +1035,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       _isLoading = true;
     });
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null) {
+      final result = await WhisperFilePicker.pickFiles(allowMultiple: true);
+      if (result.isEmpty) {
         return;
       }
       if (shouldReconnectAfterPicker) {
@@ -1014,11 +1051,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
           return;
         }
       }
-      for (final item in result.files) {
-        if (item.path == null || item.path!.isEmpty) {
-          continue;
-        }
-        await socketManager.sendFileTo(device.uid, item.path!);
+      for (final item in result) {
+        await socketManager.sendPickedFileTo(device.uid, item);
       }
     } catch (error, stackTrace) {
       logger.e('pick files failed', error: error, stackTrace: stackTrace);
@@ -1688,6 +1722,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final cardColor =
         isOpponent ? palette.messageIncoming : palette.messageOutgoing;
     final cardBorderColor = palette.borderSubtle;
+    final fileStatusStyle = TextStyle(
+      color: colorScheme.onSurfaceVariant,
+      fontSize: 12,
+    );
 
     return Container(
       width: screenWidth,
@@ -1712,11 +1750,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
               SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(
-                  value: transfer.progress.clamp(0, 1),
-                  strokeWidth: 2.4,
-                  color: colorScheme.primary,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.18),
+                child: _buildAnimatedTransferProgress(
+                  value: transfer.progress,
+                  builder: (context, value) => CircularProgressIndicator(
+                    value: value,
+                    strokeWidth: 2.4,
+                    color: colorScheme.primary,
+                    backgroundColor:
+                        colorScheme.primary.withValues(alpha: 0.18),
+                  ),
                 ),
               )
             else
@@ -1745,13 +1787,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    _fileStatusText(message, transfer),
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
+                  if (isActiveTransfer)
+                    _buildAnimatedTransferProgress(
+                      value: transfer.progress,
+                      builder: (context, value) => Text(
+                        _fileStatusText(
+                          message,
+                          transfer,
+                          progressOverride: value,
+                        ),
+                        style: fileStatusStyle,
+                      ),
+                    )
+                  else
+                    Text(
+                      _fileStatusText(message, transfer),
+                      style: fileStatusStyle,
                     ),
-                  ),
                 ],
               ),
             ),

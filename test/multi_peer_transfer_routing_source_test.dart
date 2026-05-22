@@ -3,13 +3,24 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('resumable transfer controls route to the transfer peer', () {
+  test('v3 transfer controls route to the transfer peer', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 
-    expect(source, contains('void _sendTransferControlTo(String peerId'));
-    expect(source, contains('_sendTransferControlTo(\n      transfer.peerUid'));
-    expect(source, contains('_sendTransferControlTo(\n      updated.peerUid'));
-    expect(source, contains('_sendTransferControlTo(\n          item.peerUid'));
+    expect(source, contains('void _sendFileTransferV3ControlTo('));
+    expect(source,
+        contains('_sendFileTransferV3ControlTo(\n      transfer.peerUid'));
+    expect(source,
+        contains('_sendFileTransferV3ControlTo(\n        message.sender'));
+    expect(source, contains('_sendFileTransferV3Ready(item.transferId)'));
+  });
+
+  test('v3 transfer offers route to the transfer peer', () {
+    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+
+    expect(source, contains('void _sendFileTransferV3OfferTo('));
+    expect(source, contains('_sendFileTransferV3OfferTo(peerId, message)'));
+    expect(
+        source, contains('_sendFileTransferV3OfferTo(item.peerUid, message)'));
   });
 
   test('resumable transfer chunks are written to the transfer peer socket', () {
@@ -34,7 +45,19 @@ void main() {
     expect(source, isNot(contains('_receivingTransferId')));
   });
 
-  test('raw resumable payload state is scoped by peer stream', () {
+  test('peer disconnect marks only that peer transfers waiting reconnect', () {
+    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+
+    expect(source, contains('_markPeerTransfersWaitingReconnect(peerId)'));
+    expect(source, contains('_transferRuntime.clearPeer(peerId)'));
+    expect(
+      source,
+      contains('fetchRecoverableFileTransfersForPeer(\n      peerId'),
+    );
+    expect(source, contains('FileTransferState.waitingReconnect'));
+  });
+
+  test('legacy raw resumable payload state is scoped by peer stream', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final listen = RegExp(
       r'Future<void> _listen[\s\S]*?Future<void> _freeIoSink',

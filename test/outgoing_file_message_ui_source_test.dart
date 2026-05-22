@@ -1,0 +1,98 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  String methodBody(String source, String start, String next) {
+    final startIndex = source.indexOf(start);
+    expect(startIndex, isNonNegative, reason: 'Missing method $start');
+    final endIndex = source.indexOf(next, startIndex);
+    expect(endIndex, isNonNegative, reason: 'Missing next method $next');
+    return source.substring(startIndex, endIndex);
+  }
+
+  test('outgoing file messages are dispatched locally before network ack', () {
+    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final sendFileTo = methodBody(
+      source,
+      'Future<bool> sendFileTo(String peerId, String path)',
+      'Future<bool> sendAndroidContentUriTo(',
+    );
+    final sendAndroidUri = methodBody(
+      source,
+      'Future<bool> sendAndroidContentUriTo(',
+      'void _sendTransferControl(',
+    );
+
+    for (final body in [sendFileTo, sendAndroidUri]) {
+      final insertIndex = body.indexOf('await LocalDatabase().insertMessage');
+      final dispatchIndex = body.indexOf('_dispatchOutgoingMessage(message)');
+      final sendIndex =
+          body.indexOf('_sendFileTransferV3OfferTo(peerId, message)');
+
+      expect(insertIndex, isNonNegative);
+      expect(dispatchIndex, greaterThan(insertIndex));
+      expect(sendIndex, greaterThan(dispatchIndex));
+    }
+  });
+
+  test('conversation updates an existing message with the same uuid', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final insertItem = methodBody(
+      source,
+      '_insertItem(index, item)',
+      '_insertItems(index, items)',
+    );
+
+    expect(insertItem, contains('indexWhere'));
+    expect(insertItem, contains('message.uuid == item.uuid'));
+    expect(insertItem, contains('messageList[existingIndex] = item'));
+    expect(insertItem, contains('key.currentState'));
+    expect(insertItem, contains('insertItem(index'));
+  });
+
+  test('conversation animates transfer progress instead of jumping', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+
+    expect(source, contains('_transferProgressAnimationDuration'));
+    expect(source, contains('Widget _buildAnimatedTransferProgress'));
+    expect(source, contains('TweenAnimationBuilder<double>'));
+
+    final build = methodBody(
+      source,
+      'Widget build(BuildContext context)',
+      'bool get _canSendCurrentDevice',
+    );
+    final fileMessage = methodBody(
+      source,
+      'Widget _buildFileMessage(',
+      'void onAuth(',
+    );
+
+    expect(build, contains('_buildAnimatedTransferProgress('));
+    expect(fileMessage, contains('_buildAnimatedTransferProgress('));
+  });
+
+  test('conversation animates visible transfer percentage text', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final fileStatus = methodBody(
+      source,
+      'String _fileStatusText(',
+      'Future<void> _retryTransfer',
+    );
+    final headerActions = methodBody(
+      source,
+      'List<Widget> _buildHeaderActions',
+      'String _audioShareTooltip',
+    );
+    final fileMessage = methodBody(
+      source,
+      'Widget _buildFileMessage(',
+      'void onAuth(',
+    );
+
+    expect(fileStatus, contains('progressOverride'));
+    expect(headerActions, contains('_buildAnimatedTransferProgress('));
+    expect(fileMessage, contains('progressOverride: value'));
+  });
+}

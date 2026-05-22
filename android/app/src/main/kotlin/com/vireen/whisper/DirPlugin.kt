@@ -3,6 +3,7 @@ package com.vireen.whisper
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.StatFs
 import android.widget.Toast
@@ -40,6 +41,11 @@ class DirPlugin() : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwar
                 val path = call.argument<String>("path") ?: ""
                 result.success(availableBytes(path))
             }
+            "scanFile" -> {
+                val path = call.argument<String>("path") ?: ""
+                scanFile(path)
+                result.success(null)
+            }
 
             else -> {
                 result.notImplemented()
@@ -63,6 +69,13 @@ class DirPlugin() : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwar
         val targetPath = if (path.isNotBlank()) path else context.filesDir.absolutePath
         val statFs = StatFs(targetPath)
         return statFs.availableBytes
+    }
+
+    private fun scanFile(path: String) {
+        if (path.isBlank()) {
+            return
+        }
+        MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {

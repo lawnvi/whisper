@@ -20,7 +20,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
-import 'package:whisper/helper/android_quick_share.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
@@ -84,7 +83,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       RemoteInputCoordinator.shared;
   final RemoteInputWorkspaceCoordinator _remoteInputWorkspaceCoordinator =
       RemoteInputWorkspaceCoordinator.shared;
-  final AndroidQuickShare _quickShare = AndroidQuickShare.shared;
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -113,7 +111,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   String? _pendingAutoConnectPeerId;
   Future<void>? _desktopShutdownFuture;
   bool _isDestroyingWindow = false;
-  bool _quickShareLoading = false;
 
   BorderRadius get _desktopToolbarPillRadius => BorderRadius.circular(14);
 
@@ -136,7 +133,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _remoteInputWorkspaceCoordinator.addListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
-    _quickShare.addListener(_handleQuickShareChanged);
     clipboardWatcher.addListener(this);
     // start watch
     clipboardWatcher.start();
@@ -148,9 +144,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final isFirst = !_didBootstrapDiscovery;
     _didBootstrapDiscovery = true;
     _refreshDevice(isFirst: isFirst);
-    if (isFirst) {
-      unawaited(_loadPendingAndroidQuickShare());
-    }
     socketManager.registerEvent(this, uid: device?.uid ?? "", primary: true);
     super.didChangeDependencies();
   }
@@ -168,6 +161,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         await Permission.notification.request();
       }
       initPlatformState();
+      unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
     } else {
       if (await Permission.location.isDenied) {
         await Permission.location.request();
@@ -325,7 +319,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _remoteInputWorkspaceCoordinator.removeListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
-    _quickShare.removeListener(_handleQuickShareChanged);
     _desktopSearchController.dispose();
     _desktopSearchFocusNode.dispose();
     // stop watch
@@ -359,54 +352,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (mounted) {
       setState(() {});
     }
-  }
-
-  void _handleQuickShareChanged() {
-    if (!mounted) {
-      return;
-    }
-    setState(() {});
-    if (_quickShare.hasPendingShare) {
-      if (isMobile()) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-      _handlePendingQuickShareAvailability();
-    }
-  }
-
-  Future<void> _loadPendingAndroidQuickShare() async {
-    if (!Platform.isAndroid || _quickShareLoading) {
-      return;
-    }
-    _quickShareLoading = true;
-    try {
-      await _quickShare.loadPendingShare();
-    } catch (error) {
-      logger.i('Failed to load Android quick share: $error');
-      if (mounted) {
-        showAppToast(
-          AppLocalizations.of(context)?.filePickerOpenFailed ??
-              'Unable to open the file picker',
-        );
-      }
-      _quickShare.clear();
-    } finally {
-      _quickShareLoading = false;
-    }
-  }
-
-  void _handlePendingQuickShareAvailability() {
-    if (!_quickShare.hasPendingShare) {
-      return;
-    }
-    if (socketManager.connectedPeerIds.isNotEmpty) {
-      return;
-    }
-    showAppToast(
-      AppLocalizations.of(context)?.connectToSend ??
-          'Connect to send messages',
-    );
-    _quickShare.clear();
   }
 
   void _expandDesktopSearch() {
@@ -1675,10 +1620,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _openConv(DeviceData deviceItem) async {
-    if (isMobile() && _quickShare.hasPendingShare) {
-      await _handleQuickShareDeviceSelection(deviceItem);
-      return;
-    }
     if (socketManager.isConnectedTo(deviceItem.uid)) {
       socketManager.selectPeer(deviceItem.uid);
     }
@@ -1686,49 +1627,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       setState(() {
         _selectedDesktopPeerId = deviceItem.uid;
       });
-      return;
-    }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SendMessageScreen(device: deviceItem),
-      ),
-    );
-    _refreshDevice();
-  }
-
-  Future<void> _handleQuickShareDeviceSelection(DeviceData deviceItem) async {
-    if (!_quickShare.isConnectedTarget(
-      deviceItem.uid,
-      socketManager.connectedPeerIds,
-    )) {
-      showAppToast(
-        AppLocalizations.of(context)?.connectToSend ??
-            'Connect to send messages',
-      );
-      return;
-    }
-    await _sendPendingQuickShareTo(deviceItem);
-  }
-
-  Future<void> _sendPendingQuickShareTo(DeviceData deviceItem) async {
-    if (!socketManager.isConnectedTo(deviceItem.uid)) {
-      showAppToast(
-        AppLocalizations.of(context)?.connectToSend ??
-            'Connect to send messages',
-      );
-      return;
-    }
-    final paths = _quickShare.pendingFilePaths;
-    if (paths.isEmpty) {
-      return;
-    }
-    socketManager.selectPeer(deviceItem.uid);
-    _quickShare.clear();
-    for (final path in paths) {
-      await socketManager.sendFile(path);
-    }
-    if (!mounted) {
       return;
     }
     await Navigator.push(

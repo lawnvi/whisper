@@ -67,6 +67,46 @@ Future<int?> availableBytesForPath(String path) async {
   return null;
 }
 
+Future<void> notifyFileVisibleToAndroidPickers(String path) async {
+  if (!Platform.isAndroid || path.isEmpty) {
+    return;
+  }
+
+  try {
+    await _androidDirChannel.invokeMethod<void>(
+      'scanFile',
+      {'path': path},
+    );
+  } catch (error) {
+    logger.i('Failed to scan Android file for picker visibility: $error');
+  }
+}
+
+Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
+  if (!Platform.isAndroid) {
+    return;
+  }
+
+  try {
+    final dir = await downloadDir();
+    if (!dir.existsSync()) {
+      return;
+    }
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final name = p.basename(entity.path);
+      if (name.startsWith('.') || name.endsWith('.part')) {
+        continue;
+      }
+      await notifyFileVisibleToAndroidPickers(entity.path);
+    }
+  } catch (error) {
+    logger.i('Failed to scan existing Android downloads: $error');
+  }
+}
+
 void openFile(String path) async {
   if (path.endsWith(".apk") && Platform.isAndroid) {
     if (await Permission.requestInstallPackages.isDenied) {

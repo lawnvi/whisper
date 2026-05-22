@@ -99,6 +99,7 @@ RemoteInputTopology? _topologyFromJson(Object? value) {
 class PeerCapabilities {
   const PeerCapabilities({
     this.fileResumeV1 = false,
+    this.fileTransferV3 = false,
     this.systemAudioSourceV1 = false,
     this.speakerSinkV1 = false,
     this.remoteInputSourceV1 = false,
@@ -111,6 +112,7 @@ class PeerCapabilities {
   });
 
   final bool fileResumeV1;
+  final bool fileTransferV3;
   final bool systemAudioSourceV1;
   final bool speakerSinkV1;
   final bool remoteInputSourceV1;
@@ -124,6 +126,7 @@ class PeerCapabilities {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'fileResumeV1': fileResumeV1,
+      'fileTransferV3': fileTransferV3,
       'systemAudioSourceV1': systemAudioSourceV1,
       'speakerSinkV1': speakerSinkV1,
       'remoteInputSourceV1': remoteInputSourceV1,
@@ -139,6 +142,7 @@ class PeerCapabilities {
   factory PeerCapabilities.fromJson(Map<String, dynamic> json) {
     return PeerCapabilities(
       fileResumeV1: json['fileResumeV1'] as bool? ?? false,
+      fileTransferV3: json['fileTransferV3'] as bool? ?? false,
       systemAudioSourceV1: json['systemAudioSourceV1'] as bool? ?? false,
       speakerSinkV1: json['speakerSinkV1'] as bool? ?? false,
       remoteInputSourceV1: json['remoteInputSourceV1'] as bool? ?? false,
