@@ -29,6 +29,7 @@ import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
+import 'package:whisper/widget/desktop_file_drag_source.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -429,6 +430,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return state == FileTransferState.completed ||
         state == FileTransferState.failed ||
         state == FileTransferState.canceled;
+  }
+
+  bool _canDragFileMessage(
+    MessageData message,
+    TransferSnapshot? transfer,
+  ) {
+    if (!isDesktop() ||
+        message.path.isEmpty ||
+        !File(message.path).existsSync()) {
+      return false;
+    }
+    return transfer == null || transfer.state == FileTransferState.completed;
   }
 
   String _fileStatusText(
@@ -1727,99 +1740,104 @@ class _SendMessageScreen extends State<SendMessageScreen>
       fontSize: 12,
     );
 
-    return Container(
-      width: screenWidth,
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cardBorderColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (failed || isActiveTransfer) const SizedBox(width: 8),
-            if (failed)
-              const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.redAccent,
-                size: 24,
-              )
-            else if (isActiveTransfer)
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: _buildAnimatedTransferProgress(
-                  value: transfer.progress,
-                  builder: (context, value) => CircularProgressIndicator(
-                    value: value,
-                    strokeWidth: 2.4,
-                    color: colorScheme.primary,
-                    backgroundColor:
-                        colorScheme.primary.withValues(alpha: 0.18),
-                  ),
-                ),
-              )
-            else
-              Icon(
-                Icons.insert_drive_file,
-                color: colorScheme.primary.withValues(alpha: 0.86),
-                size: 34,
-              ),
-            if (failed || isActiveTransfer) const SizedBox(width: 8),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: screenWidth - 80,
-                    child: Text(
-                      message.name,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                      maxLines: 4,
-                      softWrap: true,
+    return DesktopFileDragSource(
+      path: message.path,
+      name: message.name,
+      enabled: _canDragFileMessage(message, transfer),
+      child: Container(
+        width: screenWidth,
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cardBorderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (failed || isActiveTransfer) const SizedBox(width: 8),
+              if (failed)
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: Colors.redAccent,
+                  size: 24,
+                )
+              else if (isActiveTransfer)
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: _buildAnimatedTransferProgress(
+                    value: transfer.progress,
+                    builder: (context, value) => CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 2.4,
+                      color: colorScheme.primary,
+                      backgroundColor:
+                          colorScheme.primary.withValues(alpha: 0.18),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  if (isActiveTransfer)
-                    _buildAnimatedTransferProgress(
-                      value: transfer.progress,
-                      builder: (context, value) => Text(
-                        _fileStatusText(
-                          message,
-                          transfer,
-                          progressOverride: value,
+                )
+              else
+                Icon(
+                  Icons.insert_drive_file,
+                  color: colorScheme.primary.withValues(alpha: 0.86),
+                  size: 34,
+                ),
+              if (failed || isActiveTransfer) const SizedBox(width: 8),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: screenWidth - 80,
+                      child: Text(
+                        message.name,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
                         ),
+                        maxLines: 4,
+                        softWrap: true,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (isActiveTransfer)
+                      _buildAnimatedTransferProgress(
+                        value: transfer.progress,
+                        builder: (context, value) => Text(
+                          _fileStatusText(
+                            message,
+                            transfer,
+                            progressOverride: value,
+                          ),
+                          style: fileStatusStyle,
+                        ),
+                      )
+                    else
+                      Text(
+                        _fileStatusText(message, transfer),
                         style: fileStatusStyle,
                       ),
-                    )
-                  else
-                    Text(
-                      _fileStatusText(message, transfer),
-                      style: fileStatusStyle,
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (showRetry)
-              IconButton(
-                tooltip: l10n.retry,
-                onPressed: () => _retryTransfer(message.uuid),
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-              ),
-            if (showCancel)
-              IconButton(
-                tooltip: l10n.cancel,
-                onPressed: () => _cancelTransfer(message.uuid),
-                icon: const Icon(Icons.close_rounded, size: 20),
-              ),
-          ],
+              if (showRetry)
+                IconButton(
+                  tooltip: l10n.retry,
+                  onPressed: () => _retryTransfer(message.uuid),
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                ),
+              if (showCancel)
+                IconButton(
+                  tooltip: l10n.cancel,
+                  onPressed: () => _cancelTransfer(message.uuid),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                ),
+            ],
+          ),
         ),
       ),
     );
