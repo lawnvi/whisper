@@ -32,6 +32,8 @@ class AudioGroupSink {
     this.rttMicros = 0,
     this.jitterMicros = 0,
     this.bufferTargetMicros = 0,
+    this.latePacketCount = 0,
+    this.syncErrorMicros = 0,
     this.lastPacketSequence = -1,
     this.lastError = '',
   });
@@ -46,6 +48,8 @@ class AudioGroupSink {
   final int rttMicros;
   final int jitterMicros;
   final int bufferTargetMicros;
+  final int latePacketCount;
+  final int syncErrorMicros;
   final int lastPacketSequence;
   final String lastError;
 
@@ -65,6 +69,8 @@ class AudioGroupSink {
     int? rttMicros,
     int? jitterMicros,
     int? bufferTargetMicros,
+    int? latePacketCount,
+    int? syncErrorMicros,
     int? lastPacketSequence,
     String? lastError,
   }) {
@@ -79,6 +85,8 @@ class AudioGroupSink {
       rttMicros: rttMicros ?? this.rttMicros,
       jitterMicros: jitterMicros ?? this.jitterMicros,
       bufferTargetMicros: bufferTargetMicros ?? this.bufferTargetMicros,
+      latePacketCount: latePacketCount ?? this.latePacketCount,
+      syncErrorMicros: syncErrorMicros ?? this.syncErrorMicros,
       lastPacketSequence: lastPacketSequence ?? this.lastPacketSequence,
       lastError: lastError ?? this.lastError,
     );
@@ -94,7 +102,7 @@ class AudioGroupSession {
     required this.state,
     required this.sinks,
     this.startedAtMicros = 0,
-    this.targetLatencyMs = 160,
+    this.targetLatencyMs = 70,
     this.lastError = '',
   });
 
@@ -104,7 +112,7 @@ class AudioGroupSession {
     required String sourcePeerId,
     required AudioStreamFormat format,
     required Map<String, AudioChannelRole> sinks,
-    int targetLatencyMs = 160,
+    int targetLatencyMs = 70,
   }) {
     final sinkStates = <String, AudioGroupSink>{
       for (final entry in sinks.entries)
@@ -164,6 +172,8 @@ class AudioGroupSession {
     int? rttMicros,
     int? jitterMicros,
     int? bufferTargetMicros,
+    int? latePacketCount,
+    int? syncErrorMicros,
     int? lastPacketSequence,
     String? lastError,
   }) {
@@ -182,6 +192,8 @@ class AudioGroupSession {
         rttMicros: rttMicros,
         jitterMicros: jitterMicros,
         bufferTargetMicros: bufferTargetMicros,
+        latePacketCount: latePacketCount,
+        syncErrorMicros: syncErrorMicros,
         lastPacketSequence: lastPacketSequence,
         lastError: lastError,
       ),

@@ -35,11 +35,16 @@ class AudioPlatform {
   Future<void> writePcm({
     required String sessionId,
     required Int16List pcm,
+    int? targetPlaybackTimeMicros,
   }) {
-    return _channel.invokeMethod<void>('writePcm', <String, dynamic>{
+    final arguments = <String, dynamic>{
       'sessionId': sessionId,
       'pcm': _pcmBytes(pcm),
-    });
+    };
+    if (targetPlaybackTimeMicros != null) {
+      arguments['targetPlaybackTimeMicros'] = targetPlaybackTimeMicros;
+    }
+    return _channel.invokeMethod<void>('writePcm', arguments);
   }
 
   Future<void> stopPlayback({

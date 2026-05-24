@@ -467,6 +467,33 @@ class AppLocalizationsEs extends AppLocalizations {
       'Selecciona al menos un dispositivo de reproduccion';
 
   @override
+  String get audioGroupSyncCalibrating => 'Estimando sincronizacion';
+
+  @override
+  String get audioGroupSyncGood => 'Sincronizacion buena';
+
+  @override
+  String get audioGroupSyncFair => 'Sincronizacion aceptable';
+
+  @override
+  String get audioGroupSyncUnstable => 'Sincronizacion inestable';
+
+  @override
+  String get audioGroupClockOffsetLabel => 'desfase de reloj';
+
+  @override
+  String audioGroupSyncEvidence(
+      Object quality,
+      Object clockOffsetLabel,
+      Object offset,
+      Object rtt,
+      Object jitter,
+      Object buffer,
+      Object latePackets) {
+    return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · fluctuacion ${jitter}ms · bufer ${buffer}ms · tardios $latePackets';
+  }
+
+  @override
   String audioShareFailed(String error) {
     return 'Error al compartir audio: $error';
   }

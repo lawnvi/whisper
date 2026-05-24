@@ -910,6 +910,49 @@ abstract class AppLocalizations {
   /// **'至少选择一台播放设备'**
   String get audioGroupSelectAtLeastOne;
 
+  /// No description provided for @audioGroupSyncCalibrating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在估算同步'**
+  String get audioGroupSyncCalibrating;
+
+  /// No description provided for @audioGroupSyncGood.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步良好'**
+  String get audioGroupSyncGood;
+
+  /// No description provided for @audioGroupSyncFair.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步一般'**
+  String get audioGroupSyncFair;
+
+  /// No description provided for @audioGroupSyncUnstable.
+  ///
+  /// In zh, this message translates to:
+  /// **'同步波动'**
+  String get audioGroupSyncUnstable;
+
+  /// No description provided for @audioGroupClockOffsetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'时钟偏移'**
+  String get audioGroupClockOffsetLabel;
+
+  /// No description provided for @audioGroupSyncEvidence.
+  ///
+  /// In zh, this message translates to:
+  /// **'{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {latePackets}'**
+  String audioGroupSyncEvidence(
+      Object quality,
+      Object clockOffsetLabel,
+      Object offset,
+      Object rtt,
+      Object jitter,
+      Object buffer,
+      Object latePackets);
+
   /// No description provided for @audioShareFailed.
   ///
   /// In zh, this message translates to:

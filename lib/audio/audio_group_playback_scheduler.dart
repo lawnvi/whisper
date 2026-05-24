@@ -3,17 +3,24 @@ import 'dart:typed_data';
 import 'package:whisper/audio/audio_protocol.dart';
 
 typedef AudioGroupClock = int Function();
-typedef AudioGroupPcmWriter = Future<void> Function(Int16List pcm);
+typedef AudioGroupPcmWriter = Future<void> Function(
+  Int16List pcm,
+  int targetPlaybackTimeMicros,
+);
 
 class AudioGroupPlaybackReport {
   const AudioGroupPlaybackReport({
     required this.queuedPacketCount,
     required this.latePacketCount,
+    required this.nextPacketDelayMicros,
+    required this.nextPumpDelayMicros,
     required this.bufferDepthMicros,
   });
 
   final int queuedPacketCount;
   final int latePacketCount;
+  final int nextPacketDelayMicros;
+  final int nextPumpDelayMicros;
   final int bufferDepthMicros;
 }
 
@@ -25,6 +32,7 @@ class AudioGroupPlaybackScheduler {
     required AudioGroupPcmWriter writePcm,
     this.lateToleranceMicros = 40000,
     this.startupBufferMicros = 0,
+    this.outputLeadMicros = 0,
     this.clockRebaseThresholdMicros = 500000,
   })  : _channelRole = channelRole,
         _channels = channels <= 0 ? 1 : channels,
@@ -37,6 +45,7 @@ class AudioGroupPlaybackScheduler {
   final AudioGroupPcmWriter _writePcm;
   final int lateToleranceMicros;
   final int startupBufferMicros;
+  final int outputLeadMicros;
   final int clockRebaseThresholdMicros;
   final List<_QueuedAudioGroupPacket> _queue = <_QueuedAudioGroupPacket>[];
   int? _targetClockOffsetMicros;
@@ -44,18 +53,31 @@ class AudioGroupPlaybackScheduler {
 
   AudioGroupPlaybackReport get report {
     final now = _clockMicros();
+    final nextPacketDelayMicros = _queue.isEmpty
+        ? 0
+        : (_queue.first.targetPlaybackTimeMicros - now).clamp(0, 1 << 31);
+    final nextPumpDelayMicros = _queue.isEmpty
+        ? 0
+        : (_queue.first.targetPlaybackTimeMicros - now - outputLeadMicros)
+            .clamp(0, 1 << 31);
     final bufferDepthMicros = _queue.isEmpty
         ? 0
         : (_queue.last.targetPlaybackTimeMicros - now).clamp(0, 1 << 31);
     return AudioGroupPlaybackReport(
       queuedPacketCount: _queue.length,
       latePacketCount: _latePacketCount,
+      nextPacketDelayMicros: nextPacketDelayMicros,
+      nextPumpDelayMicros: nextPumpDelayMicros,
       bufferDepthMicros: bufferDepthMicros,
     );
   }
 
   void updateChannelRole(AudioChannelRole channelRole) {
     _channelRole = channelRole;
+  }
+
+  void updateClockOffsetMicros(int clockOffsetMicros) {
+    _targetClockOffsetMicros = clockOffsetMicros;
   }
 
   void enqueue(AudioGroupPacketFrame packet, Int16List pcm) {
@@ -85,9 +107,10 @@ class AudioGroupPlaybackScheduler {
 
   Future<void> pump() async {
     final now = _clockMicros();
-    while (_queue.isNotEmpty && _queue.first.targetPlaybackTimeMicros <= now) {
+    while (_queue.isNotEmpty &&
+        _queue.first.targetPlaybackTimeMicros <= now + outputLeadMicros) {
       final item = _queue.removeAt(0);
-      await _writePcm(item.pcm);
+      await _writePcm(item.pcm, item.targetPlaybackTimeMicros);
     }
   }
 

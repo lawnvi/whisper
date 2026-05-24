@@ -84,6 +84,23 @@ void main() {
     expect(sheet, contains('l10n.audioGroupStop'));
   });
 
+  test('desktop audio group sheet shows synchronization evidence', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final sheet = sourceBetween(
+      source,
+      'Future<_AudioGroupSetupResult?> _showAudioGroupSetupSheet',
+      'String _audioGroupRoleLabel',
+    );
+
+    expect(sheet, contains('AnimatedBuilder'));
+    expect(sheet, contains('_buildAudioGroupSinkSubtitle'));
+    expect(source, contains('_audioGroupSyncEvidenceLabel'));
+    expect(source, contains('audioGroupSyncEvidence'));
+    expect(source, contains('audioGroupClockOffsetLabel'));
+    expect(source, contains('latePacketCount'));
+    expect(source, contains('syncErrorMicros'));
+  });
+
   test('desktop sidebar search expands by pushing toolbar actions away', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 

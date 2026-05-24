@@ -189,6 +189,23 @@
   "audioGroupRoleMono": "Mono",
   "audioGroupRequestingPlayback": "Solicitando reproduccion sincronizada en los dispositivos seleccionados",
   "audioGroupSelectAtLeastOne": "Selecciona al menos un dispositivo de reproduccion",
+  "audioGroupSyncCalibrating": "Estimando sincronizacion",
+  "audioGroupSyncGood": "Sincronizacion buena",
+  "audioGroupSyncFair": "Sincronizacion aceptable",
+  "audioGroupSyncUnstable": "Sincronizacion inestable",
+  "audioGroupClockOffsetLabel": "desfase de reloj",
+  "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · fluctuacion {jitter}ms · bufer {buffer}ms · tardios {latePackets}",
+  "@audioGroupSyncEvidence": {
+    "placeholders": {
+      "quality": {},
+      "clockOffsetLabel": {},
+      "offset": {},
+      "rtt": {},
+      "jitter": {},
+      "buffer": {},
+      "latePackets": {}
+    }
+  },
   "audioShareFailed": "Error al compartir audio: {error}",
   "remoteInputSourceConnecting": "Compartir teclado y mouse: conectando al otro dispositivo",
   "remoteInputSinkConnecting": "Compartir teclado y mouse: preparando recepcion de control",

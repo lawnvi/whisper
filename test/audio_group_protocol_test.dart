@@ -33,6 +33,12 @@ void main() {
       receivedAtMicros: 120,
       sinkClockMicros: 140,
       playbackCursorMicros: 160,
+      clockOffsetMicros: 180,
+      rttMicros: 200,
+      jitterMicros: 20,
+      bufferDepthMicros: 42000,
+      latePacketCount: 3,
+      syncErrorMicros: 7000,
     );
 
     final decoded = AudioGroupControlMessage.fromJson(message.toJson());
@@ -50,6 +56,12 @@ void main() {
     expect(decoded.receivedAtMicros, 120);
     expect(decoded.sinkClockMicros, 140);
     expect(decoded.playbackCursorMicros, 160);
+    expect(decoded.clockOffsetMicros, 180);
+    expect(decoded.rttMicros, 200);
+    expect(decoded.jitterMicros, 20);
+    expect(decoded.bufferDepthMicros, 42000);
+    expect(decoded.latePacketCount, 3);
+    expect(decoded.syncErrorMicros, 7000);
     expect(decoded.format, format);
   });
 

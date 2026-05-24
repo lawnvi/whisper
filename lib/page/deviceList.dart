@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
+import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/toast.dart';
@@ -1453,43 +1454,52 @@ class _DeviceListScreen extends State<DeviceListScreen>
                     ),
                     const SizedBox(height: 12),
                     Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: candidates.length,
-                        itemBuilder: (context, index) {
-                          final candidate = candidates[index];
-                          final isSelected = selected[candidate.uid] ?? false;
-                          return CheckboxListTile(
-                            value: isSelected,
-                            onChanged: (value) {
-                              setSheetState(() {
-                                selected[candidate.uid] = value ?? false;
-                              });
+                      child: AnimatedBuilder(
+                        animation: _audioGroupCoordinator,
+                        builder: (context, _) {
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: candidates.length,
+                            itemBuilder: (context, index) {
+                              final candidate = candidates[index];
+                              final isSelected =
+                                  selected[candidate.uid] ?? false;
+                              return CheckboxListTile(
+                                value: isSelected,
+                                onChanged: (value) {
+                                  setSheetState(() {
+                                    selected[candidate.uid] = value ?? false;
+                                  });
+                                },
+                                title: Text(candidate.name),
+                                subtitle: _buildAudioGroupSinkSubtitle(
+                                  candidate,
+                                ),
+                                secondary: DropdownButton<AudioChannelRole>(
+                                  value: roles[candidate.uid],
+                                  underline: const SizedBox.shrink(),
+                                  onChanged: isSelected
+                                      ? (role) {
+                                          if (role == null) {
+                                            return;
+                                          }
+                                          setSheetState(() {
+                                            roles[candidate.uid] = role;
+                                          });
+                                        }
+                                      : null,
+                                  items: AudioChannelRole.values
+                                      .map(
+                                        (role) => DropdownMenuItem(
+                                          value: role,
+                                          child:
+                                              Text(_audioGroupRoleLabel(role)),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                ),
+                              );
                             },
-                            title: Text(candidate.name),
-                            subtitle: Text(candidate.platform),
-                            secondary: DropdownButton<AudioChannelRole>(
-                              value: roles[candidate.uid],
-                              underline: const SizedBox.shrink(),
-                              onChanged: isSelected
-                                  ? (role) {
-                                      if (role == null) {
-                                        return;
-                                      }
-                                      setSheetState(() {
-                                        roles[candidate.uid] = role;
-                                      });
-                                    }
-                                  : null,
-                              items: AudioChannelRole.values
-                                  .map(
-                                    (role) => DropdownMenuItem(
-                                      value: role,
-                                      child: Text(_audioGroupRoleLabel(role)),
-                                    ),
-                                  )
-                                  .toList(growable: false),
-                            ),
                           );
                         },
                       ),
@@ -1553,6 +1563,80 @@ class _DeviceListScreen extends State<DeviceListScreen>
       case AudioChannelRole.right:
         return l10n.audioGroupRoleRight;
     }
+  }
+
+  Widget _buildAudioGroupSinkSubtitle(DeviceData candidate) {
+    final evidence = _audioGroupSyncEvidenceLabel(candidate.uid);
+    if (evidence.isEmpty) {
+      return Text(candidate.platform);
+    }
+    final palette = context.whisperPalette;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(candidate.platform),
+        const SizedBox(height: 2),
+        Text(
+          evidence,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: palette.textMuted,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _audioGroupSyncEvidenceLabel(String peerId) {
+    final sink = _audioGroupCoordinator.session?.sinks[peerId];
+    if (sink == null) {
+      return '';
+    }
+    final hasEvidence = sink.rttMicros > 0 ||
+        sink.jitterMicros > 0 ||
+        sink.bufferTargetMicros > 0 ||
+        sink.latePacketCount > 0 ||
+        sink.syncErrorMicros != 0;
+    if (!hasEvidence) {
+      return AppLocalizations.of(context)!.audioGroupSyncCalibrating;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    return l10n.audioGroupSyncEvidence(
+      _audioGroupSyncQualityLabel(sink),
+      l10n.audioGroupClockOffsetLabel,
+      _formatAudioMicros(sink.clockOffsetMicros),
+      _formatAudioMicros(sink.rttMicros),
+      _formatAudioMicros(sink.jitterMicros),
+      _formatAudioMicros(sink.bufferTargetMicros),
+      sink.latePacketCount,
+    );
+  }
+
+  String _audioGroupSyncQualityLabel(AudioGroupSink sink) {
+    final l10n = AppLocalizations.of(context)!;
+    final errorMs = sink.syncErrorMicros.abs() / 1000;
+    final jitterMs = sink.jitterMicros.abs() / 1000;
+    final hasMeasuredError = sink.syncErrorMicros != 0;
+    if (sink.latePacketCount > 0 ||
+        (hasMeasuredError && errorMs > 30) ||
+        jitterMs > 20) {
+      return l10n.audioGroupSyncUnstable;
+    }
+    if ((hasMeasuredError && errorMs > 12) || jitterMs > 8) {
+      return l10n.audioGroupSyncFair;
+    }
+    return l10n.audioGroupSyncGood;
+  }
+
+  String _formatAudioMicros(int value) {
+    final ms = value / 1000;
+    if (ms == ms.roundToDouble()) {
+      return ms.round().toString();
+    }
+    return ms.toStringAsFixed(1);
   }
 
   Widget _buildDesktopPlaceholder(bool isDark) {

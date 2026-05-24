@@ -440,6 +440,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioGroupSelectAtLeastOne => '至少选择一台播放设备';
 
   @override
+  String get audioGroupSyncCalibrating => '正在估算同步';
+
+  @override
+  String get audioGroupSyncGood => '同步良好';
+
+  @override
+  String get audioGroupSyncFair => '同步一般';
+
+  @override
+  String get audioGroupSyncUnstable => '同步波动';
+
+  @override
+  String get audioGroupClockOffsetLabel => '时钟偏移';
+
+  @override
+  String audioGroupSyncEvidence(
+      Object quality,
+      Object clockOffsetLabel,
+      Object offset,
+      Object rtt,
+      Object jitter,
+      Object buffer,
+      Object latePackets) {
+    return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $latePackets';
+  }
+
+  @override
   String audioShareFailed(String error) {
     return '共享声音失败：$error';
   }

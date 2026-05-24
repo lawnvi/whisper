@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/audio/audio_capture_source.dart';
+import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
@@ -49,6 +50,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
         _sessionIdFactory = sessionIdFactory ?? const Uuid().v4;
 
   static final AudioGroupCoordinator shared = AudioGroupCoordinator();
+  static const int _latencyReportIntervalMicros = 1000000;
+  static const int _nativePlaybackLeadMicros = 60000;
 
   final AudioPlatform _platform;
   final AudioGroupCodecFactory _codecFactory;
@@ -67,8 +70,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
   AudioCodec? _playbackCodec;
   AudioGroupPlaybackScheduler? _playbackScheduler;
   Timer? _playbackPumpTimer;
+  final Map<String, AudioClockSyncEstimator> _clockSyncEstimators =
+      <String, AudioClockSyncEstimator>{};
+  AudioGroupControlSender? _playbackSendControl;
   String _playbackGroupId = '';
   String _playbackStreamId = '';
+  String _playbackLocalPeerId = '';
+  int _lastPlaybackReportAtMicros = 0;
   double _playbackGain = 1.0;
 
   AudioGroupSession? get session => _session;
@@ -88,7 +96,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required Map<String, AudioChannelRole> sinks,
     required AudioStreamFormat format,
     required AudioGroupControlSender sendControl,
-    int targetLatencyMs = 160,
+    int targetLatencyMs = 70,
   }) {
     if (hasLiveSession) {
       throw StateError('An audio group is already active');
@@ -280,9 +288,30 @@ class AudioGroupCoordinator extends ChangeNotifier {
         }
         break;
       case AudioGroupControlAction.groupOffer:
+        break;
       case AudioGroupControlAction.clockProbe:
+        _handleClockProbe(
+          current,
+          message,
+          localPeerId: localPeerId,
+          sendControl: sendControl,
+        );
+        break;
       case AudioGroupControlAction.clockReport:
+        await _handleClockReport(
+          current,
+          message,
+          localPeerId: localPeerId,
+          sendControl: sendControl,
+        );
+        break;
       case AudioGroupControlAction.latencyReport:
+        _handleLatencyReport(
+          current,
+          message,
+          localPeerId: localPeerId,
+          sendControl: sendControl,
+        );
         break;
       case AudioGroupControlAction.groupUpdate:
         await _handleUpdate(
@@ -306,6 +335,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     scheduler.enqueue(packet, codec.decode(packet.payload));
     await _pumpPlayback();
+    _maybeSendPlaybackLatencyReport();
   }
 
   Future<void> stopGroup({
@@ -342,10 +372,14 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackScheduler = null;
     _playbackGroupId = '';
     _playbackStreamId = '';
+    _playbackLocalPeerId = '';
+    _playbackSendControl = null;
+    _lastPlaybackReportAtMicros = 0;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
     await captureSource?.stop();
     await _fanout.closeAll();
+    _clockSyncEstimators.clear();
     if (playbackStreamId.isNotEmpty) {
       await _platform.stopPlayback(sessionId: playbackStreamId);
     }
@@ -396,6 +430,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
     try {
       await _startPlayback(offer, format: format);
+      _playbackSendControl = sendControl;
+      _playbackLocalPeerId = localPeerId;
+      _lastPlaybackReportAtMicros = 0;
       _setSession(AudioGroupSession.offering(
         groupId: offer.groupId,
         streamId: offer.streamId,
@@ -476,7 +513,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
         port: remotePort,
       );
       _setSession(next);
-      await _ensureCaptureStarted(next);
+      _sendClockProbe(
+        next,
+        next.sinks[accept.sinkPeerId],
+        sendControl: sendControl,
+      );
     } catch (error) {
       final errorMessage = _friendlyErrorMessage(error);
       _setSession(current.markSink(
@@ -518,11 +559,238 @@ class AudioGroupCoordinator extends ChangeNotifier {
     ));
   }
 
+  void _handleClockProbe(
+    AudioGroupSession current,
+    AudioGroupControlMessage probe, {
+    required String localPeerId,
+    required AudioGroupControlSender sendControl,
+  }) {
+    if (probe.sinkPeerId != localPeerId ||
+        current.sourcePeerId != probe.sourcePeerId) {
+      return;
+    }
+    final receivedAtMicros = _clockMicros();
+    sendControl(
+      probe.sourcePeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.clockReport,
+        groupId: current.groupId,
+        streamId: current.streamId,
+        sessionId: probe.sessionId,
+        sourcePeerId: probe.sourcePeerId,
+        sinkPeerId: localPeerId,
+        channelRole: probe.channelRole,
+        targetLatencyMs: current.targetLatencyMs,
+        sentAtMicros: probe.sentAtMicros,
+        receivedAtMicros: receivedAtMicros,
+        sinkClockMicros: _clockMicros(),
+      ),
+    );
+  }
+
+  Future<void> _handleClockReport(
+    AudioGroupSession current,
+    AudioGroupControlMessage report, {
+    required String localPeerId,
+    required AudioGroupControlSender sendControl,
+  }) async {
+    if (current.sourcePeerId == localPeerId) {
+      await _handleClockReportAtSource(
+        current,
+        report,
+        sendControl: sendControl,
+      );
+      return;
+    }
+    if (report.sinkPeerId != localPeerId) {
+      return;
+    }
+    _playbackScheduler?.updateClockOffsetMicros(report.clockOffsetMicros);
+    _setSession(current.markSink(
+      localPeerId,
+      clockOffsetMicros: report.clockOffsetMicros,
+      rttMicros: report.rttMicros,
+      jitterMicros: report.jitterMicros,
+    ));
+  }
+
+  Future<void> _handleClockReportAtSource(
+    AudioGroupSession current,
+    AudioGroupControlMessage report, {
+    required AudioGroupControlSender sendControl,
+  }) async {
+    final sink = current.sinks[report.sinkPeerId];
+    if (sink == null || report.sentAtMicros <= 0) {
+      return;
+    }
+    final sourceReceivedAtMicros = _clockMicros();
+    final estimator = _clockSyncEstimators.putIfAbsent(
+      report.sinkPeerId,
+      AudioClockSyncEstimator.new,
+    );
+    estimator.addSample(AudioClockSyncSample(
+      sourceSentAtMicros: report.sentAtMicros,
+      sinkReceivedAtMicros: report.receivedAtMicros,
+      sinkSentAtMicros: report.sinkClockMicros,
+      sourceReceivedAtMicros: sourceReceivedAtMicros,
+    ));
+    final snapshot = estimator.snapshot;
+    if (!snapshot.isValid) {
+      _sendClockProbe(
+        current,
+        sink,
+        sendControl: sendControl,
+      );
+      return;
+    }
+    final next = current.markSink(
+      report.sinkPeerId,
+      clockOffsetMicros: snapshot.clockOffsetMicros,
+      rttMicros: snapshot.rttMicros,
+      jitterMicros: snapshot.jitterMicros,
+    );
+    _setSession(next);
+    sendControl(
+      report.sinkPeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.clockReport,
+        groupId: current.groupId,
+        streamId: current.streamId,
+        sessionId: sink.sessionId,
+        sourcePeerId: current.sourcePeerId,
+        sinkPeerId: report.sinkPeerId,
+        channelRole: sink.channelRole,
+        targetLatencyMs: current.targetLatencyMs,
+        sentAtMicros: sourceReceivedAtMicros,
+        clockOffsetMicros: snapshot.clockOffsetMicros,
+        rttMicros: snapshot.rttMicros,
+        jitterMicros: snapshot.jitterMicros,
+      ),
+    );
+    await _ensureCaptureStartedWhenReady(next);
+  }
+
+  Future<void> _ensureCaptureStartedWhenReady(
+    AudioGroupSession session,
+  ) async {
+    if (_captureSource != null) {
+      return;
+    }
+    final sinks = session.sinks.values
+        .where((sink) => !sink.isTerminal)
+        .toList(growable: false);
+    if (sinks.isEmpty) {
+      return;
+    }
+    final allSinksSynchronized = sinks.every(
+      (sink) => sink.state == AudioGroupSinkState.active && sink.rttMicros > 0,
+    );
+    if (!allSinksSynchronized) {
+      return;
+    }
+    await _ensureCaptureStarted(session);
+  }
+
+  void _handleLatencyReport(
+    AudioGroupSession current,
+    AudioGroupControlMessage report, {
+    required String localPeerId,
+    required AudioGroupControlSender sendControl,
+  }) {
+    if (current.sourcePeerId != localPeerId ||
+        !current.sinks.containsKey(report.sinkPeerId)) {
+      return;
+    }
+    final next = current.markSink(
+      report.sinkPeerId,
+      clockOffsetMicros: report.clockOffsetMicros,
+      rttMicros: report.rttMicros,
+      jitterMicros: report.jitterMicros,
+      bufferTargetMicros: report.bufferDepthMicros,
+      latePacketCount: report.latePacketCount,
+      syncErrorMicros: report.syncErrorMicros,
+    );
+    _setSession(next);
+    _sendClockProbe(
+      next,
+      next.sinks[report.sinkPeerId],
+      sendControl: sendControl,
+    );
+  }
+
+  void _sendClockProbe(
+    AudioGroupSession session,
+    AudioGroupSink? sink, {
+    required AudioGroupControlSender sendControl,
+  }) {
+    if (sink == null || sink.isTerminal) {
+      return;
+    }
+    sendControl(
+      sink.sinkPeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.clockProbe,
+        groupId: session.groupId,
+        streamId: session.streamId,
+        sessionId: sink.sessionId,
+        sourcePeerId: session.sourcePeerId,
+        sinkPeerId: sink.sinkPeerId,
+        channelRole: sink.channelRole,
+        targetLatencyMs: session.targetLatencyMs,
+        sentAtMicros: _clockMicros(),
+      ),
+    );
+  }
+
+  void _maybeSendPlaybackLatencyReport() {
+    final scheduler = _playbackScheduler;
+    final sendControl = _playbackSendControl;
+    final localPeerId = _playbackLocalPeerId;
+    final current = _session;
+    if (scheduler == null ||
+        sendControl == null ||
+        current == null ||
+        localPeerId.isEmpty) {
+      return;
+    }
+    final now = _clockMicros();
+    if (_lastPlaybackReportAtMicros != 0 &&
+        now - _lastPlaybackReportAtMicros < _latencyReportIntervalMicros) {
+      return;
+    }
+    final sink = current.sinks[localPeerId];
+    if (sink == null) {
+      return;
+    }
+    _lastPlaybackReportAtMicros = now;
+    final report = scheduler.report;
+    sendControl(
+      current.sourcePeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.latencyReport,
+        groupId: current.groupId,
+        streamId: current.streamId,
+        sessionId: sink.sessionId,
+        sourcePeerId: current.sourcePeerId,
+        sinkPeerId: localPeerId,
+        channelRole: sink.channelRole,
+        targetLatencyMs: current.targetLatencyMs,
+        clockOffsetMicros: sink.clockOffsetMicros,
+        rttMicros: sink.rttMicros,
+        jitterMicros: sink.jitterMicros,
+        bufferDepthMicros: report.bufferDepthMicros,
+        latePacketCount: report.latePacketCount,
+        syncErrorMicros: 0,
+      ),
+    );
+  }
+
   Future<void> _ensureCaptureStarted(AudioGroupSession session) async {
     if (_captureSource != null) {
       return;
     }
     final codec = await _codecFactory(session.format);
+    var nextTargetPlaybackTimeMicros = 0;
     final captureSource = AudioCaptureSource(
       codec: codec,
       platform: _platform,
@@ -531,6 +799,16 @@ class AudioGroupCoordinator extends ChangeNotifier {
         if (current == null || current.groupId != session.groupId) {
           return;
         }
+        final durationMicros = current.format.frameDurationMs *
+            Duration.microsecondsPerMillisecond;
+        final targetBaseMicros = _clockMicros() +
+            current.targetLatencyMs * Duration.microsecondsPerMillisecond;
+        final targetPlaybackTimeMicros =
+            nextTargetPlaybackTimeMicros <= targetBaseMicros
+                ? targetBaseMicros
+                : nextTargetPlaybackTimeMicros;
+        nextTargetPlaybackTimeMicros =
+            targetPlaybackTimeMicros + durationMicros;
         _fanout.send(
           AudioGroupPacketFrame(
             groupId: current.groupId,
@@ -539,10 +817,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
             sourcePeerId: current.sourcePeerId,
             sequence: packet.sequence,
             captureTimeMicros: packet.captureTimeMicros,
-            targetPlaybackTimeMicros: packet.captureTimeMicros +
-                current.targetLatencyMs * Duration.microsecondsPerMillisecond,
-            durationMicros: current.format.frameDurationMs *
-                Duration.microsecondsPerMillisecond,
+            targetPlaybackTimeMicros: targetPlaybackTimeMicros,
+            durationMicros: durationMicros,
             channelMask: current.format.channels == 1
                 ? AudioChannelMask.mono
                 : AudioChannelMask.stereo,
@@ -577,10 +853,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
       channels: format.channels,
       clockMicros: _clockMicros,
       startupBufferMicros: 20000,
-      writePcm: (pcm) {
+      outputLeadMicros: _nativePlaybackLeadMicros,
+      writePcm: (pcm, targetPlaybackTimeMicros) {
         return _platform.writePcm(
           sessionId: offer.streamId,
           pcm: _applyPlaybackGain(pcm),
+          targetPlaybackTimeMicros: targetPlaybackTimeMicros,
         );
       },
     );
@@ -615,7 +893,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     final delay = Duration(
       microseconds:
-          report.bufferDepthMicros <= 0 ? 1 : report.bufferDepthMicros,
+          report.nextPumpDelayMicros <= 0 ? 1 : report.nextPumpDelayMicros,
     );
     _playbackPumpTimer = Timer(delay, () {
       unawaited(_pumpPlayback());

@@ -179,6 +179,12 @@ class AudioGroupControlMessage {
     this.receivedAtMicros = 0,
     this.sinkClockMicros = 0,
     this.playbackCursorMicros = 0,
+    this.clockOffsetMicros = 0,
+    this.rttMicros = 0,
+    this.jitterMicros = 0,
+    this.bufferDepthMicros = 0,
+    this.latePacketCount = 0,
+    this.syncErrorMicros = 0,
     this.errorMessage = '',
   });
 
@@ -198,6 +204,12 @@ class AudioGroupControlMessage {
   final int receivedAtMicros;
   final int sinkClockMicros;
   final int playbackCursorMicros;
+  final int clockOffsetMicros;
+  final int rttMicros;
+  final int jitterMicros;
+  final int bufferDepthMicros;
+  final int latePacketCount;
+  final int syncErrorMicros;
   final String errorMessage;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -217,6 +229,12 @@ class AudioGroupControlMessage {
         'receivedAtMicros': receivedAtMicros,
         'sinkClockMicros': sinkClockMicros,
         'playbackCursorMicros': playbackCursorMicros,
+        'clockOffsetMicros': clockOffsetMicros,
+        'rttMicros': rttMicros,
+        'jitterMicros': jitterMicros,
+        'bufferDepthMicros': bufferDepthMicros,
+        'latePacketCount': latePacketCount,
+        'syncErrorMicros': syncErrorMicros,
         'errorMessage': errorMessage,
       };
 
@@ -256,6 +274,12 @@ class AudioGroupControlMessage {
       receivedAtMicros: json['receivedAtMicros'] as int? ?? 0,
       sinkClockMicros: json['sinkClockMicros'] as int? ?? 0,
       playbackCursorMicros: json['playbackCursorMicros'] as int? ?? 0,
+      clockOffsetMicros: json['clockOffsetMicros'] as int? ?? 0,
+      rttMicros: json['rttMicros'] as int? ?? 0,
+      jitterMicros: json['jitterMicros'] as int? ?? 0,
+      bufferDepthMicros: json['bufferDepthMicros'] as int? ?? 0,
+      latePacketCount: json['latePacketCount'] as int? ?? 0,
+      syncErrorMicros: json['syncErrorMicros'] as int? ?? 0,
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }

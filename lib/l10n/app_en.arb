@@ -162,6 +162,23 @@
   "audioGroupRoleMono": "Mono",
   "audioGroupRequestingPlayback": "Requesting synced playback on selected devices",
   "audioGroupSelectAtLeastOne": "Select at least one playback device",
+  "audioGroupSyncCalibrating": "Estimating sync",
+  "audioGroupSyncGood": "Sync good",
+  "audioGroupSyncFair": "Sync fair",
+  "audioGroupSyncUnstable": "Sync unstable",
+  "audioGroupClockOffsetLabel": "clock offset",
+  "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · jitter {jitter}ms · buffer {buffer}ms · late {latePackets}",
+  "@audioGroupSyncEvidence": {
+    "placeholders": {
+      "quality": {},
+      "clockOffsetLabel": {},
+      "offset": {},
+      "rtt": {},
+      "jitter": {},
+      "buffer": {},
+      "latePackets": {}
+    }
+  },
   "audioShareFailed": "Audio sharing failed: {error}",
   "remoteInputSourceConnecting": "Keyboard and mouse sharing: connecting to peer",
   "remoteInputSinkConnecting": "Keyboard and mouse sharing: preparing to receive control",

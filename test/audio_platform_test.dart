@@ -62,6 +62,19 @@ void main() {
     expect(arguments['pcm'], Uint8List.fromList(<int>[1, 0, 255, 255]));
   });
 
+  test('writePcm forwards target playback time to the native layer', () async {
+    final platform = AudioPlatform();
+
+    await platform.writePcm(
+      sessionId: 'audio-1',
+      pcm: Int16List.fromList(<int>[1, -1]),
+      targetPlaybackTimeMicros: 123456,
+    );
+
+    final arguments = calls.single.arguments as Map<Object?, Object?>;
+    expect(arguments['targetPlaybackTimeMicros'], 123456);
+  });
+
   test('stopPlayback sends session id to the native layer', () async {
     final platform = AudioPlatform();
 

@@ -19,8 +19,10 @@ void main() {
     ).firstMatch(source)!.group(0)!;
     expect(
         heartbeatCase,
-        contains(
-            '_refreshRemoteProfileFromHeartbeat(message, peerId: incomingPeerId)'));
+        contains(RegExp(
+          r'_refreshRemoteProfileFromHeartbeat\(\s*message,\s*'
+          r'peerId:\s*incomingPeerId,\s*\)',
+        )));
     expect(heartbeatCase,
         contains('message.message == _profileRefreshRequestMessage'));
     expect(heartbeatCase,

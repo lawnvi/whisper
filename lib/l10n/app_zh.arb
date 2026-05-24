@@ -210,6 +210,23 @@
   "audioGroupRoleMono": "单声道",
   "audioGroupRequestingPlayback": "正在请求多台设备同步播放",
   "audioGroupSelectAtLeastOne": "至少选择一台播放设备",
+  "audioGroupSyncCalibrating": "正在估算同步",
+  "audioGroupSyncGood": "同步良好",
+  "audioGroupSyncFair": "同步一般",
+  "audioGroupSyncUnstable": "同步波动",
+  "audioGroupClockOffsetLabel": "时钟偏移",
+  "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {latePackets}",
+  "@audioGroupSyncEvidence": {
+    "placeholders": {
+      "quality": {},
+      "clockOffsetLabel": {},
+      "offset": {},
+      "rtt": {},
+      "jitter": {},
+      "buffer": {},
+      "latePackets": {}
+    }
+  },
   "audioShareFailed": "共享声音失败：{error}",
   "@audioShareFailed": {
     "placeholders": {

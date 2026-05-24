@@ -30,7 +30,7 @@ void main() {
       channelRole: AudioChannelRole.stereo,
       channels: 2,
       clockMicros: () => now,
-      writePcm: (pcm) async {
+      writePcm: (pcm, _) async {
         writes.add(pcm.toList(growable: false));
       },
     );
@@ -61,12 +61,90 @@ void main() {
     ]);
   });
 
+  test('reports next packet delay separately from queued buffer depth',
+      () async {
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => 1000,
+      writePcm: (_, __) async {},
+    );
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 3000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+    scheduler.enqueue(
+      packet(sequence: 2, targetPlaybackTimeMicros: 7000),
+      Int16List.fromList(<int>[2, 20]),
+    );
+
+    final report = scheduler.report;
+
+    expect(report.nextPacketDelayMicros, 2000);
+    expect(report.nextPumpDelayMicros, 2000);
+    expect(report.bufferDepthMicros, 6000);
+  });
+
+  test('writes packets ahead of target time for native playback buffering',
+      () async {
+    var now = 1000;
+    final writes = <List<int>>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      outputLeadMicros: 2000,
+      writePcm: (pcm, _) async => writes.add(pcm.toList(growable: false)),
+    );
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 5000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+
+    expect(scheduler.report.nextPacketDelayMicros, 4000);
+    expect(scheduler.report.nextPumpDelayMicros, 2000);
+
+    await scheduler.pump();
+    expect(writes, isEmpty);
+
+    now = 3000;
+    await scheduler.pump();
+    expect(writes, <List<int>>[
+      <int>[1, 10],
+    ]);
+  });
+
+  test('passes local target playback time to the PCM writer', () async {
+    var now = 109000;
+    final writeTargets = <int>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      writePcm: (pcm, targetPlaybackTimeMicros) async {
+        writeTargets.add(targetPlaybackTimeMicros);
+      },
+    );
+    scheduler.updateClockOffsetMicros(9000);
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 100000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+
+    await scheduler.pump();
+
+    expect(writeTargets, <int>[109000]);
+  });
+
   test('drops late packets and reports late count', () async {
     final scheduler = AudioGroupPlaybackScheduler(
       channelRole: AudioChannelRole.stereo,
       channels: 2,
       clockMicros: () => 5000,
-      writePcm: (_) async {},
+      writePcm: (_, __) async {},
       lateToleranceMicros: 1000,
     );
 
@@ -87,7 +165,7 @@ void main() {
       channelRole: AudioChannelRole.stereo,
       channels: 2,
       clockMicros: () => now,
-      writePcm: (pcm) async => writes.add(pcm.toList(growable: false)),
+      writePcm: (pcm, _) async => writes.add(pcm.toList(growable: false)),
       startupBufferMicros: 20000,
     );
 
@@ -109,6 +187,34 @@ void main() {
     ]);
   });
 
+  test('uses measured source to sink clock offset for target playback time',
+      () async {
+    var now = 1109000;
+    final writes = <List<int>>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      writePcm: (pcm, _) async => writes.add(pcm.toList(growable: false)),
+      startupBufferMicros: 0,
+    );
+    scheduler.updateClockOffsetMicros(100000);
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 1010000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+
+    await scheduler.pump();
+    expect(writes, isEmpty);
+
+    now = 1110000;
+    await scheduler.pump();
+    expect(writes, <List<int>>[
+      <int>[1, 10],
+    ]);
+  });
+
   test('left and right channel roles isolate the intended channel', () async {
     final leftWrites = <List<int>>[];
     final rightWrites = <List<int>>[];
@@ -116,13 +222,13 @@ void main() {
       channelRole: AudioChannelRole.left,
       channels: 2,
       clockMicros: () => 1000,
-      writePcm: (pcm) async => leftWrites.add(pcm.toList(growable: false)),
+      writePcm: (pcm, _) async => leftWrites.add(pcm.toList(growable: false)),
     );
     final right = AudioGroupPlaybackScheduler(
       channelRole: AudioChannelRole.right,
       channels: 2,
       clockMicros: () => 1000,
-      writePcm: (pcm) async => rightWrites.add(pcm.toList(growable: false)),
+      writePcm: (pcm, _) async => rightWrites.add(pcm.toList(growable: false)),
     );
 
     final frame = packet(sequence: 1, targetPlaybackTimeMicros: 1000);
@@ -143,7 +249,7 @@ void main() {
       channelRole: AudioChannelRole.mono,
       channels: 2,
       clockMicros: () => 1000,
-      writePcm: (pcm) async => writes.add(pcm.toList(growable: false)),
+      writePcm: (pcm, _) async => writes.add(pcm.toList(growable: false)),
     );
 
     scheduler.enqueue(
