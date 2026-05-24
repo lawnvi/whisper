@@ -439,7 +439,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       attributes: {
         'host': wifiIP,
         'port': (port ?? device?.port ?? 10002).toString(),
-        'name': await deviceName(),
+        'name': device?.name ?? await deviceName(),
         'platform': device?.platform ?? "未知",
         'uid': device?.uid ?? "",
         'trustedPeers': trustedPeerIds.join(','),
@@ -619,6 +619,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _refreshDevice({isFirst = false}) async {
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
+    final storedDevicesByUid = <String, DeviceData>{
+      for (final item in arr) item.uid: item,
+    };
     await ConnectionCoordinator().bootstrap(temp.uid);
     await ConnectionCoordinator().syncKnownDevices(arr);
     var newArr = <DeviceData>[];
@@ -628,7 +631,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         continue;
       }
       if (socketManager.isConnectedTo(item.uid)) {
-        newArr.insert(0, item);
+        newArr.insert(0, storedDevicesByUid[item.uid] ?? item);
         aroundIds.add(item.uid);
         continue;
       }
@@ -648,6 +651,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     socketManager.setSender(temp.uid);
 
     var serverPortUpdate = device != null && device!.port != temp.port;
+    var localProfileUpdate = device != null && device!.name != temp.name;
 
     if (isFirst || device?.port != temp.port) {
       _startServer(port: temp.port);
@@ -680,8 +684,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     });
 
     logger.i(
-        "refresh ui: broadcasting=$_isBroadcasting discovering=$_isDiscovering serverPortUpdate=$serverPortUpdate");
-    if (!_isBroadcasting || serverPortUpdate) {
+        "refresh ui: broadcasting=$_isBroadcasting discovering=$_isDiscovering serverPortUpdate=$serverPortUpdate localProfileUpdate=$localProfileUpdate");
+    if (localProfileUpdate) {
+      unawaited(socketManager.broadcastLocalProfileUpdate());
+    }
+    if (!_isBroadcasting || serverPortUpdate || localProfileUpdate) {
       _isBroadcasting = true;
       _broadcastRestartTimer?.cancel();
       _broadcastRestartTimer = Timer(const Duration(milliseconds: 100), () {

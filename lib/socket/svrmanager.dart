@@ -33,6 +33,7 @@ import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/resumable_transfer_window.dart';
 import 'package:path/path.dart' as p;
@@ -1083,7 +1084,10 @@ class WsSvrManager {
           if (message.sender == sender) {
             return;
           }
-          _refreshRemoteProfileFromHeartbeat(message, peerId: incomingPeerId);
+          await _refreshRemoteProfileFromHeartbeat(
+            message,
+            peerId: incomingPeerId,
+          );
           if (message.message == _profileRefreshRequestMessage) {
             unawaited(_heartBeat(peerId: incomingPeerId, sink: sink));
           }
@@ -1538,19 +1542,44 @@ class WsSvrManager {
     }
   }
 
-  void _refreshRemoteProfileFromHeartbeat(
+  bool _profileDeviceChanged(DeviceData? previous, DeviceData next) {
+    if (previous == null) {
+      return true;
+    }
+    return previous.name != next.name ||
+        previous.host != next.host ||
+        previous.port != next.port ||
+        previous.platform != next.platform;
+  }
+
+  Future<void> _refreshRemoteProfileFromHeartbeat(
     MessageData message, {
     String? peerId,
-  }) {
+  }) async {
     final content = message.content;
     if (content == null || content.isEmpty) {
       return;
     }
     try {
+      final resolvedPeerId = peerId ?? message.sender;
+      final previousProfile = resolvedPeerId.isEmpty
+          ? _remoteProfile
+          : _remoteProfilesByPeerId[resolvedPeerId];
       final profile = PeerProfile.fromJson(
         jsonDecode(content) as Map<String, dynamic>,
       );
-      _setRemoteProfile(profile, peerId: peerId ?? message.sender);
+      final profileDeviceChanged =
+          _profileDeviceChanged(previousProfile?.device, profile.device);
+      _setRemoteProfile(profile, peerId: resolvedPeerId);
+      if (profile.device.uid.isNotEmpty) {
+        await LocalDatabase().upsertDevice(profile.device);
+        if (_peerConnections.isConnectedTo(profile.device.uid)) {
+          ConnectionCoordinator().markConnected(profile.device);
+        }
+        if (profileDeviceChanged) {
+          _dispatchToAll((event) => event.onConnect());
+        }
+      }
     } catch (error) {
       _remoteInputTrace('heartbeat profile parse failed: $error');
     }
@@ -1587,6 +1616,16 @@ class WsSvrManager {
 
   Future<void> refreshConnectionLiveness() async {
     await _heartBeat();
+  }
+
+  Future<void> broadcastLocalProfileUpdate() async {
+    if (connectedPeerIds.isEmpty) {
+      await _heartBeat();
+      return;
+    }
+    for (final peerId in connectedPeerIds) {
+      await _heartBeat(peerId: peerId);
+    }
   }
 
   void sendAudioControl(AudioControlMessage control) {

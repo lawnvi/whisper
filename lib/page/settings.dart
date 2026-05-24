@@ -218,6 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             inputValues[0] = await deviceName();
                           }
                           await LocalSetting().updateNickname(inputValues[0]);
+                          await WsSvrManager().broadcastLocalProfileUpdate();
                           await _refreshDevice();
                         },
                       );
