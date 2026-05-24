@@ -166,6 +166,11 @@
   "audioGroupSyncGood": "Sync good",
   "audioGroupSyncFair": "Sync fair",
   "audioGroupSyncUnstable": "Sync unstable",
+  "audioGroupDeviceIdle": "Idle",
+  "audioGroupLatencyShortLabel": "network ",
+  "audioGroupJitterShortLabel": "jitter ",
+  "audioGroupBufferShortLabel": "buffer ",
+  "audioGroupLatePacketShortLabel": "late ",
   "audioGroupClockOffsetLabel": "clock offset",
   "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · jitter {jitter}ms · buffer {buffer}ms · late {latePackets}",
   "@audioGroupSyncEvidence": {
@@ -176,6 +181,20 @@
       "rtt": {},
       "jitter": {},
       "buffer": {},
+      "latePackets": {}
+    }
+  },
+  "audioGroupSyncEvidenceCompact": "{quality} · {latencyLabel}{rtt} · {jitterLabel}{jitter} · {bufferLabel}{buffer} · {latePacketLabel}{latePackets}",
+  "@audioGroupSyncEvidenceCompact": {
+    "placeholders": {
+      "quality": {},
+      "latencyLabel": {},
+      "rtt": {},
+      "jitterLabel": {},
+      "jitter": {},
+      "bufferLabel": {},
+      "buffer": {},
+      "latePacketLabel": {},
       "latePackets": {}
     }
   },

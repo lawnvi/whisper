@@ -1465,19 +1465,26 @@ class _DeviceListScreen extends State<DeviceListScreen>
                               final isSelected =
                                   selected[candidate.uid] ?? false;
                               return CheckboxListTile(
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                                 value: isSelected,
                                 onChanged: (value) {
                                   setSheetState(() {
                                     selected[candidate.uid] = value ?? false;
                                   });
                                 },
-                                title: Text(candidate.name),
+                                title: _buildAudioGroupDeviceTitle(candidate),
                                 subtitle: _buildAudioGroupSinkSubtitle(
                                   candidate,
                                 ),
                                 secondary: DropdownButton<AudioChannelRole>(
                                   value: roles[candidate.uid],
                                   underline: const SizedBox.shrink(),
+                                  isDense: true,
                                   onChanged: isSelected
                                       ? (role) {
                                           if (role == null) {
@@ -1565,28 +1572,44 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
   }
 
-  Widget _buildAudioGroupSinkSubtitle(DeviceData candidate) {
-    final evidence = _audioGroupSyncEvidenceLabel(candidate.uid);
-    if (evidence.isEmpty) {
-      return Text(candidate.platform);
-    }
+  Widget _buildAudioGroupDeviceTitle(DeviceData candidate) {
     final palette = context.whisperPalette;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: [
-        Text(candidate.platform),
-        const SizedBox(height: 2),
-        Text(
-          evidence,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
+        Tooltip(
+          message: candidate.platform,
+          child: Icon(
+            platformIcon(candidate.platform),
+            size: 18,
             color: palette.textMuted,
-            fontSize: 12,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            candidate.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
+    );
+  }
+
+  Widget? _buildAudioGroupSinkSubtitle(DeviceData candidate) {
+    final evidence = _audioGroupSyncEvidenceLabel(candidate.uid);
+    final text = evidence.isEmpty
+        ? AppLocalizations.of(context)!.audioGroupDeviceIdle
+        : evidence;
+    final palette = context.whisperPalette;
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: palette.textMuted,
+        fontSize: 12,
+      ),
     );
   }
 
@@ -1604,13 +1627,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return AppLocalizations.of(context)!.audioGroupSyncCalibrating;
     }
     final l10n = AppLocalizations.of(context)!;
-    return l10n.audioGroupSyncEvidence(
+    return l10n.audioGroupSyncEvidenceCompact(
       _audioGroupSyncQualityLabel(sink),
-      l10n.audioGroupClockOffsetLabel,
-      _formatAudioMicros(sink.clockOffsetMicros),
+      l10n.audioGroupLatencyShortLabel,
       _formatAudioMicros(sink.rttMicros),
+      l10n.audioGroupJitterShortLabel,
       _formatAudioMicros(sink.jitterMicros),
+      l10n.audioGroupBufferShortLabel,
       _formatAudioMicros(sink.bufferTargetMicros),
+      l10n.audioGroupLatePacketShortLabel,
       sink.latePacketCount,
     );
   }

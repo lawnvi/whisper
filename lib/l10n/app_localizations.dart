@@ -934,6 +934,36 @@ abstract class AppLocalizations {
   /// **'同步波动'**
   String get audioGroupSyncUnstable;
 
+  /// No description provided for @audioGroupDeviceIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未播放'**
+  String get audioGroupDeviceIdle;
+
+  /// No description provided for @audioGroupLatencyShortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络'**
+  String get audioGroupLatencyShortLabel;
+
+  /// No description provided for @audioGroupJitterShortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'抖动'**
+  String get audioGroupJitterShortLabel;
+
+  /// No description provided for @audioGroupBufferShortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓冲'**
+  String get audioGroupBufferShortLabel;
+
+  /// No description provided for @audioGroupLatePacketShortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'晚包'**
+  String get audioGroupLatePacketShortLabel;
+
   /// No description provided for @audioGroupClockOffsetLabel.
   ///
   /// In zh, this message translates to:
@@ -951,6 +981,21 @@ abstract class AppLocalizations {
       Object rtt,
       Object jitter,
       Object buffer,
+      Object latePackets);
+
+  /// No description provided for @audioGroupSyncEvidenceCompact.
+  ///
+  /// In zh, this message translates to:
+  /// **'{quality} · {latencyLabel}{rtt} · {jitterLabel}{jitter} · {bufferLabel}{buffer} · {latePacketLabel}{latePackets}'**
+  String audioGroupSyncEvidenceCompact(
+      Object quality,
+      Object latencyLabel,
+      Object rtt,
+      Object jitterLabel,
+      Object jitter,
+      Object bufferLabel,
+      Object buffer,
+      Object latePacketLabel,
       Object latePackets);
 
   /// No description provided for @audioShareFailed.

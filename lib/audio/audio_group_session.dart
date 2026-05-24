@@ -102,7 +102,7 @@ class AudioGroupSession {
     required this.state,
     required this.sinks,
     this.startedAtMicros = 0,
-    this.targetLatencyMs = 70,
+    this.targetLatencyMs = 55,
     this.lastError = '',
   });
 
@@ -112,7 +112,7 @@ class AudioGroupSession {
     required String sourcePeerId,
     required AudioStreamFormat format,
     required Map<String, AudioChannelRole> sinks,
-    int targetLatencyMs = 70,
+    int targetLatencyMs = 55,
   }) {
     final sinkStates = <String, AudioGroupSink>{
       for (final entry in sinks.entries)

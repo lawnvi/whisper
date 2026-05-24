@@ -452,6 +452,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioGroupSyncUnstable => '同步波动';
 
   @override
+  String get audioGroupDeviceIdle => '未播放';
+
+  @override
+  String get audioGroupLatencyShortLabel => '网络';
+
+  @override
+  String get audioGroupJitterShortLabel => '抖动';
+
+  @override
+  String get audioGroupBufferShortLabel => '缓冲';
+
+  @override
+  String get audioGroupLatePacketShortLabel => '晚包';
+
+  @override
   String get audioGroupClockOffsetLabel => '时钟偏移';
 
   @override
@@ -464,6 +479,20 @@ class AppLocalizationsZh extends AppLocalizations {
       Object buffer,
       Object latePackets) {
     return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $latePackets';
+  }
+
+  @override
+  String audioGroupSyncEvidenceCompact(
+      Object quality,
+      Object latencyLabel,
+      Object rtt,
+      Object jitterLabel,
+      Object jitter,
+      Object bufferLabel,
+      Object buffer,
+      Object latePacketLabel,
+      Object latePackets) {
+    return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
   }
 
   @override

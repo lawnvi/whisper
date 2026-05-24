@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -77,8 +78,8 @@ void main() {
       );
       expect(sent[0].control.channelRole, AudioChannelRole.left);
       expect(sent[1].control.channelRole, AudioChannelRole.right);
-      expect(sent[0].control.targetLatencyMs, 70);
-      expect(sent[1].control.targetLatencyMs, 70);
+      expect(sent[0].control.targetLatencyMs, 55);
+      expect(sent[1].control.targetLatencyMs, 55);
     });
 
     test('source starts capture once and fans packets out to accepted sinks',
@@ -223,7 +224,87 @@ void main() {
       expect(rightPacket.streamId, 'stream-1');
       expect(leftPacket.sequence, rightPacket.sequence);
       expect(leftPacket.captureTimeMicros, 1234);
-      expect(leftPacket.targetPlaybackTimeMicros, 132000);
+      expect(leftPacket.targetPlaybackTimeMicros, 127000);
+    });
+
+    test('source adapts group latency from the slowest synchronized sink',
+        () async {
+      final transports = <String, _FakeAudioGroupTransport>{};
+      var now = 1000;
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (uri) async {
+          final transport = _FakeAudioGroupTransport();
+          transports[uri.host] = transport;
+          return transport;
+        },
+        groupIdFactory: () => 'group-1',
+        streamIdFactory: () => 'stream-1',
+        sessionIdFactory: () => 'session-1',
+        clockMicros: () => now,
+      );
+
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+
+      now = 10000;
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      now = 91000;
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sentAtMicros: 1000,
+          receivedAtMicros: 61000,
+          sinkClockMicros: 61000,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      expect(coordinator.session?.targetLatencyMs, 80);
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onCapturePcm', <String, dynamic>{
+          'sessionId': 'stream-1',
+          'sequence': 9,
+          'captureTimeMicros': 4321,
+          'pcm': Uint8List(format.frameSize * format.channels * 2),
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final packet = transports['phone.local']!.sentPackets.single;
+      expect(packet.targetPlaybackTimeMicros, 171000);
     });
 
     test('accept updates only the matching sink', () async {
@@ -847,6 +928,14 @@ void main() {
       expect(sent.single.control.bufferDepthMicros, 0);
       expect(sent.single.control.latePacketCount, 0);
       expect(sent.single.control.syncErrorMicros, 0);
+    });
+
+    test('group playback uses a smaller Dart-side native lead window', () {
+      final source =
+          File('lib/audio/audio_group_coordinator.dart').readAsStringSync();
+
+      expect(source, contains('_nativePlaybackLeadMicros = 35000'));
+      expect(source, contains('outputLeadMicros: _nativePlaybackLeadMicros'));
     });
   });
 }

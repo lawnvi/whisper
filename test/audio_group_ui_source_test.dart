@@ -95,10 +95,41 @@ void main() {
     expect(sheet, contains('AnimatedBuilder'));
     expect(sheet, contains('_buildAudioGroupSinkSubtitle'));
     expect(source, contains('_audioGroupSyncEvidenceLabel'));
-    expect(source, contains('audioGroupSyncEvidence'));
-    expect(source, contains('audioGroupClockOffsetLabel'));
+    expect(source, contains('audioGroupSyncEvidenceCompact'));
     expect(source, contains('latePacketCount'));
     expect(source, contains('syncErrorMicros'));
+  });
+
+  test('desktop audio group sheet keeps device rows compact', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final title = sourceBetween(
+      source,
+      'Widget _buildAudioGroupDeviceTitle',
+      'Widget? _buildAudioGroupSinkSubtitle',
+    );
+    final subtitle = sourceBetween(
+      source,
+      'Widget? _buildAudioGroupSinkSubtitle',
+      'String _audioGroupSyncEvidenceLabel',
+    );
+
+    expect(source, contains('dense: true'));
+    expect(source, contains('VisualDensity.compact'));
+    expect(title, contains('platformIcon(candidate.platform)'));
+    expect(title, contains('Tooltip'));
+    expect(title, contains('maxLines: 1'));
+    expect(title, contains('TextOverflow.ellipsis'));
+    expect(subtitle, contains('maxLines: 1'));
+    expect(subtitle, contains('TextOverflow.ellipsis'));
+    expect(subtitle, isNot(contains('Text(candidate.platform)')));
+    expect(subtitle, contains('audioGroupDeviceIdle'));
+    expect(source, contains('audioGroupSyncEvidenceCompact'));
+    expect(source, contains('audioGroupLatencyShortLabel'));
+    expect(source, contains('audioGroupJitterShortLabel'));
+    expect(source, contains('audioGroupBufferShortLabel'));
+    expect(source, contains('audioGroupLatePacketShortLabel'));
+    expect(source, isNot(contains(' · Δ{offset}')));
+    expect(source, isNot(contains(' · R{rtt}')));
   });
 
   test('desktop sidebar search expands by pushing toolbar actions away', () {

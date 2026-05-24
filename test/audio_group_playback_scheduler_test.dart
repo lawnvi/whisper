@@ -215,6 +215,45 @@ void main() {
     ]);
   });
 
+  test('holds packets until clock offset is available before playback',
+      () async {
+    var now = 1109000;
+    final writeTargets = <int>[];
+    final writes = <List<int>>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      writePcm: (pcm, targetPlaybackTimeMicros) async {
+        writeTargets.add(targetPlaybackTimeMicros);
+        writes.add(pcm.toList(growable: false));
+      },
+      requireClockOffsetBeforePlayback: true,
+    );
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 1010000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+
+    await scheduler.pump();
+    expect(writes, isEmpty);
+    expect(scheduler.report.latePacketCount, 0);
+    expect(scheduler.report.queuedPacketCount, 1);
+
+    scheduler.updateClockOffsetMicros(100000);
+    await scheduler.pump();
+    expect(writes, isEmpty);
+
+    now = 1110000;
+    await scheduler.pump();
+
+    expect(writeTargets, <int>[1110000]);
+    expect(writes, <List<int>>[
+      <int>[1, 10],
+    ]);
+  });
+
   test('left and right channel roles isolate the intended channel', () async {
     final leftWrites = <List<int>>[];
     final rightWrites = <List<int>>[];

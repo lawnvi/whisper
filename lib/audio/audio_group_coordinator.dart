@@ -51,7 +51,11 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
   static final AudioGroupCoordinator shared = AudioGroupCoordinator();
   static const int _latencyReportIntervalMicros = 1000000;
-  static const int _nativePlaybackLeadMicros = 60000;
+  static const int _defaultTargetLatencyMs = 55;
+  static const int _minTargetLatencyMs = 55;
+  static const int _maxTargetLatencyMs = 95;
+  static const int _networkSafetyLatencyMs = 35;
+  static const int _nativePlaybackLeadMicros = 35000;
 
   final AudioPlatform _platform;
   final AudioGroupCodecFactory _codecFactory;
@@ -96,7 +100,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required Map<String, AudioChannelRole> sinks,
     required AudioStreamFormat format,
     required AudioGroupControlSender sendControl,
-    int targetLatencyMs = 70,
+    int targetLatencyMs = _defaultTargetLatencyMs,
   }) {
     if (hasLiveSession) {
       throw StateError('An audio group is already active');
@@ -688,7 +692,42 @@ class AudioGroupCoordinator extends ChangeNotifier {
     if (!allSinksSynchronized) {
       return;
     }
-    await _ensureCaptureStarted(session);
+    final targetLatencyMs = _targetLatencyMsForSinks(
+      sinks,
+      floorLatencyMs: session.targetLatencyMs,
+    );
+    final nextSession = targetLatencyMs == session.targetLatencyMs
+        ? session
+        : session.copyWith(targetLatencyMs: targetLatencyMs);
+    if (!identical(nextSession, session)) {
+      _setSession(nextSession);
+    }
+    await _ensureCaptureStarted(nextSession);
+  }
+
+  int _targetLatencyMsForSinks(
+    Iterable<AudioGroupSink> sinks, {
+    required int floorLatencyMs,
+  }) {
+    var targetLatencyMs = floorLatencyMs.clamp(
+      _minTargetLatencyMs,
+      _maxTargetLatencyMs,
+    );
+    for (final sink in sinks) {
+      if (sink.rttMicros <= 0) {
+        continue;
+      }
+      final oneWayMs = (sink.rttMicros / 2000).ceil();
+      final jitterMs = (sink.jitterMicros / 1000).ceil();
+      final candidateMs = oneWayMs + jitterMs + _networkSafetyLatencyMs;
+      if (candidateMs > targetLatencyMs) {
+        targetLatencyMs = candidateMs;
+      }
+    }
+    return targetLatencyMs.clamp(
+      _minTargetLatencyMs,
+      _maxTargetLatencyMs,
+    );
   }
 
   void _handleLatencyReport(
@@ -854,6 +893,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       clockMicros: _clockMicros,
       startupBufferMicros: 20000,
       outputLeadMicros: _nativePlaybackLeadMicros,
+      requireClockOffsetBeforePlayback: true,
       writePcm: (pcm, targetPlaybackTimeMicros) {
         return _platform.writePcm(
           sessionId: offer.streamId,

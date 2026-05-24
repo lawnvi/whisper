@@ -479,6 +479,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get audioGroupSyncUnstable => 'Sincronizacion inestable';
 
   @override
+  String get audioGroupDeviceIdle => 'Inactivo';
+
+  @override
+  String get audioGroupLatencyShortLabel => 'red ';
+
+  @override
+  String get audioGroupJitterShortLabel => 'fluct. ';
+
+  @override
+  String get audioGroupBufferShortLabel => 'bufer ';
+
+  @override
+  String get audioGroupLatePacketShortLabel => 'tardios ';
+
+  @override
   String get audioGroupClockOffsetLabel => 'desfase de reloj';
 
   @override
@@ -491,6 +506,20 @@ class AppLocalizationsEs extends AppLocalizations {
       Object buffer,
       Object latePackets) {
     return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · fluctuacion ${jitter}ms · bufer ${buffer}ms · tardios $latePackets';
+  }
+
+  @override
+  String audioGroupSyncEvidenceCompact(
+      Object quality,
+      Object latencyLabel,
+      Object rtt,
+      Object jitterLabel,
+      Object jitter,
+      Object bufferLabel,
+      Object buffer,
+      Object latePacketLabel,
+      Object latePackets) {
+    return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
   }
 
   @override

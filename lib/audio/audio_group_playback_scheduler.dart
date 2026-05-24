@@ -34,6 +34,7 @@ class AudioGroupPlaybackScheduler {
     this.startupBufferMicros = 0,
     this.outputLeadMicros = 0,
     this.clockRebaseThresholdMicros = 500000,
+    this.requireClockOffsetBeforePlayback = false,
   })  : _channelRole = channelRole,
         _channels = channels <= 0 ? 1 : channels,
         _clockMicros = clockMicros,
@@ -47,20 +48,23 @@ class AudioGroupPlaybackScheduler {
   final int startupBufferMicros;
   final int outputLeadMicros;
   final int clockRebaseThresholdMicros;
+  final bool requireClockOffsetBeforePlayback;
   final List<_QueuedAudioGroupPacket> _queue = <_QueuedAudioGroupPacket>[];
   int? _targetClockOffsetMicros;
   int _latePacketCount = 0;
 
   AudioGroupPlaybackReport get report {
     final now = _clockMicros();
-    final nextPacketDelayMicros = _queue.isEmpty
+    final isWaitingForClock =
+        requireClockOffsetBeforePlayback && _targetClockOffsetMicros == null;
+    final nextPacketDelayMicros = _queue.isEmpty || isWaitingForClock
         ? 0
         : (_queue.first.targetPlaybackTimeMicros - now).clamp(0, 1 << 31);
-    final nextPumpDelayMicros = _queue.isEmpty
+    final nextPumpDelayMicros = _queue.isEmpty || isWaitingForClock
         ? 0
         : (_queue.first.targetPlaybackTimeMicros - now - outputLeadMicros)
             .clamp(0, 1 << 31);
-    final bufferDepthMicros = _queue.isEmpty
+    final bufferDepthMicros = _queue.isEmpty || isWaitingForClock
         ? 0
         : (_queue.last.targetPlaybackTimeMicros - now).clamp(0, 1 << 31);
     return AudioGroupPlaybackReport(
@@ -78,35 +82,44 @@ class AudioGroupPlaybackScheduler {
 
   void updateClockOffsetMicros(int clockOffsetMicros) {
     _targetClockOffsetMicros = clockOffsetMicros;
+    for (final item in _queue) {
+      item.targetPlaybackTimeMicros =
+          item.remoteTargetPlaybackTimeMicros + clockOffsetMicros;
+    }
+    _sortQueue();
   }
 
   void enqueue(AudioGroupPacketFrame packet, Int16List pcm) {
     final now = _clockMicros();
     final targetPlaybackTimeMicros =
         _localTargetPlaybackTimeMicros(packet, now);
-    if (targetPlaybackTimeMicros + lateToleranceMicros < now) {
+    if (targetPlaybackTimeMicros != null &&
+        targetPlaybackTimeMicros + lateToleranceMicros < now) {
       _latePacketCount++;
       return;
     }
     _queue.add(
       _QueuedAudioGroupPacket(
         packet: packet,
-        targetPlaybackTimeMicros: targetPlaybackTimeMicros,
+        remoteTargetPlaybackTimeMicros: packet.targetPlaybackTimeMicros,
+        targetPlaybackTimeMicros:
+            targetPlaybackTimeMicros ?? packet.targetPlaybackTimeMicros,
         pcm: _applyChannelRole(pcm),
       ),
     );
-    _queue.sort((a, b) {
-      final targetCompare =
-          a.targetPlaybackTimeMicros.compareTo(b.targetPlaybackTimeMicros);
-      if (targetCompare != 0) {
-        return targetCompare;
-      }
-      return a.packet.sequence.compareTo(b.packet.sequence);
-    });
+    _sortQueue();
   }
 
   Future<void> pump() async {
     final now = _clockMicros();
+    if (requireClockOffsetBeforePlayback && _targetClockOffsetMicros == null) {
+      return;
+    }
+    while (_queue.isNotEmpty &&
+        _queue.first.targetPlaybackTimeMicros + lateToleranceMicros < now) {
+      _queue.removeAt(0);
+      _latePacketCount++;
+    }
     while (_queue.isNotEmpty &&
         _queue.first.targetPlaybackTimeMicros <= now + outputLeadMicros) {
       final item = _queue.removeAt(0);
@@ -114,13 +127,16 @@ class AudioGroupPlaybackScheduler {
     }
   }
 
-  int _localTargetPlaybackTimeMicros(
+  int? _localTargetPlaybackTimeMicros(
     AudioGroupPacketFrame packet,
     int now,
   ) {
     final offset = _targetClockOffsetMicros;
     if (offset != null) {
       return packet.targetPlaybackTimeMicros + offset;
+    }
+    if (requireClockOffsetBeforePlayback) {
+      return null;
     }
     if (startupBufferMicros <= 0) {
       return packet.targetPlaybackTimeMicros;
@@ -134,6 +150,17 @@ class AudioGroupPlaybackScheduler {
     final localTarget = now + startupBufferMicros;
     _targetClockOffsetMicros = localTarget - remoteTarget;
     return localTarget;
+  }
+
+  void _sortQueue() {
+    _queue.sort((a, b) {
+      final targetCompare =
+          a.targetPlaybackTimeMicros.compareTo(b.targetPlaybackTimeMicros);
+      if (targetCompare != 0) {
+        return targetCompare;
+      }
+      return a.packet.sequence.compareTo(b.packet.sequence);
+    });
   }
 
   Int16List _applyChannelRole(Int16List pcm) {
@@ -169,13 +196,15 @@ class AudioGroupPlaybackScheduler {
 }
 
 class _QueuedAudioGroupPacket {
-  const _QueuedAudioGroupPacket({
+  _QueuedAudioGroupPacket({
     required this.packet,
+    required this.remoteTargetPlaybackTimeMicros,
     required this.targetPlaybackTimeMicros,
     required this.pcm,
   });
 
   final AudioGroupPacketFrame packet;
-  final int targetPlaybackTimeMicros;
+  final int remoteTargetPlaybackTimeMicros;
+  int targetPlaybackTimeMicros;
   final Int16List pcm;
 }
