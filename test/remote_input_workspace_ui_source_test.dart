@@ -112,6 +112,21 @@ void main() {
     expect(snapAndSave, contains('layoutJson: updatedLayoutJson'));
   });
 
+  test('workspace screen restores live controller targets as selected', () {
+    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
+        .readAsStringSync();
+    final loadWorkspace = RegExp(
+      r'Future<void> _loadWorkspace\(\) async \{[\s\S]*?Future<RemoteInputLayoutData> _ensureLayout',
+    ).firstMatch(source)!.group(0)!;
+
+    expect(loadWorkspace, contains('final workspaceSnapshot'));
+    expect(loadWorkspace, contains('workspaceSnapshot.liveTargetPeerIds'));
+    expect(loadWorkspace, contains('final connectedLiveTargetPeerIds'));
+    expect(loadWorkspace, contains('_selectedPeerIds'));
+    expect(loadWorkspace, contains('addAll(connectedLiveTargetPeerIds)'));
+    expect(loadWorkspace, contains('activePeerId'));
+  });
+
   test('socket disconnect clears remote input workspace state', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 

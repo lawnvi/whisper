@@ -113,6 +113,13 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     final devices = _socketManager.connectedRemoteInputDevices(
       preferredPeerId: widget.preferredPeerId,
     );
+    final workspaceSnapshot = _workspaceCoordinator.snapshot;
+    final connectedDeviceIds = devices.map((device) => device.uid).toSet();
+    final connectedLiveTargetPeerIds = workspaceSnapshot.isControllerLive
+        ? workspaceSnapshot.liveTargetPeerIds
+            .where(connectedDeviceIds.contains)
+            .toList(growable: false)
+        : const <String>[];
     final nextLayouts = <String, RemoteInputLayoutData>{};
     for (var index = 0; index < devices.length; index++) {
       final device = devices[index];
@@ -131,7 +138,11 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       _layouts
         ..clear()
         ..addAll(nextLayouts);
-      if (_selectedPeerIds.isEmpty && devices.isNotEmpty) {
+      if (connectedLiveTargetPeerIds.isNotEmpty) {
+        _selectedPeerIds
+          ..clear()
+          ..addAll(connectedLiveTargetPeerIds);
+      } else if (_selectedPeerIds.isEmpty && devices.isNotEmpty) {
         _selectedPeerIds.add(
           widget.preferredPeerId.isNotEmpty &&
                   devices.any((device) => device.uid == widget.preferredPeerId)
@@ -139,7 +150,12 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
               : devices.first.uid,
         );
       }
-      if (_focusedPeerId.isEmpty && devices.isNotEmpty) {
+      if (workspaceSnapshot.activePeerId.isNotEmpty &&
+          _selectedPeerIds.contains(workspaceSnapshot.activePeerId)) {
+        _focusedPeerId = workspaceSnapshot.activePeerId;
+      } else if ((_focusedPeerId.isEmpty ||
+              !connectedDeviceIds.contains(_focusedPeerId)) &&
+          _selectedPeerIds.isNotEmpty) {
         _focusedPeerId = _selectedPeerIds.first;
       }
       _loading = false;
