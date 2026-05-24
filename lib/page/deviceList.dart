@@ -54,6 +54,17 @@ String buildWhisperServiceName(String baseName, String uid) {
   return "$baseName-$normalizedUid";
 }
 
+class _AudioGroupSetupResult {
+  const _AudioGroupSetupResult.apply(this.sinks) : shouldStop = false;
+
+  const _AudioGroupSetupResult.stop()
+      : shouldStop = true,
+        sinks = const <String, AudioChannelRole>{};
+
+  final bool shouldStop;
+  final Map<String, AudioChannelRole> sinks;
+}
+
 class DeviceListScreen extends StatefulWidget {
   const DeviceListScreen({super.key});
 
@@ -539,8 +550,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
               platform: platform,
               around: !isLost,
             );
-            await ConnectionCoordinator().updateDiscovery(
+            final visibleDevice = _mergeStoredDeviceWithDiscovery(
+              temp,
               resolvedDevice,
+            );
+            if (!isLost) {
+              await db.upsertDevice(visibleDevice);
+            }
+            await ConnectionCoordinator().updateDiscovery(
+              visibleDevice,
               discovered: !isLost,
               remoteTrustedPeerIds: remoteTrustedPeerIds,
               remoteAutoConnectEnabled: remoteAutoConnectEnabled,
@@ -562,7 +580,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               if (isLost && temp != null) {
                 devices.insert(index, temp);
               } else if (!isLost) {
-                devices.insert(0, resolvedDevice);
+                devices.insert(0, visibleDevice);
               }
             });
             _refreshDevice();
@@ -616,6 +634,32 @@ class _DeviceListScreen extends State<DeviceListScreen>
         around: around);
   }
 
+  DeviceData _mergeStoredDeviceWithDiscovery(
+    DeviceData? stored,
+    DeviceData discovered,
+  ) {
+    if (stored == null) {
+      return discovered;
+    }
+    return DeviceData(
+      id: stored.id,
+      uid: discovered.uid,
+      name: discovered.name.isNotEmpty ? discovered.name : stored.name,
+      host: discovered.host.isNotEmpty ? discovered.host : stored.host,
+      port: discovered.port,
+      password: stored.password,
+      platform: discovered.platform.isNotEmpty
+          ? discovered.platform
+          : stored.platform,
+      isServer: stored.isServer,
+      online: stored.online,
+      clipboard: stored.clipboard,
+      auth: stored.auth,
+      lastTime: discovered.lastTime,
+      around: discovered.around,
+    );
+  }
+
   Future<void> _refreshDevice({isFirst = false}) async {
     var temp = await LocalSetting().instance();
     var arr = await db.fetchAllDevice();
@@ -631,7 +675,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
         continue;
       }
       if (socketManager.isConnectedTo(item.uid)) {
-        newArr.insert(0, storedDevicesByUid[item.uid] ?? item);
+        newArr.insert(
+          0,
+          _mergeStoredDeviceWithDiscovery(storedDevicesByUid[item.uid], item),
+        );
         aroundIds.add(item.uid);
         continue;
       }
@@ -1186,7 +1233,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return l10n.audioShareCaptureConnecting;
     }
     if (isActive) {
-      return l10n.audioShareCaptureActiveStop;
+      return l10n.audioGroupAdjust;
     }
     return l10n.audioGroupShareStart;
   }
@@ -1196,12 +1243,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     try {
       final audioGroupSession = _audioGroupCoordinator.session;
       if (audioGroupSession?.isLive == true) {
-        await _audioGroupCoordinator.stopGroup(
-          sendControl: socketManager.sendAudioGroupControlTo,
-        );
-        if (mounted) {
-          showAppToast(l10n.audioShareCaptureStopped);
-        }
+        await _showActiveDesktopAudioGroupSetup();
         return;
       }
 
@@ -1242,35 +1284,109 @@ class _DeviceListScreen extends State<DeviceListScreen>
           groupCandidates.single.uid: AudioChannelRole.stereo,
         };
       } else {
-        final selectedSinks = await _showAudioGroupSetupSheet(
+        final selectedResult = await _showAudioGroupSetupSheet(
           groupCandidates,
           preferredPeerId: _selectedDesktopPeerId ?? '',
         );
-        if (selectedSinks == null) {
+        if (selectedResult == null || selectedResult.shouldStop) {
           return;
         }
-        if (selectedSinks.isEmpty) {
+        if (selectedResult.sinks.isEmpty) {
           showAppToast(l10n.audioGroupSelectAtLeastOne);
           return;
         }
-        sinks = selectedSinks;
+        sinks = selectedResult.sinks;
       }
 
-      _audioGroupCoordinator.startGroup(
+      await _applyDesktopAudioGroupSelection(
         sourcePeerId: self.uid,
         sinks: sinks,
-        format: AudioShareCoordinator.defaultFormat,
-        sendControl: socketManager.sendAudioGroupControlTo,
       );
-      if (mounted) {
-        showAppToast(l10n.audioGroupRequestingPlayback);
-      }
     } catch (error, stackTrace) {
       logger.e('desktop audio share toggle failed',
           error: error, stackTrace: stackTrace);
       if (mounted) {
         showAppToast(l10n.audioShareFailed(error.toString()));
       }
+    }
+  }
+
+  Map<String, AudioChannelRole> _activeAudioGroupSinks() {
+    final audioGroupSession = _audioGroupCoordinator.session;
+    if (audioGroupSession == null) {
+      return const <String, AudioChannelRole>{};
+    }
+    return <String, AudioChannelRole>{
+      for (final entry in audioGroupSession.sinks.entries)
+        entry.key: entry.value.channelRole,
+    };
+  }
+
+  Future<void> _showActiveDesktopAudioGroupSetup() async {
+    final l10n = AppLocalizations.of(context)!;
+    final self = device ?? await LocalSetting().instance();
+    final groupCandidates = socketManager.connectedAudioGroupSinkDevices(
+      preferredPeerId: _selectedDesktopPeerId ?? '',
+    );
+    final result = await _showAudioGroupSetupSheet(
+      groupCandidates,
+      preferredPeerId: _selectedDesktopPeerId ?? '',
+      initialSinks: _activeAudioGroupSinks(),
+      allowStop: true,
+      applyingActiveConfig: true,
+    );
+    if (result == null) {
+      return;
+    }
+    if (result.shouldStop) {
+      await _stopDesktopAudioShare();
+      return;
+    }
+    if (result.sinks.isEmpty) {
+      showAppToast(l10n.audioGroupSelectAtLeastOne);
+      return;
+    }
+    await _applyDesktopAudioGroupSelection(
+      sourcePeerId: self.uid,
+      sinks: result.sinks,
+      replaceActive: true,
+    );
+  }
+
+  Future<void> _stopDesktopAudioShare() async {
+    final l10n = AppLocalizations.of(context)!;
+    await _audioGroupCoordinator.stopGroup(
+      sendControl: socketManager.sendAudioGroupControlTo,
+    );
+    if (mounted) {
+      showAppToast(l10n.audioShareCaptureStopped);
+    }
+  }
+
+  Future<void> _applyDesktopAudioGroupSelection({
+    required String sourcePeerId,
+    required Map<String, AudioChannelRole> sinks,
+    bool replaceActive = false,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    if (replaceActive && _audioGroupCoordinator.session?.isLive == true) {
+      await _audioGroupCoordinator.updateGroup(
+        sinks: sinks,
+        sendControl: socketManager.sendAudioGroupControlTo,
+      );
+      if (mounted) {
+        showAppToast(l10n.audioGroupRequestingPlayback);
+      }
+      return;
+    }
+    _audioGroupCoordinator.startGroup(
+      sourcePeerId: sourcePeerId,
+      sinks: sinks,
+      format: AudioShareCoordinator.defaultFormat,
+      sendControl: socketManager.sendAudioGroupControlTo,
+    );
+    if (mounted) {
+      showAppToast(l10n.audioGroupRequestingPlayback);
     }
   }
 
@@ -1289,25 +1405,34 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _refreshDevice();
   }
 
-  Future<Map<String, AudioChannelRole>?> _showAudioGroupSetupSheet(
+  Future<_AudioGroupSetupResult?> _showAudioGroupSetupSheet(
     List<DeviceData> candidates, {
     String preferredPeerId = '',
+    Map<String, AudioChannelRole> initialSinks =
+        const <String, AudioChannelRole>{},
+    bool allowStop = false,
+    bool applyingActiveConfig = false,
   }) {
     final selected = <String, bool>{
       for (final candidate in candidates)
-        candidate.uid: candidate.uid ==
-            (preferredPeerId.isNotEmpty
-                ? preferredPeerId
-                : candidates.first.uid),
+        candidate.uid: initialSinks.isNotEmpty
+            ? initialSinks.containsKey(candidate.uid)
+            : candidate.uid ==
+                (preferredPeerId.isNotEmpty
+                    ? preferredPeerId
+                    : candidates.first.uid),
     };
     final roles = <String, AudioChannelRole>{
       for (var index = 0; index < candidates.length; index++)
-        candidates[index].uid: index == 0
-            ? AudioChannelRole.left
-            : (index == 1 ? AudioChannelRole.right : AudioChannelRole.stereo),
+        candidates[index].uid: initialSinks[candidates[index].uid] ??
+            (index == 0
+                ? AudioChannelRole.left
+                : (index == 1
+                    ? AudioChannelRole.right
+                    : AudioChannelRole.stereo)),
     };
     final l10n = AppLocalizations.of(context)!;
-    return showModalBottomSheet<Map<String, AudioChannelRole>>(
+    return showModalBottomSheet<_AudioGroupSetupResult>(
       context: context,
       showDragHandle: true,
       builder: (context) {
@@ -1370,24 +1495,40 @@ class _DeviceListScreen extends State<DeviceListScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
+                    if (allowStop) ...[
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop(
+                            const _AudioGroupSetupResult.stop(),
+                          );
+                        },
+                        icon: const Icon(Icons.stop_rounded),
+                        label: Text(l10n.audioGroupStop),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     FilledButton.icon(
                       onPressed: selectedCount == 0
                           ? null
                           : () {
                               Navigator.of(context).pop(
-                                <String, AudioChannelRole>{
-                                  for (final candidate in candidates)
-                                    if (selected[candidate.uid] == true)
-                                      candidate.uid: roles[candidate.uid] ??
-                                          AudioChannelRole.stereo,
-                                },
+                                _AudioGroupSetupResult.apply(
+                                  <String, AudioChannelRole>{
+                                    for (final candidate in candidates)
+                                      if (selected[candidate.uid] == true)
+                                        candidate.uid: roles[candidate.uid] ??
+                                            AudioChannelRole.stereo,
+                                  },
+                                ),
                               );
                             },
                       icon: const Icon(Icons.spatial_audio_off_rounded),
                       label: Text(
-                        selectedCount > 1
-                            ? l10n.audioGroupStart
-                            : l10n.audioShareStart,
+                        applyingActiveConfig
+                            ? l10n.audioGroupApply
+                            : selectedCount > 1
+                                ? l10n.audioGroupStart
+                                : l10n.audioShareStart,
                       ),
                     ),
                   ],

@@ -431,11 +431,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get audioGroupShareStart => 'Sincronizar con varios altavoces';
 
   @override
+  String get audioGroupAdjust => 'Ajustar audio compartido';
+
+  @override
   String get audioGroupSelectSinks =>
       'Seleccionar dispositivos de reproduccion';
 
   @override
   String get audioGroupStart => 'Iniciar reproduccion sincronizada';
+
+  @override
+  String get audioGroupApply => 'Aplicar configuracion';
+
+  @override
+  String get audioGroupStop => 'Detener audio compartido';
 
   @override
   String get audioGroupRoleStereo => 'Estereo';

@@ -336,6 +336,145 @@ void main() {
       ]);
       expect(coordinator.session, isNull);
     });
+
+    test('source updates active group without restarting capture', () async {
+      final sent = <_SentGroupControl>[];
+      final transports = <String, _FakeAudioGroupTransport>{};
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (uri) async {
+          final transport = _FakeAudioGroupTransport();
+          transports[uri.host] = transport;
+          return transport;
+        },
+        groupIdFactory: () => 'group-1',
+        streamIdFactory: () => 'stream-1',
+        sessionIdFactory: () => 'session-${sent.length + 1}',
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone-left': AudioChannelRole.left,
+          'phone-right': AudioChannelRole.right,
+        },
+        format: format,
+        sendControl: (peerId, control) {
+          sent.add(_SentGroupControl(peerId, control));
+        },
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-left',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone-left',
+          channelRole: AudioChannelRole.left,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone-left.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-right',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone-right',
+          channelRole: AudioChannelRole.right,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone-right.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      sent.clear();
+
+      await coordinator.updateGroup(
+        sinks: const <String, AudioChannelRole>{
+          'phone-left': AudioChannelRole.stereo,
+        },
+        sendControl: (peerId, control) {
+          sent.add(_SentGroupControl(peerId, control));
+        },
+      );
+
+      expect(
+        calls.where((call) => call.method == 'startCapture'),
+        hasLength(1),
+      );
+      expect(sent.map((item) => item.control.action), <AudioGroupControlAction>[
+        AudioGroupControlAction.groupStop,
+        AudioGroupControlAction.groupUpdate,
+      ]);
+      expect(sent[0].peerId, 'phone-right');
+      expect(sent[1].peerId, 'phone-left');
+      expect(sent[1].control.channelRole, AudioChannelRole.stereo);
+      expect(coordinator.session?.streamId, 'stream-1');
+      expect(coordinator.session?.sinks.keys, <String>['phone-left']);
+      expect(
+        coordinator.session?.sinks['phone-left']?.channelRole,
+        AudioChannelRole.stereo,
+      );
+    });
+
+    test('sink applies group update without restarting playback', () async {
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.left,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupUpdate,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.right,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      expect(
+        calls.where((call) => call.method == 'startPlayback'),
+        hasLength(1),
+      );
+      expect(
+        coordinator.session?.sinks['phone']?.channelRole,
+        AudioChannelRole.right,
+      );
+    });
   });
 }
 

@@ -407,10 +407,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioGroupShareStart => '同步到多台扬声器';
 
   @override
+  String get audioGroupAdjust => '调整音频共享';
+
+  @override
   String get audioGroupSelectSinks => '选择播放设备';
 
   @override
   String get audioGroupStart => '开始同步播放';
+
+  @override
+  String get audioGroupApply => '应用配置';
+
+  @override
+  String get audioGroupStop => '停止共享';
 
   @override
   String get audioGroupRoleStereo => '立体声';

@@ -844,6 +844,12 @@ abstract class AppLocalizations {
   /// **'同步到多台扬声器'**
   String get audioGroupShareStart;
 
+  /// No description provided for @audioGroupAdjust.
+  ///
+  /// In zh, this message translates to:
+  /// **'调整音频共享'**
+  String get audioGroupAdjust;
+
   /// No description provided for @audioGroupSelectSinks.
   ///
   /// In zh, this message translates to:
@@ -855,6 +861,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'开始同步播放'**
   String get audioGroupStart;
+
+  /// No description provided for @audioGroupApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用配置'**
+  String get audioGroupApply;
+
+  /// No description provided for @audioGroupStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止共享'**
+  String get audioGroupStop;
 
   /// No description provided for @audioGroupRoleStereo.
   ///

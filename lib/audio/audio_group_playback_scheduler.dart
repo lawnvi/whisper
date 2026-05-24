@@ -31,7 +31,7 @@ class AudioGroupPlaybackScheduler {
         _clockMicros = clockMicros,
         _writePcm = writePcm;
 
-  final AudioChannelRole _channelRole;
+  AudioChannelRole _channelRole;
   final int _channels;
   final AudioGroupClock _clockMicros;
   final AudioGroupPcmWriter _writePcm;
@@ -52,6 +52,10 @@ class AudioGroupPlaybackScheduler {
       latePacketCount: _latePacketCount,
       bufferDepthMicros: bufferDepthMicros,
     );
+  }
+
+  void updateChannelRole(AudioChannelRole channelRole) {
+    _channelRole = channelRole;
   }
 
   void enqueue(AudioGroupPacketFrame packet, Int16List pcm) {

@@ -135,6 +135,99 @@ class AudioGroupCoordinator extends ChangeNotifier {
     return nextSession;
   }
 
+  Future<AudioGroupSession?> updateGroup({
+    required Map<String, AudioChannelRole> sinks,
+    required AudioGroupControlSender sendControl,
+  }) async {
+    final current = _session;
+    if (current == null || !current.isLive) {
+      throw StateError('No active audio group to update');
+    }
+    if (sinks.isEmpty) {
+      throw ArgumentError.value(sinks, 'sinks', 'must not be empty');
+    }
+    final nextSinks = Map<String, AudioGroupSink>.from(current.sinks);
+    final requestedPeerIds = sinks.keys.toSet();
+
+    for (final sink in current.sinks.values) {
+      if (requestedPeerIds.contains(sink.sinkPeerId)) {
+        continue;
+      }
+      sendControl(
+        sink.sinkPeerId,
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: current.groupId,
+          streamId: current.streamId,
+          sessionId: sink.sessionId,
+          sourcePeerId: current.sourcePeerId,
+          sinkPeerId: sink.sinkPeerId,
+          channelRole: sink.channelRole,
+          targetLatencyMs: current.targetLatencyMs,
+        ),
+      );
+      await _fanout.detachAndClose(sink.sinkPeerId);
+      nextSinks.remove(sink.sinkPeerId);
+    }
+
+    for (final entry in sinks.entries) {
+      final sinkPeerId = entry.key;
+      final channelRole = entry.value;
+      final existing = nextSinks[sinkPeerId];
+      if (existing == null || existing.isTerminal) {
+        final sessionId = _sessionIdFactory();
+        nextSinks[sinkPeerId] = AudioGroupSink(
+          sinkPeerId: sinkPeerId,
+          sessionId: sessionId,
+          channelRole: channelRole,
+          state: AudioGroupSinkState.offered,
+        );
+        sendControl(
+          sinkPeerId,
+          AudioGroupControlMessage(
+            action: AudioGroupControlAction.groupOffer,
+            groupId: current.groupId,
+            streamId: current.streamId,
+            sessionId: sessionId,
+            sourcePeerId: current.sourcePeerId,
+            sinkPeerId: sinkPeerId,
+            sinkPeerIds: sinks.keys.toList(growable: false),
+            format: current.format,
+            transport: AudioTransport.websocket,
+            path: '/audio',
+            channelRole: channelRole,
+            targetLatencyMs: current.targetLatencyMs,
+          ),
+        );
+        continue;
+      }
+      if (existing.channelRole == channelRole) {
+        continue;
+      }
+      nextSinks[sinkPeerId] = existing.copyWith(channelRole: channelRole);
+      sendControl(
+        sinkPeerId,
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupUpdate,
+          groupId: current.groupId,
+          streamId: current.streamId,
+          sessionId: existing.sessionId,
+          sourcePeerId: current.sourcePeerId,
+          sinkPeerId: sinkPeerId,
+          sinkPeerIds: sinks.keys.toList(growable: false),
+          format: current.format,
+          transport: AudioTransport.websocket,
+          path: '/audio',
+          channelRole: channelRole,
+          targetLatencyMs: current.targetLatencyMs,
+        ),
+      );
+    }
+
+    _setSession(current.copyWith(sinks: nextSinks));
+    return _session;
+  }
+
   Future<AudioGroupSession?> handleControlMessage(
     AudioGroupControlMessage message, {
     required String localPeerId,
@@ -187,10 +280,16 @@ class AudioGroupCoordinator extends ChangeNotifier {
         }
         break;
       case AudioGroupControlAction.groupOffer:
-      case AudioGroupControlAction.groupUpdate:
       case AudioGroupControlAction.clockProbe:
       case AudioGroupControlAction.clockReport:
       case AudioGroupControlAction.latencyReport:
+        break;
+      case AudioGroupControlAction.groupUpdate:
+        await _handleUpdate(
+          current,
+          message,
+          localPeerId: localPeerId,
+        );
         break;
     }
     return _session;
@@ -399,6 +498,24 @@ class AudioGroupCoordinator extends ChangeNotifier {
         ),
       );
     }
+  }
+
+  Future<void> _handleUpdate(
+    AudioGroupSession current,
+    AudioGroupControlMessage update, {
+    required String localPeerId,
+  }) async {
+    if (update.sinkPeerId != localPeerId ||
+        current.groupId != update.groupId ||
+        current.streamId != update.streamId) {
+      return;
+    }
+    _playbackScheduler?.updateChannelRole(update.channelRole);
+    _setSession(current.markSink(
+      localPeerId,
+      sessionId: update.sessionId.isNotEmpty ? update.sessionId : null,
+      channelRole: update.channelRole,
+    ));
   }
 
   Future<void> _ensureCaptureStarted(AudioGroupSession session) async {

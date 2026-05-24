@@ -82,6 +82,11 @@ class AudioFanoutTransport {
     _transports.remove(sinkPeerId);
   }
 
+  Future<void> detachAndClose(String sinkPeerId) async {
+    final transport = _transports.remove(sinkPeerId);
+    await transport?.close();
+  }
+
   void send(AudioGroupPacketFrame packet) {
     final entries = _transports.entries.toList(growable: false);
     for (final entry in entries) {
