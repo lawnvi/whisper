@@ -1,60 +1,141 @@
-## Whisper
+# Whisper
+
+![Flutter](https://img.shields.io/badge/Flutter-3.x-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
 [中文](./README.md)
 
-Whisper is a cross-platform LAN collaboration app for nearby devices. It brings text, files, clipboard sharing, Android notifications, system audio sharing, and desktop keyboard/mouse sharing into a chat-style interface.
+> A LAN collaboration app for personal devices. Whisper creates a direct local connection between your computers and phones to send text, files, notifications, audio, and keyboard/mouse input.
+> This project is not related to OpenAI's Whisper speech recognition model.
 
-### Features
+## What It Solves
 
-- Send text and files between Android, macOS, Linux, and Windows devices.
-- Resume large file transfers after reconnecting.
-- Forward Android notifications to connected devices.
-- Share desktop system audio from one device to another.
-- Share keyboard and mouse between desktop devices, with macOS, Windows, and Linux support.
-- Auto-connect mutually trusted devices and enable launch-at-startup on desktop.
-- Start a standalone FTP service (alpha) for quick temporary access.
-- Supports light/dark themes and Chinese, English, and Spanish UI text.
+Whisper is built for a small but frequent problem: your computers, phones, and spare devices are right next to you, yet moving a bit of text, a file, or audio still often means using a chat app, cloud drive, or cable.
 
-### How It Works
+It is not a cloud drive or a public remote desktop tool. Whisper works inside a trusted LAN by default, and devices establish explicit peer-to-peer connections. It is useful for quick transfers between your own devices, receiving Android notifications, sharing desktop system audio, or moving one keyboard and mouse across desktop machines.
 
-Whisper is built with Flutter. Devices discover each other on the local network and communicate through WebSocket channels for messages, file chunks, audio frames, and keyboard/mouse events. Transfers stay inside your LAN and do not require a public relay.
+## Screenshots
 
-### Usage Notes
+### File Transfer
 
-1. Devices should be on the same LAN. If discovery fails in some network environments, connect manually with the target IP address.
-2. Mutually trusted devices can reconnect automatically. For desktop keyboard/mouse sharing, launch-at-startup is recommended.
-3. Desktop drag-and-drop can start transfers directly. On mobile, OS file access rules may require large files to be copied into the app cache first.
-4. Make sure the receiving device has enough free storage before sending files.
-5. Transfers are not end-to-end encrypted yet. Use Whisper only on trusted local networks and avoid sensitive data.
-6. Linux discovery depends on Avahi. Linux keyboard/mouse sharing currently requires an X11 display session.
-7. Linux system audio sharing depends on PulseAudio or the PipeWire Pulse compatibility layer.
-8. Windows packaging is still being improved, and ARM device compatibility has not been fully verified.
+![Whisper file transfer](.github/image/file-share.png)
 
-### Installation
+| Audio Sharing | Keyboard/Mouse Sharing |
+| --- | --- |
+| ![Whisper audio sharing](.github/image/audio-share.png) | ![Whisper keyboard and mouse sharing](.github/image/keyboard-share.png) |
 
-[Home page](https://2.127014.xyz/whisper) | [Latest Release](https://github.com/lawnvi/whisper/releases)
+## Features
 
-### Linux Installation
+- **Direct multi-device connections**: one device can connect to multiple computers or phones, with visible and explicit connection state.
+- **Chat-style transfer**: send text, clipboard content, and files in conversations for links, commands, screenshots, installers, and other quick handoffs.
+- **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
+- **Keyboard and mouse sharing**: share one keyboard and mouse across trusted desktop devices, switching targets through screen layout and edge crossing.
+- **Desktop experience**: tray integration, launch at startup, close to tray, drag files out from desktop messages, light/dark themes, and multilingual UI.
 
-If Avahi is not installed on your Linux system, run:
+## Connection
 
-```shell
-sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
+Whisper first tries LAN discovery. When two devices are on the same network and both have Whisper open, they should usually appear in each other's device list. Select a discovered device, then confirm the connection request on the receiving side.
+
+If discovery is unavailable, manually enter the peer's LAN IP address and service port. The default service port is `10002`, and it can be changed in Settings under "Server Port". When connecting manually, make sure the firewall allows LAN access to that port.
+
+Linux discovery depends on Avahi. If the network blocks mDNS/Bonjour, manual IP connection is usually more reliable.
+
+## Developer Quick Start
+
+### 1. Prepare the Environment
+
+Install Flutter stable, and make sure the Flutter SDK satisfies Dart `>=3.5.0 <4.0.0`.
+
+```bash
+flutter doctor
 ```
 
-For Linux audio sharing, make sure PulseAudio or PipeWire Pulse compatibility is available.
+Prepare the toolchain for your target platform:
 
-### Screenshots
+- Android: Android Studio / Android SDK
+- macOS / iOS: Xcode
+- Windows: Visual Studio C++ toolchain
+- Linux: Flutter Linux desktop dependencies, Avahi, PulseAudio or PipeWire Pulse
 
-<div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="74%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="24%" style="border-radius: 6px;"/>
-</div>
-<div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="74%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="24%" style="border-radius: 6px;"/>
-</div>
+### 2. Install Dependencies and Run
 
-### Notes
+```bash
+flutter pub get
+flutter run
+```
 
-Whisper is an open-source project focused on personal LAN workflows. It is meant to replace temporary relay tools such as file-transfer assistants. Please report issues through GitHub Issues.
+For local macOS debugging, the repository script is recommended. It builds, signs, and launches the debug app:
+
+```bash
+sh script/build_and_run.sh
+```
+
+### 3. Verify
+
+```bash
+flutter analyze
+flutter test
+```
+
+### 4. Package and Regenerate Code
+
+Package a macOS DMG:
+
+```bash
+sh script/build_and_run.sh package-macos
+```
+
+Regenerate code after database or localization changes:
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+flutter gen-l10n
+```
+
+## Usage
+
+### Send Text or Files
+
+Open a conversation with a connected device, type text directly, or use the attachment button to select files. On desktop, received files can be dragged out from a message to a file manager or the desktop.
+
+### Share System Audio
+
+On desktop, open audio sharing from the device tools area and choose one or more connected devices that support audio playback. Multi-device playback supports basic synchronization and channel roles, but it is not a professional audio system.
+
+### Share Keyboard and Mouse
+
+On desktop, open the keyboard/mouse sharing workspace and arrange the local and target screens. Once enabled, the pointer crosses from the configured screen edge to the target device, and keyboard input follows the active target.
+
+### Listen to Android Notifications
+
+After granting notification listener permission on Android, choose which apps to listen to. Whisper processes notification content according to your selection, which is useful for short messages such as verification codes.
+
+## Platform Status
+
+| Platform | Status |
+| --- | --- |
+| Android | Primary mobile platform, with connection, chat, file transfer, notification listening, audio playback, and related features. |
+| macOS | Primary desktop validation platform, with tray support, file drag-out, audio sharing, keyboard/mouse sharing, and packaging scripts. |
+| Windows | Desktop target with native integration for windows, single-instance behavior, audio, and keyboard/mouse sharing. |
+| Linux | Desktop target. Discovery depends on Avahi, audio depends on PulseAudio or PipeWire Pulse, and keyboard/mouse sharing currently focuses on X11. |
+| iOS | Flutter runner is kept, but capabilities are limited by the system and not fully tested. |
+
+## Boundaries and Security
+
+- End-to-end encryption is not implemented yet. Do not use Whisper on untrusted LANs.
+- Whisper does not provide public relays, hub forwarding, or transitive trust.
+- Files, audio, and keyboard/mouse input all require connection and capability negotiation; they are not designed as silent background control paths.
+- Keyboard/mouse sharing is for nearby personal devices, not unattended remote control.
+- Whisper prioritizes direct, controllable, and recoverable LAN workflows. It is not meant to replace professional sync, remote control, or MDM systems.
+
+## What It Is Not
+
+- **Not a cloud drive**: Whisper is not built for public-network sync or long-term multi-device storage. Its core is immediate nearby transfer.
+- **Not a chat app**: conversations are just the interaction shell. The goal is moving files, notifications, audio, and input between devices.
+- **Not remote desktop**: keyboard/mouse sharing only transfers input. It does not stream the screen and is not intended for unattended access.
+- **Not a professional audio system**: audio groups provide usable multi-device playback and channel roles, but do not promise professional phase synchronization.
+
+## License
+
+[MIT](./LICENSE)

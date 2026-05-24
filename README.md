@@ -1,60 +1,141 @@
-## Whisper
+# Whisper
+
+![Flutter](https://img.shields.io/badge/Flutter-3.x-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
 [English](./README_en.md)
 
-Whisper（土电话）是一款面向局域网的跨平台设备协作工具。它把文本、文件、剪贴板、Android 通知、系统声音和桌面键鼠共享放在一个对话式界面里，让同一网络里的电脑和手机可以快速互联。
+> 面向个人设备的局域网协作工具，用一条本地直连通道在电脑和手机之间传文本、文件、通知、音频和键鼠输入。
+> 本项目与 OpenAI Whisper 语音识别模型无关。
 
-### 功能特点
+## 解决什么问题
 
-- 在 Android、macOS、Linux 和 Windows 设备之间发送文本与文件。
-- 支持大文件续传与传输状态恢复，断线重连后继续发送。
-- 转发 Android 设备通知到已连接设备。
-- 在桌面端共享系统声音，可把一台设备的声音播放到另一台设备。
-- 在桌面端共享键盘和鼠标，支持 macOS、Windows、Linux 作为控制端或被控端。
-- 支持互信设备自动连接，桌面端可配置开机自启动。
-- 可单独启动 FTP 服务（alpha），用于临时文件访问。
-- 支持浅色/深色主题和中英西三种语言。
+Whisper 解决的是一个很日常但反复出现的问题：自己的电脑、手机、备用机都在身边，却仍然要靠聊天软件、网盘或数据线来搬一点文本、文件或声音。
 
-### 工作原理
+它不是云盘，也不是公网远程桌面。Whisper 默认工作在可信局域网内，设备之间显式建立点对点连接。适合在自己的设备之间临时传输内容、接收 Android 通知、共享桌面系统音频，或在多台桌面设备之间切换键鼠输入。
 
-Whisper 使用 Flutter 开发，通过局域网设备发现和 WebSocket 连接在设备间传递消息、文件块、音频帧和键鼠事件。数据传输发生在局域网内，不依赖公网中转。
+## 截图
 
-### 使用提示
+### 文件传输
 
-1. 设备需要处于同一局域网，部分网络环境下自动发现可能失败，可手动输入 IP 地址连接。
-2. 互信设备可自动连接；如果要长期使用桌面键鼠共享，建议开启桌面端开机自启动。
-3. 桌面端拖放文件可以直接开始传输；移动端受系统文件访问限制，部分大文件可能需要先复制到应用缓存。
-4. 写入文件前请确保接收设备有足够存储空间。
-5. 当前传输未做端到端加密，请只在可信局域网内使用，不要传输敏感数据。
-6. Linux 设备发现依赖 Avahi；Linux 键鼠共享当前依赖 X11 显示会话。
-7. Linux 系统声音共享依赖 PulseAudio/PipeWire Pulse 兼容层。
-8. Windows 安装包仍在改进中，ARM 设备兼容性未充分验证。
+![Whisper 文件传输](.github/image/file-share.png)
 
-### 安装
+| 音频共享 | 键鼠共享 |
+| --- | --- |
+| ![Whisper 音频共享](.github/image/audio-share.png) | ![Whisper 键鼠共享](.github/image/keyboard-share.png) |
 
-[主页](https://2.127014.xyz/whisper) | [Latest Release](https://github.com/lawnvi/whisper/releases)
+## 特性
 
-### Linux 安装
+- **多设备直连**：一台设备可以同时连接多台电脑或手机，连接关系保持显式、可见、可断开。
+- **聊天式传输**：文本、剪贴板和文件都在会话里完成，适合临时传链接、命令、截图和安装包。
+- **系统音频共享**：把一台设备的系统音频推给一个或多个播放端，支持基础扬声器组和左右声道角色。
+- **键鼠共享**：在受信任桌面设备之间共享一套键鼠，通过屏幕排列和边缘穿越切换控制目标。
+- **桌面体验**：支持托盘、启动项、关闭到托盘、桌面文件拖出复制、浅色/深色主题和多语言。
 
-如果您的 Linux 系统未安装 Avahi（用于设备发现），请运行以下命令：
+## 连接方式
 
-```shell
-sudo apt install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan
+Whisper 优先通过局域网发现设备。两台设备连接同一个网络并同时打开 Whisper 后，通常可以直接在设备列表里看到对方，点击后由接收端确认连接。
+
+如果自动发现不可用，可以手动输入对方的局域网 IP 和服务端口。默认服务端口是 `10002`，也可以在设置里的「服务端口」修改。手动连接时请确认防火墙允许该端口的局域网访问。
+
+Linux 的自动发现依赖 Avahi；如果网络环境禁用了 mDNS/Bonjour，手动 IP 连接通常更可靠。
+
+## 开发者快速开始
+
+### 1. 准备环境
+
+安装 Flutter stable，并确保当前 Flutter SDK 满足 Dart `>=3.5.0 <4.0.0`。
+
+```bash
+flutter doctor
 ```
 
-如需使用 Linux 音频共享，请确保系统具备 PulseAudio 或 PipeWire Pulse 兼容服务。
+根据目标平台准备对应工具链：
 
-### 截图展示
+- Android：Android Studio / Android SDK
+- macOS / iOS：Xcode
+- Windows：Visual Studio C++ 工具链
+- Linux：Flutter Linux desktop 依赖、Avahi、PulseAudio 或 PipeWire Pulse
 
-<div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_4.jpg" width="74%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_2.png" width="24%" style="border-radius: 6px;"/>
-</div>
-<div style="display: inline-block; text-align: center;">
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_3.jpg" width="74%" style="border-radius: 6px;"/>
-    <img src="https://github.com/lawnvi/whisper/blob/dev/.github/image/img_5.png" width="24%" style="border-radius: 6px;"/>
-</div>
+### 2. 获取依赖并运行
 
-### 说明
+```bash
+flutter pub get
+flutter run
+```
 
-Whisper 是一个个人使用场景优先的开源项目，目标是替代“文件传输助手”这类临时中转方式。如果遇到问题，欢迎在 GitHub Issues 反馈。
+macOS 本地调试建议使用仓库脚本，它会构建、签名并启动调试 App：
+
+```bash
+sh script/build_and_run.sh
+```
+
+### 3. 验证
+
+```bash
+flutter analyze
+flutter test
+```
+
+### 4. 打包与代码生成
+
+macOS 打包 DMG：
+
+```bash
+sh script/build_and_run.sh package-macos
+```
+
+数据库或本地化变更后需要重新生成代码：
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+flutter gen-l10n
+```
+
+## 使用方式
+
+### 发送文本或文件
+
+打开一个已连接设备的会话，直接输入文本并发送；点击附件按钮选择文件。桌面端收到的文件可以从消息里拖出到文件管理器或桌面完成复制。
+
+### 共享系统音频
+
+在桌面端的设备工具区选择音频共享，选择一个或多个已连接且支持音频播放的设备。多设备播放支持基础同步和声道角色，但不等同于专业音频系统。
+
+### 共享键鼠
+
+在桌面端打开键鼠共享工作区，排列本机与被控设备的屏幕位置。启用后，鼠标从配置的屏幕边缘穿越到目标设备，键盘输入跟随当前目标。
+
+### 监听 Android 通知
+
+在 Android 端授予通知监听权限后，可以选择需要监听的 App。Whisper 会按用户选择处理通知内容，适合验证码等短消息场景。
+
+## 平台状态
+
+| 平台 | 当前状态 |
+| --- | --- |
+| Android | 主要移动端，支持连接、聊天、文件传输、通知监听和音频播放等能力。 |
+| macOS | 主要桌面验证平台，支持托盘、文件拖出、音频共享、键鼠共享和打包脚本。 |
+| Windows | 桌面目标平台，包含窗口、单实例、音频和键鼠相关原生集成。 |
+| Linux | 桌面目标平台，发现依赖 Avahi，音频依赖 PulseAudio 或 PipeWire Pulse，键鼠共享当前以 X11 为主。 |
+| iOS | 保留 Flutter runner，具体能力受系统限制影响，未测试 |
+
+## 边界与安全说明
+
+- 当前没有实现端到端加密，不应把 Whisper 用在不可信局域网环境中。
+- 当前不做公网中继、Hub 转发或传递信任。
+- 文件、音频、键鼠都需要连接和能力协商，不设计为无提示后台控制入口。
+- 键鼠共享面向本人设备间的近场协作，不是无人值守远程控制方案。
+- Whisper 优先保证局域网内的直接、可控和可恢复，不追求替代专业同步、远控或 MDM 系统。
+
+## 为什么不是这些工具
+
+- **不是云盘**：Whisper 不以跨公网、多端长期同步为目标，核心是近场设备之间的即时直连。
+- **不是聊天软件**：会话只是交互外壳，真正目标是让文件、通知、音频和输入能力在设备间流动。
+- **不是远程桌面**：键鼠共享只处理输入，不传屏幕，也不面向无人值守远控。
+- **不是专业音频系统**：音频组提供可用的多设备播放和声道角色，但不承诺专业级相位同步。
+
+## License
+
+[MIT](./LICENSE)
