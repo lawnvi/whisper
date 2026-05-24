@@ -127,7 +127,7 @@ void main() {
     expect(source, contains('audioGroupLatencyShortLabel'));
     expect(source, contains('audioGroupJitterShortLabel'));
     expect(source, contains('audioGroupBufferShortLabel'));
-    expect(source, contains('audioGroupLatePacketShortLabel'));
+    expect(source, contains('audioGroupRecentLatePacketShortLabel'));
     expect(source, isNot(contains(' · Δ{offset}')));
     expect(source, isNot(contains(' · R{rtt}')));
   });

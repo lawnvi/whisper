@@ -50,11 +50,13 @@ class AudioGroupPlaybackScheduler {
   final int clockRebaseThresholdMicros;
   final bool requireClockOffsetBeforePlayback;
   final List<_QueuedAudioGroupPacket> _queue = <_QueuedAudioGroupPacket>[];
+  static const int _recentLatePacketWindowMicros = 10000000;
   int? _targetClockOffsetMicros;
-  int _latePacketCount = 0;
+  final List<int> _latePacketTimestamps = <int>[];
 
   AudioGroupPlaybackReport get report {
     final now = _clockMicros();
+    _pruneLatePacketTimestamps(now);
     final isWaitingForClock =
         requireClockOffsetBeforePlayback && _targetClockOffsetMicros == null;
     final nextPacketDelayMicros = _queue.isEmpty || isWaitingForClock
@@ -69,7 +71,7 @@ class AudioGroupPlaybackScheduler {
         : (_queue.last.targetPlaybackTimeMicros - now).clamp(0, 1 << 31);
     return AudioGroupPlaybackReport(
       queuedPacketCount: _queue.length,
-      latePacketCount: _latePacketCount,
+      latePacketCount: _latePacketTimestamps.length,
       nextPacketDelayMicros: nextPacketDelayMicros,
       nextPumpDelayMicros: nextPumpDelayMicros,
       bufferDepthMicros: bufferDepthMicros,
@@ -95,7 +97,7 @@ class AudioGroupPlaybackScheduler {
         _localTargetPlaybackTimeMicros(packet, now);
     if (targetPlaybackTimeMicros != null &&
         targetPlaybackTimeMicros + lateToleranceMicros < now) {
-      _latePacketCount++;
+      _recordLatePacket(now);
       return;
     }
     _queue.add(
@@ -118,7 +120,7 @@ class AudioGroupPlaybackScheduler {
     while (_queue.isNotEmpty &&
         _queue.first.targetPlaybackTimeMicros + lateToleranceMicros < now) {
       _queue.removeAt(0);
-      _latePacketCount++;
+      _recordLatePacket(now);
     }
     while (_queue.isNotEmpty &&
         _queue.first.targetPlaybackTimeMicros <= now + outputLeadMicros) {
@@ -161,6 +163,19 @@ class AudioGroupPlaybackScheduler {
       }
       return a.packet.sequence.compareTo(b.packet.sequence);
     });
+  }
+
+  void _recordLatePacket(int now) {
+    _latePacketTimestamps.add(now);
+    _pruneLatePacketTimestamps(now);
+  }
+
+  void _pruneLatePacketTimestamps(int now) {
+    final threshold = now - _recentLatePacketWindowMicros;
+    while (_latePacketTimestamps.isNotEmpty &&
+        _latePacketTimestamps.first <= threshold) {
+      _latePacketTimestamps.removeAt(0);
+    }
   }
 
   Int16List _applyChannelRole(Int16List pcm) {

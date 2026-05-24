@@ -157,6 +157,28 @@ void main() {
     expect(scheduler.report.queuedPacketCount, 0);
   });
 
+  test('late packet count only reports the recent health window', () async {
+    var now = 5000;
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      writePcm: (_, __) async {},
+      lateToleranceMicros: 1000,
+    );
+
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 1000),
+      Int16List.fromList(<int>[1, 10]),
+    );
+
+    expect(scheduler.report.latePacketCount, 1);
+
+    now += 10000001;
+
+    expect(scheduler.report.latePacketCount, 0);
+  });
+
   test('rebases remote target time when source and sink clocks differ',
       () async {
     var now = 10000000;

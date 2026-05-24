@@ -1030,7 +1030,7 @@ class WsSvrManager {
           if (message.uuid.isEmpty) {
             return;
           }
-          logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
+          // logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
           var msg = await LocalDatabase().ackMessage(message);
           if (msg != null) {
             _dispatchToAll((event) => event.onMessage(msg));

@@ -958,11 +958,11 @@ abstract class AppLocalizations {
   /// **'缓冲'**
   String get audioGroupBufferShortLabel;
 
-  /// No description provided for @audioGroupLatePacketShortLabel.
+  /// No description provided for @audioGroupRecentLatePacketShortLabel.
   ///
   /// In zh, this message translates to:
-  /// **'晚包'**
-  String get audioGroupLatePacketShortLabel;
+  /// **'近10秒晚包'**
+  String get audioGroupRecentLatePacketShortLabel;
 
   /// No description provided for @audioGroupClockOffsetLabel.
   ///

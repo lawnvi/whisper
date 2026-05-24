@@ -1635,7 +1635,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _formatAudioMicros(sink.jitterMicros),
       l10n.audioGroupBufferShortLabel,
       _formatAudioMicros(sink.bufferTargetMicros),
-      l10n.audioGroupLatePacketShortLabel,
+      l10n.audioGroupRecentLatePacketShortLabel,
       sink.latePacketCount,
     );
   }

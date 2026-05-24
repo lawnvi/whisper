@@ -170,7 +170,7 @@
   "audioGroupLatencyShortLabel": "network ",
   "audioGroupJitterShortLabel": "jitter ",
   "audioGroupBufferShortLabel": "buffer ",
-  "audioGroupLatePacketShortLabel": "late ",
+  "audioGroupRecentLatePacketShortLabel": "late 10s ",
   "audioGroupClockOffsetLabel": "clock offset",
   "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · jitter {jitter}ms · buffer {buffer}ms · late {latePackets}",
   "@audioGroupSyncEvidence": {

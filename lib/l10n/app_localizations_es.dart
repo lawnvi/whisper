@@ -491,7 +491,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get audioGroupBufferShortLabel => 'bufer ';
 
   @override
-  String get audioGroupLatePacketShortLabel => 'tardios ';
+  String get audioGroupRecentLatePacketShortLabel => 'tardios 10s ';
 
   @override
   String get audioGroupClockOffsetLabel => 'desfase de reloj';

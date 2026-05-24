@@ -218,7 +218,7 @@
   "audioGroupLatencyShortLabel": "网络",
   "audioGroupJitterShortLabel": "抖动",
   "audioGroupBufferShortLabel": "缓冲",
-  "audioGroupLatePacketShortLabel": "晚包",
+  "audioGroupRecentLatePacketShortLabel": "近10秒晚包",
   "audioGroupClockOffsetLabel": "时钟偏移",
   "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {latePackets}",
   "@audioGroupSyncEvidence": {
