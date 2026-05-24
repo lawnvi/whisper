@@ -60,4 +60,15 @@ void main() {
     expect(source, contains('droppedStaleCount'));
     expect(source, contains('.flush()'));
   });
+
+  test('Android audio playback uses non-blocking writes on API 23+', () {
+    final source = File(
+            'android/app/src/main/kotlin/com/vireen/whisper/AudioSharePlugin.kt')
+        .readAsStringSync();
+
+    expect(source, contains('WRITE_NON_BLOCKING'));
+    expect(source, contains('Build.VERSION.SDK_INT >= Build.VERSION_CODES.M'));
+    expect(source, contains('writePcmNonBlocking'));
+    expect(source, contains('shortWriteCount'));
+  });
 }

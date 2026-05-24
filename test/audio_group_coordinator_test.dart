@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -930,11 +931,89 @@ void main() {
       expect(sent.single.control.syncErrorMicros, 0);
     });
 
+    test('sink packet handling is not blocked by a slow native audio write',
+        () async {
+      final slowWrite = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'writePcm') {
+          return slowWrite.future;
+        }
+        return;
+      });
+
+      var now = 100000;
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+        clockMicros: () => now,
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.stereo,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          clockOffsetMicros: 0,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      final packetFuture = coordinator.handlePacket(AudioGroupPacketFrame(
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        sourcePeerId: 'mac',
+        sequence: 1,
+        captureTimeMicros: 0,
+        targetPlaybackTimeMicros: now,
+        durationMicros: 20000,
+        channelMask: AudioChannelMask.stereo,
+        payload: Uint8List.fromList(<int>[1, 0, 2, 0]),
+      ));
+
+      await expectLater(
+        packetFuture.timeout(const Duration(milliseconds: 50)),
+        completes,
+      );
+      expect(calls.where((call) => call.method == 'writePcm'), hasLength(1));
+
+      slowWrite.complete();
+      await Future<void>.delayed(Duration.zero);
+    });
+
     test('group playback uses a smaller Dart-side native lead window', () {
       final source =
           File('lib/audio/audio_group_coordinator.dart').readAsStringSync();
 
       expect(source, contains('_nativePlaybackLeadMicros = 35000'));
+      expect(source, contains('_maxPlaybackPumpIntervalMicros = 10000'));
+      expect(source, contains('_playbackPumpDelayMicros(report)'));
       expect(source, contains('outputLeadMicros: _nativePlaybackLeadMicros'));
     });
   });

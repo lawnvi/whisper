@@ -197,7 +197,7 @@
   "audioGroupLatencyShortLabel": "red ",
   "audioGroupJitterShortLabel": "fluct. ",
   "audioGroupBufferShortLabel": "bufer ",
-  "audioGroupRecentLatePacketShortLabel": "tardios 10s ",
+  "audioGroupRecentLatePacketShortLabel": "tardios ",
   "audioGroupClockOffsetLabel": "desfase de reloj",
   "audioGroupSyncEvidence": "{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · fluctuacion {jitter}ms · bufer {buffer}ms · tardios {latePackets}",
   "@audioGroupSyncEvidence": {

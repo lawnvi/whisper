@@ -56,6 +56,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
   static const int _maxTargetLatencyMs = 95;
   static const int _networkSafetyLatencyMs = 35;
   static const int _nativePlaybackLeadMicros = 35000;
+  static const int _maxPlaybackPumpIntervalMicros = 10000;
 
   final AudioPlatform _platform;
   final AudioGroupCodecFactory _codecFactory;
@@ -74,6 +75,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
   AudioCodec? _playbackCodec;
   AudioGroupPlaybackScheduler? _playbackScheduler;
   Timer? _playbackPumpTimer;
+  bool _playbackPumpRunning = false;
+  bool _playbackPumpRequested = false;
   final Map<String, AudioClockSyncEstimator> _clockSyncEstimators =
       <String, AudioClockSyncEstimator>{};
   AudioGroupControlSender? _playbackSendControl;
@@ -338,7 +341,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return;
     }
     scheduler.enqueue(packet, codec.decode(packet.payload));
-    await _pumpPlayback();
+    _requestPlaybackPump();
     _maybeSendPlaybackLatencyReport();
   }
 
@@ -909,6 +912,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final playbackStreamId = _playbackStreamId;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
+    _playbackPumpRequested = false;
     _playbackCodec = null;
     _playbackScheduler = null;
     _playbackGroupId = '';
@@ -920,24 +924,60 @@ class AudioGroupCoordinator extends ChangeNotifier {
   }
 
   Future<void> _pumpPlayback() async {
+    if (_playbackPumpRunning) {
+      _playbackPumpRequested = true;
+      return;
+    }
+    _playbackPumpRunning = true;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
+    try {
+      while (true) {
+        _playbackPumpRequested = false;
+        final scheduler = _playbackScheduler;
+        if (scheduler == null) {
+          return;
+        }
+        await scheduler.pump();
+        if (!_playbackPumpRequested) {
+          break;
+        }
+      }
+    } finally {
+      _playbackPumpRunning = false;
+    }
     final scheduler = _playbackScheduler;
     if (scheduler == null) {
       return;
     }
-    await scheduler.pump();
     final report = scheduler.report;
     if (report.queuedPacketCount == 0) {
       return;
     }
-    final delay = Duration(
-      microseconds:
-          report.nextPumpDelayMicros <= 0 ? 1 : report.nextPumpDelayMicros,
-    );
+    final delay = Duration(microseconds: _playbackPumpDelayMicros(report));
     _playbackPumpTimer = Timer(delay, () {
       unawaited(_pumpPlayback());
     });
+  }
+
+  void _requestPlaybackPump() {
+    if (_playbackPumpRunning) {
+      _playbackPumpRequested = true;
+      return;
+    }
+    _playbackPumpTimer?.cancel();
+    _playbackPumpTimer = null;
+    unawaited(_pumpPlayback());
+  }
+
+  int _playbackPumpDelayMicros(AudioGroupPlaybackReport report) {
+    if (report.nextPumpDelayMicros <= 0) {
+      return 1;
+    }
+    if (report.nextPumpDelayMicros > _maxPlaybackPumpIntervalMicros) {
+      return _maxPlaybackPumpIntervalMicros;
+    }
+    return report.nextPumpDelayMicros;
   }
 
   void _markSinkFailed(String sinkPeerId, Object error) {

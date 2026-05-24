@@ -41,7 +41,13 @@ void main() {
       syncErrorMicros: 7000,
     );
 
-    final decoded = AudioGroupControlMessage.fromJson(message.toJson());
+    final json = message.toJson();
+    expect(json, isNot(containsPair('enqueueLatePacketCount', anything)));
+    expect(json, isNot(containsPair('pumpLatePacketCount', anything)));
+    expect(json, isNot(containsPair('minArrivalLeadMicros', anything)));
+    expect(json, isNot(containsPair('minPumpLeadMicros', anything)));
+
+    final decoded = AudioGroupControlMessage.fromJson(json);
 
     expect(decoded.action, AudioGroupControlAction.groupOffer);
     expect(decoded.groupId, 'group-1');

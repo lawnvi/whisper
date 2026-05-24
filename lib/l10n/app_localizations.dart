@@ -961,7 +961,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioGroupRecentLatePacketShortLabel.
   ///
   /// In zh, this message translates to:
-  /// **'近10秒晚包'**
+  /// **'晚包'**
   String get audioGroupRecentLatePacketShortLabel;
 
   /// No description provided for @audioGroupClockOffsetLabel.

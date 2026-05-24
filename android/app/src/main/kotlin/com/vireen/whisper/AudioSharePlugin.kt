@@ -32,6 +32,7 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var writeBytes: Long = 0L
     private var droppedWriteCount: Int = 0
     private var droppedStaleCount: Int = 0
+    private var shortWriteCount: Int = 0
     private var resyncCount: Int = 0
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -76,7 +77,7 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     if (queuedBeforeMicros > PLAYBACK_RESYNC_QUEUE_MICROS) {
                         resyncPlaybackQueue("preWrite", queuedBeforeMicros)
                     }
-                    val written = audioTrack?.write(pcm, 0, pcm.size) ?: 0
+                    val written = writePcmNonBlocking(pcm)
                     writeCount += 1
                     if (written > 0) {
                         writeBytes += written.toLong()
@@ -84,6 +85,14 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     }
                     val nativeQueuedMicros = nativeQueuedMicros()
                     updatePlaybackSpeed(nativeQueuedMicros)
+                    if (written < pcm.size) {
+                        recordShortWrite(
+                            sessionId,
+                            requestedBytes = pcm.size,
+                            writtenBytes = written,
+                            nativeQueuedMicros = nativeQueuedMicros
+                        )
+                    }
                     if (writeCount <= 3 || writeCount % 100 == 0) {
                         val peakLeft = pcmPeak(pcm, activeChannels, 0)
                         val peakRight = if (activeChannels > 1) {
@@ -98,7 +107,8 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                                 "targetPlaybackTimeMicros=$targetPlaybackTimeMicros " +
                                 "writtenFrames=$writtenFrames nativeQueuedMicros=$nativeQueuedMicros " +
                                 "peakLeft=$peakLeft peakRight=$peakRight " +
-                                "droppedStale=$droppedStaleCount resync=$resyncCount"
+                                "droppedStale=$droppedStaleCount " +
+                                "shortWrite=$shortWriteCount resync=$resyncCount"
                         )
                     }
                 } else {
@@ -136,6 +146,7 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         writeBytes = 0L
         droppedWriteCount = 0
         droppedStaleCount = 0
+        shortWriteCount = 0
         resyncCount = 0
 
         val sampleRate = (format["sampleRate"] as? Number)?.toInt() ?: 48000
@@ -194,7 +205,8 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 TAG,
                 "stopPlayback session=$sessionId writeCount=$writeCount " +
                     "writeBytes=$writeBytes dropped=$droppedWriteCount " +
-                    "droppedStale=$droppedStaleCount resync=$resyncCount"
+                    "droppedStale=$droppedStaleCount " +
+                    "shortWrite=$shortWriteCount resync=$resyncCount"
             )
         }
         audioTrack?.let {
@@ -211,7 +223,34 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         writtenFrames = 0L
         currentPlaybackSpeed = PLAYBACK_NORMAL_SPEED
         droppedStaleCount = 0
+        shortWriteCount = 0
         resyncCount = 0
+    }
+
+    private fun writePcmNonBlocking(pcm: ByteArray): Int {
+        val track = audioTrack ?: return 0
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            track.write(pcm, 0, pcm.size, AudioTrack.WRITE_NON_BLOCKING)
+        } else {
+            track.write(pcm, 0, pcm.size)
+        }
+    }
+
+    private fun recordShortWrite(
+        sessionId: String,
+        requestedBytes: Int,
+        writtenBytes: Int,
+        nativeQueuedMicros: Long
+    ) {
+        shortWriteCount += 1
+        if (shortWriteCount <= 3 || shortWriteCount % 50 == 0) {
+            Log.w(
+                TAG,
+                "writePcm short session=$sessionId requested=$requestedBytes " +
+                    "written=$writtenBytes nativeQueuedMicros=$nativeQueuedMicros " +
+                    "shortWrite=$shortWriteCount"
+            )
+        }
     }
 
     private fun nativeQueuedMicros(): Long {

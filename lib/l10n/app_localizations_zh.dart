@@ -464,7 +464,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioGroupBufferShortLabel => '缓冲';
 
   @override
-  String get audioGroupRecentLatePacketShortLabel => '近10秒晚包';
+  String get audioGroupRecentLatePacketShortLabel => '晚包';
 
   @override
   String get audioGroupClockOffsetLabel => '时钟偏移';

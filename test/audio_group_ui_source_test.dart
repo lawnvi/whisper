@@ -128,6 +128,11 @@ void main() {
     expect(source, contains('audioGroupJitterShortLabel'));
     expect(source, contains('audioGroupBufferShortLabel'));
     expect(source, contains('audioGroupRecentLatePacketShortLabel'));
+    expect(source, isNot(contains('audioGroupArrivalLeadShortLabel')));
+    expect(source, isNot(contains('audioGroupPumpLeadShortLabel')));
+    expect(source, isNot(contains('audioGroupEnqueueLateShortLabel')));
+    expect(source, isNot(contains('audioGroupPumpLateShortLabel')));
+    expect(source, isNot(contains('hasDiagnostics')));
     expect(source, isNot(contains(' · Δ{offset}')));
     expect(source, isNot(contains(' · R{rtt}')));
   });
