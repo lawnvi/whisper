@@ -15,8 +15,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-release-version:
+    name: Verify release version
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Verify release tag matches pubspec version
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          tag_version="${GITHUB_REF_NAME##*-}"
+          tag_version="${tag_version#v}"
+          pubspec_version="$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)(\+[0-9]+)?[[:space:]]*$/\1/p' pubspec.yaml)"
+
+          if [[ -z "$pubspec_version" ]]; then
+            echo "Unable to read semantic version from pubspec.yaml" >&2
+            exit 1
+          fi
+
+          if [[ "$tag_version" != "$pubspec_version" ]]; then
+            echo "Release tag version ($tag_version) must match pubspec.yaml version ($pubspec_version)" >&2
+            exit 1
+          fi
+
   build-on-macos:
     name: macOS + iOS
+    needs: verify-release-version
     runs-on: macos-15-intel
     steps:
       - name: Check out code
@@ -84,6 +109,7 @@ jobs:
 
   build-on-windows:
     name: Windows
+    needs: verify-release-version
     runs-on: windows-latest
     steps:
       - name: Check out code
@@ -156,6 +182,7 @@ jobs:
 
   build-on-linux:
     name: Linux + Android
+    needs: verify-release-version
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code

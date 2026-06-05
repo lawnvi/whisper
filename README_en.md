@@ -9,6 +9,10 @@
 > A LAN collaboration app for personal devices. Whisper creates a direct local connection between your computers and phones to send text, files, notifications, audio, and keyboard/mouse input.
 > This project is not related to OpenAI's Whisper speech recognition model.
 
+## Download
+
+[Download the latest release](https://github.com/lawnvi/whisper/releases/latest)
+
 ## What It Solves
 
 Whisper is built for a small but frequent problem: your computers, phones, and spare devices are right next to you, yet moving a bit of text, a file, or audio still often means using a chat app, cloud drive, or cable.
