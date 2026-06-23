@@ -23,6 +23,7 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/auth_request_gate.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/peer_connection.dart';
@@ -65,6 +66,7 @@ class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
+  static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
   static const int defaultTransferChunkSize = 32 * 1024 * 1024;
   static const int transferFramePayloadSize = 4 * 1024 * 1024;
   static const int transferRawFramePayloadSize = 64 * 1024;
@@ -87,6 +89,11 @@ class WsSvrManager {
   WebSocketSink? _sink;
   final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
   final Map<WebSocketSink, String> _peerIdsBySink = <WebSocketSink, String>{};
+  final AuthRequestGate _authRequestGate = AuthRequestGate();
+  final Map<WebSocketSink, String> _outgoingAuthKeysBySink =
+      <WebSocketSink, String>{};
+  final Map<WebSocketSink, String> _incomingAuthPeerIdsBySink =
+      <WebSocketSink, String>{};
   final Map<String, PeerProfile> _remoteProfilesByPeerId =
       <String, PeerProfile>{};
   final Map<WebSocketSink, Timer> _clientTimersBySink =
@@ -423,6 +430,38 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onTransferUpdated(snapshot));
   }
 
+  String _authRequestKey({
+    String? peerId,
+    required String host,
+    required int port,
+  }) {
+    final normalizedPeerId = peerId?.trim() ?? '';
+    if (normalizedPeerId.isNotEmpty) {
+      return 'peer:$normalizedPeerId';
+    }
+    return 'endpoint:${host.trim()}:$port';
+  }
+
+  void _releaseOutgoingAuthForSink(WebSocketSink? sink) {
+    if (sink == null) {
+      return;
+    }
+    final requestKey = _outgoingAuthKeysBySink.remove(sink);
+    if (requestKey != null) {
+      _authRequestGate.releaseOutgoing(requestKey);
+    }
+  }
+
+  void _releaseIncomingAuthForSink(WebSocketSink? sink) {
+    if (sink == null) {
+      return;
+    }
+    final peerId = _incomingAuthPeerIdsBySink.remove(sink);
+    if (peerId != null) {
+      _authRequestGate.releaseIncoming(peerId);
+    }
+  }
+
   Future<void> debugRegisterPeerConnection(
     String peerId,
     PeerConnection connection,
@@ -488,6 +527,8 @@ class WsSvrManager {
   }
 
   Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
+    _releaseOutgoingAuthForSink(sink);
+    _releaseIncomingAuthForSink(sink);
     _clientTimersBySink.remove(sink)?.cancel();
     final peerId = _peerIdsBySink.remove(sink);
     if (peerId == null) {
@@ -584,37 +625,60 @@ class WsSvrManager {
     });
   }
 
-  Future<void> connectToServer(String host, int port, var callback) async {
+  Future<void> connectToServer(
+    String host,
+    int port,
+    var callback, {
+    String? peerId,
+  }) async {
+    final authRequestKey = _authRequestKey(
+      peerId: peerId,
+      host: host,
+      port: port,
+    );
+    if (!_authRequestGate.tryClaimOutgoing(authRequestKey)) {
+      callback(false, duplicateAuthRequestMessage);
+      return;
+    }
+    WebSocketChannel? channel;
     try {
       final wsUrl = Uri.parse('ws://$host:$port');
-      WebSocketChannel channel = IOWebSocketChannel(
+      channel = IOWebSocketChannel(
         WebSocket.connect(
           wsUrl.toString(),
           compression: CompressionOptions.compressionOff,
         ),
       );
-      await channel.ready;
+      final connectedChannel = channel;
+      await connectedChannel.ready;
+      final channelSink = connectedChannel.sink;
       asServer = false;
-      _sink = channel.sink;
-      await _auth(true, sink: channel.sink);
-      channel.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message, sink: channel.sink));
+      _sink = channelSink;
+      _outgoingAuthKeysBySink[channelSink] = authRequestKey;
+      await _auth(true, sink: channelSink);
+      connectedChannel.stream.listen((message) {
+        unawaited(_handleIncomingMessage(message, sink: channelSink));
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
       }, onDone: () {
         logger.i("客户端服务done");
-        unawaited(_handlePeerSocketDoneQueued(channel.sink));
+        unawaited(_handlePeerSocketDoneQueued(channelSink));
       });
       // 开启一个定时器，每秒执行一次
       final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
         // 在这里执行你想要重复执行的代码
-        unawaited(_heartBeat(sink: channel.sink));
+        unawaited(_heartBeat(sink: channelSink));
       });
-      _clientTimersBySink[channel.sink] = timer;
+      _clientTimersBySink[channelSink] = timer;
       _clientTimer = timer;
       callback(true, "");
     } on Exception catch (e1) {
+      if (channel != null) {
+        _releaseOutgoingAuthForSink(channel.sink);
+      } else {
+        _authRequestGate.releaseOutgoing(authRequestKey);
+      }
       callback(false, "连接失败：$e1");
     }
   }
@@ -639,6 +703,9 @@ class WsSvrManager {
       timer.cancel();
     }
     _clientTimersBySink.clear();
+    _outgoingAuthKeysBySink.clear();
+    _incomingAuthPeerIdsBySink.clear();
+    _authRequestGate.clear();
     unawaited(_markRecoverableTransfersWaitingReconnect());
     final closeResumableHandles = _closeResumableHandles();
     await _freeIoSink(freeAll: true);
@@ -965,6 +1032,10 @@ class WsSvrManager {
             );
             device = profile.device;
           }
+          final peerId = device?.uid ?? incomingPeerId ?? '';
+          if (!asServer) {
+            _releaseOutgoingAuthForSink(sink);
+          }
           _remoteInputTrace(
             'AUTH remote profile uid=${device?.uid ?? ''} '
             'protocol=${profile?.protocolVersion ?? 1} '
@@ -978,7 +1049,6 @@ class WsSvrManager {
                 await LocalDatabase().fetchDevice(device?.uid ?? "");
             var self = await LocalSetting().instance();
             if ((self.auth || localTemp != null && localTemp.auth)) {
-              final peerId = device?.uid ?? "";
               await _auth(true, sink: sink, peerId: peerId);
               receiver = peerId;
               if (peerId.isNotEmpty && sink != null) {
@@ -996,31 +1066,50 @@ class WsSvrManager {
             }
           }
 
+          if (asServer && peerId.isNotEmpty) {
+            if (!_authRequestGate.tryClaimIncoming(peerId)) {
+              logger.i("忽略重复连接请求: $peerId");
+              await sink?.close();
+              return;
+            }
+            if (sink != null) {
+              _incomingAuthPeerIdsBySink[sink] = peerId;
+            }
+          }
+
           logger.i("AUTH message: ${message.sender} - $sender");
           _dispatchToPrimary((event) {
             event.onAuth(device, asServer, message.message ?? "",
                 (allow) async {
-              logger.i("AUTH message: ${message.message} ||| $allow");
-              final peerId = device?.uid ?? "";
-              if (asServer) {
-                await _auth(allow, sink: sink, peerId: peerId);
-              }
-              if (allow) {
-                receiver = peerId;
-                if (peerId.isNotEmpty && sink != null) {
-                  await _registerPeerConnection(
-                    peerId: peerId,
-                    sink: sink,
-                    profile: profile,
-                  );
+              try {
+                logger.i("AUTH message: ${message.message} ||| $allow");
+                if (asServer) {
+                  await _auth(allow, sink: sink, peerId: peerId);
                 }
-                _setRemoteProfile(profile, peerId: peerId);
-                _dispatchToAll((event) => event.onConnect());
-                unawaited(_resumeRecoverableOutgoingTransfers());
-              } else {
-                close();
+                if (allow) {
+                  receiver = peerId;
+                  if (peerId.isNotEmpty && sink != null) {
+                    await _registerPeerConnection(
+                      peerId: peerId,
+                      sink: sink,
+                      profile: profile,
+                    );
+                  }
+                  _setRemoteProfile(profile, peerId: peerId);
+                  _dispatchToAll((event) => event.onConnect());
+                  unawaited(_resumeRecoverableOutgoingTransfers());
+                } else {
+                  close();
+                }
+                _dispatchToAll((listener) => listener.afterAuth(allow, device));
+              } finally {
+                if (asServer && peerId.isNotEmpty) {
+                  _authRequestGate.releaseIncoming(peerId);
+                  if (sink != null) {
+                    _incomingAuthPeerIdsBySink.remove(sink);
+                  }
+                }
               }
-              _dispatchToAll((listener) => listener.afterAuth(allow, device));
             });
           });
           break;

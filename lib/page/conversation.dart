@@ -1116,6 +1116,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
         if (!completer.isCompleted) {
           completer.complete(false);
         }
+        if (message == WsSvrManager.duplicateAuthRequestMessage) {
+          if (mounted) {
+            showAppToast(message.toString());
+          }
+          return;
+        }
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??
@@ -1137,7 +1143,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (!completer.isCompleted) {
         completer.complete(true);
       }
-    });
+    }, peerId: device.uid);
     return completer.future;
   }
 

@@ -2127,6 +2127,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     socketManager.connectToServer(host, port, (ok, message) {
       // _showToast(message);
       if (!ok) {
+        if (message == WsSvrManager.duplicateAuthRequestMessage) {
+          if (manual && mounted) {
+            showAppToast(message.toString());
+          }
+          return;
+        }
         ConnectionCoordinator()
             .markDisconnected(peerId: peerId, error: message.toString());
         if (_pendingAutoConnectPeerId == peerId) {
@@ -2155,7 +2161,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         );
         return;
       }
-    });
+    }, peerId: peerId);
   }
 
   Future<void> _attemptAutoConnect() async {

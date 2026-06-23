@@ -243,7 +243,7 @@ void main() {
     expect(
         startServer, contains('_handlePeerSocketDoneQueued(webSocket.sink)'));
     expect(
-        connectToServer, contains('_handlePeerSocketDoneQueued(channel.sink)'));
+        connectToServer, contains('_handlePeerSocketDoneQueued(channelSink)'));
     expect(
         startServer, isNot(contains('_handlePeerSocketDone(webSocket.sink)')));
     expect(connectToServer,
