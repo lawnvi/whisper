@@ -229,6 +229,16 @@ class RemoteInputTopology {
   }
 }
 
+class RemoteInputPlacedTopology {
+  const RemoteInputPlacedTopology({
+    required this.displays,
+    required this.bounds,
+  });
+
+  final List<RemoteInputDisplay> displays;
+  final RemoteInputScreenRect bounds;
+}
+
 class RemoteInputSharedEdgeSegment {
   const RemoteInputSharedEdgeSegment({
     required this.sourceDisplayId,
@@ -336,6 +346,46 @@ class RemoteInputResolvedLayout {
 
 class RemoteInputLayoutGeometry {
   const RemoteInputLayoutGeometry._();
+
+  static RemoteInputPlacedTopology placeSinkTopologyInBounds({
+    required RemoteInputTopology sinkTopology,
+    required RemoteInputScreenRect bounds,
+  }) {
+    if (sinkTopology.displays.isEmpty) {
+      return RemoteInputPlacedTopology(displays: const [], bounds: bounds);
+    }
+    final virtualBounds = sinkTopology.virtualBounds;
+    return translatedSinkTopology(
+      sinkTopology: sinkTopology,
+      sinkOffsetX: bounds.x - virtualBounds.x,
+      sinkOffsetY: bounds.y - virtualBounds.y,
+    );
+  }
+
+  static RemoteInputPlacedTopology translatedSinkTopology({
+    required RemoteInputTopology sinkTopology,
+    required int sinkOffsetX,
+    required int sinkOffsetY,
+  }) {
+    if (sinkTopology.displays.isEmpty) {
+      return const RemoteInputPlacedTopology(
+        displays: [],
+        bounds: RemoteInputScreenRect(x: 0, y: 0, width: 1, height: 1),
+      );
+    }
+    final displays = sinkTopology.displays
+        .map(
+          (display) => display.translated(
+            dx: sinkOffsetX,
+            dy: sinkOffsetY,
+          ),
+        )
+        .toList(growable: false);
+    return RemoteInputPlacedTopology(
+      displays: displays,
+      bounds: _boundsForDisplays(displays),
+    );
+  }
 
   static RemoteInputScreenRect snapToNearestEdge({
     required RemoteInputScreenRect local,
@@ -856,6 +906,27 @@ class RemoteInputLayoutGeometry {
       return maximum;
     }
     return value;
+  }
+
+  static RemoteInputScreenRect _boundsForDisplays(
+    List<RemoteInputDisplay> displays,
+  ) {
+    var left = displays.first.left;
+    var top = displays.first.top;
+    var right = displays.first.right;
+    var bottom = displays.first.bottom;
+    for (final display in displays.skip(1)) {
+      left = math.min(left, display.left);
+      top = math.min(top, display.top);
+      right = math.max(right, display.right);
+      bottom = math.max(bottom, display.bottom);
+    }
+    return RemoteInputScreenRect(
+      x: left,
+      y: top,
+      width: math.max(1, right - left),
+      height: math.max(1, bottom - top),
+    );
   }
 
   static bool _areOppositeEdges(RemoteInputEdge a, RemoteInputEdge b) {

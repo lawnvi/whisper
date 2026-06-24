@@ -821,6 +821,130 @@ void main() {
   });
 
   group('RemoteInputTopology', () {
+    test('places multi-display sink topology as a workspace group', () {
+      const topology = RemoteInputTopology(
+        platform: 'windows',
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'left',
+            name: 'Left',
+            x: -3840,
+            y: 0,
+            width: 3840,
+            height: 2160,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'main',
+            name: 'Main',
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+        updatedAt: 1234,
+      );
+
+      final placed = RemoteInputLayoutGeometry.placeSinkTopologyInBounds(
+        sinkTopology: topology,
+        bounds: const RemoteInputScreenRect(
+          x: 1710,
+          y: -1080,
+          width: 5760,
+          height: 2160,
+        ),
+      );
+
+      expect(placed.displays, hasLength(2));
+      expect(placed.bounds.x, 1710);
+      expect(placed.bounds.y, -1080);
+      expect(placed.bounds.width, 5760);
+      expect(placed.bounds.height, 2160);
+      expect(placed.displays[0].displayId, 'left');
+      expect(placed.displays[0].x, 1710);
+      expect(placed.displays[0].width, 3840);
+      expect(placed.displays[1].displayId, 'main');
+      expect(placed.displays[1].x, 5550);
+      expect(placed.displays[1].width, 1920);
+    });
+
+    test('creates edge mapping from placed multi-display sink bounds', () {
+      const sourceTopology = RemoteInputTopology(
+        platform: 'macos',
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'source-main',
+            name: 'Studio',
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+        updatedAt: 1,
+      );
+      const sinkTopology = RemoteInputTopology(
+        platform: 'windows',
+        displays: [
+          RemoteInputDisplay(
+            displayId: 'sink-left',
+            name: 'Left',
+            x: -3840,
+            y: 0,
+            width: 3840,
+            height: 2160,
+            scale: 1,
+            isPrimary: false,
+          ),
+          RemoteInputDisplay(
+            displayId: 'sink-main',
+            name: 'Main',
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale: 1,
+            isPrimary: true,
+          ),
+        ],
+        updatedAt: 1,
+      );
+      final placed = RemoteInputLayoutGeometry.placeSinkTopologyInBounds(
+        sinkTopology: sinkTopology,
+        bounds: const RemoteInputScreenRect(
+          x: 2560,
+          y: 0,
+          width: 5760,
+          height: 2160,
+        ),
+      );
+      final sinkBounds = sinkTopology.virtualBounds;
+      final saved =
+          RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
+        sourceTopology: sourceTopology,
+        sinkTopology: sinkTopology,
+        sinkOffsetX: placed.bounds.x - sinkBounds.x,
+        sinkOffsetY: placed.bounds.y - sinkBounds.y,
+        preferredSinkDisplayId: sinkTopology.primaryDisplay.displayId,
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.sourceDisplayId, 'source-main');
+      expect(saved.sinkDisplayId, 'sink-left');
+      expect(saved.sourceEdge, RemoteInputEdge.right);
+      expect(saved.sinkEdge, RemoteInputEdge.left);
+      expect(saved.sinkOffsetX, 6400);
+      expect(saved.sinkOffsetY, 0);
+      expect(saved.sharedSegmentStart, 0);
+      expect(saved.sharedSegmentEnd, 1440);
+    });
+
     test('round-trips display topology json', () {
       const topology = RemoteInputTopology(
         platform: 'macos',

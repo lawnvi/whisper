@@ -169,12 +169,13 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }) async {
     final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
     if (saved != null) {
-      final next = _reanchorLegacyDefaultLayout(
+      var next = _reanchorLegacyDefaultLayout(
         saved,
         device: device,
         index: index,
         localTopology: localTopology,
       );
+      next = _normalizeRemoteTopologyLayout(next, device: device);
       if (next != saved) {
         await LocalDatabase().upsertRemoteInputLayout(next);
       }
@@ -245,6 +246,48 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
   }
 
+  RemoteInputLayoutData _normalizeRemoteTopologyLayout(
+    RemoteInputLayoutData layout, {
+    required DeviceData device,
+  }) {
+    final remote = _socketManager.remoteDisplayTopologyFor(device.uid);
+    if (remote == null || remote.isEmpty) {
+      return layout;
+    }
+    final savedLayout = layout.savedLayout;
+    final placed = savedLayout == null
+        ? RemoteInputLayoutGeometry.placeSinkTopologyInBounds(
+            sinkTopology: remote,
+            bounds: RemoteInputScreenRect(
+              x: layout.x,
+              y: layout.y,
+              width: layout.width,
+              height: layout.height,
+            ),
+          )
+        : RemoteInputLayoutGeometry.translatedSinkTopology(
+            sinkTopology: remote,
+            sinkOffsetX: savedLayout.sinkOffsetX,
+            sinkOffsetY: savedLayout.sinkOffsetY,
+          );
+    final bounds = placed.bounds;
+    if (layout.peerName == device.name &&
+        layout.x == bounds.x &&
+        layout.y == bounds.y &&
+        layout.width == bounds.width &&
+        layout.height == bounds.height) {
+      return layout;
+    }
+    return layout.copyWith(
+      peerName: device.name,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
   _WorkspaceDefaultLayoutAnchor _defaultLayoutAnchor(
     DeviceData device, {
     required int index,
@@ -252,9 +295,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }) {
     final source = localTopology.primaryDisplay;
     final remote = _socketManager.remoteDisplayTopologyFor(device.uid);
-    final remotePrimary = remote?.primaryDisplay;
-    final width = remotePrimary?.width ?? 900;
-    final height = remotePrimary?.height ?? 600;
+    final remoteBounds = remote?.virtualBounds;
+    final width = remoteBounds?.width ?? 900;
+    final height = remoteBounds?.height ?? 600;
     final rowStep = height + 20 > 620 ? height + 20 : 620;
     return _WorkspaceDefaultLayoutAnchor(
       x: index.isEven ? source.right : source.left - width,
@@ -483,13 +526,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     for (final device in selectedDevices) {
       final layout = _layouts[device.uid];
       if (layout != null) {
-        rects.add(
-          RemoteInputScreenRect(
-            x: layout.x,
-            y: layout.y,
-            width: layout.width,
-            height: layout.height,
-          ),
+        rects.addAll(
+          _peerDisplaysForLayout(device, layout).map((display) => display.rect),
         );
       }
     }
@@ -550,6 +588,47 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
   }
 
+  List<RemoteInputDisplay> _peerDisplaysForLayout(
+    DeviceData device,
+    RemoteInputLayoutData layout,
+  ) {
+    final remote = _socketManager.remoteDisplayTopologyFor(device.uid);
+    if (remote != null && remote.isNotEmpty) {
+      return RemoteInputLayoutGeometry.placeSinkTopologyInBounds(
+        sinkTopology: remote,
+        bounds: RemoteInputScreenRect(
+          x: layout.x,
+          y: layout.y,
+          width: layout.width,
+          height: layout.height,
+        ),
+      ).displays;
+    }
+    return [
+      RemoteInputDisplay(
+        displayId: '${device.uid}-screen',
+        name: device.name,
+        x: layout.x,
+        y: layout.y,
+        width: layout.width,
+        height: layout.height,
+        scale: 1,
+        isPrimary: true,
+      ),
+    ];
+  }
+
+  RemoteInputScreenRect _peerLayoutBounds(
+    DeviceData device,
+    RemoteInputLayoutData layout,
+  ) {
+    return _boundsFor(
+      _peerDisplaysForLayout(device, layout)
+          .map((display) => display.rect)
+          .toList(growable: false),
+    );
+  }
+
   Widget _buildPeerScreenBlock(
     DeviceData device, {
     required RemoteInputLayoutData layout,
@@ -558,14 +637,17 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required double scale,
     required bool conflict,
   }) {
-    final offset = toCanvas(layout.x, layout.y);
-    final size = toSize(layout.width, layout.height);
+    final displays = _peerDisplaysForLayout(device, layout);
+    final bounds = _peerLayoutBounds(device, layout);
+    final offset = toCanvas(bounds.x, bounds.y);
+    final groupSize = toSize(bounds.width, bounds.height);
     return Positioned(
       left: offset.dx,
       top: offset.dy,
-      width: size.width,
-      height: size.height,
+      width: groupSize.width,
+      height: groupSize.height,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () {
           setState(() {
             _focusedPeerId = device.uid;
@@ -575,21 +657,34 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         onPanUpdate: (details) {
           setState(() {
             _focusedPeerId = device.uid;
-            _layouts[device.uid] = layout.copyWith(
-              x: layout.x + (details.delta.dx / scale).round(),
-              y: layout.y + (details.delta.dy / scale).round(),
+            final currentLayout = _layouts[device.uid] ?? layout;
+            _layouts[device.uid] = currentLayout.copyWith(
+              x: currentLayout.x + (details.delta.dx / scale).round(),
+              y: currentLayout.y + (details.delta.dy / scale).round(),
             );
           });
         },
         onPanEnd: (_) {
           unawaited(_snapAndSaveLayout(device));
         },
-        child: _ScreenBlock(
-          title: device.name,
-          subtitle: _peerScreenSubtitle(layout),
-          selected: _focusedPeerId == device.uid,
-          conflict: conflict,
-          local: false,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final display in displays)
+              Positioned(
+                left: (display.left - bounds.left) * scale,
+                top: (display.top - bounds.top) * scale,
+                width: math.max(1.0, display.width * scale),
+                height: math.max(1.0, display.height * scale),
+                child: _ScreenBlock(
+                  title: display.name.isEmpty ? device.name : display.name,
+                  subtitle: _displaySizeLabel(display),
+                  selected: _focusedPeerId == device.uid,
+                  conflict: conflict,
+                  local: false,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -867,12 +962,23 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     RemoteInputLayoutData layout,
     RemoteInputTopology localTopology,
   ) {
-    final savedLayout = layout.savedLayout;
-    if (savedLayout != null &&
-        _socketManager.supportsRemoteInputTopologyFor(device.uid)) {
+    if (_socketManager.supportsRemoteInputTopologyFor(device.uid)) {
       final remoteTopology =
           _socketManager.remoteDisplayTopologyFor(device.uid);
       if (remoteTopology != null) {
+        final remoteBounds = remoteTopology.virtualBounds;
+        final savedLayout = layout.savedLayout ??
+            RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
+              sourceTopology: localTopology,
+              sinkTopology: remoteTopology,
+              sinkOffsetX: layout.x - remoteBounds.x,
+              sinkOffsetY: layout.y - remoteBounds.y,
+              preferredSinkDisplayId: remoteTopology.primaryDisplay.displayId,
+              edgeTolerance: layout.edgeThresholdPx,
+            );
+        if (savedLayout == null) {
+          return null;
+        }
         final resolved = RemoteInputLayoutGeometry.resolveSavedLayout(
           savedLayout: savedLayout,
           sourceTopology: localTopology,
@@ -1009,6 +1115,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       peerName: device.name,
       x: snapped.x,
       y: snapped.y,
+      width: snapped.width,
+      height: snapped.height,
       layoutVersion: updatedLayoutJson.isEmpty ? 1 : 2,
       layoutJson: updatedLayoutJson,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -1035,8 +1143,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     }
     final preferredSinkDisplayId = layout.savedLayout?.sinkDisplayId ??
         remoteTopology.primaryDisplay.displayId;
-    final sinkDisplay = remoteTopology.displayById(preferredSinkDisplayId) ??
-        remoteTopology.primaryDisplay;
+    final remoteBounds = remoteTopology.virtualBounds;
     final sourceTopology = _localTopology.isNotEmpty
         ? _localTopology
         : RemoteInputTopology.fallback();
@@ -1044,8 +1151,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         RemoteInputLayoutGeometry.savedLayoutForTranslatedSinkTopology(
       sourceTopology: sourceTopology,
       sinkTopology: remoteTopology,
-      sinkOffsetX: snapped.x - sinkDisplay.x,
-      sinkOffsetY: snapped.y - sinkDisplay.y,
+      sinkOffsetX: snapped.x - remoteBounds.x,
+      sinkOffsetY: snapped.y - remoteBounds.y,
       preferredSinkDisplayId: preferredSinkDisplayId,
       edgeTolerance: layout.edgeThresholdPx,
     );

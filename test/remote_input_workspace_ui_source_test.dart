@@ -69,11 +69,33 @@ void main() {
     expect(canvas, isNot(contains('math.max(64, h * scale)')));
     expect(canvas, contains('math.max(1.0, w * scale)'));
     expect(canvas, contains('math.max(1.0, h * scale)'));
-    expect(peerBlock, contains('_peerScreenSubtitle(layout)'));
+    expect(peerBlock, contains('_displaySizeLabel(display)'));
     expect(source, contains('String _peerScreenSubtitle'));
     expect(source, contains('_displaySizeLabelForLayout'));
     expect(source, contains('LayoutBuilder('));
     expect(source, contains('showSubtitle'));
+  });
+
+  test('workspace canvas renders remote topology displays as a draggable group',
+      () {
+    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
+        .readAsStringSync();
+    final canvas = RegExp(
+      r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
+    ).firstMatch(source)!.group(0)!;
+    final peerBlock = RegExp(
+      r'Widget _buildPeerScreenBlock\([\s\S]*?Widget _buildDetailsPanel',
+    ).firstMatch(source)!.group(0)!;
+
+    expect(source, contains('_peerDisplaysForLayout'));
+    expect(source, contains('_peerLayoutBounds'));
+    expect(source, contains('placeSinkTopologyInBounds'));
+    expect(canvas, contains('_peerDisplaysForLayout(device, layout)'));
+    expect(peerBlock, contains('for (final display in displays)'));
+    expect(peerBlock, contains('_displaySizeLabel(display)'));
+    expect(peerBlock, contains('final currentLayout'));
+    expect(peerBlock, contains('currentLayout.copyWith'));
+    expect(peerBlock, isNot(contains('width: size.width,')));
   });
 
   test('workspace snapping and labels can target any local display', () {
