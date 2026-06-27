@@ -82,6 +82,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       RemoteInputCoordinator.shared;
   final DesktopClipboardImageReader _clipboardImageReader =
       const DesktopClipboardImageReader();
+  final DesktopClipboardFileReader _clipboardFileReader =
+      const DesktopClipboardFileReader();
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -103,6 +105,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final bool embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
+  List<ClipboardFileDraft> _pendingClipboardFiles =
+      const <ClipboardFileDraft>[];
   ClipboardImageDraft? _pendingClipboardImage;
 
   bool get _isCurrentRoute {
@@ -1029,6 +1033,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       keyPressedMap: keyPressedMap,
       controller: _textController,
       focusNode: _composerFocusNode,
+      pendingClipboardFiles: _pendingClipboardFiles,
       pendingClipboardImage: _pendingClipboardImage,
       onPickFiles: _pickFilesAndSend,
       onSendClipboard: () async {
@@ -1037,10 +1042,40 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onSendText: (text) async {
         await _sendText(text);
       },
+      onPasteClipboardFiles: _pasteClipboardFiles,
+      onSendClipboardFiles: _sendPendingClipboardFiles,
+      onClearClipboardFiles: _clearPendingClipboardFiles,
       onPasteClipboardImage: _pasteClipboardImage,
       onSendClipboardImage: _sendPendingClipboardImage,
       onClearClipboardImage: _clearPendingClipboardImage,
     );
+  }
+
+  Future<bool> _pasteClipboardFiles() async {
+    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
+      return false;
+    }
+    try {
+      final drafts = await _clipboardFileReader.readFileDrafts();
+      if (drafts.isEmpty) {
+        return false;
+      }
+      if (!mounted) {
+        return true;
+      }
+      setState(() {
+        _pendingClipboardFiles = drafts;
+        _pendingClipboardImage = null;
+      });
+      return true;
+    } catch (error, stackTrace) {
+      logger.e(
+        'read clipboard files failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
   }
 
   Future<bool> _pasteClipboardImage() async {
@@ -1056,6 +1091,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return true;
       }
       setState(() {
+        _pendingClipboardFiles = const <ClipboardFileDraft>[];
         _pendingClipboardImage = draft;
       });
       return true;
@@ -1069,6 +1105,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
+  void _clearPendingClipboardFiles() {
+    if (_pendingClipboardFiles.isEmpty) {
+      return;
+    }
+    setState(() {
+      _pendingClipboardFiles = const <ClipboardFileDraft>[];
+    });
+  }
+
   void _clearPendingClipboardImage() {
     if (_pendingClipboardImage == null) {
       return;
@@ -1076,6 +1121,55 @@ class _SendMessageScreen extends State<SendMessageScreen>
     setState(() {
       _pendingClipboardImage = null;
     });
+  }
+
+  Future<void> _sendPendingClipboardFiles() async {
+    final drafts = List<ClipboardFileDraft>.of(_pendingClipboardFiles);
+    if (drafts.isEmpty || !_canSendCurrentDevice || _isLocalhost) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    final remaining = <ClipboardFileDraft>[];
+    var currentIndex = 0;
+    try {
+      for (; currentIndex < drafts.length; currentIndex++) {
+        final draft = drafts[currentIndex];
+        final sent = await socketManager.sendFileTo(device.uid, draft.path);
+        if (!sent) {
+          remaining.addAll(drafts.skip(currentIndex));
+          break;
+        }
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pendingClipboardFiles = remaining;
+      });
+      if (remaining.isNotEmpty) {
+        showAppToast(l10n.clipboardFilesSendFailed);
+      }
+    } catch (error, stackTrace) {
+      logger.e(
+        'send clipboard files failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        setState(() {
+          _pendingClipboardFiles = drafts.skip(currentIndex).toList();
+        });
+        showAppToast(l10n.clipboardFilesSendFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _sendPendingClipboardImage() async {

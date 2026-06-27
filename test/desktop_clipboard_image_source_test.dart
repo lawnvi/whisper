@@ -9,8 +9,10 @@ void main() {
         File('lib/helper/desktop_clipboard_image.dart').readAsStringSync();
 
     expect(source, contains('DesktopClipboardImageReader'));
+    expect(source, contains('DesktopClipboardFileReader'));
     expect(source, contains('com.vireen.whisper/desktop_clipboard_image'));
     expect(source, contains('readImagePng'));
+    expect(source, contains('readFilePaths'));
     expect(source, contains('MissingPluginException'));
     expect(source, contains('Directory.systemTemp'));
     expect(source, contains('Screenshot'));
@@ -20,9 +22,18 @@ void main() {
     final source = File('lib/page/conversation.dart').readAsStringSync();
 
     expect(source, contains('_pendingClipboardImage'));
+    expect(source, contains('_pendingClipboardFiles'));
+    expect(source, contains('_pasteClipboardFiles'));
+    expect(source, contains('_sendPendingClipboardFiles'));
     expect(source, contains('_pasteClipboardImage'));
     expect(source, contains('_sendPendingClipboardImage'));
     expect(source, contains('sendFileTo(device.uid, draft.path)'));
+    expect(source, contains('pendingClipboardFiles: _pendingClipboardFiles'));
+    expect(source, contains('onPasteClipboardFiles: _pasteClipboardFiles'));
+    expect(
+      source,
+      contains('onSendClipboardFiles: _sendPendingClipboardFiles'),
+    );
     expect(source, contains('pendingClipboardImage: _pendingClipboardImage'));
     expect(source, contains('onPasteClipboardImage: _pasteClipboardImage'));
     expect(
@@ -37,6 +48,8 @@ void main() {
     expect(source, contains('com.vireen.whisper/desktop_clipboard_image'));
     expect(source, contains('NSPasteboard.general'));
     expect(source, contains('readImagePng'));
+    expect(source, contains('readFilePaths'));
+    expect(source, contains('urlReadingFileURLsOnly'));
     expect(source, contains('NSBitmapImageRep'));
     expect(source, contains('FlutterStandardTypedData'));
   });
@@ -57,6 +70,9 @@ void main() {
     expect(cmake, contains('windowscodecs.lib'));
     expect(plugin, contains('com.vireen.whisper/desktop_clipboard_image'));
     expect(plugin, contains('readImagePng'));
+    expect(plugin, contains('readFilePaths'));
+    expect(plugin, contains('CF_HDROP'));
+    expect(plugin, contains('DragQueryFileW'));
     expect(plugin, contains('CF_DIBV5'));
     expect(plugin, contains('CF_DIB'));
     expect(plugin, contains('IWICImagingFactory'));
@@ -75,6 +91,9 @@ void main() {
     expect(cmake, contains('desktop_clipboard_image_plugin.cc'));
     expect(plugin, contains('com.vireen.whisper/desktop_clipboard_image'));
     expect(plugin, contains('readImagePng'));
+    expect(plugin, contains('readFilePaths'));
+    expect(plugin, contains('gtk_clipboard_wait_for_uris'));
+    expect(plugin, contains('g_filename_from_uri'));
     expect(plugin, contains('gtk_clipboard_wait_for_image'));
     expect(plugin, contains('gdk_pixbuf_save_to_buffer'));
   });

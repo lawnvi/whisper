@@ -36,10 +36,40 @@ FlValue* ReadImagePng() {
   return value;
 }
 
+FlValue* ReadFilePaths() {
+  GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+  if (clipboard == nullptr) {
+    return fl_value_new_list();
+  }
+  gchar** uris = gtk_clipboard_wait_for_uris(clipboard);
+  FlValue* paths = fl_value_new_list();
+  if (uris == nullptr) {
+    return paths;
+  }
+  for (gchar** uri = uris; *uri != nullptr; uri++) {
+    g_autoptr(GError) error = nullptr;
+    gchar* filename = g_filename_from_uri(*uri, nullptr, &error);
+    if (filename == nullptr) {
+      continue;
+    }
+    fl_value_append_take(paths, fl_value_new_string(filename));
+    g_free(filename);
+  }
+  g_strfreev(uris);
+  return paths;
+}
+
 void MethodCallCallback(FlMethodChannel*,
                         FlMethodCall* method_call,
                         gpointer) {
   const gchar* method = fl_method_call_get_name(method_call);
+  if (std::strcmp(method, "readFilePaths") == 0) {
+    g_autoptr(FlValue) paths = ReadFilePaths();
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(paths));
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
   if (std::strcmp(method, "readImagePng") != 0) {
     fl_method_call_respond_not_implemented(method_call, nullptr);
     return;

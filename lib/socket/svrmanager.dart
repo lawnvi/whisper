@@ -17,6 +17,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
+import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -1875,7 +1876,7 @@ class WsSvrManager {
       return;
     }
     if (clipboard && content.isEmpty) {
-      var str = await getClipboardText() ?? "";
+      var str = await readClipboardTextForSync() ?? "";
       content = str.trimRight();
     }
     if (content.trim().isEmpty) {

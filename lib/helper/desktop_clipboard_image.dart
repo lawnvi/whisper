@@ -18,6 +18,18 @@ class ClipboardImageDraft {
   final Uint8List bytes;
 }
 
+class ClipboardFileDraft {
+  const ClipboardFileDraft({
+    required this.path,
+    required this.fileName,
+    required this.size,
+  });
+
+  final String path;
+  final String fileName;
+  final int size;
+}
+
 class DesktopClipboardImageReader {
   static const channelName = 'com.vireen.whisper/desktop_clipboard_image';
 
@@ -92,5 +104,54 @@ class DesktopClipboardImageReader {
     final minute = value.minute.toString().padLeft(2, '0');
     final second = value.second.toString().padLeft(2, '0');
     return '$year-$month-$day $hour.$minute.$second';
+  }
+}
+
+class DesktopClipboardFileReader {
+  static const channelName = DesktopClipboardImageReader.channelName;
+
+  const DesktopClipboardFileReader({
+    MethodChannel channel = const MethodChannel(channelName),
+  }) : _channel = channel;
+
+  final MethodChannel _channel;
+
+  Future<List<ClipboardFileDraft>> readFileDrafts() async {
+    final List<String>? paths;
+    try {
+      paths = await _channel.invokeListMethod<String>('readFilePaths');
+    } on MissingPluginException {
+      return const <ClipboardFileDraft>[];
+    } on PlatformException {
+      return const <ClipboardFileDraft>[];
+    }
+
+    if (paths == null || paths.isEmpty) {
+      return const <ClipboardFileDraft>[];
+    }
+
+    final drafts = <ClipboardFileDraft>[];
+    for (final path in paths) {
+      final file = File(path);
+      try {
+        if (!await file.exists()) {
+          continue;
+        }
+        final stat = await file.stat();
+        if (stat.type != FileSystemEntityType.file) {
+          continue;
+        }
+        drafts.add(
+          ClipboardFileDraft(
+            path: path,
+            fileName: p.basename(path),
+            size: stat.size,
+          ),
+        );
+      } on FileSystemException {
+        continue;
+      }
+    }
+    return drafts;
   }
 }

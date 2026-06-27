@@ -6,6 +6,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 #include <objidl.h>
+#include <shellapi.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -287,6 +288,56 @@ std::optional<std::vector<uint8_t>> ReadClipboardImagePng(HWND window) {
   return std::nullopt;
 }
 
+std::string WideToUtf8(const std::wstring& value) {
+  if (value.empty()) {
+    return "";
+  }
+  const int length = WideCharToMultiByte(CP_UTF8, 0, value.data(),
+                                         static_cast<int>(value.size()),
+                                         nullptr, 0, nullptr, nullptr);
+  if (length <= 0) {
+    return "";
+  }
+  std::string result(static_cast<size_t>(length), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.data(),
+                      static_cast<int>(value.size()), result.data(), length,
+                      nullptr, nullptr);
+  return result;
+}
+
+std::vector<std::string> ReadClipboardFilePaths(HWND window) {
+  ScopedClipboard clipboard(window);
+  if (!clipboard.opened() || !IsClipboardFormatAvailable(CF_HDROP)) {
+    return {};
+  }
+  HANDLE handle = GetClipboardData(CF_HDROP);
+  if (handle == nullptr) {
+    return {};
+  }
+  HDROP drop = static_cast<HDROP>(handle);
+  const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+  std::vector<std::string> paths;
+  paths.reserve(count);
+  for (UINT index = 0; index < count; index++) {
+    const UINT length = DragQueryFileW(drop, index, nullptr, 0);
+    if (length == 0) {
+      continue;
+    }
+    std::wstring path(length + 1, L'\0');
+    const UINT copied =
+        DragQueryFileW(drop, index, path.data(), length + 1);
+    if (copied == 0) {
+      continue;
+    }
+    path.resize(copied);
+    const auto utf8 = WideToUtf8(path);
+    if (!utf8.empty()) {
+      paths.push_back(utf8);
+    }
+  }
+  return paths;
+}
+
 class DesktopClipboardImagePlugin : public flutter::Plugin {
  public:
   DesktopClipboardImagePlugin(flutter::PluginRegistrarWindows* registrar,
@@ -305,6 +356,14 @@ class DesktopClipboardImagePlugin : public flutter::Plugin {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+    if (call.method_name() == "readFilePaths") {
+      flutter::EncodableList values;
+      for (const auto& path : ReadClipboardFilePaths(window_)) {
+        values.emplace_back(path);
+      }
+      result->Success(flutter::EncodableValue(std::move(values)));
+      return;
+    }
     if (call.method_name() != "readImagePng") {
       result->NotImplemented();
       return;

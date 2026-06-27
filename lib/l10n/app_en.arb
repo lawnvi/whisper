@@ -34,6 +34,15 @@
   "menuSendFile": "Send Files",
   "filePickerOpenFailed": "Unable to open the file picker",
   "clipboardImageSendFailed": "Unable to send clipboard image",
+  "clipboardFilesSendFailed": "Unable to send clipboard files",
+  "clipboardFilesCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@clipboardFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
   "exit": "Exit",
   "delete": "Delete",
   "deleteConfirm": "Confirm Delete",

@@ -310,6 +310,18 @@ abstract class AppLocalizations {
   /// **'剪贴板图片发送失败'**
   String get clipboardImageSendFailed;
 
+  /// No description provided for @clipboardFilesSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板文件发送失败'**
+  String get clipboardFilesSendFailed;
+
+  /// No description provided for @clipboardFilesCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =1{1 个文件} other{{count} 个文件}}'**
+  String clipboardFilesCount(num count);
+
   /// No description provided for @exit.
   ///
   /// In zh, this message translates to:

@@ -43,6 +43,15 @@
   "menuSendFile": "发送文件",
   "filePickerOpenFailed": "无法打开文件选择器",
   "clipboardImageSendFailed": "剪贴板图片发送失败",
+  "clipboardFilesSendFailed": "剪贴板文件发送失败",
+  "clipboardFilesCount": "{count, plural, =1{1 个文件} other{{count} 个文件}}",
+  "@clipboardFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
   "exit": "退出",
   "delete": "删除",
   "deleteConfirm": "确认删除",

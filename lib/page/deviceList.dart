@@ -21,6 +21,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/global.dart';
+import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/main.dart';
@@ -2473,8 +2474,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClipboardChanged() async {
-    var text = await getClipboardText() ?? "";
-    if (_clipboardText == text || shouldIgnoreClipboardSync(text)) {
+    final text = await readClipboardTextForSync();
+    if (text == null ||
+        _clipboardText == text ||
+        shouldIgnoreClipboardSync(text)) {
       return;
     }
     _clipboardText = text;

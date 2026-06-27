@@ -119,6 +119,21 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo enviar la imagen del portapapeles';
 
   @override
+  String get clipboardFilesSendFailed =>
+      'No se pudieron enviar los archivos del portapapeles';
+
+  @override
+  String clipboardFilesCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get exit => 'Salir';
 
   @override

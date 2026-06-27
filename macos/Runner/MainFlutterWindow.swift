@@ -77,6 +77,8 @@ final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
         return
       }
       result(FlutterStandardTypedData(bytes: data))
+    case "readFilePaths":
+      result(readFilePaths())
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -110,6 +112,17 @@ final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
       return nil
     }
     return bitmap.representation(using: .png, properties: [:])
+  }
+
+  private func readFilePaths() -> [String] {
+    let pasteboard = NSPasteboard.general
+    let options: [NSPasteboard.ReadingOptionKey: Any] = [
+      .urlReadingFileURLsOnly: true
+    ]
+    let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
+    return urls?
+      .filter { $0.isFileURL }
+      .map { $0.path } ?? []
   }
 }
 

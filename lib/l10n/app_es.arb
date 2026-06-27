@@ -43,6 +43,15 @@
   "menuSendFile": "Enviar archivos",
   "filePickerOpenFailed": "No se pudo abrir el selector de archivos",
   "clipboardImageSendFailed": "No se pudo enviar la imagen del portapapeles",
+  "clipboardFilesSendFailed": "No se pudieron enviar los archivos del portapapeles",
+  "clipboardFilesCount": "{count, plural, =1{1 archivo} other{{count} archivos}}",
+  "@clipboardFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
   "exit": "Salir",
   "delete": "Eliminar",
   "deleteConfirm": "Confirmar eliminación",

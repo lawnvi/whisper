@@ -118,6 +118,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clipboardImageSendFailed => '剪贴板图片发送失败';
 
   @override
+  String get clipboardFilesSendFailed => '剪贴板文件发送失败';
+
+  @override
+  String clipboardFilesCount(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件',
+      one: '1 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get exit => '退出';
 
   @override

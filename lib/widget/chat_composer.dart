@@ -19,6 +19,10 @@ class ChatComposer extends StatelessWidget {
       ValueKey('chat-composer-clipboard-image-preview');
   static const clipboardImageRemoveButtonKey =
       ValueKey('chat-composer-clipboard-image-remove');
+  static const clipboardFilesPreviewKey =
+      ValueKey('chat-composer-clipboard-files-preview');
+  static const clipboardFilesRemoveButtonKey =
+      ValueKey('chat-composer-clipboard-files-remove');
 
   final bool clipboardEnabled;
   final bool canSend;
@@ -30,9 +34,13 @@ class ChatComposer extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final ClipboardImageDraft? pendingClipboardImage;
+  final List<ClipboardFileDraft> pendingClipboardFiles;
   final Future<void> Function() onPickFiles;
   final Future<void> Function() onSendClipboard;
   final Future<void> Function(String text) onSendText;
+  final Future<bool> Function()? onPasteClipboardFiles;
+  final Future<void> Function()? onSendClipboardFiles;
+  final VoidCallback? onClearClipboardFiles;
   final Future<bool> Function()? onPasteClipboardImage;
   final Future<void> Function()? onSendClipboardImage;
   final VoidCallback? onClearClipboardImage;
@@ -49,9 +57,13 @@ class ChatComposer extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     this.pendingClipboardImage,
+    this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
     required this.onSendClipboard,
     required this.onSendText,
+    this.onPasteClipboardFiles,
+    this.onSendClipboardFiles,
+    this.onClearClipboardFiles,
     this.onPasteClipboardImage,
     this.onSendClipboardImage,
     this.onClearClipboardImage,
@@ -98,6 +110,10 @@ class ChatComposer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_showsClipboardFilesPreview) ...[
+            _buildClipboardFilesPreview(context),
+            const SizedBox(height: 10),
+          ],
           if (_showsClipboardImagePreview) ...[
             _buildClipboardImagePreview(context),
             const SizedBox(height: 10),
@@ -400,6 +416,87 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
+  Widget _buildClipboardFilesPreview(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final files = pendingClipboardFiles;
+    final first = files.first;
+    final totalSize =
+        files.fold<int>(0, (previous, draft) => previous + draft.size);
+    final l10n = AppLocalizations.of(context);
+    final countLabel = l10n?.clipboardFilesCount(files.length) ??
+        (files.length == 1 ? '1 file' : '${files.length} files');
+    return Container(
+      key: clipboardFilesPreviewKey,
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.insert_drive_file_outlined,
+              color: colorScheme.primary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  first.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$countLabel · ${_formatBytes(totalSize)}',
+                  style: TextStyle(
+                    color: palette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: clipboardFilesRemoveButtonKey,
+            tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
+            onPressed: onClearClipboardFiles,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(32, 32),
+              maximumSize: const Size(32, 32),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: Colors.transparent,
+            ),
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPrimaryActionButton(
     BuildContext context, {
     required ColorScheme colorScheme,
@@ -414,6 +511,7 @@ class ChatComposer extends StatelessWidget {
         !isLoading &&
         (showsAttachmentAction ||
             _hasDraftText ||
+            _canSendPendingClipboardFiles ||
             _canSendPendingClipboardImage);
     final backgroundColor = showsAttachmentAction
         ? Colors.transparent
@@ -459,16 +557,31 @@ class ChatComposer extends StatelessWidget {
 
   bool get _hasDraftText => !isInputEmpty && controller.text.trim().isNotEmpty;
 
+  bool get _showsClipboardFilesPreview =>
+      isDesktopStyle && pendingClipboardFiles.isNotEmpty;
+
   bool get _showsClipboardImagePreview =>
-      isDesktopStyle && pendingClipboardImage != null;
+      isDesktopStyle &&
+      pendingClipboardImage != null &&
+      !_showsClipboardFilesPreview;
+
+  bool get _canSendPendingClipboardFiles =>
+      _showsClipboardFilesPreview && onSendClipboardFiles != null;
 
   bool get _canSendPendingClipboardImage =>
       _showsClipboardImagePreview && onSendClipboardImage != null;
 
   bool get _showsAttachmentAction =>
-      !isLocalhost && !_hasDraftText && !_showsClipboardImagePreview;
+      !isLocalhost &&
+      !_hasDraftText &&
+      !_showsClipboardFilesPreview &&
+      !_showsClipboardImagePreview;
 
   Future<void> _handlePrimaryAction() async {
+    if (_canSendPendingClipboardFiles) {
+      await onSendClipboardFiles!();
+      return;
+    }
     if (_canSendPendingClipboardImage) {
       await onSendClipboardImage!();
       return;
@@ -505,6 +618,10 @@ class ChatComposer extends StatelessWidget {
       if (event is KeyDownEvent &&
           (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
               isMobile())) {
+        if (_canSendPendingClipboardFiles) {
+          unawaited(onSendClipboardFiles!());
+          return KeyEventResult.handled;
+        }
         if (_canSendPendingClipboardImage) {
           unawaited(onSendClipboardImage!());
           return KeyEventResult.handled;
@@ -531,6 +648,11 @@ class ChatComposer extends StatelessWidget {
   }
 
   Future<void> _handlePasteShortcut() async {
+    final filesPasted =
+        await (onPasteClipboardFiles?.call() ?? Future<bool>.value(false));
+    if (filesPasted) {
+      return;
+    }
     final imagePasted =
         await (onPasteClipboardImage?.call() ?? Future<bool>.value(false));
     if (imagePasted) {
