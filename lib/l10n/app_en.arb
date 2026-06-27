@@ -33,6 +33,7 @@
   "menuClipboard": "Send Clipboard",
   "menuSendFile": "Send Files",
   "filePickerOpenFailed": "Unable to open the file picker",
+  "clipboardImageSendFailed": "Unable to send clipboard image",
   "exit": "Exit",
   "delete": "Delete",
   "deleteConfirm": "Confirm Delete",

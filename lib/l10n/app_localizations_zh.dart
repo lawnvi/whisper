@@ -115,6 +115,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filePickerOpenFailed => '无法打开文件选择器';
 
   @override
+  String get clipboardImageSendFailed => '剪贴板图片发送失败';
+
+  @override
   String get exit => '退出';
 
   @override

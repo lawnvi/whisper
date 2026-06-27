@@ -304,6 +304,12 @@ abstract class AppLocalizations {
   /// **'无法打开文件选择器'**
   String get filePickerOpenFailed;
 
+  /// No description provided for @clipboardImageSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板图片发送失败'**
+  String get clipboardImageSendFailed;
+
   /// No description provided for @exit.
   ///
   /// In zh, this message translates to:

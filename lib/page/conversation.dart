@@ -15,6 +15,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -79,6 +80,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       AudioGroupCoordinator.shared;
   final RemoteInputCoordinator _remoteInputCoordinator =
       RemoteInputCoordinator.shared;
+  final DesktopClipboardImageReader _clipboardImageReader =
+      const DesktopClipboardImageReader();
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -100,6 +103,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final bool embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
+  ClipboardImageDraft? _pendingClipboardImage;
 
   bool get _isCurrentRoute {
     final route = ModalRoute.of(context);
@@ -1025,6 +1029,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       keyPressedMap: keyPressedMap,
       controller: _textController,
       focusNode: _composerFocusNode,
+      pendingClipboardImage: _pendingClipboardImage,
       onPickFiles: _pickFilesAndSend,
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
@@ -1032,7 +1037,83 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onSendText: (text) async {
         await _sendText(text);
       },
+      onPasteClipboardImage: _pasteClipboardImage,
+      onSendClipboardImage: _sendPendingClipboardImage,
+      onClearClipboardImage: _clearPendingClipboardImage,
     );
+  }
+
+  Future<bool> _pasteClipboardImage() async {
+    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
+      return false;
+    }
+    try {
+      final draft = await _clipboardImageReader.readImageDraft();
+      if (draft == null) {
+        return false;
+      }
+      if (!mounted) {
+        return true;
+      }
+      setState(() {
+        _pendingClipboardImage = draft;
+      });
+      return true;
+    } catch (error, stackTrace) {
+      logger.e(
+        'read clipboard image failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  void _clearPendingClipboardImage() {
+    if (_pendingClipboardImage == null) {
+      return;
+    }
+    setState(() {
+      _pendingClipboardImage = null;
+    });
+  }
+
+  Future<void> _sendPendingClipboardImage() async {
+    final draft = _pendingClipboardImage;
+    if (draft == null || !_canSendCurrentDevice || _isLocalhost) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final sent = await socketManager.sendFileTo(device.uid, draft.path);
+      if (!mounted) {
+        return;
+      }
+      if (sent) {
+        setState(() {
+          _pendingClipboardImage = null;
+        });
+      } else {
+        showAppToast(l10n.clipboardImageSendFailed);
+      }
+    } catch (error, stackTrace) {
+      logger.e(
+        'send clipboard image failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        showAppToast(l10n.clipboardImageSendFailed);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _pickFilesAndSend() async {

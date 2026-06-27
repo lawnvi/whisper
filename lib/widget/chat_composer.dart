@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -11,6 +15,10 @@ class ChatComposer extends StatelessWidget {
   static const attachmentButtonKey = ValueKey('chat-composer-attachment');
   static const clipboardButtonKey = ValueKey('chat-composer-clipboard');
   static const sendButtonKey = ValueKey('chat-composer-send');
+  static const clipboardImagePreviewKey =
+      ValueKey('chat-composer-clipboard-image-preview');
+  static const clipboardImageRemoveButtonKey =
+      ValueKey('chat-composer-clipboard-image-remove');
 
   final bool clipboardEnabled;
   final bool canSend;
@@ -21,9 +29,13 @@ class ChatComposer extends StatelessWidget {
   final Map<String, bool> keyPressedMap;
   final TextEditingController controller;
   final FocusNode focusNode;
+  final ClipboardImageDraft? pendingClipboardImage;
   final Future<void> Function() onPickFiles;
   final Future<void> Function() onSendClipboard;
   final Future<void> Function(String text) onSendText;
+  final Future<bool> Function()? onPasteClipboardImage;
+  final Future<void> Function()? onSendClipboardImage;
+  final VoidCallback? onClearClipboardImage;
 
   const ChatComposer({
     super.key,
@@ -36,9 +48,13 @@ class ChatComposer extends StatelessWidget {
     required this.keyPressedMap,
     required this.controller,
     required this.focusNode,
+    this.pendingClipboardImage,
     required this.onPickFiles,
     required this.onSendClipboard,
     required this.onSendText,
+    this.onPasteClipboardImage,
+    this.onSendClipboardImage,
+    this.onClearClipboardImage,
   });
 
   @override
@@ -82,6 +98,10 @@ class ChatComposer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_showsClipboardImagePreview) ...[
+            _buildClipboardImagePreview(context),
+            const SizedBox(height: 10),
+          ],
           Focus(
             onKeyEvent: (_, event) => _handleKeyEvent(event),
             child: TextField(
@@ -299,6 +319,87 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
+  Widget _buildClipboardImagePreview(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final draft = pendingClipboardImage!;
+    return Container(
+      key: clipboardImagePreviewKey,
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(
+              draft.bytes,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                width: 44,
+                height: 44,
+                color: colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.image_outlined,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  draft.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _formatBytes(draft.size),
+                  style: TextStyle(
+                    color: palette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: clipboardImageRemoveButtonKey,
+            tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
+            onPressed: onClearClipboardImage,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(32, 32),
+              maximumSize: const Size(32, 32),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: Colors.transparent,
+            ),
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPrimaryActionButton(
     BuildContext context, {
     required ColorScheme colorScheme,
@@ -309,8 +410,11 @@ class ChatComposer extends StatelessWidget {
     final accentColor = colorScheme.primary;
     final disabledBorderColor = palette.borderSubtle;
     final showsAttachmentAction = _showsAttachmentAction;
-    final enabled =
-        canSend && !isLoading && (showsAttachmentAction || _hasDraftText);
+    final enabled = canSend &&
+        !isLoading &&
+        (showsAttachmentAction ||
+            _hasDraftText ||
+            _canSendPendingClipboardImage);
     final backgroundColor = showsAttachmentAction
         ? Colors.transparent
         : (enabled ? accentColor : palette.surfaceMuted);
@@ -355,9 +459,20 @@ class ChatComposer extends StatelessWidget {
 
   bool get _hasDraftText => !isInputEmpty && controller.text.trim().isNotEmpty;
 
-  bool get _showsAttachmentAction => !isLocalhost && !_hasDraftText;
+  bool get _showsClipboardImagePreview =>
+      isDesktopStyle && pendingClipboardImage != null;
+
+  bool get _canSendPendingClipboardImage =>
+      _showsClipboardImagePreview && onSendClipboardImage != null;
+
+  bool get _showsAttachmentAction =>
+      !isLocalhost && !_hasDraftText && !_showsClipboardImagePreview;
 
   Future<void> _handlePrimaryAction() async {
+    if (_canSendPendingClipboardImage) {
+      await onSendClipboardImage!();
+      return;
+    }
     if (_showsAttachmentAction) {
       await onPickFiles();
       return;
@@ -376,6 +491,10 @@ class ChatComposer extends StatelessWidget {
     if (!canSend) {
       return KeyEventResult.ignored;
     }
+    if (_isPasteShortcut(event)) {
+      unawaited(_handlePasteShortcut());
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
         event.logicalKey == LogicalKeyboardKey.shiftRight) {
       keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is KeyDownEvent;
@@ -386,6 +505,10 @@ class ChatComposer extends StatelessWidget {
       if (event is KeyDownEvent &&
           (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
               isMobile())) {
+        if (_canSendPendingClipboardImage) {
+          unawaited(onSendClipboardImage!());
+          return KeyEventResult.handled;
+        }
         final nextText = controller.text.trimRight();
         if (nextText.trim().isNotEmpty) {
           onSendText(nextText);
@@ -395,5 +518,58 @@ class ChatComposer extends StatelessWidget {
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  bool _isPasteShortcut(KeyEvent event) {
+    if (!isDesktopStyle ||
+        event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.keyV) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isControlPressed || keyboard.isMetaPressed;
+  }
+
+  Future<void> _handlePasteShortcut() async {
+    final imagePasted =
+        await (onPasteClipboardImage?.call() ?? Future<bool>.value(false));
+    if (imagePasted) {
+      return;
+    }
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) {
+      return;
+    }
+    _insertTextAtSelection(text);
+  }
+
+  void _insertTextAtSelection(String text) {
+    final selection = controller.selection;
+    final originalText = controller.text;
+    final start = selection.isValid
+        ? math.min(selection.start, selection.end)
+        : originalText.length;
+    final end = selection.isValid
+        ? math.max(selection.start, selection.end)
+        : originalText.length;
+    final nextText = originalText.replaceRange(start, end, text);
+    controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: start + text.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+    final kb = bytes / 1024;
+    if (kb < 1024) {
+      return '${kb.toStringAsFixed(kb >= 10 ? 0 : 1)} KB';
+    }
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
   }
 }

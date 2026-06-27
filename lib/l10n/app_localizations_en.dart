@@ -115,6 +115,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get filePickerOpenFailed => 'Unable to open the file picker';
 
   @override
+  String get clipboardImageSendFailed => 'Unable to send clipboard image';
+
+  @override
   String get exit => 'Exit';
 
   @override

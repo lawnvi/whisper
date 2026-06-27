@@ -68,6 +68,7 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME}
   "audio_share_plugin.cc"
+  "desktop_clipboard_image_plugin.cc"
   "main.cc"
   "my_application.cc"
   "remote_input_plugin.cc"

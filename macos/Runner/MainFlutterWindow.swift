@@ -48,6 +48,8 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "AudioSharePlugin"))
     RemoteInputPlugin.register(
       with: flutterViewController.registrar(forPlugin: "RemoteInputPlugin"))
+    DesktopClipboardImagePlugin.register(
+      with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
 
     super.awakeFromNib()
   }
@@ -55,6 +57,59 @@ class MainFlutterWindow: NSWindow {
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
       super.order(place, relativeTo: otherWin)
       hiddenWindowAtLaunch()
+  }
+}
+
+final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/desktop_clipboard_image",
+      binaryMessenger: registrar.messenger)
+    let instance = DesktopClipboardImagePlugin()
+    registrar.addMethodCallDelegate(instance, channel: channel)
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "readImagePng":
+      guard let data = readImagePng() else {
+        result(nil)
+        return
+      }
+      result(FlutterStandardTypedData(bytes: data))
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func readImagePng() -> Data? {
+    let pasteboard = NSPasteboard.general
+    if let pngData = pasteboard.data(forType: .png), !pngData.isEmpty {
+      return pngData
+    }
+    if let tiffData = pasteboard.data(forType: .tiff),
+       let pngData = pngData(fromTiff: tiffData) {
+      return pngData
+    }
+    let images = pasteboard.readObjects(forClasses: [NSImage.self], options: nil)
+    guard let image = images?.first as? NSImage else {
+      return nil
+    }
+    return pngData(from: image)
+  }
+
+  private func pngData(from image: NSImage) -> Data? {
+    guard let tiffData = image.tiffRepresentation else {
+      return nil
+    }
+    return pngData(fromTiff: tiffData)
+  }
+
+  private func pngData(fromTiff data: Data) -> Data? {
+    guard let bitmap = NSBitmapImageRep(data: data) else {
+      return nil
+    }
+    return bitmap.representation(using: .png, properties: [:])
   }
 }
 

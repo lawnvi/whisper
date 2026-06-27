@@ -6,6 +6,7 @@
 #endif
 
 #include "audio_share_plugin.h"
+#include "desktop_clipboard_image_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
 
@@ -63,6 +64,7 @@ static void my_application_activate(GApplication* application) {
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
   audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
   remote_input_plugin_register(FL_PLUGIN_REGISTRY(view));
+  desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

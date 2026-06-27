@@ -42,6 +42,7 @@
   "menuClipboard": "Enviar portapapeles",
   "menuSendFile": "Enviar archivos",
   "filePickerOpenFailed": "No se pudo abrir el selector de archivos",
+  "clipboardImageSendFailed": "No se pudo enviar la imagen del portapapeles",
   "exit": "Salir",
   "delete": "Eliminar",
   "deleteConfirm": "Confirmar eliminación",

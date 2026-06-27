@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "audio_share_plugin.h"
+#include "desktop_clipboard_image_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
 #include "window_theme_plugin.h"
@@ -40,6 +41,10 @@ bool FlutterWindow::OnCreate() {
       flutter_controller_->engine()->GetRegistrarForPlugin("AudioSharePlugin"));
   RemoteInputPluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("RemoteInputPlugin"),
+      GetHandle());
+  DesktopClipboardImagePluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin(
+          "DesktopClipboardImagePlugin"),
       GetHandle());
   WindowThemePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("WindowThemePlugin"),

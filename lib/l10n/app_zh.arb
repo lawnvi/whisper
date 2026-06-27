@@ -42,6 +42,7 @@
   "menuClipboard": "发送剪切板",
   "menuSendFile": "发送文件",
   "filePickerOpenFailed": "无法打开文件选择器",
+  "clipboardImageSendFailed": "剪贴板图片发送失败",
   "exit": "退出",
   "delete": "删除",
   "deleteConfirm": "确认删除",

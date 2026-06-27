@@ -115,6 +115,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get filePickerOpenFailed => 'No se pudo abrir el selector de archivos';
 
   @override
+  String get clipboardImageSendFailed =>
+      'No se pudo enviar la imagen del portapapeles';
+
+  @override
   String get exit => 'Salir';
 
   @override
