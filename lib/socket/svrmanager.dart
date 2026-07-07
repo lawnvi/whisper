@@ -32,6 +32,7 @@ import 'package:whisper/socket/guarded_auth_callback.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -852,7 +853,7 @@ class WsSvrManager {
       transferId: '',
       offset: 0,
       sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(message.toJsonString())),
+      payload: Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
     ).encode();
     if (sink != null) {
       sink.add(payload);
@@ -861,7 +862,7 @@ class WsSvrManager {
     if (peerId != null && _peerConnections.sendTo(peerId, payload)) {
       return;
     }
-    _send(message.toJsonString());
+    _send(encodeWireMessage(message));
   }
 
   void _dispatchOutgoingMessage(MessageData message) {
@@ -923,7 +924,7 @@ class WsSvrManager {
         await _listen(frame.payload, sink: sink, allowFrame: false);
         break;
       case WhisperFrameType.fileOffer:
-        final message = MessageData.fromJson(
+        final message = decodeWireMessage(
           jsonDecode(utf8.decode(frame.payload)) as Map<String, dynamic>,
         );
         await _handleFileTransferV3Offer(message);
@@ -1047,7 +1048,7 @@ class WsSvrManager {
     try {
       str = utf8.decode(data);
       Map<String, dynamic> json = jsonDecode(str);
-      message = MessageData.fromJson(json);
+      message = decodeWireMessage(json);
     } catch (_) {
       // 需同时容忍 Error:type 以枚举序号上线,新版对端发来的越界序号
       // 会抛 RangeError(不是 Exception),此处降级为 UNKONWN 消息继续。
@@ -1528,7 +1529,7 @@ class WsSvrManager {
     var data = FileSignal(size, received, msgId);
     var message = _buildMessage(
         MessageEnum.FileSignal, jsonEncode(data), "", "", 0, false);
-    _send(message.toJsonString());
+    _send(encodeWireMessage(message));
   }
 
   Future<void> _handleFileMsg(MessageData message) async {
@@ -1546,7 +1547,7 @@ class WsSvrManager {
     }
     var msgTemp = message.toJson();
     msgTemp["path"] = path;
-    var newMessage = MessageData.fromJson(msgTemp);
+    var newMessage = decodeWireMessage(msgTemp);
     await LocalDatabase().insertMessage(newMessage);
     // logger.i("保存文件: $path");
     _dispatchToAll((event) => event.onMessage(newMessage));
@@ -1742,7 +1743,7 @@ class WsSvrManager {
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
     // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
-    _sendMessageData(MessageData.fromJson(json), peerId: data.sender);
+    _sendMessageData(decodeWireMessage(json), peerId: data.sender);
   }
 
   Future<void> _heartBeat({
@@ -1972,7 +1973,7 @@ class WsSvrManager {
 
     var message = _buildMessage(
         MessageEnum.Notification, jsonEncode(content), "", "", 0, false);
-    _send(message.toJsonString());
+    _send(encodeWireMessage(message));
   }
 
   Future<bool> sendFile(String path) async {
@@ -2148,7 +2149,7 @@ class WsSvrManager {
         transferId: message.uuid,
         offset: 0,
         sequence: 0,
-        payload: Uint8List.fromList(utf8.encode(message.toJsonString())),
+        payload: Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
       ),
     );
   }
@@ -2279,7 +2280,7 @@ class WsSvrManager {
     if (existingMessage == null) {
       final json = message.toJson();
       json['path'] = transfer.finalPath;
-      final newMessage = MessageData.fromJson(json);
+      final newMessage = decodeWireMessage(json);
       await db.insertMessage(newMessage);
       _dispatchToAll((event) => event.onMessage(newMessage));
     }
@@ -3081,7 +3082,7 @@ class WsSvrManager {
     if (existingMessage == null) {
       final json = message.toJson();
       json['path'] = transfer.finalPath;
-      final newMessage = MessageData.fromJson(json);
+      final newMessage = decodeWireMessage(json);
       await db.insertMessage(newMessage);
       _dispatchToAll((event) => event.onMessage(newMessage));
     }
