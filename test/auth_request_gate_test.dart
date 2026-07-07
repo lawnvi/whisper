@@ -27,5 +27,16 @@ void main() {
 
       expect(gate.tryClaimOutgoing('peer-a'), isTrue);
     });
+
+    test('hasOutgoing reflects claim lifecycle', () {
+      final gate = AuthRequestGate();
+      expect(gate.hasOutgoing('peer:abc'), isFalse);
+      expect(gate.tryClaimOutgoing('peer:abc'), isTrue);
+      expect(gate.hasOutgoing('peer:abc'), isTrue);
+      expect(gate.hasOutgoing(' peer:abc '), isTrue); // trim 一致
+      gate.releaseOutgoing('peer:abc');
+      expect(gate.hasOutgoing('peer:abc'), isFalse);
+      expect(gate.hasOutgoing(''), isFalse);
+    });
   });
 }

@@ -34,6 +34,14 @@ class AuthRequestGate {
     _outgoingRequestKeys.remove(key);
   }
 
+  bool hasOutgoing(String requestKey) {
+    final key = requestKey.trim();
+    if (key.isEmpty) {
+      return false;
+    }
+    return _outgoingRequestKeys.contains(key);
+  }
+
   void clear() {
     _incomingPeerIds.clear();
     _outgoingRequestKeys.clear();
