@@ -20,6 +20,7 @@ void main() {
     expect(notifier, contains("acceptActionId = 'whisper_connect_accept'"));
     expect(notifier, contains("rejectActionId = 'whisper_connect_reject'"));
     expect(notifier, contains('AppLifecycleState.resumed'));
+    expect(notifier, contains('onlyAlertOnce: true'));
 
     // 前台/后台响应回调都接上了
     expect(helper, contains('onDidReceiveNotificationResponse'));
@@ -31,8 +32,8 @@ void main() {
     expect(manager, contains('maybeShowForAuthRequest'));
     expect(
       manager,
-      matches(
-          RegExp(r'_releaseIncomingAuthForSink[\s\S]{0,400}dismissForPeer')),
+      matches(RegExp(
+          r'_releaseIncomingAuthForSink[\s\S]{0,400}dismissForPeer\([^;]+graceMillis:\s*3000')),
     );
 
     // manifest 补了 action receiver

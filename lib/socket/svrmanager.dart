@@ -467,7 +467,10 @@ class WsSvrManager {
     final peerId = _incomingAuthPeerIdsBySink.remove(sink);
     if (peerId != null && peerId.isNotEmpty) {
       _authRequestGate.releaseIncoming(peerId);
-      unawaited(ConnectionRequestNotifier().dismissForPeer(peerId));
+      unawaited(ConnectionRequestNotifier().dismissForPeer(
+        peerId,
+        graceMillis: 3000,
+      ));
     }
   }
 

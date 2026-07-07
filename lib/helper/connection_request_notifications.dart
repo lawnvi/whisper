@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:whisper/helper/connection_request_notification_dismissal.dart';
 import 'package:whisper/helper/connection_request_registry.dart';
 import 'package:whisper/helper/notification_l10n.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -48,6 +50,8 @@ class ConnectionRequestNotifier {
   static const String channelId = 'whisper.connect_request';
 
   final ConnectionRequestRegistry registry = ConnectionRequestRegistry();
+  final ConnectionRequestNotificationDismissal _dismissal =
+      ConnectionRequestNotificationDismissal();
   FlutterLocalNotificationsPlugin? _plugin;
   ReceivePort? _receivePort;
 
@@ -90,6 +94,7 @@ class ConnectionRequestNotifier {
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
       return;
     }
+    _dismissal.cancelPending(peerId);
     final requestId = registry.register(peerId, callback);
     final l10n = _l10n;
     final details = NotificationDetails(
@@ -102,6 +107,7 @@ class ConnectionRequestNotifier {
         category: AndroidNotificationCategory.call,
         autoCancel: false,
         ongoing: true,
+        onlyAlertOnce: true,
         actions: <AndroidNotificationAction>[
           AndroidNotificationAction(
             acceptActionId,
@@ -138,7 +144,22 @@ class ConnectionRequestNotifier {
     _resolve(requestId, response.actionId == acceptActionId);
   }
 
-  Future<void> dismissForPeer(String peerId) async {
+  Future<void> dismissForPeer(
+    String peerId, {
+    int graceMillis = 0,
+  }) async {
+    if (graceMillis > 0) {
+      _dismissal.schedule(
+        peerId,
+        graceMillis: graceMillis,
+        onDismiss: () {
+          registry.removeForPeer(peerId);
+          unawaited(_plugin?.cancel(notificationIdForPeer(peerId)));
+        },
+      );
+      return;
+    }
+    _dismissal.cancelPending(peerId);
     registry.removeForPeer(peerId);
     await _plugin?.cancel(notificationIdForPeer(peerId));
   }
@@ -156,7 +177,9 @@ class ConnectionRequestNotifier {
       }
       return;
     }
-    _plugin?.cancel(notificationIdForPeer(_peerIdOfRequest(requestId)));
+    final peerId = _peerIdOfRequest(requestId);
+    _dismissal.cancelPending(peerId);
+    _plugin?.cancel(notificationIdForPeer(peerId));
   }
 
   static Future<void> showExpired(
