@@ -754,4 +754,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String remoteInputWorkspaceStatusFailed(String error) {
     return 'Error del espacio de teclado y mouse: $error';
   }
+
+  @override
+  String get audioPlaybackNotificationSubtitle =>
+      'Reproduciendo audio del sistema';
+
+  @override
+  String get mediaActionPause => 'Pausar';
+
+  @override
+  String get mediaActionPlay => 'Reproducir';
+
+  @override
+  String get mediaActionDisconnect => 'Desconectar';
 }

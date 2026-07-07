@@ -79,7 +79,9 @@ class AudioShareCoordinator extends ChangeNotifier {
         _playbackGainProvider =
             playbackGainProvider ?? LocalSetting().audioSharePlaybackGain;
 
-  static final AudioShareCoordinator shared = AudioShareCoordinator();
+  static final AudioShareCoordinator shared = AudioShareCoordinator(
+    platform: AudioPlatform.shared,
+  );
 
   static const AudioStreamFormat defaultFormat = AudioStreamFormat(
     codec: AudioCodecKind.opus,

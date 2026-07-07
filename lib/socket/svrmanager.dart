@@ -185,6 +185,11 @@ class WsSvrManager {
         profile?.capabilities.remoteInputSinkV1 == true;
   }
 
+  PeerProfile? remoteProfileFor(String peerId) {
+    return _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+  }
+
   bool supportsAudioGroupSourceFor(String peerId) {
     final profile = _remoteProfilesByPeerId[peerId] ??
         (peerId == receiver ? _remoteProfile : null);

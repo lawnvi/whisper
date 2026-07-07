@@ -710,4 +710,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String remoteInputWorkspaceStatusFailed(String error) {
     return '键鼠工作区失败：$error';
   }
+
+  @override
+  String get audioPlaybackNotificationSubtitle => '正在播放系统音频';
+
+  @override
+  String get mediaActionPause => '暂停';
+
+  @override
+  String get mediaActionPlay => '播放';
+
+  @override
+  String get mediaActionDisconnect => '断开';
 }

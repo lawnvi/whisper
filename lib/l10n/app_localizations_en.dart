@@ -749,4 +749,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String remoteInputWorkspaceStatusFailed(String error) {
     return 'Keyboard and mouse workspace failed: $error';
   }
+
+  @override
+  String get audioPlaybackNotificationSubtitle => 'Playing system audio';
+
+  @override
+  String get mediaActionPause => 'Pause';
+
+  @override
+  String get mediaActionPlay => 'Play';
+
+  @override
+  String get mediaActionDisconnect => 'Disconnect';
 }

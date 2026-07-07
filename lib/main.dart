@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:whisper/audio/audio_group_coordinator.dart';
+import 'package:whisper/audio/audio_media_session.dart';
+import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/local.dart';
@@ -49,6 +52,10 @@ void main() async {
   await notificationHelper.initialize();
   await ConnectionRequestNotifier().initialize(notificationHelper.plugin);
   TransferNotificationBridge().attach();
+  AudioMediaSessionBridge().attach(
+    coordinator: AudioGroupCoordinator.shared,
+    platform: AudioPlatform.shared,
+  );
   runApp(MyApp());
 }
 

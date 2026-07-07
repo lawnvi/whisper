@@ -1366,6 +1366,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'键鼠工作区失败：{error}'**
   String remoteInputWorkspaceStatusFailed(String error);
+
+  /// No description provided for @audioPlaybackNotificationSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在播放系统音频'**
+  String get audioPlaybackNotificationSubtitle;
+
+  /// No description provided for @mediaActionPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get mediaActionPause;
+
+  /// No description provided for @mediaActionPlay.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放'**
+  String get mediaActionPlay;
+
+  /// No description provided for @mediaActionDisconnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'断开'**
+  String get mediaActionDisconnect;
 }
 
 class _AppLocalizationsDelegate

@@ -49,7 +49,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
         _streamIdFactory = streamIdFactory ?? const Uuid().v4,
         _sessionIdFactory = sessionIdFactory ?? const Uuid().v4;
 
-  static final AudioGroupCoordinator shared = AudioGroupCoordinator();
+  static final AudioGroupCoordinator shared = AudioGroupCoordinator(
+    platform: AudioPlatform.shared,
+  );
   static const int _latencyReportIntervalMicros = 1000000;
   static const int _defaultTargetLatencyMs = 55;
   static const int _minTargetLatencyMs = 55;

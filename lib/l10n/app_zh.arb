@@ -411,5 +411,9 @@
         "type": "String"
       }
     }
-  }
+  },
+  "audioPlaybackNotificationSubtitle": "正在播放系统音频",
+  "mediaActionPause": "暂停",
+  "mediaActionPlay": "播放",
+  "mediaActionDisconnect": "断开"
 }

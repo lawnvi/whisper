@@ -314,5 +314,9 @@
   "remoteInputWorkspaceStatusOffering": "Waiting for targets to accept",
   "remoteInputWorkspaceStatusArmed": "Move to a screen edge to control a target",
   "remoteInputWorkspaceStatusActive": "Controlling {peer}",
-  "remoteInputWorkspaceStatusFailed": "Keyboard and mouse workspace failed: {error}"
+  "remoteInputWorkspaceStatusFailed": "Keyboard and mouse workspace failed: {error}",
+  "audioPlaybackNotificationSubtitle": "Playing system audio",
+  "mediaActionPause": "Pause",
+  "mediaActionPlay": "Play",
+  "mediaActionDisconnect": "Disconnect"
 }

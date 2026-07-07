@@ -12,12 +12,14 @@ class AudioPlatform {
   }
 
   static const String channelName = 'com.vireen.whisper/audio_share';
+  static final AudioPlatform shared = AudioPlatform();
 
   final MethodChannel _channel;
   final StreamController<PlatformPcmFrame> _captureFrames =
       StreamController<PlatformPcmFrame>.broadcast();
   final StreamController<PlatformAudioError> _captureErrors =
       StreamController<PlatformAudioError>.broadcast();
+  void Function(String action)? onMediaControl;
 
   Stream<PlatformPcmFrame> get captureFrames => _captureFrames.stream;
   Stream<PlatformAudioError> get captureErrors => _captureErrors.stream;
@@ -73,7 +75,33 @@ class AudioPlatform {
     });
   }
 
+  Future<void> updateMediaState({
+    required String state,
+    required String title,
+    required String subtitle,
+    required bool canResume,
+    required String pauseLabel,
+    required String playLabel,
+    required String disconnectLabel,
+  }) {
+    return _channel.invokeMethod<void>('updateMediaState', <String, dynamic>{
+      'state': state,
+      'title': title,
+      'subtitle': subtitle,
+      'canResume': canResume,
+      'pauseLabel': pauseLabel,
+      'playLabel': playLabel,
+      'disconnectLabel': disconnectLabel,
+    });
+  }
+
   Future<dynamic> handleNativeMethodCall(MethodCall call) async {
+    if (call.method == 'mediaControl') {
+      final arguments = call.arguments as Map?;
+      onMediaControl?.call(arguments?['action'] as String? ?? '');
+      return null;
+    }
+
     if (call.method == 'onCapturePcm') {
       final arguments = Map<Object?, Object?>.from(call.arguments as Map);
       final pcmBytes = arguments['pcm'];
