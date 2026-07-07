@@ -411,11 +411,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     double? progressOverride,
   }) {
     if (transfer == null) {
-      if (_isConnectedSession &&
-          !socketManager.supportsResumableTransfer &&
-          !message.acked) {
-        return l10n.fileTransferLegacyInProgress;
-      }
       return formatSize(message.size);
     }
     final progress = progressOverride ?? transfer.progress;
@@ -742,23 +737,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
               ],
             ),
           ),
-        ),
-      );
-    }
-    if (_isConnectedSession && !socketManager.supportsResumableTransfer) {
-      actions.add(
-        IconButton(
-          padding: actionPadding,
-          constraints: actionConstraints,
-          visualDensity: actionVisualDensity,
-          tooltip: l10n.peerDoesNotSupportResumableTransfer,
-          icon: Icon(
-            Icons.history_toggle_off_rounded,
-            color: palette.textMuted,
-          ),
-          onPressed: () {
-            showAppToast(l10n.connectedPeerDoesNotSupportResumableTransfer);
-          },
         ),
       );
     }
@@ -2060,32 +2038,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         messageData.receiver == device.uid) {
       _insertItem(0, messageData);
       unawaited(_loadTransferSnapshotsForMessages(<MessageData>[messageData]));
-    }
-  }
-
-  @override
-  void onProgress(int size, length) {
-    if (!socketManager.isConnectedTo(device.uid)) {
-      return;
-    }
-    // TODO: implement onProgress
-    int now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastUpdateTime >= _transferUiSpeedRefreshMs) {
-      if (_lastUpdateTime > 0) {
-        String speed =
-            formatSize(1000 * (length - _sentSize) ~/ (now - _lastUpdateTime));
-        setState(() {
-          _speed = "$speed/s ";
-        });
-      }
-      _lastUpdateTime = now;
-      _sentSize = length;
-    }
-    _updatePercent(length / size);
-
-    if (length == size) {
-      _lastUpdateTime = 0;
-      _sentSize = 0;
     }
   }
 

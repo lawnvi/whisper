@@ -88,9 +88,6 @@ class TransferNotificationBridge implements ISocketEvent {
   void onMessage(MessageData messageData) {}
 
   @override
-  void onProgress(int size, length) {}
-
-  @override
   void onClose() {}
 
   @override

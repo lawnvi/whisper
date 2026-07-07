@@ -30,7 +30,6 @@ void main() {
         autoConnectEnabled: true,
         protocolVersion: 3,
         capabilities: const PeerCapabilities(
-          fileResumeV1: true,
           systemAudioSourceV1: true,
           speakerSinkV1: true,
           remoteInputSourceV1: true,
@@ -40,7 +39,6 @@ void main() {
 
       final decoded = PeerProfile.fromJson(profile.toJson());
 
-      expect(decoded.capabilities.fileResumeV1, isTrue);
       expect(decoded.capabilities.systemAudioSourceV1, isTrue);
       expect(decoded.capabilities.speakerSinkV1, isTrue);
       expect(decoded.capabilities.remoteInputSourceV1, isTrue);
@@ -67,10 +65,9 @@ void main() {
         'autoApproveNewDevices': false,
         'autoConnectEnabled': true,
         'protocolVersion': 2,
-        'capabilities': <String, dynamic>{'fileResumeV1': true},
+        'capabilities': <String, dynamic>{},
       });
 
-      expect(profile.capabilities.fileResumeV1, isTrue);
       expect(profile.capabilities.systemAudioSourceV1, isFalse);
       expect(profile.capabilities.speakerSinkV1, isFalse);
       expect(profile.capabilities.remoteInputSourceV1, isFalse);

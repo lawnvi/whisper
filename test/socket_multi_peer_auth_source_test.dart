@@ -6,8 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 1. 鉴权前的 socket 不得抢占全局默认发送目标 `_sink`;
 /// 2. 拒绝连接请求只关闭该条 socket,不得触发全局 close 断开所有 peer;
 /// 3. 入站待确认的连接请求必须有超时自动拒绝,不能无限半开;
-/// 4. 消息解码需容忍 Error(枚举序号越界),降级为 UNKONWN 而非丢弃整条消息;
-/// 5. peer 断开时必须清理按 peer 索引的分帧接收缓存,防重连误解析。
+/// 4. 消息解码需容忍 Error(枚举序号越界),降级为 UNKONWN 而非丢弃整条消息。
 void main() {
   final source =
       File('lib/socket/svrmanager.dart').readAsStringSync();
@@ -70,26 +69,6 @@ void main() {
         reason: '枚举序号越界抛 RangeError(Error),on Exception 兜不住,'
             '应 catch 全部并降级为 UNKONWN 消息');
     expect(decode.contains('catch'), isTrue);
-  });
-
-  test('peer disconnect clears per-peer pending chunk buffers', () {
-    final disconnected = section(
-      'Future<void> _handlePeerDisconnected(String peerId) async {',
-      'Future<void> _markPeerTransfersWaitingReconnect(',
-    );
-    expect(
-      disconnected.contains('_pendingIncomingChunkHeadersByPeer.remove(peerId)'),
-      isTrue,
-      reason: '断开时应清理该 peer 的待续分帧头',
-    );
-    expect(
-      disconnected.contains('_pendingIncomingRawOffsetsByPeer.remove(peerId)'),
-      isTrue,
-    );
-    expect(
-      disconnected.contains('_pendingIncomingRawRemainingByPeer.remove(peerId)'),
-      isTrue,
-    );
   });
 
   test('simultaneous dials are resolved deterministically by uid', () {

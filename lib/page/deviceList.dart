@@ -2384,11 +2384,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   @override
-  void onProgress(int size, length) {
-    // TODO: implement onProgress
-  }
-
-  @override
   void onTransferUpdated(TransferSnapshot snapshot) {
     // Device list only needs to refresh high-level presence state for now.
   }

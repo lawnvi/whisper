@@ -206,7 +206,6 @@
   "androidBackgroundKeepAliveActiveDesc": "有活动会话时保持前台服务运行",
   "androidBatteryOptimization": "电池优化白名单",
   "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备",
-  "fileTransferLegacyInProgress": "旧协议传输中",
   "fileTransferQueued": "排队中",
   "fileTransferPreparingResume": "准备续传 {progress}%",
   "@fileTransferPreparingResume": {
@@ -229,8 +228,6 @@
   "fileTransferVerifying": "校验中",
   "fileTransferFailedRetryable": "失败，可重试",
   "fileTransferCanceled": "已取消",
-  "peerDoesNotSupportResumableTransfer": "对端不支持断点续传",
-  "connectedPeerDoesNotSupportResumableTransfer": "当前连接设备不支持断点续传",
   "audioShareCaptureConnecting": "采集端：正在连接远端扬声器",
   "audioSharePlaybackPreparing": "播放端：正在准备播放共享声音",
   "audioShareCaptureActiveStop": "采集端：正在共享本机声音，点击停止",

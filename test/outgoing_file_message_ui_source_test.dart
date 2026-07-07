@@ -21,7 +21,7 @@ void main() {
     final sendAndroidUri = methodBody(
       source,
       'Future<bool> sendAndroidContentUriTo(',
-      'void _sendTransferControl(',
+      'void _sendFileTransferV3OfferTo(',
     );
 
     for (final body in [sendFileTo, sendAndroidUri]) {

@@ -23,17 +23,6 @@ void main() {
         source, contains('_sendFileTransferV3OfferTo(item.peerUid, message)'));
   });
 
-  test('resumable transfer chunks are written to the transfer peer socket', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final sendNextTransferChunk = RegExp(
-      r'Future<void> _sendNextTransferChunk[\s\S]*?Future<void> _handleTransferChunk',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(sendNextTransferChunk, contains('_sendBytesToPeer('));
-    expect(sendNextTransferChunk, contains('transfer.peerUid'));
-    expect(sendNextTransferChunk, isNot(contains('_sink?.add(')));
-  });
-
   test('resumable transfer active state is tracked per peer', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 
@@ -55,17 +44,5 @@ void main() {
       contains('fetchRecoverableFileTransfersForPeer(\n      peerId'),
     );
     expect(source, contains('FileTransferState.waitingReconnect'));
-  });
-
-  test('legacy raw resumable payload state is scoped by peer stream', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final listen = RegExp(
-      r'Future<void> _listen[\s\S]*?MessageData _buildMessage',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(source, contains('_pendingIncomingChunkHeadersByPeer'));
-    expect(source, contains('_pendingIncomingRawRemainingByPeer'));
-    expect(listen, contains('final streamPeerKey = _streamPeerKey(sink)'));
-    expect(listen, contains('_supportsResumableTransferFor(streamPeerId)'));
   });
 }

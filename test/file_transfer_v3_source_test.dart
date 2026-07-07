@@ -45,10 +45,7 @@ void main() {
 
     expect(listen, contains('WhisperFrameV3.looksLikeFrame(data)'));
     expect(listen, contains('_handleWhisperFrameV3('));
-    expect(
-      listen.indexOf('WhisperFrameV3.looksLikeFrame(data)'),
-      lessThan(listen.indexOf('TransferChunkFrame.looksLikeFrame(data)')),
-    );
+    expect(listen, isNot(contains('TransferChunkFrame.looksLikeFrame(data)')));
   });
 
   test('sendFileTo requires v3 and sends a file offer frame', () {
@@ -143,7 +140,8 @@ void main() {
     );
   });
 
-  test('queued incoming v3 transfers resume from transfer metadata', () {
+  test('queued incoming transfers always resume via v3 (WSP2 stack removed)',
+      () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final startNext = methodBody(
       source,
@@ -151,7 +149,8 @@ void main() {
       'Future<void> _markRecoverableTransfersWaitingReconnect',
     );
 
-    expect(startNext, contains('_fileTransferUsesV3(item)'));
+    expect(startNext, contains('_sendFileTransferV3Ready(item.transferId)'));
+    expect(startNext, isNot(contains('_fileTransferUsesV3')));
     expect(
       startNext,
       isNot(contains('_supportsFileTransferV3For(item.peerUid)')),

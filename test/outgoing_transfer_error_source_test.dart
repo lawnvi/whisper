@@ -15,13 +15,8 @@ void main() {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final handleReady = methodBody(
       source,
-      'Future<void> _handleReady(TransferControl control)',
-      'Future<void> _handleRestart(TransferControl control)',
-    );
-    final sendSafely = methodBody(
-      source,
-      'Future<void> _sendNextTransferChunkSafely(',
-      'Future<void> _handleOutgoingTransferError(',
+      'Future<void> _handleFileTransferV3Ready(',
+      'Future<void> _failOutgoingFileTransferV3(',
     );
     final failHelper = methodBody(
       source,
@@ -30,12 +25,8 @@ void main() {
     );
 
     expect(handleReady, contains('_handleOutgoingTransferError'));
-    expect(handleReady, contains('_sendNextTransferChunkSafely'));
-    expect(sendSafely, contains('_sendNextTransferChunk('));
-    expect(sendSafely, contains('_handleOutgoingTransferError'));
     expect(failHelper, contains('FileTransferState.failed'));
     expect(failHelper, contains('_transferRuntime.complete'));
-    expect(failHelper, contains('TransferAction.error'));
     expect(failHelper, isNot(contains('onError(')));
   });
 }

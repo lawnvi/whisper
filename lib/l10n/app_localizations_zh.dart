@@ -355,9 +355,6 @@ class AppLocalizationsZh extends AppLocalizations {
       '建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备';
 
   @override
-  String get fileTransferLegacyInProgress => '旧协议传输中';
-
-  @override
   String get fileTransferQueued => '排队中';
 
   @override
@@ -384,12 +381,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fileTransferCanceled => '已取消';
-
-  @override
-  String get peerDoesNotSupportResumableTransfer => '对端不支持断点续传';
-
-  @override
-  String get connectedPeerDoesNotSupportResumableTransfer => '当前连接设备不支持断点续传';
 
   @override
   String get audioShareCaptureConnecting => '采集端：正在连接远端扬声器';

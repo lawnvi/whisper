@@ -721,12 +721,6 @@ abstract class AppLocalizations {
   /// **'建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备'**
   String get androidBatteryOptimizationDesc;
 
-  /// No description provided for @fileTransferLegacyInProgress.
-  ///
-  /// In zh, this message translates to:
-  /// **'旧协议传输中'**
-  String get fileTransferLegacyInProgress;
-
   /// No description provided for @fileTransferQueued.
   ///
   /// In zh, this message translates to:
@@ -774,18 +768,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已取消'**
   String get fileTransferCanceled;
-
-  /// No description provided for @peerDoesNotSupportResumableTransfer.
-  ///
-  /// In zh, this message translates to:
-  /// **'对端不支持断点续传'**
-  String get peerDoesNotSupportResumableTransfer;
-
-  /// No description provided for @connectedPeerDoesNotSupportResumableTransfer.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前连接设备不支持断点续传'**
-  String get connectedPeerDoesNotSupportResumableTransfer;
 
   /// No description provided for @audioShareCaptureConnecting.
   ///

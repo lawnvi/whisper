@@ -32,9 +32,6 @@ class _RecordingSocketEvent implements ISocketEvent {
   }
 
   @override
-  void onProgress(int size, length) {}
-
-  @override
   void onTransferUpdated(TransferSnapshot snapshot) {
     transfers.add(snapshot);
   }

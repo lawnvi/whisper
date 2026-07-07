@@ -7,7 +7,6 @@ void main() {
     final source = File('lib/page/conversation.dart').readAsStringSync();
 
     for (final text in [
-      '旧协议传输中',
       '排队中',
       '准备续传',
       '协商中',
@@ -16,8 +15,6 @@ void main() {
       '校验中',
       '失败，可重试',
       '已取消',
-      '对端不支持断点续传',
-      '当前连接设备不支持断点续传',
       '采集端：正在连接远端扬声器',
       '播放端：正在准备播放共享声音',
       '采集端：正在共享本机声音，点击停止',
@@ -50,8 +47,6 @@ void main() {
     expect(source, isNot(contains("tooltip: '重试'")));
     expect(source, isNot(contains("tooltip: '取消'")));
 
-    expect(source, contains('l10n.fileTransferLegacyInProgress'));
-    expect(source, contains('l10n.peerDoesNotSupportResumableTransfer'));
     expect(source, contains('l10n.audioShareStart'));
     expect(source, contains('l10n.audioShareFailed('));
     expect(source, contains('l10n.remoteInputStart'));

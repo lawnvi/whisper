@@ -365,9 +365,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Recommended: allow background activity and exclude Whisper from battery optimization on Android';
 
   @override
-  String get fileTransferLegacyInProgress => 'Legacy transfer in progress';
-
-  @override
   String get fileTransferQueued => 'Queued';
 
   @override
@@ -394,14 +391,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fileTransferCanceled => 'Canceled';
-
-  @override
-  String get peerDoesNotSupportResumableTransfer =>
-      'Peer does not support resumable transfer';
-
-  @override
-  String get connectedPeerDoesNotSupportResumableTransfer =>
-      'Connected device does not support resumable transfer';
 
   @override
   String get audioShareCaptureConnecting =>
