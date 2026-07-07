@@ -92,3 +92,13 @@ double doubleJson(Object? raw, [double fallback = 0]);
 
 - 黄金字节测试是 wire 等价的唯一硬门,必须**先采集后重构**(Task 顺序保证)。
 - `done` 流上收后 remote_input 的断线通知路径改走共享实现,`remote_input_platform_test` 若有行为断言需逐一核对。
+
+## 终审修订(2026-07-07,合并前)
+
+实现即事实,以下三处本文设计在落地时被裁决偏离,已回写以免误导后人:
+
+- **共享 `done`/`notifyDone` 未落地(终审删除)**:`PacketByteTransport` 不再提供 `done` 广播流与 `notifyDone`。原设计"done 广播流(remote_input 用)"被证伪——`RemoteInputWebSocketPacketTransport` 需要的是**对端断开**(WS stream onDone/onError)通知,而共享设计的 `close()→notifyDone` 会在**本地 close** 时误发,语义相反,故 remote_input 始终保留其自建 done(`_doneController`,建在 `channel.stream` 上)。共享 done 零生产消费者,终审按 YAGNI 删除,以免后人误接入引入"本地 close 触发误拆连"缺陷。
+- **`connectPacketWebSocket` 收窄为 `(Uri uri)`**:去掉 `log`/`onPacketSent`/`onPacketDropped` 三个零消费可选参。audio 侧的诊断/连接失败处理仍由其自有 `AudioWebSocketPacketTransport.connect` 的 try/catch 承担;共享 connect 只做 `IOWebSocketChannel.connect + await ready`,失败原样上抛(与三份现状传播一致)。
+- **`looksLikeFramedPacket` 未实现**:无现存调用方,YAGNI 略去(计划已记)。
+
+以上三处不影响 wire 字节等价与既有行为;黄金锁 4/4、全量 test、analyze、apk 三门在终审(含本次删除)后全绿。

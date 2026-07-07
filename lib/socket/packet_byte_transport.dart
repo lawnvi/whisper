@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Shared byte-transport core for the three packet-transport subsystems
-/// (audio / audio group / remote input): close is idempotent, `send` after
-/// close silently drops (with an optional hook), and `done` broadcasts a
-/// one-time notification (no subscribers => zero overhead).
+/// (audio / audio group / remote input): close is idempotent and `send` after
+/// close silently drops (with an optional hook).
 ///
 /// Extracted so `AudioPacketByteTransport` / `AudioGroupPacketByteTransport` /
 /// `RemoteInputPacketByteTransport` delegate the closed-guard + send/close
@@ -25,12 +22,9 @@ class PacketByteTransport {
   final Future<void> Function() _closeSink;
   final void Function()? onPacketSent;
   final void Function()? onPacketDropped;
-  final StreamController<void> _done = StreamController<void>.broadcast();
   bool _closed = false;
-  bool _doneNotified = false;
 
   bool get isClosed => _closed;
-  Stream<void> get done => _done.stream;
 
   void send(Object bytes) {
     if (_closed) {
@@ -41,25 +35,12 @@ class PacketByteTransport {
     onPacketSent?.call();
   }
 
-  /// WS onDone/onError 或 close() 时触发,一次性。
-  void notifyDone() {
-    if (_doneNotified) {
-      return;
-    }
-    _doneNotified = true;
-    if (!_done.isClosed) {
-      _done.add(null);
-    }
-    unawaited(_done.close());
-  }
-
   Future<void> close() async {
     if (_closed) {
       return;
     }
     _closed = true;
     await _closeSink();
-    notifyDone();
   }
 }
 
@@ -83,29 +64,14 @@ Uri buildPeerPacketUri({
 
 /// Connects a `WebSocketChannel` to [uri] and wraps it in a
 /// [PacketByteTransport]. Channel establishment (`IOWebSocketChannel.connect`
-/// + `await channel.ready`) and the try/catch + rethrow shape are taken as-is
-/// from the prior `AudioWebSocketPacketTransport.connect` implementation;
-/// subsystem-specific diagnostics are generalized to the optional [log]
-/// callback so this helper stays subsystem-agnostic.
-Future<PacketByteTransport> connectPacketWebSocket(
-  Uri uri, {
-  void Function(String message)? log,
-  void Function()? onPacketSent,
-  void Function()? onPacketDropped,
-}) async {
-  log?.call('connecting uri=$uri');
-  try {
-    final channel = IOWebSocketChannel.connect(uri);
-    await channel.ready;
-    log?.call('connected uri=$uri');
-    return PacketByteTransport(
-      sendBytes: channel.sink.add,
-      closeSink: () => channel.sink.close(),
-      onPacketSent: onPacketSent,
-      onPacketDropped: onPacketDropped,
-    );
-  } catch (error) {
-    log?.call('connect failed uri=$uri error=$error');
-    rethrow;
-  }
+/// + `await channel.ready`) is taken as-is from the prior
+/// `AudioWebSocketPacketTransport.connect` implementation; a failed
+/// `channel.ready` propagates to the caller, which owns any diagnostics/retry.
+Future<PacketByteTransport> connectPacketWebSocket(Uri uri) async {
+  final channel = IOWebSocketChannel.connect(uri);
+  await channel.ready;
+  return PacketByteTransport(
+    sendBytes: channel.sink.add,
+    closeSink: () => channel.sink.close(),
+  );
 }

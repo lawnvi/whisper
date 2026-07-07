@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
@@ -23,19 +21,6 @@ void main() {
     expect(dropped, 1);
     expect(closes, 1);
     expect(transport.isClosed, isTrue);
-  });
-
-  test('done fires exactly once across notifyDone and close', () async {
-    final transport = PacketByteTransport(
-      sendBytes: (_) {},
-      closeSink: () async {},
-    );
-    var doneCount = 0;
-    transport.done.listen((_) => doneCount++);
-    transport.notifyDone();
-    await transport.close();
-    await Future<void>.delayed(Duration.zero);
-    expect(doneCount, 1);
   });
 
   test('buildPeerPacketUri composes ws uri', () {
