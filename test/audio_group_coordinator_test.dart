@@ -837,6 +837,82 @@ void main() {
       );
     });
 
+    test('disconnectPlaybackAsSink sends groupStop and clears playback state',
+        () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.right,
+        targetLatencyMs: 77,
+      );
+      sent.clear();
+
+      await coordinator.disconnectPlaybackAsSink();
+
+      expect(sent, hasLength(1));
+      expect(sent.single.peerId, 'mac');
+      expect(sent.single.control.action, AudioGroupControlAction.groupStop);
+      expect(sent.single.control.groupId, 'group-1');
+      expect(sent.single.control.streamId, 'stream-1');
+      expect(sent.single.control.sessionId, 'session-phone');
+      expect(sent.single.control.sourcePeerId, 'mac');
+      expect(sent.single.control.sinkPeerId, 'phone');
+      expect(sent.single.control.channelRole, AudioChannelRole.right);
+      expect(sent.single.control.targetLatencyMs, 77);
+      expect(coordinator.isPlaybackActive, isFalse);
+      expect(coordinator.canRejoinAsSink, isFalse);
+      expect(coordinator.session, isNull);
+    });
+
+    test('disconnectPlaybackAsSink notifies source while paused', () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.left,
+        targetLatencyMs: 88,
+      );
+      await coordinator.pausePlaybackAsSink();
+      sent.clear();
+
+      await coordinator.disconnectPlaybackAsSink();
+
+      expect(sent, hasLength(1));
+      expect(sent.single.peerId, 'mac');
+      expect(sent.single.control.action, AudioGroupControlAction.groupStop);
+      expect(sent.single.control.groupId, 'group-1');
+      expect(sent.single.control.streamId, 'stream-1');
+      expect(sent.single.control.sessionId, 'session-phone');
+      expect(sent.single.control.sourcePeerId, 'mac');
+      expect(sent.single.control.sinkPeerId, 'phone');
+      expect(sent.single.control.channelRole, AudioChannelRole.left);
+      expect(sent.single.control.targetLatencyMs, 88);
+      expect(coordinator.isPlaybackActive, isFalse);
+      expect(coordinator.canRejoinAsSink, isFalse);
+      expect(coordinator.session, isNull);
+    });
+
     test('source re-offers a sink on sinkJoinRequest', () async {
       final sent = <_SentGroupControl>[];
       var sessionIndex = 0;

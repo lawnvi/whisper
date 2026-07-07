@@ -490,6 +490,52 @@ class AudioGroupCoordinator extends ChangeNotifier {
     return true;
   }
 
+  Future<void> disconnectPlaybackAsSink() async {
+    final context = _sinkRejoinContext;
+    final sendControl = _playbackSendControl ?? context?.sendControl;
+    final groupId =
+        _playbackGroupId.isNotEmpty ? _playbackGroupId : context?.groupId ?? '';
+    final streamId = _playbackStreamId.isNotEmpty
+        ? _playbackStreamId
+        : context?.streamId ?? '';
+    final sessionId = _playbackSessionId.isNotEmpty
+        ? _playbackSessionId
+        : context?.sessionId ?? '';
+    final sourcePeerId = _playbackSourcePeerId.isNotEmpty
+        ? _playbackSourcePeerId
+        : context?.sourcePeerId ?? '';
+    final localPeerId = _playbackLocalPeerId.isNotEmpty
+        ? _playbackLocalPeerId
+        : context?.localPeerId ?? '';
+    final channelRole = _playbackStreamId.isNotEmpty
+        ? _playbackChannelRole
+        : context?.channelRole ?? AudioChannelRole.stereo;
+    final targetLatencyMs = _playbackStreamId.isNotEmpty
+        ? _playbackTargetLatencyMs
+        : context?.targetLatencyMs ?? _defaultTargetLatencyMs;
+    if (sendControl != null &&
+        groupId.isNotEmpty &&
+        streamId.isNotEmpty &&
+        sessionId.isNotEmpty &&
+        sourcePeerId.isNotEmpty &&
+        localPeerId.isNotEmpty) {
+      sendControl(
+        sourcePeerId,
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: groupId,
+          streamId: streamId,
+          sessionId: sessionId,
+          sourcePeerId: sourcePeerId,
+          sinkPeerId: localPeerId,
+          channelRole: channelRole,
+          targetLatencyMs: targetLatencyMs,
+        ),
+      );
+    }
+    await stopLocal();
+  }
+
   Future<void> stopLocal() async {
     final captureSource = _captureSource;
     final playbackCodec = _playbackCodec;

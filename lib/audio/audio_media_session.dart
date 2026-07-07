@@ -72,7 +72,7 @@ class AudioMediaSessionBridge {
         });
         break;
       case 'disconnect':
-        coordinator.stopLocal();
+        coordinator.disconnectPlaybackAsSink();
         break;
     }
   }
