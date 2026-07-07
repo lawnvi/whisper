@@ -72,6 +72,7 @@ class TransferNotificationAggregator {
   int _displayedPercent = 0;
   int _lastBytes = 0;
   int _lastBytesMillis = 0;
+  bool _stalledNotified = false;
 
   TransferNotificationCommand? onSnapshot(TransferSnapshot snapshot) {
     if (isTerminalFileTransferState(snapshot.state)) {
@@ -82,13 +83,48 @@ class TransferNotificationAggregator {
       _active.remove(snapshot.transferId);
       _terminal[snapshot.transferId] = snapshot;
       if (_active.isNotEmpty) {
-        return _progressCommand(force: true);
+        return _stalledOrProgress(forceProgress: true);
       }
       return _finishGeneration();
     }
 
     _active[snapshot.transferId] = snapshot;
-    return _progressCommand(force: false);
+    if (_isResumingState(snapshot.state)) {
+      final wasStalled = _stalledNotified;
+      _stalledNotified = false;
+      return _progressCommand(force: wasStalled);
+    }
+    return _stalledOrProgress(forceProgress: false);
+  }
+
+  TransferNotificationCommand? _stalledOrProgress({
+    required bool forceProgress,
+  }) {
+    if (_isStalled()) {
+      if (_stalledNotified) {
+        return null;
+      }
+      _stalledNotified = true;
+      return TransferNotificationCommand(
+        kind: TransferNotificationKind.terminal,
+        title: strings.title(_active.length + _terminal.length),
+        text: strings.interrupted(),
+        success: false,
+      );
+    }
+    return _progressCommand(force: forceProgress);
+  }
+
+  bool _isResumingState(FileTransferState state) {
+    return state == FileTransferState.transferring ||
+        state == FileTransferState.negotiating;
+  }
+
+  bool _isStalled() {
+    return _active.isNotEmpty &&
+        _active.values.every((s) =>
+            s.state == FileTransferState.waitingReconnect ||
+            s.state == FileTransferState.paused);
   }
 
   TransferNotificationCommand? _progressCommand({required bool force}) {
@@ -182,5 +218,6 @@ class TransferNotificationAggregator {
     _lastBytes = 0;
     _lastBytesMillis = 0;
     _lastEmitMillis = -_throttleMillis;
+    _stalledNotified = false;
   }
 }

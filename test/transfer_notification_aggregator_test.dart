@@ -85,6 +85,63 @@ void main() {
     expect(cmd.text, 'interrupted');
   });
 
+  test('waiting reconnect yields one interrupted terminal without reset', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    agg.onSnapshot(snap('a', committed: 10));
+    now += 2000;
+
+    final interrupted =
+        agg.onSnapshot(snap('a', state: FileTransferState.waitingReconnect));
+
+    expect(interrupted, isNotNull);
+    expect(interrupted!.kind, TransferNotificationKind.terminal);
+    expect(interrupted.success, isFalse);
+    expect(interrupted.text, 'interrupted');
+
+    now += 2000;
+    expect(
+      agg.onSnapshot(snap('a', state: FileTransferState.waitingReconnect)),
+      isNull,
+    );
+  });
+
+  test('stalled transfer resumes with forced progress', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    agg.onSnapshot(snap('a', committed: 10));
+    now += 2000;
+    expect(
+      agg
+          .onSnapshot(snap('a', state: FileTransferState.waitingReconnect))!
+          .kind,
+      TransferNotificationKind.terminal,
+    );
+    now += 100;
+
+    final resumed = agg.onSnapshot(snap('a', committed: 20));
+
+    expect(resumed, isNotNull);
+    expect(resumed!.kind, TransferNotificationKind.progress);
+    expect(resumed.progress, 20);
+  });
+
+  test('all failed still yields original interrupted terminal and resets', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    agg.onSnapshot(snap('a', committed: 90));
+    final cmd = agg.onSnapshot(snap('a', state: FileTransferState.failed));
+    expect(cmd!.kind, TransferNotificationKind.terminal);
+    expect(cmd.success, isFalse);
+    expect(cmd.text, 'interrupted');
+
+    now += 2000;
+    expect(agg.onSnapshot(snap('b', committed: 10))!.progress, 10);
+  });
+
   test('formats speed from byte deltas', () {
     expect(formatBytesForNotification(0), '0 B');
     expect(formatBytesForNotification(1536), '1.5 KB');
