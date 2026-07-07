@@ -62,7 +62,7 @@ class TransferNotificationAggregator {
   }) : _nowMillis = nowMillis ?? _wallClock;
 
   static int _wallClock() => DateTime.now().millisecondsSinceEpoch;
-  static const int _throttleMillis = 1000;
+  static const int _throttleMillis = 300;
 
   final TransferNotificationStrings strings;
   final int Function() _nowMillis;

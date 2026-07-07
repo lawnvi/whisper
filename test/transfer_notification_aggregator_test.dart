@@ -46,14 +46,14 @@ void main() {
     expect(cmd.progress, 50); // 单调:不允许从 50 回退到 12
   });
 
-  test('throttles to one update per second but not terminal', () {
+  test('throttles to 300ms updates but not terminal', () {
     var now = 0;
     final agg = TransferNotificationAggregator(
         nowMillis: () => now, strings: strings());
     expect(agg.onSnapshot(snap('a', committed: 10)), isNotNull);
-    now += 300;
+    now += 100;
     expect(agg.onSnapshot(snap('a', committed: 20)), isNull); // 节流
-    now += 800;
+    now += 250;
     expect(agg.onSnapshot(snap('a', committed: 30)), isNotNull);
     now += 100;
     final done = agg.onSnapshot(
