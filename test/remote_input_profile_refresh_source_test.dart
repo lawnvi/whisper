@@ -15,7 +15,7 @@ void main() {
     expect(source, contains('_completeRemoteProfileRefreshWaiters()'));
 
     final heartbeatCase = RegExp(
-      r'case MessageEnum\.Heartbeat:[\s\S]*?case MessageEnum\.FileSignal:',
+      r'case MessageEnum\.Heartbeat:[\s\S]*?case MessageEnum\.File:',
     ).firstMatch(source)!.group(0)!;
     expect(
         heartbeatCase,

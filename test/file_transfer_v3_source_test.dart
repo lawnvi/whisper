@@ -40,7 +40,7 @@ void main() {
     final listen = methodBody(
       source,
       'Future<void> _listen(',
-      'Future<void> _freeIoSink',
+      'MessageData _buildMessage',
     );
 
     expect(listen, contains('WhisperFrameV3.looksLikeFrame(data)'));

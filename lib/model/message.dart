@@ -41,25 +41,6 @@ enum MessageEnum {
   AudioGroupControl,
 }
 
-class FileSignal {
-  String msgId = ""; // 消息id
-  int size = 0; // 文件大小
-  int received = 0; // 已接受大小
-
-  FileSignal(this.size, this.received, this.msgId);
-
-  FileSignal.fromJson(Map<String, dynamic> json)
-      : msgId = json['msg_id'] as String,
-        size = json['size'] as int,
-        received = json['received'] as int;
-
-  Map<String, dynamic> toJson() => {
-        'msg_id': msgId,
-        'size': size,
-        'received': received,
-      };
-}
-
 enum TransferAction {
   resumeProbe,
   ready,

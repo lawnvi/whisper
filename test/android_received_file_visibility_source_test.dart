@@ -23,10 +23,6 @@ void main() {
         deviceList, contains('notifyExistingDownloadsVisibleToAndroidPickers'));
     expect(
       manager,
-      contains('await notifyFileVisibleToAndroidPickers(finalPath);'),
-    );
-    expect(
-      manager,
       contains('await notifyFileVisibleToAndroidPickers(transfer.finalPath);'),
     );
   });

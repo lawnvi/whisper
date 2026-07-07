@@ -60,7 +60,7 @@ void main() {
   test('legacy raw resumable payload state is scoped by peer stream', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final listen = RegExp(
-      r'Future<void> _listen[\s\S]*?Future<void> _freeIoSink',
+      r'Future<void> _listen[\s\S]*?MessageData _buildMessage',
     ).firstMatch(source)!.group(0)!;
 
     expect(source, contains('_pendingIncomingChunkHeadersByPeer'));

@@ -108,20 +108,12 @@ class WsSvrManager {
       <WebSocketSink, Timer>{};
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
-  IOSink? _ioSink;
-  File? _receivingFile;
-  RandomAccessFile? _sendingFile;
-  // RandomAccessFile? _savingFile;
   final int _bufferSize = 16 * 1024 * 1024;
   final int oneMb = 1024 * 1024;
-  int _currentSize = 0; // 大小
-  int _currentFileTimestamp = 0; // 修改时间
-  int _currentLen = 0; // 已接收长度
   bool started = false;
   bool asServer = true;
   String receiver = "";
   String sender = "";
-  final List<MessageData> _sendingFiles = [];
   final _sendFileLock = Lock();
   Future<void> _receiveQueue = Future<void>.value();
   Timer? _clientTimer;
@@ -718,7 +710,6 @@ class WsSvrManager {
     bool forceServerClose = false,
   }) async {
     final hadActiveConnection = _sink != null ||
-        _ioSink != null ||
         _clientTimer != null ||
         _receivingTransferSinks.isNotEmpty ||
         _peerConnections.connectedPeerIds.isNotEmpty ||
@@ -738,7 +729,6 @@ class WsSvrManager {
     _authRequestGate.clear();
     unawaited(_markRecoverableTransfersWaitingReconnect());
     final closeResumableHandles = _closeResumableHandles();
-    await _freeIoSink(freeAll: true);
     await AudioShareCoordinator.shared.stopLocal();
     await AudioGroupCoordinator.shared.stopLocal();
     await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
@@ -1205,9 +1195,6 @@ class WsSvrManager {
           var msg = await LocalDatabase().ackMessage(message);
           if (msg != null) {
             _dispatchToAll((event) => event.onMessage(msg));
-            if (msg.type == MessageEnum.File && !_supportsResumableTransfer) {
-              _sendFile(msg);
-            }
           }
           break;
         }
@@ -1265,34 +1252,12 @@ class WsSvrManager {
           _ackMessage(message);
           break;
         }
-      case MessageEnum.FileSignal:
-        {
-          final json =
-              jsonDecode(message.content ?? "") as Map<String, dynamic>;
-          var data = FileSignal.fromJson(json);
-          // logger.i('发送文件中 ${data.size}: ${(100*data.received/data.size).toStringAsFixed(2)}% ${data.received}'); // \r表示回车，将光标移到行首
-          if (data.size == data.received || data.received % _bufferSize == 0) {
-            logger.i('send next chunk ${data.received}'); // \r表示回车，将光标移到行首
-            await _sendFileChunk(sendOver: data.size == data.received);
-          }
-          if (data.size == data.received || data.received % oneMb == 0) {
-            _dispatchToAll(
-                (event) => event.onProgress(data.size, data.received));
-          }
-        }
       case MessageEnum.File:
         {
           if (_supportsResumableTransfer) {
             await _handleResumableFileMsg(message);
             break;
           }
-          await _sendFileLock.synchronized(() async {
-            _sendingFiles.insert(0, message);
-            if (_sendingFiles.length > 1) {
-              return;
-            }
-            await _handleFileMsg(message);
-          });
           break;
         }
       case MessageEnum.TransferControl:
@@ -1432,145 +1397,9 @@ class WsSvrManager {
             await _handleTransferChunk(TransferChunkFrame.decode(data));
             return;
           }
-          if (_currentSize > 0 && _ioSink != null) {
-            _ioSink?.add(data);
-            _currentLen += data.length;
-            // logger.i('接收文件中 $_currentSize: ${(100*_currentLen/_currentSize).toStringAsFixed(2)}% size: $_currentLen'); // \r表示回车，将光标移到行首
-            // await _savingFile?.writeFrom(data);
-            // logger.i("recv ${data.length}, recved: $_currentLen all: $_currentSize");
-            if (_currentLen == _currentSize || _currentLen % _bufferSize == 0) {
-              // logger.i("recv a chunk: $_currentLen flush");
-              await _ioSink?.flush();
-              // logger.i("recv a chunk: $_currentLen flush over");
-            }
-            if (_currentSize == _currentLen || _currentLen % oneMb == 0) {
-              _dispatchToAll(
-                (event) => event.onProgress(_currentSize, _currentLen),
-              );
-              _sendFileSignal(_currentLen, _currentSize);
-            }
-            if (_currentSize == _currentLen) {
-              final finishedSize = _currentSize;
-              final completedMessage =
-                  _sendingFiles.isNotEmpty ? _sendingFiles.last : null;
-              final receiveCompleted =
-                  await _finalizeReceivedFile(completedMessage);
-              await _freeIoSink();
-              if (receiveCompleted && finishedSize > 0) {
-                _dispatchToAll(
-                    (event) => event.onProgress(finishedSize, finishedSize));
-              }
-              logger.i(
-                  "recv over file size: $_currentSize, check sending files size: ${_sendingFiles.length}");
-              if (!receiveCompleted && completedMessage != null) {
-                logger.i(
-                  "recv file verification failed: ${completedMessage.name}",
-                );
-              }
-              if (_sendingFiles.isNotEmpty) {
-                await _handleFileMsg(_sendingFiles.last);
-              }
-            }
-          } else {
-            logger.i("未知消息：$str");
-          }
+          logger.i("未知消息：$str");
         }
     }
-  }
-
-  Future<void> _freeIoSink({freeAll = false}) async {
-    logger.i("close file");
-    // await _ioSink?.flush();
-    // await _savingFile?.close();
-    await _ioSink?.close();
-    _ioSink = null;
-    _currentLen = 0;
-    _currentSize = 0;
-    _currentFileTimestamp = 0;
-    _receivingFile = null;
-    if (freeAll) {
-      _sendingFiles.clear();
-    } else {
-      _sendingFiles.removeLast();
-    }
-    WakelockPlus.disable();
-  }
-
-  Future<void> _rejectIncomingFile(MessageData message, String notice) async {
-    logger.i(notice);
-    _dispatchToAll((event) => event.onNotice(notice));
-    if (_sendingFiles.isNotEmpty) {
-      _sendingFiles.removeLast();
-    }
-    if (_sendingFiles.isNotEmpty) {
-      await _handleFileMsg(_sendingFiles.last);
-    }
-  }
-
-  Future<bool> _finalizeReceivedFile(MessageData? message) async {
-    final tempFile = _receivingFile;
-    if (tempFile == null) {
-      return false;
-    }
-
-    final expectedMd5 = message?.md5 ?? "";
-    final finalPath = tempFile.path.substring(0, tempFile.path.length - 11);
-
-    if (expectedMd5.isNotEmpty) {
-      final actualMd5 = await fileMD5(tempFile);
-      if (!isFileIntegrityValid(
-        expectedMd5: expectedMd5,
-        actualMd5: actualMd5,
-      )) {
-        try {
-          await tempFile.delete();
-        } catch (_) {}
-        _dispatchToAll(
-          (event) => event.onNotice(
-            '文件校验失败，已丢弃损坏文件：${message?.name ?? ''}',
-          ),
-        );
-        return false;
-      }
-    }
-
-    if (_currentFileTimestamp > 0) {
-      await tempFile.setLastModified(
-        DateTime.fromMillisecondsSinceEpoch(_currentFileTimestamp),
-      );
-    }
-    await tempFile.rename(finalPath);
-    await notifyFileVisibleToAndroidPickers(finalPath);
-    return true;
-  }
-
-  void _sendFileSignal(int received, int size, {String msgId = ""}) {
-    var data = FileSignal(size, received, msgId);
-    var message = _buildMessage(
-        MessageEnum.FileSignal, jsonEncode(data), "", "", 0, false);
-    _send(encodeWireMessage(message));
-  }
-
-  Future<void> _handleFileMsg(MessageData message) async {
-    logger.i(
-        "收到文件：${message.name} size: ${message.size} timestamp: ${message.fileTimestamp}");
-    String path;
-    try {
-      path = await _prepareIOSink(message);
-    } on FileSystemException catch (error) {
-      await _rejectIncomingFile(message, error.message);
-      return;
-    } catch (error) {
-      await _rejectIncomingFile(message, '接收 ${message.name} 失败：$error');
-      return;
-    }
-    var msgTemp = message.toJson();
-    msgTemp["path"] = path;
-    var newMessage = decodeWireMessage(msgTemp);
-    await LocalDatabase().insertMessage(newMessage);
-    // logger.i("保存文件: $path");
-    _dispatchToAll((event) => event.onMessage(newMessage));
-    _ackMessage(message);
   }
 
   MessageData _buildMessage(
@@ -3009,7 +2838,7 @@ class WsSvrManager {
   Future<void> _handleResumableFileMsg(MessageData message) async {
     final metadata = _FileTransferMetadata.fromContent(message.content);
     if (metadata == null) {
-      await _handleFileMsg(message);
+      logger.i("忽略缺少传输元数据的文件消息: ${message.uuid}");
       return;
     }
 
@@ -4112,89 +3941,6 @@ class WsSvrManager {
         );
       }
     }
-  }
-
-  void _sendFile(MessageData message) async {
-    WakelockPlus.enable();
-    final file = File(message.path);
-    final size = file.lengthSync();
-    final fileName = p.basename(message.path);
-    _sendingFile = await file.open();
-
-    var start = DateTime.now().millisecondsSinceEpoch;
-    logger.i("start send $fileName, size: $size");
-    await _sendFileChunk();
-
-    logger.i(
-        "send $fileName, size: $size use time: ${DateTime.now().millisecondsSinceEpoch - start}ms");
-  }
-
-  Future<void> _sendFileChunk({sendOver = false}) async {
-    if (_sendingFile == null) {
-      logger.i("send file chunk _sending file is null");
-      return;
-    }
-
-    if (sendOver) {
-      logger.i("send file chunk over close");
-      await _sendingFile?.close();
-      _sendingFile = null;
-      WakelockPlus.disable();
-      return;
-    }
-
-    var buffer = await _sendingFile!.read(_bufferSize);
-
-    int start;
-    for (var i = 0; i < buffer.length;) {
-      start = i;
-      i = i + 64 * 1024;
-      if (i > buffer.length) {
-        i = buffer.length;
-      }
-      _sink?.add(buffer.sublist(start, i));
-    }
-    logger.i("send file chunk buffer ${buffer.length}");
-  }
-
-  Future<String> _prepareIOSink(MessageData message) async {
-    var appDir = await downloadDir();
-    final availableBytes = await availableBytesForPath(appDir.path);
-    if (!hasEnoughStorageForFile(
-      fileSize: message.size,
-      availableBytes: availableBytes,
-    )) {
-      throw FileSystemException(
-        '接收 ${message.name} 失败：存储空间不足',
-        appDir.path,
-      );
-    }
-    _currentSize = message.size;
-    _currentFileTimestamp =
-        message.fileTimestamp ?? DateTime.now().millisecondsSinceEpoch;
-    _receivingFile = File('${appDir.path}/${message.name}');
-    var idx = 1;
-    var arr = message.name.split(".");
-    var before = message.name;
-    var dot = "";
-    if (arr.length > 1) {
-      dot = arr[arr.length - 1];
-      before = message.name.substring(0, message.name.length - 1 - dot.length);
-    }
-    while (_receivingFile!.existsSync()) {
-      _receivingFile = File('${appDir.path}/$before-$idx.$dot');
-      idx++;
-    }
-    var path = _receivingFile!.path;
-    _receivingFile = File('$path.crdownload');
-    if (await _receivingFile!.exists()) {
-      await _receivingFile!.delete();
-    }
-    // todo 无法访问时如何处理
-    _ioSink = _receivingFile!.openWrite();
-    // _savingFile = await _receivingFile!.open(mode: FileMode.write);
-    WakelockPlus.enable();
-    return path;
   }
 }
 
