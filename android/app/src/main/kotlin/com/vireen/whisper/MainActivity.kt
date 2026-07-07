@@ -11,5 +11,6 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(BackgroundKeepAlivePlugin())
         flutterEngine.plugins.add(AudioSharePlugin())
         flutterEngine.plugins.add(AndroidDocumentPickerPlugin())
+        flutterEngine.plugins.add(TransferNotificationPlugin())
     }
 }
