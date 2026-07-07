@@ -68,6 +68,9 @@ abstract class ISocketEvent {
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
+
+  /// 入站连接请求等待用户确认的上限;超时按拒绝处理,避免半开状态无限挂起。
+  static const Duration incomingAuthRequestTimeout = Duration(minutes: 2);
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
   static const int defaultTransferChunkSize = 32 * 1024 * 1024;
@@ -414,14 +417,26 @@ class WsSvrManager {
   void _dispatchToAll(void Function(ISocketEvent event) callback) {
     final listeners = _listeners.toList(growable: false);
     for (final listener in listeners) {
-      callback(listener);
+      _dispatchGuarded(listener, callback);
     }
   }
 
   void _dispatchToPrimary(void Function(ISocketEvent event) callback) {
     final primaryEvent = _primaryEvent;
     if (primaryEvent != null) {
-      callback(primaryEvent);
+      _dispatchGuarded(primaryEvent, callback);
+    }
+  }
+
+  // 单个监听器异常只记日志,不得阻断协议事件继续分发给其余监听器。
+  void _dispatchGuarded(
+    ISocketEvent listener,
+    void Function(ISocketEvent event) callback,
+  ) {
+    try {
+      callback(listener);
+    } catch (error, stackTrace) {
+      logger.i('socket 事件监听器异常: $error\n$stackTrace');
     }
   }
 
@@ -597,7 +612,8 @@ class WsSvrManager {
     };
     final chatHandler = webSocketHandler((WebSocketChannel webSocket) async {
       asServer = true;
-      _sink = webSocket.sink;
+      // 鉴权前不写全局 _sink:默认发送目标只能指向已鉴权 peer,
+      // 由鉴权成功后的 _registerPeerConnection 统一设置。
       webSocket.stream.listen((message) {
         unawaited(_handleIncomingMessage(message, sink: webSocket.sink));
       }, onError: (Object error, StackTrace stackTrace) {
@@ -665,7 +681,7 @@ class WsSvrManager {
       await connectedChannel.ready;
       final channelSink = connectedChannel.sink;
       asServer = false;
-      _sink = channelSink;
+      // 鉴权前不写全局 _sink,握手全程走显式 sink 参数。
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
       await _auth(true, sink: channelSink);
       connectedChannel.stream.listen((message) {
@@ -767,6 +783,11 @@ class WsSvrManager {
 
   Future<void> _handlePeerDisconnected(String peerId) async {
     await _markPeerTransfersWaitingReconnect(peerId);
+    // 分帧接收缓存按 peerId 索引,断开必须清理,
+    // 否则同 peer 重连后的首批数据会被误当作上次未收完的原始分片。
+    _pendingIncomingChunkHeadersByPeer.remove(peerId);
+    _pendingIncomingRawOffsetsByPeer.remove(peerId);
+    _pendingIncomingRawRemainingByPeer.remove(peerId);
     _transferRuntime.clearPeer(peerId);
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
     if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
@@ -1027,8 +1048,9 @@ class WsSvrManager {
       str = utf8.decode(data);
       Map<String, dynamic> json = jsonDecode(str);
       message = MessageData.fromJson(json);
-    } on Exception {
-      // str = "";
+    } catch (_) {
+      // 需同时容忍 Error:type 以枚举序号上线,新版对端发来的越界序号
+      // 会抛 RangeError(不是 Exception),此处降级为 UNKONWN 消息继续。
     }
     final incomingPeerId =
         message.sender.isNotEmpty ? message.sender : streamPeerId;
@@ -1109,7 +1131,8 @@ class WsSvrManager {
                 _dispatchToAll((event) => event.onConnect());
                 unawaited(_resumeRecoverableOutgoingTransfers());
               } else {
-                close();
+                // 拒绝只关闭这条未鉴权 socket,不得全局 close 断开其他已连 peer。
+                await sink?.close();
               }
               _dispatchToAll((listener) => listener.afterAuth(allow, device));
             } finally {
@@ -1122,9 +1145,11 @@ class WsSvrManager {
             }
           }
 
+          Timer? incomingAuthTimer;
           final guarded = GuardedAuthCallback(
             (allow) => unawaited(respond(allow)),
             onResolved: (_) {
+              incomingAuthTimer?.cancel();
               if (asServer && peerId.isNotEmpty) {
                 unawaited(ConnectionRequestNotifier().dismissForPeer(peerId));
               }
@@ -1133,6 +1158,12 @@ class WsSvrManager {
           if (asServer &&
               peerId.isNotEmpty &&
               (message.message ?? '').isEmpty) {
+            // 等待用户确认的请求超时自动拒绝;GuardedAuthCallback 幂等,
+            // 用户已处理时超时回调无效果。
+            incomingAuthTimer = Timer(incomingAuthRequestTimeout, () {
+              logger.i('连接请求超时自动拒绝: $peerId');
+              guarded.call(false);
+            });
             unawaited(ConnectionRequestNotifier().maybeShowForAuthRequest(
               peerId: peerId,
               deviceName: device?.name ?? '',

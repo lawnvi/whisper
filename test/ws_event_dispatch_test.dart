@@ -40,6 +40,13 @@ class _RecordingSocketEvent implements ISocketEvent {
   }
 }
 
+class _ThrowingSocketEvent extends _RecordingSocketEvent {
+  @override
+  void onMessage(MessageData messageData) {
+    throw StateError('listener failure');
+  }
+}
+
 MessageData _buildMessage() {
   return MessageData(
     id: 1,
@@ -73,6 +80,19 @@ void main() {
     manager.debugDispatchMessage(_buildMessage());
 
     expect(listListener.messages, hasLength(1));
+    expect(chatListener.messages, hasLength(1));
+  });
+
+  test('a throwing listener does not break dispatch to later listeners', () {
+    final manager = WsSvrManager();
+    final throwingListener = _ThrowingSocketEvent();
+    final chatListener = _RecordingSocketEvent();
+
+    manager.debugResetListeners();
+    manager.registerEvent(throwingListener, primary: true);
+    manager.registerEvent(chatListener);
+
+    expect(() => manager.debugDispatchMessage(_buildMessage()), returnsNormally);
     expect(chatListener.messages, hasLength(1));
   });
 
