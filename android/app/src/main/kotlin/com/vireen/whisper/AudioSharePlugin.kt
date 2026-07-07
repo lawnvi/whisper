@@ -1,10 +1,17 @@
 package com.vireen.whisper
 
+import android.app.ForegroundServiceStartNotAllowedException
+import android.content.Context
+import android.content.Intent
+import android.media.AudioFocusRequest
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.PlaybackParams
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -19,10 +26,21 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         private const val PLAYBACK_NORMAL_QUEUE_MICROS = 100_000L
         private const val PLAYBACK_STALE_DROP_TOLERANCE_MICROS = 80_000L
         private const val PLAYBACK_RESYNC_QUEUE_MICROS = 220_000L
+        private var activeInstance: AudioSharePlugin? = null
+
+        fun dispatchMediaControl(action: String) {
+            val instance = activeInstance ?: return
+            Handler(Looper.getMainLooper()).post {
+                instance.channel.invokeMethod("mediaControl", mapOf("action" to action))
+            }
+        }
     }
 
-    private lateinit var channel: MethodChannel
+    internal lateinit var channel: MethodChannel
     private var audioTrack: AudioTrack? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private var pausedByTransientLoss = false
+    private lateinit var appContext: Context
     private var activeSessionId: String = ""
     private var activeChannels: Int = 2
     private var activeSampleRate: Int = 48000
@@ -36,13 +54,18 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var resyncCount: Int = 0
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        appContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "com.vireen.whisper/audio_share")
         channel.setMethodCallHandler(this)
+        activeInstance = this
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         stopPlayback()
         channel.setMethodCallHandler(null)
+        if (activeInstance === this) {
+            activeInstance = null
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -132,8 +155,115 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(null)
             }
 
+            "updateMediaState" -> {
+                val state = call.argument<String>("state") ?: MediaPlaybackService.STATE_STOPPED
+                if (state == MediaPlaybackService.STATE_PLAYING) {
+                    requestFocus()
+                } else if (state == MediaPlaybackService.STATE_STOPPED) {
+                    abandonFocus()
+                }
+                val intent = Intent(appContext, MediaPlaybackService::class.java)
+                    .putExtra(MediaPlaybackService.EXTRA_STATE, state)
+                    .putExtra(MediaPlaybackService.EXTRA_TITLE, call.argument<String>("title") ?: "")
+                    .putExtra(MediaPlaybackService.EXTRA_SUBTITLE, call.argument<String>("subtitle") ?: "")
+                    .putExtra(
+                        MediaPlaybackService.EXTRA_CAN_RESUME,
+                        call.argument<Boolean>("canResume") ?: true
+                    )
+                    .putExtra(
+                        MediaPlaybackService.EXTRA_PAUSE_LABEL,
+                        call.argument<String>("pauseLabel") ?: ""
+                    )
+                    .putExtra(
+                        MediaPlaybackService.EXTRA_PLAY_LABEL,
+                        call.argument<String>("playLabel") ?: ""
+                    )
+                    .putExtra(
+                        MediaPlaybackService.EXTRA_DISCONNECT_LABEL,
+                        call.argument<String>("disconnectLabel") ?: ""
+                    )
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        appContext.startForegroundService(intent)
+                    } else {
+                        appContext.startService(intent)
+                    }
+                } catch (error: Exception) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        error is ForegroundServiceStartNotAllowedException
+                    ) {
+                        Log.w(TAG, "media FGS start not allowed", error)
+                    } else {
+                        throw error
+                    }
+                }
+                result.success(null)
+            }
+
             else -> result.notImplemented()
         }
+    }
+
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                pausedByTransientLoss = true
+                dispatchMediaControl("focusPauseTransient")
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                pausedByTransientLoss = false
+                dispatchMediaControl("focusPause")
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                audioTrack?.setVolume(0.2f)
+
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                audioTrack?.setVolume(1.0f)
+                if (pausedByTransientLoss) {
+                    pausedByTransientLoss = false
+                    dispatchMediaControl("focusResume")
+                }
+            }
+        }
+    }
+
+    private fun requestFocus() {
+        val manager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                )
+                .setOnAudioFocusChangeListener(focusListener)
+                .build()
+            focusRequest = request
+            manager.requestAudioFocus(request)
+        } else {
+            @Suppress("DEPRECATION")
+            manager.requestAudioFocus(
+                focusListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN,
+            )
+        }
+    }
+
+    private fun abandonFocus() {
+        val manager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val request = focusRequest
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && request != null) {
+            manager.abandonAudioFocusRequest(request)
+        } else {
+            @Suppress("DEPRECATION")
+            manager.abandonAudioFocus(focusListener)
+        }
+        focusRequest = null
+        pausedByTransientLoss = false
     }
 
     private fun startPlayback(sessionId: String, format: Map<String, Any>) {
