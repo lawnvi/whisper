@@ -465,7 +465,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       ),
     );
     await _stopPlaybackOnly();
-    notifyListeners();
+    _setSession(null);
   }
 
   /// 播放=重新加入:向源端请求 re-offer,后续复用现有 offer/accept 流程。
@@ -560,6 +560,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return;
     }
 
+    final previousRejoinContext = _sinkRejoinContext;
     try {
       await _startPlayback(offer, format: format);
       _playbackSendControl = sendControl;
@@ -595,6 +596,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
       );
     } catch (error) {
       await stopLocal();
+      if (previousRejoinContext != null) {
+        _sinkRejoinContext = previousRejoinContext;
+        notifyListeners();
+      }
       sendControl(
         offer.sourcePeerId,
         AudioGroupControlMessage(
