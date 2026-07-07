@@ -204,25 +204,6 @@
   "androidBackgroundKeepAliveDesc": "连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率",
   "androidBackgroundKeepAliveActiveTitle": "Whisper 正在保持连接",
   "androidBackgroundKeepAliveActiveDesc": "有活动会话时保持前台服务运行",
-  "androidBackgroundKeepAliveTransferSending": "正在传文件 {progress}%",
-  "@androidBackgroundKeepAliveTransferSending": {
-    "placeholders": {
-      "progress": {
-        "type": "String"
-      }
-    }
-  },
-  "androidBackgroundKeepAliveTransferReceiving": "正在接收文件 {progress}%",
-  "@androidBackgroundKeepAliveTransferReceiving": {
-    "placeholders": {
-      "progress": {
-        "type": "String"
-      }
-    }
-  },
-  "androidBackgroundKeepAliveAudioSharing": "正在共享音频",
-  "androidBackgroundKeepAliveAudioPlaying": "正在播放共享音频",
-  "androidBackgroundKeepAliveAudioPreparing": "正在准备音频共享",
   "androidBatteryOptimization": "电池优化白名单",
   "androidBatteryOptimizationDesc": "建议允许后台运行，并把 Whisper 加入电池优化白名单，尤其是小米、OPPO、vivo、华为设备",
   "fileTransferLegacyInProgress": "旧协议传输中",

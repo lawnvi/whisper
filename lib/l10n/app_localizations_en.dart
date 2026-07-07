@@ -358,26 +358,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Active while a device session is connected';
 
   @override
-  String androidBackgroundKeepAliveTransferSending(String progress) {
-    return 'Sending file $progress%';
-  }
-
-  @override
-  String androidBackgroundKeepAliveTransferReceiving(String progress) {
-    return 'Receiving file $progress%';
-  }
-
-  @override
-  String get androidBackgroundKeepAliveAudioSharing => 'Sharing audio';
-
-  @override
-  String get androidBackgroundKeepAliveAudioPlaying => 'Playing shared audio';
-
-  @override
-  String get androidBackgroundKeepAliveAudioPreparing =>
-      'Preparing audio sharing';
-
-  @override
   String get androidBatteryOptimization => 'Battery optimization';
 
   @override

@@ -709,36 +709,6 @@ abstract class AppLocalizations {
   /// **'有活动会话时保持前台服务运行'**
   String get androidBackgroundKeepAliveActiveDesc;
 
-  /// No description provided for @androidBackgroundKeepAliveTransferSending.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在传文件 {progress}%'**
-  String androidBackgroundKeepAliveTransferSending(String progress);
-
-  /// No description provided for @androidBackgroundKeepAliveTransferReceiving.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在接收文件 {progress}%'**
-  String androidBackgroundKeepAliveTransferReceiving(String progress);
-
-  /// No description provided for @androidBackgroundKeepAliveAudioSharing.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在共享音频'**
-  String get androidBackgroundKeepAliveAudioSharing;
-
-  /// No description provided for @androidBackgroundKeepAliveAudioPlaying.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在播放共享音频'**
-  String get androidBackgroundKeepAliveAudioPlaying;
-
-  /// No description provided for @androidBackgroundKeepAliveAudioPreparing.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在准备音频共享'**
-  String get androidBackgroundKeepAliveAudioPreparing;
-
   /// No description provided for @androidBatteryOptimization.
   ///
   /// In zh, this message translates to:

@@ -348,25 +348,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidBackgroundKeepAliveActiveDesc => '有活动会话时保持前台服务运行';
 
   @override
-  String androidBackgroundKeepAliveTransferSending(String progress) {
-    return '正在传文件 $progress%';
-  }
-
-  @override
-  String androidBackgroundKeepAliveTransferReceiving(String progress) {
-    return '正在接收文件 $progress%';
-  }
-
-  @override
-  String get androidBackgroundKeepAliveAudioSharing => '正在共享音频';
-
-  @override
-  String get androidBackgroundKeepAliveAudioPlaying => '正在播放共享音频';
-
-  @override
-  String get androidBackgroundKeepAliveAudioPreparing => '正在准备音频共享';
-
-  @override
   String get androidBatteryOptimization => '电池优化白名单';
 
   @override

@@ -170,25 +170,6 @@
   "androidBackgroundKeepAliveDesc": "Use an Android foreground service during active sessions to reduce disconnects when picking files or switching apps",
   "androidBackgroundKeepAliveActiveTitle": "Whisper is keeping the connection alive",
   "androidBackgroundKeepAliveActiveDesc": "Active while a device session is connected",
-  "androidBackgroundKeepAliveTransferSending": "Sending file {progress}%",
-  "@androidBackgroundKeepAliveTransferSending": {
-    "placeholders": {
-      "progress": {
-        "type": "String"
-      }
-    }
-  },
-  "androidBackgroundKeepAliveTransferReceiving": "Receiving file {progress}%",
-  "@androidBackgroundKeepAliveTransferReceiving": {
-    "placeholders": {
-      "progress": {
-        "type": "String"
-      }
-    }
-  },
-  "androidBackgroundKeepAliveAudioSharing": "Sharing audio",
-  "androidBackgroundKeepAliveAudioPlaying": "Playing shared audio",
-  "androidBackgroundKeepAliveAudioPreparing": "Preparing audio sharing",
   "androidBatteryOptimization": "Battery optimization",
   "androidBatteryOptimizationDesc": "Recommended: allow background activity and exclude Whisper from battery optimization on Android",
   "fileTransferLegacyInProgress": "Legacy transfer in progress",

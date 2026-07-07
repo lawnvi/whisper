@@ -142,55 +142,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   AndroidKeepAliveNotification _buildAndroidKeepAliveNotification() {
-    final activeTransfer = _activeTransferId == null
-        ? null
-        : _transferSnapshots[_activeTransferId!];
-    final title = l10n.androidBackgroundKeepAliveActiveTitle;
-    if (activeTransfer != null && !_isTransferTerminal(activeTransfer.state)) {
-      final progress = (activeTransfer.progress * 100).round().clamp(0, 100);
-      final progressText = progress.toString();
-      return AndroidKeepAliveNotification(
-        title: title,
-        description: activeTransfer.direction == FileTransferDirection.outgoing
-            ? l10n.androidBackgroundKeepAliveTransferSending(progressText)
-            : l10n.androidBackgroundKeepAliveTransferReceiving(progressText),
-        progress: progress,
-        indeterminateProgress:
-            activeTransfer.state != FileTransferState.transferring,
-      );
-    }
-
-    if (percent > 0 && percent < 1) {
-      final progress = (percent * 100).round().clamp(0, 100);
-      return AndroidKeepAliveNotification(
-        title: title,
-        description:
-            l10n.androidBackgroundKeepAliveTransferSending(progress.toString()),
-        progress: progress,
-      );
-    }
-
-    final audioState = _audioCoordinator.state;
-    if (audioState.isForPeer(device.uid) &&
-        audioState.status != AudioShareRuntimeStatus.idle &&
-        audioState.status != AudioShareRuntimeStatus.failed) {
-      if (audioState.isBusy) {
-        return AndroidKeepAliveNotification(
-          title: title,
-          description: l10n.androidBackgroundKeepAliveAudioPreparing,
-          indeterminateProgress: true,
-        );
-      }
-      return AndroidKeepAliveNotification(
-        title: title,
-        description: audioState.role == AudioShareRuntimeRole.source
-            ? l10n.androidBackgroundKeepAliveAudioSharing
-            : l10n.androidBackgroundKeepAliveAudioPlaying,
-      );
-    }
-
     return AndroidKeepAliveNotification(
-      title: title,
+      title: l10n.androidBackgroundKeepAliveActiveTitle,
       description: l10n.androidBackgroundKeepAliveActiveDesc,
     );
   }
