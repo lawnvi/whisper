@@ -13,6 +13,18 @@
       }
     }
   },
+  "connectRequestNotificationBody": "{name}({host})请求连接",
+  "@connectRequestNotificationBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "connectRequestExpired": "连接请求已过期",
   "connect": "连接",
   "confirm": "确定",
   "allow": "同意",

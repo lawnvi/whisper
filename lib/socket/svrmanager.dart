@@ -18,6 +18,7 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
+import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -27,6 +28,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/auth_request_gate.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
+import 'package:whisper/socket/guarded_auth_callback.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
@@ -458,8 +460,9 @@ class WsSvrManager {
       return;
     }
     final peerId = _incomingAuthPeerIdsBySink.remove(sink);
-    if (peerId != null) {
+    if (peerId != null && peerId.isNotEmpty) {
       _authRequestGate.releaseIncoming(peerId);
+      unawaited(ConnectionRequestNotifier().dismissForPeer(peerId));
     }
   }
 
@@ -1079,39 +1082,58 @@ class WsSvrManager {
           }
 
           logger.i("AUTH message: ${message.sender} - $sender");
-          _dispatchToPrimary((event) {
-            event.onAuth(device, asServer, message.message ?? "",
-                (allow) async {
-              try {
-                logger.i("AUTH message: ${message.message} ||| $allow");
-                if (asServer) {
-                  await _auth(allow, sink: sink, peerId: peerId);
+          Future<void> respond(bool allow) async {
+            try {
+              logger.i("AUTH message: ${message.message} ||| $allow");
+              if (asServer) {
+                await _auth(allow, sink: sink, peerId: peerId);
+              }
+              if (allow) {
+                receiver = peerId;
+                if (peerId.isNotEmpty && sink != null) {
+                  await _registerPeerConnection(
+                    peerId: peerId,
+                    sink: sink,
+                    profile: profile,
+                  );
                 }
-                if (allow) {
-                  receiver = peerId;
-                  if (peerId.isNotEmpty && sink != null) {
-                    await _registerPeerConnection(
-                      peerId: peerId,
-                      sink: sink,
-                      profile: profile,
-                    );
-                  }
-                  _setRemoteProfile(profile, peerId: peerId);
-                  _dispatchToAll((event) => event.onConnect());
-                  unawaited(_resumeRecoverableOutgoingTransfers());
-                } else {
-                  close();
-                }
-                _dispatchToAll((listener) => listener.afterAuth(allow, device));
-              } finally {
-                if (asServer && peerId.isNotEmpty) {
-                  _authRequestGate.releaseIncoming(peerId);
-                  if (sink != null) {
-                    _incomingAuthPeerIdsBySink.remove(sink);
-                  }
+                _setRemoteProfile(profile, peerId: peerId);
+                _dispatchToAll((event) => event.onConnect());
+                unawaited(_resumeRecoverableOutgoingTransfers());
+              } else {
+                close();
+              }
+              _dispatchToAll((listener) => listener.afterAuth(allow, device));
+            } finally {
+              if (asServer && peerId.isNotEmpty) {
+                _authRequestGate.releaseIncoming(peerId);
+                if (sink != null) {
+                  _incomingAuthPeerIdsBySink.remove(sink);
                 }
               }
-            });
+            }
+          }
+
+          final guarded = GuardedAuthCallback(
+            (allow) => unawaited(respond(allow)),
+            onResolved: (_) {
+              if (asServer && peerId.isNotEmpty) {
+                unawaited(ConnectionRequestNotifier().dismissForPeer(peerId));
+              }
+            },
+          );
+          if (asServer &&
+              peerId.isNotEmpty &&
+              (message.message ?? '').isEmpty) {
+            unawaited(ConnectionRequestNotifier().maybeShowForAuthRequest(
+              peerId: peerId,
+              deviceName: device?.name ?? '',
+              host: device?.host ?? '',
+              callback: guarded,
+            ));
+          }
+          _dispatchToPrimary((event) {
+            event.onAuth(device, asServer, message.message ?? "", guarded.call);
           });
           break;
         }

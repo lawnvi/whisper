@@ -26,6 +26,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String connectRequestNotificationBody(String name, String host) {
+    return '$name ($host) wants to connect';
+  }
+
+  @override
+  String get connectRequestExpired => 'Connection request expired';
+
+  @override
   String get connect => 'Connect';
 
   @override

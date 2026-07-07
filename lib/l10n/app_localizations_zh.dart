@@ -26,6 +26,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String connectRequestNotificationBody(String name, String host) {
+    return '$name($host)请求连接';
+  }
+
+  @override
+  String get connectRequestExpired => '连接请求已过期';
+
+  @override
   String get connect => '连接';
 
   @override

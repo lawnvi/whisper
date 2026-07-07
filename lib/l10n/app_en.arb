@@ -4,6 +4,18 @@
   "connectTo": "Connect To",
   "connectRequest": "Connection Request",
   "connectRequestDesc": "New device: {device}?",
+  "connectRequestNotificationBody": "{name} ({host}) wants to connect",
+  "@connectRequestNotificationBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "connectRequestExpired": "Connection request expired",
   "connect": "Connect",
   "confirm": "Confirm",
   "allow": "Allow",

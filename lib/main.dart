@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +46,7 @@ void main() async {
   // 初始化通知帮助类
   NotificationHelper notificationHelper = NotificationHelper();
   await notificationHelper.initialize();
+  await ConnectionRequestNotifier().initialize(notificationHelper.plugin);
   runApp(MyApp());
 }
 

@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
+import 'package:whisper/helper/connection_request_notifications.dart';
 
 class NotificationHelper {
   // 使用单例模式进行初始化
@@ -18,6 +19,8 @@ class NotificationHelper {
   // FlutterLocalNotificationsPlugin是一个用于处理本地通知的插件，它提供了在Flutter应用程序中发送和接收本地通知的功能。
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
+
+  FlutterLocalNotificationsPlugin get plugin => _notificationsPlugin;
 
   // 初始化函数
   Future<void> initialize() async {
@@ -37,7 +40,14 @@ class NotificationHelper {
             linux: LinuxInitializationSettings(
               defaultActionName: 'open notification',
             ));
-    await _notificationsPlugin.initialize(initializationSettings);
+    await _notificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (response) {
+        ConnectionRequestNotifier().handleNotificationResponse(response);
+      },
+      onDidReceiveBackgroundNotificationResponse:
+          connectionRequestNotificationBackgroundHandler,
+    );
   }
 
 //  显示通知

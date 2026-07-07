@@ -13,6 +13,18 @@
       }
     }
   },
+  "connectRequestNotificationBody": "{name} ({host}) quiere conectarse",
+  "@connectRequestNotificationBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "connectRequestExpired": "La solicitud de conexión ha expirado",
   "connect": "Conectar",
   "confirm": "Confirmar",
   "allow": "Permitir",

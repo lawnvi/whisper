@@ -130,6 +130,18 @@ abstract class AppLocalizations {
   /// **'接入设备：{device}?'**
   String connectRequestDesc(String device);
 
+  /// No description provided for @connectRequestNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}({host})请求连接'**
+  String connectRequestNotificationBody(String name, String host);
+
+  /// No description provided for @connectRequestExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接请求已过期'**
+  String get connectRequestExpired;
+
   /// No description provided for @connect.
   ///
   /// In zh, this message translates to:
