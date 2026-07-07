@@ -25,6 +25,7 @@ void main() {
     expect(service, contains('canPostPromotedNotifications'));
     expect(service, contains('Build.VERSION.SDK_INT >= 36'));
     expect(service, contains('.setProgress(100,')); // 15- 降级
+    expect(service, isNot(contains('setShortCriticalText')));
     expect(service, contains('setOnlyAlertOnce(true)'));
     expect(service, contains('STOP_FOREGROUND_DETACH'));
 

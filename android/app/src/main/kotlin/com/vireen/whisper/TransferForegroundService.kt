@@ -65,7 +65,6 @@ class TransferForegroundService : Service() {
                     .setProgress(clamped)
             )
             builder.setRequestPromotedOngoing(true)
-            builder.setShortCriticalText("$clamped%")
         } else {
             builder.setProgress(100, clamped, false)
         }
