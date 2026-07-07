@@ -26,6 +26,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/auth_request_gate.dart';
+import 'package:whisper/socket/dial_tiebreaker.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/guarded_auth_callback.dart';
@@ -1079,6 +1080,24 @@ class WsSvrManager {
             'trustedPeers=${profile?.trustedPeerIds.length ?? 0}',
           );
           logger.i("AUTH message: ${message.sender} + $sender");
+          // 互拨裁决:双方同时向对方拨号时,按 uid 字典序确定唯一存活连接,
+          // 防止 last-writer-wins 误杀承载传输的连接。
+          if (asServer && peerId.isNotEmpty) {
+            final outgoingKey =
+                _authRequestKey(peerId: peerId, host: '', port: 0);
+            if (_authRequestGate.hasOutgoing(outgoingKey)) {
+              final decision = resolveSimultaneousDial(
+                localUid: sender,
+                remoteUid: peerId,
+              );
+              if (decision == SimultaneousDialDecision.keepOutgoing) {
+                logger.i('互拨裁决: 保留本机出站拨号,关闭来自 $peerId 的入站');
+                await sink?.close();
+                return;
+              }
+              logger.i('互拨裁决: 让步接受来自 $peerId 的入站,在途出站将被对端关闭');
+            }
+          }
           if (asServer) {
             var localTemp =
                 await LocalDatabase().fetchDevice(device?.uid ?? "");

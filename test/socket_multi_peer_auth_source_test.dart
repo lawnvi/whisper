@@ -91,4 +91,17 @@ void main() {
       isTrue,
     );
   });
+
+  test('simultaneous dials are resolved deterministically by uid', () {
+    final authCase = section(
+      'case MessageEnum.Auth:',
+      'case MessageEnum.Ack:',
+    );
+    expect(authCase.contains('hasOutgoing'), isTrue,
+        reason: '入站 auth 需检测对同一 peer 的在途出站拨号');
+    expect(authCase.contains('resolveSimultaneousDial'), isTrue,
+        reason: '互拨时必须走确定性裁决而非 last-writer-wins');
+    expect(authCase.contains('SimultaneousDialDecision.keepOutgoing'), isTrue,
+        reason: '赢方需关闭入站连接保留出站');
+  });
 }
