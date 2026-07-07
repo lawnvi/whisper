@@ -82,13 +82,22 @@ class AudioGroupCoordinator extends ChangeNotifier {
   AudioGroupControlSender? _playbackSendControl;
   String _playbackGroupId = '';
   String _playbackStreamId = '';
+  String _playbackSourcePeerId = '';
+  String _playbackSessionId = '';
   String _playbackLocalPeerId = '';
+  AudioChannelRole _playbackChannelRole = AudioChannelRole.stereo;
+  int _playbackTargetLatencyMs = _defaultTargetLatencyMs;
+  _SinkRejoinContext? _sinkRejoinContext;
   int _lastPlaybackReportAtMicros = 0;
   double _playbackGain = 1.0;
 
   AudioGroupSession? get session => _session;
 
   bool get hasLiveSession => _session?.isLive == true;
+
+  bool get isPlaybackActive => _playbackStreamId.isNotEmpty;
+
+  bool get canRejoinAsSink => _sinkRejoinContext != null;
 
   bool isForPeer(String peerId) {
     final current = _session;
@@ -155,7 +164,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required AudioGroupControlSender sendControl,
   }) async {
     final current = _session;
-    if (current == null || !current.isLive) {
+    if (current == null || (!current.isLive && current.sinks.isEmpty)) {
       throw StateError('No active audio group to update');
     }
     if (sinks.isEmpty) {
@@ -239,7 +248,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
       );
     }
 
-    _setSession(current.copyWith(sinks: nextSinks));
+    _setSession(current.copyWith(
+      sinks: nextSinks,
+      state: current.isLive ? null : AudioGroupState.offering,
+    ));
     return _session;
   }
 
@@ -287,6 +299,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         if (current.sourcePeerId != localPeerId) {
           await stopLocal();
         } else {
+          await _fanout.detachAndClose(message.sinkPeerId);
           _setSession(current.markSink(
             message.sinkPeerId,
             state: AudioGroupSinkState.stopped,
@@ -295,7 +308,16 @@ class AudioGroupCoordinator extends ChangeNotifier {
         }
         break;
       case AudioGroupControlAction.groupOffer:
+        break;
       case AudioGroupControlAction.sinkJoinRequest:
+        if (current.sourcePeerId == localPeerId &&
+            current.sinks.containsKey(message.sinkPeerId)) {
+          final sinks = <String, AudioChannelRole>{
+            for (final sink in current.sinks.values)
+              sink.sinkPeerId: sink.channelRole,
+          };
+          await updateGroup(sinks: sinks, sendControl: sendControl);
+        }
         break;
       case AudioGroupControlAction.clockProbe:
         _handleClockProbe(
@@ -371,6 +393,74 @@ class AudioGroupCoordinator extends ChangeNotifier {
     await stopLocal();
   }
 
+  /// 暂停=断流:通知源端停止对本 sink 的 fanout,本地停止播放,
+  /// 但保留后续请求 re-offer 所需的上下文。
+  Future<void> pausePlaybackAsSink() async {
+    final sendControl = _playbackSendControl;
+    final groupId = _playbackGroupId;
+    final streamId = _playbackStreamId;
+    final sessionId = _playbackSessionId;
+    final sourcePeerId = _playbackSourcePeerId;
+    final localPeerId = _playbackLocalPeerId;
+    final channelRole = _playbackChannelRole;
+    final targetLatencyMs = _playbackTargetLatencyMs;
+    if (sendControl == null ||
+        groupId.isEmpty ||
+        streamId.isEmpty ||
+        sessionId.isEmpty ||
+        sourcePeerId.isEmpty ||
+        localPeerId.isEmpty) {
+      return;
+    }
+    _sinkRejoinContext = _SinkRejoinContext(
+      groupId: groupId,
+      streamId: streamId,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      localPeerId: localPeerId,
+      channelRole: channelRole,
+      targetLatencyMs: targetLatencyMs,
+      sendControl: sendControl,
+    );
+    sendControl(
+      sourcePeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.groupStop,
+        groupId: groupId,
+        streamId: streamId,
+        sessionId: sessionId,
+        sourcePeerId: sourcePeerId,
+        sinkPeerId: localPeerId,
+        channelRole: channelRole,
+        targetLatencyMs: targetLatencyMs,
+      ),
+    );
+    await _stopPlaybackOnly();
+    notifyListeners();
+  }
+
+  /// 播放=重新加入:向源端请求 re-offer,后续复用现有 offer/accept 流程。
+  Future<bool> requestRejoinAsSink() async {
+    final context = _sinkRejoinContext;
+    if (context == null) {
+      return false;
+    }
+    context.sendControl(
+      context.sourcePeerId,
+      AudioGroupControlMessage(
+        action: AudioGroupControlAction.sinkJoinRequest,
+        groupId: context.groupId,
+        streamId: context.streamId,
+        sessionId: context.sessionId,
+        sourcePeerId: context.sourcePeerId,
+        sinkPeerId: context.localPeerId,
+        channelRole: context.channelRole,
+        targetLatencyMs: context.targetLatencyMs,
+      ),
+    );
+    return true;
+  }
+
   Future<void> stopLocal() async {
     final captureSource = _captureSource;
     final playbackCodec = _playbackCodec;
@@ -380,8 +470,13 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackScheduler = null;
     _playbackGroupId = '';
     _playbackStreamId = '';
+    _playbackSourcePeerId = '';
+    _playbackSessionId = '';
     _playbackLocalPeerId = '';
+    _playbackChannelRole = AudioChannelRole.stereo;
+    _playbackTargetLatencyMs = _defaultTargetLatencyMs;
     _playbackSendControl = null;
+    _sinkRejoinContext = null;
     _lastPlaybackReportAtMicros = 0;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
@@ -441,6 +536,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
       _playbackSendControl = sendControl;
       _playbackLocalPeerId = localPeerId;
       _lastPlaybackReportAtMicros = 0;
+      _sinkRejoinContext = null;
       _setSession(AudioGroupSession.offering(
         groupId: offer.groupId,
         streamId: offer.streamId,
@@ -887,6 +983,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackCodec = codec;
     _playbackGroupId = offer.groupId;
     _playbackStreamId = offer.streamId;
+    _playbackSourcePeerId = offer.sourcePeerId;
+    _playbackSessionId = offer.sessionId;
+    _playbackChannelRole = offer.channelRole;
+    _playbackTargetLatencyMs = offer.targetLatencyMs;
     await _platform.startPlayback(
       sessionId: offer.streamId,
       format: format,
@@ -918,6 +1018,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackScheduler = null;
     _playbackGroupId = '';
     _playbackStreamId = '';
+    _playbackSourcePeerId = '';
+    _playbackSessionId = '';
+    _playbackChannelRole = AudioChannelRole.stereo;
+    _playbackTargetLatencyMs = _defaultTargetLatencyMs;
     if (playbackStreamId.isNotEmpty) {
       await _platform.stopPlayback(sessionId: playbackStreamId);
     }
@@ -1054,6 +1158,28 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     return text;
   }
+}
+
+class _SinkRejoinContext {
+  const _SinkRejoinContext({
+    required this.groupId,
+    required this.streamId,
+    required this.sessionId,
+    required this.sourcePeerId,
+    required this.localPeerId,
+    required this.channelRole,
+    required this.targetLatencyMs,
+    required this.sendControl,
+  });
+
+  final String groupId;
+  final String streamId;
+  final String sessionId;
+  final String sourcePeerId;
+  final String localPeerId;
+  final AudioChannelRole channelRole;
+  final int targetLatencyMs;
+  final AudioGroupControlSender sendControl;
 }
 
 Future<AudioCodec> _createDefaultAudioGroupCodec(
