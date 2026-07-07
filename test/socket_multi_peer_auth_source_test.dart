@@ -103,5 +103,11 @@ void main() {
         reason: '互拨时必须走确定性裁决而非 last-writer-wins');
     expect(authCase.contains('SimultaneousDialDecision.keepOutgoing'), isTrue,
         reason: '赢方需关闭入站连接保留出站');
+    expect(
+      authCase.indexOf('resolveSimultaneousDial') <
+          authCase.indexOf('if (asServer) {'),
+      isTrue,
+      reason: '裁决必须先于信任自动通过分支,否则受信任 peer 互拨会双注册',
+    );
   });
 }
