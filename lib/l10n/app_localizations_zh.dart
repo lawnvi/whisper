@@ -34,6 +34,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectRequestExpired => '连接请求已过期';
 
   @override
+  String transferNotificationTitle(int count) {
+    return '正在传输 $count 个文件';
+  }
+
+  @override
+  String transferNotificationBodySending(
+      int percent, String speed, String remaining) {
+    return '发送中 $percent% · $speed · 剩余 $remaining';
+  }
+
+  @override
+  String transferNotificationBodyReceiving(
+      int percent, String speed, String remaining) {
+    return '接收中 $percent% · $speed · 剩余 $remaining';
+  }
+
+  @override
+  String transferNotificationBodyMixed(
+      int percent, String speed, String remaining) {
+    return '收发中 $percent% · $speed · 剩余 $remaining';
+  }
+
+  @override
+  String transferNotificationCompleted(int count) {
+    return '传输完成 · $count 个文件';
+  }
+
+  @override
+  String get transferNotificationInterrupted => '传输已中断,回到应用可恢复';
+
+  @override
   String get connect => '连接';
 
   @override

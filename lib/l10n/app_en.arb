@@ -16,6 +16,65 @@
     }
   },
   "connectRequestExpired": "Connection request expired",
+  "transferNotificationTitle": "Transferring {count} files",
+  "@transferNotificationTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationBodySending": "Sending {percent}% · {speed} · {remaining} left",
+  "@transferNotificationBodySending": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyReceiving": "Receiving {percent}% · {speed} · {remaining} left",
+  "@transferNotificationBodyReceiving": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyMixed": "Syncing {percent}% · {speed} · {remaining} left",
+  "@transferNotificationBodyMixed": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationCompleted": "Transfer complete · {count} files",
+  "@transferNotificationCompleted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationInterrupted": "Transfer interrupted, reopen the app to resume",
   "connect": "Connect",
   "confirm": "Confirm",
   "allow": "Allow",

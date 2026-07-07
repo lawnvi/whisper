@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +48,7 @@ void main() async {
   NotificationHelper notificationHelper = NotificationHelper();
   await notificationHelper.initialize();
   await ConnectionRequestNotifier().initialize(notificationHelper.plugin);
+  TransferNotificationBridge().attach();
   runApp(MyApp());
 }
 

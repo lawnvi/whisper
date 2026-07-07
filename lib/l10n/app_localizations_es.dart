@@ -34,6 +34,38 @@ class AppLocalizationsEs extends AppLocalizations {
   String get connectRequestExpired => 'La solicitud de conexión ha expirado';
 
   @override
+  String transferNotificationTitle(int count) {
+    return 'Transfiriendo $count archivos';
+  }
+
+  @override
+  String transferNotificationBodySending(
+      int percent, String speed, String remaining) {
+    return 'Enviando $percent% · $speed · quedan $remaining';
+  }
+
+  @override
+  String transferNotificationBodyReceiving(
+      int percent, String speed, String remaining) {
+    return 'Recibiendo $percent% · $speed · quedan $remaining';
+  }
+
+  @override
+  String transferNotificationBodyMixed(
+      int percent, String speed, String remaining) {
+    return 'Sincronizando $percent% · $speed · quedan $remaining';
+  }
+
+  @override
+  String transferNotificationCompleted(int count) {
+    return 'Transferencia completada · $count archivos';
+  }
+
+  @override
+  String get transferNotificationInterrupted =>
+      'Transferencia interrumpida, vuelve a la app para reanudar';
+
+  @override
   String get connect => 'Conectar';
 
   @override

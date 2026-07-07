@@ -142,6 +142,45 @@ abstract class AppLocalizations {
   /// **'连接请求已过期'**
   String get connectRequestExpired;
 
+  /// No description provided for @transferNotificationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在传输 {count} 个文件'**
+  String transferNotificationTitle(int count);
+
+  /// No description provided for @transferNotificationBodySending.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送中 {percent}% · {speed} · 剩余 {remaining}'**
+  String transferNotificationBodySending(
+      int percent, String speed, String remaining);
+
+  /// No description provided for @transferNotificationBodyReceiving.
+  ///
+  /// In zh, this message translates to:
+  /// **'接收中 {percent}% · {speed} · 剩余 {remaining}'**
+  String transferNotificationBodyReceiving(
+      int percent, String speed, String remaining);
+
+  /// No description provided for @transferNotificationBodyMixed.
+  ///
+  /// In zh, this message translates to:
+  /// **'收发中 {percent}% · {speed} · 剩余 {remaining}'**
+  String transferNotificationBodyMixed(
+      int percent, String speed, String remaining);
+
+  /// No description provided for @transferNotificationCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输完成 · {count} 个文件'**
+  String transferNotificationCompleted(int count);
+
+  /// No description provided for @transferNotificationInterrupted.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输已中断,回到应用可恢复'**
+  String get transferNotificationInterrupted;
+
   /// No description provided for @connect.
   ///
   /// In zh, this message translates to:

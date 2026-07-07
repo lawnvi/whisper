@@ -25,6 +25,65 @@
     }
   },
   "connectRequestExpired": "La solicitud de conexión ha expirado",
+  "transferNotificationTitle": "Transfiriendo {count} archivos",
+  "@transferNotificationTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationBodySending": "Enviando {percent}% · {speed} · quedan {remaining}",
+  "@transferNotificationBodySending": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyReceiving": "Recibiendo {percent}% · {speed} · quedan {remaining}",
+  "@transferNotificationBodyReceiving": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyMixed": "Sincronizando {percent}% · {speed} · quedan {remaining}",
+  "@transferNotificationBodyMixed": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationCompleted": "Transferencia completada · {count} archivos",
+  "@transferNotificationCompleted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationInterrupted": "Transferencia interrumpida, vuelve a la app para reanudar",
   "connect": "Conectar",
   "confirm": "Confirmar",
   "allow": "Permitir",

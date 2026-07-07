@@ -25,6 +25,65 @@
     }
   },
   "connectRequestExpired": "连接请求已过期",
+  "transferNotificationTitle": "正在传输 {count} 个文件",
+  "@transferNotificationTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationBodySending": "发送中 {percent}% · {speed} · 剩余 {remaining}",
+  "@transferNotificationBodySending": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyReceiving": "接收中 {percent}% · {speed} · 剩余 {remaining}",
+  "@transferNotificationBodyReceiving": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationBodyMixed": "收发中 {percent}% · {speed} · 剩余 {remaining}",
+  "@transferNotificationBodyMixed": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "transferNotificationCompleted": "传输完成 · {count} 个文件",
+  "@transferNotificationCompleted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transferNotificationInterrupted": "传输已中断,回到应用可恢复",
   "connect": "连接",
   "confirm": "确定",
   "allow": "同意",
