@@ -153,6 +153,21 @@ git commit -m "refactor(socket): 删除 WSP2 可续传传输栈与 fileResumeV1 
 - Produces(Task 4 依赖,签名逐字):
 
 ```dart
+/// 与 svrmanager `_buildMessage` 现签名逐字对应(msg/fileName/path/uid/fileTimestamp 原本未标类型)。
+typedef TransferMessageBuilder = MessageData Function(
+  MessageEnum type,
+  String content,
+  dynamic msg,
+  dynamic fileName,
+  int size,
+  bool clipboard, {
+  String md5,
+  dynamic path,
+  dynamic uid,
+  dynamic fileTimestamp,
+  String? receiverOverride,
+});
+
 class FileTransferEngine {
   FileTransferEngine({
     required bool Function(String peerId, Object bytes) sendBytesToPeer,
@@ -160,6 +175,13 @@ class FileTransferEngine {
     required void Function(String message) notify,
     required PeerProfile? Function(String peerId) remoteProfileFor,
     required String Function() localUid,
+    required bool Function(String peerId) isConnectedTo,
+    required Set<String> Function() connectedPeerIds,
+    required String Function() defaultPeerId,
+    required bool Function(String peerId) hasLegacySinkFor,
+    required TransferMessageBuilder buildMessage,
+    required void Function(MessageData message) dispatchOutgoingMessage,
+    required void Function(MessageData message) ackMessage,
     LocalDatabase Function() database = LocalDatabase.new,
   });
 
@@ -215,18 +237,24 @@ class FileTransferEngine {
 - 持久化/恢复:`_updateTransfer`、`_persistTransfer`、`_emitTransferById`、`_markPeerTransfersWaitingReconnect`(引擎内公开为 `handlePeerDisconnected`)、`_resumeRecoverableOutgoingTransfers`(公开为 `resumeRecoverableOutgoing`)、`_clearActiveIncomingTransfer`、`_clearIncomingTransferPerf`、`_dispatchTransferProgress` 及 grep 后仅被上述方法引用的其余助手。
 - 字段:`_transferRuntime`、`_sendFileLock`、`_receivingTransferSinks`、`_receivingTransferWritersV3`、`_receivingTransfers`、`_receivingChecksums`、`_receivingTransferOffsets`、`_incomingBytesSinceProgress`、`_incomingFramesSinceProgress`、`_incomingWindowStartedAt`、`_outgoingWindowSentAt`、`_outgoingTransferSequences`、`_incomingWindowEndOffsets`、`_outgoingWindowEndOffsets`(存活到此时即 V3 所有)。
 - 常量:`transferFramePayloadSize`、`defaultTransferChecksumAlgorithm`、`_transferChunkSize` 等仅被迁移体引用的 static const。
+- **确认删除(不迁移,Task 2 评审已核实零写入/零引用)**:`_incomingBytesSinceProgress`、`_incomingFramesSinceProgress`、`_incomingWindowStartedAt`、`_incomingWindowEndOffsets` 四个死 map 及 `_clearIncomingTransferPerf`(随之成空壳)与其调用点、`_closeResumableHandles` 中对四 map 的 clear;`_streamPeerKey`;`shouldUseTransferChecksum`/`_shouldStreamChecksum`/`_hasExpectedChecksum`(零引用死岛);`_formatTransferRate`(零引用)。删除以 grep 零引用为最终判据,若 grep 发现引用则保留并报告。
 
-**符号映射表**(迁移后在 engine 内全量替换,仅此五类,其余零改):
+**符号映射表**(迁移后在 engine 内全量替换,仅此清单,其余零改;**表达式级规则先于裸符号规则应用**):
 
 | svrmanager 原文 | engine 替换为 |
 |---|---|
+| `peerId == receiver && _sink != null`(canUseLegacySink 右值,3 处逐字一致) | `_hasLegacySinkFor(peerId)` |
 | `_dispatchToAll((event) => event.onTransferUpdated(<X>))` | `_emitTransferUpdated(<X>)` |
 | `_dispatchToAll((event) => event.onNotice(<X>))` 与 `_dispatchToPrimary((event) => event.onNotice(<X>))` | `_notify(<X>)` |
+| `_dispatchToAll((event) => event.onMessage(<X>))` | `_dispatchOutgoingMessage(<X>)` |
 | `LocalDatabase()` | `_database()` |
 | `sender`(裸引用本机 uid) | `_localUid()` |
+| `receiver`(裸引用,上面表达式规则处理后的残余) | `_defaultPeerId()` |
+| `isConnectedTo(` | `_isConnectedTo(` |
+| `connectedPeerIds`(裸 getter 或 `_peerConnections.connectedPeerIds`) | `_connectedPeerIds()` |
 | `_supportsFileTransferV3For(` | 不变(engine 内已定义) |
 
-`_sendBytesToPeer(` 调用原样保留(注入字段同名)。迁移体中若出现映射表外的 svrmanager 成员引用(如 `sink`、`_sink`、`receiver`、`_peerConnections`),**停下报 NEEDS_CONTEXT**,列出符号与所在方法,不许自行改写。
+`_sendBytesToPeer(`、`_buildMessage(`、`_dispatchOutgoingMessage(`、`_ackMessage(` 调用原样保留(注入字段同名)。迁移体中若出现映射表外的 svrmanager 成员引用(如 `sink`、`_sink` 裸引用、`_peerConnections` 其他成员),**停下报 NEEDS_CONTEXT**,列出符号与所在方法,不许自行改写。
 
 - [ ] **Step 3: svrmanager 接线(facade + 路由)**
 
@@ -242,6 +270,13 @@ class FileTransferEngine {
         _remoteProfilesByPeerId[peerId] ??
         (peerId == receiver ? _remoteProfile : null),
     localUid: () => sender,
+    isConnectedTo: isConnectedTo,
+    connectedPeerIds: () => _peerConnections.connectedPeerIds,
+    defaultPeerId: () => receiver,
+    hasLegacySinkFor: (peerId) => peerId == receiver && _sink != null,
+    buildMessage: _buildMessage,
+    dispatchOutgoingMessage: _dispatchOutgoingMessage,
+    ackMessage: _ackMessage,
   );
 ```
 
@@ -308,30 +343,42 @@ git commit -m "refactor(socket): V3 文件传输抽离为可注入 FileTransferE
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 
+FileTransferEngine _engine({
+  bool Function(String, Object)? sendBytesToPeer,
+  void Function(String)? notify,
+}) {
+  return FileTransferEngine(
+    sendBytesToPeer: sendBytesToPeer ?? (_, __) => true,
+    emitTransferUpdated: (_) {},
+    notify: notify ?? (_) {},
+    remoteProfileFor: (_) => null, // 无 profile ⇒ 无 fileTransferV3 能力
+    localUid: () => 'local-uid',
+    isConnectedTo: (_) => true,
+    connectedPeerIds: () => <String>{},
+    defaultPeerId: () => '',
+    hasLegacySinkFor: (_) => false,
+    buildMessage: (type, content, msg, fileName, size, clipboard,
+            {md5 = '', path = '', uid, fileTimestamp = 0, receiverOverride}) =>
+        throw UnimplementedError('buildMessage 不应被本测试触达'),
+    dispatchOutgoingMessage: (_) {},
+    ackMessage: (_) {},
+  );
+}
+
 void main() {
   test('engine is constructible with injected fakes only', () {
-    final engine = FileTransferEngine(
-      sendBytesToPeer: (_, __) => true,
-      emitTransferUpdated: (_) {},
-      notify: (_) {},
-      remoteProfileFor: (_) => null,
-      localUid: () => 'local-uid',
-    );
-    expect(engine, isNotNull);
+    expect(_engine(), isNotNull);
   });
 
   test('sendFileTo rejects peer without fileTransferV3 and notifies', () async {
     final notices = <String>[];
     var sent = false;
-    final engine = FileTransferEngine(
+    final engine = _engine(
       sendBytesToPeer: (_, __) {
         sent = true;
         return true;
       },
-      emitTransferUpdated: (_) {},
       notify: notices.add,
-      remoteProfileFor: (_) => null, // 无 profile ⇒ 无 fileTransferV3 能力
-      localUid: () => 'local-uid',
     );
 
     final ok = await engine.sendFileTo('peer-x', '/tmp/whisper-test-nonexistent.bin');
