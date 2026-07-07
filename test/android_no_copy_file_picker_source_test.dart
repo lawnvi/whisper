@@ -43,7 +43,8 @@ void main() {
     final source = File('lib/socket/file_transfer_source.dart').existsSync()
         ? File('lib/socket/file_transfer_source.dart').readAsStringSync()
         : '';
-    final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final manager =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('AndroidContentUriTransferSource'));
     expect(source, contains('readBytes(uri: uri'));

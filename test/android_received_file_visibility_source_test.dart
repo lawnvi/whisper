@@ -8,7 +8,8 @@ void main() {
     final dirPlugin = File(
       'android/app/src/main/kotlin/com/vireen/whisper/DirPlugin.kt',
     ).readAsStringSync();
-    final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final manager =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
 
     expect(dirPlugin, contains('MediaScannerConnection.scanFile'));

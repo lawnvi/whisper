@@ -12,7 +12,8 @@ void main() {
   }
 
   test('outgoing file messages are dispatched locally before network ack', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendFileTo = methodBody(
       source,
       'Future<bool> sendFileTo(String peerId, String path)',
@@ -21,11 +22,11 @@ void main() {
     final sendAndroidUri = methodBody(
       source,
       'Future<bool> sendAndroidContentUriTo(',
-      'void _sendFileTransferV3OfferTo(',
+      'Future<void> handleFrame(',
     );
 
     for (final body in [sendFileTo, sendAndroidUri]) {
-      final insertIndex = body.indexOf('await LocalDatabase().insertMessage');
+      final insertIndex = body.indexOf('await _database().insertMessage');
       final dispatchIndex = body.indexOf('_dispatchOutgoingMessage(message)');
       final sendIndex =
           body.indexOf('_sendFileTransferV3OfferTo(peerId, message)');

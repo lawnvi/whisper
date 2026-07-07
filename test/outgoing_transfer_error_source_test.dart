@@ -12,7 +12,7 @@ void main() {
   }
 
   test('outgoing file source errors fail only the transfer', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final handleReady = methodBody(
       source,
       'Future<void> _handleFileTransferV3Ready(',

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('v3 transfer controls route to the transfer peer', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('void _sendFileTransferV3ControlTo('));
     expect(source,
@@ -15,7 +15,7 @@ void main() {
   });
 
   test('v3 transfer offers route to the transfer peer', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('void _sendFileTransferV3OfferTo('));
     expect(source, contains('_sendFileTransferV3OfferTo(peerId, message)'));
@@ -24,7 +24,7 @@ void main() {
   });
 
   test('resumable transfer active state is tracked per peer', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('final MultiPeerTransferRuntime _transferRuntime'));
     expect(source, contains('_transferRuntime.activeIncomingFor('));
@@ -35,7 +35,7 @@ void main() {
   });
 
   test('peer disconnect marks only that peer transfers waiting reconnect', () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('_markPeerTransfersWaitingReconnect(peerId)'));
     expect(source, contains('_transferRuntime.clearPeer(peerId)'));
