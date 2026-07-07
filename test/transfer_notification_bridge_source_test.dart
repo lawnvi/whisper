@@ -13,7 +13,7 @@ void main() {
     expect(bridge, contains("'com.vireen.whisper/transfer_notifications'"));
     expect(bridge, contains('onTransferUpdated'));
     expect(bridge, contains('Platform.isAndroid'));
-    expect(bridge, contains('lookupAppLocalizations'));
+    expect(bridge, contains('resolveNotificationL10n'));
     expect(main, contains('TransferNotificationBridge().attach()'));
   });
 }

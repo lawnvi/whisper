@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:whisper/helper/connection_request_registry.dart';
+import 'package:whisper/helper/notification_l10n.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/socket/guarded_auth_callback.dart';
 
@@ -56,8 +57,7 @@ class ConnectionRequestNotifier {
   static String _peerIdOfRequest(String requestId) =>
       requestId.split('#').first;
 
-  AppLocalizations get _l10n =>
-      lookupAppLocalizations(PlatformDispatcher.instance.locale);
+  AppLocalizations get _l10n => resolveNotificationL10n();
 
   Future<void> initialize(FlutterLocalNotificationsPlugin plugin) async {
     if (!Platform.isAndroid) {
@@ -161,7 +161,7 @@ class ConnectionRequestNotifier {
 
   static Future<void> showExpired(
       FlutterLocalNotificationsPlugin plugin, String requestId) async {
-    final l10n = lookupAppLocalizations(PlatformDispatcher.instance.locale);
+    final l10n = resolveNotificationL10n();
     await plugin.show(
       notificationIdForPeer(_peerIdOfRequest(requestId)),
       l10n.connectRequest,

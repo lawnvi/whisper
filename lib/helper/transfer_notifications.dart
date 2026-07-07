@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/notification_l10n.dart';
 import 'package:whisper/helper/transfer_notification_aggregator.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -23,8 +23,7 @@ class TransferNotificationBridge implements ISocketEvent {
 
   TransferNotificationAggregator? _aggregator;
 
-  AppLocalizations get _l10n =>
-      lookupAppLocalizations(PlatformDispatcher.instance.locale);
+  AppLocalizations get _l10n => resolveNotificationL10n();
 
   void attach() {
     if (!Platform.isAndroid) {
@@ -98,7 +97,8 @@ class TransferNotificationBridge implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {}
+  void onAuth(
+      DeviceData? deviceData, bool asServer, String msg, var callback) {}
 
   @override
   void afterAuth(bool allow, DeviceData? device) {}

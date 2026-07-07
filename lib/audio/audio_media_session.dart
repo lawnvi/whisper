@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_platform.dart';
+import 'package:whisper/helper/notification_l10n.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
@@ -23,8 +23,7 @@ class AudioMediaSessionBridge {
   Timer? _rejoinTimeout;
   String _lastState = 'stopped';
 
-  AppLocalizations get _l10n =>
-      lookupAppLocalizations(PlatformDispatcher.instance.locale);
+  AppLocalizations get _l10n => resolveNotificationL10n();
 
   void attach({
     required AudioGroupCoordinator coordinator,
