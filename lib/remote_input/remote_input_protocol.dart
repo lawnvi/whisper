@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:whisper/socket/framed_packet_codec.dart';
 
 enum RemoteInputControlAction {
   offer,
@@ -102,21 +103,21 @@ class RemoteInputEdgeMapping {
     return RemoteInputEdgeMapping(
       routeId: json['routeId'] as String? ?? '',
       sourceDisplayId: json['sourceDisplayId'] as String? ?? '',
-      sourceEdge: _enumByName(
+      sourceEdge: enumByName(
         RemoteInputEdge.values,
         json['sourceEdge'] as String?,
         RemoteInputEdge.right,
       ),
-      sourceSegmentStart: _intJson(json['sourceSegmentStart']),
-      sourceSegmentEnd: _intJson(json['sourceSegmentEnd']),
+      sourceSegmentStart: intJson(json['sourceSegmentStart']),
+      sourceSegmentEnd: intJson(json['sourceSegmentEnd']),
       sinkDisplayId: json['sinkDisplayId'] as String? ?? '',
-      sinkEdge: _enumByName(
+      sinkEdge: enumByName(
         RemoteInputEdge.values,
         json['sinkEdge'] as String?,
         RemoteInputEdge.left,
       ),
-      sinkSegmentStart: _intJson(json['sinkSegmentStart']),
-      sinkSegmentEnd: _intJson(json['sinkSegmentEnd']),
+      sinkSegmentStart: intJson(json['sinkSegmentStart']),
+      sinkSegmentEnd: intJson(json['sinkSegmentEnd']),
     );
   }
 }
@@ -209,7 +210,7 @@ class RemoteInputControlMessage {
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
     return RemoteInputControlMessage(
-      action: _enumByName(
+      action: enumByName(
         RemoteInputControlAction.values,
         json['action'] as String?,
         RemoteInputControlAction.error,
@@ -217,30 +218,30 @@ class RemoteInputControlMessage {
       sessionId: json['sessionId'] as String? ?? '',
       sourcePeerId: json['sourcePeerId'] as String? ?? '',
       sinkPeerId: json['sinkPeerId'] as String? ?? '',
-      transport: _enumByName(
+      transport: enumByName(
         RemoteInputTransport.values,
         json['transport'] as String?,
         RemoteInputTransport.websocket,
       ),
       path: json['path'] as String? ?? '/input',
-      layoutEdge: _nullableEnumByName(
+      layoutEdge: nullableEnumByName(
         RemoteInputEdge.values,
         json['layoutEdge'] as String?,
       ),
       sourceDisplayId: json['sourceDisplayId'] as String? ?? '',
-      sourceEdge: _nullableEnumByName(
+      sourceEdge: nullableEnumByName(
         RemoteInputEdge.values,
         json['sourceEdge'] as String?,
       ),
-      sourceSegmentStart: _intJson(json['sourceSegmentStart']),
-      sourceSegmentEnd: _intJson(json['sourceSegmentEnd']),
+      sourceSegmentStart: intJson(json['sourceSegmentStart']),
+      sourceSegmentEnd: intJson(json['sourceSegmentEnd']),
       sinkDisplayId: json['sinkDisplayId'] as String? ?? '',
-      sinkEdge: _nullableEnumByName(
+      sinkEdge: nullableEnumByName(
         RemoteInputEdge.values,
         json['sinkEdge'] as String?,
       ),
-      sinkSegmentStart: _intJson(json['sinkSegmentStart']),
-      sinkSegmentEnd: _intJson(json['sinkSegmentEnd']),
+      sinkSegmentStart: intJson(json['sinkSegmentStart']),
+      sinkSegmentEnd: intJson(json['sinkSegmentEnd']),
       edgeMappings: (json['edgeMappings'] as List<dynamic>? ?? const [])
           .whereType<Map>()
           .map((item) =>
@@ -254,9 +255,9 @@ class RemoteInputControlMessage {
       routeId: json['routeId'] as String? ?? '',
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
       releaseReason: json['releaseReason'] as String? ?? '',
-      releaseSequence: _intJson(json['releaseSequence']),
-      releaseActivationSequence: _intJson(json['releaseActivationSequence']),
-      releaseEdgeUnit: _doubleJson(json['releaseEdgeUnit']),
+      releaseSequence: intJson(json['releaseSequence']),
+      releaseActivationSequence: intJson(json['releaseActivationSequence']),
+      releaseEdgeUnit: doubleJson(json['releaseEdgeUnit']),
       errorMessage: json['errorMessage'] as String? ?? '',
       sourcePlatform: json['sourcePlatform'] as String? ?? '',
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
@@ -282,99 +283,36 @@ class RemoteInputPacketFrame {
   final Uint8List payload;
 
   Uint8List encode() {
-    final header = utf8.encode(jsonEncode(<String, dynamic>{
-      'sessionId': sessionId,
-      'sequence': sequence,
-      'timestampMicros': timestampMicros,
-      'eventType': eventType.name,
-      'payloadLength': payload.length,
-    }));
-    final headerLength = ByteData(4)..setUint32(0, header.length);
-    final bytes = BytesBuilder(copy: false)
-      ..add(ascii.encode(magic))
-      ..add(headerLength.buffer.asUint8List())
-      ..add(header)
-      ..add(payload);
-    return bytes.takeBytes();
+    return encodeFramedPacket(
+      magic: magic,
+      header: <String, dynamic>{
+        'sessionId': sessionId,
+        'sequence': sequence,
+        'timestampMicros': timestampMicros,
+        'eventType': eventType.name,
+        'payloadLength': payload.length,
+      },
+      payload: payload,
+    );
   }
 
   factory RemoteInputPacketFrame.decode(Uint8List bytes) {
-    if (bytes.length < 8) {
-      throw const FormatException('remote input packet frame too short');
-    }
-    final actualMagic = ascii.decode(bytes.sublist(0, 4), allowInvalid: false);
-    if (actualMagic != magic) {
-      throw const FormatException('invalid remote input packet magic');
-    }
-    final headerLength = ByteData.sublistView(bytes, 4, 8).getUint32(0);
-    final headerEnd = 8 + headerLength;
-    if (bytes.length < headerEnd) {
-      throw const FormatException('remote input packet header truncated');
-    }
-    final header = jsonDecode(
-      utf8.decode(bytes.sublist(8, headerEnd)),
-    ) as Map<String, dynamic>;
-    final payload = Uint8List.sublistView(bytes, headerEnd);
-    final expectedLength = header['payloadLength'] as int? ?? -1;
-    if (payload.length != expectedLength) {
-      throw const FormatException(
-          'remote input packet payload length mismatch');
-    }
+    final decoded = decodeFramedPacket(
+      magic: magic,
+      label: 'remote input packet',
+      bytes: bytes,
+    );
+    final header = decoded.header;
     return RemoteInputPacketFrame(
       sessionId: header['sessionId'] as String? ?? '',
       sequence: header['sequence'] as int? ?? 0,
       timestampMicros: header['timestampMicros'] as int? ?? 0,
-      eventType: _enumByName(
+      eventType: enumByName(
         RemoteInputEventType.values,
         header['eventType'] as String?,
         RemoteInputEventType.release,
       ),
-      payload: payload,
+      payload: decoded.payload,
     );
   }
-}
-
-T _enumByName<T extends Enum>(
-  List<T> values,
-  String? name,
-  T fallback,
-) {
-  for (final value in values) {
-    if (value.name == name) {
-      return value;
-    }
-  }
-  return fallback;
-}
-
-T? _nullableEnumByName<T extends Enum>(
-  List<T> values,
-  String? name,
-) {
-  if (name == null) {
-    return null;
-  }
-  for (final value in values) {
-    if (value.name == name) {
-      return value;
-    }
-  }
-  return null;
-}
-
-int _intJson(Object? value) {
-  if (value is int) {
-    return value;
-  }
-  if (value is num) {
-    return value.round();
-  }
-  return 0;
-}
-
-double _doubleJson(Object? value) {
-  if (value is num) {
-    return value.toDouble();
-  }
-  return 0;
 }

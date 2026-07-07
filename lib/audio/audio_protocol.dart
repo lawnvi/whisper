@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:whisper/socket/framed_packet_codec.dart';
 
 enum AudioCodecKind {
   opus,
@@ -73,7 +74,7 @@ class AudioStreamFormat {
 
   factory AudioStreamFormat.fromJson(Map<String, dynamic> json) {
     return AudioStreamFormat(
-      codec: _enumByName(
+      codec: enumByName(
         AudioCodecKind.values,
         json['codec'] as String?,
         AudioCodecKind.opus,
@@ -140,7 +141,7 @@ class AudioControlMessage {
   factory AudioControlMessage.fromJson(Map<String, dynamic> json) {
     final formatJson = json['format'];
     return AudioControlMessage(
-      action: _enumByName(
+      action: enumByName(
         AudioControlAction.values,
         json['action'] as String?,
         AudioControlAction.error,
@@ -151,7 +152,7 @@ class AudioControlMessage {
       format: formatJson is Map
           ? AudioStreamFormat.fromJson(Map<String, dynamic>.from(formatJson))
           : null,
-      transport: _enumByName(
+      transport: enumByName(
         AudioTransport.values,
         json['transport'] as String?,
         AudioTransport.websocket,
@@ -242,7 +243,7 @@ class AudioGroupControlMessage {
   factory AudioGroupControlMessage.fromJson(Map<String, dynamic> json) {
     final formatJson = json['format'];
     return AudioGroupControlMessage(
-      action: _enumByName(
+      action: enumByName(
         AudioGroupControlAction.values,
         json['action'] as String?,
         AudioGroupControlAction.error,
@@ -259,13 +260,13 @@ class AudioGroupControlMessage {
       format: formatJson is Map
           ? AudioStreamFormat.fromJson(Map<String, dynamic>.from(formatJson))
           : null,
-      transport: _enumByName(
+      transport: enumByName(
         AudioTransport.values,
         json['transport'] as String?,
         AudioTransport.websocket,
       ),
       path: json['path'] as String? ?? '',
-      channelRole: _enumByName(
+      channelRole: enumByName(
         AudioChannelRole.values,
         json['channelRole'] as String?,
         AudioChannelRole.stereo,
@@ -302,47 +303,30 @@ class AudioPacketFrame {
   final Uint8List payload;
 
   Uint8List encode() {
-    final header = utf8.encode(jsonEncode(<String, dynamic>{
-      'sessionId': sessionId,
-      'sequence': sequence,
-      'captureTimeMicros': captureTimeMicros,
-      'payloadLength': payload.length,
-    }));
-    final headerLength = ByteData(4)..setUint32(0, header.length);
-    final bytes = BytesBuilder(copy: false)
-      ..add(ascii.encode(magic))
-      ..add(headerLength.buffer.asUint8List())
-      ..add(header)
-      ..add(payload);
-    return bytes.takeBytes();
+    return encodeFramedPacket(
+      magic: magic,
+      header: <String, dynamic>{
+        'sessionId': sessionId,
+        'sequence': sequence,
+        'captureTimeMicros': captureTimeMicros,
+        'payloadLength': payload.length,
+      },
+      payload: payload,
+    );
   }
 
   factory AudioPacketFrame.decode(Uint8List bytes) {
-    if (bytes.length < 8) {
-      throw const FormatException('audio packet frame too short');
-    }
-    final actualMagic = ascii.decode(bytes.sublist(0, 4), allowInvalid: false);
-    if (actualMagic != magic) {
-      throw const FormatException('invalid audio packet magic');
-    }
-    final headerLength = ByteData.sublistView(bytes, 4, 8).getUint32(0);
-    final headerEnd = 8 + headerLength;
-    if (bytes.length < headerEnd) {
-      throw const FormatException('audio packet header truncated');
-    }
-    final header = jsonDecode(
-      utf8.decode(bytes.sublist(8, headerEnd)),
-    ) as Map<String, dynamic>;
-    final payload = Uint8List.sublistView(bytes, headerEnd);
-    final expectedLength = header['payloadLength'] as int? ?? -1;
-    if (payload.length != expectedLength) {
-      throw const FormatException('audio packet payload length mismatch');
-    }
+    final decoded = decodeFramedPacket(
+      magic: magic,
+      label: 'audio packet',
+      bytes: bytes,
+    );
+    final header = decoded.header;
     return AudioPacketFrame(
       sessionId: header['sessionId'] as String? ?? '',
       sequence: header['sequence'] as int? ?? 0,
       captureTimeMicros: header['captureTimeMicros'] as int? ?? 0,
-      payload: payload,
+      payload: decoded.payload,
     );
   }
 }
@@ -375,48 +359,31 @@ class AudioGroupPacketFrame {
   final Uint8List payload;
 
   Uint8List encode() {
-    final header = utf8.encode(jsonEncode(<String, dynamic>{
-      'groupId': groupId,
-      'streamId': streamId,
-      'sessionId': sessionId,
-      'sourcePeerId': sourcePeerId,
-      'sequence': sequence,
-      'captureTimeMicros': captureTimeMicros,
-      'targetPlaybackTimeMicros': targetPlaybackTimeMicros,
-      'durationMicros': durationMicros,
-      'channelMask': channelMask.name,
-      'payloadLength': payload.length,
-    }));
-    final headerLength = ByteData(4)..setUint32(0, header.length);
-    final bytes = BytesBuilder(copy: false)
-      ..add(ascii.encode(magic))
-      ..add(headerLength.buffer.asUint8List())
-      ..add(header)
-      ..add(payload);
-    return bytes.takeBytes();
+    return encodeFramedPacket(
+      magic: magic,
+      header: <String, dynamic>{
+        'groupId': groupId,
+        'streamId': streamId,
+        'sessionId': sessionId,
+        'sourcePeerId': sourcePeerId,
+        'sequence': sequence,
+        'captureTimeMicros': captureTimeMicros,
+        'targetPlaybackTimeMicros': targetPlaybackTimeMicros,
+        'durationMicros': durationMicros,
+        'channelMask': channelMask.name,
+        'payloadLength': payload.length,
+      },
+      payload: payload,
+    );
   }
 
   factory AudioGroupPacketFrame.decode(Uint8List bytes) {
-    if (bytes.length < 8) {
-      throw const FormatException('audio group packet frame too short');
-    }
-    final actualMagic = ascii.decode(bytes.sublist(0, 4), allowInvalid: false);
-    if (actualMagic != magic) {
-      throw const FormatException('invalid audio group packet magic');
-    }
-    final headerLength = ByteData.sublistView(bytes, 4, 8).getUint32(0);
-    final headerEnd = 8 + headerLength;
-    if (bytes.length < headerEnd) {
-      throw const FormatException('audio group packet header truncated');
-    }
-    final header = jsonDecode(
-      utf8.decode(bytes.sublist(8, headerEnd)),
-    ) as Map<String, dynamic>;
-    final payload = Uint8List.sublistView(bytes, headerEnd);
-    final expectedLength = header['payloadLength'] as int? ?? -1;
-    if (payload.length != expectedLength) {
-      throw const FormatException('audio group packet payload length mismatch');
-    }
+    final decoded = decodeFramedPacket(
+      magic: magic,
+      label: 'audio group packet',
+      bytes: bytes,
+    );
+    final header = decoded.header;
     return AudioGroupPacketFrame(
       groupId: header['groupId'] as String? ?? '',
       streamId: header['streamId'] as String? ?? '',
@@ -426,25 +393,12 @@ class AudioGroupPacketFrame {
       captureTimeMicros: header['captureTimeMicros'] as int? ?? 0,
       targetPlaybackTimeMicros: header['targetPlaybackTimeMicros'] as int? ?? 0,
       durationMicros: header['durationMicros'] as int? ?? 0,
-      channelMask: _enumByName(
+      channelMask: enumByName(
         AudioChannelMask.values,
         header['channelMask'] as String?,
         AudioChannelMask.stereo,
       ),
-      payload: payload,
+      payload: decoded.payload,
     );
   }
-}
-
-T _enumByName<T extends Enum>(
-  List<T> values,
-  String? name,
-  T fallback,
-) {
-  for (final value in values) {
-    if (value.name == name) {
-      return value;
-    }
-  }
-  return fallback;
 }
