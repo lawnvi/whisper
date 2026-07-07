@@ -101,6 +101,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
   bool get canRejoinAsSink => _sinkRejoinContext != null;
 
+  String get rejoinSourcePeerId => _sinkRejoinContext?.sourcePeerId ?? '';
+
   bool isForPeer(String peerId) {
     final current = _session;
     if (current == null || peerId.isEmpty) {
@@ -274,7 +276,15 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
 
     final current = _session;
-    if (current == null || current.groupId != message.groupId) {
+    if (current == null) {
+      if (message.action == AudioGroupControlAction.groupStop &&
+          _sinkRejoinContext?.groupId == message.groupId) {
+        _sinkRejoinContext = null;
+        notifyListeners();
+      }
+      return current;
+    }
+    if (current.groupId != message.groupId) {
       return current;
     }
     switch (message.action) {

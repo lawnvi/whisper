@@ -654,6 +654,7 @@ void main() {
       expect(coordinator.isPlaybackActive, isFalse);
       expect(coordinator.hasLiveSession, isFalse);
       expect(coordinator.canRejoinAsSink, isTrue);
+      expect(coordinator.rejoinSourcePeerId, 'mac');
       expect(
         calls.where((call) {
           if (call.method != 'stopPlayback') {
@@ -664,6 +665,54 @@ void main() {
         }),
         hasLength(1),
       );
+    });
+
+    test('source groupStop clears paused rejoin context', () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 88,
+      );
+      await coordinator.pausePlaybackAsSink();
+      expect(coordinator.session, isNull);
+      expect(coordinator.canRejoinAsSink, isTrue);
+      var notifications = 0;
+      coordinator.addListener(() {
+        notifications += 1;
+      });
+
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          targetLatencyMs: 88,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      expect(coordinator.canRejoinAsSink, isFalse);
+      expect(coordinator.rejoinSourcePeerId, isEmpty);
+      expect(notifications, 1);
     });
 
     test('requestRejoinAsSink sends sinkJoinRequest with saved context',

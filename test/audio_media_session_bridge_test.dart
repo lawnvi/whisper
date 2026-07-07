@@ -14,6 +14,7 @@ void main() {
     expect(bridge, contains('pausePlaybackAsSink'));
     expect(bridge, contains('requestRejoinAsSink'));
     expect(bridge, contains('disconnectPlaybackAsSink'));
+    expect(bridge, contains('coordinator.rejoinSourcePeerId'));
     expect(bridge, contains("'buffering'")); // 重连中间态
     expect(bridge, contains('audioGroupRejoinV1')); // canResume 门控
     expect(bridge, contains('focusPauseTransient'));

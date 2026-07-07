@@ -122,7 +122,10 @@ class AudioMediaSessionBridge {
     }
     _lastState = state;
     final l10n = _l10n;
-    final sourcePeerId = coordinator.session?.sourcePeerId ?? '';
+    final sessionSourcePeerId = coordinator.session?.sourcePeerId ?? '';
+    final sourcePeerId = sessionSourcePeerId.isNotEmpty
+        ? sessionSourcePeerId
+        : coordinator.rejoinSourcePeerId;
     platform.updateMediaState(
       state: state,
       title: _sourceTitle(sourcePeerId),
