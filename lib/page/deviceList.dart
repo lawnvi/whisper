@@ -33,6 +33,7 @@ import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/connect_prompt_registry.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -96,6 +97,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       RemoteInputCoordinator.shared;
   final RemoteInputWorkspaceCoordinator _remoteInputWorkspaceCoordinator =
       RemoteInputWorkspaceCoordinator.shared;
+  final ConnectPromptRegistry _connectPromptRegistry = ConnectPromptRegistry();
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -2233,19 +2235,64 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     if (asServer) {
-      showConfirmationDialog(context,
-          title: AppLocalizations.of(context)?.connectRequest ?? '连接请求',
-          description: AppLocalizations.of(context)
-                  ?.connectRequestDesc(deviceData?.name ?? "") ??
-              '接入设备: ${deviceData?.name}?',
-          confirmButtonText: AppLocalizations.of(context)?.allow ?? '同意',
-          cancelButtonText: AppLocalizations.of(context)?.refuse ?? '拒绝',
-          onConfirm: () {
-        callback(true);
-      }, onCancel: () {
-        logger.i("拒绝连接");
-        callback(false);
-      });
+      final peerId = deviceData?.uid ?? '';
+      final needsPrompt = _connectPromptRegistry.register(
+        peerId,
+        (allow) => callback(allow),
+      );
+      if (!needsPrompt) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      showCupertinoDialog(
+        context: context,
+        builder: (dialogContext) {
+          _connectPromptRegistry.bindCloser(peerId, () {
+            Navigator.of(dialogContext).pop();
+          });
+          void resolve(bool allow) {
+            final latest = _connectPromptRegistry.latestCallbackFor(peerId);
+            if (!allow) {
+              logger.i("拒绝连接");
+            }
+            latest?.call(allow);
+            _connectPromptRegistry.resolveAndClose(peerId);
+          }
+
+          return CupertinoAlertDialog(
+            title: Text(l10n?.connectRequest ?? '连接请求'),
+            content: Column(
+              children: [
+                const SizedBox(height: 14),
+                Text(
+                  l10n?.connectRequestDesc(deviceData?.name ?? "") ??
+                      '接入设备: ${deviceData?.name}?',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[400] : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            actions: <Widget>[
+              CupertinoDialogAction(
+                onPressed: () => resolve(false),
+                child: Text(
+                  l10n?.refuse ?? '拒绝',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              CupertinoDialogAction(
+                onPressed: () => resolve(true),
+                child: Text(
+                  l10n?.allow ?? '同意',
+                  style: const TextStyle(color: Colors.lightBlue),
+                ),
+              ),
+            ],
+          );
+        },
+      );
     } else {
       callback(true);
     }
@@ -2253,6 +2300,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) async {
+    if (deviceData != null) {
+      _connectPromptRegistry.resolveAndClose(deviceData.uid);
+    }
     if (!allow || deviceData == null) {
       return;
     }
