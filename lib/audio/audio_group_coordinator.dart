@@ -310,13 +310,40 @@ class AudioGroupCoordinator extends ChangeNotifier {
       case AudioGroupControlAction.groupOffer:
         break;
       case AudioGroupControlAction.sinkJoinRequest:
-        if (current.sourcePeerId == localPeerId &&
-            current.sinks.containsKey(message.sinkPeerId)) {
+        final requestedSink = current.sinks[message.sinkPeerId];
+        if (current.sourcePeerId == localPeerId && requestedSink != null) {
           final sinks = <String, AudioChannelRole>{
             for (final sink in current.sinks.values)
-              sink.sinkPeerId: sink.channelRole,
+              if (!sink.isTerminal ||
+                  sink.sinkPeerId == requestedSink.sinkPeerId)
+                sink.sinkPeerId: sink.channelRole,
           };
-          await updateGroup(sinks: sinks, sendControl: sendControl);
+          if (requestedSink.isTerminal) {
+            final sessionId = _sessionIdFactory();
+            sendControl(
+              requestedSink.sinkPeerId,
+              AudioGroupControlMessage(
+                action: AudioGroupControlAction.groupOffer,
+                groupId: current.groupId,
+                streamId: current.streamId,
+                sessionId: sessionId,
+                sourcePeerId: current.sourcePeerId,
+                sinkPeerId: requestedSink.sinkPeerId,
+                sinkPeerIds: sinks.keys.toList(growable: false),
+                format: current.format,
+                transport: AudioTransport.websocket,
+                path: '/audio',
+                channelRole: requestedSink.channelRole,
+                targetLatencyMs: current.targetLatencyMs,
+              ),
+            );
+            _setSession(current.markSink(
+              requestedSink.sinkPeerId,
+              state: AudioGroupSinkState.offered,
+              sessionId: sessionId,
+              channelRole: requestedSink.channelRole,
+            ));
+          }
         }
         break;
       case AudioGroupControlAction.clockProbe:

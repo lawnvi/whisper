@@ -801,6 +801,100 @@ void main() {
       expect(coordinator.session?.state, AudioGroupState.offering);
     });
 
+    test('sinkJoinRequest does not re-offer other terminal sinks', () async {
+      final sent = <_SentGroupControl>[];
+      var sessionIndex = 0;
+      final coordinator = AudioGroupCoordinator(
+        groupIdFactory: () => 'group-1',
+        streamIdFactory: () => 'stream-1',
+        sessionIdFactory: () => 'session-${++sessionIndex}',
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone-a': AudioChannelRole.left,
+          'phone-b': AudioChannelRole.right,
+        },
+        format: format,
+        sendControl: (peerId, control) {
+          sent.add(_SentGroupControl(peerId, control));
+        },
+      );
+      sent.clear();
+
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupReject,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-1',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone-a',
+          channelRole: AudioChannelRole.left,
+          errorMessage: 'sink failed earlier',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone-a.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-2',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone-b',
+          channelRole: AudioChannelRole.right,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone-b.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      expect(
+        coordinator.session?.sinks['phone-a']?.state,
+        AudioGroupSinkState.failed,
+      );
+      expect(
+        coordinator.session?.sinks['phone-b']?.state,
+        AudioGroupSinkState.stopped,
+      );
+
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.sinkJoinRequest,
+          groupId: 'group-1',
+          streamId: 'stream-1',
+          sessionId: 'session-2',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone-b',
+          channelRole: AudioChannelRole.right,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone-b.local',
+        remotePort: 10002,
+        sendControl: (peerId, control) {
+          sent.add(_SentGroupControl(peerId, control));
+        },
+      );
+
+      expect(sent, hasLength(1));
+      expect(sent.single.peerId, 'phone-b');
+      expect(sent.single.control.action, AudioGroupControlAction.groupOffer);
+      expect(sent.single.control.sinkPeerId, 'phone-b');
+      expect(sent.single.control.channelRole, AudioChannelRole.right);
+      expect(
+        coordinator.session?.sinks['phone-a']?.state,
+        AudioGroupSinkState.failed,
+      );
+      expect(
+        coordinator.session?.sinks['phone-b']?.state,
+        AudioGroupSinkState.offered,
+      );
+    });
+
     test('source detaches fanout when sink reports groupStop', () async {
       final transports = <String, _FakeAudioGroupTransport>{};
       final coordinator = AudioGroupCoordinator(
