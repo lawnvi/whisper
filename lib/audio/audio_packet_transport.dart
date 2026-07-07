@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_diagnostics.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class AudioPacketTransport {
   void send(AudioPacketFrame packet);
@@ -17,26 +15,21 @@ class AudioPacketByteTransport implements AudioPacketTransport {
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
     AudioShareDiagnostics? diagnostics,
-  })  : _sendBytes = sendBytes,
-        _closeSink = closeSink,
-        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
+  }) : _diagnostics = diagnostics ?? AudioShareDiagnostics.shared {
+    _inner = PacketByteTransport(
+      sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+      closeSink: closeSink ?? () async {},
+      onPacketSent: _emitSent,
+      onPacketDropped: _emitDropped,
+    );
+  }
 
-  final void Function(Uint8List bytes) _sendBytes;
-  final Future<void> Function()? _closeSink;
   final AudioShareDiagnostics _diagnostics;
-  bool _closed = false;
+  late final PacketByteTransport _inner;
+  AudioPacketFrame? _pending;
 
-  @override
-  void send(AudioPacketFrame packet) {
-    if (_closed) {
-      _diagnostics.audioPacketSendDropped(
-        sessionId: packet.sessionId,
-        sequence: packet.sequence,
-        reason: 'closed',
-      );
-      return;
-    }
-    _sendBytes(packet.encode());
+  void _emitSent() {
+    final packet = _pending!;
     _diagnostics.audioPacketSent(
       sessionId: packet.sessionId,
       sequence: packet.sequence,
@@ -44,28 +37,34 @@ class AudioPacketByteTransport implements AudioPacketTransport {
     );
   }
 
-  @override
-  Future<void> close() async {
-    if (_closed) {
-      return;
-    }
-    _closed = true;
-    await _closeSink?.call();
+  void _emitDropped() {
+    final packet = _pending!;
+    _diagnostics.audioPacketSendDropped(
+      sessionId: packet.sessionId,
+      sequence: packet.sequence,
+      reason: 'closed',
+    );
   }
+
+  @override
+  void send(AudioPacketFrame packet) {
+    _pending = packet;
+    _inner.send(_inner.isClosed ? Uint8List(0) : packet.encode());
+  }
+
+  @override
+  Future<void> close() => _inner.close();
 }
 
 class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
   AudioWebSocketPacketTransport._(
-    WebSocketChannel channel, {
+    PacketByteTransport channelTransport, {
     required AudioShareDiagnostics diagnostics,
-  })  : _channel = channel,
-        super(
-          sendBytes: channel.sink.add,
-          closeSink: () => channel.sink.close(),
+  }) : super(
+          sendBytes: (bytes) => channelTransport.send(bytes),
+          closeSink: channelTransport.close,
           diagnostics: diagnostics,
         );
-
-  final WebSocketChannel _channel;
 
   static Future<AudioWebSocketPacketTransport> connect(
     Uri uri, {
@@ -74,11 +73,10 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
     final resolvedDiagnostics = diagnostics ?? AudioShareDiagnostics.shared;
     resolvedDiagnostics.transportConnecting(uri);
     try {
-      final channel = IOWebSocketChannel.connect(uri);
-      await channel.ready;
+      final channelTransport = await connectPacketWebSocket(uri);
       resolvedDiagnostics.transportConnected(uri);
       return AudioWebSocketPacketTransport._(
-        channel,
+        channelTransport,
         diagnostics: resolvedDiagnostics,
       );
     } catch (error) {
@@ -86,6 +84,4 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
       rethrow;
     }
   }
-
-  Stream<dynamic> get stream => _channel.stream;
 }

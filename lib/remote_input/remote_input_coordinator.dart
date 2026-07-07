@@ -14,6 +14,7 @@ import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef RemoteInputControlSender = void Function(
   RemoteInputControlMessage control,
@@ -1189,13 +1190,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String path,
   }) {
     final normalizedPath = path.isEmpty ? '/input' : path;
-    return Uri(
-      scheme: 'ws',
+    return buildPeerPacketUri(
       host: host,
       port: port,
-      path: normalizedPath.startsWith('/')
-          ? normalizedPath.substring(1)
-          : normalizedPath,
+      path: normalizedPath,
     );
   }
 

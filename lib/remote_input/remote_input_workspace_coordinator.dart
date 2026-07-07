@@ -9,6 +9,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef RemoteInputPeerControlSender = void Function(
   String peerId,
@@ -517,11 +518,10 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     _manager.handleControlMessage(accept);
     final path = accept.path.isNotEmpty ? accept.path : target.offer.path;
     target.transport = await _transportFactory(
-      Uri(
-        scheme: 'ws',
+      buildPeerPacketUri(
         host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
         port: remotePort > 0 ? remotePort : target.request.port,
-        path: path.startsWith('/') ? path.substring(1) : path,
+        path: path,
       ),
     );
     target.transportDoneSubscription = _listenForTargetTransportDone(target);

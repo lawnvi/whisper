@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class RemoteInputPacketTransport {
   void send(RemoteInputPacketFrame packet);
@@ -20,29 +21,23 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
   RemoteInputPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
-  })  : _sendBytes = sendBytes,
-        _closeSink = closeSink;
+  }) : _inner = PacketByteTransport(
+          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+          closeSink: closeSink ?? () async {},
+        );
 
-  final void Function(Uint8List bytes) _sendBytes;
-  final Future<void> Function()? _closeSink;
-  bool _closed = false;
+  final PacketByteTransport _inner;
 
   @override
   void send(RemoteInputPacketFrame packet) {
-    if (_closed) {
+    if (_inner.isClosed) {
       return;
     }
-    _sendBytes(packet.encode());
+    _inner.send(packet.encode());
   }
 
   @override
-  Future<void> close() async {
-    if (_closed) {
-      return;
-    }
-    _closed = true;
-    await _closeSink?.call();
-  }
+  Future<void> close() => _inner.close();
 }
 
 class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport

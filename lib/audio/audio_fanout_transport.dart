@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioGroupSinkFailure = void Function(String sinkPeerId, Object error);
 
@@ -16,48 +15,36 @@ class AudioGroupPacketByteTransport implements AudioGroupPacketTransport {
   AudioGroupPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
-  })  : _sendBytes = sendBytes,
-        _closeSink = closeSink;
+  }) : _inner = PacketByteTransport(
+          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+          closeSink: closeSink ?? () async {},
+        );
 
-  final void Function(Uint8List bytes) _sendBytes;
-  final Future<void> Function()? _closeSink;
-  bool _closed = false;
+  final PacketByteTransport _inner;
 
   @override
   void send(AudioGroupPacketFrame packet) {
-    if (_closed) {
+    if (_inner.isClosed) {
       return;
     }
-    _sendBytes(packet.encode());
+    _inner.send(packet.encode());
   }
 
   @override
-  Future<void> close() async {
-    if (_closed) {
-      return;
-    }
-    _closed = true;
-    await _closeSink?.call();
-  }
+  Future<void> close() => _inner.close();
 }
 
 class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
-  AudioGroupWebSocketPacketTransport._(WebSocketChannel channel)
-      : _channel = channel,
-        super(
-          sendBytes: channel.sink.add,
-          closeSink: () => channel.sink.close(),
+  AudioGroupWebSocketPacketTransport._(PacketByteTransport channelTransport)
+      : super(
+          sendBytes: (bytes) => channelTransport.send(bytes),
+          closeSink: channelTransport.close,
         );
 
-  final WebSocketChannel _channel;
-
   static Future<AudioGroupWebSocketPacketTransport> connect(Uri uri) async {
-    final channel = IOWebSocketChannel.connect(uri);
-    await channel.ready;
-    return AudioGroupWebSocketPacketTransport._(channel);
+    final channelTransport = await connectPacketWebSocket(uri);
+    return AudioGroupWebSocketPacketTransport._(channelTransport);
   }
-
-  Stream<dynamic> get stream => _channel.stream;
 }
 
 class AudioFanoutTransport {

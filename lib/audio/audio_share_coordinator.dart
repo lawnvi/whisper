@@ -10,6 +10,7 @@ import 'package:whisper/audio/audio_playback_sink.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioControlSender = void Function(AudioControlMessage control);
 typedef AudioCodecFactory = Future<AudioCodec> Function(
@@ -394,13 +395,10 @@ class AudioShareCoordinator extends ChangeNotifier {
     required String path,
   }) {
     final normalizedPath = path.isEmpty ? '/audio' : path;
-    return Uri(
-      scheme: 'ws',
+    return buildPeerPacketUri(
       host: host,
       port: port,
-      path: normalizedPath.startsWith('/')
-          ? normalizedPath.substring(1)
-          : normalizedPath,
+      path: normalizedPath,
     );
   }
 

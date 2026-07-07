@@ -13,6 +13,7 @@ import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioGroupControlSender = void Function(
   String peerId,
@@ -1198,13 +1199,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required String path,
   }) {
     final normalizedPath = path.isEmpty ? '/audio' : path;
-    return Uri(
-      scheme: 'ws',
+    return buildPeerPacketUri(
       host: host,
       port: port,
-      path: normalizedPath.startsWith('/')
-          ? normalizedPath.substring(1)
-          : normalizedPath,
+      path: normalizedPath,
     );
   }
 
