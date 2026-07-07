@@ -107,6 +107,7 @@ class PeerCapabilities {
     this.remoteInputTopologyV1 = false,
     this.audioGroupSourceV1 = false,
     this.audioGroupSinkV1 = false,
+    this.audioGroupRejoinV1 = false,
     this.audioSyncClockV1 = false,
     this.audioChannelRoleV1 = false,
   });
@@ -120,6 +121,7 @@ class PeerCapabilities {
   final bool remoteInputTopologyV1;
   final bool audioGroupSourceV1;
   final bool audioGroupSinkV1;
+  final bool audioGroupRejoinV1;
   final bool audioSyncClockV1;
   final bool audioChannelRoleV1;
 
@@ -134,6 +136,7 @@ class PeerCapabilities {
       'remoteInputTopologyV1': remoteInputTopologyV1,
       'audioGroupSourceV1': audioGroupSourceV1,
       'audioGroupSinkV1': audioGroupSinkV1,
+      'audioGroupRejoinV1': audioGroupRejoinV1,
       'audioSyncClockV1': audioSyncClockV1,
       'audioChannelRoleV1': audioChannelRoleV1,
     };
@@ -150,6 +153,7 @@ class PeerCapabilities {
       remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
       audioGroupSourceV1: json['audioGroupSourceV1'] as bool? ?? false,
       audioGroupSinkV1: json['audioGroupSinkV1'] as bool? ?? false,
+      audioGroupRejoinV1: json['audioGroupRejoinV1'] as bool? ?? false,
       audioSyncClockV1: json['audioSyncClockV1'] as bool? ?? false,
       audioChannelRoleV1: json['audioChannelRoleV1'] as bool? ?? false,
     );

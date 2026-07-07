@@ -295,6 +295,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
         }
         break;
       case AudioGroupControlAction.groupOffer:
+      case AudioGroupControlAction.sinkJoinRequest:
         break;
       case AudioGroupControlAction.clockProbe:
         _handleClockProbe(

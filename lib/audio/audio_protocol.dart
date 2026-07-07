@@ -42,6 +42,7 @@ enum AudioGroupControlAction {
   clockProbe,
   clockReport,
   latencyReport,
+  sinkJoinRequest,
   error,
 }
 

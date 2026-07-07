@@ -1587,6 +1587,7 @@ class WsSvrManager {
         remoteInputTopologyV1: hasTopology,
         audioGroupSourceV1: supportsNativeSystemAudio(),
         audioGroupSinkV1: true,
+        audioGroupRejoinV1: true,
         audioSyncClockV1: true,
         audioChannelRoleV1: true,
       ),

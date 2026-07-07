@@ -130,6 +130,28 @@ void main() {
     });
   });
 
+  group('AudioGroupControlMessage', () {
+    test('sinkJoinRequest action roundtrips and unknown falls back to error',
+        () {
+      const msg = AudioGroupControlMessage(
+        action: AudioGroupControlAction.sinkJoinRequest,
+        groupId: 'g',
+        streamId: 's',
+        sessionId: 'sess',
+        sourcePeerId: 'src',
+        sinkPeerId: 'sink',
+      );
+      final decoded = AudioGroupControlMessage.fromJson(msg.toJson());
+      expect(decoded.action, AudioGroupControlAction.sinkJoinRequest);
+
+      final unknown = AudioGroupControlMessage.fromJson(<String, dynamic>{
+        ...msg.toJson(),
+        'action': 'someFutureAction',
+      });
+      expect(unknown.action, AudioGroupControlAction.error);
+    });
+  });
+
   group('AudioPacketFrame', () {
     test('encodes and decodes Opus packet metadata and payload', () {
       final frame = AudioPacketFrame(
