@@ -142,6 +142,67 @@ void main() {
     expect(agg.onSnapshot(snap('b', committed: 10))!.progress, 10);
   });
 
+  test('completion while others stalled announces completed count', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    agg.onSnapshot(snap('t1', committed: 10));
+    now += 2000;
+    expect(
+      agg
+          .onSnapshot(snap('t1', state: FileTransferState.waitingReconnect))!
+          .kind,
+      TransferNotificationKind.interrupted,
+    );
+
+    // 新传输 t2 在 t1 停滞期间开始并完成
+    now += 2000;
+    agg.onSnapshot(snap('t2', state: FileTransferState.negotiating));
+    now += 2000;
+    agg.onSnapshot(snap('t2', committed: 50));
+    now += 2000;
+    final done = agg.onSnapshot(
+        snap('t2', state: FileTransferState.completed, committed: 100));
+
+    // t2 成功完成必须播报完成计数,不得被停滞僵尸 t1 吞掉或播成"已中断"
+    expect(done, isNotNull);
+    expect(done!.success, isTrue);
+    expect(done.text, 'done:1');
+
+    // 僵尸 t1 仍被跟踪:恢复后进度照常、终态照常收尾
+    now += 2000;
+    final resumed = agg.onSnapshot(snap('t1', committed: 20));
+    expect(resumed!.kind, TransferNotificationKind.progress);
+    expect(resumed.progress, 20, reason: '部分收尾后新一段进度不受上一段单调值影响');
+    now += 2000;
+    final t1done = agg.onSnapshot(
+        snap('t1', state: FileTransferState.completed, committed: 100));
+    expect(t1done!.kind, TransferNotificationKind.terminal);
+    expect(t1done.text, 'done:1');
+  });
+
+  test('canceled subset while others stalled stays silent', () {
+    var now = 0;
+    final agg = TransferNotificationAggregator(
+        nowMillis: () => now, strings: strings());
+    agg.onSnapshot(snap('t1', committed: 10));
+    now += 2000;
+    agg.onSnapshot(snap('t1', state: FileTransferState.waitingReconnect));
+    now += 2000;
+    agg.onSnapshot(snap('t2', committed: 10));
+    now += 2000;
+
+    // t2 被取消,t1 仍停滞:无需播报(通知维持"已中断"现状)
+    expect(
+      agg.onSnapshot(snap('t2', state: FileTransferState.canceled)),
+      isNull,
+    );
+
+    // t1 之后取消 → 整代以 cancel 收尾
+    final cmd = agg.onSnapshot(snap('t1', state: FileTransferState.canceled));
+    expect(cmd!.kind, TransferNotificationKind.cancel);
+  });
+
   test('formats speed from byte deltas', () {
     expect(formatBytesForNotification(0), '0 B');
     expect(formatBytesForNotification(1536), '1.5 KB');

@@ -40,16 +40,35 @@ class TransferForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
 
-            COMMAND_TERMINAL -> {
-                showTerminal(
+            COMMAND_STATUS -> {
+                // 停滞/部分收尾:更新文案但服务保活,后台恢复的进度更新
+                // 无需重新拉起 FGS(Android 12+ 后台拉起会被拒)。
+                val notification = buildStatusNotification(
                     intent.getStringExtra(EXTRA_TITLE) ?: "",
                     intent.getStringExtra(EXTRA_TEXT) ?: "",
                 )
+                startForeground(NOTIFICATION_ID, notification)
+            }
+
+            COMMAND_TERMINAL -> {
+                // startForegroundService 契约:本次启动必须先 startForeground
+                // 一次再退场,否则服务冷启动收终态会抛 RemoteServiceException。
+                val notification = buildTerminalNotification(
+                    intent.getStringExtra(EXTRA_TITLE) ?: "",
+                    intent.getStringExtra(EXTRA_TEXT) ?: "",
+                )
+                startForeground(NOTIFICATION_ID, notification)
                 stopForeground(STOP_FOREGROUND_DETACH)
+                // detach 后重发一次,确保通知脱离 FGS 标志、可滑走
+                notificationManager().notify(NOTIFICATION_ID, notification)
                 stopSelf()
             }
 
             COMMAND_CANCEL -> {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildStatusNotification("", ""),
+                )
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 notificationManager().cancel(NOTIFICATION_ID)
                 stopSelf()
@@ -79,13 +98,19 @@ class TransferForegroundService : Service() {
         return builder.build()
     }
 
-    private fun showTerminal(title: String, text: String) {
+    private fun buildStatusNotification(title: String, text: String): Notification {
         ensureChannel()
-        val notification = baseBuilder(title, text)
+        return baseBuilder(title, text)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun buildTerminalNotification(title: String, text: String): Notification {
+        ensureChannel()
+        return baseBuilder(title, text)
             .setOngoing(false)
             .setAutoCancel(true)
             .build()
-        notificationManager().notify(NOTIFICATION_ID, notification)
     }
 
     private fun baseBuilder(title: String, text: String): NotificationCompat.Builder {
@@ -146,6 +171,7 @@ class TransferForegroundService : Service() {
         private const val DEFAULT_CHANNEL_NAME = "Whisper Transfer"
         private const val DEFAULT_CHANNEL_DESCRIPTION = "File transfer progress"
         const val COMMAND_PROGRESS = "progress"
+        const val COMMAND_STATUS = "status"
         const val COMMAND_TERMINAL = "terminal"
         const val COMMAND_CANCEL = "cancel"
 

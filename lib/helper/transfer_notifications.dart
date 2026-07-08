@@ -55,23 +55,29 @@ class TransferNotificationBridge implements ISocketEvent {
     if (command == null) {
       return;
     }
+    final l10n = _l10n;
     switch (command.kind) {
       case TransferNotificationKind.progress:
         _channel.invokeMethod<void>('showProgress', <String, Object?>{
           'title': command.title,
           'text': command.text,
           'progress': command.progress,
-          'channelName': _l10n.notificationChannelTransfer,
-          'channelDescription': _l10n.notificationChannelTransferDesc,
+          'channelName': l10n.notificationChannelTransfer,
+          'channelDescription': l10n.notificationChannelTransferDesc,
         });
         break;
       case TransferNotificationKind.interrupted:
-        // 停滞不是生命周期终结:展示"已中断"但保留聚合器,
-        // 否则分批停滞会重复弹通知且完成计数漂移(R3)。
-        _channel.invokeMethod<void>('showTerminal', _terminalArguments(command));
+      case TransferNotificationKind.terminalPartial:
+        // 停滞/部分收尾不是生命周期终结:更新文案但保留聚合器与前台
+        // 服务(showStatus 不 stopSelf)。停服务只在整代终结时发生,
+        // 否则后台恢复无法刷新通知,且已停服务再收终态命令会违反
+        // startForegroundService 契约直接崩溃(R3)。
+        _channel.invokeMethod<void>(
+            'showStatus', _summaryArguments(command, l10n));
         break;
       case TransferNotificationKind.terminal:
-        _channel.invokeMethod<void>('showTerminal', _terminalArguments(command));
+        _channel.invokeMethod<void>(
+            'showTerminal', _summaryArguments(command, l10n));
         _aggregator = null;
         break;
       case TransferNotificationKind.cancel:
@@ -81,13 +87,14 @@ class TransferNotificationBridge implements ISocketEvent {
     }
   }
 
-  Map<String, Object?> _terminalArguments(TransferNotificationCommand command) {
+  Map<String, Object?> _summaryArguments(
+      TransferNotificationCommand command, AppLocalizations l10n) {
     return <String, Object?>{
       'title': command.title,
       'text': command.text,
       'success': command.success,
-      'channelName': _l10n.notificationChannelTransfer,
-      'channelDescription': _l10n.notificationChannelTransferDesc,
+      'channelName': l10n.notificationChannelTransfer,
+      'channelDescription': l10n.notificationChannelTransferDesc,
     };
   }
 

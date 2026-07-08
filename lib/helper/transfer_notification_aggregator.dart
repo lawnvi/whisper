@@ -1,9 +1,18 @@
 import 'package:whisper/model/file_transfer.dart';
 
-/// interrupted 与 terminal 的原生展示相同(showTerminal),但语义不同:
-/// interrupted 只是全员停滞的通知形态,聚合器这一代尚未终结,
-/// 消费方不得据此丢弃聚合器,否则分批停滞会重复弹"已中断"且计数漂移。
-enum TransferNotificationKind { progress, interrupted, terminal, cancel }
+/// interrupted/terminalPartial 都不是生命周期终结:聚合器这一代尚未终结,
+/// 消费方不得据此丢弃聚合器或停止前台服务,否则分批停滞会重复弹"已中断"、
+/// 计数漂移,且已停服务再收终态命令会违反 FGS 启动契约(崩溃)。
+/// - interrupted:全员停滞,展示"已中断"。
+/// - terminalPartial:部分传输已终结但仍有停滞僵尸在跟踪,展示阶段性汇总。
+/// 只有 terminal/cancel 才终结整代、允许停止服务。
+enum TransferNotificationKind {
+  progress,
+  interrupted,
+  terminalPartial,
+  terminal,
+  cancel,
+}
 
 class TransferNotificationCommand {
   const TransferNotificationCommand({
@@ -85,10 +94,16 @@ class TransferNotificationAggregator {
       }
       _active.remove(snapshot.transferId);
       _terminal[snapshot.transferId] = snapshot;
-      if (_active.isNotEmpty) {
-        return _stalledOrProgress(forceProgress: true);
+      if (_active.isEmpty) {
+        return _finishGeneration();
       }
-      return _finishGeneration();
+      if (_isStalled()) {
+        // 剩余全是停滞僵尸:立即为已终结部分收尾播报,僵尸留在本代
+        // 继续跟踪。否则成功完成的传输会被播成"已中断"或毫无播报,
+        // 直到僵尸解决为止。
+        return _finishPartialGeneration();
+      }
+      return _stalledOrProgress(forceProgress: true);
     }
 
     _active[snapshot.transferId] = snapshot;
@@ -194,19 +209,43 @@ class TransferNotificationAggregator {
       return const TransferNotificationCommand(
           kind: TransferNotificationKind.cancel);
     }
+    return _summaryCommand(results, TransferNotificationKind.terminal);
+  }
+
+  /// 为已终结子集收尾:清掉终态集与显示状态,停滞僵尸留在 [_active]
+  /// 作为新一段继续跟踪(恢复后进度从头累计,不受上一段单调值影响)。
+  TransferNotificationCommand? _finishPartialGeneration() {
+    final results = _terminal.values.toList(growable: false);
+    _terminal.clear();
+    _displayedPercent = 0;
+    _lastBytes = 0;
+    _lastBytesMillis = 0;
+    _lastEmitMillis = -_throttleMillis;
+    // 僵尸的"已中断"要么已播报过,要么被本次汇总替代,不再重复弹。
+    _stalledNotified = true;
+    final allCanceled =
+        results.every((s) => s.state == FileTransferState.canceled);
+    if (allCanceled) {
+      return null; // 取消的子集无需播报,僵尸维持现有通知
+    }
+    return _summaryCommand(results, TransferNotificationKind.terminalPartial);
+  }
+
+  TransferNotificationCommand _summaryCommand(
+      List<TransferSnapshot> results, TransferNotificationKind kind) {
     final anyFailed = results.any((s) =>
         s.state == FileTransferState.failed ||
         s.state == FileTransferState.canceled);
     if (anyFailed) {
       return TransferNotificationCommand(
-        kind: TransferNotificationKind.terminal,
+        kind: kind,
         title: strings.title(results.length),
         text: strings.interrupted(),
         success: false,
       );
     }
     return TransferNotificationCommand(
-      kind: TransferNotificationKind.terminal,
+      kind: kind,
       title: strings.title(results.length),
       text: strings.completed(results.length),
       progress: 100,

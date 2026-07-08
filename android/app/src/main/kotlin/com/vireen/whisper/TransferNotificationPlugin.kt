@@ -36,6 +36,17 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                 result.success(null)
             }
 
+            "showStatus" -> {
+                val intent = TransferForegroundService
+                    .buildIntent(context, TransferForegroundService.COMMAND_STATUS)
+                    .putExtra(TransferForegroundService.EXTRA_TITLE, call.argument<String>("title") ?: "")
+                    .putExtra(TransferForegroundService.EXTRA_TEXT, call.argument<String>("text") ?: "")
+                    .putExtra(TransferForegroundService.EXTRA_CHANNEL_NAME, call.argument<String>("channelName") ?: "")
+                    .putExtra(TransferForegroundService.EXTRA_CHANNEL_DESCRIPTION, call.argument<String>("channelDescription") ?: "")
+                startServiceSafely(intent)
+                result.success(null)
+            }
+
             "showTerminal" -> {
                 val intent = TransferForegroundService
                     .buildIntent(context, TransferForegroundService.COMMAND_TERMINAL)
