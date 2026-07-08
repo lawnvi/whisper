@@ -100,7 +100,6 @@ class WsSvrManager {
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
   bool started = false;
-  bool asServer = true;
   String receiver = "";
   String sender = "";
   Future<void> _receiveQueue = Future<void>.value();
@@ -476,11 +475,11 @@ class WsSvrManager {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
     final chatHandler = webSocketHandler((WebSocketChannel webSocket) async {
-      asServer = true;
       // 鉴权前不写全局 _sink:默认发送目标只能指向已鉴权 peer,
       // 由鉴权成功后的 _registerPeerConnection 统一设置。
       webSocket.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message, sink: webSocket.sink));
+        unawaited(_handleIncomingMessage(message,
+            sink: webSocket.sink, asServer: true));
       }, onError: (Object error, StackTrace stackTrace) {
         logger.i("连接服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -545,12 +544,12 @@ class WsSvrManager {
       final connectedChannel = channel;
       await connectedChannel.ready;
       final channelSink = connectedChannel.sink;
-      asServer = false;
       // 鉴权前不写全局 _sink,握手全程走显式 sink 参数。
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
       await _auth(true, sink: channelSink);
       connectedChannel.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message, sink: channelSink));
+        unawaited(_handleIncomingMessage(message,
+            sink: channelSink, asServer: false));
       }, onError: (error, stackTrace) {
         logger.i("客户端服务异常: $error\n$stackTrace");
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -714,13 +713,16 @@ class WsSvrManager {
     }
   }
 
+  /// [asServer] 是本条 socket 的角色(服务端接入=true/本机拨出=false),
+  /// 随消息逐层透传;设备可同时对不同 peer 兼具两种角色,不存在全局角色。
   Future<void> _handleIncomingMessage(
     dynamic message, {
     WebSocketSink? sink,
+    required bool asServer,
   }) {
     _receiveQueue = _receiveQueue.then((_) async {
       try {
-        await _listen(_incomingBytes(message), sink: sink);
+        await _listen(_incomingBytes(message), sink: sink, asServer: asServer);
       } catch (error, stackTrace) {
         logger.i('处理 websocket 消息失败: $error\n$stackTrace');
         _dispatchToPrimary((event) => event.onError(error.toString()));
@@ -745,10 +747,12 @@ class WsSvrManager {
   Future<void> _handleWhisperFrameV3(
     WhisperFrameV3 frame, {
     WebSocketSink? sink,
+    required bool asServer,
   }) async {
     switch (frame.type) {
       case WhisperFrameType.message:
-        await _listen(frame.payload, sink: sink, allowFrame: false);
+        await _listen(frame.payload,
+            sink: sink, allowFrame: false, asServer: asServer);
         break;
       case WhisperFrameType.fileOffer:
       case WhisperFrameType.fileData:
@@ -766,9 +770,11 @@ class WsSvrManager {
     Uint8List data, {
     WebSocketSink? sink,
     bool allowFrame = true,
+    required bool asServer,
   }) async {
     if (allowFrame && WhisperFrameV3.looksLikeFrame(data)) {
-      await _handleWhisperFrameV3(WhisperFrameV3.decode(data), sink: sink);
+      await _handleWhisperFrameV3(WhisperFrameV3.decode(data),
+          sink: sink, asServer: asServer);
       return;
     }
     final streamPeerId = _peerIdForSink(sink);

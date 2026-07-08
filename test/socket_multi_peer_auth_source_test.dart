@@ -71,6 +71,28 @@ void main() {
     expect(decode.contains('catch'), isTrue);
   });
 
+  test('socket role (asServer) is per-connection, not global state', () {
+    // 设备可同时对不同 peer 兼具 server/client 两种角色:
+    // 角色必须随每条 socket 的消息逐层透传,不允许回退到全局可变布尔
+    // (旧实现在连接建立时写、Auth 到达时读,双角色并发下会串味)。
+    expect(source.contains('bool asServer = true;'), isFalse,
+        reason: 'asServer 不得是 WsSvrManager 的全局可变字段');
+    expect(source.contains('asServer = true;'), isFalse,
+        reason: '不得有对全局 asServer 的赋值(server 侧)');
+    expect(source.contains('asServer = false;'), isFalse,
+        reason: '不得有对全局 asServer 的赋值(client 侧)');
+    expect(
+      source.contains('sink: webSocket.sink, asServer: true'),
+      isTrue,
+      reason: '服务端接入的 socket 必须显式以 asServer: true 处理消息',
+    );
+    expect(
+      source.contains('sink: channelSink, asServer: false'),
+      isTrue,
+      reason: '本机拨出的 socket 必须显式以 asServer: false 处理消息',
+    );
+  });
+
   test('simultaneous dials are resolved deterministically by uid', () {
     final authCase = section(
       'case MessageEnum.Auth:',
