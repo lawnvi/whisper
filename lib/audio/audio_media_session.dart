@@ -77,7 +77,12 @@ class AudioMediaSessionBridge {
         });
         break;
       case 'disconnect':
+        // 与 pause 同理:buffering(rejoin 在途)中断开 = 放弃在途 rejoin,
+        // 复位后媒体卡立即回落,而不是僵持 buffering 直到 10s 超时。
+        _rejoining = false;
+        _rejoinTimeout?.cancel();
         coordinator.disconnectPlaybackAsSink();
+        _sync();
         break;
     }
   }
@@ -115,6 +120,12 @@ class AudioMediaSessionBridge {
     if (coordinator.isPlaybackActive) {
       state = 'playing';
       _rejoining = false;
+    } else if (_rejoining && !coordinator.canRejoinAsSink) {
+      // rejoin 上下文已被清除(源端停组/本端断开):在途 rejoin 不可能
+      // 完成,立即回落而不是渲染 buffering 等 10s 超时。
+      _rejoining = false;
+      _rejoinTimeout?.cancel();
+      state = 'stopped';
     } else if (_rejoining) {
       state = 'buffering';
     } else if (coordinator.canRejoinAsSink) {

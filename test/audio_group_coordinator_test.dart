@@ -706,6 +706,126 @@ void main() {
       expect(coordinator.rejoinSourcePeerId, 'mac');
     });
 
+    test('pause during pending rejoin declines the crossing offer', () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+      await coordinator.pausePlaybackAsSink();
+      expect(await coordinator.requestRejoinAsSink(), isTrue);
+      // join 在途时用户按下暂停 = 取消在途 join
+      await coordinator.pausePlaybackAsSink();
+      sent.clear();
+
+      // 源端对已取消 join 的应答 offer 在信道上交错到达
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone-2',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+
+      expect(coordinator.isPlaybackActive, isFalse,
+          reason: '暂停后交错到达的陈旧 offer 不得被自动接受回到"播放中"');
+      expect(coordinator.canRejoinAsSink, isTrue,
+          reason: '媒体卡的播放键仍是重试入口');
+      expect(sent, hasLength(1));
+      expect(sent.single.peerId, 'mac');
+      expect(sent.single.control.action, AudioGroupControlAction.groupStop,
+          reason: '回 groupStop 让源端按暂停语义标记 stopped(幂等)');
+
+      // 拒收是一次性的:用户再次播放后,新 offer 正常接受
+      sent.clear();
+      expect(await coordinator.requestRejoinAsSink(), isTrue);
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone-3',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+      expect(coordinator.isPlaybackActive, isTrue);
+    });
+
+    test('disconnect during pending rejoin declines the crossing offer',
+        () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+      await coordinator.pausePlaybackAsSink();
+      expect(await coordinator.requestRejoinAsSink(), isTrue);
+      await coordinator.disconnectPlaybackAsSink();
+      sent.clear();
+
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone-2',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+
+      expect(coordinator.isPlaybackActive, isFalse,
+          reason: '断开后交错到达的陈旧 offer 不得自动重启播放');
+      expect(sent, hasLength(1));
+      expect(sent.single.control.action, AudioGroupControlAction.groupStop);
+
+      // 一次性:源端此后主动 re-offer(重新添加 sink)仍可接受
+      sent.clear();
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone-3',
+        channelRole: AudioChannelRole.stereo,
+        targetLatencyMs: 55,
+      );
+      expect(coordinator.isPlaybackActive, isTrue);
+    });
+
     test('source groupStop clears paused rejoin context', () async {
       final sent = <_SentGroupControl>[];
       final coordinator = AudioGroupCoordinator(

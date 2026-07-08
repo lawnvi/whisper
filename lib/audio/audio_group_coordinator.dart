@@ -91,6 +91,15 @@ class AudioGroupCoordinator extends ChangeNotifier {
   AudioChannelRole _playbackChannelRole = AudioChannelRole.stereo;
   int _playbackTargetLatencyMs = _defaultTargetLatencyMs;
   _SinkRejoinContext? _sinkRejoinContext;
+
+  /// 在途 sinkJoinRequest 所属 group;应答 offer 到达或流程终止时清空。
+  String _pendingSinkJoinGroupId = '';
+
+  /// pause/disconnect 取消在途 join 后,一次性拒绝其交错到达的应答 offer:
+  /// offer 到达时本地会话已清空,若照常自动接受会回到无声的"播放中"。
+  /// 仅针对被取消的 join,源端主动 re-offer 不受影响;requestRejoinAsSink
+  /// 重新放行。
+  String _declinedOfferGroupId = '';
   int _lastPlaybackReportAtMicros = 0;
   double _playbackGain = 1.0;
 
@@ -281,6 +290,9 @@ class AudioGroupCoordinator extends ChangeNotifier {
       if (message.action == AudioGroupControlAction.groupStop &&
           _sinkRejoinContext?.groupId == message.groupId) {
         _sinkRejoinContext = null;
+        if (_pendingSinkJoinGroupId == message.groupId) {
+          _pendingSinkJoinGroupId = ''; // 源端已停组,在途 join 作废
+        }
         notifyListeners();
       }
       return current;
@@ -436,61 +448,16 @@ class AudioGroupCoordinator extends ChangeNotifier {
   /// 暂停=断流:通知源端停止对本 sink 的 fanout,本地停止播放,
   /// 但保留后续请求 re-offer 所需的上下文。
   /// buffering(rejoin 在途)时活播字段已清空,回退到 rejoin 上下文,
-  /// 使暂停等价于"取消在途 rejoin"而非静默 no-op。
+  /// 使暂停等价于"取消在途 rejoin"而非静默 no-op;被取消 join 的
+  /// 应答 offer 若交错到达,将被一次性拒收。
   Future<void> pausePlaybackAsSink() async {
-    final context = _sinkRejoinContext;
-    final sendControl = _playbackSendControl ?? context?.sendControl;
-    final groupId =
-        _playbackGroupId.isNotEmpty ? _playbackGroupId : context?.groupId ?? '';
-    final streamId = _playbackStreamId.isNotEmpty
-        ? _playbackStreamId
-        : context?.streamId ?? '';
-    final sessionId = _playbackSessionId.isNotEmpty
-        ? _playbackSessionId
-        : context?.sessionId ?? '';
-    final sourcePeerId = _playbackSourcePeerId.isNotEmpty
-        ? _playbackSourcePeerId
-        : context?.sourcePeerId ?? '';
-    final localPeerId = _playbackLocalPeerId.isNotEmpty
-        ? _playbackLocalPeerId
-        : context?.localPeerId ?? '';
-    final channelRole = _playbackStreamId.isNotEmpty
-        ? _playbackChannelRole
-        : context?.channelRole ?? AudioChannelRole.stereo;
-    final targetLatencyMs = _playbackStreamId.isNotEmpty
-        ? _playbackTargetLatencyMs
-        : context?.targetLatencyMs ?? _defaultTargetLatencyMs;
-    if (sendControl == null ||
-        groupId.isEmpty ||
-        streamId.isEmpty ||
-        sessionId.isEmpty ||
-        sourcePeerId.isEmpty ||
-        localPeerId.isEmpty) {
+    final resolved = _resolveSinkControlContext();
+    if (resolved == null) {
       return;
     }
-    _sinkRejoinContext = _SinkRejoinContext(
-      groupId: groupId,
-      streamId: streamId,
-      sessionId: sessionId,
-      sourcePeerId: sourcePeerId,
-      localPeerId: localPeerId,
-      channelRole: channelRole,
-      targetLatencyMs: targetLatencyMs,
-      sendControl: sendControl,
-    );
-    sendControl(
-      sourcePeerId,
-      AudioGroupControlMessage(
-        action: AudioGroupControlAction.groupStop,
-        groupId: groupId,
-        streamId: streamId,
-        sessionId: sessionId,
-        sourcePeerId: sourcePeerId,
-        sinkPeerId: localPeerId,
-        channelRole: channelRole,
-        targetLatencyMs: targetLatencyMs,
-      ),
-    );
+    _armOfferDeclineIfJoinPending(resolved.groupId);
+    _sinkRejoinContext = resolved;
+    resolved.sendControl(resolved.sourcePeerId, _sinkStopMessage(resolved));
     await _stopPlaybackOnly();
     _setSession(null);
   }
@@ -514,10 +481,24 @@ class AudioGroupCoordinator extends ChangeNotifier {
         targetLatencyMs: context.targetLatencyMs,
       ),
     );
+    _pendingSinkJoinGroupId = context.groupId;
+    _declinedOfferGroupId = ''; // 用户重新播放,放行后续 offer
     return true;
   }
 
   Future<void> disconnectPlaybackAsSink() async {
+    final resolved = _resolveSinkControlContext();
+    if (resolved != null) {
+      _armOfferDeclineIfJoinPending(resolved.groupId);
+      resolved.sendControl(resolved.sourcePeerId, _sinkStopMessage(resolved));
+    }
+    await stopLocal();
+  }
+
+  /// pause/disconnect 共用的控制上下文解析:优先取活播字段,
+  /// buffering(rejoin 在途)时活播字段已清空则回退 rejoin 上下文,
+  /// 两者都无法定位时返回 null。
+  _SinkRejoinContext? _resolveSinkControlContext() {
     final context = _sinkRejoinContext;
     final sendControl = _playbackSendControl ?? context?.sendControl;
     final groupId =
@@ -534,33 +515,51 @@ class AudioGroupCoordinator extends ChangeNotifier {
     final localPeerId = _playbackLocalPeerId.isNotEmpty
         ? _playbackLocalPeerId
         : context?.localPeerId ?? '';
+    // channelRole/targetLatencyMs 无空值语义,以活播流是否在用为轴取值。
     final channelRole = _playbackStreamId.isNotEmpty
         ? _playbackChannelRole
         : context?.channelRole ?? AudioChannelRole.stereo;
     final targetLatencyMs = _playbackStreamId.isNotEmpty
         ? _playbackTargetLatencyMs
         : context?.targetLatencyMs ?? _defaultTargetLatencyMs;
-    if (sendControl != null &&
-        groupId.isNotEmpty &&
-        streamId.isNotEmpty &&
-        sessionId.isNotEmpty &&
-        sourcePeerId.isNotEmpty &&
-        localPeerId.isNotEmpty) {
-      sendControl(
-        sourcePeerId,
-        AudioGroupControlMessage(
-          action: AudioGroupControlAction.groupStop,
-          groupId: groupId,
-          streamId: streamId,
-          sessionId: sessionId,
-          sourcePeerId: sourcePeerId,
-          sinkPeerId: localPeerId,
-          channelRole: channelRole,
-          targetLatencyMs: targetLatencyMs,
-        ),
-      );
+    if (sendControl == null ||
+        groupId.isEmpty ||
+        streamId.isEmpty ||
+        sessionId.isEmpty ||
+        sourcePeerId.isEmpty ||
+        localPeerId.isEmpty) {
+      return null;
     }
-    await stopLocal();
+    return _SinkRejoinContext(
+      groupId: groupId,
+      streamId: streamId,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      localPeerId: localPeerId,
+      channelRole: channelRole,
+      targetLatencyMs: targetLatencyMs,
+      sendControl: sendControl,
+    );
+  }
+
+  AudioGroupControlMessage _sinkStopMessage(_SinkRejoinContext context) {
+    return AudioGroupControlMessage(
+      action: AudioGroupControlAction.groupStop,
+      groupId: context.groupId,
+      streamId: context.streamId,
+      sessionId: context.sessionId,
+      sourcePeerId: context.sourcePeerId,
+      sinkPeerId: context.localPeerId,
+      channelRole: context.channelRole,
+      targetLatencyMs: context.targetLatencyMs,
+    );
+  }
+
+  void _armOfferDeclineIfJoinPending(String groupId) {
+    if (_pendingSinkJoinGroupId == groupId) {
+      _declinedOfferGroupId = groupId;
+      _pendingSinkJoinGroupId = '';
+    }
   }
 
   Future<void> stopLocal() async {
@@ -579,6 +578,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _playbackTargetLatencyMs = _defaultTargetLatencyMs;
     _playbackSendControl = null;
     _sinkRejoinContext = null;
+    _pendingSinkJoinGroupId = '';
     _lastPlaybackReportAtMicros = 0;
     _playbackPumpTimer?.cancel();
     _playbackPumpTimer = null;
@@ -598,6 +598,28 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required AudioGroupControlSender sendControl,
   }) async {
     if (offer.sinkPeerId != localPeerId) {
+      return;
+    }
+    if (offer.groupId == _pendingSinkJoinGroupId) {
+      _pendingSinkJoinGroupId = ''; // 在途 join 已被应答
+    }
+    if (offer.groupId == _declinedOfferGroupId) {
+      // 这是已被暂停/断开取消的 join 的迟到应答:一次性拒收,回 groupStop
+      // 让源端按停止语义标记本 sink(源端多半已处理过 stop,幂等)。
+      _declinedOfferGroupId = '';
+      sendControl(
+        offer.sourcePeerId,
+        AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupStop,
+          groupId: offer.groupId,
+          streamId: offer.streamId,
+          sessionId: offer.sessionId,
+          sourcePeerId: offer.sourcePeerId,
+          sinkPeerId: offer.sinkPeerId,
+          channelRole: offer.channelRole,
+          targetLatencyMs: offer.targetLatencyMs,
+        ),
+      );
       return;
     }
     if (hasLiveSession && _session?.groupId != offer.groupId) {
