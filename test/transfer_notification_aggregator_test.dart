@@ -96,7 +96,7 @@ void main() {
         agg.onSnapshot(snap('a', state: FileTransferState.waitingReconnect));
 
     expect(interrupted, isNotNull);
-    expect(interrupted!.kind, TransferNotificationKind.terminal);
+    expect(interrupted!.kind, TransferNotificationKind.interrupted);
     expect(interrupted.success, isFalse);
     expect(interrupted.text, 'interrupted');
 
@@ -117,7 +117,7 @@ void main() {
       agg
           .onSnapshot(snap('a', state: FileTransferState.waitingReconnect))!
           .kind,
-      TransferNotificationKind.terminal,
+      TransferNotificationKind.interrupted,
     );
     now += 100;
 

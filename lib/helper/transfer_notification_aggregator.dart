@@ -1,6 +1,9 @@
 import 'package:whisper/model/file_transfer.dart';
 
-enum TransferNotificationKind { progress, terminal, cancel }
+/// interrupted 与 terminal 的原生展示相同(showTerminal),但语义不同:
+/// interrupted 只是全员停滞的通知形态,聚合器这一代尚未终结,
+/// 消费方不得据此丢弃聚合器,否则分批停滞会重复弹"已中断"且计数漂移。
+enum TransferNotificationKind { progress, interrupted, terminal, cancel }
 
 class TransferNotificationCommand {
   const TransferNotificationCommand({
@@ -106,7 +109,7 @@ class TransferNotificationAggregator {
       }
       _stalledNotified = true;
       return TransferNotificationCommand(
-        kind: TransferNotificationKind.terminal,
+        kind: TransferNotificationKind.interrupted,
         title: strings.title(_active.length + _terminal.length),
         text: strings.interrupted(),
         success: false,
