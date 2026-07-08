@@ -26,6 +26,12 @@ const MethodChannel _windowThemeChannel =
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (isMobile()) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+  }
+
   if (!isMobile()) {
     // 必须加上这一行。
     await windowManager.ensureInitialized();
