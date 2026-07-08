@@ -52,6 +52,33 @@ void main() {
     );
   });
 
+  test('release DMG applies a compact Finder install window layout', () {
+    final packageScript = File('script/build_and_run.sh').readAsStringSync();
+
+    expect(packageScript, contains('DMG_WINDOW_BOUNDS="{160, 120, 720, 440}"'));
+    expect(packageScript, contains('DMG_ICON_SIZE=112'));
+    expect(packageScript, contains('DMG_APP_BUNDLE_NAME="Whisper.app"'));
+    expect(packageScript, contains('DMG_APP_ICON_POSITION="{180, 170}"'));
+    expect(
+      packageScript,
+      contains('DMG_APPLICATIONS_ICON_POSITION="{420, 170}"'),
+    );
+    expect(packageScript, contains('configure_dmg_finder_window()'));
+    expect(packageScript,
+        contains('set toolbar visible of container window to false'));
+    expect(packageScript,
+        contains('set statusbar visible of container window to false'));
+    expect(packageScript,
+        contains(r'set the bounds of container window to $DMG_WINDOW_BOUNDS'));
+    expect(packageScript,
+        contains(r'set icon size of viewOptions to $DMG_ICON_SIZE'));
+    expect(
+      packageScript,
+      contains(r'set position of item "$DMG_APP_BUNDLE_NAME"'),
+    );
+    expect(packageScript, contains('set position of item "Applications"'));
+  });
+
   test('macOS package script can import a stable signing certificate', () {
     final script = File('script/build_and_run.sh').readAsStringSync();
 
@@ -60,7 +87,8 @@ void main() {
     expect(script, contains(r'security import "$tmpdir/cert.p12"'));
     expect(script, contains('security set-key-partition-list'));
     expect(script, contains('WHISPER_MACOS_REQUIRE_STABLE_SIGNING'));
-    expect(script, contains(r'security find-identity -p codesigning "$KEYCHAIN"'));
+    expect(
+        script, contains(r'security find-identity -p codesigning "$KEYCHAIN"'));
     expect(
       script,
       isNot(contains(r'security find-identity -p codesigning -v "$KEYCHAIN"')),

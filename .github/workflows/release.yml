@@ -67,6 +67,16 @@ jobs:
           cd ../ios
           pod install --repo-update
 
+      - name: Set release version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
+            PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          else
+            PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+
       - name: Build signed macOS DMG
         env:
           WHISPER_MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
@@ -74,8 +84,7 @@ jobs:
           WHISPER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
           WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
-          WHISPER_MACOS_DMG_PATH: whisper.dmg
-        run: script/build_and_run.sh package-macos
+        run: WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" script/build_and_run.sh package-macos
 
       - name: Build iOS IPA
         run: |
@@ -85,15 +94,15 @@ jobs:
           cd Payload
           ln -s ../Runner.app
           cd ..
-          zip -r app.ipa Payload
+          zip -r "whisper-${PACKAGE_VERSION}-ios-unsigned.ipa" Payload
 
       - name: Upload macOS and iOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: whisper-macos-ios-${{ github.run_id }}
           path: |
-            whisper.dmg
-            build/ios/iphoneos/app.ipa
+            whisper-*-macos-x86_64.dmg
+            build/ios/iphoneos/whisper-*-ios-unsigned.ipa
           retention-days: 7
 
       - name: Publish macOS and iOS release assets
@@ -104,8 +113,8 @@ jobs:
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
           files: |
-            whisper.dmg
-            build/ios/iphoneos/app.ipa
+            whisper-*-macos-x86_64.dmg
+            build/ios/iphoneos/whisper-*-ios-unsigned.ipa
 
   build-on-windows:
     name: Windows
@@ -130,6 +139,7 @@ jobs:
           } else {
             $version = "0.0.${{ github.run_number }}"
           }
+          "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install NSIS
@@ -153,13 +163,13 @@ jobs:
             /DAPP_NAME="Whisper" `
             /DAPP_VERSION="$env:APP_VERSION" `
             /DAPP_PUBLISHER="lawnvi" `
-            /DOUTPUT_NAME="whisper-windows-x86_64.exe" `
+            /DOUTPUT_NAME="whisper-$($env:PACKAGE_VERSION)-windows-x86_64.exe" `
             installer.nsi
           Pop-Location
 
       - name: Verify installer exists
         run: |
-          $path = "windows\whisper-windows-x86_64.exe"
+          $path = "windows\whisper-$($env:PACKAGE_VERSION)-windows-x86_64.exe"
           if (!(Test-Path $path)) {
             throw "Installer not found at $path"
           }
@@ -168,7 +178,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: whisper-windows-${{ github.run_id }}
-          path: windows/whisper-windows-x86_64.exe
+          path: windows/whisper-*-windows-x86_64.exe
           retention-days: 7
 
       - name: Publish Windows release asset
@@ -178,7 +188,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: windows/whisper-windows-x86_64.exe
+          files: windows/whisper-*-windows-x86_64.exe
 
   build-on-linux:
     name: Linux + Android
@@ -248,10 +258,17 @@ jobs:
           flutter build linux
 
       - name: Build DEB package
-        run: chmod +x linux/build_deb.sh && bash linux/build_deb.sh "$PACKAGE_VERSION" amd64
+        run: |
+          chmod +x linux/build_deb.sh
+          bash linux/build_deb.sh "$PACKAGE_VERSION" amd64
+          deb_path="$(find build/linux/deb -name 'whisper-amd64.deb' -print -quit)"
+          mv "$deb_path" "build/linux/deb/whisper-${PACKAGE_VERSION}-linux-amd64.deb"
 
       - name: Build RPM package
-        run: sudo alien -r build/linux/deb/whisper-amd64.deb && mv whisper-${PACKAGE_VERSION}-2.x86_64.rpm whisper-x86_64.rpm
+        run: |
+          deb_path="$(find build/linux/deb -name 'whisper-*-linux-amd64.deb' -print -quit)"
+          sudo alien -r "$deb_path"
+          mv "whisper-${PACKAGE_VERSION}-2.x86_64.rpm" "whisper-${PACKAGE_VERSION}-linux-x86_64.rpm"
 
       - name: Install appimagetool
         run: |
@@ -260,7 +277,10 @@ jobs:
           echo "APPIMAGE_TOOL=/tmp/appimagetool.AppImage" >> $GITHUB_ENV
 
       - name: Build AppImage
-        run: chmod +x linux/build_appimage.sh && bash linux/build_appimage.sh "$PACKAGE_VERSION"
+        run: |
+          chmod +x linux/build_appimage.sh
+          bash linux/build_appimage.sh "$PACKAGE_VERSION"
+          mv "build/linux/appimage/whisper-${PACKAGE_VERSION}-x86_64.AppImage" "build/linux/appimage/whisper-${PACKAGE_VERSION}-linux-x86_64.AppImage"
 
       - name: Prepare Android signing
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh "${{ secrets.KEY_PASSWORD }}" "${{ secrets.STORE_PASSWORD }}"
@@ -270,15 +290,23 @@ jobs:
           flutter build apk
           flutter build apk --split-per-abi
 
+      - name: Normalize Android APK names
+        run: |
+          apk_dir="build/app/outputs/flutter-apk"
+          mv "$apk_dir/app-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-universal.apk"
+          mv "$apk_dir/app-arm64-v8a-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-arm64-v8a.apk"
+          mv "$apk_dir/app-armeabi-v7a-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-armeabi-v7a.apk"
+          mv "$apk_dir/app-x86_64-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-x86_64.apk"
+
       - name: Upload Linux and Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: whisper-linux-android-${{ github.run_id }}
           path: |
-            whisper-x86_64.rpm
-            build/linux/deb/whisper-amd64.deb
-            build/linux/appimage/*.AppImage
-            build/app/outputs/flutter-apk/*.apk
+            whisper-*-linux-x86_64.rpm
+            build/linux/deb/whisper-*-linux-amd64.deb
+            build/linux/appimage/whisper-*-linux-x86_64.AppImage
+            build/app/outputs/flutter-apk/whisper-*-android-*.apk
           retention-days: 7
 
       - name: Publish Linux and Android release assets
@@ -289,7 +317,7 @@ jobs:
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
           files: |
-            whisper-x86_64.rpm
-            build/linux/deb/whisper-amd64.deb
-            build/linux/appimage/*.AppImage
-            build/app/outputs/flutter-apk/*.apk
+            whisper-*-linux-x86_64.rpm
+            build/linux/deb/whisper-*-linux-amd64.deb
+            build/linux/appimage/whisper-*-linux-x86_64.AppImage
+            build/app/outputs/flutter-apk/whisper-*-android-*.apk
