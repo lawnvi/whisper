@@ -41,6 +41,36 @@ void main() {
     expect(dartHelper, contains("'indeterminateProgress':"));
   });
 
+  test('keep-alive channel l10n survives sticky restarts', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'KeepAliveForegroundService.kt',
+    ).readAsStringSync();
+
+    String section(String startMarker, String endMarker) {
+      final start = service.indexOf(startMarker);
+      expect(start, greaterThanOrEqualTo(0), reason: '未找到: $startMarker');
+      final end = service.indexOf(endMarker, start);
+      expect(end, greaterThan(start), reason: '未找到终点: $endMarker');
+      return service.substring(start, end);
+    }
+
+    // START_STICKY 空 intent 重建时 onCreate 先于任何 onStartCommand 调
+    // ensureChannel;本地化渠道文案只活在 Intent extra 的话,重建会用英文
+    // 缺省名 createNotificationChannel,把系统设置里已本地化的渠道名改回
+    // 英文。文案必须持久化并在 onCreate 读回。
+    expect(service, contains('START_STICKY'));
+    final onCreate =
+        section('override fun onCreate()', 'override fun onStartCommand');
+    expect(onCreate, contains('PREF_CHANNEL_NAME'),
+        reason: 'onCreate 需读回持久化的渠道名');
+    expect(onCreate, contains('PREF_CHANNEL_DESCRIPTION'));
+    final onStart =
+        section('override fun onStartCommand', 'override fun onDestroy');
+    expect(onStart, contains('putString(PREF_CHANNEL_NAME'),
+        reason: 'onStartCommand 收到本地化文案时需持久化');
+  });
+
   test('notification listener service is declared for Android settings grant',
       () {
     final manifest =

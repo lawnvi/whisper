@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
     // channel 名/描述由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
+    // 文案同时持久化:START_STICKY 空 intent 重建与首启 onCreate 抢跑时,
+    // ensureChannel 不至于用英文缺省名把系统设置里已本地化的渠道名改回去。
     private var channelName: String = DEFAULT_CHANNEL_NAME
     private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
 
@@ -20,6 +22,11 @@ class KeepAliveForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.getString(PREF_CHANNEL_NAME, null)
+            ?.takeIf { it.isNotBlank() }?.let { channelName = it }
+        prefs.getString(PREF_CHANNEL_DESCRIPTION, null)
+            ?.takeIf { it.isNotBlank() }?.let { channelDescription = it }
         startForeground(
             NOTIFICATION_ID,
             buildNotification(
@@ -32,10 +39,18 @@ class KeepAliveForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        intent?.getStringExtra(EXTRA_CHANNEL_NAME)
-            ?.takeIf { it.isNotBlank() }?.let { channelName = it }
-        intent?.getStringExtra(EXTRA_CHANNEL_DESCRIPTION)
-            ?.takeIf { it.isNotBlank() }?.let { channelDescription = it }
+        val extraChannelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+            ?.takeIf { it.isNotBlank() }
+        val extraChannelDescription = intent?.getStringExtra(EXTRA_CHANNEL_DESCRIPTION)
+            ?.takeIf { it.isNotBlank() }
+        if (extraChannelName != null || extraChannelDescription != null) {
+            extraChannelName?.let { channelName = it }
+            extraChannelDescription?.let { channelDescription = it }
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putString(PREF_CHANNEL_NAME, channelName)
+                .putString(PREF_CHANNEL_DESCRIPTION, channelDescription)
+                .apply()
+        }
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
         val description = intent?.getStringExtra(EXTRA_DESCRIPTION) ?: DEFAULT_DESCRIPTION
         val progress = intent?.getIntExtra(EXTRA_PROGRESS, NO_PROGRESS) ?: NO_PROGRESS
@@ -125,6 +140,9 @@ class KeepAliveForegroundService : Service() {
         private const val EXTRA_INDETERMINATE_PROGRESS = "indeterminateProgress"
         private const val EXTRA_CHANNEL_NAME = "channelName"
         private const val EXTRA_CHANNEL_DESCRIPTION = "channelDescription"
+        private const val PREFS_NAME = "whisper.keep_alive.channel"
+        private const val PREF_CHANNEL_NAME = "channelName"
+        private const val PREF_CHANNEL_DESCRIPTION = "channelDescription"
 
         fun buildIntent(
             context: Context,
