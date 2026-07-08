@@ -61,23 +61,17 @@ class TransferNotificationBridge implements ISocketEvent {
           'title': command.title,
           'text': command.text,
           'progress': command.progress,
+          'channelName': _l10n.notificationChannelTransfer,
+          'channelDescription': _l10n.notificationChannelTransferDesc,
         });
         break;
       case TransferNotificationKind.interrupted:
         // 停滞不是生命周期终结:展示"已中断"但保留聚合器,
         // 否则分批停滞会重复弹通知且完成计数漂移(R3)。
-        _channel.invokeMethod<void>('showTerminal', <String, Object?>{
-          'title': command.title,
-          'text': command.text,
-          'success': command.success,
-        });
+        _channel.invokeMethod<void>('showTerminal', _terminalArguments(command));
         break;
       case TransferNotificationKind.terminal:
-        _channel.invokeMethod<void>('showTerminal', <String, Object?>{
-          'title': command.title,
-          'text': command.text,
-          'success': command.success,
-        });
+        _channel.invokeMethod<void>('showTerminal', _terminalArguments(command));
         _aggregator = null;
         break;
       case TransferNotificationKind.cancel:
@@ -85,6 +79,16 @@ class TransferNotificationBridge implements ISocketEvent {
         _aggregator = null;
         break;
     }
+  }
+
+  Map<String, Object?> _terminalArguments(TransferNotificationCommand command) {
+    return <String, Object?>{
+      'title': command.title,
+      'text': command.text,
+      'success': command.success,
+      'channelName': _l10n.notificationChannelTransfer,
+      'channelDescription': _l10n.notificationChannelTransferDesc,
+    };
   }
 
   @override

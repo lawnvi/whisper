@@ -342,5 +342,12 @@
   "audioPlaybackNotificationSubtitle": "Reproduciendo audio del sistema",
   "mediaActionPause": "Pausar",
   "mediaActionPlay": "Reproducir",
-  "mediaActionDisconnect": "Desconectar"
+  "mediaActionDisconnect": "Desconectar",
+  "notificationChannelKeepAlive": "Mantener activo en segundo plano",
+  "notificationChannelKeepAliveDesc": "Mantiene Whisper conectado mientras se ejecuta en segundo plano",
+  "notificationChannelMedia": "Reproducción multimedia",
+  "notificationChannelTransfer": "Transferencia de archivos",
+  "notificationChannelTransferDesc": "Progreso de transferencia de archivos",
+  "notificationChannelGeneral": "Mensajes",
+  "notificationChannelGeneralDesc": "Mensajes entrantes y avisos"
 }

@@ -19,9 +19,17 @@ import androidx.core.app.NotificationManagerCompat
  * 终态时原地把同一条通知更新为可滑走的结果通知,再 detach 停止服务。
  */
 class TransferForegroundService : Service() {
+    // channel 名/描述由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
+    private var channelName: String = DEFAULT_CHANNEL_NAME
+    private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+            ?.takeIf { it.isNotBlank() }?.let { channelName = it }
+        intent?.getStringExtra(EXTRA_CHANNEL_DESCRIPTION)
+            ?.takeIf { it.isNotBlank() }?.let { channelDescription = it }
         when (intent?.getStringExtra(EXTRA_COMMAND)) {
             COMMAND_PROGRESS -> {
                 val notification = buildProgressNotification(
@@ -117,10 +125,10 @@ class TransferForegroundService : Service() {
         }
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Whisper Transfer",
+            channelName,
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "File transfer progress"
+            description = channelDescription
             setShowBadge(false)
         }
         notificationManager().createNotificationChannel(channel)
@@ -133,6 +141,10 @@ class TransferForegroundService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_TEXT = "text"
         const val EXTRA_PROGRESS = "progress"
+        const val EXTRA_CHANNEL_NAME = "channelName"
+        const val EXTRA_CHANNEL_DESCRIPTION = "channelDescription"
+        private const val DEFAULT_CHANNEL_NAME = "Whisper Transfer"
+        private const val DEFAULT_CHANNEL_DESCRIPTION = "File transfer progress"
         const val COMMAND_PROGRESS = "progress"
         const val COMMAND_TERMINAL = "terminal"
         const val COMMAND_CANCEL = "cancel"

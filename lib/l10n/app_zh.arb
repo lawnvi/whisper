@@ -412,5 +412,12 @@
   "audioPlaybackNotificationSubtitle": "正在播放系统音频",
   "mediaActionPause": "暂停",
   "mediaActionPlay": "播放",
-  "mediaActionDisconnect": "断开"
+  "mediaActionDisconnect": "断开",
+  "notificationChannelKeepAlive": "后台保活",
+  "notificationChannelKeepAliveDesc": "在后台运行时保持 Whisper 连接",
+  "notificationChannelMedia": "媒体播放",
+  "notificationChannelTransfer": "文件传输",
+  "notificationChannelTransferDesc": "文件传输进度",
+  "notificationChannelGeneral": "消息",
+  "notificationChannelGeneralDesc": "新消息与提醒"
 }

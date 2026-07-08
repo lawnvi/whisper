@@ -7,6 +7,7 @@ import 'package:flutter_notification_listener_plus/flutter_notification_listener
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
+import 'package:whisper/helper/notification_l10n.dart';
 
 class NotificationHelper {
   // 使用单例模式进行初始化
@@ -60,9 +61,11 @@ class NotificationHelper {
     // Importance.max：用于指定通知的重要性，设置为最高级别。
     // Priority.high：用于指定通知的优先级，设置为高优先级。
     // 'ticker'：用于指定通知的提示文本，即通知出现在通知中心的文本内容。
-    const AndroidNotificationDetails androidNotificationDetails =
-        AndroidNotificationDetails('whisper.channel.id', 'whisper channel',
-            channelDescription: 'whisper dispatcher channel',
+    final l10n = resolveNotificationL10n();
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+            'whisper.channel.id', l10n.notificationChannelGeneral,
+            channelDescription: l10n.notificationChannelGeneralDesc,
             importance: Importance.max,
             priority: Priority.high,
             ticker: 'ticker');
@@ -74,7 +77,7 @@ class NotificationHelper {
             categoryIdentifier: darwinNotificationCategoryPlain);
 
     // 创建跨平台通知
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+    final NotificationDetails platformChannelSpecifics = NotificationDetails(
         android: androidNotificationDetails,
         iOS: iosNotificationDetails,
         macOS: iosNotificationDetails);

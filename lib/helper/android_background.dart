@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:whisper/helper/notification_l10n.dart';
 
 const _androidBackgroundChannel =
     MethodChannel('com.vireen.whisper/android_background');
@@ -19,11 +20,14 @@ class AndroidKeepAliveNotification {
   final bool indeterminateProgress;
 
   Map<String, Object?> toChannelArguments() {
+    final l10n = resolveNotificationL10n();
     return <String, Object?>{
       'title': title,
       'description': description,
       'progress': _clampedProgress,
       'indeterminateProgress': indeterminateProgress,
+      'channelName': l10n.notificationChannelKeepAlive,
+      'channelDescription': l10n.notificationChannelKeepAliveDesc,
     };
   }
 

@@ -1372,6 +1372,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'断开'**
   String get mediaActionDisconnect;
+
+  /// No description provided for @notificationChannelKeepAlive.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台保活'**
+  String get notificationChannelKeepAlive;
+
+  /// No description provided for @notificationChannelKeepAliveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'在后台运行时保持 Whisper 连接'**
+  String get notificationChannelKeepAliveDesc;
+
+  /// No description provided for @notificationChannelMedia.
+  ///
+  /// In zh, this message translates to:
+  /// **'媒体播放'**
+  String get notificationChannelMedia;
+
+  /// No description provided for @notificationChannelTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件传输'**
+  String get notificationChannelTransfer;
+
+  /// No description provided for @notificationChannelTransferDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件传输进度'**
+  String get notificationChannelTransferDesc;
+
+  /// No description provided for @notificationChannelGeneral.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息'**
+  String get notificationChannelGeneral;
+
+  /// No description provided for @notificationChannelGeneralDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'新消息与提醒'**
+  String get notificationChannelGeneralDesc;
 }
 
 class _AppLocalizationsDelegate

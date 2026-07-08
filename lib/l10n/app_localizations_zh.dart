@@ -713,4 +713,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mediaActionDisconnect => '断开';
+
+  @override
+  String get notificationChannelKeepAlive => '后台保活';
+
+  @override
+  String get notificationChannelKeepAliveDesc => '在后台运行时保持 Whisper 连接';
+
+  @override
+  String get notificationChannelMedia => '媒体播放';
+
+  @override
+  String get notificationChannelTransfer => '文件传输';
+
+  @override
+  String get notificationChannelTransferDesc => '文件传输进度';
+
+  @override
+  String get notificationChannelGeneral => '消息';
+
+  @override
+  String get notificationChannelGeneralDesc => '新消息与提醒';
 }

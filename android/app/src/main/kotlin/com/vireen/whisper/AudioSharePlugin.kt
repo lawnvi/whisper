@@ -182,6 +182,10 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         MediaPlaybackService.EXTRA_DISCONNECT_LABEL,
                         call.argument<String>("disconnectLabel") ?: ""
                     )
+                    .putExtra(
+                        MediaPlaybackService.EXTRA_CHANNEL_NAME,
+                        call.argument<String>("channelName") ?: ""
+                    )
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         appContext.startForegroundService(intent)

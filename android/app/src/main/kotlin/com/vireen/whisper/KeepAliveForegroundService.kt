@@ -12,6 +12,10 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
+    // channel 名/描述由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
+    private var channelName: String = DEFAULT_CHANNEL_NAME
+    private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -28,6 +32,10 @@ class KeepAliveForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+            ?.takeIf { it.isNotBlank() }?.let { channelName = it }
+        intent?.getStringExtra(EXTRA_CHANNEL_DESCRIPTION)
+            ?.takeIf { it.isNotBlank() }?.let { channelDescription = it }
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
         val description = intent?.getStringExtra(EXTRA_DESCRIPTION) ?: DEFAULT_DESCRIPTION
         val progress = intent?.getIntExtra(EXTRA_PROGRESS, NO_PROGRESS) ?: NO_PROGRESS
@@ -93,10 +101,10 @@ class KeepAliveForegroundService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Whisper Keep Alive",
+            channelName,
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Keeps Whisper connected while it runs in the background"
+            description = channelDescription
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
@@ -108,17 +116,24 @@ class KeepAliveForegroundService : Service() {
         private const val NO_PROGRESS = -1
         private const val DEFAULT_TITLE = "Whisper"
         private const val DEFAULT_DESCRIPTION = "Keeping connection alive"
+        private const val DEFAULT_CHANNEL_NAME = "Whisper Keep Alive"
+        private const val DEFAULT_CHANNEL_DESCRIPTION =
+            "Keeps Whisper connected while it runs in the background"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_DESCRIPTION = "description"
         private const val EXTRA_PROGRESS = "progress"
         private const val EXTRA_INDETERMINATE_PROGRESS = "indeterminateProgress"
+        private const val EXTRA_CHANNEL_NAME = "channelName"
+        private const val EXTRA_CHANNEL_DESCRIPTION = "channelDescription"
 
         fun buildIntent(
             context: Context,
             title: String,
             description: String,
             progress: Int?,
-            indeterminateProgress: Boolean
+            indeterminateProgress: Boolean,
+            channelName: String = "",
+            channelDescription: String = ""
         ): Intent {
             return Intent(context, KeepAliveForegroundService::class.java).apply {
                 putExtra(EXTRA_TITLE, title)
@@ -127,6 +142,8 @@ class KeepAliveForegroundService : Service() {
                     putExtra(EXTRA_PROGRESS, progress)
                 }
                 putExtra(EXTRA_INDETERMINATE_PROGRESS, indeterminateProgress)
+                putExtra(EXTRA_CHANNEL_NAME, channelName)
+                putExtra(EXTRA_CHANNEL_DESCRIPTION, channelDescription)
             }
         }
     }

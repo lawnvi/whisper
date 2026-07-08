@@ -315,5 +315,12 @@
   "audioPlaybackNotificationSubtitle": "Playing system audio",
   "mediaActionPause": "Pause",
   "mediaActionPlay": "Play",
-  "mediaActionDisconnect": "Disconnect"
+  "mediaActionDisconnect": "Disconnect",
+  "notificationChannelKeepAlive": "Background keep-alive",
+  "notificationChannelKeepAliveDesc": "Keeps Whisper connected while it runs in the background",
+  "notificationChannelMedia": "Media playback",
+  "notificationChannelTransfer": "File transfer",
+  "notificationChannelTransferDesc": "File transfer progress",
+  "notificationChannelGeneral": "Messages",
+  "notificationChannelGeneralDesc": "Incoming messages and alerts"
 }

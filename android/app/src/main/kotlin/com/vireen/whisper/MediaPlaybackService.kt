@@ -21,6 +21,9 @@ import androidx.core.app.NotificationCompat
 class MediaPlaybackService : Service() {
     private var mediaSession: MediaSessionCompat? = null
 
+    // channel 名由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
+    private var channelName: String = DEFAULT_CHANNEL_NAME
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -44,6 +47,8 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+            ?.takeIf { it.isNotBlank() }?.let { channelName = it }
         val state = intent?.getStringExtra(EXTRA_STATE) ?: STATE_STOPPED
         if (state == STATE_STOPPED) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -164,7 +169,7 @@ class MediaPlaybackService : Service() {
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Whisper Media", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW)
                 .apply { setShowBadge(false) },
         )
     }
@@ -179,7 +184,9 @@ class MediaPlaybackService : Service() {
         const val EXTRA_PAUSE_LABEL = "pauseLabel"
         const val EXTRA_PLAY_LABEL = "playLabel"
         const val EXTRA_DISCONNECT_LABEL = "disconnectLabel"
+        const val EXTRA_CHANNEL_NAME = "channelName"
         const val EXTRA_CONTROL_ACTION = "controlAction"
+        private const val DEFAULT_CHANNEL_NAME = "Whisper Media"
         const val STATE_PLAYING = "playing"
         const val STATE_PAUSED = "paused"
         const val STATE_BUFFERING = "buffering"

@@ -140,6 +140,7 @@ class AudioMediaSessionBridge {
       pauseLabel: l10n.mediaActionPause,
       playLabel: l10n.mediaActionPlay,
       disconnectLabel: l10n.mediaActionDisconnect,
+      channelName: l10n.notificationChannelMedia,
     );
   }
 }

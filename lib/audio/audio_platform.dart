@@ -83,6 +83,7 @@ class AudioPlatform {
     required String pauseLabel,
     required String playLabel,
     required String disconnectLabel,
+    String channelName = '',
   }) {
     return _channel.invokeMethod<void>('updateMediaState', <String, dynamic>{
       'state': state,
@@ -92,6 +93,7 @@ class AudioPlatform {
       'pauseLabel': pauseLabel,
       'playLabel': playLabel,
       'disconnectLabel': disconnectLabel,
+      'channelName': channelName,
     });
   }
 

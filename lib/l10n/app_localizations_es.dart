@@ -756,4 +756,27 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mediaActionDisconnect => 'Desconectar';
+
+  @override
+  String get notificationChannelKeepAlive => 'Mantener activo en segundo plano';
+
+  @override
+  String get notificationChannelKeepAliveDesc =>
+      'Mantiene Whisper conectado mientras se ejecuta en segundo plano';
+
+  @override
+  String get notificationChannelMedia => 'Reproducción multimedia';
+
+  @override
+  String get notificationChannelTransfer => 'Transferencia de archivos';
+
+  @override
+  String get notificationChannelTransferDesc =>
+      'Progreso de transferencia de archivos';
+
+  @override
+  String get notificationChannelGeneral => 'Mensajes';
+
+  @override
+  String get notificationChannelGeneralDesc => 'Mensajes entrantes y avisos';
 }
