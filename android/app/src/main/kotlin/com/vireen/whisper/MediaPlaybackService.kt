@@ -123,11 +123,17 @@ class MediaPlaybackService : Service() {
             android.R.drawable.ic_menu_close_clear_cancel, disconnectLabel,
             controlIntent("disconnect", 3),
         )
-        builder.setStyle(
-            androidx.media.app.NotificationCompat.MediaStyle()
-                .setMediaSession(mediaSession?.sessionToken)
-                .setShowActionsInCompactView(0, if (state == STATE_PLAYING) 1 else 0),
-        )
+        // 紧凑视图索引跟随实际 addAction 数量:有播放/暂停键时 disconnect 在 1,否则只有 0。
+        val hasPlaybackAction =
+            state == STATE_PLAYING || state == STATE_BUFFERING || canResume
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+            .setMediaSession(mediaSession?.sessionToken)
+        if (hasPlaybackAction) {
+            mediaStyle.setShowActionsInCompactView(0, 1)
+        } else {
+            mediaStyle.setShowActionsInCompactView(0)
+        }
+        builder.setStyle(mediaStyle)
         return builder.build()
     }
 
