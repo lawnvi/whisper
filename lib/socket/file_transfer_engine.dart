@@ -43,7 +43,6 @@ class FileTransferEngine {
     required void Function(TransferSnapshot snapshot) emitTransferUpdated,
     required void Function(String message) notify,
     required PeerProfile? Function(String peerId) remoteProfileFor,
-    required String Function() localUid,
     required bool Function(String peerId) isConnectedTo,
     required Set<String> Function() connectedPeerIds,
     required String Function() defaultPeerId,
@@ -56,7 +55,6 @@ class FileTransferEngine {
         _emitTransferUpdated = emitTransferUpdated,
         _notify = notify,
         _remoteProfileFor = remoteProfileFor,
-        _localUid = localUid,
         _isConnectedTo = isConnectedTo,
         _connectedPeerIds = connectedPeerIds,
         _defaultPeerId = defaultPeerId,
@@ -74,7 +72,6 @@ class FileTransferEngine {
   final void Function(TransferSnapshot snapshot) _emitTransferUpdated;
   final void Function(String message) _notify;
   final PeerProfile? Function(String peerId) _remoteProfileFor;
-  final String Function() _localUid;
   final bool Function(String peerId) _isConnectedTo;
   final Set<String> Function() _connectedPeerIds;
   final String Function() _defaultPeerId;
@@ -690,15 +687,13 @@ class FileTransferEngine {
   Future<void> _handleFileTransferV3Ready(
     FileTransferV3Control control,
   ) async {
-    final transfer =
-        await _database().fetchFileTransfer(control.transferId);
+    final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.outgoing ||
         isTerminalFileTransferState(transfer.state)) {
       return;
     }
-    final message =
-        await _database().fetchMessageByUuid(transfer.messageUuid);
+    final message = await _database().fetchMessageByUuid(transfer.messageUuid);
     if (message == null) {
       return;
     }
@@ -825,7 +820,8 @@ class FileTransferEngine {
     MessageData message, {
     required int offset,
   }) async {
-    if (!_isConnectedTo(transfer.peerUid) && transfer.peerUid != _defaultPeerId()) {
+    if (!_isConnectedTo(transfer.peerUid) &&
+        transfer.peerUid != _defaultPeerId()) {
       return;
     }
     if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
@@ -1107,8 +1103,7 @@ class FileTransferEngine {
   }
 
   Future<void> _handleFileTransferV3Ack(FileTransferV3Control control) async {
-    final transfer =
-        await _database().fetchFileTransfer(control.transferId);
+    final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.outgoing ||
         isTerminalFileTransferState(transfer.state)) {
@@ -1131,8 +1126,7 @@ class FileTransferEngine {
       _outgoingWindowEndOffsets.remove(control.transferId);
       return;
     }
-    final message =
-        await _database().fetchMessageByUuid(updated.messageUuid);
+    final message = await _database().fetchMessageByUuid(updated.messageUuid);
     if (message == null) {
       return;
     }
@@ -1161,8 +1155,7 @@ class FileTransferEngine {
     if (decision == TransferRuntimeDecision.queued) {
       return;
     }
-    final message =
-        await _database().fetchMessageByUuid(transfer.messageUuid);
+    final message = await _database().fetchMessageByUuid(transfer.messageUuid);
     if (message == null) {
       return;
     }
@@ -1188,8 +1181,7 @@ class FileTransferEngine {
       committedBytes: control.size,
       lastError: '',
     );
-    final transfer =
-        await _database().fetchFileTransfer(control.transferId);
+    final transfer = await _database().fetchFileTransfer(control.transferId);
     String? nextTransferId;
     if (transfer != null) {
       nextTransferId = _transferRuntime.complete(
@@ -1211,8 +1203,7 @@ class FileTransferEngine {
       state: FileTransferState.canceled,
       lastError: control.errorMessage,
     );
-    final transfer =
-        await _database().fetchFileTransfer(control.transferId);
+    final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer == null) {
       return;
     }
@@ -1235,8 +1226,7 @@ class FileTransferEngine {
       state: FileTransferState.failed,
       lastError: control.errorMessage,
     );
-    final transfer =
-        await _database().fetchFileTransfer(control.transferId);
+    final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer != null) {
       if (transfer.direction == FileTransferDirection.incoming) {
         await _clearActiveIncomingTransfer(transfer.transferId, flush: true);
@@ -1264,8 +1254,7 @@ class FileTransferEngine {
     if (finalFile.existsSync()) {
       await finalFile.delete();
     }
-    final message =
-        await _database().fetchMessageByUuid(transfer.messageUuid);
+    final message = await _database().fetchMessageByUuid(transfer.messageUuid);
     if (message?.fileTimestamp != null && (message!.fileTimestamp ?? 0) > 0) {
       await tempFile.setLastModified(
         DateTime.fromMillisecondsSinceEpoch(message.fileTimestamp!),
@@ -1541,7 +1530,8 @@ class _FileTransferMetadata {
       checksumAlgorithm: json['checksumAlgorithm'] as String? ??
           FileTransferEngine.defaultTransferChecksumAlgorithm,
       checksumValue: json['checksumValue'] as String? ?? '',
-      chunkSize: json['chunkSize'] as int? ?? FileTransferEngine._transferChunkSize,
+      chunkSize:
+          json['chunkSize'] as int? ?? FileTransferEngine._transferChunkSize,
       protocolVersion: json['protocolVersion'] as int? ?? 1,
     );
   }

@@ -28,16 +28,14 @@ MessageData _message(MessageEnum type) {
 
 void main() {
   test('encodes type as enum name string on the wire', () {
-    final json =
-        jsonDecode(encodeWireMessage(_message(MessageEnum.Text)))
-            as Map<String, dynamic>;
+    final json = jsonDecode(encodeWireMessage(_message(MessageEnum.Text)))
+        as Map<String, dynamic>;
     expect(json['type'], 'Text');
   });
 
   test('roundtrip keeps type and payload fields', () {
     final wire = encodeWireMessage(_message(MessageEnum.TransferControl));
-    final decoded =
-        decodeWireMessage(jsonDecode(wire) as Map<String, dynamic>);
+    final decoded = decodeWireMessage(jsonDecode(wire) as Map<String, dynamic>);
     expect(decoded.type, MessageEnum.TransferControl);
     expect(decoded.uuid, 'msg-1');
     expect(decoded.content, 'hello');

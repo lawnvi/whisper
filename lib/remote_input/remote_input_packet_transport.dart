@@ -73,8 +73,6 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   @override
   Stream<void> get done => _doneController.stream;
 
-  Stream<dynamic> get stream => _stream;
-
   void _notifyDone() {
     if (_doneNotified || _doneController.isClosed) {
       return;

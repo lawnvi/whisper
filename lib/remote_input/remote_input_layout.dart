@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/framed_packet_codec.dart';
 
 enum RemoteInputAutoRole {
   source,
@@ -121,11 +122,11 @@ class RemoteInputDisplay {
     return RemoteInputDisplay(
       displayId: json['displayId'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      x: _intJson(json['x']),
-      y: _intJson(json['y']),
-      width: math.max(1, _intJson(json['width'], fallback: 1)),
-      height: math.max(1, _intJson(json['height'], fallback: 1)),
-      scale: _doubleJson(json['scale'], fallback: 1),
+      x: intJson(json['x']),
+      y: intJson(json['y']),
+      width: math.max(1, intJson(json['width'], 1)),
+      height: math.max(1, intJson(json['height'], 1)),
+      scale: doubleJson(json['scale'], 1),
       isPrimary: json['isPrimary'] as bool? ?? false,
     );
   }
@@ -201,7 +202,7 @@ class RemoteInputTopology {
               RemoteInputDisplay.fromJson(Map<String, dynamic>.from(item)))
           .where((display) => display.displayId.isNotEmpty)
           .toList(growable: false),
-      updatedAt: _intJson(json['updatedAt']),
+      updatedAt: intJson(json['updatedAt']),
     );
   }
 
@@ -302,10 +303,10 @@ class RemoteInputSavedLayout {
       sinkDisplayId: json['sinkDisplayId'] as String? ?? '',
       sourceEdge: _edgeJson(json['sourceEdge'], RemoteInputEdge.right),
       sinkEdge: _edgeJson(json['sinkEdge'], RemoteInputEdge.left),
-      sinkOffsetX: _intJson(json['sinkOffsetX']),
-      sinkOffsetY: _intJson(json['sinkOffsetY']),
-      sharedSegmentStart: _intJson(json['sharedSegmentStart']),
-      sharedSegmentEnd: _intJson(json['sharedSegmentEnd']),
+      sinkOffsetX: intJson(json['sinkOffsetX']),
+      sinkOffsetY: intJson(json['sinkOffsetY']),
+      sharedSegmentStart: intJson(json['sharedSegmentStart']),
+      sharedSegmentEnd: intJson(json['sharedSegmentEnd']),
     );
   }
 
@@ -961,29 +962,5 @@ class _TranslatedSinkLayoutCandidate {
   }
 }
 
-int _intJson(Object? value, {int fallback = 0}) {
-  if (value is int) {
-    return value;
-  }
-  if (value is num) {
-    return value.round();
-  }
-  return fallback;
-}
-
-double _doubleJson(Object? value, {double fallback = 0}) {
-  if (value is num) {
-    return value.toDouble();
-  }
-  return fallback;
-}
-
-RemoteInputEdge _edgeJson(Object? value, RemoteInputEdge fallback) {
-  final name = value as String?;
-  for (final edge in RemoteInputEdge.values) {
-    if (edge.name == name) {
-      return edge;
-    }
-  }
-  return fallback;
-}
+RemoteInputEdge _edgeJson(Object? value, RemoteInputEdge fallback) =>
+    enumByName(RemoteInputEdge.values, value, fallback);

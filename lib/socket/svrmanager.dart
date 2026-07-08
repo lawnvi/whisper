@@ -117,7 +117,6 @@ class WsSvrManager {
     remoteProfileFor: (peerId) =>
         _remoteProfilesByPeerId[peerId] ??
         (peerId == receiver ? _remoteProfile : null),
-    localUid: () => sender,
     isConnectedTo: isConnectedTo,
     connectedPeerIds: () => _peerConnections.connectedPeerIds,
     defaultPeerId: () => receiver,
@@ -144,12 +143,6 @@ class WsSvrManager {
       _selectedRemoteProfile?.displayTopology?.isNotEmpty == true;
   RemoteInputTopology? get remoteDisplayTopology =>
       _selectedRemoteProfile?.displayTopology;
-
-  bool _supportsFileTransferV3For(String peerId) {
-    final profile = _remoteProfilesByPeerId[peerId] ??
-        (peerId == receiver ? _remoteProfile : null);
-    return profile?.capabilities.fileTransferV3 == true;
-  }
 
   bool supportsRemoteInputFor(String peerId) {
     final profile = _remoteProfilesByPeerId[peerId] ??

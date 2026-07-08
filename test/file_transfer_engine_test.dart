@@ -10,7 +10,6 @@ FileTransferEngine _engine({
     emitTransferUpdated: (_) {},
     notify: notify ?? (_) {},
     remoteProfileFor: (_) => null, // 无 profile ⇒ 无 fileTransferV3 能力
-    localUid: () => 'local-uid',
     isConnectedTo: (_) => true,
     connectedPeerIds: () => <String>{},
     defaultPeerId: () => '',
@@ -39,7 +38,8 @@ void main() {
       notify: notices.add,
     );
 
-    final ok = await engine.sendFileTo('peer-x', '/tmp/whisper-test-nonexistent.bin');
+    final ok =
+        await engine.sendFileTo('peer-x', '/tmp/whisper-test-nonexistent.bin');
 
     expect(ok, isFalse);
     expect(sent, isFalse, reason: '能力不满足时不得发出任何字节');
