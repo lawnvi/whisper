@@ -435,15 +435,31 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
   /// 暂停=断流:通知源端停止对本 sink 的 fanout,本地停止播放,
   /// 但保留后续请求 re-offer 所需的上下文。
+  /// buffering(rejoin 在途)时活播字段已清空,回退到 rejoin 上下文,
+  /// 使暂停等价于"取消在途 rejoin"而非静默 no-op。
   Future<void> pausePlaybackAsSink() async {
-    final sendControl = _playbackSendControl;
-    final groupId = _playbackGroupId;
-    final streamId = _playbackStreamId;
-    final sessionId = _playbackSessionId;
-    final sourcePeerId = _playbackSourcePeerId;
-    final localPeerId = _playbackLocalPeerId;
-    final channelRole = _playbackChannelRole;
-    final targetLatencyMs = _playbackTargetLatencyMs;
+    final context = _sinkRejoinContext;
+    final sendControl = _playbackSendControl ?? context?.sendControl;
+    final groupId =
+        _playbackGroupId.isNotEmpty ? _playbackGroupId : context?.groupId ?? '';
+    final streamId = _playbackStreamId.isNotEmpty
+        ? _playbackStreamId
+        : context?.streamId ?? '';
+    final sessionId = _playbackSessionId.isNotEmpty
+        ? _playbackSessionId
+        : context?.sessionId ?? '';
+    final sourcePeerId = _playbackSourcePeerId.isNotEmpty
+        ? _playbackSourcePeerId
+        : context?.sourcePeerId ?? '';
+    final localPeerId = _playbackLocalPeerId.isNotEmpty
+        ? _playbackLocalPeerId
+        : context?.localPeerId ?? '';
+    final channelRole = _playbackStreamId.isNotEmpty
+        ? _playbackChannelRole
+        : context?.channelRole ?? AudioChannelRole.stereo;
+    final targetLatencyMs = _playbackStreamId.isNotEmpty
+        ? _playbackTargetLatencyMs
+        : context?.targetLatencyMs ?? _defaultTargetLatencyMs;
     if (sendControl == null ||
         groupId.isEmpty ||
         streamId.isEmpty ||

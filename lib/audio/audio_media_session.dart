@@ -48,7 +48,12 @@ class AudioMediaSessionBridge {
       case 'pause':
       case 'focusPause':
       case 'focusPauseTransient':
+        // buffering(rejoin 在途)中暂停 = 取消在途 rejoin:
+        // 复位 rejoining 让媒体卡立即回落 paused,而不是卡在 buffering。
+        _rejoining = false;
+        _rejoinTimeout?.cancel();
         coordinator.pausePlaybackAsSink();
+        _sync();
         break;
       case 'resume':
       case 'focusResume':

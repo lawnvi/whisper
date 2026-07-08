@@ -667,6 +667,45 @@ void main() {
       );
     });
 
+    test('pausePlaybackAsSink during pending rejoin sends groupStop from context',
+        () async {
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await _offerSinkPlayback(
+        coordinator,
+        sent: sent,
+        localPeerId: 'phone',
+        sourcePeerId: 'mac',
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        channelRole: AudioChannelRole.right,
+        targetLatencyMs: 77,
+      );
+      await coordinator.pausePlaybackAsSink();
+      expect(await coordinator.requestRejoinAsSink(), isTrue);
+      sent.clear();
+
+      await coordinator.pausePlaybackAsSink();
+
+      expect(sent, hasLength(1), reason: 'rejoin 在途时暂停不得是 no-op');
+      expect(sent.single.peerId, 'mac');
+      expect(sent.single.control.action, AudioGroupControlAction.groupStop);
+      expect(sent.single.control.groupId, 'group-1');
+      expect(sent.single.control.streamId, 'stream-1');
+      expect(sent.single.control.sessionId, 'session-phone');
+      expect(sent.single.control.sinkPeerId, 'phone');
+      expect(sent.single.control.channelRole, AudioChannelRole.right);
+      expect(sent.single.control.targetLatencyMs, 77);
+      expect(coordinator.canRejoinAsSink, isTrue,
+          reason: '暂停后媒体卡的播放键仍是重试入口');
+      expect(coordinator.rejoinSourcePeerId, 'mac');
+    });
+
     test('source groupStop clears paused rejoin context', () async {
       final sent = <_SentGroupControl>[];
       final coordinator = AudioGroupCoordinator(
