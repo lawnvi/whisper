@@ -36,6 +36,10 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<!-- iPad 竖屏锁定的前提:声明全屏(放弃多任务分屏),
+	     否则 App Store 校验要求四方向齐全(ITMS-90474)。 -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
