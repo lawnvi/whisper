@@ -79,6 +79,33 @@ void main() {
     expect(packageScript, contains('set position of item "Applications"'));
   });
 
+  test('DMG Finder window layout is best-effort so headless CI still packages',
+      () {
+    final packageScript = File('script/build_and_run.sh').readAsStringSync();
+
+    // The cosmetic layout must not abort packaging by default. Headless CI
+    // runners can fail Finder scripting even though hdiutil can still produce a
+    // usable DMG.
+    expect(
+      packageScript,
+      contains('WHISPER_MACOS_REQUIRE_DMG_LAYOUT'),
+    );
+    expect(
+      packageScript,
+      contains(
+        'Warning: skipping DMG Finder window layout (cosmetic); '
+        'packaging plain DMG',
+      ),
+    );
+
+    final layoutFailure =
+        packageScript.indexOf('WHISPER_MACOS_REQUIRE_DMG_LAYOUT');
+    final convert = packageScript.indexOf(r'hdiutil convert "$rw_dmg_path"');
+    expect(layoutFailure, isNot(-1));
+    expect(convert, isNot(-1));
+    expect(layoutFailure, lessThan(convert));
+  });
+
   test('macOS package script can import a stable signing certificate', () {
     final script = File('script/build_and_run.sh').readAsStringSync();
 

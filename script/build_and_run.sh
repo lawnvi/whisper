@@ -243,10 +243,15 @@ package_release_dmg() {
   ln -s /Applications "$DMG_ROOT/Applications"
   hdiutil create -volname "Whisper" -srcfolder "$DMG_ROOT" -ov -format UDRW "$rw_dmg_path"
   hdiutil attach "$rw_dmg_path" -mountpoint "$mount_point" -nobrowse -quiet
+  # The Finder window layout is cosmetic. Headless CI runners may not have a
+  # usable Finder session, so keep packaging unless strict layout is requested.
   if ! configure_dmg_finder_window "$mount_point"; then
-    detach_dmg_mount "$mount_point" || true
-    echo "Failed to configure DMG Finder window layout" >&2
-    exit 1
+    if [[ "${WHISPER_MACOS_REQUIRE_DMG_LAYOUT:-0}" == "1" ]]; then
+      detach_dmg_mount "$mount_point" || true
+      echo "Failed to configure DMG Finder window layout" >&2
+      exit 1
+    fi
+    echo "Warning: skipping DMG Finder window layout (cosmetic); packaging plain DMG" >&2
   fi
   detach_dmg_mount "$mount_point"
   hdiutil convert "$rw_dmg_path" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
