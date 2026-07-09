@@ -54,6 +54,20 @@ void main() {
         greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
     expect(tester.getSize(inspect), const Size.square(44));
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusIsWithin(find.byType(InkWell).first), isTrue);
+    expect(_primaryFocusIsWithin(find.byType(Checkbox)), isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusIsWithin(inspect), isTrue);
+    expect(
+      _primaryFocusIsWithin(find.byType(Checkbox)),
+      isFalse,
+      reason: 'the visual checkbox must not add a second traversal stop',
+    );
+
     await tester.tap(toggle);
     await tester.tap(inspect);
     expect(toggles, 1);
@@ -284,6 +298,26 @@ Widget _workspaceFixture({required double textScale}) {
 }
 
 void _noop() {}
+
+bool _primaryFocusIsWithin(Finder finder) {
+  final focusContext = FocusManager.instance.primaryFocus?.context;
+  if (focusContext == null) {
+    return false;
+  }
+  final targets = finder.evaluate().toSet();
+  if (targets.contains(focusContext)) {
+    return true;
+  }
+  var found = false;
+  focusContext.visitAncestorElements((ancestor) {
+    if (targets.contains(ancestor)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
 
 double _contrast(Color foreground, Color background) {
   final lighter = foreground.computeLuminance() > background.computeLuminance()

@@ -16,15 +16,187 @@ import 'package:whisper/remote_input/remote_input_workspace_presentation.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
 
+abstract interface class RemoteInputWorkspaceCoordinatorApi {
+  RemoteInputWorkspaceSnapshot get snapshot;
+
+  RemoteInputRuntimeState get legacyState;
+
+  void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
+
+  Future<RemoteInputTopology> loadLocalTopology();
+
+  Future<void> startControllerWorkspace({
+    required String sourcePeerId,
+    required List<RemoteInputWorkspaceTargetRequest> targets,
+    required RemoteInputPeerControlSender sendControlTo,
+  });
+
+  Future<void> stopControllerWorkspace({
+    RemoteInputPeerControlSender? sendControlTo,
+  });
+}
+
+abstract interface class RemoteInputWorkspaceSocketApi {
+  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''});
+
+  bool supportsRemoteInputFor(String peerId);
+
+  bool supportsRemoteInputTopologyFor(String peerId);
+
+  RemoteInputTopology? remoteDisplayTopologyFor(String peerId);
+
+  bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId);
+
+  bool isConnectedTo(String peerId);
+
+  void sendRemoteInputControlTo(
+    String peerId,
+    RemoteInputControlMessage control,
+  );
+}
+
+abstract interface class RemoteInputWorkspaceStore {
+  Future<DeviceData?> fetchDevice(String peerId);
+
+  Future<RemoteInputLayoutData?> fetchLayout(String peerId);
+
+  Future<void> saveLayout(RemoteInputLayoutData layout);
+}
+
+class RemoteInputWorkspaceDependencies {
+  const RemoteInputWorkspaceDependencies({
+    required this.coordinator,
+    required this.socket,
+    required this.store,
+  });
+
+  factory RemoteInputWorkspaceDependencies.live() {
+    return RemoteInputWorkspaceDependencies(
+      coordinator: _LiveRemoteInputWorkspaceCoordinator(),
+      socket: _LiveRemoteInputWorkspaceSocket(),
+      store: _LiveRemoteInputWorkspaceStore(),
+    );
+  }
+
+  final RemoteInputWorkspaceCoordinatorApi coordinator;
+  final RemoteInputWorkspaceSocketApi socket;
+  final RemoteInputWorkspaceStore store;
+}
+
+class _LiveRemoteInputWorkspaceCoordinator
+    implements RemoteInputWorkspaceCoordinatorApi {
+  final RemoteInputWorkspaceCoordinator _workspace =
+      RemoteInputWorkspaceCoordinator.shared;
+  final RemoteInputCoordinator _legacy = RemoteInputCoordinator.shared;
+
+  @override
+  RemoteInputRuntimeState get legacyState => _legacy.state;
+
+  @override
+  RemoteInputWorkspaceSnapshot get snapshot => _workspace.snapshot;
+
+  @override
+  void addListener(VoidCallback listener) => _workspace.addListener(listener);
+
+  @override
+  Future<RemoteInputTopology> loadLocalTopology() => _legacy.displayTopology();
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _workspace.removeListener(listener);
+
+  @override
+  Future<void> startControllerWorkspace({
+    required String sourcePeerId,
+    required List<RemoteInputWorkspaceTargetRequest> targets,
+    required RemoteInputPeerControlSender sendControlTo,
+  }) {
+    return _workspace.startControllerWorkspace(
+      sourcePeerId: sourcePeerId,
+      targets: targets,
+      sendControlTo: sendControlTo,
+    );
+  }
+
+  @override
+  Future<void> stopControllerWorkspace({
+    RemoteInputPeerControlSender? sendControlTo,
+  }) {
+    return _workspace.stopControllerWorkspace(sendControlTo: sendControlTo);
+  }
+}
+
+class _LiveRemoteInputWorkspaceSocket implements RemoteInputWorkspaceSocketApi {
+  final WsSvrManager _socket = WsSvrManager();
+
+  @override
+  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) {
+    return _socket.connectedRemoteInputDevices(
+      preferredPeerId: preferredPeerId,
+    );
+  }
+
+  @override
+  bool isConnectedTo(String peerId) => _socket.isConnectedTo(peerId);
+
+  @override
+  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) =>
+      _socket.remoteDisplayTopologyFor(peerId);
+
+  @override
+  bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) =>
+      _socket.remotePeerTrustsPeer(remotePeerId, trustedPeerId);
+
+  @override
+  void sendRemoteInputControlTo(
+    String peerId,
+    RemoteInputControlMessage control,
+  ) {
+    _socket.sendRemoteInputControlTo(peerId, control);
+  }
+
+  @override
+  bool supportsRemoteInputFor(String peerId) =>
+      _socket.supportsRemoteInputFor(peerId);
+
+  @override
+  bool supportsRemoteInputTopologyFor(String peerId) =>
+      _socket.supportsRemoteInputTopologyFor(peerId);
+}
+
+class _LiveRemoteInputWorkspaceStore implements RemoteInputWorkspaceStore {
+  final LocalDatabase _database = LocalDatabase();
+
+  @override
+  Future<DeviceData?> fetchDevice(String peerId) =>
+      _database.fetchDevice(peerId);
+
+  @override
+  Future<RemoteInputLayoutData?> fetchLayout(String peerId) =>
+      _database.fetchRemoteInputLayout(peerId);
+
+  @override
+  Future<void> saveLayout(RemoteInputLayoutData layout) =>
+      _database.upsertRemoteInputLayout(layout);
+}
+
 class RemoteInputWorkspaceScreen extends StatefulWidget {
   const RemoteInputWorkspaceScreen({
     super.key,
     required this.initialDevices,
     this.preferredPeerId = '',
+    this.dependencies,
   });
+
+  static ValueKey<String> remoteDisplayKey(String peerId, String displayId) {
+    return ValueKey<String>('remote-input-display-$peerId-$displayId');
+  }
 
   final List<DeviceData> initialDevices;
   final String preferredPeerId;
+  final RemoteInputWorkspaceDependencies? dependencies;
 
   @override
   State<RemoteInputWorkspaceScreen> createState() =>
@@ -33,11 +205,9 @@ class RemoteInputWorkspaceScreen extends StatefulWidget {
 
 class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     with WidgetsBindingObserver {
-  final WsSvrManager _socketManager = WsSvrManager();
-  final RemoteInputWorkspaceCoordinator _workspaceCoordinator =
-      RemoteInputWorkspaceCoordinator.shared;
-  final RemoteInputCoordinator _legacyCoordinator =
-      RemoteInputCoordinator.shared;
+  late final RemoteInputWorkspaceSocketApi _socketManager;
+  late final RemoteInputWorkspaceCoordinatorApi _workspaceCoordinator;
+  late final RemoteInputWorkspaceStore _workspaceStore;
   final Map<String, RemoteInputLayoutData> _layouts =
       <String, RemoteInputLayoutData>{};
   final Map<String, Timer> _layoutSaveTimers = <String, Timer>{};
@@ -51,6 +221,11 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   @override
   void initState() {
     super.initState();
+    final dependencies =
+        widget.dependencies ?? RemoteInputWorkspaceDependencies.live();
+    _socketManager = dependencies.socket;
+    _workspaceCoordinator = dependencies.coordinator;
+    _workspaceStore = dependencies.store;
     WidgetsBinding.instance.addObserver(this);
     _devices = widget.initialDevices;
     _focusedPeerId = widget.preferredPeerId;
@@ -81,7 +256,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
 
   Future<RemoteInputTopology> _loadLocalTopology() async {
     try {
-      final topology = await _legacyCoordinator.displayTopology();
+      final topology = await _workspaceCoordinator.loadLocalTopology();
       return topology.isNotEmpty ? topology : RemoteInputTopology.fallback();
     } catch (_) {
       return RemoteInputTopology.fallback();
@@ -172,7 +347,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required int index,
     required RemoteInputTopology localTopology,
   }) async {
-    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
+    final saved = await _workspaceStore.fetchLayout(device.uid);
     if (saved != null) {
       var next = _reanchorLegacyDefaultLayout(
         saved,
@@ -182,7 +357,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       );
       next = _normalizeRemoteTopologyLayout(next, device: device);
       if (next != saved) {
-        await LocalDatabase().upsertRemoteInputLayout(next);
+        await _workspaceStore.saveLayout(next);
       }
       return next;
     }
@@ -208,7 +383,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: now,
     );
-    await LocalDatabase().upsertRemoteInputLayout(layout);
+    await _workspaceStore.saveLayout(layout);
     return layout;
   }
 
@@ -397,13 +572,18 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           .whereType<RemoteInputWorkspaceTargetRequest>()
           .toList(growable: false),
     );
+    final hasAvailableDevices = _devices.isNotEmpty;
     return RemoteInputWorkspaceCanvasPanel(
       title: l10n.remoteInputWorkspaceCanvasTitle,
       hasConflict: validation.hasConflict,
       conflictLabel: l10n.remoteInputWorkspaceConflict,
       empty: selectedDevices.isEmpty,
-      emptyTitle: l10n.remoteInputWorkspaceNoTargets,
-      emptyBody: l10n.emptyDevicesBody,
+      emptyTitle: hasAvailableDevices
+          ? l10n.remoteInputWorkspaceSelectTargets
+          : l10n.remoteInputWorkspaceNoTargets,
+      emptyBody: hasAvailableDevices
+          ? l10n.remoteInputWorkspaceSelectTargetBody
+          : l10n.emptyDevicesBody,
       child: LayoutBuilder(
         builder: (context, constraints) => _buildScreenCanvas(
           constraints,
@@ -547,6 +727,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         children: <Widget>[
           for (final display in displays)
             RemoteInputPositionedScreenBlock(
+              key: RemoteInputWorkspaceScreen.remoteDisplayKey(
+                device.uid,
+                display.displayId,
+              ),
               visualRect: Rect.fromLTWH(
                 toCanvas(display.left, display.top).dx,
                 toCanvas(display.left, display.top).dy,
@@ -591,10 +775,13 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
   }
 
-  void _togglePeerSelection(DeviceData device) {
+  void _togglePeerSelection(
+    DeviceData device, {
+    bool preserveFocus = false,
+  }) {
     setState(() {
       if (_selectedPeerIds.remove(device.uid)) {
-        if (_focusedPeerId == device.uid) {
+        if (!preserveFocus && _focusedPeerId == device.uid) {
           _focusedPeerId = _selectedPeerIds.firstOrNull ?? '';
         }
       } else {
@@ -653,7 +840,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       layoutJson: layoutJson,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
-    await LocalDatabase().upsertRemoteInputLayout(next);
+    await _workspaceStore.saveLayout(next);
     if (!mounted) {
       return;
     }
@@ -699,7 +886,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           : selected
               ? Icons.visibility_off_rounded
               : Icons.add_rounded,
-      onAction: focused == null ? null : () => _togglePeerSelection(focused),
+      onAction: focused == null
+          ? null
+          : () => _togglePeerSelection(focused, preserveFocus: true),
     );
   }
 
@@ -739,7 +928,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       showAppToast(l10n.remoteInputWorkspaceNoTargets);
       return;
     }
-    final legacyState = _legacyCoordinator.state;
+    final legacyState = _workspaceCoordinator.legacyState;
     if (legacyState.status != RemoteInputRuntimeStatus.idle &&
         legacyState.status != RemoteInputRuntimeStatus.failed) {
       showAppToast(l10n.remoteInputStopCurrentFirst);
@@ -803,7 +992,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           index: 0,
           localTopology: _localTopology,
         );
-    final storedDevice = await LocalDatabase().fetchDevice(device.uid);
+    final storedDevice = await _workspaceStore.fetchDevice(device.uid);
     final localTrustsRemote = storedDevice?.auth == true;
     final remoteTrustsLocal =
         _socketManager.remotePeerTrustsPeer(device.uid, sourcePeerId);
@@ -1050,7 +1239,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       layoutJson: updatedLayoutJson,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
-    await LocalDatabase().upsertRemoteInputLayout(next);
+    await _workspaceStore.saveLayout(next);
     if (!mounted) {
       return;
     }

@@ -691,6 +691,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteInputWorkspaceSelectTargets => 'Control targets';
 
   @override
+  String get remoteInputWorkspaceSelectTargetBody =>
+      'Add at least one device from the Devices panel to arrange its screens.';
+
+  @override
   String get remoteInputWorkspaceCanvasTitle => 'Screen arrangement';
 
   @override

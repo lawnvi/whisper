@@ -175,6 +175,7 @@ void main() {
         home: Scaffold(
           body: AppInteractiveTile(
             semanticLabel: 'Unavailable device',
+            selected: true,
             enabled: false,
             onActivate: () => activations += 1,
             title: const Text('Unavailable'),
@@ -187,14 +188,27 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
 
-    final focusIndicator = tester.widget<Container>(
+    final focusRect = tester.getRect(
       find.byKey(AppInteractiveTile.focusIndicatorKey),
     );
-    final boxDecoration = focusIndicator.decoration! as BoxDecoration;
-    final border = boxDecoration.border! as Border;
-    expect(border.top.width, 2);
-    expect(border.top.color, AppTheme.darkTheme.colorScheme.primary);
-    expect(focusIndicator.padding, const EdgeInsets.all(4));
+    final visualRect = tester.getRect(
+      find.byKey(AppInteractiveTile.visualSurfaceKey),
+    );
+    expect(
+      visualRect,
+      Rect.fromLTRB(
+        focusRect.left + 4,
+        focusRect.top + 4,
+        focusRect.right - 4,
+        focusRect.bottom - 4,
+      ),
+    );
+    const paintedFocusStrokeWidth = 2.0;
+    expect(
+      visualRect.left - (focusRect.left + paintedFocusStrokeWidth),
+      2,
+      reason: 'the rendered surface must leave a 2 px gap after the focus ring',
+    );
     expect(tester.getSize(find.byType(AppInteractiveTile)), sizeBeforeFocus);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -207,6 +221,7 @@ void main() {
         label: 'Unavailable device',
         hasEnabledState: true,
         hasSelectedState: true,
+        isSelected: true,
         isButton: true,
         isFocusable: true,
         isFocused: true,

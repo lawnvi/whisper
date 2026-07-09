@@ -381,6 +381,7 @@
   "remoteInputWorkspaceStop": "停止",
   "remoteInputWorkspaceNoTargets": "没有可用的桌面被控设备",
   "remoteInputWorkspaceSelectTargets": "被控设备",
+  "remoteInputWorkspaceSelectTargetBody": "请从设备面板至少将一台设备加入工作区，再排列它的屏幕。",
   "remoteInputWorkspaceCanvasTitle": "屏幕排列",
   "remoteInputWorkspaceDetailsTitle": "设备详情",
   "remoteInputWorkspaceFocusTarget": "查看设备",

@@ -85,6 +85,7 @@ void main() {
         'dangerousActions',
         'remoteInputWorkspaceDevicesPanel',
         'remoteInputWorkspaceDetailsPanel',
+        'remoteInputWorkspaceSelectTargetBody',
         'remoteInputWorkspaceClosePanel',
       }),
     );
@@ -114,6 +115,7 @@ void main() {
       'dangerousActions',
       'remoteInputWorkspaceDevicesPanel',
       'remoteInputWorkspaceDetailsPanel',
+      'remoteInputWorkspaceSelectTargetBody',
     };
 
     for (final key in criticalKeys) {

@@ -505,10 +505,14 @@ class _RemoteInputDeviceTargetRow extends StatelessWidget {
                     ),
                     child: Row(
                       children: <Widget>[
-                        ExcludeSemantics(
-                          child: Checkbox(
-                            value: item.selected,
-                            onChanged: (_) => item.onToggle(),
+                        IgnorePointer(
+                          child: ExcludeFocus(
+                            child: ExcludeSemantics(
+                              child: Checkbox(
+                                value: item.selected,
+                                onChanged: (_) => item.onToggle(),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -771,12 +775,15 @@ class RemoteInputWorkspaceStatusBar extends StatelessWidget {
         color: palette.surfaceElevated,
         border: Border(top: BorderSide(color: palette.borderSubtle)),
       ),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        status,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: palette.textMuted),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        heightFactor: 1,
+        child: Text(
+          status,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: palette.textMuted),
+        ),
       ),
     );
   }

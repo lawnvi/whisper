@@ -1265,6 +1265,12 @@ abstract class AppLocalizations {
   /// **'被控设备'**
   String get remoteInputWorkspaceSelectTargets;
 
+  /// No description provided for @remoteInputWorkspaceSelectTargetBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请从设备面板至少将一台设备加入工作区，再排列它的屏幕。'**
+  String get remoteInputWorkspaceSelectTargetBody;
+
   /// No description provided for @remoteInputWorkspaceCanvasTitle.
   ///
   /// In zh, this message translates to:

@@ -20,6 +20,9 @@ class AppInteractiveTile extends StatefulWidget {
   static const focusIndicatorKey = ValueKey<String>(
     'app-interactive-tile-focus-indicator',
   );
+  static const visualSurfaceKey = ValueKey<String>(
+    'app-interactive-tile-visual-surface',
+  );
 
   final String semanticLabel;
   final bool selected;
@@ -125,39 +128,45 @@ class _AppInteractiveTileState extends State<AppInteractiveTile> {
           behavior: HitTestBehavior.opaque,
           excludeFromSemantics: true,
           onTap: _canActivate ? _activate : null,
-          child: Container(
-            key: AppInteractiveTile.focusIndicatorKey,
+          child: ConstrainedBox(
             constraints: const BoxConstraints(
               minWidth: WhisperUi.minInteractiveSize,
               minHeight: WhisperUi.minInteractiveSize,
             ),
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-              border: Border.all(
-                color: _focused ? colorScheme.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-            child: AnimatedContainer(
-              duration: disableAnimations
-                  ? Duration.zero
-                  : const Duration(milliseconds: 160),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: DecoratedBox(
+              key: AppInteractiveTile.focusIndicatorKey,
               decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(WhisperUi.radiusSmall),
-                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+                border: Border.all(
+                  color: _focused ? colorScheme.primary : Colors.transparent,
+                  width: 2,
+                ),
               ),
-              child: IconTheme(
-                data:
-                    theme.iconTheme.copyWith(color: foregroundColor, size: 20),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => _buildContent(
-                    theme,
-                    palette,
-                    foregroundColor,
-                    boundedWidth: constraints.hasBoundedWidth,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: AnimatedContainer(
+                  key: AppInteractiveTile.visualSurfaceKey,
+                  duration: disableAnimations
+                      ? Duration.zero
+                      : const Duration(milliseconds: 160),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    borderRadius: BorderRadius.circular(WhisperUi.radiusSmall),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: IconTheme(
+                    data: theme.iconTheme
+                        .copyWith(color: foregroundColor, size: 20),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => _buildContent(
+                        theme,
+                        palette,
+                        foregroundColor,
+                        boundedWidth: constraints.hasBoundedWidth,
+                      ),
+                    ),
                   ),
                 ),
               ),

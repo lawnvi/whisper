@@ -298,6 +298,7 @@
   "remoteInputWorkspaceStop": "Stop",
   "remoteInputWorkspaceNoTargets": "No available desktop control targets",
   "remoteInputWorkspaceSelectTargets": "Control targets",
+  "remoteInputWorkspaceSelectTargetBody": "Add at least one device from the Devices panel to arrange its screens.",
   "remoteInputWorkspaceCanvasTitle": "Screen arrangement",
   "remoteInputWorkspaceDetailsTitle": "Device details",
   "remoteInputWorkspaceFocusTarget": "Inspect device",

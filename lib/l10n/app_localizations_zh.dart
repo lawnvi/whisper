@@ -657,6 +657,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputWorkspaceSelectTargets => '被控设备';
 
   @override
+  String get remoteInputWorkspaceSelectTargetBody =>
+      '请从设备面板至少将一台设备加入工作区，再排列它的屏幕。';
+
+  @override
   String get remoteInputWorkspaceCanvasTitle => '屏幕排列';
 
   @override

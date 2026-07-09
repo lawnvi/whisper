@@ -325,6 +325,7 @@
   "remoteInputWorkspaceStop": "Detener",
   "remoteInputWorkspaceNoTargets": "No hay equipos de escritorio disponibles",
   "remoteInputWorkspaceSelectTargets": "Equipos controlados",
+  "remoteInputWorkspaceSelectTargetBody": "Agrega al menos un dispositivo desde el panel Dispositivos para organizar sus pantallas.",
   "remoteInputWorkspaceCanvasTitle": "Distribucion de pantalla",
   "remoteInputWorkspaceDetailsTitle": "Detalles del dispositivo",
   "remoteInputWorkspaceFocusTarget": "Ver dispositivo",
