@@ -1109,4 +1109,52 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get remoteInputWorkspaceConflictScreen =>
       'La pantalla se superpone con otro borde';
+
+  @override
+  String get pairingNewDeviceTitle => 'Emparejar un dispositivo nuevo';
+
+  @override
+  String pairingNewDeviceDescription(String device) {
+    return '$device quiere establecer una conexión de confianza';
+  }
+
+  @override
+  String get pairingIdentityChangedTitle =>
+      'La identidad del dispositivo ha cambiado';
+
+  @override
+  String pairingIdentityChangedDescription(String device) {
+    return 'La clave de identidad de $device no coincide con el emparejamiento anterior. Continúa solo si el dispositivo se reinstaló o restableció';
+  }
+
+  @override
+  String get pairingLegacyTrustTitle =>
+      'Confirma de nuevo este dispositivo de confianza';
+
+  @override
+  String pairingLegacyTrustDescription(String device) {
+    return '$device usa un registro de confianza antiguo y debe emparejarse de nuevo para vincular su identidad';
+  }
+
+  @override
+  String get pairingCompareCode =>
+      'Confirma que ambos dispositivos muestran el mismo código de seis dígitos';
+
+  @override
+  String pairingCodeSemantics(String code) {
+    return 'Código de emparejamiento $code';
+  }
+
+  @override
+  String get pairingReject => 'Rechazar';
+
+  @override
+  String get pairingApprove => 'Los códigos coinciden';
+
+  @override
+  String get pairingUpgradeRequired =>
+      'El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo';
+
+  @override
+  String get pairingExpired => 'La solicitud de emparejamiento ha caducado';
 }

@@ -33,11 +33,12 @@ import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
-import 'package:whisper/state/connect_prompt_registry.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
+import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
@@ -97,7 +98,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       RemoteInputCoordinator.shared;
   final RemoteInputWorkspaceCoordinator _remoteInputWorkspaceCoordinator =
       RemoteInputWorkspaceCoordinator.shared;
-  final ConnectPromptRegistry _connectPromptRegistry = ConnectPromptRegistry();
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -2136,8 +2136,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
           }
           return;
         }
+        final l10n = AppLocalizations.of(context);
+        final displayMessage = message == 'upgrade_required'
+            ? l10n?.pairingUpgradeRequired ?? message.toString()
+            : message == 'pairing_expired'
+                ? l10n?.pairingExpired ?? message.toString()
+                : message.toString();
         ConnectionCoordinator()
-            .markDisconnected(peerId: peerId, error: message.toString());
+            .markDisconnected(peerId: peerId, error: displayMessage);
         if (_pendingAutoConnectPeerId == peerId) {
           _pendingAutoConnectPeerId = null;
         }
@@ -2148,7 +2154,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
-          description: "$message",
+          description: displayMessage,
           isLoading: true,
           // 是否显示加载指示器
           icon: const Icon(
@@ -2212,97 +2218,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
-    if (msg.isNotEmpty) {
-      showLoadingDialog(
-        context,
-        title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
-        description: "${deviceData?.name} $msg",
-        isLoading: true,
-        // 是否显示加载指示器
-        icon: const Icon(
-          Icons.warning_rounded,
-          color: Colors.red,
-        ),
-        cancelButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
-        onCancel: () {
-          // 处理取消操作
-          callback(false);
-          Navigator.of(context).pop(); // 关闭对话框
-        },
-        task: (VoidCallback onCancel) async {},
-      );
+  void onPairing(
+    PairingRequest request,
+    void Function(bool) resolve,
+  ) {
+    if (!mounted) {
+      resolve(false);
       return;
     }
-    if (asServer) {
-      final peerId = deviceData?.uid ?? '';
-      final needsPrompt = _connectPromptRegistry.register(
-        peerId,
-        (allow) => callback(allow),
-      );
-      if (!needsPrompt) {
-        return;
-      }
-      final l10n = AppLocalizations.of(context);
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      showCupertinoDialog(
-        context: context,
-        builder: (dialogContext) {
-          _connectPromptRegistry.bindCloser(peerId, () {
-            Navigator.of(dialogContext).pop();
-          });
-          void resolve(bool allow) {
-            final latest = _connectPromptRegistry.latestCallbackFor(peerId);
-            if (!allow) {
-              logger.i("拒绝连接");
-            }
-            latest?.call(allow);
-            _connectPromptRegistry.resolveAndClose(peerId);
-          }
-
-          return CupertinoAlertDialog(
-            title: Text(l10n?.connectRequest ?? '连接请求'),
-            content: Column(
-              children: [
-                const SizedBox(height: 14),
-                Text(
-                  l10n?.connectRequestDesc(deviceData?.name ?? "") ??
-                      '接入设备: ${deviceData?.name}?',
-                  style: TextStyle(
-                    color: isDark ? Colors.grey[400] : Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            actions: <Widget>[
-              CupertinoDialogAction(
-                onPressed: () => resolve(false),
-                child: Text(
-                  l10n?.refuse ?? '拒绝',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-              CupertinoDialogAction(
-                onPressed: () => resolve(true),
-                child: Text(
-                  l10n?.allow ?? '同意',
-                  style: const TextStyle(color: Colors.lightBlue),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    } else {
-      callback(true);
-    }
+    unawaited(
+      showPairingDialog(context, request: request, resolve: resolve),
+    );
   }
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) async {
-    if (deviceData != null) {
-      _connectPromptRegistry.resolveAndClose(deviceData.uid);
-    }
     if (!allow || deviceData == null) {
       return;
     }

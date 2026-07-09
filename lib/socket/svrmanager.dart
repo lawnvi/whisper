@@ -25,11 +25,13 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/auth_request_gate.dart';
+import 'package:whisper/socket/auth_protocol.dart';
+import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
-import 'package:whisper/socket/guarded_auth_callback.dart';
 import 'package:whisper/socket/peer_connection.dart';
+import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -39,6 +41,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:path/path.dart' as p;
 
@@ -58,17 +61,22 @@ abstract class ISocketEvent {
 
   void onConnect();
 
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback);
+  void onPairing(PairingRequest request, void Function(bool) resolve);
 
   void afterAuth(bool allow, DeviceData? device);
+}
+
+final class _SocketAuthResult {
+  const _SocketAuthResult(this.allow, this.message);
+
+  final bool allow;
+  final String message;
 }
 
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
 
-  /// 入站连接请求等待用户确认的上限;超时按拒绝处理,避免半开状态无限挂起。
-  static const Duration incomingAuthRequestTimeout = Duration(minutes: 2);
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
   // 创建一个私有的静态实例变量
@@ -88,6 +96,16 @@ class WsSvrManager {
   WebSocketSink? _sink;
   final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
   final Map<WebSocketSink, String> _peerIdsBySink = <WebSocketSink, String>{};
+  final Map<WebSocketSink, PeerSocketSession> _sessionsBySink =
+      <WebSocketSink, PeerSocketSession>{};
+  final Map<String, PeerSocketSession> _sessionsByPeerId =
+      <String, PeerSocketSession>{};
+  final Map<WebSocketSink, Completer<_SocketAuthResult>> _authResultsBySink =
+      <WebSocketSink, Completer<_SocketAuthResult>>{};
+  final Map<WebSocketSink, ({String host, int port})> _endpointsBySink =
+      <WebSocketSink, ({String host, int port})>{};
+  final DeviceIdentityStore _identityStore = DeviceIdentityStore();
+  int _nextConnectionGeneration = 0;
   final AuthRequestGate _authRequestGate = AuthRequestGate();
   final Map<WebSocketSink, String> _outgoingAuthKeysBySink =
       <WebSocketSink, String>{};
@@ -236,13 +254,14 @@ class WsSvrManager {
   }
 
   bool remoteTrustsPeer(String peerId) {
-    return _selectedRemoteProfile?.trustsPeer(peerId) ?? false;
+    final selectedPeerId = _selectedRemoteProfile?.device.uid ?? receiver;
+    return peerId == sender &&
+        _sessionsByPeerId[selectedPeerId]?.isAuthenticated == true;
   }
 
   bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) {
-    final profile = _remoteProfilesByPeerId[remotePeerId] ??
-        (remotePeerId == receiver ? _remoteProfile : null);
-    return profile?.trustsPeer(trustedPeerId) ?? false;
+    return trustedPeerId == sender &&
+        _sessionsByPeerId[remotePeerId]?.isAuthenticated == true;
   }
 
   bool isConnectedTo(String peerId) {
@@ -409,18 +428,20 @@ class WsSvrManager {
   Future<void> _registerPeerConnection({
     required String peerId,
     required WebSocketSink sink,
+    required PeerSocketSession session,
     PeerProfile? profile,
   }) async {
-    if (peerId.isEmpty) {
+    if (peerId.isEmpty || !session.isAuthenticated) {
       return;
     }
     _peerIdsBySink[sink] = peerId;
     await _peerConnections.register(
       PeerConnection(
         peerId: peerId,
-        send: sink.add,
+        send: (message) => _sendBytesOnSink(sink, message),
         close: () async {
           _peerIdsBySink.remove(sink);
+          session.close();
           await sink.close();
         },
       ),
@@ -442,10 +463,17 @@ class WsSvrManager {
   }
 
   Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
+    final session = _sessionsBySink.remove(sink);
+    session?.close();
+    _endpointsBySink.remove(sink);
+    _completeSocketAuth(sink, false, 'connection_closed');
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
     _clientTimersBySink.remove(sink)?.cancel();
     final peerId = _peerIdsBySink.remove(sink);
+    if (peerId != null && identical(_sessionsByPeerId[peerId], session)) {
+      _sessionsByPeerId.remove(peerId);
+    }
     if (peerId == null) {
       if (identical(_sink, sink)) {
         _sink = null;
@@ -469,24 +497,67 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onClose());
   }
 
+  Future<PeerSocketSession> _createSocketSession({
+    required WebSocketSink sink,
+    required PeerSocketRole role,
+    String intendedPeerId = '',
+    String intendedPublicKeyHash = '',
+  }) async {
+    late PeerSocketSession session;
+    session = await PeerSocketSession.create(
+      role: role,
+      connectionGeneration: ++_nextConnectionGeneration,
+      localIdentity: await _identityStore.loadOrCreate(),
+      localProfile: (await _localPeerProfile()).toWireProfile(),
+      intendedPeerId: intendedPeerId,
+      intendedPublicKeyHash: intendedPublicKeyHash,
+      onTimeout: () {
+        if (!identical(_sessionsBySink[sink], session)) {
+          return;
+        }
+        _completeSocketAuth(sink, false, 'pairing_expired');
+        unawaited(sink.close());
+      },
+    );
+    _sessionsBySink[sink] = session;
+    return session;
+  }
+
+  Future<void> _attachIncomingSocket(WebSocketChannel webSocket) async {
+    final sink = webSocket.sink;
+    try {
+      await _createSocketSession(sink: sink, role: PeerSocketRole.server);
+      webSocket.stream.listen((message) {
+        unawaited(
+          _handleIncomingMessage(message, sink: sink, asServer: true),
+        );
+      }, onError: (Object error, StackTrace stackTrace) {
+        logger.i('连接服务异常: ${error.runtimeType}');
+        _dispatchToPrimary((event) => event.onError(error.toString()));
+        _completeSocketAuth(sink, false, 'socket_error');
+      }, onDone: () {
+        unawaited(_handlePeerSocketDoneQueued(sink));
+      });
+    } catch (error) {
+      _completeSocketAuth(sink, false, 'session_setup_failed');
+      await sink.close();
+    }
+  }
+
+  void _completeSocketAuth(WebSocketSink sink, bool allow, String message) {
+    final completer = _authResultsBySink.remove(sink);
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(_SocketAuthResult(allow, message));
+    }
+  }
+
   void startServer(int port, var callback) {
     close(closeServer: true);
     AudioShareManager.shared.onGroupPacket = (packet) {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
-    final chatHandler = webSocketHandler((WebSocketChannel webSocket) async {
-      // 鉴权前不写全局 _sink:默认发送目标只能指向已鉴权 peer,
-      // 由鉴权成功后的 _registerPeerConnection 统一设置。
-      webSocket.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message,
-            sink: webSocket.sink, asServer: true));
-      }, onError: (Object error, StackTrace stackTrace) {
-        logger.i("连接服务异常: $error\n$stackTrace");
-        _dispatchToPrimary((event) => event.onError(error.toString()));
-      }, onDone: () {
-        logger.i("连接服务done");
-        unawaited(_handlePeerSocketDoneQueued(webSocket.sink));
-      });
+    final chatHandler = webSocketHandler((WebSocketChannel webSocket) {
+      unawaited(_attachIncomingSocket(webSocket));
     }, pingInterval: _serverPingInterval);
     final audioHandler = AudioShareManager.shared.webSocketHandler(
       pingInterval: _serverPingInterval,
@@ -522,6 +593,7 @@ class WsSvrManager {
     int port,
     var callback, {
     String? peerId,
+    String? intendedPublicKeyHash,
   }) async {
     final authRequestKey = _authRequestKey(
       peerId: peerId,
@@ -544,22 +616,36 @@ class WsSvrManager {
       final connectedChannel = channel;
       await connectedChannel.ready;
       final channelSink = connectedChannel.sink;
-      // 鉴权前不写全局 _sink,握手全程走显式 sink 参数。
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
-      await _auth(true, sink: channelSink);
+      _endpointsBySink[channelSink] = (host: host, port: port);
+      final authCompleter = Completer<_SocketAuthResult>();
+      _authResultsBySink[channelSink] = authCompleter;
+      final session = await _createSocketSession(
+        sink: channelSink,
+        role: PeerSocketRole.client,
+        intendedPeerId: peerId ?? '',
+        intendedPublicKeyHash: intendedPublicKeyHash ?? '',
+      );
       connectedChannel.stream.listen((message) {
-        unawaited(_handleIncomingMessage(message,
-            sink: channelSink, asServer: false));
+        unawaited(
+          _handleIncomingMessage(message, sink: channelSink, asServer: false),
+        );
       }, onError: (error, stackTrace) {
-        logger.i("客户端服务异常: $error\n$stackTrace");
+        logger.i('客户端服务异常: ${error.runtimeType}');
         _dispatchToPrimary((event) => event.onError(error.toString()));
+        _completeSocketAuth(channelSink, false, 'socket_error');
       }, onDone: () {
-        logger.i("客户端服务done");
         unawaited(_handlePeerSocketDoneQueued(channelSink));
       });
-      // 开启一个定时器，每秒执行一次
+      await _sendAuthEnvelope(channelSink, await session.createHello());
+      final authResult = await authCompleter.future;
+      _releaseOutgoingAuthForSink(channelSink);
+      if (!authResult.allow) {
+        await channelSink.close();
+        callback(false, authResult.message);
+        return;
+      }
       final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
-        // 在这里执行你想要重复执行的代码
         unawaited(_heartBeat(sink: channelSink));
       });
       _clientTimersBySink[channelSink] = timer;
@@ -567,6 +653,7 @@ class WsSvrManager {
       callback(true, "");
     } on Exception catch (e1) {
       if (channel != null) {
+        _completeSocketAuth(channel.sink, false, 'connection_failed');
         _releaseOutgoingAuthForSink(channel.sink);
       } else {
         _authRequestGate.releaseOutgoing(authRequestKey);
@@ -596,6 +683,20 @@ class WsSvrManager {
     _outgoingAuthKeysBySink.clear();
     _incomingAuthPeerIdsBySink.clear();
     _authRequestGate.clear();
+    for (final entry in _authResultsBySink.entries.toList(growable: false)) {
+      if (!entry.value.isCompleted) {
+        entry.value.complete(
+          const _SocketAuthResult(false, 'connection_closed'),
+        );
+      }
+    }
+    _authResultsBySink.clear();
+    for (final session in _sessionsBySink.values) {
+      session.close();
+    }
+    _sessionsBySink.clear();
+    _sessionsByPeerId.clear();
+    _endpointsBySink.clear();
     await _transferEngine.closeAll();
     await AudioShareCoordinator.shared.stopLocal();
     await AudioGroupCoordinator.shared.stopLocal();
@@ -659,6 +760,47 @@ class WsSvrManager {
     return _peerConnections.sendTo(peerId, message);
   }
 
+  void _sendBytesOnSink(
+    WebSocketSink sink,
+    Object message, {
+    bool rawAuth = false,
+  }) {
+    if (rawAuth) {
+      sink.add(message);
+      return;
+    }
+    final session = _sessionsBySink[sink];
+    if (session == null || !session.isAuthenticated) {
+      unawaited(sink.close());
+      return;
+    }
+    final Uint8List bytes;
+    if (message is Uint8List) {
+      bytes = message;
+    } else if (message is List<int>) {
+      bytes = Uint8List.fromList(message);
+    } else if (message is String) {
+      bytes = Uint8List.fromList(utf8.encode(message));
+    } else {
+      unawaited(sink.close());
+      return;
+    }
+    unawaited(_encodeAndSend(session, sink, bytes));
+  }
+
+  Future<void> _encodeAndSend(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    Uint8List bytes,
+  ) async {
+    try {
+      sink.add(await session.encodeOutgoing(bytes));
+    } catch (_) {
+      session.close();
+      await sink.close();
+    }
+  }
+
   Uint8List _messageFrame(Uint8List payload) {
     return WhisperFrameV3(
       type: WhisperFrameType.message,
@@ -673,6 +815,7 @@ class WsSvrManager {
     MessageData message, {
     String? peerId,
     WebSocketSink? sink,
+    bool rawAuth = false,
   }) {
     final payload = WhisperFrameV3(
       type: WhisperFrameType.message,
@@ -682,7 +825,7 @@ class WsSvrManager {
       payload: Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
     ).encode();
     if (sink != null) {
-      sink.add(payload);
+      _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
       return;
     }
     if (peerId != null && _peerConnections.sendTo(peerId, payload)) {
@@ -700,7 +843,10 @@ class WsSvrManager {
       return true;
     }
     if (peerId.isEmpty || peerId == receiver) {
-      _sink?.add(bytes);
+      final sink = _sink;
+      if (sink != null) {
+        _sendBytesOnSink(sink, bytes);
+      }
       return _sink != null;
     }
     return false;
@@ -709,7 +855,10 @@ class WsSvrManager {
   void _send(String message) {
     final payload = _messageFrame(Uint8List.fromList(utf8.encode(message)));
     if (!_sendTo(receiver, payload)) {
-      _sink?.add(payload);
+      final sink = _sink;
+      if (sink != null) {
+        _sendBytesOnSink(sink, payload);
+      }
     }
   }
 
@@ -722,10 +871,27 @@ class WsSvrManager {
   }) {
     _receiveQueue = _receiveQueue.then((_) async {
       try {
-        await _listen(_incomingBytes(message), sink: sink, asServer: asServer);
-      } catch (error, stackTrace) {
-        logger.i('处理 websocket 消息失败: $error\n$stackTrace');
-        _dispatchToPrimary((event) => event.onError(error.toString()));
+        final session = sink == null ? null : _sessionsBySink[sink];
+        if (session == null ||
+            (asServer && session.role != PeerSocketRole.server) ||
+            (!asServer && session.role != PeerSocketRole.client)) {
+          await sink?.close();
+          return;
+        }
+        var bytes = _incomingBytes(message);
+        if (session.isAuthenticated) {
+          bytes = await session.decodeIncoming(bytes);
+        }
+        await _listen(
+          bytes,
+          sink: sink,
+          asServer: asServer,
+          session: session,
+        );
+      } catch (error) {
+        logger.i('处理 websocket 消息失败: ${error.runtimeType}');
+        _sessionsBySink[sink]?.close();
+        await sink?.close();
       }
     });
     return _receiveQueue;
@@ -744,15 +910,319 @@ class WsSvrManager {
     throw FormatException('unsupported websocket message: $message');
   }
 
+  Future<void> _sendAuthEnvelope(
+    WebSocketSink sink,
+    AuthEnvelope envelope,
+  ) async {
+    final message = _buildMessage(
+      MessageEnum.Auth,
+      envelope.toJsonString(),
+      '',
+      '',
+      0,
+      false,
+      senderOverride: _sessionsBySink[sink]?.localProfile.uid,
+      receiverOverride: envelope.action == AuthAction.hello
+          ? envelope.intendedPeerId ?? ''
+          : _sessionsBySink[sink]?.remotePeerId,
+    );
+    _sendMessageData(message, sink: sink, rawAuth: true);
+  }
+
+  Future<void> _handleAuthMessage(
+    MessageData message, {
+    required WebSocketSink sink,
+    required PeerSocketSession session,
+  }) async {
+    try {
+      final content = message.content;
+      if (content == null || content.isEmpty) {
+        throw const FormatException('Missing auth envelope');
+      }
+      final envelope = AuthEnvelope.fromJsonString(content);
+      if (message.sender.isNotEmpty && message.sender != envelope.peerId) {
+        throw const AuthHandshakeException('sender_mismatch');
+      }
+      switch ((session.role, envelope.action)) {
+        case (PeerSocketRole.server, AuthAction.hello):
+          await _handleServerHello(session, sink, envelope);
+        case (PeerSocketRole.server, AuthAction.proof):
+          await _handleServerProof(session, sink, envelope);
+        case (PeerSocketRole.client, AuthAction.challenge):
+          await _handleClientChallenge(session, sink, envelope);
+        case (PeerSocketRole.client, AuthAction.result):
+          await _handleClientResult(session, sink, envelope);
+        default:
+          throw const AuthHandshakeException('unexpected_action');
+      }
+    } on FormatException {
+      if (session.role == PeerSocketRole.server) {
+        _sendUpgradeRequired(sink, session);
+      }
+      session.close();
+      _completeSocketAuth(sink, false, 'upgrade_required');
+      await sink.close();
+    } on AuthHandshakeException catch (error) {
+      if (error.code == 'upgrade_required' &&
+          session.role == PeerSocketRole.server) {
+        _sendUpgradeRequired(sink, session);
+      }
+      session.close();
+      _completeSocketAuth(sink, false, error.code);
+      await sink.close();
+    }
+  }
+
+  Future<void> _handleServerHello(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    AuthEnvelope hello,
+  ) async {
+    final challenge = await session.receiveHello(hello);
+    await _sendAuthEnvelope(sink, challenge);
+  }
+
+  Future<void> _handleClientChallenge(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    AuthEnvelope challenge,
+  ) async {
+    await session.receiveChallenge(challenge);
+    final reason = await _pairingReason(session);
+    Future<void> resolve(bool allow) async {
+      final accepted = session.resolveLocalApproval(
+        generation: session.connectionGeneration,
+        allow: allow,
+      );
+      if (!accepted) {
+        return;
+      }
+      if (!allow) {
+        _completeSocketAuth(sink, false, 'rejected');
+        _dispatchToAll((event) => event.afterAuth(false, null));
+        await sink.close();
+        return;
+      }
+      await _sendAuthEnvelope(sink, await session.createProof());
+    }
+
+    if (reason == null) {
+      await resolve(true);
+    } else {
+      await _requestPairingDecision(session, sink, reason, resolve);
+    }
+  }
+
+  Future<void> _handleServerProof(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    AuthEnvelope proof,
+  ) async {
+    await session.receiveProof(proof);
+    final peerId = session.remotePeerId;
+    final outgoingKey = _authRequestKey(peerId: peerId, host: '', port: 0);
+    if (_authRequestGate.hasOutgoing(outgoingKey)) {
+      final decision = resolveSimultaneousDial(
+        localUid: session.localProfile.uid,
+        remoteUid: peerId,
+      );
+      if (decision == SimultaneousDialDecision.keepOutgoing) {
+        session.close();
+        await sink.close();
+        return;
+      }
+    }
+    if (!_authRequestGate.tryClaimIncoming(peerId)) {
+      session.close();
+      await sink.close();
+      return;
+    }
+    _incomingAuthPeerIdsBySink[sink] = peerId;
+
+    final reason = await _pairingReason(session);
+    Future<void> resolve(bool allow) async {
+      final accepted = session.resolveLocalApproval(
+        generation: session.connectionGeneration,
+        allow: allow,
+      );
+      if (!accepted) {
+        return;
+      }
+      final result = await session.createResult(
+        allow: allow,
+        reason: allow ? 'approved' : 'rejected',
+      );
+      await _sendAuthEnvelope(sink, result);
+      if (!allow) {
+        _releaseIncomingAuthForSink(sink);
+        _dispatchToAll((event) => event.afterAuth(false, null));
+        await sink.close();
+        return;
+      }
+      await _completeAuthenticatedSession(session, sink);
+    }
+
+    if (reason == null) {
+      await resolve(true);
+    } else {
+      await _requestPairingDecision(session, sink, reason, resolve);
+    }
+  }
+
+  Future<void> _handleClientResult(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    AuthEnvelope result,
+  ) async {
+    if (!await session.receiveResult(result)) {
+      _completeSocketAuth(sink, false, result.reason ?? 'rejected');
+      _dispatchToAll((event) => event.afterAuth(false, null));
+      await sink.close();
+      return;
+    }
+    await _completeAuthenticatedSession(session, sink);
+  }
+
+  Future<PairingReason?> _pairingReason(PeerSocketSession session) async {
+    final stored = await LocalDatabase().fetchDevice(session.remotePeerId);
+    return pairingReasonForIdentity(stored, session.remoteIdentityPublicKey);
+  }
+
+  Future<void> _requestPairingDecision(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    PairingReason reason,
+    Future<void> Function(bool) resolve,
+  ) async {
+    final listener = _primaryEvent;
+    if (listener == null) {
+      await resolve(false);
+      return;
+    }
+    final device = await _deviceForSession(session, sink);
+    final guarded = session.guardApprovalCallback(
+      (allow) => unawaited(resolve(allow)),
+    );
+    _dispatchGuarded(
+      listener,
+      (event) => event.onPairing(
+        PairingRequest(
+          device: device,
+          pairingCode: session.pairingCode,
+          reason: reason,
+          canApprove: true,
+        ),
+        guarded,
+      ),
+    );
+  }
+
+  Future<DeviceData> _deviceForSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+  ) async {
+    final stored = await LocalDatabase().fetchDevice(session.remotePeerId);
+    final endpoint = _endpointsBySink[sink];
+    final host =
+        endpoint?.host.isNotEmpty == true ? endpoint!.host : stored?.host ?? '';
+    final port = endpoint?.port != null && endpoint!.port > 0
+        ? endpoint.port
+        : stored?.port ?? 0;
+    return session.remoteProfile!.toDeviceData(host: host, port: port);
+  }
+
+  Future<void> _completeAuthenticatedSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+  ) async {
+    DeviceData? storedDevice;
+    PeerProfile? runtimeProfile;
+    final committed = await session.commitAuthentication(
+      generation: session.connectionGeneration,
+      pinIdentity: () async {
+        final candidate = await _deviceForSession(session, sink);
+        final database = LocalDatabase();
+        await database.upsertDevice(candidate);
+        await database.pinDeviceIdentity(
+          candidate.uid,
+          session.remoteIdentityPublicKey,
+        );
+        await database.authDevice(candidate.uid, true);
+        storedDevice = await database.fetchDevice(candidate.uid);
+        final device = storedDevice ?? candidate;
+        runtimeProfile = PeerProfile(
+          device: device,
+          trustedPeerIds: const <String>[],
+          autoApproveNewDevices: false,
+          autoConnectEnabled: true,
+          protocolVersion: session.remoteProfile!.protocolVersion,
+          capabilities: session.remoteProfile!.capabilities,
+          displayTopology: session.remoteProfile!.displayTopology,
+        );
+      },
+      registerPeer: () async {
+        final peerId = session.remotePeerId;
+        _sessionsByPeerId[peerId] = session;
+        await _registerPeerConnection(
+          peerId: peerId,
+          sink: sink,
+          session: session,
+          profile: runtimeProfile,
+        );
+      },
+    );
+    if (!committed) {
+      return;
+    }
+    _releaseOutgoingAuthForSink(sink);
+    _releaseIncomingAuthForSink(sink);
+    _completeSocketAuth(sink, true, '');
+    _dispatchToAll((event) => event.onConnect());
+    _dispatchToAll((event) => event.afterAuth(true, storedDevice));
+    unawaited(_transferEngine.resumeRecoverableOutgoing());
+  }
+
+  void _sendUpgradeRequired(
+    WebSocketSink sink,
+    PeerSocketSession session,
+  ) {
+    final payload = jsonEncode(<String, Object?>{
+      'action': 'upgrade_required',
+      'version': PeerSocketSession.protocolVersion,
+    });
+    final message = _buildMessage(
+      MessageEnum.Auth,
+      payload,
+      'upgrade_required',
+      '',
+      0,
+      false,
+      senderOverride: session.localProfile.uid,
+      receiverOverride: session.remotePeerId,
+    );
+    _sendMessageData(message, sink: sink, rawAuth: true);
+  }
+
   Future<void> _handleWhisperFrameV3(
     WhisperFrameV3 frame, {
     WebSocketSink? sink,
     required bool asServer,
+    required PeerSocketSession session,
   }) async {
+    if (!session.isAuthenticated && frame.type != WhisperFrameType.message) {
+      session.close();
+      await sink?.close();
+      return;
+    }
     switch (frame.type) {
       case WhisperFrameType.message:
-        await _listen(frame.payload,
-            sink: sink, allowFrame: false, asServer: asServer);
+        await _listen(
+          frame.payload,
+          sink: sink,
+          allowFrame: false,
+          asServer: asServer,
+          session: session,
+        );
         break;
       case WhisperFrameType.fileOffer:
       case WhisperFrameType.fileData:
@@ -771,10 +1241,15 @@ class WsSvrManager {
     WebSocketSink? sink,
     bool allowFrame = true,
     required bool asServer,
+    required PeerSocketSession session,
   }) async {
     if (allowFrame && WhisperFrameV3.looksLikeFrame(data)) {
-      await _handleWhisperFrameV3(WhisperFrameV3.decode(data),
-          sink: sink, asServer: asServer);
+      await _handleWhisperFrameV3(
+        WhisperFrameV3.decode(data),
+        sink: sink,
+        asServer: asServer,
+        session: session,
+      );
       return;
     }
     final streamPeerId = _peerIdForSink(sink);
@@ -804,143 +1279,20 @@ class WsSvrManager {
     final incomingPeerId =
         message.sender.isNotEmpty ? message.sender : streamPeerId;
 
+    if (!session.isAuthenticated && message.type != MessageEnum.Auth) {
+      session.close();
+      await sink?.close();
+      return;
+    }
+
     switch (message.type) {
       case MessageEnum.Auth:
         {
-          DeviceData? device;
-          PeerProfile? profile;
-          if (message.content != null) {
-            profile = PeerProfile.fromJson(
-              jsonDecode(message.content ?? "{}") as Map<String, dynamic>,
-            );
-            device = profile.device;
+          if (sink == null) {
+            session.close();
+            return;
           }
-          final peerId = device?.uid ?? incomingPeerId ?? '';
-          if (!asServer) {
-            _releaseOutgoingAuthForSink(sink);
-          }
-          _remoteInputTrace(
-            'AUTH remote profile uid=${device?.uid ?? ''} '
-            'protocol=${profile?.protocolVersion ?? 1} '
-            'remoteInputSource=${profile?.capabilities.remoteInputSourceV1 ?? false} '
-            'remoteInputSink=${profile?.capabilities.remoteInputSinkV1 ?? false} '
-            'trustedPeers=${profile?.trustedPeerIds.length ?? 0}',
-          );
-          logger.i("AUTH message: ${message.sender} + $sender");
-          // 互拨裁决:双方同时向对方拨号时,按 uid 字典序确定唯一存活连接,
-          // 防止 last-writer-wins 误杀承载传输的连接。
-          if (asServer && peerId.isNotEmpty) {
-            final outgoingKey =
-                _authRequestKey(peerId: peerId, host: '', port: 0);
-            if (_authRequestGate.hasOutgoing(outgoingKey)) {
-              final decision = resolveSimultaneousDial(
-                localUid: sender,
-                remoteUid: peerId,
-              );
-              if (decision == SimultaneousDialDecision.keepOutgoing) {
-                logger.i('互拨裁决: 保留本机出站拨号,关闭来自 $peerId 的入站');
-                await sink?.close();
-                return;
-              }
-              logger.i('互拨裁决: 让步接受来自 $peerId 的入站,在途出站将被对端关闭');
-            }
-          }
-          if (asServer) {
-            var localTemp =
-                await LocalDatabase().fetchDevice(device?.uid ?? "");
-            var self = await LocalSetting().instance();
-            if ((self.auth || localTemp != null && localTemp.auth)) {
-              await _auth(true, sink: sink, peerId: peerId);
-              receiver = peerId;
-              if (peerId.isNotEmpty && sink != null) {
-                await _registerPeerConnection(
-                  peerId: peerId,
-                  sink: sink,
-                  profile: profile,
-                );
-              }
-              _setRemoteProfile(profile, peerId: peerId);
-              _dispatchToAll((event) => event.onConnect());
-              unawaited(_transferEngine.resumeRecoverableOutgoing());
-              _dispatchToAll((event) => event.afterAuth(true, device));
-              return;
-            }
-          }
-
-          if (asServer && peerId.isNotEmpty) {
-            if (!_authRequestGate.tryClaimIncoming(peerId)) {
-              logger.i("忽略重复连接请求: $peerId");
-              await sink?.close();
-              return;
-            }
-            if (sink != null) {
-              _incomingAuthPeerIdsBySink[sink] = peerId;
-            }
-          }
-
-          logger.i("AUTH message: ${message.sender} - $sender");
-          Future<void> respond(bool allow) async {
-            try {
-              logger.i("AUTH message: ${message.message} ||| $allow");
-              if (asServer) {
-                await _auth(allow, sink: sink, peerId: peerId);
-              }
-              if (allow) {
-                receiver = peerId;
-                if (peerId.isNotEmpty && sink != null) {
-                  await _registerPeerConnection(
-                    peerId: peerId,
-                    sink: sink,
-                    profile: profile,
-                  );
-                }
-                _setRemoteProfile(profile, peerId: peerId);
-                _dispatchToAll((event) => event.onConnect());
-                unawaited(_transferEngine.resumeRecoverableOutgoing());
-              } else {
-                // 拒绝只关闭这条未鉴权 socket,不得全局 close 断开其他已连 peer。
-                await sink?.close();
-              }
-              _dispatchToAll((listener) => listener.afterAuth(allow, device));
-            } finally {
-              if (asServer && peerId.isNotEmpty) {
-                _authRequestGate.releaseIncoming(peerId);
-                if (sink != null) {
-                  _incomingAuthPeerIdsBySink.remove(sink);
-                }
-              }
-            }
-          }
-
-          Timer? incomingAuthTimer;
-          final guarded = GuardedAuthCallback(
-            (allow) => unawaited(respond(allow)),
-            onResolved: (_) {
-              incomingAuthTimer?.cancel();
-              if (asServer && peerId.isNotEmpty) {
-                unawaited(ConnectionRequestNotifier().dismissForPeer(peerId));
-              }
-            },
-          );
-          if (asServer &&
-              peerId.isNotEmpty &&
-              (message.message ?? '').isEmpty) {
-            // 等待用户确认的请求超时自动拒绝;GuardedAuthCallback 幂等,
-            // 用户已处理时超时回调无效果。
-            incomingAuthTimer = Timer(incomingAuthRequestTimeout, () {
-              logger.i('连接请求超时自动拒绝: $peerId');
-              guarded.call(false);
-            });
-            unawaited(ConnectionRequestNotifier().maybeShowForAuthRequest(
-              peerId: peerId,
-              deviceName: device?.name ?? '',
-              host: device?.host ?? '',
-              callback: guarded,
-            ));
-          }
-          _dispatchToPrimary((event) {
-            event.onAuth(device, asServer, message.message ?? "", guarded.call);
-          });
+          await _handleAuthMessage(message, sink: sink, session: session);
           break;
         }
       case MessageEnum.Ack:
@@ -1077,8 +1429,13 @@ class WsSvrManager {
           final storedRemote = remoteDevice == null
               ? null
               : await LocalDatabase().fetchDevice(remoteDevice.uid);
+          final authenticatedSession =
+              remoteDevice == null ? null : _sessionsByPeerId[remoteDevice.uid];
           final isMutuallyTrusted = storedRemote?.auth == true &&
-              (remoteProfile?.trustsPeer(self.uid) ?? false);
+              storedRemote?.identityPublicKey.isNotEmpty == true &&
+              storedRemote?.identityPublicKey ==
+                  authenticatedSession?.remoteIdentityPublicKey &&
+              authenticatedSession?.isAuthenticated == true;
           final localCanInject = supportsNativeRemoteInput();
           _remoteInputTrace(
             'remote input recv control ${_remoteInputControlSummary(control)} '
@@ -1086,7 +1443,7 @@ class WsSvrManager {
             'remote=${remoteDevice?.uid ?? ''} '
             'remoteAddress=${remoteDevice?.host ?? ''}:${remoteDevice?.port ?? 0} '
             'storedAuth=${storedRemote?.auth == true} '
-            'remoteTrustsLocal=${remoteProfile?.trustsPeer(self.uid) ?? false} '
+            'signedSession=${authenticatedSession?.isAuthenticated == true} '
             'mutualTrust=$isMutuallyTrusted '
             'localCanInject=$localCanInject '
             'remoteSupports=$supportsRemoteInput',
@@ -1154,10 +1511,11 @@ class WsSvrManager {
       path = "",
       uid,
       fileTimestamp = 0,
+      String? senderOverride,
       String? receiverOverride}) {
     return MessageData(
         id: 0,
-        sender: sender,
+        sender: senderOverride ?? sender,
         receiver: receiverOverride ?? receiver,
         name: fileName,
         clipboard: clipboard,
@@ -1173,29 +1531,8 @@ class WsSvrManager {
         fileTimestamp: fileTimestamp);
   }
 
-  Future<void> _auth(bool allow, {WebSocketSink? sink, String? peerId}) async {
-    final profile = await _localPeerProfile();
-    final device = profile.device;
-    final topology = profile.displayTopology;
-    final topologyCount = topology?.displays.length ?? 0;
-    _remoteInputTrace(
-      'AUTH local capabilities uid=${device.uid} '
-      'protocol=${profile.protocolVersion} '
-      'remoteInputSource=${profile.capabilities.remoteInputSourceV1} '
-      'remoteInputSink=${profile.capabilities.remoteInputSinkV1} '
-      'remoteInputTopology=${profile.capabilities.remoteInputTopologyV1} '
-      'displays=$topologyCount '
-      'display=${Platform.environment['DISPLAY'] ?? ''}',
-    );
-    var message = _buildMessage(MessageEnum.Auth, profile.toJsonString(),
-        allow ? "" : "拒绝连接", "", 0, false,
-        receiverOverride: peerId);
-    _sendMessageData(message, peerId: peerId, sink: sink);
-  }
-
   Future<PeerProfile> _localPeerProfile() async {
     var device = await LocalSetting().instance(online: true);
-    final trustedPeerIds = await LocalDatabase().fetchTrustedPeerIds();
     RemoteInputTopology? topology;
     if (supportsNativeRemoteInput()) {
       try {
@@ -1207,10 +1544,10 @@ class WsSvrManager {
     final hasTopology = topology?.isNotEmpty == true;
     final profile = PeerProfile(
       device: device,
-      trustedPeerIds: trustedPeerIds,
-      autoApproveNewDevices: await LocalSetting().autoApproveNewDevices(),
-      autoConnectEnabled: await LocalSetting().autoConnectEnabled(),
-      protocolVersion: 4,
+      trustedPeerIds: const <String>[],
+      autoApproveNewDevices: false,
+      autoConnectEnabled: true,
+      protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: PeerCapabilities(
         fileTransferV3: true,
         systemAudioSourceV1: supportsNativeSystemAudio(),
@@ -1311,8 +1648,14 @@ class WsSvrManager {
       final previousProfile = resolvedPeerId.isEmpty
           ? _remoteProfile
           : _remoteProfilesByPeerId[resolvedPeerId];
-      final profile = PeerProfile.fromJson(
-        jsonDecode(content) as Map<String, dynamic>,
+      final wireJson = Map<String, Object?>.from(
+        jsonDecode(content) as Map,
+      );
+      final wireProfile = WirePeerProfile.fromJson(wireJson);
+      final profile = PeerProfile.fromWire(
+        wireProfile,
+        host: previousProfile?.device.host ?? '',
+        port: previousProfile?.device.port ?? 0,
       );
       final profileDeviceChanged =
           _profileDeviceChanged(previousProfile?.device, profile.device);

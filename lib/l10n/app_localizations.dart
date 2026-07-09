@@ -1924,6 +1924,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'屏幕与另一条边重叠'**
   String get remoteInputWorkspaceConflictScreen;
+
+  /// No description provided for @pairingNewDeviceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对新设备'**
+  String get pairingNewDeviceTitle;
+
+  /// No description provided for @pairingNewDeviceDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 请求建立可信连接'**
+  String pairingNewDeviceDescription(String device);
+
+  /// No description provided for @pairingIdentityChangedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备身份已变化'**
+  String get pairingIdentityChangedTitle;
+
+  /// No description provided for @pairingIdentityChangedDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的身份公钥与上次配对不同。仅在你确认设备已重装或重置后继续'**
+  String pairingIdentityChangedDescription(String device);
+
+  /// No description provided for @pairingLegacyTrustTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新确认可信设备'**
+  String get pairingLegacyTrustTitle;
+
+  /// No description provided for @pairingLegacyTrustDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 来自旧版信任记录，需要重新配对以绑定设备身份'**
+  String pairingLegacyTrustDescription(String device);
+
+  /// No description provided for @pairingCompareCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确认两台设备显示相同的 6 位数字'**
+  String get pairingCompareCode;
+
+  /// No description provided for @pairingCodeSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code}'**
+  String pairingCodeSemantics(String code);
+
+  /// No description provided for @pairingReject.
+  ///
+  /// In zh, this message translates to:
+  /// **'拒绝'**
+  String get pairingReject;
+
+  /// No description provided for @pairingApprove.
+  ///
+  /// In zh, this message translates to:
+  /// **'数字一致'**
+  String get pairingApprove;
+
+  /// No description provided for @pairingUpgradeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方版本过低，请升级 Whisper 后重试'**
+  String get pairingUpgradeRequired;
+
+  /// No description provided for @pairingExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对请求已过期'**
+  String get pairingExpired;
 }
 
 class _AppLocalizationsDelegate

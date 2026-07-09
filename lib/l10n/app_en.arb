@@ -486,5 +486,21 @@
   "remoteInputWorkspaceClosePanel": "Close panel",
   "remoteInputWorkspaceSaveShortcut": "Save screen arrangement",
   "remoteInputWorkspaceSelectedScreen": "Selected screen",
-  "remoteInputWorkspaceConflictScreen": "Screen overlaps another edge"
+  "remoteInputWorkspaceConflictScreen": "Screen overlaps another edge",
+  "pairingNewDeviceTitle": "Pair a new device",
+  "pairingNewDeviceDescription": "{device} wants to establish a trusted connection",
+  "@pairingNewDeviceDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingIdentityChangedTitle": "Device identity changed",
+  "pairingIdentityChangedDescription": "The identity key for {device} differs from the previous pairing. Continue only if the device was reinstalled or reset",
+  "@pairingIdentityChangedDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingLegacyTrustTitle": "Confirm this trusted device again",
+  "pairingLegacyTrustDescription": "{device} uses a legacy trust record and must be paired again to bind its identity",
+  "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingCompareCode": "Confirm that both devices show the same six-digit code",
+  "pairingCodeSemantics": "Pairing code {code}",
+  "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
+  "pairingReject": "Reject",
+  "pairingApprove": "Codes match",
+  "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",
+  "pairingExpired": "The pairing request expired"
 }

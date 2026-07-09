@@ -67,7 +67,7 @@ void main() {
     final fileMessage = methodBody(
       source,
       'Widget _buildFileMessage(',
-      'void onAuth(',
+      'void onPairing(',
     );
 
     expect(build, contains('_buildAnimatedTransferProgress('));
@@ -89,7 +89,7 @@ void main() {
     final fileMessage = methodBody(
       source,
       'Widget _buildFileMessage(',
-      'void onAuth(',
+      'void onPairing(',
     );
 
     expect(fileStatus, contains('progressOverride'));

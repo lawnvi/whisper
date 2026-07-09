@@ -27,10 +27,12 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/pairing_dialog.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -1228,11 +1230,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
           }
           return;
         }
+        final displayMessage = message == 'upgrade_required'
+            ? l10n.pairingUpgradeRequired
+            : message == 'pairing_expired'
+                ? l10n.pairingExpired
+                : message.toString();
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??
               'Connection Failed',
-          description: "$message",
+          description: displayMessage,
           isLoading: true,
           icon: const Icon(
             Icons.warning_rounded,
@@ -1956,8 +1963,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
-    callback(true);
+  void onPairing(
+    PairingRequest request,
+    void Function(bool) resolve,
+  ) {
+    if (!mounted || !_isCurrentRoute) {
+      resolve(false);
+      return;
+    }
+    unawaited(
+      showPairingDialog(context, request: request, resolve: resolve),
+    );
   }
 
   @override

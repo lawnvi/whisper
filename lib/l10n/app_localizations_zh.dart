@@ -1028,4 +1028,48 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteInputWorkspaceConflictScreen => '屏幕与另一条边重叠';
+
+  @override
+  String get pairingNewDeviceTitle => '配对新设备';
+
+  @override
+  String pairingNewDeviceDescription(String device) {
+    return '$device 请求建立可信连接';
+  }
+
+  @override
+  String get pairingIdentityChangedTitle => '设备身份已变化';
+
+  @override
+  String pairingIdentityChangedDescription(String device) {
+    return '$device 的身份公钥与上次配对不同。仅在你确认设备已重装或重置后继续';
+  }
+
+  @override
+  String get pairingLegacyTrustTitle => '重新确认可信设备';
+
+  @override
+  String pairingLegacyTrustDescription(String device) {
+    return '$device 来自旧版信任记录，需要重新配对以绑定设备身份';
+  }
+
+  @override
+  String get pairingCompareCode => '请确认两台设备显示相同的 6 位数字';
+
+  @override
+  String pairingCodeSemantics(String code) {
+    return '配对码 $code';
+  }
+
+  @override
+  String get pairingReject => '拒绝';
+
+  @override
+  String get pairingApprove => '数字一致';
+
+  @override
+  String get pairingUpgradeRequired => '对方版本过低，请升级 Whisper 后重试';
+
+  @override
+  String get pairingExpired => '配对请求已过期';
 }

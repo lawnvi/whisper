@@ -1092,4 +1092,50 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get remoteInputWorkspaceConflictScreen =>
       'Screen overlaps another edge';
+
+  @override
+  String get pairingNewDeviceTitle => 'Pair a new device';
+
+  @override
+  String pairingNewDeviceDescription(String device) {
+    return '$device wants to establish a trusted connection';
+  }
+
+  @override
+  String get pairingIdentityChangedTitle => 'Device identity changed';
+
+  @override
+  String pairingIdentityChangedDescription(String device) {
+    return 'The identity key for $device differs from the previous pairing. Continue only if the device was reinstalled or reset';
+  }
+
+  @override
+  String get pairingLegacyTrustTitle => 'Confirm this trusted device again';
+
+  @override
+  String pairingLegacyTrustDescription(String device) {
+    return '$device uses a legacy trust record and must be paired again to bind its identity';
+  }
+
+  @override
+  String get pairingCompareCode =>
+      'Confirm that both devices show the same six-digit code';
+
+  @override
+  String pairingCodeSemantics(String code) {
+    return 'Pairing code $code';
+  }
+
+  @override
+  String get pairingReject => 'Reject';
+
+  @override
+  String get pairingApprove => 'Codes match';
+
+  @override
+  String get pairingUpgradeRequired =>
+      'The other device is out of date. Update Whisper and try again';
+
+  @override
+  String get pairingExpired => 'The pairing request expired';
 }

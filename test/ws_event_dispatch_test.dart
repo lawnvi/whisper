@@ -3,6 +3,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/pairing_request.dart';
 
 class _RecordingSocketEvent implements ISocketEvent {
   final List<MessageData> messages = [];
@@ -12,7 +13,7 @@ class _RecordingSocketEvent implements ISocketEvent {
   void afterAuth(bool allow, DeviceData? device) {}
 
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, callback) {}
+  void onPairing(PairingRequest request, void Function(bool) resolve) {}
 
   @override
   void onClose() {}
@@ -89,7 +90,8 @@ void main() {
     manager.registerEvent(throwingListener, primary: true);
     manager.registerEvent(chatListener);
 
-    expect(() => manager.debugDispatchMessage(_buildMessage()), returnsNormally);
+    expect(
+        () => manager.debugDispatchMessage(_buildMessage()), returnsNormally);
     expect(chatListener.messages, hasLength(1));
   });
 

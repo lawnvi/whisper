@@ -583,5 +583,21 @@
   "remoteInputWorkspaceClosePanel": "关闭面板",
   "remoteInputWorkspaceSaveShortcut": "保存屏幕排列",
   "remoteInputWorkspaceSelectedScreen": "已选择屏幕",
-  "remoteInputWorkspaceConflictScreen": "屏幕与另一条边重叠"
+  "remoteInputWorkspaceConflictScreen": "屏幕与另一条边重叠",
+  "pairingNewDeviceTitle": "配对新设备",
+  "pairingNewDeviceDescription": "{device} 请求建立可信连接",
+  "@pairingNewDeviceDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingIdentityChangedTitle": "设备身份已变化",
+  "pairingIdentityChangedDescription": "{device} 的身份公钥与上次配对不同。仅在你确认设备已重装或重置后继续",
+  "@pairingIdentityChangedDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingLegacyTrustTitle": "重新确认可信设备",
+  "pairingLegacyTrustDescription": "{device} 来自旧版信任记录，需要重新配对以绑定设备身份",
+  "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingCompareCode": "请确认两台设备显示相同的 6 位数字",
+  "pairingCodeSemantics": "配对码 {code}",
+  "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
+  "pairingReject": "拒绝",
+  "pairingApprove": "数字一致",
+  "pairingUpgradeRequired": "对方版本过低，请升级 Whisper 后重试",
+  "pairingExpired": "配对请求已过期"
 }

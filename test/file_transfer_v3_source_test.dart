@@ -226,6 +226,11 @@ void main() {
       'Future<void> _handlePeerSocketDoneQueued',
       'Future<void> _handlePeerSocketDone(',
     );
+    final attachIncomingSocket = methodBody(
+      source,
+      'Future<void> _attachIncomingSocket(',
+      'void _completeSocketAuth(',
+    );
     final startServer = methodBody(
       source,
       'void startServer(',
@@ -239,12 +244,12 @@ void main() {
 
     expect(queuedDone, contains('_receiveQueue = _receiveQueue.then'));
     expect(queuedDone, contains('await _handlePeerSocketDone(sink)'));
-    expect(
-        startServer, contains('_handlePeerSocketDoneQueued(webSocket.sink)'));
+    expect(attachIncomingSocket, contains('_handlePeerSocketDoneQueued(sink)'));
     expect(
         connectToServer, contains('_handlePeerSocketDoneQueued(channelSink)'));
-    expect(
-        startServer, isNot(contains('_handlePeerSocketDone(webSocket.sink)')));
+    expect(attachIncomingSocket,
+        isNot(contains('_handlePeerSocketDone(webSocket.sink)')));
+    expect(startServer, contains('_attachIncomingSocket(webSocket)'));
     expect(connectToServer,
         isNot(contains('_handlePeerSocketDone(channel.sink)')));
   });

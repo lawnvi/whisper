@@ -513,5 +513,21 @@
   "remoteInputWorkspaceClosePanel": "Cerrar panel",
   "remoteInputWorkspaceSaveShortcut": "Guardar la disposición de pantallas",
   "remoteInputWorkspaceSelectedScreen": "Pantalla seleccionada",
-  "remoteInputWorkspaceConflictScreen": "La pantalla se superpone con otro borde"
+  "remoteInputWorkspaceConflictScreen": "La pantalla se superpone con otro borde",
+  "pairingNewDeviceTitle": "Emparejar un dispositivo nuevo",
+  "pairingNewDeviceDescription": "{device} quiere establecer una conexión de confianza",
+  "@pairingNewDeviceDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingIdentityChangedTitle": "La identidad del dispositivo ha cambiado",
+  "pairingIdentityChangedDescription": "La clave de identidad de {device} no coincide con el emparejamiento anterior. Continúa solo si el dispositivo se reinstaló o restableció",
+  "@pairingIdentityChangedDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingLegacyTrustTitle": "Confirma de nuevo este dispositivo de confianza",
+  "pairingLegacyTrustDescription": "{device} usa un registro de confianza antiguo y debe emparejarse de nuevo para vincular su identidad",
+  "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
+  "pairingCompareCode": "Confirma que ambos dispositivos muestran el mismo código de seis dígitos",
+  "pairingCodeSemantics": "Código de emparejamiento {code}",
+  "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
+  "pairingReject": "Rechazar",
+  "pairingApprove": "Los códigos coinciden",
+  "pairingUpgradeRequired": "El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo",
+  "pairingExpired": "La solicitud de emparejamiento ha caducado"
 }

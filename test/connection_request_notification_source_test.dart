@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('connection request notification is wired end to end', () {
+  test('legacy notification actions cannot approve signed pairing', () {
     final notifier = File('lib/helper/connection_request_notifications.dart')
         .readAsStringSync();
     final helper = File('lib/helper/notification.dart').readAsStringSync();
@@ -27,9 +27,11 @@ void main() {
     expect(helper, contains('onDidReceiveBackgroundNotificationResponse:'));
     expect(helper, contains('connectionRequestNotificationBackgroundHandler'));
 
-    // svrmanager:守卫回调 + 通知入口 + 断连清理
-    expect(manager, contains('GuardedAuthCallback('));
-    expect(manager, contains('maybeShowForAuthRequest'));
+    // Signed pairing must stay in the in-app code comparison flow. The old
+    // notification actions do not display a pairing code and cannot resolve it.
+    expect(manager, contains('session.guardApprovalCallback('));
+    expect(manager, contains('event.onPairing('));
+    expect(manager, isNot(contains('maybeShowForAuthRequest')));
     expect(
       manager,
       matches(RegExp(
