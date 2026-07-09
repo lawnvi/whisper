@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsFlag;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,107 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_interactive_tile.dart';
 
 void main() {
+  testWidgets('reserves a 44 by 44 target without parent width constraints',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const Scaffold(
+          body: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              AppInteractiveTile(
+                semanticLabel: 'Compact action',
+                onActivate: _noop,
+                title: SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final size = tester.getSize(find.byType(AppInteractiveTile));
+    expect(size.width, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+    expect(size.height, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+  });
+
+  testWidgets('exposes an optional toggled semantic state', (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    Widget host(bool? toggled) => MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AppInteractiveTile(
+              semanticLabel: 'Clipboard sync',
+              toggled: toggled,
+              onActivate: _noop,
+              title: const Text('Clipboard sync'),
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(host(true));
+    var node = tester.getSemantics(find.byType(AppInteractiveTile));
+    expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
+    expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
+
+    await tester.pumpWidget(host(null));
+    node = tester.getSemantics(find.byType(AppInteractiveTile));
+    expect(node.hasFlag(SemanticsFlag.hasToggledState), isFalse);
+    expect(node.hasFlag(SemanticsFlag.isToggled), isFalse);
+
+    semantics.dispose();
+  });
+
+  testWidgets('selected boundary keeps three-to-one rendered contrast',
+      (tester) async {
+    for (final theme in <ThemeData>[
+      AppTheme.lightTheme,
+      AppTheme.darkTheme,
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: const Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 240,
+                child: AppInteractiveTile(
+                  semanticLabel: 'Selected device',
+                  selected: true,
+                  onActivate: _noop,
+                  title: Text('Selected device'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final surface = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byType(AppInteractiveTile),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      final decoration = surface.decoration! as BoxDecoration;
+      final background = Color.alphaBlend(
+        decoration.color!,
+        theme.colorScheme.surface,
+      );
+      final border = decoration.border! as Border;
+      final renderedBoundary = Color.alphaBlend(border.top.color, background);
+
+      expect(
+        _contrast(renderedBoundary, background),
+        greaterThanOrEqualTo(3),
+        reason: theme.brightness.name,
+      );
+    }
+  });
+
   testWidgets('meets target, semantics, and keyboard activation requirements',
       (tester) async {
     final semantics = tester.ensureSemantics();
@@ -80,16 +183,19 @@ void main() {
       ),
     );
 
+    final sizeBeforeFocus = tester.getSize(find.byType(AppInteractiveTile));
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
 
-    final focusDecoration = tester.widget<AnimatedContainer>(
+    final focusIndicator = tester.widget<Container>(
       find.byKey(AppInteractiveTile.focusIndicatorKey),
     );
-    final boxDecoration = focusDecoration.decoration! as BoxDecoration;
+    final boxDecoration = focusIndicator.decoration! as BoxDecoration;
     final border = boxDecoration.border! as Border;
     expect(border.top.width, 2);
     expect(border.top.color, AppTheme.darkTheme.colorScheme.primary);
+    expect(focusIndicator.padding, const EdgeInsets.all(4));
+    expect(tester.getSize(find.byType(AppInteractiveTile)), sizeBeforeFocus);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
@@ -110,4 +216,16 @@ void main() {
 
     semantics.dispose();
   });
+}
+
+void _noop() {}
+
+double _contrast(Color foreground, Color background) {
+  final lighter = foreground.computeLuminance() > background.computeLuminance()
+      ? foreground.computeLuminance()
+      : background.computeLuminance();
+  final darker = foreground.computeLuminance() > background.computeLuminance()
+      ? background.computeLuminance()
+      : foreground.computeLuminance();
+  return (lighter + 0.05) / (darker + 0.05);
 }

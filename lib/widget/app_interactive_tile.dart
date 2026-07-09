@@ -9,6 +9,7 @@ class AppInteractiveTile extends StatefulWidget {
     required this.semanticLabel,
     required this.title,
     this.selected = false,
+    this.toggled,
     this.enabled = true,
     this.onActivate,
     this.leading,
@@ -22,6 +23,7 @@ class AppInteractiveTile extends StatefulWidget {
 
   final String semanticLabel;
   final bool selected;
+  final bool? toggled;
   final bool enabled;
   final VoidCallback? onActivate;
   final Widget? leading;
@@ -86,11 +88,9 @@ class _AppInteractiveTileState extends State<AppInteractiveTile> {
         : _hovered
             ? palette.surfaceMuted
             : Colors.transparent;
-    final borderColor = _focused
+    final borderColor = widget.selected
         ? colorScheme.primary
-        : widget.selected
-            ? colorScheme.primary.withValues(alpha: 0.72)
-            : palette.borderSubtle.withValues(alpha: 0);
+        : palette.borderSubtle.withValues(alpha: 0);
 
     return Semantics(
       container: true,
@@ -99,6 +99,7 @@ class _AppInteractiveTileState extends State<AppInteractiveTile> {
       button: true,
       enabled: _canActivate,
       selected: widget.selected,
+      toggled: widget.toggled,
       focusable: true,
       focused: _focused,
       onFocus: _focusNode.requestFocus,
@@ -124,70 +125,92 @@ class _AppInteractiveTileState extends State<AppInteractiveTile> {
           behavior: HitTestBehavior.opaque,
           excludeFromSemantics: true,
           onTap: _canActivate ? _activate : null,
-          child: AnimatedContainer(
+          child: Container(
             key: AppInteractiveTile.focusIndicatorKey,
-            duration: disableAnimations
-                ? Duration.zero
-                : const Duration(milliseconds: 160),
             constraints: const BoxConstraints(
+              minWidth: WhisperUi.minInteractiveSize,
               minHeight: WhisperUi.minInteractiveSize,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(WhisperUi.radiusMedium),
+              borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
               border: Border.all(
-                color: borderColor,
-                width: _focused ? 2 : 1,
+                color: _focused ? colorScheme.primary : Colors.transparent,
+                width: 2,
               ),
             ),
-            child: IconTheme(
-              data: theme.iconTheme.copyWith(color: foregroundColor, size: 20),
-              child: Row(
-                children: <Widget>[
-                  if (widget.leading != null) ...<Widget>[
-                    widget.leading!,
-                    const SizedBox(width: 12),
-                  ],
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        DefaultTextStyle(
-                          style: theme.textTheme.titleSmall!.copyWith(
-                            color: foregroundColor,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          child: widget.title,
-                        ),
-                        if (widget.subtitle != null) ...<Widget>[
-                          const SizedBox(height: 2),
-                          DefaultTextStyle(
-                            style: theme.textTheme.bodySmall!.copyWith(
-                              color: widget.enabled
-                                  ? palette.textMuted
-                                  : foregroundColor,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            child: widget.subtitle!,
-                          ),
-                        ],
-                      ],
-                    ),
+            child: AnimatedContainer(
+              duration: disableAnimations
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(WhisperUi.radiusSmall),
+                border: Border.all(color: borderColor),
+              ),
+              child: IconTheme(
+                data:
+                    theme.iconTheme.copyWith(color: foregroundColor, size: 20),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => _buildContent(
+                    theme,
+                    palette,
+                    foregroundColor,
+                    boundedWidth: constraints.hasBoundedWidth,
                   ),
-                  if (widget.trailing != null) ...<Widget>[
-                    const SizedBox(width: 12),
-                    widget.trailing!,
-                  ],
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContent(
+    ThemeData theme,
+    WhisperPalette palette,
+    Color foregroundColor, {
+    required bool boundedWidth,
+  }) {
+    final text = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        DefaultTextStyle(
+          style: theme.textTheme.titleSmall!.copyWith(color: foregroundColor),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          child: widget.title,
+        ),
+        if (widget.subtitle != null) ...<Widget>[
+          const SizedBox(height: 2),
+          DefaultTextStyle(
+            style: theme.textTheme.bodySmall!.copyWith(
+              color: widget.enabled ? palette.textMuted : foregroundColor,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            child: widget.subtitle!,
+          ),
+        ],
+      ],
+    );
+
+    return Row(
+      mainAxisSize: boundedWidth ? MainAxisSize.max : MainAxisSize.min,
+      children: <Widget>[
+        if (widget.leading != null) ...<Widget>[
+          widget.leading!,
+          const SizedBox(width: 12),
+        ],
+        if (boundedWidth) Expanded(child: text) else text,
+        if (widget.trailing != null) ...<Widget>[
+          const SizedBox(width: 12),
+          widget.trailing!,
+        ],
+      ],
     );
   }
 }
