@@ -61,22 +61,17 @@ void main() {
     final presentation =
         File('lib/remote_input/remote_input_workspace_presentation.dart')
             .readAsStringSync();
-    final canvas = RegExp(
-      r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
-    ).firstMatch(source)!.group(0)!;
     final peerBlock = RegExp(
       r'Widget _buildPeerScreenBlock\([\s\S]*?Widget _buildDetailsPanel',
     ).firstMatch(source)!.group(0)!;
 
-    expect(canvas, isNot(contains('math.max(90, w * scale)')));
-    expect(canvas, isNot(contains('math.max(64, h * scale)')));
-    expect(canvas, contains('math.max(1.0, w * scale)'));
-    expect(canvas, contains('math.max(1.0, h * scale)'));
+    expect(source, contains('RemoteInputPositionedScreenBlock'));
     expect(peerBlock, contains('_displaySizeLabel(display)'));
     expect(source, contains('String _peerScreenSubtitle'));
     expect(source, contains('_displaySizeLabelForLayout'));
     expect(source, contains('LayoutBuilder('));
     expect(presentation, contains('showSubtitle'));
+    expect(presentation, isNot(contains('FittedBox(')));
   });
 
   test('workspace canvas renders remote topology displays as a draggable group',
@@ -177,7 +172,8 @@ void main() {
 
     expect(
         screenBlock, contains('crossAxisAlignment: CrossAxisAlignment.center'));
-    expect(screenBlock, contains('alignment: Alignment.center'));
+    expect(
+        screenBlock, contains('mainAxisAlignment: MainAxisAlignment.center'));
     expect(screenBlock, contains('textAlign: TextAlign.center'));
   });
 

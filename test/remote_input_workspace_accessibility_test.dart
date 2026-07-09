@@ -12,6 +12,136 @@ import 'package:whisper/remote_input/remote_input_workspace_presentation.dart';
 import 'package:whisper/theme/app_theme.dart';
 
 void main() {
+  testWidgets('scaled screen keeps visual geometry and a 44 pixel hit target',
+      (tester) async {
+    const visualRect = Rect.fromLTWH(80, 30, 1, 1);
+    final hitRect = remoteInputHitRectForVisualRect(visualRect);
+    expect(hitRect.center, visualRect.center);
+    expect(hitRect.size, const Size.square(WhisperUi.minInteractiveSize));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: Stack(
+            children: <Widget>[
+              RemoteInputPositionedScreenBlock(
+                visualRect: visualRect,
+                title: 'Tiny remote display',
+                resolution: '1 x 1',
+                roleLabel: 'Remote screen',
+                selectedLabel: 'Selected screen',
+                conflictLabel: 'Conflict',
+                selected: false,
+                conflict: false,
+                local: false,
+                onActivate: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byType(RemoteInputScreenBlock)),
+      const Size.square(WhisperUi.minInteractiveSize),
+    );
+    expect(
+      tester.getRect(find.byKey(RemoteInputScreenBlock.visualSurfaceKey)),
+      visualRect,
+    );
+  });
+
+  testWidgets('conflict screen keeps a separated primary focus ring',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: Stack(
+            children: <Widget>[
+              RemoteInputPositionedScreenBlock(
+                visualRect: const Rect.fromLTWH(80, 30, 120, 70),
+                title: 'Remote display',
+                resolution: '1920 x 1080',
+                roleLabel: 'Remote screen',
+                selectedLabel: 'Selected screen',
+                conflictLabel: 'Conflict',
+                selected: false,
+                conflict: true,
+                local: false,
+                onActivate: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final visualBefore =
+        tester.getRect(find.byKey(RemoteInputScreenBlock.visualSurfaceKey));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    final ring = tester.widget<Container>(
+      find.byKey(RemoteInputScreenBlock.focusRingKey),
+    );
+    final decoration = ring.decoration! as BoxDecoration;
+    final border = decoration.border! as Border;
+    expect(border.top.width, 2);
+    expect(border.top.color, AppTheme.lightTheme.colorScheme.primary);
+    expect(
+      tester.getRect(find.byKey(RemoteInputScreenBlock.focusRingKey)),
+      visualBefore.inflate(4),
+    );
+    expect(
+      tester.getRect(find.byKey(RemoteInputScreenBlock.visualSurfaceKey)),
+      visualBefore,
+    );
+  });
+
+  testWidgets('screen labels retain two hundred percent text scaling',
+      (tester) async {
+    Future<double> renderedHeight(double scale) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: child!,
+          ),
+          home: const Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 90,
+                height: 58,
+                child: RemoteInputScreenBlock(
+                  title: 'A very long display name',
+                  resolution: '1920 x 1080',
+                  roleLabel: 'Remote screen',
+                  selectedLabel: 'Selected screen',
+                  conflictLabel: 'Conflict',
+                  selected: true,
+                  conflict: false,
+                  local: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return tester.getRect(find.text('A very long display name')).height;
+    }
+
+    final normalHeight = await renderedHeight(1);
+    final scaledHeight = await renderedHeight(2);
+    expect(scaledHeight, greaterThan(normalHeight * 1.5));
+  });
+
   testWidgets('screen block exposes state and keyboard-equivalent movement',
       (tester) async {
     final semantics = tester.ensureSemantics();

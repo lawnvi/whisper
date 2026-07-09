@@ -270,57 +270,45 @@ class _RemoteInputLayoutEditorScreenState
                   ),
                 ),
                 for (final display in _localTopology.displays)
-                  Positioned.fromRect(
-                    rect: transform.toCanvasRect(display.rect),
-                    child: RemoteInputScreenBlock(
-                      title: display.name.isEmpty
-                          ? l10n.remoteInputLocalScreen
-                          : display.name,
-                      resolution: '${display.width} x ${display.height}',
-                      roleLabel: l10n.remoteInputLocalScreen,
-                      selectedLabel: l10n.remoteInputWorkspaceSelectedScreen,
-                      conflictLabel: l10n.remoteInputWorkspaceConflictScreen,
-                      selected: false,
-                      conflict: false,
-                      local: true,
-                    ),
+                  RemoteInputPositionedScreenBlock(
+                    visualRect: transform.toCanvasRect(display.rect),
+                    title: display.name.isEmpty
+                        ? l10n.remoteInputLocalScreen
+                        : display.name,
+                    resolution: '${display.width} x ${display.height}',
+                    roleLabel: l10n.remoteInputLocalScreen,
+                    selectedLabel: l10n.remoteInputWorkspaceSelectedScreen,
+                    conflictLabel: l10n.remoteInputWorkspaceConflictScreen,
+                    selected: false,
+                    conflict: false,
+                    local: true,
                   ),
                 for (final display in _translatedRemoteDisplays())
-                  Positioned.fromRect(
-                    rect: transform.toCanvasRect(display.rect),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.move,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanUpdate: (details) {
-                          setState(() {
-                            _hasUserAdjustedLayout = true;
-                            _sinkOffsetX +=
-                                (details.delta.dx / transform.scale).round();
-                            _sinkOffsetY +=
-                                (details.delta.dy / transform.scale).round();
-                          });
-                        },
-                        onPanEnd: (_) => _snapToNearestEdge(),
-                        child: RemoteInputScreenBlock(
-                          title: display.name.isEmpty
-                              ? widget.peerName.isEmpty
-                                  ? l10n.remoteInputPeerScreen
-                                  : widget.peerName
-                              : display.name,
-                          resolution: '${display.width} x ${display.height}',
-                          roleLabel: l10n.remoteInputPeerScreen,
-                          selectedLabel:
-                              l10n.remoteInputWorkspaceSelectedScreen,
-                          conflictLabel:
-                              l10n.remoteInputWorkspaceConflictScreen,
-                          selected: true,
-                          conflict: false,
-                          local: false,
-                          onMove: _moveRemoteByKey,
-                        ),
-                      ),
-                    ),
+                  RemoteInputPositionedScreenBlock(
+                    visualRect: transform.toCanvasRect(display.rect),
+                    title: display.name.isEmpty
+                        ? widget.peerName.isEmpty
+                            ? l10n.remoteInputPeerScreen
+                            : widget.peerName
+                        : display.name,
+                    resolution: '${display.width} x ${display.height}',
+                    roleLabel: l10n.remoteInputPeerScreen,
+                    selectedLabel: l10n.remoteInputWorkspaceSelectedScreen,
+                    conflictLabel: l10n.remoteInputWorkspaceConflictScreen,
+                    selected: true,
+                    conflict: false,
+                    local: false,
+                    onMove: _moveRemoteByKey,
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _hasUserAdjustedLayout = true;
+                        _sinkOffsetX +=
+                            (details.delta.dx / transform.scale).round();
+                        _sinkOffsetY +=
+                            (details.delta.dy / transform.scale).round();
+                      });
+                    },
+                    onPanEnd: (_) => _snapToNearestEdge(),
                   ),
               ],
             ),
