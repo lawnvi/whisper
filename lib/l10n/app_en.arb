@@ -132,7 +132,6 @@
   "language": "Language {language}",
   "pushNotification": "Forward Android Notifications",
   "ignoreNotification": "Ignore Android Notifications",
-  "ftpService": "FTP Service",
   "back": "Back",
   "selectAll": "Select All",
   "clearAll": "Clear",

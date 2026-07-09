@@ -31,8 +31,6 @@ class LocalSetting {
   final String _windowWidth = "_window_width";
   final String _windowHeight = "_window_height";
   final String _localization = "_localization";
-  final String _ftpDir = "_ftpDir";
-  final String _ftpPort = "_ftpPort";
   final String _notifyAppMap = "_notifyAppMap";
   final String _savePath = "_savePath";
   final String _copyVerifyCode = "_copyVerifyCode";
@@ -180,22 +178,6 @@ class LocalSetting {
 
   Future<void> setLocalization(String local) async {
     await _setSP(_localization, local);
-  }
-
-  Future<String> ftpDir() async {
-    return await getSPDefault(_ftpDir, '');
-  }
-
-  Future<void> setFTPDir(String local) async {
-    await _setSP(_ftpDir, local);
-  }
-
-  Future<int> ftpPort() async {
-    return await getSPDefault(_ftpPort, 8021);
-  }
-
-  Future<void> setFTPPort(int port) async {
-    await _setSP(_ftpPort, port);
   }
 
   Future<Map<String, int>> listenAppNotifyList() async {

@@ -7,11 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
-import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/helper/file.dart';
-import 'package:whisper/helper/ftp.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/notification.dart';
@@ -55,8 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoConnect = true;
   bool _launchAtStartup = false;
   bool _androidBackgroundKeepAlive = true;
-  bool _ftpServer = SimpleFtpServer().isActive();
-  int _ftpPort = 8021;
   double _audioSharePlaybackGain = 1.0;
   double _remoteInputScrollMultiplier = 1.0;
   ThemeMode _themeMode = ThemeMode.system;
@@ -96,7 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final packageInfo = await PackageInfo.fromPlatform();
     final doubleClick = await LocalSetting().isDoubleClickDelete();
     final closeToTray = await LocalSetting().isClose2Tray();
-    final ftpPort = await LocalSetting().ftpPort();
     final copyVerify = await LocalSetting().copyVerify();
     final listenAndroid = await LocalSetting().isListenAndroid();
     final ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
@@ -117,7 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _packageInfo = packageInfo;
       _close2tray = closeToTray;
       _doubleClickDelete = doubleClick;
-      _ftpPort = ftpPort;
       _copyVerifyCode = copyVerify;
       _ignoreAndroid = ignoreAndroid;
       _listenAndroid = listenAndroid;
@@ -230,8 +224,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _settingsSectionText(locale, '连接与传输', 'Connection & transfer'),
                 _settingsSectionText(
                   locale,
-                  '端口、FTP 和可信设备自动连接',
-                  'Ports, FTP, and trusted device auto-connect',
+                  '服务端口和可信设备自动连接',
+                  'Service port and trusted device auto-connect',
                 ),
                 [
                   _buildSettingItem(
@@ -270,67 +264,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       );
                     },
-                  ),
-                  _buildSettingItem(
-                    AppLocalizations.of(context)?.ftpService ?? 'FTP服务',
-                    Icon(
-                      Icons.folder_shared_outlined,
-                      color: isDark
-                          ? Colors.grey[400]
-                          : CupertinoColors.systemGrey,
-                    ),
-                    desc: 'Port $_ftpPort',
-                    onTap: _pickFTPDir,
-                    onLongPress: () {
-                      if (_ftpServer) {
-                        return;
-                      }
-                      showInputAlertDialog(
-                        context,
-                        title:
-                            'FTP${AppLocalizations.of(context)?.serverPortTitle ?? '服务端口'}',
-                        description: AppLocalizations.of(context)?.portDesc ??
-                            '请输入服务端口 [1000, 65535]',
-                        inputHints: [
-                          {'$_ftpPort': true}
-                        ],
-                        confirmButtonText:
-                            AppLocalizations.of(context)?.confirm ?? '确定',
-                        cancelButtonText:
-                            AppLocalizations.of(context)?.cancel ?? '取消',
-                        onConfirm: (List<String> inputValues) async {
-                          try {
-                            final port = int.parse(inputValues[0]);
-                            if (port > 1000 && port <= 65535) {
-                              await LocalSetting().setFTPPort(port);
-                              setState(() {
-                                _ftpPort = port;
-                              });
-                            }
-                          } on Exception catch (_) {}
-                        },
-                      );
-                    },
-                    trailing: CupertinoSwitch(
-                      value: _ftpServer,
-                      onChanged: (bool value) async {
-                        var path = await LocalSetting().ftpDir();
-                        if (path.isEmpty) {
-                          path = await _pickFTPDir();
-                        }
-
-                        if (path.isEmpty) {
-                          return;
-                        }
-
-                        value
-                            ? SimpleFtpServer().start(path, defaultFtpPort)
-                            : SimpleFtpServer().stop();
-                        setState(() {
-                          _ftpServer = value;
-                        });
-                      },
-                    ),
                   ),
                   _buildSettingItem(
                     _autoConnectLabel(context),
@@ -724,14 +657,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  Future<String> _pickFTPDir() async {
-    final selectDir = await FilePicker.platform.getDirectoryPath();
-    if (selectDir != null) {
-      await LocalSetting().setFTPDir(selectDir);
-    }
-    return selectDir ?? "";
   }
 
   Future<String> _pickSaveDir() async {

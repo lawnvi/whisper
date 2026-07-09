@@ -481,12 +481,6 @@ abstract class AppLocalizations {
   /// **'忽略安卓通知'**
   String get ignoreNotification;
 
-  /// No description provided for @ftpService.
-  ///
-  /// In zh, this message translates to:
-  /// **'FTP服务'**
-  String get ftpService;
-
   /// No description provided for @back.
   ///
   /// In zh, this message translates to:

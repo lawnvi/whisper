@@ -1,1 +1,0 @@
-const defaultFtpPort = 6921;

@@ -453,14 +453,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  ftp_server:
-    dependency: "direct main"
-    description:
-      name: ftp_server
-      sha256: e4133eacf67d0216a824656fa560fa17072bc76eda0bcb5d5f47c830853d1224
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.7"
   glob:
     dependency: transitive
     description:

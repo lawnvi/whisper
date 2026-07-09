@@ -231,9 +231,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ignoreNotification => '忽略安卓通知';
 
   @override
-  String get ftpService => 'FTP服务';
-
-  @override
   String get back => '返回';
 
   @override

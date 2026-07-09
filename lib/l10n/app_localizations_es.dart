@@ -236,9 +236,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ignoreNotification => 'Ignorar notificaciones de Android';
 
   @override
-  String get ftpService => 'Servicio FTP';
-
-  @override
   String get back => 'Volver';
 
   @override
