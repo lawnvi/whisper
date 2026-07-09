@@ -3,21 +3,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('settings back buttons use the app bar foreground color', () {
+  test('settings back buttons use accessible icon actions', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
 
-    expect(
-      RegExp(
-        r'CupertinoNavigationBarBackButton\([\s\S]*?color: colorScheme\.primary,',
-      ).allMatches(source),
-      isEmpty,
-    );
-    expect(
-      RegExp(
-        r'CupertinoNavigationBarBackButton\([\s\S]*?color: colorScheme\.onSurface,',
-      ).allMatches(source),
-      hasLength(2),
-    );
+    expect(source, isNot(contains('CupertinoNavigationBarBackButton')));
+    expect(RegExp(r'BackButton\(').allMatches(source), hasLength(2));
   });
 
   test('remote input auto mode sheet uses settings menu colors', () {
@@ -60,18 +50,16 @@ void main() {
     );
   });
 
-  test('client settings use compact untitled cards', () {
+  test('client settings use localized unframed sections', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
     final clientSettings = RegExp(
       r'class _ClientSettingsScreenState[\s\S]*?class _DeviceSettingTile',
     ).firstMatch(source)!.group(0)!;
 
-    expect(clientSettings, contains('Widget _buildClientSettingsCard('));
-    expect(
-        clientSettings, isNot(contains('_buildClientSettingsSectionHeader')));
-    expect(clientSettings, isNot(contains('_clientSettingsSectionText')));
-    expect(clientSettings, contains('BorderRadius.circular(14.0)'));
-    expect(clientSettings, isNot(contains('BorderRadius.circular(20.0)')));
+    expect(clientSettings, contains('Widget _buildClientSettingsSection('));
+    expect(clientSettings, contains('l10n.dangerousActions'));
+    expect(clientSettings, isNot(contains('Card(')));
+    expect(clientSettings, isNot(contains('BorderRadius.circular(14.0)')));
   });
 
   test('client setting tiles keep row height consistent without dividers', () {
@@ -80,8 +68,8 @@ void main() {
     expect(tileStart, isNonNegative);
     final tile = source.substring(tileStart);
 
+    expect(tile, contains('AppInteractiveTile('));
     expect(tile, contains('BoxConstraints(minHeight: 56)'));
-    expect(tile, contains('CrossAxisAlignment.center'));
     expect(tile, isNot(contains('Divider(')));
   });
 

@@ -6,23 +6,52 @@ import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_empty_state.dart';
+import 'package:whisper/widget/app_interactive_tile.dart';
 
-import '../l10n/app_localizations.dart';
+typedef AppListLoader = Future<AppListPresentation> Function();
+
+typedef AppSelectionWriter = Future<void> Function({
+  required List<String> packages,
+  required bool add,
+  bool clear,
+});
+
+@immutable
+class AppListPresentation {
+  const AppListPresentation({
+    required this.apps,
+    required this.selectedPackages,
+  });
+
+  final List<AppInfo> apps;
+  final Set<String> selectedPackages;
+}
 
 class AppListScreen extends StatefulWidget {
-  const AppListScreen({super.key});
+  const AppListScreen({
+    super.key,
+    this.loader,
+    this.selectionWriter,
+  });
+
+  final AppListLoader? loader;
+  final AppSelectionWriter? selectionWriter;
 
   @override
-  _AppListScreenState createState() => _AppListScreenState();
+  State<AppListScreen> createState() => _AppListScreenState();
 }
 
 class _AppListScreenState extends State<AppListScreen> {
-  List<AppInfo> apps = [];
-  List<AppInfo> filteredApps = [];
-  TextEditingController searchController = TextEditingController();
-  Map<String, bool> checkedApps = {};
+  final TextEditingController searchController = TextEditingController();
+
+  List<AppInfo> apps = <AppInfo>[];
+  List<AppInfo> filteredApps = <AppInfo>[];
+  Map<String, bool> checkedApps = <String, bool>{};
   bool isLoading = true;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -30,8 +59,14 @@ class _AppListScreenState extends State<AppListScreen> {
     loadApps();
   }
 
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   Future<List<AppInfo>> _loadVisibleApps() async {
-    final results = await Future.wait<List<AppInfo>>([
+    final results = await Future.wait<List<AppInfo>>(<Future<List<AppInfo>>>[
       InstalledApps.getInstalledApps(
         excludeSystemApps: true,
         withIcon: true,
@@ -50,10 +85,12 @@ class _AppListScreenState extends State<AppListScreen> {
       for (final app in allAppsWithoutIcons) app.packageName: app,
     };
     final systemSmsPackages = allAppsWithoutIcons
-        .where((app) =>
-            app.isSystemApp &&
-            isVerificationCodeNotificationPackage(app.packageName) &&
-            !installedAppsByPackage.containsKey(app.packageName))
+        .where(
+          (app) =>
+              app.isSystemApp &&
+              isVerificationCodeNotificationPackage(app.packageName) &&
+              !installedAppsByPackage.containsKey(app.packageName),
+        )
         .map((app) => app.packageName)
         .toSet();
     final systemSmsApps = await Future.wait<AppInfo?>(
@@ -67,7 +104,23 @@ class _AppListScreenState extends State<AppListScreen> {
         installedAppsByPackage[app.packageName] = app;
       }
     }
-    return installedAppsByPackage.values.toList();
+    return installedAppsByPackage.values.toList(growable: false);
+  }
+
+  Future<AppListPresentation> _loadDefaultPresentation() async {
+    final results = await Future.wait<dynamic>(<Future<dynamic>>[
+      _loadVisibleApps(),
+      LocalSetting().listenAppNotifyList(),
+    ]);
+    final installedApps = results[0] as List<AppInfo>;
+    final appMap = results[1] as Map<String, int>;
+    installedApps.sort(
+      (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0),
+    );
+    return AppListPresentation(
+      apps: List<AppInfo>.unmodifiable(installedApps),
+      selectedPackages: Set<String>.unmodifiable(appMap.keys),
+    );
   }
 
   List<AppInfo> _filterApps(List<AppInfo> source, String query) {
@@ -78,202 +131,251 @@ class _AppListScreenState extends State<AppListScreen> {
     return source.where((app) {
       return app.name.toLowerCase().contains(normalizedQuery) ||
           app.packageName.toLowerCase().contains(normalizedQuery);
-    }).toList();
+    }).toList(growable: false);
   }
 
-  void loadApps() async {
+  Future<void> loadApps() async {
     setState(() {
       isLoading = true;
+      _loadFailed = false;
     });
-    final results = await Future.wait<dynamic>([
-      _loadVisibleApps(),
-      LocalSetting().listenAppNotifyList(),
-    ]);
-    if (!mounted) {
-      return;
+    try {
+      final presentation =
+          await (widget.loader ?? _loadDefaultPresentation).call();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        apps = List<AppInfo>.of(presentation.apps);
+        filteredApps = _filterApps(apps, searchController.text);
+        checkedApps = <String, bool>{
+          for (final package in presentation.selectedPackages) package: true,
+        };
+        isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        isLoading = false;
+        _loadFailed = true;
+      });
     }
-    final installedApps = results[0] as List<AppInfo>;
-    final appMap = results[1] as Map<String, int>;
-    installedApps.sort(
-        (a, b) => (appMap[b.packageName] ?? 0) - (appMap[a.packageName] ?? 0));
-
-    var checked = <String, bool>{};
-    for (var item in appMap.keys) {
-      checked[item] = true;
-    }
-
-    setState(() {
-      apps = installedApps;
-      filteredApps = _filterApps(installedApps, searchController.text);
-      isLoading = false;
-      checkedApps = checked;
-    });
   }
 
-  void filterApps(String query) async {
+  void filterApps(String query) {
     setState(() {
       filteredApps = _filterApps(apps, query);
     });
   }
 
-  void _updateAppChecked(String packageName, bool value) {
+  void _clearSearch() {
+    searchController.clear();
+    filterApps('');
+  }
+
+  Future<void> _writeSelection({
+    required List<String> packages,
+    required bool add,
+    bool clear = false,
+  }) async {
+    final writer = widget.selectionWriter;
+    if (writer != null) {
+      await writer(packages: packages, add: add, clear: clear);
+      return;
+    }
+    await LocalSetting().modifyListenNotifyApp(
+      packages: packages,
+      add: add,
+      clear: clear,
+    );
+  }
+
+  Future<void> _updateAppChecked(String packageName, bool value) async {
     setState(() {
       checkedApps[packageName] = value;
     });
-    LocalSetting().modifyListenNotifyApp(packages: [packageName], add: value);
+    await _writeSelection(packages: <String>[packageName], add: value);
+  }
+
+  Future<void> _toggleAll() async {
+    final selectAll = apps.any((app) => checkedApps[app.packageName] != true);
+    final packages = apps.map((app) => app.packageName).toList(growable: false);
+    setState(() {
+      checkedApps = <String, bool>{
+        for (final package in packages) package: selectAll,
+      };
+    });
+    await _writeSelection(
+      add: selectAll,
+      clear: !selectAll,
+      packages: packages,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
-    final navigationTextColor =
-        isDark ? palette.textMuted : colorScheme.onSurface;
+    final l10n = AppLocalizations.of(context)!;
+    final allSelected = apps.isNotEmpty &&
+        apps.every((app) => checkedApps[app.packageName] == true);
 
-    return CupertinoPageScaffold(
+    return Scaffold(
       backgroundColor: colorScheme.surface,
-      navigationBar: CupertinoNavigationBar(
-        backgroundColor: colorScheme.surface,
-        automaticBackgroundVisibility: false,
-        enableBackgroundFilterBlur: false,
-        border: Border(
-          bottom: BorderSide(color: palette.borderSubtle),
+      appBar: AppBar(
+        foregroundColor: colorScheme.onSurface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: palette.borderSubtle),
         ),
-        middle: Text(AppLocalizations.of(context)?.selectNotifyApp ?? '监听APP通知',
-            style: TextStyle(color: navigationTextColor)),
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.back ?? 'Back',
-              style: TextStyle(color: navigationTextColor)),
-          onPressed: () {
-            // Handle back button press
-            Navigator.pop(context);
-          },
+        leading: const BackButton(),
+        title: Text(
+          l10n.selectNotifyApp,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          child: Text(AppLocalizations.of(context)?.selectAll ?? '全选',
-              style: TextStyle(color: navigationTextColor)),
-          onPressed: () {
-            bool selectAll = checkedApps.length < apps.length ||
-                checkedApps.values.contains(false);
-
-            var appArr = <String>[];
-            var checkedMap = <String, bool>{};
-            for (var app in apps) {
-              appArr.add(app.packageName);
-              checkedMap[app.packageName] = selectAll;
-            }
-            setState(() {
-              checkedApps = checkedMap;
-            });
-
-            LocalSetting().modifyListenNotifyApp(
-                add: selectAll, clear: !selectAll, packages: appArr);
-          },
-        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: allSelected ? l10n.deselectAll : l10n.selectAll,
+            onPressed: isLoading || apps.isEmpty ? null : _toggleAll,
+            icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+          ),
+        ],
       ),
-      child: ColoredBox(
-        color: colorScheme.surface,
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 2),
-                child: CupertinoSearchTextField(
-                  controller: searchController,
-                  onChanged: filterApps,
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: WhisperUi.settingsMaxWidth,
+            ),
+            child: Column(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: TextField(
+                    controller: searchController,
+                    onChanged: filterApps,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: l10n.appListSearchPlaceholder,
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: l10n.appListClearSearch,
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.clear),
+                            ),
+                    ),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: isLoading
-                      ? const Center(
-                          key: ValueKey('loading-app-list'),
-                          child: CupertinoActivityIndicator(radius: 14),
-                        )
-                      : ListView.builder(
-                          key: const ValueKey('loaded-app-list'),
-                          itemCount: filteredApps.length,
-                          itemBuilder: (context, index) {
-                            AppInfo app = filteredApps[index];
-                            bool isChecked =
-                                checkedApps[app.packageName] ?? false;
-                            return AppListTile(
-                              app: app,
-                              isChecked: isChecked,
-                              isDark: isDark,
-                              onChanged: (bool value) {
-                                _updateAppChecked(app.packageName, value);
-                              },
-                            );
-                          },
-                        ),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: _buildBody(l10n),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _buildBody(AppLocalizations l10n) {
+    if (isLoading) {
+      return const Center(
+        key: ValueKey<String>('loading-app-list'),
+        child: CupertinoActivityIndicator(radius: 14),
+      );
+    }
+    if (_loadFailed) {
+      return AppEmptyState(
+        key: const ValueKey<String>('failed-app-list'),
+        icon: Icons.error_outline,
+        title: l10n.appListLoadFailedTitle,
+        body: l10n.appListLoadFailedBody,
+        actionLabel: l10n.retry,
+        onAction: loadApps,
+      );
+    }
+    if (apps.isEmpty) {
+      return AppEmptyState(
+        key: const ValueKey<String>('empty-app-list'),
+        icon: Icons.apps_outlined,
+        title: l10n.emptyAppsTitle,
+        body: l10n.emptyAppsBody,
+      );
+    }
+    if (filteredApps.isEmpty) {
+      return AppEmptyState(
+        key: const ValueKey<String>('empty-app-search'),
+        icon: Icons.search_off,
+        title: l10n.emptyAppsSearchTitle,
+        body: l10n.emptyAppsSearchBody,
+        actionLabel: l10n.appListClearSearch,
+        onAction: _clearSearch,
+      );
+    }
+    return ListView.builder(
+      key: const ValueKey<String>('loaded-app-list'),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+      itemCount: filteredApps.length,
+      itemBuilder: (context, index) {
+        final app = filteredApps[index];
+        final isChecked = checkedApps[app.packageName] ?? false;
+        return AppListTile(
+          app: app,
+          isChecked: isChecked,
+          onChanged: (value) => _updateAppChecked(app.packageName, value),
+        );
+      },
+    );
+  }
 }
 
 class AppListTile extends StatelessWidget {
-  final AppInfo app;
-  final bool isChecked;
-  final ValueChanged<bool> onChanged;
-  final bool isDark;
-
   const AppListTile({
     super.key,
     required this.app,
     required this.isChecked,
-    required this.isDark,
     required this.onChanged,
   });
 
+  final AppInfo app;
+  final bool isChecked;
+  final ValueChanged<bool> onChanged;
+
   @override
   Widget build(BuildContext context) {
-    AppInfo app = this.app;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-      child: Row(
-        children: [
-          if (app.icon != null) AppIcon(icon: app.icon!),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(app.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        decoration: TextDecoration.none)),
-                const SizedBox(height: 4),
-                Text(
-                  _appSubtitle(app),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: CupertinoColors.systemGrey,
-                      decoration: TextDecoration.none),
-                ),
-              ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: AppInteractiveTile(
+        semanticLabel: '${app.name}, ${app.packageName}',
+        toggled: isChecked,
+        onActivate: () => onChanged(!isChecked),
+        leading: app.icon == null
+            ? const SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(Icons.apps_outlined),
+              )
+            : AppIcon(icon: app.icon!),
+        title: Text(app.name),
+        subtitle: Text(_appSubtitle(app)),
+        trailing: ExcludeFocus(
+          child: ExcludeSemantics(
+            child: CupertinoSwitch(
+              value: isChecked,
+              onChanged: onChanged,
             ),
           ),
-          CupertinoSwitch(
-            value: isChecked,
-            onChanged: onChanged,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -284,12 +386,22 @@ String _appSubtitle(AppInfo app) {
 }
 
 class AppIcon extends StatelessWidget {
-  final Uint8List icon;
-
   const AppIcon({super.key, required this.icon});
+
+  final Uint8List icon;
 
   @override
   Widget build(BuildContext context) {
-    return Image.memory(icon, width: 40, height: 40);
+    return Image.memory(
+      icon,
+      width: 40,
+      height: 40,
+      gaplessPlayback: true,
+      errorBuilder: (context, error, stackTrace) => const SizedBox(
+        width: 40,
+        height: 40,
+        child: Icon(Icons.apps_outlined),
+      ),
+    );
   }
 }

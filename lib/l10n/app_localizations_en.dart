@@ -128,7 +128,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get port => 'Port';
 
   @override
-  String get portDesc => 'Port range: [1000, 65535]';
+  String get portDesc => 'Enter a port from 1001 to 65535';
 
   @override
   String get timeoutTitle => 'Connection Timeout';
@@ -243,7 +243,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearAll => 'Clear';
 
   @override
-  String get selectNotifyApp => 'Listen to App Notifications';
+  String get selectNotifyApp => 'Notification apps';
 
   @override
   String get copyVerifyCode => 'Copy Verification Code to Clipboard';
@@ -1039,7 +1039,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSectionNotificationForwardingDesc =>
-      'Choose which Android apps can forward notifications';
+      'Android notification handling and verification code assistance';
 
   @override
   String get settingsSectionLanguageFiles => 'Language and files';
@@ -1065,6 +1065,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appListClearSearch => 'Clear app search';
+
+  @override
+  String get deselectAll => 'Deselect all';
+
+  @override
+  String get settingsLoadFailedTitle => 'Settings could not be loaded';
+
+  @override
+  String get settingsLoadFailedBody =>
+      'Check the local app services and try again.';
+
+  @override
+  String get appListLoadFailedTitle => 'Apps could not be loaded';
+
+  @override
+  String get appListLoadFailedBody => 'Check app access and try again.';
 
   @override
   String get dangerousActions => 'Dangerous actions';

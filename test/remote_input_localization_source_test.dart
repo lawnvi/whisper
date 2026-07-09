@@ -34,6 +34,10 @@ void main() {
       contains('l10n.remoteInputLayoutSetting('),
     );
     expect(remoteInputSection, contains('l10n.remoteInputAutoModeTitle'));
+    expect(
+        remoteInputSection, isNot(contains('AppLocalizations.of(context)?')));
+    expect(remoteInputSection, isNot(contains('SF Pro Display')));
+    expect(remoteInputSection, contains('AppInteractiveTile('));
   });
 
   test('remote input layout editor labels use AppLocalizations', () {

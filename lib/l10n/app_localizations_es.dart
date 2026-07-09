@@ -90,10 +90,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sendTips => 'Escribe algo...';
 
   @override
-  String get trust => 'Confiar en dispositivo';
+  String get trust => 'Confiar en este dispositivo';
 
   @override
-  String get writeClipboard => 'Escribir al portapapeles';
+  String get writeClipboard => 'Permitir escribir en el portapapeles';
 
   @override
   String get deleteDevice => 'Eliminar dispositivo';
@@ -107,10 +107,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get serverPortTitle => 'Puerto del servidor';
 
   @override
-  String get trustNewDevice => 'Acceso automático a nuevos dispositivos';
+  String get trustNewDevice => 'Aprobar automáticamente dispositivos nuevos';
 
   @override
-  String get accessClipboard => 'Acceder al portapapeles';
+  String get accessClipboard => 'Permitir acceso al portapapeles';
 
   @override
   String get doubleClickRmMessage => 'Eliminar mensaje al hacer doble clic';
@@ -122,13 +122,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nickname => 'Apodo';
 
   @override
-  String get nicknameDesc => 'Ingresa tu apodo';
+  String get nicknameDesc => 'Introduce un apodo';
 
   @override
   String get port => 'Puerto';
 
   @override
-  String get portDesc => 'Rango del puerto: [1000, 65535]';
+  String get portDesc => 'Introduce un puerto entre 1001 y 65535';
 
   @override
   String get timeoutTitle => 'Tiempo de espera de conexión';
@@ -245,7 +245,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get clearAll => 'Limpiar';
 
   @override
-  String get selectNotifyApp => 'Escuchar notificaciones de apps';
+  String get selectNotifyApp => 'Aplicaciones de notificaciones';
 
   @override
   String get copyVerifyCode => 'Copiar código de verificación al portapapeles';
@@ -312,14 +312,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get localeNameZhHans => 'Chino simplificado';
 
   @override
-  String get localeNameEnglish => 'Ingles';
+  String get localeNameEnglish => 'Inglés';
 
   @override
-  String get localeNameSpanish => 'Espanol';
+  String get localeNameSpanish => 'Español';
 
   @override
   String get autoConnectTrustedDevices =>
-      'Conectar automaticamente dispositivos con confianza mutua';
+      'Conectar automáticamente los dispositivos con confianza mutua';
 
   @override
   String get mutualTrustEnabled => 'La confianza mutua esta activada';
@@ -1054,7 +1054,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsSectionNotificationForwardingDesc =>
-      'Elige qué aplicaciones de Android pueden reenviar notificaciones';
+      'Gestión de notificaciones de Android y ayuda con códigos de verificación';
 
   @override
   String get settingsSectionLanguageFiles => 'Idioma y archivos';
@@ -1080,6 +1080,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get appListClearSearch => 'Borrar búsqueda de aplicaciones';
+
+  @override
+  String get deselectAll => 'Deseleccionar todo';
+
+  @override
+  String get settingsLoadFailedTitle => 'No se pudieron cargar los ajustes';
+
+  @override
+  String get settingsLoadFailedBody =>
+      'Comprueba los servicios locales de la aplicación e inténtalo de nuevo.';
+
+  @override
+  String get appListLoadFailedTitle => 'No se pudieron cargar las aplicaciones';
+
+  @override
+  String get appListLoadFailedBody =>
+      'Comprueba el acceso a las aplicaciones e inténtalo de nuevo.';
 
   @override
   String get dangerousActions => 'Acciones peligrosas';

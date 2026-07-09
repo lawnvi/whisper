@@ -304,7 +304,7 @@ abstract class AppLocalizations {
   /// No description provided for @portDesc.
   ///
   /// In zh, this message translates to:
-  /// **'请输入服务端口：[1000, 65535]'**
+  /// **'请输入 1001 到 65535 之间的端口'**
   String get portDesc;
 
   /// No description provided for @timeoutTitle.
@@ -502,7 +502,7 @@ abstract class AppLocalizations {
   /// No description provided for @selectNotifyApp.
   ///
   /// In zh, this message translates to:
-  /// **'监听APP通知'**
+  /// **'选择通知应用'**
   String get selectNotifyApp;
 
   /// No description provided for @copyVerifyCode.
@@ -1820,7 +1820,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSectionNotificationForwardingDesc.
   ///
   /// In zh, this message translates to:
-  /// **'选择允许转发通知的 Android 应用'**
+  /// **'Android 通知处理和验证码辅助'**
   String get settingsSectionNotificationForwardingDesc;
 
   /// No description provided for @settingsSectionLanguageFiles.
@@ -1870,6 +1870,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'清除应用搜索'**
   String get appListClearSearch;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消全选'**
+  String get deselectAll;
+
+  /// No description provided for @settingsLoadFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法加载设置'**
+  String get settingsLoadFailedTitle;
+
+  /// No description provided for @settingsLoadFailedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查本机应用服务后重试。'**
+  String get settingsLoadFailedBody;
+
+  /// No description provided for @appListLoadFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法加载应用'**
+  String get appListLoadFailedTitle;
+
+  /// No description provided for @appListLoadFailedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查应用访问权限后重试。'**
+  String get appListLoadFailedBody;
 
   /// No description provided for @dangerousActions.
   ///

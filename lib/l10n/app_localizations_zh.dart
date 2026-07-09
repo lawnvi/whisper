@@ -127,7 +127,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get port => '服务端口';
 
   @override
-  String get portDesc => '请输入服务端口：[1000, 65535]';
+  String get portDesc => '请输入 1001 到 65535 之间的端口';
 
   @override
   String get timeoutTitle => '连接超时';
@@ -240,7 +240,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearAll => '清空';
 
   @override
-  String get selectNotifyApp => '监听APP通知';
+  String get selectNotifyApp => '选择通知应用';
 
   @override
   String get copyVerifyCode => '验证码写入剪切板';
@@ -976,8 +976,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionNotificationForwarding => '通知转发';
 
   @override
-  String get settingsSectionNotificationForwardingDesc =>
-      '选择允许转发通知的 Android 应用';
+  String get settingsSectionNotificationForwardingDesc => 'Android 通知处理和验证码辅助';
 
   @override
   String get settingsSectionLanguageFiles => '语言与文件';
@@ -1002,6 +1001,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appListClearSearch => '清除应用搜索';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get settingsLoadFailedTitle => '无法加载设置';
+
+  @override
+  String get settingsLoadFailedBody => '请检查本机应用服务后重试。';
+
+  @override
+  String get appListLoadFailedTitle => '无法加载应用';
+
+  @override
+  String get appListLoadFailedBody => '请检查应用访问权限后重试。';
 
   @override
   String get dangerousActions => '危险操作';
