@@ -12,8 +12,10 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_workspace_presentation.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_empty_state.dart';
 
 class RemoteInputWorkspaceScreen extends StatefulWidget {
   const RemoteInputWorkspaceScreen({
@@ -39,6 +41,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       RemoteInputCoordinator.shared;
   final Map<String, RemoteInputLayoutData> _layouts =
       <String, RemoteInputLayoutData>{};
+  final Map<String, Timer> _layoutSaveTimers = <String, Timer>{};
   final Set<String> _selectedPeerIds = <String>{};
   RemoteInputTopology _localTopology = RemoteInputTopology.fallback();
   List<DeviceData> _devices = const <DeviceData>[];
@@ -60,6 +63,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _workspaceCoordinator.removeListener(_handleWorkspaceChanged);
+    for (final timer in _layoutSaveTimers.values) {
+      timer.cancel();
+    }
     super.dispose();
   }
 
@@ -315,9 +321,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
         title: Text(l10n.remoteInputWorkspaceTitle),
-        leading: CupertinoNavigationBarBackButton(
+        leading: IconButton(
+          tooltip: l10n.back,
           onPressed: () => Navigator.of(context).pop(),
-          color: Theme.of(context).colorScheme.onSurface,
+          icon: const Icon(Icons.arrow_back_rounded),
         ),
         actions: [
           TextButton.icon(
@@ -339,20 +346,14 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       body: SafeArea(
         child: _loading
             ? const Center(child: CupertinoActivityIndicator())
-            : Row(
-                children: [
-                  SizedBox(
-                    width: 260,
-                    child: _buildDevicePanel(l10n),
-                  ),
-                  Expanded(
-                    child: _buildCanvasPanel(l10n),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: _buildDetailsPanel(l10n),
-                  ),
-                ],
+            : RemoteInputAdaptiveWorkspace(
+                devicesPanelLabel: l10n.remoteInputWorkspaceDevicesPanel,
+                detailsPanelLabel: l10n.remoteInputWorkspaceDetailsPanel,
+                closePanelLabel: l10n.remoteInputWorkspaceClosePanel,
+                devicePanel: _buildDevicePanel(l10n),
+                canvasPanel: _buildCanvasPanel(l10n),
+                detailsPanel: _buildDetailsPanel(l10n),
+                onEscape: () => Navigator.of(context).maybePop(),
               ),
       ),
       bottomNavigationBar: _buildStatusBar(l10n),
@@ -380,15 +381,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           ),
           Expanded(
             child: _devices.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(
-                        l10n.remoteInputWorkspaceNoTargets,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: palette.textMuted),
-                      ),
-                    ),
+                ? AppEmptyState(
+                    icon: Icons.keyboard_alt_outlined,
+                    title: l10n.remoteInputWorkspaceNoTargets,
+                    body: l10n.emptyDevicesBody,
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -399,49 +395,45 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                       final focused = _focusedPeerId == device.uid;
                       final snapshot =
                           _workspaceCoordinator.snapshot.targets[device.uid];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Material(
-                          color: focused
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.08)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                          child: CheckboxListTile(
-                            value: selected,
-                            onChanged: (value) {
-                              setState(() {
-                                if (value == true) {
-                                  _selectedPeerIds.add(device.uid);
-                                  _focusedPeerId = device.uid;
-                                } else {
-                                  _selectedPeerIds.remove(device.uid);
-                                }
-                              });
-                            },
-                            onFocusChange: (_) {},
-                            title: Text(
-                              device.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      return FocusTraversalOrder(
+                        order: NumericFocusOrder(10 + index.toDouble()),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Material(
+                            color: focused
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(
+                              WhisperUi.radiusMedium,
                             ),
-                            subtitle: Text(
-                              _targetStatusLabel(l10n, snapshot),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            secondary: IconButton(
-                              tooltip: l10n.remoteInputWorkspaceFocusTarget,
-                              onPressed: () {
-                                setState(() {
-                                  _focusedPeerId = device.uid;
-                                });
-                              },
-                              icon:
-                                  const Icon(Icons.center_focus_strong_rounded),
+                            child: CheckboxListTile(
+                              value: selected,
+                              onChanged: (_) => _togglePeerSelection(device),
+                              title: Text(
+                                device.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                _targetStatusLabel(l10n, snapshot),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              controlAffinity: ListTileControlAffinity.leading,
+                              secondary: IconButton(
+                                tooltip: l10n.remoteInputWorkspaceFocusTarget,
+                                onPressed: () {
+                                  setState(() {
+                                    _focusedPeerId = device.uid;
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.center_focus_strong_rounded,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -479,9 +471,30 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                 ),
               ),
               if (validation.hasConflict)
-                Text(
-                  l10n.remoteInputWorkspaceConflict,
-                  style: const TextStyle(color: Colors.orange),
+                Semantics(
+                  liveRegion: true,
+                  excludeSemantics: true,
+                  label: l10n.remoteInputWorkspaceConflict,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 18,
+                        color: palette.warning,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          l10n.remoteInputWorkspaceConflict,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(color: palette.warning),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -493,10 +506,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
               decoration: BoxDecoration(
                 color: palette.surfaceElevated,
                 border: Border.all(color: palette.borderSubtle),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     return _buildScreenCanvas(
@@ -564,11 +577,16 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
             top: toCanvas(display.x, display.y).dy,
             width: toSize(display.width, display.height).width,
             height: toSize(display.width, display.height).height,
-            child: _ScreenBlock(
+            child: RemoteInputScreenBlock(
               title: display.name.isEmpty
                   ? AppLocalizations.of(context)!.remoteInputLocalScreen
                   : display.name,
-              subtitle: _displaySizeLabel(display),
+              resolution: _displaySizeLabel(display),
+              roleLabel: AppLocalizations.of(context)!.remoteInputLocalScreen,
+              selectedLabel: AppLocalizations.of(context)!
+                  .remoteInputWorkspaceSelectedScreen,
+              conflictLabel: AppLocalizations.of(context)!
+                  .remoteInputWorkspaceConflictScreen,
               selected: false,
               conflict: false,
               local: true,
@@ -676,18 +694,106 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                 top: (display.top - bounds.top) * scale,
                 width: math.max(1.0, display.width * scale),
                 height: math.max(1.0, display.height * scale),
-                child: _ScreenBlock(
+                child: RemoteInputScreenBlock(
                   title: display.name.isEmpty ? device.name : display.name,
-                  subtitle: _displaySizeLabel(display),
+                  resolution: _displaySizeLabel(display),
+                  roleLabel:
+                      AppLocalizations.of(context)!.remoteInputPeerScreen,
+                  selectedLabel: AppLocalizations.of(context)!
+                      .remoteInputWorkspaceSelectedScreen,
+                  conflictLabel: AppLocalizations.of(context)!
+                      .remoteInputWorkspaceConflictScreen,
                   selected: _focusedPeerId == device.uid,
                   conflict: conflict,
                   local: false,
+                  onActivate: () {
+                    setState(() {
+                      _focusedPeerId = device.uid;
+                      _selectedPeerIds.add(device.uid);
+                    });
+                  },
+                  onToggle: () => _togglePeerSelection(device),
+                  onMove: (direction, coarse) =>
+                      _movePeerLayoutByKey(device, direction, coarse),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  void _togglePeerSelection(DeviceData device) {
+    setState(() {
+      if (_selectedPeerIds.remove(device.uid)) {
+        if (_focusedPeerId == device.uid) {
+          _focusedPeerId = _selectedPeerIds.firstOrNull ?? '';
+        }
+      } else {
+        _selectedPeerIds.add(device.uid);
+        _focusedPeerId = device.uid;
+      }
+    });
+  }
+
+  void _movePeerLayoutByKey(
+    DeviceData device,
+    RemoteInputEdge direction,
+    bool coarse,
+  ) {
+    final current = _layouts[device.uid];
+    if (current == null) {
+      return;
+    }
+    final moved = moveRemoteLayoutByKey(
+      RemoteInputScreenRect(
+        x: current.x,
+        y: current.y,
+        width: current.width,
+        height: current.height,
+      ),
+      direction: direction,
+      coarse: coarse,
+    );
+    setState(() {
+      _focusedPeerId = device.uid;
+      _layouts[device.uid] = current.copyWith(x: moved.x, y: moved.y);
+    });
+    _layoutSaveTimers[device.uid]?.cancel();
+    _layoutSaveTimers[device.uid] = Timer(
+      const Duration(milliseconds: 160),
+      () => unawaited(_persistKeyboardMovedLayout(device)),
+    );
+  }
+
+  Future<void> _persistKeyboardMovedLayout(DeviceData device) async {
+    _layoutSaveTimers.remove(device.uid);
+    final layout = _layouts[device.uid];
+    if (layout == null) {
+      return;
+    }
+    final rect = RemoteInputScreenRect(
+      x: layout.x,
+      y: layout.y,
+      width: layout.width,
+      height: layout.height,
+    );
+    final layoutJson = _layoutJsonForSnappedLayout(layout, rect);
+    final next = layout.copyWith(
+      peerName: device.name,
+      layoutVersion: layoutJson.isEmpty ? 1 : 2,
+      layoutJson: layoutJson,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await LocalDatabase().upsertRemoteInputLayout(next);
+    if (!mounted) {
+      return;
+    }
+    final latest = _layouts[device.uid];
+    if (latest?.x == next.x && latest?.y == next.y) {
+      setState(() => _layouts[device.uid] = next);
+      await _restartControllerWorkspaceIfLive();
+    }
   }
 
   Widget _buildDetailsPanel(AppLocalizations l10n) {
@@ -707,9 +813,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
         child: focused == null
-            ? Text(
-                l10n.remoteInputWorkspaceNoTargets,
-                style: TextStyle(color: palette.textMuted),
+            ? AppEmptyState(
+                icon: Icons.info_outline_rounded,
+                title: l10n.remoteInputWorkspaceNoTargets,
+                body: l10n.emptyDevicesBody,
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1478,109 +1585,6 @@ class _WorkspaceSnapCandidate {
 
   final RemoteInputScreenRect rect;
   final int score;
-}
-
-class _ScreenBlock extends StatelessWidget {
-  const _ScreenBlock({
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.conflict,
-    required this.local,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final bool conflict;
-  final bool local;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final borderColor = conflict
-        ? Colors.orange
-        : selected
-            ? colorScheme.primary
-            : palette.borderSubtle;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        color: local
-            ? colorScheme.primary.withValues(alpha: 0.08)
-            : palette.surfaceMuted,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: selected ? 2 : 1),
-        boxShadow: [
-          if (selected)
-            BoxShadow(
-              color: colorScheme.primary.withValues(alpha: 0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-        ],
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showTitle =
-              constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
-          final showSubtitle =
-              constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
-          final horizontalPadding = constraints.maxWidth >= 96 ? 12.0 : 4.0;
-          final verticalPadding = constraints.maxHeight >= 64 ? 10.0 : 2.0;
-          if (!showTitle) {
-            return const SizedBox.expand();
-          }
-          return Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: verticalPadding,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.center,
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                if (showSubtitle) ...[
-                  const SizedBox(height: 4),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.center,
-                      child: Text(
-                        subtitle,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: palette.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
 }
 
 class _DetailRow extends StatelessWidget {
