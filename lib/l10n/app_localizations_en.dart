@@ -772,4 +772,324 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationChannelGeneralDesc => 'Incoming messages and alerts';
+
+  @override
+  String get emptyDevicesTitle => 'No devices yet';
+
+  @override
+  String get emptyDevicesBody =>
+      'Nearby and previously connected devices will appear here.';
+
+  @override
+  String get emptySearchTitle => 'No results';
+
+  @override
+  String get emptySearchBody => 'No devices match your search.';
+
+  @override
+  String get emptySearchClear => 'Clear search';
+
+  @override
+  String get emptyConversationTitle => 'No messages yet';
+
+  @override
+  String get emptyConversationConnectedBody =>
+      'Send a message or file to start the conversation.';
+
+  @override
+  String get emptyConversationDisconnectedBody =>
+      'Connect to this device before sending a message or file.';
+
+  @override
+  String get emptyAppsTitle => 'No apps available';
+
+  @override
+  String get emptyAppsBody =>
+      'No notification apps are available on this device.';
+
+  @override
+  String get emptyAppsSearchTitle => 'No apps found';
+
+  @override
+  String get emptyAppsSearchBody => 'Try a different app name or package.';
+
+  @override
+  String get sessionGroupConnected => 'Connected devices';
+
+  @override
+  String get sessionGroupNearby => 'Available nearby';
+
+  @override
+  String get sessionGroupRecent => 'Recent devices';
+
+  @override
+  String sessionGroupDeviceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count devices',
+      one: '1 device',
+      zero: 'No devices',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get localDiscoveryStarting => 'Starting local discovery';
+
+  @override
+  String get localDiscoveryActive => 'Broadcasting and discovering';
+
+  @override
+  String get localDiscoveryStopped => 'Local discovery is stopped';
+
+  @override
+  String get localDiscoveryUnavailable => 'Local discovery is unavailable';
+
+  @override
+  String get localDiscoveryPermissionUnknown =>
+      'Waiting for local network permission';
+
+  @override
+  String get localDiscoveryPermissionDenied => 'Local network access is denied';
+
+  @override
+  String get localDiscoveryPermissionRestricted =>
+      'Local network access is restricted';
+
+  @override
+  String localDiscoveryFailed(String error) {
+    return 'Local discovery failed: $error';
+  }
+
+  @override
+  String localDiscoveryAddress(String address) {
+    return 'Local address: $address';
+  }
+
+  @override
+  String get localDiscoveryUnpairedCandidate => 'Unpaired nearby device';
+
+  @override
+  String get workbenchActionManualConnect => 'Connect manually';
+
+  @override
+  String get workbenchActionAudioShare => 'Share system audio';
+
+  @override
+  String get workbenchActionRemoteInput => 'Keyboard and mouse workspace';
+
+  @override
+  String get workbenchActionSettings => 'Settings';
+
+  @override
+  String get workbenchActionBack => 'Back to devices';
+
+  @override
+  String get workbenchActionSearch => 'Search devices';
+
+  @override
+  String get workbenchActionClearSearch => 'Clear device search';
+
+  @override
+  String get workbenchActionRetryDiscovery => 'Retry discovery';
+
+  @override
+  String workbenchActionUnavailable(String reason) {
+    return 'Unavailable: $reason';
+  }
+
+  @override
+  String get clipboardPreviewTitle => 'Clipboard preview';
+
+  @override
+  String clipboardPreviewTextCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count characters',
+      one: '1 character',
+      zero: 'Empty text',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get clipboardPreviewImage => 'Clipboard image';
+
+  @override
+  String clipboardPreviewImageDetails(String file, String size) {
+    return '$file · $size';
+  }
+
+  @override
+  String clipboardPreviewFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+      zero: 'No files',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clipboardPreviewFilesDetails(String file, int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$file · $_temp0 · $size';
+  }
+
+  @override
+  String get clipboardPreviewRemove => 'Remove clipboard preview';
+
+  @override
+  String get clipboardPreviewSend => 'Send clipboard content';
+
+  @override
+  String get clipboardPreviewEmpty => 'The clipboard has no supported content';
+
+  @override
+  String clipboardPreviewReadFailed(String error) {
+    return 'Unable to read the clipboard: $error';
+  }
+
+  @override
+  String fileDropAccepted(String device) {
+    return 'Drop to send to $device';
+  }
+
+  @override
+  String get fileDropRejected => 'These files cannot be sent';
+
+  @override
+  String get fileDropRejectedDisconnected =>
+      'Connect to the device before dropping files';
+
+  @override
+  String get fileDropRejectedLocalSession =>
+      'Files cannot be sent to this device';
+
+  @override
+  String get fileDropRejectedNoFiles => 'No files were found in this drop';
+
+  @override
+  String get validationRequired => 'This field is required';
+
+  @override
+  String get validationNicknameRequired => 'Enter a nickname';
+
+  @override
+  String get validationNicknameTooLong =>
+      'Nickname must be 64 characters or fewer';
+
+  @override
+  String get validationHostRequired => 'Enter a host or IP address';
+
+  @override
+  String get validationHostInvalid =>
+      'Enter a valid IPv4, IPv6, .local, or host name';
+
+  @override
+  String get validationPortInvalid => 'Enter a port from 1001 to 65535';
+
+  @override
+  String get settingsSectionDeviceAppearance => 'Device and appearance';
+
+  @override
+  String get settingsSectionDeviceAppearanceDesc =>
+      'Name, theme, and how this device appears nearby';
+
+  @override
+  String get settingsSectionConnectionTransfer => 'Connection and transfer';
+
+  @override
+  String get settingsSectionConnectionTransferDesc =>
+      'Server port, saved files, and trusted device connections';
+
+  @override
+  String get settingsSectionSystemBehavior => 'System behavior';
+
+  @override
+  String get settingsSectionSystemBehaviorDesc =>
+      'Startup, background, and window behavior';
+
+  @override
+  String get settingsSectionPermissionsSharing => 'Permissions and sharing';
+
+  @override
+  String get settingsSectionPermissionsSharingDesc =>
+      'Clipboard, trust, audio, and keyboard or mouse access';
+
+  @override
+  String get settingsSectionMobileIntegration => 'Mobile integration';
+
+  @override
+  String get settingsSectionMobileIntegrationDesc =>
+      'Background connection and battery behavior';
+
+  @override
+  String get settingsSectionNotificationForwarding => 'Notification forwarding';
+
+  @override
+  String get settingsSectionNotificationForwardingDesc =>
+      'Choose which Android apps can forward notifications';
+
+  @override
+  String get settingsSectionLanguageFiles => 'Language and files';
+
+  @override
+  String get settingsSectionLanguageFilesDesc =>
+      'Language, save directory, and app information';
+
+  @override
+  String get settingsSaveDirectory => 'Save directory';
+
+  @override
+  String get settingsChangeDirectory => 'Change save directory';
+
+  @override
+  String get settingsOpenDirectory => 'Open save directory';
+
+  @override
+  String get settingsVersion => 'Version';
+
+  @override
+  String get appListSearchPlaceholder => 'Search apps';
+
+  @override
+  String get appListClearSearch => 'Clear app search';
+
+  @override
+  String get dangerousActions => 'Dangerous actions';
+
+  @override
+  String get remoteInputWorkspaceDevicesPanel => 'Devices panel';
+
+  @override
+  String get remoteInputWorkspaceDetailsPanel => 'Details panel';
+
+  @override
+  String get remoteInputWorkspaceOpenDevicesPanel => 'Open devices panel';
+
+  @override
+  String get remoteInputWorkspaceOpenDetailsPanel => 'Open details panel';
+
+  @override
+  String get remoteInputWorkspaceClosePanel => 'Close panel';
+
+  @override
+  String get remoteInputWorkspaceSaveShortcut => 'Save screen arrangement';
+
+  @override
+  String get remoteInputWorkspaceSelectedScreen => 'Selected screen';
+
+  @override
+  String get remoteInputWorkspaceConflictScreen =>
+      'Screen overlaps another edge';
 }

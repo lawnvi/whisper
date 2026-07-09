@@ -734,4 +734,298 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationChannelGeneralDesc => '新消息与提醒';
+
+  @override
+  String get emptyDevicesTitle => '还没有设备';
+
+  @override
+  String get emptyDevicesBody => '附近设备和曾连接的设备会显示在这里。';
+
+  @override
+  String get emptySearchTitle => '没有结果';
+
+  @override
+  String get emptySearchBody => '没有设备符合当前搜索。';
+
+  @override
+  String get emptySearchClear => '清除搜索';
+
+  @override
+  String get emptyConversationTitle => '还没有消息';
+
+  @override
+  String get emptyConversationConnectedBody => '发送消息或文件即可开始会话。';
+
+  @override
+  String get emptyConversationDisconnectedBody => '连接此设备后即可发送消息或文件。';
+
+  @override
+  String get emptyAppsTitle => '没有可用应用';
+
+  @override
+  String get emptyAppsBody => '此设备上没有可用于通知转发的应用。';
+
+  @override
+  String get emptyAppsSearchTitle => '没有找到应用';
+
+  @override
+  String get emptyAppsSearchBody => '请尝试其他应用名称或包名。';
+
+  @override
+  String get sessionGroupConnected => '已连接设备';
+
+  @override
+  String get sessionGroupNearby => '附近可用';
+
+  @override
+  String get sessionGroupRecent => '最近设备';
+
+  @override
+  String sessionGroupDeviceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 台设备',
+      zero: '没有设备',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get localDiscoveryStarting => '正在启动局域网发现';
+
+  @override
+  String get localDiscoveryActive => '正在广播并发现';
+
+  @override
+  String get localDiscoveryStopped => '局域网发现已停止';
+
+  @override
+  String get localDiscoveryUnavailable => '局域网发现不可用';
+
+  @override
+  String get localDiscoveryPermissionUnknown => '正在等待局域网权限';
+
+  @override
+  String get localDiscoveryPermissionDenied => '局域网访问权限已拒绝';
+
+  @override
+  String get localDiscoveryPermissionRestricted => '局域网访问受到限制';
+
+  @override
+  String localDiscoveryFailed(String error) {
+    return '局域网发现失败：$error';
+  }
+
+  @override
+  String localDiscoveryAddress(String address) {
+    return '本机地址：$address';
+  }
+
+  @override
+  String get localDiscoveryUnpairedCandidate => '附近未配对设备';
+
+  @override
+  String get workbenchActionManualConnect => '手动连接';
+
+  @override
+  String get workbenchActionAudioShare => '共享系统音频';
+
+  @override
+  String get workbenchActionRemoteInput => '键鼠工作区';
+
+  @override
+  String get workbenchActionSettings => '设置';
+
+  @override
+  String get workbenchActionBack => '返回设备列表';
+
+  @override
+  String get workbenchActionSearch => '搜索设备';
+
+  @override
+  String get workbenchActionClearSearch => '清除设备搜索';
+
+  @override
+  String get workbenchActionRetryDiscovery => '重试发现';
+
+  @override
+  String workbenchActionUnavailable(String reason) {
+    return '暂不可用：$reason';
+  }
+
+  @override
+  String get clipboardPreviewTitle => '剪贴板预览';
+
+  @override
+  String clipboardPreviewTextCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个字符',
+      zero: '空文本',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get clipboardPreviewImage => '剪贴板图片';
+
+  @override
+  String clipboardPreviewImageDetails(String file, String size) {
+    return '$file · $size';
+  }
+
+  @override
+  String clipboardPreviewFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件',
+      zero: '没有文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clipboardPreviewFilesDetails(String file, int count, String size) {
+    return '$file · $count 个文件 · $size';
+  }
+
+  @override
+  String get clipboardPreviewRemove => '移除剪贴板预览';
+
+  @override
+  String get clipboardPreviewSend => '发送剪贴板内容';
+
+  @override
+  String get clipboardPreviewEmpty => '剪贴板中没有支持的内容';
+
+  @override
+  String clipboardPreviewReadFailed(String error) {
+    return '无法读取剪贴板：$error';
+  }
+
+  @override
+  String fileDropAccepted(String device) {
+    return '松开发送到 $device';
+  }
+
+  @override
+  String get fileDropRejected => '无法发送这些文件';
+
+  @override
+  String get fileDropRejectedDisconnected => '请先连接设备再拖入文件';
+
+  @override
+  String get fileDropRejectedLocalSession => '不能向本机发送文件';
+
+  @override
+  String get fileDropRejectedNoFiles => '拖入的内容中没有文件';
+
+  @override
+  String get validationRequired => '此项不能为空';
+
+  @override
+  String get validationNicknameRequired => '请输入昵称';
+
+  @override
+  String get validationNicknameTooLong => '昵称不能超过 64 个字符';
+
+  @override
+  String get validationHostRequired => '请输入主机名或 IP 地址';
+
+  @override
+  String get validationHostInvalid => '请输入有效的 IPv4、IPv6、.local 或主机名';
+
+  @override
+  String get validationPortInvalid => '请输入 1001 到 65535 之间的端口';
+
+  @override
+  String get settingsSectionDeviceAppearance => '设备与外观';
+
+  @override
+  String get settingsSectionDeviceAppearanceDesc => '名称、主题和本机在附近设备上的显示方式';
+
+  @override
+  String get settingsSectionConnectionTransfer => '连接与传输';
+
+  @override
+  String get settingsSectionConnectionTransferDesc => '服务端口、文件保存和可信设备连接';
+
+  @override
+  String get settingsSectionSystemBehavior => '系统行为';
+
+  @override
+  String get settingsSectionSystemBehaviorDesc => '启动、后台和窗口行为';
+
+  @override
+  String get settingsSectionPermissionsSharing => '权限与共享';
+
+  @override
+  String get settingsSectionPermissionsSharingDesc => '剪贴板、信任、音频和键鼠权限';
+
+  @override
+  String get settingsSectionMobileIntegration => '移动端集成';
+
+  @override
+  String get settingsSectionMobileIntegrationDesc => '后台连接和电池行为';
+
+  @override
+  String get settingsSectionNotificationForwarding => '通知转发';
+
+  @override
+  String get settingsSectionNotificationForwardingDesc =>
+      '选择允许转发通知的 Android 应用';
+
+  @override
+  String get settingsSectionLanguageFiles => '语言与文件';
+
+  @override
+  String get settingsSectionLanguageFilesDesc => '语言、保存目录和应用信息';
+
+  @override
+  String get settingsSaveDirectory => '保存目录';
+
+  @override
+  String get settingsChangeDirectory => '更改保存目录';
+
+  @override
+  String get settingsOpenDirectory => '打开保存目录';
+
+  @override
+  String get settingsVersion => '版本';
+
+  @override
+  String get appListSearchPlaceholder => '搜索应用';
+
+  @override
+  String get appListClearSearch => '清除应用搜索';
+
+  @override
+  String get dangerousActions => '危险操作';
+
+  @override
+  String get remoteInputWorkspaceDevicesPanel => '设备面板';
+
+  @override
+  String get remoteInputWorkspaceDetailsPanel => '详情面板';
+
+  @override
+  String get remoteInputWorkspaceOpenDevicesPanel => '打开设备面板';
+
+  @override
+  String get remoteInputWorkspaceOpenDetailsPanel => '打开详情面板';
+
+  @override
+  String get remoteInputWorkspaceClosePanel => '关闭面板';
+
+  @override
+  String get remoteInputWorkspaceSaveShortcut => '保存屏幕排列';
+
+  @override
+  String get remoteInputWorkspaceSelectedScreen => '已选择屏幕';
+
+  @override
+  String get remoteInputWorkspaceConflictScreen => '屏幕与另一条边重叠';
 }

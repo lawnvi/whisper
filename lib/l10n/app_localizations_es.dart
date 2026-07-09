@@ -779,4 +779,334 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notificationChannelGeneralDesc => 'Mensajes entrantes y avisos';
+
+  @override
+  String get emptyDevicesTitle => 'Aún no hay dispositivos';
+
+  @override
+  String get emptyDevicesBody =>
+      'Los dispositivos cercanos y conectados anteriormente aparecerán aquí.';
+
+  @override
+  String get emptySearchTitle => 'Sin resultados';
+
+  @override
+  String get emptySearchBody => 'Ningún dispositivo coincide con la búsqueda.';
+
+  @override
+  String get emptySearchClear => 'Borrar búsqueda';
+
+  @override
+  String get emptyConversationTitle => 'Aún no hay mensajes';
+
+  @override
+  String get emptyConversationConnectedBody =>
+      'Envía un mensaje o archivo para iniciar la conversación.';
+
+  @override
+  String get emptyConversationDisconnectedBody =>
+      'Conecta este dispositivo antes de enviar un mensaje o archivo.';
+
+  @override
+  String get emptyAppsTitle => 'No hay aplicaciones disponibles';
+
+  @override
+  String get emptyAppsBody =>
+      'No hay aplicaciones disponibles para reenviar notificaciones en este dispositivo.';
+
+  @override
+  String get emptyAppsSearchTitle => 'No se encontraron aplicaciones';
+
+  @override
+  String get emptyAppsSearchBody =>
+      'Prueba con otro nombre de aplicación o paquete.';
+
+  @override
+  String get sessionGroupConnected => 'Dispositivos conectados';
+
+  @override
+  String get sessionGroupNearby => 'Disponibles cerca';
+
+  @override
+  String get sessionGroupRecent => 'Dispositivos recientes';
+
+  @override
+  String sessionGroupDeviceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dispositivos',
+      one: '1 dispositivo',
+      zero: 'Ningún dispositivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get localDiscoveryStarting => 'Iniciando la detección local';
+
+  @override
+  String get localDiscoveryActive => 'Anunciando y buscando dispositivos';
+
+  @override
+  String get localDiscoveryStopped => 'La detección local está detenida';
+
+  @override
+  String get localDiscoveryUnavailable =>
+      'La detección local no está disponible';
+
+  @override
+  String get localDiscoveryPermissionUnknown =>
+      'Esperando permiso para la red local';
+
+  @override
+  String get localDiscoveryPermissionDenied =>
+      'Se denegó el acceso a la red local';
+
+  @override
+  String get localDiscoveryPermissionRestricted =>
+      'El acceso a la red local está restringido';
+
+  @override
+  String localDiscoveryFailed(String error) {
+    return 'Falló la detección local: $error';
+  }
+
+  @override
+  String localDiscoveryAddress(String address) {
+    return 'Dirección local: $address';
+  }
+
+  @override
+  String get localDiscoveryUnpairedCandidate =>
+      'Dispositivo cercano sin emparejar';
+
+  @override
+  String get workbenchActionManualConnect => 'Conectar manualmente';
+
+  @override
+  String get workbenchActionAudioShare => 'Compartir audio del sistema';
+
+  @override
+  String get workbenchActionRemoteInput => 'Espacio de teclado y ratón';
+
+  @override
+  String get workbenchActionSettings => 'Ajustes';
+
+  @override
+  String get workbenchActionBack => 'Volver a dispositivos';
+
+  @override
+  String get workbenchActionSearch => 'Buscar dispositivos';
+
+  @override
+  String get workbenchActionClearSearch => 'Borrar búsqueda de dispositivos';
+
+  @override
+  String get workbenchActionRetryDiscovery => 'Reintentar detección';
+
+  @override
+  String workbenchActionUnavailable(String reason) {
+    return 'No disponible: $reason';
+  }
+
+  @override
+  String get clipboardPreviewTitle => 'Vista previa del portapapeles';
+
+  @override
+  String clipboardPreviewTextCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count caracteres',
+      one: '1 carácter',
+      zero: 'Texto vacío',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get clipboardPreviewImage => 'Imagen del portapapeles';
+
+  @override
+  String clipboardPreviewImageDetails(String file, String size) {
+    return '$file · $size';
+  }
+
+  @override
+  String clipboardPreviewFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+      zero: 'Ningún archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clipboardPreviewFilesDetails(String file, int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$file · $_temp0 · $size';
+  }
+
+  @override
+  String get clipboardPreviewRemove => 'Quitar vista previa del portapapeles';
+
+  @override
+  String get clipboardPreviewSend => 'Enviar contenido del portapapeles';
+
+  @override
+  String get clipboardPreviewEmpty =>
+      'El portapapeles no contiene elementos compatibles';
+
+  @override
+  String clipboardPreviewReadFailed(String error) {
+    return 'No se pudo leer el portapapeles: $error';
+  }
+
+  @override
+  String fileDropAccepted(String device) {
+    return 'Suelta para enviar a $device';
+  }
+
+  @override
+  String get fileDropRejected => 'No se pueden enviar estos archivos';
+
+  @override
+  String get fileDropRejectedDisconnected =>
+      'Conecta el dispositivo antes de soltar archivos';
+
+  @override
+  String get fileDropRejectedLocalSession =>
+      'No se pueden enviar archivos a este dispositivo';
+
+  @override
+  String get fileDropRejectedNoFiles =>
+      'No se encontraron archivos en los elementos soltados';
+
+  @override
+  String get validationRequired => 'Este campo es obligatorio';
+
+  @override
+  String get validationNicknameRequired => 'Introduce un apodo';
+
+  @override
+  String get validationNicknameTooLong =>
+      'El apodo no puede superar los 64 caracteres';
+
+  @override
+  String get validationHostRequired =>
+      'Introduce un nombre de host o dirección IP';
+
+  @override
+  String get validationHostInvalid =>
+      'Introduce una dirección IPv4, IPv6, .local o un host válido';
+
+  @override
+  String get validationPortInvalid => 'Introduce un puerto entre 1001 y 65535';
+
+  @override
+  String get settingsSectionDeviceAppearance => 'Dispositivo y apariencia';
+
+  @override
+  String get settingsSectionDeviceAppearanceDesc =>
+      'Nombre, tema y visibilidad de este dispositivo en la red cercana';
+
+  @override
+  String get settingsSectionConnectionTransfer => 'Conexión y transferencia';
+
+  @override
+  String get settingsSectionConnectionTransferDesc =>
+      'Puerto del servidor, archivos guardados y conexiones de confianza';
+
+  @override
+  String get settingsSectionSystemBehavior => 'Comportamiento del sistema';
+
+  @override
+  String get settingsSectionSystemBehaviorDesc =>
+      'Inicio, segundo plano y comportamiento de las ventanas';
+
+  @override
+  String get settingsSectionPermissionsSharing => 'Permisos y uso compartido';
+
+  @override
+  String get settingsSectionPermissionsSharingDesc =>
+      'Acceso al portapapeles, confianza, audio, teclado y ratón';
+
+  @override
+  String get settingsSectionMobileIntegration => 'Integración móvil';
+
+  @override
+  String get settingsSectionMobileIntegrationDesc =>
+      'Conexión en segundo plano y uso de la batería';
+
+  @override
+  String get settingsSectionNotificationForwarding =>
+      'Reenvío de notificaciones';
+
+  @override
+  String get settingsSectionNotificationForwardingDesc =>
+      'Elige qué aplicaciones de Android pueden reenviar notificaciones';
+
+  @override
+  String get settingsSectionLanguageFiles => 'Idioma y archivos';
+
+  @override
+  String get settingsSectionLanguageFilesDesc =>
+      'Idioma, carpeta de guardado e información de la aplicación';
+
+  @override
+  String get settingsSaveDirectory => 'Carpeta de guardado';
+
+  @override
+  String get settingsChangeDirectory => 'Cambiar carpeta de guardado';
+
+  @override
+  String get settingsOpenDirectory => 'Abrir carpeta de guardado';
+
+  @override
+  String get settingsVersion => 'Versión';
+
+  @override
+  String get appListSearchPlaceholder => 'Buscar aplicaciones';
+
+  @override
+  String get appListClearSearch => 'Borrar búsqueda de aplicaciones';
+
+  @override
+  String get dangerousActions => 'Acciones peligrosas';
+
+  @override
+  String get remoteInputWorkspaceDevicesPanel => 'Panel de dispositivos';
+
+  @override
+  String get remoteInputWorkspaceDetailsPanel => 'Panel de detalles';
+
+  @override
+  String get remoteInputWorkspaceOpenDevicesPanel =>
+      'Abrir panel de dispositivos';
+
+  @override
+  String get remoteInputWorkspaceOpenDetailsPanel => 'Abrir panel de detalles';
+
+  @override
+  String get remoteInputWorkspaceClosePanel => 'Cerrar panel';
+
+  @override
+  String get remoteInputWorkspaceSaveShortcut =>
+      'Guardar la disposición de pantallas';
+
+  @override
+  String get remoteInputWorkspaceSelectedScreen => 'Pantalla seleccionada';
+
+  @override
+  String get remoteInputWorkspaceConflictScreen =>
+      'La pantalla se superpone con otro borde';
 }

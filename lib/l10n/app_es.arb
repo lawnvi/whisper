@@ -349,5 +349,169 @@
   "notificationChannelTransfer": "Transferencia de archivos",
   "notificationChannelTransferDesc": "Progreso de transferencia de archivos",
   "notificationChannelGeneral": "Mensajes",
-  "notificationChannelGeneralDesc": "Mensajes entrantes y avisos"
+  "notificationChannelGeneralDesc": "Mensajes entrantes y avisos",
+  "emptyDevicesTitle": "Aún no hay dispositivos",
+  "emptyDevicesBody": "Los dispositivos cercanos y conectados anteriormente aparecerán aquí.",
+  "emptySearchTitle": "Sin resultados",
+  "emptySearchBody": "Ningún dispositivo coincide con la búsqueda.",
+  "emptySearchClear": "Borrar búsqueda",
+  "emptyConversationTitle": "Aún no hay mensajes",
+  "emptyConversationConnectedBody": "Envía un mensaje o archivo para iniciar la conversación.",
+  "emptyConversationDisconnectedBody": "Conecta este dispositivo antes de enviar un mensaje o archivo.",
+  "emptyAppsTitle": "No hay aplicaciones disponibles",
+  "emptyAppsBody": "No hay aplicaciones disponibles para reenviar notificaciones en este dispositivo.",
+  "emptyAppsSearchTitle": "No se encontraron aplicaciones",
+  "emptyAppsSearchBody": "Prueba con otro nombre de aplicación o paquete.",
+  "sessionGroupConnected": "Dispositivos conectados",
+  "sessionGroupNearby": "Disponibles cerca",
+  "sessionGroupRecent": "Dispositivos recientes",
+  "sessionGroupDeviceCount": "{count, plural, =0{Ningún dispositivo} =1{1 dispositivo} other{{count} dispositivos}}",
+  "@sessionGroupDeviceCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "localDiscoveryStarting": "Iniciando la detección local",
+  "localDiscoveryActive": "Anunciando y buscando dispositivos",
+  "localDiscoveryStopped": "La detección local está detenida",
+  "localDiscoveryUnavailable": "La detección local no está disponible",
+  "localDiscoveryPermissionUnknown": "Esperando permiso para la red local",
+  "localDiscoveryPermissionDenied": "Se denegó el acceso a la red local",
+  "localDiscoveryPermissionRestricted": "El acceso a la red local está restringido",
+  "localDiscoveryFailed": "Falló la detección local: {error}",
+  "@localDiscoveryFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "localDiscoveryAddress": "Dirección local: {address}",
+  "@localDiscoveryAddress": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "localDiscoveryUnpairedCandidate": "Dispositivo cercano sin emparejar",
+  "workbenchActionManualConnect": "Conectar manualmente",
+  "workbenchActionAudioShare": "Compartir audio del sistema",
+  "workbenchActionRemoteInput": "Espacio de teclado y ratón",
+  "workbenchActionSettings": "Ajustes",
+  "workbenchActionBack": "Volver a dispositivos",
+  "workbenchActionSearch": "Buscar dispositivos",
+  "workbenchActionClearSearch": "Borrar búsqueda de dispositivos",
+  "workbenchActionRetryDiscovery": "Reintentar detección",
+  "workbenchActionUnavailable": "No disponible: {reason}",
+  "@workbenchActionUnavailable": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "clipboardPreviewTitle": "Vista previa del portapapeles",
+  "clipboardPreviewTextCount": "{count, plural, =0{Texto vacío} =1{1 carácter} other{{count} caracteres}}",
+  "@clipboardPreviewTextCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clipboardPreviewImage": "Imagen del portapapeles",
+  "clipboardPreviewImageDetails": "{file} · {size}",
+  "@clipboardPreviewImageDetails": {
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "clipboardPreviewFiles": "{count, plural, =0{Ningún archivo} =1{1 archivo} other{{count} archivos}}",
+  "@clipboardPreviewFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clipboardPreviewFilesDetails": "{file} · {count, plural, =1{1 archivo} other{{count} archivos}} · {size}",
+  "@clipboardPreviewFilesDetails": {
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "clipboardPreviewRemove": "Quitar vista previa del portapapeles",
+  "clipboardPreviewSend": "Enviar contenido del portapapeles",
+  "clipboardPreviewEmpty": "El portapapeles no contiene elementos compatibles",
+  "clipboardPreviewReadFailed": "No se pudo leer el portapapeles: {error}",
+  "@clipboardPreviewReadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "fileDropAccepted": "Suelta para enviar a {device}",
+  "@fileDropAccepted": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "fileDropRejected": "No se pueden enviar estos archivos",
+  "fileDropRejectedDisconnected": "Conecta el dispositivo antes de soltar archivos",
+  "fileDropRejectedLocalSession": "No se pueden enviar archivos a este dispositivo",
+  "fileDropRejectedNoFiles": "No se encontraron archivos en los elementos soltados",
+  "validationRequired": "Este campo es obligatorio",
+  "validationNicknameRequired": "Introduce un apodo",
+  "validationNicknameTooLong": "El apodo no puede superar los 64 caracteres",
+  "validationHostRequired": "Introduce un nombre de host o dirección IP",
+  "validationHostInvalid": "Introduce una dirección IPv4, IPv6, .local o un host válido",
+  "validationPortInvalid": "Introduce un puerto entre 1001 y 65535",
+  "settingsSectionDeviceAppearance": "Dispositivo y apariencia",
+  "settingsSectionDeviceAppearanceDesc": "Nombre, tema y visibilidad de este dispositivo en la red cercana",
+  "settingsSectionConnectionTransfer": "Conexión y transferencia",
+  "settingsSectionConnectionTransferDesc": "Puerto del servidor, archivos guardados y conexiones de confianza",
+  "settingsSectionSystemBehavior": "Comportamiento del sistema",
+  "settingsSectionSystemBehaviorDesc": "Inicio, segundo plano y comportamiento de las ventanas",
+  "settingsSectionPermissionsSharing": "Permisos y uso compartido",
+  "settingsSectionPermissionsSharingDesc": "Acceso al portapapeles, confianza, audio, teclado y ratón",
+  "settingsSectionMobileIntegration": "Integración móvil",
+  "settingsSectionMobileIntegrationDesc": "Conexión en segundo plano y uso de la batería",
+  "settingsSectionNotificationForwarding": "Reenvío de notificaciones",
+  "settingsSectionNotificationForwardingDesc": "Elige qué aplicaciones de Android pueden reenviar notificaciones",
+  "settingsSectionLanguageFiles": "Idioma y archivos",
+  "settingsSectionLanguageFilesDesc": "Idioma, carpeta de guardado e información de la aplicación",
+  "settingsSaveDirectory": "Carpeta de guardado",
+  "settingsChangeDirectory": "Cambiar carpeta de guardado",
+  "settingsOpenDirectory": "Abrir carpeta de guardado",
+  "settingsVersion": "Versión",
+  "appListSearchPlaceholder": "Buscar aplicaciones",
+  "appListClearSearch": "Borrar búsqueda de aplicaciones",
+  "dangerousActions": "Acciones peligrosas",
+  "remoteInputWorkspaceDevicesPanel": "Panel de dispositivos",
+  "remoteInputWorkspaceDetailsPanel": "Panel de detalles",
+  "remoteInputWorkspaceOpenDevicesPanel": "Abrir panel de dispositivos",
+  "remoteInputWorkspaceOpenDetailsPanel": "Abrir panel de detalles",
+  "remoteInputWorkspaceClosePanel": "Cerrar panel",
+  "remoteInputWorkspaceSaveShortcut": "Guardar la disposición de pantallas",
+  "remoteInputWorkspaceSelectedScreen": "Pantalla seleccionada",
+  "remoteInputWorkspaceConflictScreen": "La pantalla se superpone con otro borde"
 }

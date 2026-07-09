@@ -1,8 +1,71 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:whisper/theme/app_theme.dart';
 
+import '../theme/app_theme.dart';
+
+class InputDialogField {
+  const InputDialogField({
+    required this.initialValue,
+    required this.label,
+    this.keyboardType,
+    this.inputFormatters = const <TextInputFormatter>[],
+    this.validator,
+  });
+
+  final String initialValue;
+  final String label;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter> inputFormatters;
+  final String? Function(String value)? validator;
+}
+
+Future<List<String>?> showValidatedInputDialog(
+  BuildContext context, {
+  required String title,
+  String? description,
+  required List<InputDialogField> fields,
+  required String confirmButtonText,
+  required String cancelButtonText,
+}) {
+  return showDialog<List<String>>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => _ValidatedInputDialog(
+      title: title,
+      description: description,
+      fields: fields,
+      confirmButtonText: confirmButtonText,
+      cancelButtonText: cancelButtonText,
+    ),
+  );
+}
+
+Future<bool> confirmAction(
+  BuildContext context, {
+  required String title,
+  required String description,
+  required String confirmButtonText,
+  required String cancelButtonText,
+  bool isDestructive = false,
+}) async {
+  return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _ConfirmationDialog(
+          title: title,
+          description: description,
+          confirmButtonText: confirmButtonText,
+          cancelButtonText: cancelButtonText,
+          isDestructive: isDestructive,
+        ),
+      ) ??
+      false;
+}
+
+@Deprecated('Use confirmAction and await its result')
 void showConfirmationDialog(
   BuildContext context, {
   required String title,
@@ -11,52 +74,26 @@ void showConfirmationDialog(
   required String cancelButtonText,
   required VoidCallback onConfirm,
   VoidCallback? onCancel,
+  bool isDestructive = false,
 }) {
-  final palette = context.whisperPalette;
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 14),
-            Text(
-              description,
-              style: TextStyle(
-                color: palette.textMuted,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(color: Colors.red),
-            ),
-            onPressed: () {
-              onCancel?.call();
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(color: Colors.lightBlue),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-              onConfirm();
-            },
-          ),
-        ],
-      );
-    },
-  );
+  unawaited(() async {
+    final confirmed = await confirmAction(
+      context,
+      title: title,
+      description: description,
+      confirmButtonText: confirmButtonText,
+      cancelButtonText: cancelButtonText,
+      isDestructive: isDestructive,
+    );
+    if (confirmed) {
+      onConfirm();
+    } else {
+      onCancel?.call();
+    }
+  }());
 }
 
+@Deprecated('Use showValidatedInputDialog and await its result')
 void showInputAlertDialog(
   BuildContext context, {
   required String title,
@@ -66,87 +103,208 @@ void showInputAlertDialog(
   required String cancelButtonText,
   required Function(List<String>) onConfirm,
 }) {
-  final controllers = <TextEditingController>[];
-  final inputFields = <Widget>[];
-  final colorScheme = Theme.of(context).colorScheme;
-  final palette = context.whisperPalette;
+  final fields = inputHints.map((hint) {
+    final entry = hint.entries.first;
+    return InputDialogField(
+      initialValue: entry.key,
+      label: entry.key,
+      keyboardType: entry.value ? TextInputType.number : null,
+      inputFormatters: entry.value
+          ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
+          : const <TextInputFormatter>[],
+    );
+  }).toList(growable: false);
 
-  for (int i = 0; i < inputHints.length; i++) {
-    final controller = TextEditingController(text: inputHints[i].keys.first);
-    controllers.add(controller);
+  unawaited(() async {
+    final values = await showValidatedInputDialog(
+      context,
+      title: title,
+      description: description,
+      fields: fields,
+      confirmButtonText: confirmButtonText,
+      cancelButtonText: cancelButtonText,
+    );
+    if (values != null) {
+      onConfirm(values);
+    }
+  }());
+}
 
-    inputFields.add(
-      Column(
-        children: [
-          const SizedBox(height: 8),
-          CupertinoTextField(
-            controller: controller,
-            placeholder: inputHints[i].keys.first,
-            style: TextStyle(
-              color: colorScheme.onSurface,
+class _ValidatedInputDialog extends StatefulWidget {
+  const _ValidatedInputDialog({
+    required this.title,
+    required this.description,
+    required this.fields,
+    required this.confirmButtonText,
+    required this.cancelButtonText,
+  });
+
+  final String title;
+  final String? description;
+  final List<InputDialogField> fields;
+  final String confirmButtonText;
+  final String cancelButtonText;
+
+  @override
+  State<_ValidatedInputDialog> createState() => _ValidatedInputDialogState();
+}
+
+class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final List<TextEditingController> _controllers;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = widget.fields
+        .map((field) => TextEditingController(text: field.initialValue))
+        .toList(growable: false);
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _cancel() {
+    if (_submitting) {
+      return;
+    }
+    _submitting = true;
+    Navigator.of(context).pop();
+  }
+
+  void _submit() {
+    if (_submitting || !(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+    _submitting = true;
+    Navigator.of(context).pop(
+      _controllers.map((controller) => controller.text.trim()).toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+        const SingleActivator(LogicalKeyboardKey.enter): _submit,
+      },
+      child: AlertDialog(
+        title: Text(widget.title),
+        content: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (widget.description?.isNotEmpty ?? false) ...<Widget>[
+                  Text(
+                    widget.description!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: context.whisperPalette.textMuted,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                for (var index = 0;
+                    index < widget.fields.length;
+                    index += 1) ...<Widget>[
+                  if (index > 0) const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _controllers[index],
+                    autofocus: index == 0,
+                    keyboardType: widget.fields[index].keyboardType,
+                    inputFormatters: widget.fields[index].inputFormatters,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: widget.fields[index].label,
+                    ),
+                    validator: (value) => widget.fields[index].validator
+                        ?.call((value ?? '').trim()),
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                ],
+              ],
             ),
-            decoration: BoxDecoration(
-              color: palette.surfaceElevated,
-              border: Border.all(
-                color: palette.borderSubtle,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            inputFormatters: inputHints[i].values.first
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                  ]
-                : null,
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: _submitting ? null : _cancel,
+            child: Text(widget.cancelButtonText),
+          ),
+          FilledButton(
+            onPressed: _submitting ? null : _submit,
+            child: Text(widget.confirmButtonText),
           ),
         ],
       ),
     );
   }
+}
 
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: TextStyle(
-                color: palette.textMuted,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...inputFields,
-          ],
+class _ConfirmationDialog extends StatefulWidget {
+  const _ConfirmationDialog({
+    required this.title,
+    required this.description,
+    required this.confirmButtonText,
+    required this.cancelButtonText,
+    required this.isDestructive,
+  });
+
+  final String title;
+  final String description;
+  final String confirmButtonText;
+  final String cancelButtonText;
+  final bool isDestructive;
+
+  @override
+  State<_ConfirmationDialog> createState() => _ConfirmationDialogState();
+}
+
+class _ConfirmationDialogState extends State<_ConfirmationDialog> {
+  bool _submitting = false;
+
+  void _complete(bool result) {
+    if (_submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final confirmColor = widget.isDestructive
+        ? context.whisperPalette.danger
+        : colorScheme.primary;
+
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Text(widget.description),
+      actions: <Widget>[
+        TextButton(
+          autofocus: true,
+          style: TextButton.styleFrom(foregroundColor: colorScheme.onSurface),
+          onPressed: _submitting ? null : () => _complete(false),
+          child: Text(widget.cancelButtonText),
         ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(color: Colors.red),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(color: Colors.lightBlue),
-            ),
-            onPressed: () {
-              final inputValues =
-                  controllers.map((controller) => controller.text).toList();
-              onConfirm(inputValues);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: confirmColor),
+          onPressed: _submitting ? null : () => _complete(true),
+          child: Text(widget.confirmButtonText),
+        ),
+      ],
+    );
+  }
 }
 
 Future<void> showLoadingDialog(
@@ -170,15 +328,13 @@ Future<void> showLoadingDialog(
         title: Text(title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
+          children: <Widget>[
             const SizedBox(height: 12),
             if (isLoading) icon,
             const SizedBox(height: 8),
             Text(
               description,
-              style: TextStyle(
-                color: palette.textMuted,
-              ),
+              style: TextStyle(color: palette.textMuted),
             ),
           ],
         ),
@@ -188,7 +344,7 @@ Future<void> showLoadingDialog(
               onPressed: onCancel,
               child: Text(
                 cancelButtonText,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: palette.textMuted),
               ),
             ),
         ],
