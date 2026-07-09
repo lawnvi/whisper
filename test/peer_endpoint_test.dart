@@ -78,6 +78,19 @@ void main() {
       expect(linkLocal.audioUri.host, 'fe80::2%25en0');
     });
 
+    test('preserves numeric-looking IPv6 zones through URI encoding', () {
+      for (final entry in <String, String>{
+        'fe80::1%25': 'ws://[fe80::1%2525]:10004/chat',
+        'fe80::1%25foo': 'ws://[fe80::1%2525foo]:10004/chat',
+        'fe80::1%en0': 'ws://[fe80::1%25en0]:10004/chat',
+      }.entries) {
+        final endpoint = PeerEndpoint(host: entry.key, port: 10004);
+
+        expect(endpoint.host, entry.key);
+        expect(endpoint.chatUri.toString(), entry.value);
+      }
+    });
+
     test('rejects unsafe IPv6 scopes and address classes', () {
       for (final host in <String>[
         '::',

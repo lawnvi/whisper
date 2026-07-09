@@ -21,10 +21,19 @@ final class PeerEndpoint {
 
   Uri _uri(String path) => Uri(
         scheme: 'ws',
-        host: host,
+        host: _uriHost,
         port: port,
         path: path,
       );
+
+  String get _uriHost {
+    final zoneSeparator = host.indexOf('%');
+    if (zoneSeparator == -1) {
+      return host;
+    }
+    // Uri accepts escaped host input, so encode only the raw scope delimiter.
+    return host.replaceRange(zoneSeparator, zoneSeparator + 1, '%25');
+  }
 
   static String _validateAndNormalizeHost(String host) {
     if (host.isEmpty ||
