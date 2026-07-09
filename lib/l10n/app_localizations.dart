@@ -259,12 +259,6 @@ abstract class AppLocalizations {
   /// **'服务端口'**
   String get serverPortTitle;
 
-  /// No description provided for @trustNewDevice.
-  ///
-  /// In zh, this message translates to:
-  /// **'自动通过新设备'**
-  String get trustNewDevice;
-
   /// No description provided for @accessClipboard.
   ///
   /// In zh, this message translates to:
@@ -1924,6 +1918,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'开启通知转发后可选择应用'**
   String get notificationAppsDisabled;
+
+  /// No description provided for @notificationForwardingUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法更新通知转发，请重试'**
+  String get notificationForwardingUpdateFailed;
 
   /// No description provided for @dangerousActions.
   ///

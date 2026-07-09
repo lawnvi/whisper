@@ -162,6 +162,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDesktopPlatform = true;
   bool _isMobilePlatform = false;
   int _notificationAppCount = 0;
+  bool _notificationForwardingBusy = false;
+  int _presentationLoadGeneration = 0;
 
   @override
   void initState() {
@@ -221,10 +223,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _refreshDevice() async {
+    final generation = ++_presentationLoadGeneration;
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadFailed = false;
+      });
+    }
     try {
       final presentation =
           await (widget.presentationLoader ?? _loadDefaultPresentation).call();
-      if (!mounted) {
+      if (!mounted || generation != _presentationLoadGeneration) {
         return;
       }
       setState(() {
@@ -249,7 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _loadFailed = false;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || generation != _presentationLoadGeneration) {
         return;
       }
       setState(() {
@@ -434,22 +443,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     l10n.settingsSectionPermissionsSharingDesc,
                     [
                       _buildSettingItem(
-                        l10n.trustNewDevice,
-                        Icon(
-                          Icons.lock_open,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
-                        trailing: CupertinoSwitch(
-                          value: device?.auth ?? false,
-                          onChanged: (bool value) async {
-                            await LocalSetting().updateNoAuth(value);
-                            await _refreshDevice();
-                          },
-                        ),
-                      ),
-                      _buildSettingItem(
                         l10n.accessClipboard,
                         Icon(
                           Icons.copy,
@@ -566,9 +559,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? Colors.grey[400]
                                 : CupertinoColors.systemGrey,
                           ),
+                          enabled: !_notificationForwardingBusy,
                           trailing: CupertinoSwitch(
                             value: _listenAndroid,
-                            onChanged: _updateNotificationForwarding,
+                            onChanged: _notificationForwardingBusy
+                                ? null
+                                : _updateNotificationForwarding,
                           ),
                         ),
                         _buildSettingItem(
@@ -584,7 +580,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _notificationAppCount,
                                 )
                               : l10n.notificationAppsDisabled,
-                          enabled: _listenAndroid,
+                          enabled:
+                              _listenAndroid && !_notificationForwardingBusy,
                           onTap: _openNotificationApps,
                           trailing: Icon(
                             Icons.chevron_right_rounded,
@@ -686,26 +683,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _updateNotificationForwarding(bool enabled) async {
-    final update = widget.updateNotificationForwarding;
-    if (update != null) {
-      await update(enabled);
-    } else {
-      await LocalSetting().setAndroidListen(enabled);
-      if (Platform.isAndroid && WsSvrManager().isConnected) {
-        enabled ? startAndroidListening() : stopAndroidListening();
-      }
-      await NotificationAppRegistry.instance.refresh();
-    }
-    if (!mounted) {
+    if (_notificationForwardingBusy || enabled == _listenAndroid) {
       return;
     }
+    final previous = _listenAndroid;
     setState(() {
-      _listenAndroid = enabled;
+      _notificationForwardingBusy = true;
     });
+
+    final update = widget.updateNotificationForwarding;
+    try {
+      if (update != null) {
+        await update(enabled);
+      } else {
+        await _applyNotificationForwarding(enabled);
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _listenAndroid = enabled;
+        _notificationForwardingBusy = false;
+      });
+    } catch (error, stackTrace) {
+      var trustedValue = previous;
+      if (update == null) {
+        logger.e(
+          'Failed to update notification forwarding',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        trustedValue = await _restoreNotificationForwarding(previous);
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _listenAndroid = trustedValue;
+        _notificationForwardingBusy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.notificationForwardingUpdateFailed,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _applyNotificationForwarding(bool enabled) async {
+    await LocalSetting().setAndroidListen(enabled);
+    await _syncAndroidNotificationListener(enabled);
+    await NotificationAppRegistry.instance.refresh();
+  }
+
+  Future<bool> _restoreNotificationForwarding(bool previous) async {
+    try {
+      await _applyNotificationForwarding(previous);
+    } catch (error, stackTrace) {
+      logger.e(
+        'Failed to restore notification forwarding',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+    try {
+      return await LocalSetting().isListenAndroid();
+    } catch (error, stackTrace) {
+      logger.e(
+        'Failed to read restored notification forwarding state',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return previous;
+    }
+  }
+
+  Future<void> _syncAndroidNotificationListener(bool enabled) async {
+    if (!Platform.isAndroid || !WsSvrManager().isConnected) {
+      return;
+    }
+    if (enabled) {
+      await startAndroidListening();
+    } else {
+      await stopAndroidListening();
+    }
   }
 
   Future<void> _openNotificationApps() async {
-    if (!_listenAndroid) {
+    if (!_listenAndroid || _notificationForwardingBusy) {
       return;
     }
     final open = widget.openNotificationApps;

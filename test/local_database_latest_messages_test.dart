@@ -43,7 +43,6 @@ void main() {
         '_port': 10002,
         '_is_server': false,
         '_clipboard': true,
-        '_no_auth': false,
         '_password': '',
       });
       database = LocalDatabase.forTesting(NativeDatabase.memory());

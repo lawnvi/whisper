@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show SemanticsAction, SemanticsFlag;
 
@@ -391,6 +392,114 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('notification forwarding serializes rapid keyboard activation',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final pending = Completer<void>();
+    final updates = <bool>[];
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      updateNotificationForwarding: (enabled) {
+        updates.add(enabled);
+        return pending.future;
+      },
+    );
+    await tester.scrollUntilVisible(
+      find.text('Mobile integration'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = find.widgetWithText(
+      AppInteractiveTile,
+      'Forward Android Notifications',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    for (var index = 0; index < 30; index += 1) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      if (tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused)) {
+        break;
+      }
+    }
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+
+    expect(updates, <bool>[false]);
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<CupertinoSwitch>(
+            find.descendant(
+              of: forwarding,
+              matching: find.byType(CupertinoSwitch),
+            ),
+          )
+          .onChanged,
+      isNull,
+    );
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(updates, <bool>[false]);
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
+      isFalse,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('notification forwarding rolls back and reports update failure',
+      (tester) async {
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      updateNotificationForwarding: (_) async {
+        throw StateError('persistence failed');
+      },
+    );
+    await tester.scrollUntilVisible(
+      find.text('Mobile integration'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = find.widgetWithText(
+      AppInteractiveTile,
+      'Forward Android Notifications',
+    );
+    await tester.tap(forwarding);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
+      isTrue,
+    );
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
+      isTrue,
+    );
+    expect(
+      find.text('Notification forwarding could not be updated'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('notification app navigation explains its disabled state',
       (tester) async {
     final semantics = tester.ensureSemantics();
@@ -453,6 +562,82 @@ void main() {
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(find.text('Device and appearance'), findsOneWidget);
+  });
+
+  testWidgets('latest retry ignores an older failure and hides retry at once',
+      (tester) async {
+    final older = Completer<SettingsPresentation>();
+    final latest = Completer<SettingsPresentation>();
+    var attempts = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      loader: () {
+        attempts += 1;
+        if (attempts == 1) {
+          return Future<SettingsPresentation>.error(
+            StateError('initial failure'),
+          );
+        }
+        return attempts == 2 ? older.future : latest.future;
+      },
+    );
+
+    final retry = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Retry'),
+    );
+    retry.onPressed!();
+    retry.onPressed!();
+    await tester.pump();
+
+    expect(attempts, 3);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    latest.complete(_presentation);
+    await tester.pumpAndSettle();
+    expect(find.text('Device and appearance'), findsOneWidget);
+
+    older.completeError(StateError('stale failure'));
+    await tester.pumpAndSettle();
+    expect(find.text('Device and appearance'), findsOneWidget);
+    expect(find.text('Settings could not be loaded'), findsNothing);
+  });
+
+  testWidgets('latest retry failure ignores an older successful load',
+      (tester) async {
+    final older = Completer<SettingsPresentation>();
+    final latest = Completer<SettingsPresentation>();
+    var attempts = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      loader: () {
+        attempts += 1;
+        if (attempts == 1) {
+          return Future<SettingsPresentation>.error(
+            StateError('initial failure'),
+          );
+        }
+        return attempts == 2 ? older.future : latest.future;
+      },
+    );
+
+    final retry = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Retry'),
+    );
+    retry.onPressed!();
+    retry.onPressed!();
+    await tester.pump();
+
+    latest.completeError(StateError('latest failure'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings could not be loaded'), findsOneWidget);
+
+    older.complete(_presentation);
+    await tester.pumpAndSettle();
+    expect(find.text('Settings could not be loaded'), findsOneWidget);
+    expect(find.text('Device and appearance'), findsNothing);
   });
 
   testWidgets('nickname and port validation stays inline and accepts limits',
@@ -553,5 +738,28 @@ void main() {
     expect(source, contains('confirmAction('));
     expect(source, contains('isDestructive: true'));
     expect(source, contains('showValidatedInputDialog('));
+  });
+
+  test('obsolete automatic approval setting is absent from settings and l10n',
+      () {
+    final settings = File('lib/page/settings.dart').readAsStringSync();
+    expect(settings, isNot(contains('trustNewDevice')));
+    expect(settings, isNot(contains('updateNoAuth')));
+
+    for (final path in <String>[
+      'lib/l10n/app_zh.arb',
+      'lib/l10n/app_en.arb',
+      'lib/l10n/app_es.arb',
+      'lib/l10n/app_localizations.dart',
+      'lib/l10n/app_localizations_zh.dart',
+      'lib/l10n/app_localizations_en.dart',
+      'lib/l10n/app_localizations_es.dart',
+    ]) {
+      expect(
+        File(path).readAsStringSync(),
+        isNot(contains('trustNewDevice')),
+        reason: path,
+      );
+    }
   });
 }

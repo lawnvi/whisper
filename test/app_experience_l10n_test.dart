@@ -80,6 +80,7 @@ void main() {
         'settingsSectionMobileIntegrationDesc',
         'settingsSectionNotificationForwarding',
         'settingsSectionNotificationForwardingDesc',
+        'notificationForwardingUpdateFailed',
         'settingsSectionLanguageFiles',
         'settingsSectionLanguageFilesDesc',
         'dangerousActions',

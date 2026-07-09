@@ -107,9 +107,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverPortTitle => 'Server Port';
 
   @override
-  String get trustNewDevice => 'Auto-Approve New Device';
-
-  @override
   String get accessClipboard => 'Access Clipboard';
 
   @override
@@ -1104,6 +1101,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get notificationAppsDisabled =>
       'Enable notification forwarding to choose applications';
+
+  @override
+  String get notificationForwardingUpdateFailed =>
+      'Notification forwarding could not be updated';
 
   @override
   String get dangerousActions => 'Dangerous actions';

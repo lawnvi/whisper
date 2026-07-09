@@ -24,7 +24,6 @@ class LocalSetting {
   final String _port = "_port";
   final String _isServer = "_is_server";
   final String _clipboard = "_clipboard";
-  final String _noAuth = "_no_auth";
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
   final String _close2tray = "_close_to_tray";
@@ -64,7 +63,7 @@ class LocalSetting {
         online: online,
         password: await getSPDefault(_password, ""),
         clipboard: await getSPDefault(_clipboard, true),
-        auth: await getSPDefault(_noAuth, false),
+        auth: false,
         around: false);
   }
 
@@ -130,10 +129,6 @@ class LocalSetting {
 
   Future<void> updateClipboard(bool allow) async {
     await _setSP(_clipboard, allow);
-  }
-
-  Future<void> updateNoAuth(bool allow) async {
-    await _setSP(_noAuth, allow);
   }
 
   Future<void> updatePassword(String password) async {
@@ -288,10 +283,6 @@ class LocalSetting {
 
   Future<void> setLastManualPeerId(String peerId) async {
     await _setSP(_lastManualPeerId, peerId);
-  }
-
-  Future<bool> autoApproveNewDevices() async {
-    return await getSPDefault(_noAuth, false);
   }
 
   Future<bool> listenAndroidNotifications() async {

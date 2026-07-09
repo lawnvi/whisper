@@ -107,9 +107,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get serverPortTitle => 'Puerto del servidor';
 
   @override
-  String get trustNewDevice => 'Aprobar automáticamente dispositivos nuevos';
-
-  @override
   String get accessClipboard => 'Permitir acceso al portapapeles';
 
   @override
@@ -1120,6 +1117,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get notificationAppsDisabled =>
       'Activa el reenvío de notificaciones para elegir aplicaciones';
+
+  @override
+  String get notificationForwardingUpdateFailed =>
+      'No se pudo actualizar el reenvío de notificaciones';
 
   @override
   String get dangerousActions => 'Acciones peligrosas';

@@ -106,9 +106,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverPortTitle => '服务端口';
 
   @override
-  String get trustNewDevice => '自动通过新设备';
-
-  @override
   String get accessClipboard => '允许访问剪切板';
 
   @override
@@ -1036,6 +1033,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationAppsDisabled => '开启通知转发后可选择应用';
+
+  @override
+  String get notificationForwardingUpdateFailed => '无法更新通知转发，请重试';
 
   @override
   String get dangerousActions => '危险操作';
