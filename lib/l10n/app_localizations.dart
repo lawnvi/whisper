@@ -1901,6 +1901,30 @@ abstract class AppLocalizations {
   /// **'请检查应用访问权限后重试。'**
   String get appListLoadFailedBody;
 
+  /// No description provided for @appListSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存通知应用选择'**
+  String get appListSaveFailed;
+
+  /// No description provided for @notificationApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知应用'**
+  String get notificationApps;
+
+  /// No description provided for @notificationAppsSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0{尚未选择应用} other{已选择 {count} 个应用}}'**
+  String notificationAppsSelected(int count);
+
+  /// No description provided for @notificationAppsDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启通知转发后可选择应用'**
+  String get notificationAppsDisabled;
+
   /// No description provided for @dangerousActions.
   ///
   /// In zh, this message translates to:

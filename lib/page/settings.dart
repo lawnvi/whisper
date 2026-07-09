@@ -49,6 +49,10 @@ class SettingsPresentation {
     required this.audioSharePlaybackGain,
     required this.remoteInputScrollMultiplier,
     required this.themeMode,
+    this.isAndroid = false,
+    this.isDesktop = true,
+    this.isMobile = false,
+    this.notificationAppCount = 0,
   });
 
   final DeviceData device;
@@ -64,6 +68,48 @@ class SettingsPresentation {
   final double audioSharePlaybackGain;
   final double remoteInputScrollMultiplier;
   final ThemeMode themeMode;
+  final bool isAndroid;
+  final bool isDesktop;
+  final bool isMobile;
+  final int notificationAppCount;
+}
+
+class SettingsSectionSurface extends StatelessWidget {
+  const SettingsSectionSurface({
+    super.key,
+    required this.children,
+  });
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        border: Border.all(color: palette.borderSubtle),
+        borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (var index = 0; index < children.length; index += 1) ...<Widget>[
+            children[index],
+            if (index < children.length - 1)
+              Divider(
+                height: 1,
+                thickness: 1,
+                indent: 56,
+                endIndent: 12,
+                color: palette.borderSubtle,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -74,6 +120,8 @@ class SettingsScreen extends StatefulWidget {
     this.openDirectory,
     this.updateNickname,
     this.updateServerPort,
+    this.updateNotificationForwarding,
+    this.openNotificationApps,
   });
 
   final SettingsPresentationLoader? presentationLoader;
@@ -81,6 +129,8 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function(String path)? openDirectory;
   final Future<void> Function(String nickname)? updateNickname;
   final Future<void> Function(int port)? updateServerPort;
+  final Future<void> Function(bool enabled)? updateNotificationForwarding;
+  final Future<void> Function()? openNotificationApps;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -108,6 +158,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ThemeMode _themeMode = ThemeMode.system;
   bool _isLoading = true;
   bool _loadFailed = false;
+  bool _isAndroidPlatform = false;
+  bool _isDesktopPlatform = true;
+  bool _isMobilePlatform = false;
+  int _notificationAppCount = 0;
 
   @override
   void initState() {
@@ -144,6 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final remoteInputScrollMultiplier =
         await LocalSetting().remoteInputScrollMultiplier();
     final themeMode = await LocalSetting().themeMode();
+    final notificationApps = await LocalSetting().listenAppNotifyList();
     return SettingsPresentation(
       device: temp,
       saveDirectoryPath: path.path,
@@ -158,6 +213,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       audioSharePlaybackGain: audioSharePlaybackGain,
       remoteInputScrollMultiplier: remoteInputScrollMultiplier,
       themeMode: themeMode,
+      isAndroid: Platform.isAndroid,
+      isDesktop: isDesktop(),
+      isMobile: isMobile(),
+      notificationAppCount: notificationApps.length,
     );
   }
 
@@ -182,6 +241,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _audioSharePlaybackGain = presentation.audioSharePlaybackGain;
         _remoteInputScrollMultiplier = presentation.remoteInputScrollMultiplier;
         _themeMode = presentation.themeMode;
+        _isAndroidPlatform = presentation.isAndroid;
+        _isDesktopPlatform = presentation.isDesktop;
+        _isMobilePlatform = presentation.isMobile;
+        _notificationAppCount = presentation.notificationAppCount;
         _isLoading = false;
         _loadFailed = false;
       });
@@ -242,6 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _buildSettingItem(
                         l10n.themeMode,
                         Icon(Icons.dark_mode,
+                            size: 20,
                             color: isDark
                                 ? Colors.grey[400]
                                 : CupertinoColors.systemGrey),
@@ -305,12 +369,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  if (isDesktop() || !isMobile())
+                  if (_isDesktopPlatform || !_isMobilePlatform)
                     _buildSettingsSection(
                       l10n.settingsSectionSystemBehavior,
                       l10n.settingsSectionSystemBehaviorDesc,
                       [
-                        if (isDesktop())
+                        if (_isDesktopPlatform)
                           _buildSettingItem(
                             l10n.launchAtStartup,
                             Icon(
@@ -344,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               },
                             ),
                           ),
-                        if (!isMobile())
+                        if (!_isMobilePlatform)
                           _buildSettingItem(
                             l10n.close2tray,
                             Icon(
@@ -421,7 +485,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: palette.textMuted,
                         ),
                       ),
-                      if (isDesktop())
+                      if (_isDesktopPlatform)
                         _buildSettingItem(
                           l10n.remoteInputScrollMultiplierSetting(
                             _remoteInputScrollMultiplierLabel(
@@ -444,107 +508,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                     ],
                   ),
-                  if (Platform.isAndroid)
+                  if (_isAndroidPlatform)
                     _buildSettingsSection(
                       l10n.settingsSectionMobileIntegration,
                       l10n.settingsSectionMobileIntegrationDesc,
                       [
-                        if (Platform.isAndroid)
-                          _buildSettingItem(
-                            l10n.androidBackgroundKeepAlive,
-                            Icon(
-                              Icons.sync_alt_rounded,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                            desc: l10n.androidBackgroundKeepAliveDesc,
-                            trailing: CupertinoSwitch(
-                              value: _androidBackgroundKeepAlive,
-                              onChanged: (bool value) async {
-                                await LocalSetting()
-                                    .setAndroidBackgroundKeepAlive(value);
-                                setState(() {
-                                  _androidBackgroundKeepAlive = value;
-                                });
-                                if (WsSvrManager().isConnected) {
-                                  if (value) {
-                                    await startAndroidBackgroundKeepAlive(
-                                      title: l10n
-                                          .androidBackgroundKeepAliveActiveTitle,
-                                      description: l10n
-                                          .androidBackgroundKeepAliveActiveDesc,
-                                    );
-                                  } else {
-                                    await stopAndroidBackgroundKeepAlive();
-                                  }
-                                }
-                              },
-                            ),
+                        _buildSettingItem(
+                          l10n.androidBackgroundKeepAlive,
+                          Icon(
+                            Icons.sync_alt_rounded,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
                           ),
-                        if (Platform.isAndroid)
-                          _buildSettingItem(
-                            l10n.androidBatteryOptimization,
-                            Icon(
-                              Icons.battery_saver_rounded,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                            desc: l10n.androidBatteryOptimizationDesc,
-                            onTap: () async {
-                              await openAndroidBatteryOptimizationSettings();
-                            },
-                          ),
-                        if (Platform.isAndroid)
-                          _buildSettingItem(
-                            l10n.pushNotification,
-                            Icon(
-                              Icons.notifications,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : CupertinoColors.systemGrey,
-                            ),
-                            onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const AppListScreen(),
-                                ),
-                              );
-                              await NotificationAppRegistry.instance.refresh();
-                            },
-                            trailing: CupertinoSwitch(
-                              value: _listenAndroid,
-                              onChanged: (bool value) async {
-                                await LocalSetting().setAndroidListen(value);
-                                setState(() {
-                                  _listenAndroid = value;
-                                });
-                                if (Platform.isAndroid &&
-                                    WsSvrManager().isConnected) {
-                                  value
-                                      ? startAndroidListening()
-                                      : stopAndroidListening();
-                                }
-                                await NotificationAppRegistry.instance
-                                    .refresh();
-                                if (value &&
-                                    NotificationAppRegistry
-                                        .instance.packages.isEmpty) {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const AppListScreen(),
-                                    ),
+                          desc: l10n.androidBackgroundKeepAliveDesc,
+                          trailing: CupertinoSwitch(
+                            value: _androidBackgroundKeepAlive,
+                            onChanged: (bool value) async {
+                              await LocalSetting()
+                                  .setAndroidBackgroundKeepAlive(value);
+                              setState(() {
+                                _androidBackgroundKeepAlive = value;
+                              });
+                              if (WsSvrManager().isConnected) {
+                                if (value) {
+                                  await startAndroidBackgroundKeepAlive(
+                                    title: l10n
+                                        .androidBackgroundKeepAliveActiveTitle,
+                                    description: l10n
+                                        .androidBackgroundKeepAliveActiveDesc,
                                   );
-                                  await NotificationAppRegistry.instance
-                                      .refresh();
+                                } else {
+                                  await stopAndroidBackgroundKeepAlive();
                                 }
-                              },
-                            ),
+                              }
+                            },
                           ),
+                        ),
+                        _buildSettingItem(
+                          l10n.androidBatteryOptimization,
+                          Icon(
+                            Icons.battery_saver_rounded,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          desc: l10n.androidBatteryOptimizationDesc,
+                          onTap: () async {
+                            await openAndroidBatteryOptimizationSettings();
+                          },
+                        ),
+                        _buildSettingItem(
+                          l10n.pushNotification,
+                          Icon(
+                            Icons.notifications,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          trailing: CupertinoSwitch(
+                            value: _listenAndroid,
+                            onChanged: _updateNotificationForwarding,
+                          ),
+                        ),
+                        _buildSettingItem(
+                          l10n.notificationApps,
+                          Icon(
+                            Icons.apps_rounded,
+                            color: isDark
+                                ? Colors.grey[400]
+                                : CupertinoColors.systemGrey,
+                          ),
+                          desc: _listenAndroid
+                              ? l10n.notificationAppsSelected(
+                                  _notificationAppCount,
+                                )
+                              : l10n.notificationAppsDisabled,
+                          enabled: _listenAndroid,
+                          onTap: _openNotificationApps,
+                          trailing: Icon(
+                            Icons.chevron_right_rounded,
+                            color: palette.textMuted,
+                          ),
+                        ),
                       ],
                     ),
                   _buildSettingsSection(
@@ -637,6 +683,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _updateNotificationForwarding(bool enabled) async {
+    final update = widget.updateNotificationForwarding;
+    if (update != null) {
+      await update(enabled);
+    } else {
+      await LocalSetting().setAndroidListen(enabled);
+      if (Platform.isAndroid && WsSvrManager().isConnected) {
+        enabled ? startAndroidListening() : stopAndroidListening();
+      }
+      await NotificationAppRegistry.instance.refresh();
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _listenAndroid = enabled;
+    });
+  }
+
+  Future<void> _openNotificationApps() async {
+    if (!_listenAndroid) {
+      return;
+    }
+    final open = widget.openNotificationApps;
+    if (open != null) {
+      await open();
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => const AppListScreen(),
+      ),
+    );
+    await NotificationAppRegistry.instance.refresh();
+    final selectedApps = await LocalSetting().listenAppNotifyList();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _notificationAppCount = selectedApps.length;
+    });
   }
 
   Future<void> _editNickname() async {
@@ -881,26 +971,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String subtitle,
     List<Widget> children,
   ) {
-    final palette = context.whisperPalette;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _buildSettingsSectionHeader(title, subtitle),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: palette.borderSubtle),
-                bottom: BorderSide(color: palette.borderSubtle),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
-          ),
+          SettingsSectionSurface(children: children),
         ],
       ),
     );
@@ -935,6 +1012,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     GestureTapCallback? onTap,
     String desc = '',
     Widget? subtitle,
+    bool enabled = true,
   }) {
     final toggle = trailing is CupertinoSwitch ? trailing : null;
     final activate = onTap ??
@@ -948,19 +1026,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 desc,
                 softWrap: true,
               ));
+    final semanticLabel = desc.isEmpty ? title : '$title, $desc';
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 56),
       child: AppInteractiveTile(
-        semanticLabel: title,
+        semanticLabel: semanticLabel,
         toggled: toggle?.value,
+        enabled: enabled,
         onActivate: activate,
-        leading: Icon(icon.icon),
+        leading: icon,
         title: Text(title),
         subtitle: resolvedSubtitle,
         trailing: toggle == null
             ? trailing
-            : ExcludeFocus(child: ExcludeSemantics(child: toggle)),
+            : IgnorePointer(
+                ignoring: !enabled,
+                child: ExcludeFocus(
+                  child: ExcludeSemantics(child: toggle),
+                ),
+              ),
       ),
     );
   }
@@ -1170,9 +1255,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class ClientSettingsScreen extends StatefulWidget {
-  final DeviceData device;
+  const ClientSettingsScreen({
+    super.key,
+    required this.device,
+    this.deviceLoader,
+    this.isConnected,
+    this.canConfigureRemoteInput,
+    this.deleteDevice,
+  });
 
-  const ClientSettingsScreen({super.key, required this.device});
+  final DeviceData device;
+  final Future<DeviceData?> Function(String uid)? deviceLoader;
+  final bool? isConnected;
+  final bool? canConfigureRemoteInput;
+  final Future<void> Function(String uid)? deleteDevice;
 
   @override
   State<ClientSettingsScreen> createState() => _ClientSettingsScreenState();
@@ -1193,6 +1289,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   }
 
   bool get _canConfigureRemoteInput {
+    final override = widget.canConfigureRemoteInput;
+    if (override != null) {
+      return override;
+    }
     final platform = device.platform.toLowerCase();
     final isDesktopPeer = platform.contains('mac') ||
         platform.contains('windows') ||
@@ -1203,7 +1303,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   }
 
   Future<void> _refreshDevice() async {
-    final temp = await LocalDatabase().fetchDevice(device.uid);
+    final loader = widget.deviceLoader;
+    final temp = loader == null
+        ? await LocalDatabase().fetchDevice(device.uid)
+        : await loader(device.uid);
     if (temp == null || !mounted) {
       return;
     }
@@ -1350,7 +1453,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       ),
                   ],
                 ),
-                if (!WsSvrManager().isConnectedTo(device.uid))
+                if (!(widget.isConnected ??
+                    WsSvrManager().isConnectedTo(device.uid)))
                   _buildClientSettingsSection(
                     l10n.dangerousActions,
                     l10n.deleteDeviceDesc,
@@ -1373,8 +1477,13 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           if (!confirmed) {
                             return;
                           }
-                          await LocalDatabase()
-                              .clearDevices(<String>[device.uid]);
+                          final deleteDevice = widget.deleteDevice;
+                          if (deleteDevice == null) {
+                            await LocalDatabase()
+                                .clearDevices(<String>[device.uid]);
+                          } else {
+                            await deleteDevice(device.uid);
+                          }
                           if (!mounted) {
                             return;
                           }
@@ -1420,15 +1529,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               ],
             ),
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: palette.borderSubtle),
-                bottom: BorderSide(color: palette.borderSubtle),
-              ),
-            ),
-            child: Column(children: children),
-          ),
+          SettingsSectionSurface(children: children),
         ],
       ),
     );

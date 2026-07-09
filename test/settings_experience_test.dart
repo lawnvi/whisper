@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:ui' show SemanticsFlag;
+import 'dart:ui' show SemanticsAction, SemanticsFlag;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +43,34 @@ const _presentation = SettingsPresentation(
   themeMode: ThemeMode.system,
 );
 
-Widget _host({Locale locale = const Locale('en'), double textScale = 1}) {
+const _androidPresentation = SettingsPresentation(
+  device: _device,
+  saveDirectoryPath: '/storage/emulated/0/Download',
+  version: '2.4.0',
+  closeToTray: false,
+  copyVerificationCode: true,
+  listenAndroidNotifications: true,
+  ignoreAndroidNotifications: false,
+  autoConnect: true,
+  launchAtStartup: false,
+  androidBackgroundKeepAlive: true,
+  audioSharePlaybackGain: 1.0,
+  remoteInputScrollMultiplier: 1.0,
+  themeMode: ThemeMode.system,
+  isAndroid: true,
+  isDesktop: false,
+  isMobile: true,
+  notificationAppCount: 2,
+);
+
+Widget _host({
+  Locale locale = const Locale('en'),
+  double textScale = 1,
+  SettingsPresentation presentation = _presentation,
+  SettingsPresentationLoader? loader,
+  Future<void> Function(bool enabled)? updateNotificationForwarding,
+  Future<void> Function()? openNotificationApps,
+}) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
     locale: locale,
@@ -61,11 +88,13 @@ Widget _host({Locale locale = const Locale('en'), double textScale = 1}) {
       child: child!,
     ),
     home: SettingsScreen(
-      presentationLoader: () async => _presentation,
+      presentationLoader: loader ?? () async => presentation,
       changeDirectory: () async => '/tmp/Whisper',
       openDirectory: (_) async {},
       updateNickname: (_) async {},
       updateServerPort: (_) async {},
+      updateNotificationForwarding: updateNotificationForwarding,
+      openNotificationApps: openNotificationApps,
     ),
   );
 }
@@ -75,11 +104,22 @@ Future<void> _pumpAt(
   required double width,
   double textScale = 1,
   Locale locale = const Locale('en'),
+  SettingsPresentation presentation = _presentation,
+  SettingsPresentationLoader? loader,
+  Future<void> Function(bool enabled)? updateNotificationForwarding,
+  Future<void> Function()? openNotificationApps,
 }) async {
   tester.view
     ..physicalSize = Size(width, 900)
     ..devicePixelRatio = 1;
-  await tester.pumpWidget(_host(locale: locale, textScale: textScale));
+  await tester.pumpWidget(_host(
+    locale: locale,
+    textScale: textScale,
+    presentation: presentation,
+    loader: loader,
+    updateNotificationForwarding: updateNotificationForwarding,
+    openNotificationApps: openNotificationApps,
+  ));
   await tester.pumpAndSettle();
 }
 
@@ -121,6 +161,31 @@ void main() {
       expect(tester.getSize(find.byWidget(tile.widget)).height,
           greaterThanOrEqualTo(56));
     }
+  });
+
+  testWidgets('section surfaces use four borders, eight radius and dividers',
+      (tester) async {
+    await _pumpAt(tester, width: 760);
+
+    final surface = find.byType(SettingsSectionSurface).first;
+    final container = tester.widget<Container>(
+      find.descendant(of: surface, matching: find.byType(Container)).first,
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    final border = decoration.border! as Border;
+    expect(border.top.style, BorderStyle.solid);
+    expect(border.right.style, BorderStyle.solid);
+    expect(border.bottom.style, BorderStyle.solid);
+    expect(border.left.style, BorderStyle.solid);
+    expect(decoration.borderRadius, BorderRadius.circular(8));
+    expect(decoration.boxShadow, isNull);
+
+    final dividers = tester.widgetList<Divider>(
+      find.descendant(of: surface, matching: find.byType(Divider)),
+    );
+    expect(dividers, isNotEmpty);
+    expect(dividers.every((divider) => divider.indent == 56), isTrue);
+    expect(dividers.every((divider) => divider.endIndent == 12), isTrue);
   });
 
   testWidgets('settings remain usable at supported widths and 200 percent text',
@@ -212,6 +277,184 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets(
+      'setting semantics include current values and preserve icon style',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _pumpAt(tester, width: 760);
+
+    for (final expectation in <(String, String)>[
+      ('Theme Mode', 'Follow System'),
+      ('Nickname', 'Studio Mac'),
+      ('Server Port', 'Server Port 10002'),
+    ]) {
+      final tile = find.widgetWithText(AppInteractiveTile, expectation.$1);
+      expect(tester.getSemantics(tile).label, contains(expectation.$2));
+    }
+    final themeTile = find.widgetWithText(AppInteractiveTile, 'Theme Mode');
+    final leadingIcon = tester.widget<Icon>(
+      find.descendant(of: themeTile, matching: find.byIcon(Icons.dark_mode)),
+    );
+    expect(leadingIcon.color, CupertinoColors.systemGrey);
+    expect(leadingIcon.size, 20);
+
+    await tester.scrollUntilVisible(
+      find.text('Language and files'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    expect(
+      tester
+          .getSemantics(
+            find.widgetWithText(AppInteractiveTile, 'Select Language'),
+          )
+          .label,
+      contains('English'),
+    );
+    expect(
+      tester
+          .getSemantics(find.widgetWithText(AppInteractiveTile, 'Version'))
+          .label,
+      contains('2.4.0'),
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('Android forwarding and app navigation are separate actions',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final updates = <bool>[];
+    var opens = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      updateNotificationForwarding: (enabled) async => updates.add(enabled),
+      openNotificationApps: () async => opens += 1,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Mobile integration'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = find.widgetWithText(
+      AppInteractiveTile,
+      'Forward Android Notifications',
+    );
+    var node = tester.getSemantics(forwarding);
+    expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
+    expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
+    FocusManager.instance.primaryFocus?.unfocus();
+    for (var index = 0; index < 30; index += 1) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      if (tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused)) {
+        break;
+      }
+    }
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(updates, <bool>[false]);
+    expect(opens, 0);
+    node = tester.getSemantics(forwarding);
+    expect(node.hasFlag(SemanticsFlag.isToggled), isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(updates, <bool>[false, true]);
+    expect(opens, 0);
+
+    final apps = find.widgetWithText(AppInteractiveTile, 'Notification apps');
+    expect(
+        tester.getSemantics(apps).label, contains('2 applications selected'));
+    for (var index = 0; index < 10; index += 1) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      if (tester.getSemantics(apps).hasFlag(SemanticsFlag.isFocused)) {
+        break;
+      }
+    }
+    expect(
+      tester.getSemantics(apps).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(opens, 1);
+    semantics.dispose();
+  });
+
+  testWidgets('notification app navigation explains its disabled state',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final disabled = SettingsPresentation(
+      device: _androidPresentation.device,
+      saveDirectoryPath: _androidPresentation.saveDirectoryPath,
+      version: _androidPresentation.version,
+      closeToTray: _androidPresentation.closeToTray,
+      copyVerificationCode: _androidPresentation.copyVerificationCode,
+      listenAndroidNotifications: false,
+      ignoreAndroidNotifications:
+          _androidPresentation.ignoreAndroidNotifications,
+      autoConnect: _androidPresentation.autoConnect,
+      launchAtStartup: _androidPresentation.launchAtStartup,
+      androidBackgroundKeepAlive:
+          _androidPresentation.androidBackgroundKeepAlive,
+      audioSharePlaybackGain: _androidPresentation.audioSharePlaybackGain,
+      remoteInputScrollMultiplier:
+          _androidPresentation.remoteInputScrollMultiplier,
+      themeMode: _androidPresentation.themeMode,
+      isAndroid: true,
+      isDesktop: false,
+      isMobile: true,
+      notificationAppCount: 2,
+    );
+    await _pumpAt(tester, width: 760, presentation: disabled);
+    await tester.scrollUntilVisible(
+      find.text('Mobile integration'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final apps = find.widgetWithText(AppInteractiveTile, 'Notification apps');
+    final node = tester.getSemantics(apps);
+    expect(node.label,
+        contains('Enable notification forwarding to choose applications'));
+    expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+    semantics.dispose();
+  });
+
+  testWidgets('settings loader failure can retry without platform services',
+      (tester) async {
+    var attempts = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      loader: () async {
+        attempts += 1;
+        if (attempts == 1) {
+          throw StateError('load failed');
+        }
+        return _presentation;
+      },
+    );
+
+    expect(find.text('Settings could not be loaded'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.text('Device and appearance'), findsOneWidget);
+  });
+
   testWidgets('nickname and port validation stays inline and accepts limits',
       (tester) async {
     await _pumpAt(tester, width: 760);
@@ -238,6 +481,61 @@ void main() {
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(find.text('Enter a port from 1001 to 65535'), findsWidgets);
+  });
+
+  testWidgets('client destructive delete awaits confirmation and callback',
+      (tester) async {
+    const peer = DeviceData(
+      id: 9,
+      uid: 'android-peer',
+      name: 'Pixel',
+      host: '192.168.1.9',
+      port: 10002,
+      platform: 'android',
+      isServer: false,
+      online: false,
+      clipboard: false,
+      auth: true,
+      lastTime: 0,
+    );
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ClientSettingsScreen(
+          device: peer,
+          deviceLoader: (_) async => peer,
+          isConnected: false,
+          canConfigureRemoteInput: false,
+          deleteDevice: (uid) async => deleted.add(uid),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Delete Device'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Delete Device'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete Pixel'), findsOneWidget);
+    final cancel = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Cancel'),
+    );
+    expect(cancel.autofocus, isTrue);
+    await tester.tap(find.widgetWithText(TextButton, 'Confirm'));
+    await tester.pumpAndSettle();
+    expect(deleted, <String>['android-peer']);
   });
 
   test('settings source has no legacy fallbacks, long press, or custom font',

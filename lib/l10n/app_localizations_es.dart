@@ -1099,6 +1099,29 @@ class AppLocalizationsEs extends AppLocalizations {
       'Comprueba el acceso a las aplicaciones e inténtalo de nuevo.';
 
   @override
+  String get appListSaveFailed =>
+      'No se pudo guardar la selección de aplicaciones de notificaciones';
+
+  @override
+  String get notificationApps => 'Aplicaciones de notificaciones';
+
+  @override
+  String notificationAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aplicaciones seleccionadas',
+      one: '1 aplicación seleccionada',
+      zero: 'No hay aplicaciones seleccionadas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get notificationAppsDisabled =>
+      'Activa el reenvío de notificaciones para elegir aplicaciones';
+
+  @override
   String get dangerousActions => 'Acciones peligrosas';
 
   @override

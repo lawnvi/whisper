@@ -52,6 +52,7 @@ class _AppListScreenState extends State<AppListScreen> {
   Map<String, bool> checkedApps = <String, bool>{};
   bool isLoading = true;
   bool _loadFailed = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -192,22 +193,64 @@ class _AppListScreenState extends State<AppListScreen> {
     );
   }
 
-  Future<void> _updateAppChecked(String packageName, bool value) async {
+  Future<void> _commitSelection({
+    required Map<String, bool> nextSelection,
+    required List<String> packages,
+    required bool add,
+    bool clear = false,
+  }) async {
+    if (_isSaving) {
+      return;
+    }
+    final previousSelection = Map<String, bool>.of(checkedApps);
     setState(() {
-      checkedApps[packageName] = value;
+      checkedApps = nextSelection;
+      _isSaving = true;
     });
-    await _writeSelection(packages: <String>[packageName], add: value);
+    try {
+      await _writeSelection(packages: packages, add: add, clear: clear);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSaving = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        checkedApps = previousSelection;
+        _isSaving = false;
+      });
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.appListSaveFailed)),
+        );
+    }
+  }
+
+  Future<void> _updateAppChecked(String packageName, bool value) async {
+    final nextSelection = Map<String, bool>.of(checkedApps)
+      ..[packageName] = value;
+    await _commitSelection(
+      nextSelection: nextSelection,
+      packages: <String>[packageName],
+      add: value,
+    );
   }
 
   Future<void> _toggleAll() async {
     final selectAll = apps.any((app) => checkedApps[app.packageName] != true);
     final packages = apps.map((app) => app.packageName).toList(growable: false);
-    setState(() {
-      checkedApps = <String, bool>{
-        for (final package in packages) package: selectAll,
-      };
-    });
-    await _writeSelection(
+    final nextSelection = selectAll
+        ? (Map<String, bool>.of(checkedApps)
+          ..addEntries(packages.map((package) => MapEntry(package, true))))
+        : <String, bool>{};
+    await _commitSelection(
+      nextSelection: nextSelection,
       add: selectAll,
       clear: !selectAll,
       packages: packages,
@@ -240,7 +283,8 @@ class _AppListScreenState extends State<AppListScreen> {
         actions: <Widget>[
           IconButton(
             tooltip: allSelected ? l10n.deselectAll : l10n.selectAll,
-            onPressed: isLoading || apps.isEmpty ? null : _toggleAll,
+            onPressed:
+                isLoading || apps.isEmpty || _isSaving ? null : _toggleAll,
             icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
           ),
         ],
@@ -332,6 +376,7 @@ class _AppListScreenState extends State<AppListScreen> {
         return AppListTile(
           app: app,
           isChecked: isChecked,
+          enabled: !_isSaving,
           onChanged: (value) => _updateAppChecked(app.packageName, value),
         );
       },
@@ -344,11 +389,13 @@ class AppListTile extends StatelessWidget {
     super.key,
     required this.app,
     required this.isChecked,
+    this.enabled = true,
     required this.onChanged,
   });
 
   final AppInfo app;
   final bool isChecked;
+  final bool enabled;
   final ValueChanged<bool> onChanged;
 
   @override
@@ -358,6 +405,7 @@ class AppListTile extends StatelessWidget {
       child: AppInteractiveTile(
         semanticLabel: '${app.name}, ${app.packageName}',
         toggled: isChecked,
+        enabled: enabled,
         onActivate: () => onChanged(!isChecked),
         leading: app.icon == null
             ? const SizedBox(
@@ -372,7 +420,7 @@ class AppListTile extends StatelessWidget {
           child: ExcludeSemantics(
             child: CupertinoSwitch(
               value: isChecked,
-              onChanged: onChanged,
+              onChanged: enabled ? onChanged : null,
             ),
           ),
         ),

@@ -1083,6 +1083,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appListLoadFailedBody => 'Check app access and try again.';
 
   @override
+  String get appListSaveFailed =>
+      'Could not save the notification app selection';
+
+  @override
+  String get notificationApps => 'Notification apps';
+
+  @override
+  String notificationAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count applications selected',
+      one: '1 application selected',
+      zero: 'No applications selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get notificationAppsDisabled =>
+      'Enable notification forwarding to choose applications';
+
+  @override
   String get dangerousActions => 'Dangerous actions';
 
   @override

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/cupertino.dart';
@@ -43,6 +44,7 @@ Widget _host({
   required AppListLoader loader,
   Locale locale = const Locale('en'),
   double textScale = 1,
+  AppSelectionWriter? selectionWriter,
 }) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
@@ -62,8 +64,8 @@ Widget _host({
     ),
     home: AppListScreen(
       loader: loader,
-      selectionWriter: (
-          {required packages, required add, clear = false}) async {},
+      selectionWriter: selectionWriter ??
+          ({required packages, required add, clear = false}) async {},
     ),
   );
 }
@@ -103,6 +105,185 @@ void main() {
     expect(find.text('No apps available'), findsOneWidget);
     expect(find.text('No notification apps are available on this device.'),
         findsOneWidget);
+  });
+
+  testWidgets('loader failure is consumed and retry restores the list',
+      (tester) async {
+    var attempts = 0;
+    tester.view
+      ..physicalSize = const Size(390, 900)
+      ..devicePixelRatio = 1;
+    await tester.pumpWidget(
+      _host(loader: () async {
+        attempts += 1;
+        if (attempts == 1) {
+          throw StateError('no permission');
+        }
+        return const AppListPresentation(
+          apps: <AppInfo>[_mail],
+          selectedPackages: <String>{},
+        );
+      }),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apps could not be loaded'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.text('Mail'), findsOneWidget);
+  });
+
+  testWidgets('failed item write rolls back and reports localized feedback',
+      (tester) async {
+    final pending = Completer<void>();
+    final calls = <({List<String> packages, bool add, bool clear})>[];
+    tester.view
+      ..physicalSize = const Size(760, 900)
+      ..devicePixelRatio = 1;
+    await tester.pumpWidget(
+      _host(
+        loader: () async => const AppListPresentation(
+          apps: <AppInfo>[_mail, _messages],
+          selectedPackages: <String>{},
+        ),
+        selectionWriter: ({required packages, required add, clear = false}) {
+          calls.add(
+              (packages: List<String>.of(packages), add: add, clear: clear));
+          return pending.future;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mail'));
+    await tester.pump();
+    var mail = tester.widget<AppInteractiveTile>(
+      find.widgetWithText(AppInteractiveTile, 'Mail'),
+    );
+    expect(mail.toggled, isTrue);
+    expect(mail.enabled, isFalse);
+    final selectAllButton = tester
+        .widgetList<IconButton>(find.byType(IconButton))
+        .singleWhere((button) => button.tooltip == 'Select All');
+    expect(
+      selectAllButton.onPressed,
+      isNull,
+    );
+    expect(calls.single.packages, <String>['com.example.mail']);
+    expect(calls.single.add, isTrue);
+    expect(calls.single.clear, isFalse);
+
+    pending.completeError(StateError('disk full'));
+    await tester.pumpAndSettle();
+    mail = tester.widget<AppInteractiveTile>(
+      find.widgetWithText(AppInteractiveTile, 'Mail'),
+    );
+    expect(mail.toggled, isFalse);
+    expect(mail.enabled, isTrue);
+    expect(find.text('Could not save the notification app selection'),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'one busy boundary prevents reordering and persists exact intents',
+      (tester) async {
+    final firstWrite = Completer<void>();
+    final calls = <({List<String> packages, bool add, bool clear})>[];
+    final persisted = <String>{};
+    tester.view
+      ..physicalSize = const Size(760, 900)
+      ..devicePixelRatio = 1;
+    await tester.pumpWidget(
+      _host(
+        loader: () async => const AppListPresentation(
+          apps: <AppInfo>[_mail, _messages],
+          selectedPackages: <String>{},
+        ),
+        selectionWriter: (
+            {required packages, required add, clear = false}) async {
+          calls.add(
+              (packages: List<String>.of(packages), add: add, clear: clear));
+          if (calls.length == 1) {
+            await firstWrite.future;
+          }
+          if (clear) {
+            persisted.clear();
+          } else if (add) {
+            persisted.addAll(packages);
+          } else {
+            persisted.removeAll(packages);
+          }
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mail'));
+    await tester.tap(find.text('Messages'));
+    expect(calls, hasLength(1));
+    firstWrite.complete();
+    await tester.pumpAndSettle();
+    expect(persisted, <String>{'com.example.mail'});
+
+    await tester.tap(find.byTooltip('Select All'));
+    await tester.pumpAndSettle();
+    expect(calls[1].packages,
+        <String>['com.example.mail', 'com.example.messages']);
+    expect(calls[1].add, isTrue);
+    expect(calls[1].clear, isFalse);
+    expect(persisted, <String>{'com.example.mail', 'com.example.messages'});
+
+    await tester.tap(find.byTooltip('Deselect all'));
+    await tester.pumpAndSettle();
+    expect(calls[2].packages,
+        <String>['com.example.mail', 'com.example.messages']);
+    expect(calls[2].add, isFalse);
+    expect(calls[2].clear, isTrue);
+    expect(persisted, isEmpty);
+
+    await tester.tap(find.text('Mail'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mail'));
+    await tester.pumpAndSettle();
+    expect(calls[3].packages, <String>['com.example.mail']);
+    expect(calls[3].add, isTrue);
+    expect(calls[3].clear, isFalse);
+    expect(calls[4].packages, <String>['com.example.mail']);
+    expect(calls[4].add, isFalse);
+    expect(calls[4].clear, isFalse);
+    expect(persisted, isEmpty);
+    final selectedInUi = tester
+        .widgetList<AppInteractiveTile>(find.byType(AppInteractiveTile))
+        .where((tile) => tile.toggled == true)
+        .map((tile) => tile.semanticLabel)
+        .toSet();
+    expect(selectedInUi, isEmpty);
+  });
+
+  testWidgets('disposing during a failed write does not leak an exception',
+      (tester) async {
+    final pending = Completer<void>();
+    tester.view
+      ..physicalSize = const Size(760, 900)
+      ..devicePixelRatio = 1;
+    await tester.pumpWidget(
+      _host(
+        loader: () async => const AppListPresentation(
+          apps: <AppInfo>[_mail],
+          selectedPackages: <String>{},
+        ),
+        selectionWriter: ({required packages, required add, clear = false}) =>
+            pending.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mail'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    pending.completeError(StateError('late failure'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('no-result state clears back to the full app list',

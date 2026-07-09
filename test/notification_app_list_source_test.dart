@@ -51,8 +51,11 @@ void main() {
 
     expect(source, contains('final bool isChecked;'));
     expect(source, contains('value: isChecked'));
-    expect(source, contains('checkedApps[packageName] = value;'));
+    expect(source, contains('Map<String, bool>.of(checkedApps)'));
     expect(source, contains('_updateAppChecked(app.packageName, value)'));
+    expect(source, contains('Future<void> _commitSelection('));
+    expect(source, contains('checkedApps = previousSelection;'));
+    expect(source, contains('bool _isSaving = false;'));
     expect(source, isNot(contains('ValueNotifier<bool>')));
   });
 

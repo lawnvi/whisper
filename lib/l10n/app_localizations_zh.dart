@@ -1018,6 +1018,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appListLoadFailedBody => '请检查应用访问权限后重试。';
 
   @override
+  String get appListSaveFailed => '无法保存通知应用选择';
+
+  @override
+  String get notificationApps => '通知应用';
+
+  @override
+  String notificationAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选择 $count 个应用',
+      zero: '尚未选择应用',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get notificationAppsDisabled => '开启通知转发后可选择应用';
+
+  @override
   String get dangerousActions => '危险操作';
 
   @override
