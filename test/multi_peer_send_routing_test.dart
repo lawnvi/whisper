@@ -9,6 +9,7 @@ void main() {
       ..register(
         PeerConnection(
           peerId: 'peer-b',
+          connectionId: 1,
           send: sentToB.add,
           close: () async {},
         ),
@@ -16,6 +17,7 @@ void main() {
       ..register(
         PeerConnection(
           peerId: 'peer-c',
+          connectionId: 2,
           send: sentToC.add,
           close: () async {},
         ),

@@ -216,6 +216,102 @@ void main() {
         DeviceIdentityPinResult.missingDevice,
       );
     });
+
+    test('authDeviceIfPinned authenticates only the matching identity',
+        () async {
+      await database.upsertDevice(_device('peer-conditional'));
+      await database.pinDeviceIdentity('peer-conditional', 'trusted-key');
+
+      expect(
+        await database.authDeviceIfPinned(
+          'peer-conditional',
+          'attacker-key',
+        ),
+        isFalse,
+      );
+      expect((await database.fetchDevice('peer-conditional'))!.auth, isFalse);
+
+      expect(
+        await database.authDeviceIfPinned(
+          'peer-conditional',
+          'trusted-key',
+        ),
+        isTrue,
+      );
+      expect((await database.fetchDevice('peer-conditional'))!.auth, isTrue);
+    });
+
+    test('authenticated identity commit is atomic and returns the pinned row',
+        () async {
+      final stored = await database.commitAuthenticatedDevice(
+        candidate: _device('peer-atomic', name: 'Updated peer'),
+        publicKey: 'trusted-key',
+        replaceIdentity: false,
+        expectedPublicKey: '',
+        requireCurrent: () {},
+      );
+
+      expect(stored.name, 'Updated peer');
+      expect(stored.identityPublicKey, 'trusted-key');
+      expect(stored.auth, isTrue);
+    });
+
+    test('closing after a legacy pin rolls back the whole identity commit',
+        () async {
+      await database.upsertDevice(_device('legacy-rollback'));
+      await database.authDevice('legacy-rollback', true);
+      var guardCalls = 0;
+
+      await expectLater(
+        database.commitAuthenticatedDevice(
+          candidate: _device('legacy-rollback', name: 'Changed'),
+          publicKey: 'new-key',
+          replaceIdentity: false,
+          expectedPublicKey: '',
+          requireCurrent: () {
+            guardCalls += 1;
+            if (guardCalls == 3) {
+              throw StateError('socket closed');
+            }
+          },
+        ),
+        throwsStateError,
+      );
+
+      final stored = await database.fetchDevice('legacy-rollback');
+      expect(stored!.name, 'Peer');
+      expect(stored.identityPublicKey, isEmpty);
+      expect(stored.auth, isTrue);
+    });
+
+    test('closing after identity replacement restores the old trusted key',
+        () async {
+      await database.upsertDevice(_device('changed-rollback'));
+      await database.pinDeviceIdentity('changed-rollback', 'old-key');
+      await database.authDevice('changed-rollback', true);
+      var guardCalls = 0;
+
+      await expectLater(
+        database.commitAuthenticatedDevice(
+          candidate: _device('changed-rollback', name: 'Changed'),
+          publicKey: 'new-key',
+          replaceIdentity: true,
+          expectedPublicKey: 'old-key',
+          requireCurrent: () {
+            guardCalls += 1;
+            if (guardCalls == 3) {
+              throw StateError('socket closed');
+            }
+          },
+        ),
+        throwsStateError,
+      );
+
+      final stored = await database.fetchDevice('changed-rollback');
+      expect(stored!.name, 'Peer');
+      expect(stored.identityPublicKey, 'old-key');
+      expect(stored.auth, isTrue);
+    });
   });
 
   test('schema 5 upgrade deduplicates identities and is reopen-idempotent',

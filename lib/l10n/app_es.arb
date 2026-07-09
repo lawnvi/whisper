@@ -523,6 +523,7 @@
   "pairingLegacyTrustDescription": "{device} usa un registro de confianza antiguo y debe emparejarse de nuevo para vincular su identidad",
   "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
   "pairingCompareCode": "Confirma que ambos dispositivos muestran el mismo código de seis dígitos",
+  "pairingNotificationBody": "Abre Whisper para comparar en la app el código de emparejamiento de seis dígitos",
   "pairingCodeSemantics": "Código de emparejamiento {code}",
   "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
   "pairingReject": "Rechazar",

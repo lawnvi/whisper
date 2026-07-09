@@ -415,11 +415,20 @@ class WsSvrManager {
     final peerId = _incomingAuthPeerIdsBySink.remove(sink);
     if (peerId != null && peerId.isNotEmpty) {
       _authRequestGate.releaseIncoming(peerId);
-      unawaited(ConnectionRequestNotifier().dismissForPeer(
-        peerId,
-        graceMillis: 3000,
-      ));
+      _ignoreFuture(
+        ConnectionRequestNotifier().dismissForPeer(
+          peerId,
+          graceMillis: 3000,
+        ),
+        context: 'dismiss pairing notification',
+      );
     }
+  }
+
+  void _ignoreFuture(Future<void> future, {required String context}) {
+    unawaited(future.catchError((Object error, StackTrace stackTrace) {
+      logger.i('$context failed: $error\n$stackTrace');
+    }));
   }
 
   Future<void> debugRegisterPeerConnection(
@@ -438,14 +447,19 @@ class WsSvrManager {
     required PeerSocketSession session,
     PeerProfile? profile,
   }) async {
-    if (peerId.isEmpty || !session.isAuthenticated) {
+    if (peerId.isEmpty || !session.isAuthenticationReady) {
       return;
     }
     _peerIdsBySink[sink] = peerId;
     await _peerConnections.register(
       PeerConnection(
         peerId: peerId,
-        send: (message) => _sendBytesOnSink(sink, message),
+        connectionId: session.connectionGeneration,
+        send: (message) {
+          if (session.isAuthenticated) {
+            _sendBytesOnSink(sink, message);
+          }
+        },
         close: () async {
           _peerIdsBySink.remove(sink);
           session.close();
@@ -479,7 +493,10 @@ class WsSvrManager {
     _releaseIncomingAuthForSink(sink);
     _clientTimersBySink.remove(sink)?.cancel();
     final peerId = _peerIdsBySink.remove(sink);
-    if (peerId != null && identical(_sessionsByPeerId[peerId], session)) {
+    final isCurrentConnection = peerId != null &&
+        session != null &&
+        identical(_sessionsByPeerId[peerId], session);
+    if (isCurrentConnection) {
       _sessionsByPeerId.remove(peerId);
     }
     if (peerId == null) {
@@ -488,7 +505,13 @@ class WsSvrManager {
       }
       return;
     }
-    await _peerConnections.disconnect(peerId);
+    if (!isCurrentConnection ||
+        !await _peerConnections.removeIfCurrent(
+          peerId,
+          session.connectionGeneration,
+        )) {
+      return;
+    }
     await _handlePeerDisconnected(peerId);
     _remoteProfilesByPeerId.remove(peerId);
     if (receiver == peerId) {
@@ -524,7 +547,7 @@ class WsSvrManager {
           return;
         }
         _completeSocketAuth(sink, false, 'pairing_expired');
-        unawaited(sink.close());
+        _ignoreFuture(sink.close(), context: 'close expired pairing socket');
       },
     );
     _sessionsBySink[sink] = session;
@@ -540,10 +563,13 @@ class WsSvrManager {
           _handleIncomingMessage(message, sink: sink, asServer: true),
         );
       }, onError: (Object error, StackTrace stackTrace) {
+        _sessionsBySink[sink]?.close();
         logger.i('连接服务异常: ${error.runtimeType}');
         _dispatchToPrimary((event) => event.onError(error.toString()));
         _completeSocketAuth(sink, false, 'socket_error');
+        unawaited(_handlePeerSocketDoneQueued(sink));
       }, onDone: () {
+        _sessionsBySink[sink]?.close();
         unawaited(_handlePeerSocketDoneQueued(sink));
       });
     } catch (error) {
@@ -556,6 +582,23 @@ class WsSvrManager {
     final completer = _authResultsBySink.remove(sink);
     if (completer != null && !completer.isCompleted) {
       completer.complete(_SocketAuthResult(allow, message));
+    }
+  }
+
+  Future<void> _failSocketSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    String message,
+  ) async {
+    session.close();
+    _identityPinPlansBySink.remove(sink);
+    _completeSocketAuth(sink, false, message);
+    _releaseOutgoingAuthForSink(sink);
+    _releaseIncomingAuthForSink(sink);
+    try {
+      await sink.close();
+    } catch (error, stackTrace) {
+      logger.i('关闭失败的 websocket 失败: $error\n$stackTrace');
     }
   }
 
@@ -639,10 +682,13 @@ class WsSvrManager {
           _handleIncomingMessage(message, sink: channelSink, asServer: false),
         );
       }, onError: (error, stackTrace) {
+        _sessionsBySink[channelSink]?.close();
         logger.i('客户端服务异常: ${error.runtimeType}');
         _dispatchToPrimary((event) => event.onError(error.toString()));
         _completeSocketAuth(channelSink, false, 'socket_error');
+        unawaited(_handlePeerSocketDoneQueued(channelSink));
       }, onDone: () {
+        _sessionsBySink[channelSink]?.close();
         unawaited(_handlePeerSocketDoneQueued(channelSink));
       });
       await _sendAuthEnvelope(channelSink, await session.createHello());
@@ -676,6 +722,8 @@ class WsSvrManager {
   }) async {
     final hadActiveConnection = _sink != null ||
         _clientTimer != null ||
+        _sessionsBySink.isNotEmpty ||
+        _authResultsBySink.isNotEmpty ||
         _peerConnections.connectedPeerIds.isNotEmpty ||
         receiver.isNotEmpty;
     if (!hadActiveConnection && !closeServer) {
@@ -899,8 +947,15 @@ class WsSvrManager {
         );
       } catch (error) {
         logger.i('处理 websocket 消息失败: ${error.runtimeType}');
-        _sessionsBySink[sink]?.close();
-        await sink?.close();
+        final failedSession = sink == null ? null : _sessionsBySink[sink];
+        if (sink != null && failedSession != null) {
+          final message = error is AuthHandshakeException
+              ? error.code
+              : 'authentication_failed';
+          await _failSocketSession(failedSession, sink, message);
+        } else {
+          await sink?.close();
+        }
       }
     });
     return _receiveQueue;
@@ -968,17 +1023,13 @@ class WsSvrManager {
       if (session.role == PeerSocketRole.server) {
         _sendUpgradeRequired(sink, session);
       }
-      session.close();
-      _completeSocketAuth(sink, false, 'upgrade_required');
-      await sink.close();
+      await _failSocketSession(session, sink, 'upgrade_required');
     } on AuthHandshakeException catch (error) {
       if (error.code == 'upgrade_required' &&
           session.role == PeerSocketRole.server) {
         _sendUpgradeRequired(sink, session);
       }
-      session.close();
-      _completeSocketAuth(sink, false, error.code);
-      await sink.close();
+      await _failSocketSession(session, sink, error.code);
     }
   }
 
@@ -1004,13 +1055,16 @@ class WsSvrManager {
         generation: generation,
         allow: allow,
       );
-      if (!accepted || !_isCurrentSession(session, sink, generation)) {
+      if (!accepted || !_isSameSession(session, sink, generation)) {
         return;
       }
       if (!allow) {
         _completeSocketAuth(sink, false, 'rejected');
         _dispatchToAll((event) => event.afterAuth(false, null));
         await sink.close();
+        return;
+      }
+      if (!_isCurrentSession(session, sink, generation)) {
         return;
       }
       final proof = await session.createProof();
@@ -1073,21 +1127,27 @@ class WsSvrManager {
         allow: allow,
         reason: allow ? 'approved' : 'rejected',
       );
-      if (!_isCurrentSession(session, sink, generation)) {
+      if (!_isSameSession(session, sink, generation)) {
         return;
       }
-      await _sendAuthEnvelope(sink, result);
       if (!allow) {
+        await _sendAuthEnvelope(sink, result);
         _releaseIncomingAuthForSink(sink);
         _dispatchToAll((event) => event.afterAuth(false, null));
         await sink.close();
         return;
       }
-      await _completeAuthenticatedSession(
+      if (!_isCurrentSession(session, sink, generation)) {
+        return;
+      }
+      final storedDevice = await _completeAuthenticatedSession(
         session,
         sink,
         pinPlan: pinPlan,
       );
+      _requireCurrentAuthenticatedSession(session, sink, generation);
+      await _sendAuthEnvelope(sink, result);
+      _announceAuthenticatedSession(session, sink, storedDevice);
     }
 
     if (pinPlan.reason == null) {
@@ -1118,11 +1178,12 @@ class WsSvrManager {
     if (pinPlan == null) {
       throw const AuthHandshakeException('identity_pin_state_missing');
     }
-    await _completeAuthenticatedSession(
+    final storedDevice = await _completeAuthenticatedSession(
       session,
       sink,
       pinPlan: pinPlan,
     );
+    _announceAuthenticatedSession(session, sink, storedDevice);
   }
 
   Future<_IdentityPinPlan> _pairingReason(PeerSocketSession session) async {
@@ -1149,9 +1210,20 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
-    final guarded = session.guardApprovalCallback(
-      (allow) => unawaited(resolve(allow)),
+    _ignoreFuture(
+      ConnectionRequestNotifier().maybeShowForPairing(
+        peerId: session.remotePeerId,
+      ),
+      context: 'show pairing notification',
     );
+    final guarded = session.guardApprovalCallback((allow) {
+      _runGuardedApproval(
+        session: session,
+        sink: sink,
+        generation: generation,
+        resolve: () => resolve(allow),
+      );
+    });
     _dispatchGuarded(
       listener,
       (event) => event.onPairing(
@@ -1164,6 +1236,30 @@ class WsSvrManager {
         guarded,
       ),
     );
+  }
+
+  void _runGuardedApproval({
+    required PeerSocketSession session,
+    required WebSocketSink sink,
+    required int generation,
+    required Future<void> Function() resolve,
+  }) {
+    unawaited(() async {
+      try {
+        await resolve();
+      } catch (error, stackTrace) {
+        logger.i('处理配对决定失败: $error\n$stackTrace');
+        if (_isSameSession(session, sink, generation)) {
+          await _failSocketSession(
+            session,
+            sink,
+            error is AuthHandshakeException
+                ? error.code
+                : 'authentication_failed',
+          );
+        }
+      }
+    }());
   }
 
   Future<DeviceData> _deviceForSession(
@@ -1180,48 +1276,31 @@ class WsSvrManager {
     return session.remoteProfile!.toDeviceData(host: host, port: port);
   }
 
-  Future<void> _completeAuthenticatedSession(
+  Future<DeviceData> _completeAuthenticatedSession(
     PeerSocketSession session,
     WebSocketSink sink, {
     required _IdentityPinPlan pinPlan,
   }) async {
     final generation = session.connectionGeneration;
-    _requireCurrentAuthenticatedSession(session, sink, generation);
+    _requireCurrentSession(session, sink, generation);
     DeviceData? storedDevice;
     PeerProfile? runtimeProfile;
     final committed = await session.commitAuthentication(
       generation: generation,
-      pinIdentity: () async {
-        _requireCurrentAuthenticatedSession(session, sink, generation);
+      persistIdentity: () async {
+        _requireCurrentSession(session, sink, generation);
         final candidate = await _deviceForSession(session, sink);
-        _requireCurrentAuthenticatedSession(session, sink, generation);
+        _requireCurrentSession(session, sink, generation);
         final database = LocalDatabase();
-        await database.upsertDevice(candidate);
-        _requireCurrentAuthenticatedSession(session, sink, generation);
-        final pinResult = pinPlan.reason == PairingReason.identityChanged
-            ? await database.replaceDeviceIdentity(
-                candidate.uid,
-                expectedPublicKey: pinPlan.expectedPublicKey,
-                newPublicKey: session.remoteIdentityPublicKey,
-              )
-            : await database.pinDeviceIdentity(
-                candidate.uid,
-                session.remoteIdentityPublicKey,
-              );
-        _requireCurrentAuthenticatedSession(session, sink, generation);
-        if (!pinResult.isSuccess) {
-          throw const AuthHandshakeException('identity_pin_conflict');
-        }
-        await database.authDevice(candidate.uid, true);
-        _requireCurrentAuthenticatedSession(session, sink, generation);
-        storedDevice = await database.fetchDevice(candidate.uid);
-        _requireCurrentAuthenticatedSession(session, sink, generation);
-        final device = storedDevice;
-        if (device == null ||
-            !device.auth ||
-            device.identityPublicKey != session.remoteIdentityPublicKey) {
-          throw const AuthHandshakeException('identity_pin_conflict');
-        }
+        final device = await database.commitAuthenticatedDevice(
+          candidate: candidate,
+          publicKey: session.remoteIdentityPublicKey,
+          replaceIdentity: pinPlan.reason == PairingReason.identityChanged,
+          expectedPublicKey: pinPlan.expectedPublicKey,
+          requireCurrent: () =>
+              _requireCurrentSession(session, sink, generation),
+        );
+        storedDevice = device;
         runtimeProfile = PeerProfile(
           device: device,
           trustedPeerIds: const <String>[],
@@ -1233,7 +1312,7 @@ class WsSvrManager {
         );
       },
       registerPeer: () async {
-        _requireCurrentAuthenticatedSession(session, sink, generation);
+        _requireCurrentRegisterableSession(session, sink, generation);
         final peerId = session.remotePeerId;
         _sessionsByPeerId[peerId] = session;
         await _registerPeerConnection(
@@ -1242,19 +1321,48 @@ class WsSvrManager {
           session: session,
           profile: runtimeProfile,
         );
-        _requireCurrentAuthenticatedSession(session, sink, generation);
+        _requireCurrentRegisterableSession(session, sink, generation);
       },
     );
     if (!committed) {
-      return;
+      throw const AuthHandshakeException('session_expired');
     }
     _requireCurrentAuthenticatedSession(session, sink, generation);
+    final device = storedDevice;
+    if (device == null) {
+      throw const AuthHandshakeException('identity_pin_state_missing');
+    }
+    return device;
+  }
+
+  void _announceAuthenticatedSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    DeviceData storedDevice,
+  ) {
+    _requireCurrentAuthenticatedSession(
+      session,
+      sink,
+      session.connectionGeneration,
+    );
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
     _completeSocketAuth(sink, true, '');
     _dispatchToAll((event) => event.onConnect());
     _dispatchToAll((event) => event.afterAuth(true, storedDevice));
-    unawaited(_transferEngine.resumeRecoverableOutgoing());
+    _ignoreFuture(
+      _transferEngine.resumeRecoverableOutgoing(),
+      context: 'resume outgoing transfers',
+    );
+  }
+
+  bool _isSameSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    int generation,
+  ) {
+    return identical(_sessionsBySink[sink], session) &&
+        session.connectionGeneration == generation;
   }
 
   bool _isCurrentSession(
@@ -1262,9 +1370,17 @@ class WsSvrManager {
     WebSocketSink sink,
     int generation,
   ) {
-    return identical(_sessionsBySink[sink], session) &&
-        session.connectionGeneration == generation &&
-        !session.isClosed;
+    return _isSameSession(session, sink, generation) && !session.isClosed;
+  }
+
+  void _requireCurrentSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    int generation,
+  ) {
+    if (!_isCurrentSession(session, sink, generation)) {
+      throw const AuthHandshakeException('session_expired');
+    }
   }
 
   void _requireCurrentAuthenticatedSession(
@@ -1272,8 +1388,19 @@ class WsSvrManager {
     WebSocketSink sink,
     int generation,
   ) {
-    if (!_isCurrentSession(session, sink, generation) ||
-        !session.isAuthenticated) {
+    _requireCurrentSession(session, sink, generation);
+    if (!session.isAuthenticated) {
+      throw const AuthHandshakeException('session_expired');
+    }
+  }
+
+  void _requireCurrentRegisterableSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    int generation,
+  ) {
+    _requireCurrentSession(session, sink, generation);
+    if (!session.isAuthenticationReady) {
       throw const AuthHandshakeException('session_expired');
     }
   }

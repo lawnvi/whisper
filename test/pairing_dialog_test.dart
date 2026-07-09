@@ -53,7 +53,7 @@ void main() {
     expect(find.textContaining('Desk PC'), findsWidgets);
   });
 
-  testWidgets('identity change has explicit reject and approve actions',
+  testWidgets('identity change resolves only the first decision',
       (tester) async {
     final decisions = <bool>[];
     final request = PairingRequest(
@@ -69,7 +69,70 @@ void main() {
     expect(decisions, <bool>[false]);
 
     await tester.tap(find.byKey(pairingApproveKey));
-    expect(decisions, <bool>[false, true]);
+    expect(decisions, <bool>[false]);
+    await tester.pump();
+    final reject = tester.widget<TextButton>(find.byKey(pairingRejectKey));
+    final approve = tester.widget<FilledButton>(find.byKey(pairingApproveKey));
+    expect(reject.onPressed, isNull);
+    expect(approve.onPressed, isNull);
+  });
+
+  testWidgets('reject is the default focused action', (tester) async {
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      canApprove: true,
+    );
+    await tester.pumpWidget(_app(request, (_) {}));
+    await tester.pump();
+
+    expect(
+      tester.widget<TextButton>(find.byKey(pairingRejectKey)).autofocus,
+      isTrue,
+    );
+  });
+
+  testWidgets('repeated route decisions cannot pop the underlying page',
+      (tester) async {
+    final decisions = <bool>[];
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      canApprove: true,
+    );
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: decisions.add,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(pairingRejectKey), warnIfMissed: false);
+    await tester.tap(find.byKey(pairingRejectKey), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await shown;
+
+    expect(decisions, <bool>[false]);
+    expect(find.text('underlying page'), findsOneWidget);
   });
 
   testWidgets('read-only request does not expose an approve action',

@@ -209,7 +209,7 @@ void main() {
     expect(
       await flow.client.commitAuthentication(
         generation: flow.client.connectionGeneration,
-        pinIdentity: () async => pins += 1,
+        persistIdentity: () async => pins += 1,
         registerPeer: () async => registrations += 1,
       ),
       isFalse,
@@ -230,7 +230,7 @@ void main() {
     expect(
       await flow.client.commitAuthentication(
         generation: flow.client.connectionGeneration,
-        pinIdentity: () async => pins += 1,
+        persistIdentity: () async => pins += 1,
         registerPeer: () async => registrations += 1,
       ),
       isTrue,
@@ -238,7 +238,7 @@ void main() {
     expect(
       await flow.client.commitAuthentication(
         generation: flow.client.connectionGeneration,
-        pinIdentity: () async => pins += 1,
+        persistIdentity: () async => pins += 1,
         registerPeer: () async => registrations += 1,
       ),
       isFalse,
@@ -264,7 +264,7 @@ void main() {
     expect(
       await flow.client.commitAuthentication(
         generation: flow.client.connectionGeneration,
-        pinIdentity: () async => pins += 1,
+        persistIdentity: () async => pins += 1,
         registerPeer: () async => registrations += 1,
       ),
       isFalse,

@@ -593,6 +593,7 @@
   "pairingLegacyTrustDescription": "{device} 来自旧版信任记录，需要重新配对以绑定设备身份",
   "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
   "pairingCompareCode": "请确认两台设备显示相同的 6 位数字",
+  "pairingNotificationBody": "打开 Whisper，在 App 内比对 6 位配对码",
   "pairingCodeSemantics": "配对码 {code}",
   "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
   "pairingReject": "拒绝",

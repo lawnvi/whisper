@@ -4,22 +4,26 @@ typedef PeerConnectionCloser = Future<void> Function();
 class PeerConnectionSnapshot {
   const PeerConnectionSnapshot({
     required this.peerId,
+    required this.connectionId,
     this.isConnected = true,
   });
 
   final String peerId;
+  final int connectionId;
   final bool isConnected;
 }
 
 class PeerConnection {
   PeerConnection({
     required this.peerId,
+    required this.connectionId,
     required PeerMessageSender send,
     required PeerConnectionCloser close,
   })  : _send = send,
         _close = close;
 
   final String peerId;
+  final int connectionId;
   final PeerMessageSender _send;
   final PeerConnectionCloser _close;
   bool _isClosed = false;
@@ -28,6 +32,7 @@ class PeerConnection {
 
   PeerConnectionSnapshot get snapshot => PeerConnectionSnapshot(
         peerId: peerId,
+        connectionId: connectionId,
         isConnected: isConnected,
       );
 
@@ -66,12 +71,16 @@ class PeerConnectionRegistry {
 
   PeerConnection? connection(String peerId) => _connections[peerId];
 
+  bool isCurrent(String peerId, int connectionId) {
+    return _connections[peerId]?.connectionId == connectionId;
+  }
+
   Future<void> register(PeerConnection connection) async {
     final previous = _connections[connection.peerId];
+    _connections[connection.peerId] = connection;
     if (previous != null && !identical(previous, connection)) {
       await previous.close();
     }
-    _connections[connection.peerId] = connection;
   }
 
   bool sendTo(String peerId, Object message) {
@@ -85,6 +94,16 @@ class PeerConnectionRegistry {
   Future<void> disconnect(String peerId) async {
     final connection = _connections.remove(peerId);
     await connection?.close();
+  }
+
+  Future<bool> removeIfCurrent(String peerId, int connectionId) async {
+    final connection = _connections[peerId];
+    if (connection == null || connection.connectionId != connectionId) {
+      return false;
+    }
+    _connections.remove(peerId);
+    await connection.close();
+    return true;
   }
 
   Future<void> disconnectAll() async {

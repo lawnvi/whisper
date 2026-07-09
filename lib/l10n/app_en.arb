@@ -496,6 +496,7 @@
   "pairingLegacyTrustDescription": "{device} uses a legacy trust record and must be paired again to bind its identity",
   "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
   "pairingCompareCode": "Confirm that both devices show the same six-digit code",
+  "pairingNotificationBody": "Open Whisper to compare the six-digit pairing code in the app",
   "pairingCodeSemantics": "Pairing code {code}",
   "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
   "pairingReject": "Reject",

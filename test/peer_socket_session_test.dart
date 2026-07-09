@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -121,6 +122,42 @@ void main() {
     );
     expect(await pair.client.receiveResult(result), isTrue);
 
+    expect(pair.client.phase, PeerSocketPhase.awaitingResult);
+    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(pair.client.codec, isNull);
+    expect(pair.server.codec, isNull);
+
+    final serverOrder = <String>[];
+    expect(
+      await pair.server.commitAuthentication(
+        generation: pair.server.connectionGeneration,
+        persistIdentity: () async => serverOrder.add('persist'),
+        registerPeer: () async {
+          expect(pair.server.isAuthenticated, isFalse);
+          expect(pair.server.isAuthenticationReady, isTrue);
+          expect(pair.server.codec, isNotNull);
+          serverOrder.add('register');
+        },
+      ),
+      isTrue,
+    );
+    final clientOrder = <String>[];
+    expect(
+      await pair.client.commitAuthentication(
+        generation: pair.client.connectionGeneration,
+        persistIdentity: () async => clientOrder.add('persist'),
+        registerPeer: () async {
+          expect(pair.client.isAuthenticated, isFalse);
+          expect(pair.client.isAuthenticationReady, isTrue);
+          expect(pair.client.codec, isNotNull);
+          clientOrder.add('register');
+        },
+      ),
+      isTrue,
+    );
+
+    expect(serverOrder, <String>['persist', 'register']);
+    expect(clientOrder, <String>['persist', 'register']);
     expect(pair.client.phase, PeerSocketPhase.authenticated);
     expect(pair.server.phase, PeerSocketPhase.authenticated);
     expect(pair.client.remotePeerId, 'server-b');
@@ -133,6 +170,100 @@ void main() {
       await pair.server.codec!.decode(encoded),
       orderedEquals(<int>[1, 2, 3]),
     );
+  });
+
+  test('persistence failure closes an approved session before registration',
+      () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    pair.client.resolveLocalApproval(
+      generation: pair.client.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    pair.server.resolveLocalApproval(
+      generation: pair.server.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.createResult(allow: true, reason: 'approved');
+    var registered = false;
+
+    await expectLater(
+      pair.server.commitAuthentication(
+        generation: pair.server.connectionGeneration,
+        persistIdentity: () async => throw StateError('database failed'),
+        registerPeer: () async => registered = true,
+      ),
+      throwsStateError,
+    );
+
+    expect(registered, isFalse);
+    expect(pair.server.phase, PeerSocketPhase.closing);
+    expect(pair.server.isAuthenticated, isFalse);
+  });
+
+  test('registration failure closes a MAC-activated session', () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    pair.client.resolveLocalApproval(
+      generation: pair.client.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    pair.server.resolveLocalApproval(
+      generation: pair.server.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.createResult(allow: true, reason: 'approved');
+
+    await expectLater(
+      pair.server.commitAuthentication(
+        generation: pair.server.connectionGeneration,
+        persistIdentity: () async {},
+        registerPeer: () async {
+          expect(pair.server.isAuthenticated, isFalse);
+          expect(pair.server.isAuthenticationReady, isTrue);
+          throw StateError('registry failed');
+        },
+      ),
+      throwsStateError,
+    );
+
+    expect(pair.server.phase, PeerSocketPhase.closing);
+    expect(pair.server.isAuthenticated, isFalse);
+  });
+
+  test('closing during persistence is terminal and cannot resume auth',
+      () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    pair.client.resolveLocalApproval(
+      generation: pair.client.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    pair.server.resolveLocalApproval(
+      generation: pair.server.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.createResult(allow: true, reason: 'approved');
+    final persistence = Completer<void>();
+    var registered = false;
+    final commit = pair.server.commitAuthentication(
+      generation: pair.server.connectionGeneration,
+      persistIdentity: () => persistence.future,
+      registerPeer: () async => registered = true,
+    );
+
+    pair.server.close();
+    persistence.complete();
+
+    await expectLater(commit, throwsA(isA<AuthHandshakeException>()));
+    expect(pair.server.phase, PeerSocketPhase.closing);
+    expect(registered, isFalse);
   });
 
   test('unknown target can omit peer id but must match discovered pkh',

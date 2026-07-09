@@ -20,7 +20,7 @@ void main() {
       'Future<void> _registerPeerConnection(',
       'Future<void> _handlePeerSocketDoneQueued(',
     );
-    expect(register, contains('!session.isAuthenticated'));
+    expect(register, contains('!session.isAuthenticationReady'));
     expect(register, contains('_sink = sink'));
   });
 
@@ -110,18 +110,16 @@ void main() {
 
   test('identity pin commits use captured compare-and-set state', () {
     final completion = section(
-      'Future<void> _completeAuthenticatedSession(',
+      'Future<DeviceData> _completeAuthenticatedSession(',
       'void _sendUpgradeRequired(',
     );
-    expect(completion, contains('database.pinDeviceIdentity('));
-    expect(completion, contains('database.replaceDeviceIdentity('));
+    expect(completion, contains('database.commitAuthenticatedDevice('));
     expect(completion, contains('pinPlan.expectedPublicKey'));
     expect(completion, contains('PairingReason.identityChanged'));
-    expect(completion, contains('identity_pin_conflict'));
-    expect(completion, contains('_requireCurrentAuthenticatedSession('));
+    expect(completion, contains('_requireCurrentSession('));
     expect(
-      completion.indexOf('_requireCurrentAuthenticatedSession('),
-      lessThan(completion.indexOf('database.pinDeviceIdentity(')),
+      completion.indexOf('_requireCurrentSession('),
+      lessThan(completion.indexOf('database.commitAuthenticatedDevice(')),
     );
 
     final challenge = section(
@@ -129,5 +127,56 @@ void main() {
       'Future<void> _handleServerProof(',
     );
     expect(challenge, contains('_identityPinPlansBySink[sink] = pinPlan'));
+  });
+
+  test('server persists and registers before sending an allow result', () {
+    final proof = section(
+      'Future<void> _handleServerProof(',
+      'Future<void> _handleClientResult(',
+    );
+    expect(proof, contains('_completeAuthenticatedSession('));
+    expect(proof, contains('_sendAuthEnvelope(sink, result)'));
+    expect(
+      proof.indexOf('_completeAuthenticatedSession('),
+      lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),
+    );
+  });
+
+  test('pending sessions participate in graceful shutdown', () {
+    final close = section(
+      'Future<void> closeGracefully(',
+      'Future<void> disconnectPeer(',
+    );
+    expect(close, contains('_sessionsBySink.isNotEmpty'));
+    expect(close, contains('_authResultsBySink.isNotEmpty'));
+  });
+
+  test('stream terminal callbacks close sessions before queued cleanup', () {
+    final attach = section(
+      'Future<void> _attachIncomingSocket(',
+      'void _completeSocketAuth(',
+    );
+    expect(
+      attach.indexOf('_sessionsBySink[sink]?.close()'),
+      lessThan(attach.indexOf('_handlePeerSocketDoneQueued(sink)')),
+    );
+    final connect = section(
+      'Future<void> connectToServer(',
+      'Future<void> closeGracefully(',
+    );
+    expect(
+      connect.indexOf('_sessionsBySink[channelSink]?.close()'),
+      lessThan(connect.indexOf('_handlePeerSocketDoneQueued(channelSink)')),
+    );
+  });
+
+  test('old socket cleanup removes only its own connection generation', () {
+    final cleanup = section(
+      'Future<void> _handlePeerSocketDone(',
+      'Future<PeerSocketSession> _createSocketSession(',
+    );
+    expect(cleanup, contains('removeIfCurrent('));
+    expect(cleanup, contains('session.connectionGeneration'));
+    expect(cleanup, isNot(contains('_peerConnections.disconnect(peerId)')));
   });
 }

@@ -22,7 +22,7 @@ Future<void> showPairingDialog(
   resolve(decision ?? false);
 }
 
-class PairingDialog extends StatelessWidget {
+class PairingDialog extends StatefulWidget {
   const PairingDialog({
     super.key,
     required this.request,
@@ -33,24 +33,39 @@ class PairingDialog extends StatelessWidget {
   final ValueChanged<bool> onResolved;
 
   @override
+  State<PairingDialog> createState() => _PairingDialogState();
+}
+
+class _PairingDialogState extends State<PairingDialog> {
+  bool _resolved = false;
+
+  void _resolve(bool allow) {
+    if (_resolved) {
+      return;
+    }
+    setState(() => _resolved = true);
+    widget.onResolved(allow);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
-    final title = switch (request.reason) {
+    final title = switch (widget.request.reason) {
       PairingReason.newDevice => l10n.pairingNewDeviceTitle,
       PairingReason.identityChanged => l10n.pairingIdentityChangedTitle,
       PairingReason.legacyTrustWithoutPin => l10n.pairingLegacyTrustTitle,
     };
-    final description = switch (request.reason) {
+    final description = switch (widget.request.reason) {
       PairingReason.newDevice =>
-        l10n.pairingNewDeviceDescription(request.device.name),
+        l10n.pairingNewDeviceDescription(widget.request.device.name),
       PairingReason.identityChanged =>
-        l10n.pairingIdentityChangedDescription(request.device.name),
+        l10n.pairingIdentityChangedDescription(widget.request.device.name),
       PairingReason.legacyTrustWithoutPin =>
-        l10n.pairingLegacyTrustDescription(request.device.name),
+        l10n.pairingLegacyTrustDescription(widget.request.device.name),
     };
-    final code = '${request.pairingCode.substring(0, 3)} '
-        '${request.pairingCode.substring(3)}';
+    final code = '${widget.request.pairingCode.substring(0, 3)} '
+        '${widget.request.pairingCode.substring(3)}';
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -72,7 +87,7 @@ class PairingDialog extends StatelessWidget {
             const SizedBox(height: 12),
             Semantics(
               key: pairingCodeKey,
-              label: l10n.pairingCodeSemantics(request.pairingCode),
+              label: l10n.pairingCodeSemantics(widget.request.pairingCode),
               liveRegion: true,
               child: ExcludeSemantics(
                 child: SizedBox(
@@ -94,13 +109,14 @@ class PairingDialog extends StatelessWidget {
       actions: <Widget>[
         TextButton(
           key: pairingRejectKey,
-          onPressed: () => onResolved(false),
+          autofocus: true,
+          onPressed: _resolved ? null : () => _resolve(false),
           child: Text(l10n.pairingReject),
         ),
-        if (request.canApprove)
+        if (widget.request.canApprove)
           FilledButton(
             key: pairingApproveKey,
-            onPressed: () => onResolved(true),
+            onPressed: _resolved ? null : () => _resolve(true),
             child: Text(l10n.pairingApprove),
           ),
       ],

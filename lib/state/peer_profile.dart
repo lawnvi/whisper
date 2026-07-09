@@ -85,10 +85,9 @@ class WirePeerProfile {
       }
       capabilitiesJson[entry.key as String] = entry.value;
     }
-    final topology = _topologyFromJson(json['displayTopology']);
-    if (json.containsKey('displayTopology') && topology == null) {
-      throw const FormatException('Invalid display topology');
-    }
+    final topology = json.containsKey('displayTopology')
+        ? _wireTopologyFromJson(json['displayTopology'])
+        : null;
     return WirePeerProfile(
       uid: uid,
       name: name,
@@ -234,6 +233,125 @@ RemoteInputTopology? _topologyFromJson(Object? value) {
     return RemoteInputTopology.fromJson(Map<String, dynamic>.from(value));
   }
   return null;
+}
+
+RemoteInputTopology _wireTopologyFromJson(Object? value) {
+  const topologyKeys = <String>{'platform', 'displays', 'updatedAt'};
+  const displayKeys = <String>{
+    'displayId',
+    'name',
+    'x',
+    'y',
+    'width',
+    'height',
+    'scale',
+    'isPrimary',
+  };
+  if (value is! Map || !_hasExactStringKeys(value, topologyKeys)) {
+    throw const FormatException('Invalid wire display topology');
+  }
+  final platform = _boundedWireString(
+    value['platform'],
+    maxBytes: 64,
+    allowEmpty: true,
+  );
+  final updatedAt = value['updatedAt'];
+  if (updatedAt is! int || updatedAt < 0 || updatedAt > 9007199254740991) {
+    throw const FormatException('Invalid wire topology timestamp');
+  }
+  final rawDisplays = value['displays'];
+  if (rawDisplays is! List || rawDisplays.isEmpty || rawDisplays.length > 16) {
+    throw const FormatException('Invalid wire display count');
+  }
+
+  final displayIds = <String>{};
+  var primaryCount = 0;
+  final displays = <RemoteInputDisplay>[];
+  for (final rawDisplay in rawDisplays) {
+    if (rawDisplay is! Map || !_hasExactStringKeys(rawDisplay, displayKeys)) {
+      throw const FormatException('Invalid wire display');
+    }
+    final displayId = _boundedWireString(
+      rawDisplay['displayId'],
+      maxBytes: 128,
+    );
+    final name = _boundedWireString(
+      rawDisplay['name'],
+      maxBytes: 256,
+      allowEmpty: true,
+    );
+    if (!displayIds.add(displayId)) {
+      throw const FormatException('Duplicate wire display id');
+    }
+    final x = _boundedWireInt(rawDisplay['x'], min: -1000000, max: 1000000);
+    final y = _boundedWireInt(rawDisplay['y'], min: -1000000, max: 1000000);
+    final width = _boundedWireInt(rawDisplay['width'], min: 1, max: 100000);
+    final height = _boundedWireInt(rawDisplay['height'], min: 1, max: 100000);
+    final scaleValue = rawDisplay['scale'];
+    if (scaleValue is! num ||
+        !scaleValue.isFinite ||
+        scaleValue < 0.25 ||
+        scaleValue > 8) {
+      throw const FormatException('Invalid wire display scale');
+    }
+    final isPrimary = rawDisplay['isPrimary'];
+    if (isPrimary is! bool) {
+      throw const FormatException('Invalid wire primary display flag');
+    }
+    if (isPrimary) {
+      primaryCount += 1;
+    }
+    displays.add(RemoteInputDisplay(
+      displayId: displayId,
+      name: name,
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      scale: scaleValue.toDouble(),
+      isPrimary: isPrimary,
+    ));
+  }
+  if (primaryCount != 1) {
+    throw const FormatException('Wire topology must have one primary display');
+  }
+  return RemoteInputTopology(
+    platform: platform,
+    displays: List<RemoteInputDisplay>.unmodifiable(displays),
+    updatedAt: updatedAt,
+  );
+}
+
+bool _hasExactStringKeys(Map<Object?, Object?> value, Set<String> keys) {
+  if (value.length != keys.length) {
+    return false;
+  }
+  for (final key in value.keys) {
+    if (key is! String || !keys.contains(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+String _boundedWireString(
+  Object? value, {
+  required int maxBytes,
+  bool allowEmpty = false,
+}) {
+  if (value is! String ||
+      (!allowEmpty && value.isEmpty) ||
+      utf8.encode(value).length > maxBytes) {
+    throw const FormatException('Invalid wire display string');
+  }
+  return value;
+}
+
+int _boundedWireInt(Object? value, {required int min, required int max}) {
+  if (value is! int || value < min || value > max) {
+    throw const FormatException('Invalid wire display integer');
+  }
+  return value;
 }
 
 class PeerCapabilities {

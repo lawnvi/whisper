@@ -262,6 +262,74 @@ class LocalDatabase extends _$LocalDatabase {
     );
   }
 
+  Future<bool> authDeviceIfPinned(String uid, String publicKey) async {
+    if (uid.isEmpty || publicKey.isEmpty) {
+      return false;
+    }
+    final updated = await customUpdate(
+      'UPDATE device SET auth = 1 '
+      'WHERE uid = ? AND identity_public_key = ?',
+      variables: <Variable<Object>>[
+        Variable<String>(uid),
+        Variable<String>(publicKey),
+      ],
+      updates: <TableInfo<Table, Object?>>{device},
+    );
+    return updated == 1;
+  }
+
+  /// Commits the discovered profile, identity CAS, and trust bit together.
+  /// [requireCurrent] is deliberately called after every async boundary so a
+  /// socket close aborts and rolls back the transaction instead of trusting a
+  /// key from an expired handshake.
+  Future<DeviceData> commitAuthenticatedDevice({
+    required DeviceData candidate,
+    required String publicKey,
+    required bool replaceIdentity,
+    required String expectedPublicKey,
+    required void Function() requireCurrent,
+  }) {
+    if (candidate.uid.isEmpty || publicKey.isEmpty) {
+      throw ArgumentError('candidate.uid and publicKey must not be empty');
+    }
+    if (replaceIdentity && expectedPublicKey.isEmpty) {
+      throw ArgumentError(
+          'expectedPublicKey must not be empty for replacement');
+    }
+    return transaction(() async {
+      requireCurrent();
+      await upsertDevice(candidate);
+      requireCurrent();
+
+      final pinResult = replaceIdentity
+          ? await replaceDeviceIdentity(
+              candidate.uid,
+              expectedPublicKey: expectedPublicKey,
+              newPublicKey: publicKey,
+            )
+          : await pinDeviceIdentity(candidate.uid, publicKey);
+      requireCurrent();
+      if (!pinResult.isSuccess) {
+        throw StateError('identity_pin_conflict');
+      }
+
+      final authenticated = await authDeviceIfPinned(candidate.uid, publicKey);
+      requireCurrent();
+      if (!authenticated) {
+        throw StateError('identity_pin_conflict');
+      }
+
+      final stored = await fetchDevice(candidate.uid);
+      requireCurrent();
+      if (stored == null ||
+          !stored.auth ||
+          stored.identityPublicKey != publicKey) {
+        throw StateError('identity_pin_conflict');
+      }
+      return stored;
+    });
+  }
+
   Future<void> clipboardDevice(String uid, bool clipboard) async {
     if (uid.isEmpty) {
       return;

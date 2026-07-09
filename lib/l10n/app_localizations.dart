@@ -1961,6 +1961,12 @@ abstract class AppLocalizations {
   /// **'请确认两台设备显示相同的 6 位数字'**
   String get pairingCompareCode;
 
+  /// No description provided for @pairingNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 Whisper，在 App 内比对 6 位配对码'**
+  String get pairingNotificationBody;
+
   /// No description provided for @pairingCodeSemantics.
   ///
   /// In zh, this message translates to:

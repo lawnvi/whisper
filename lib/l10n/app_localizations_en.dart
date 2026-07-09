@@ -1119,6 +1119,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Confirm that both devices show the same six-digit code';
 
   @override
+  String get pairingNotificationBody =>
+      'Open Whisper to compare the six-digit pairing code in the app';
+
+  @override
   String pairingCodeSemantics(String code) {
     return 'Pairing code $code';
   }

@@ -1054,6 +1054,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingCompareCode => '请确认两台设备显示相同的 6 位数字';
 
   @override
+  String get pairingNotificationBody => '打开 Whisper，在 App 内比对 6 位配对码';
+
+  @override
   String pairingCodeSemantics(String code) {
     return '配对码 $code';
   }
