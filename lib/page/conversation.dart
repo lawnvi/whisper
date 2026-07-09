@@ -13,7 +13,6 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
-import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/local.dart';

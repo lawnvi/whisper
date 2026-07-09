@@ -43,7 +43,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - `lib/model/`: Drift database, device/message/transfer models, and generated database code.
 - `lib/audio/`: audio sharing protocol, codecs, capture/playback abstractions, transport, and runtime coordinator.
 - `lib/remote_input/`: keyboard/mouse sharing protocol, topology/layout, native platform bridges, transport, and coordinator.
-- `lib/helper/`: platform helpers for files, settings, notifications, background services, desktop startup, FTP, and general utilities.
+- `lib/helper/`: platform helpers for files, settings, notifications, background services, desktop startup, and general utilities.
 - `lib/l10n/`: ARB files and generated Flutter localization classes for Chinese, English, and Spanish.
 - `lib/theme/`: Material 3 theme and `WhisperPalette` tokens.
 - `android/`, `ios/`, `macos/`, `linux/`, `windows/`: native runners and platform plugins.
