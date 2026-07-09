@@ -1,6 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:drift/drift.dart' show DataClass, Insertable, Value, Variable;
+import 'package:drift/drift.dart'
+    show
+        ApplyInterceptor,
+        DataClass,
+        Insertable,
+        QueryExecutor,
+        QueryInterceptor,
+        Value,
+        Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -39,12 +48,49 @@ Future<bool> _hasUniqueUidIndex(LocalDatabase database) async {
   return indexes.any((row) => row.read<int>('unique') == 1);
 }
 
+class _BlockingIdentityUpdate extends QueryInterceptor {
+  Completer<void>? _blocked;
+  Completer<void>? _release;
+  int? _argumentCount;
+
+  Future<void> blockNext({required int argumentCount}) {
+    _argumentCount = argumentCount;
+    _blocked = Completer<void>();
+    _release = Completer<void>();
+    return _blocked!.future;
+  }
+
+  void release() => _release?.complete();
+
+  @override
+  Future<int> runUpdate(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) async {
+    final result = await executor.runUpdate(statement, args);
+    if (_argumentCount == args.length &&
+        statement.startsWith(
+          'UPDATE device SET identity_public_key = ?',
+        )) {
+      _argumentCount = null;
+      _blocked!.complete();
+      await _release!.future;
+    }
+    return result;
+  }
+}
+
 void main() {
   group('device identity schema', () {
     late LocalDatabase database;
+    late _BlockingIdentityUpdate blocker;
 
     setUp(() {
-      database = LocalDatabase.forTesting(NativeDatabase.memory());
+      blocker = _BlockingIdentityUpdate();
+      database = LocalDatabase.forTesting(
+        NativeDatabase.memory().interceptWith(blocker),
+      );
     });
 
     tearDown(() async {
@@ -260,21 +306,26 @@ void main() {
         () async {
       await database.upsertDevice(_device('legacy-rollback'));
       await database.authDevice('legacy-rollback', true);
-      var guardCalls = 0;
+      var sessionCurrent = true;
+      final blocked = blocker.blockNext(argumentCount: 2);
+
+      final commit = database.commitAuthenticatedDevice(
+        candidate: _device('legacy-rollback', name: 'Changed'),
+        publicKey: 'new-key',
+        replaceIdentity: false,
+        expectedPublicKey: '',
+        requireCurrent: () {
+          if (!sessionCurrent) {
+            throw StateError('socket closed');
+          }
+        },
+      );
+      await blocked;
+      sessionCurrent = false;
+      blocker.release();
 
       await expectLater(
-        database.commitAuthenticatedDevice(
-          candidate: _device('legacy-rollback', name: 'Changed'),
-          publicKey: 'new-key',
-          replaceIdentity: false,
-          expectedPublicKey: '',
-          requireCurrent: () {
-            guardCalls += 1;
-            if (guardCalls == 3) {
-              throw StateError('socket closed');
-            }
-          },
-        ),
+        commit,
         throwsStateError,
       );
 
@@ -289,21 +340,26 @@ void main() {
       await database.upsertDevice(_device('changed-rollback'));
       await database.pinDeviceIdentity('changed-rollback', 'old-key');
       await database.authDevice('changed-rollback', true);
-      var guardCalls = 0;
+      var sessionCurrent = true;
+      final blocked = blocker.blockNext(argumentCount: 3);
+
+      final commit = database.commitAuthenticatedDevice(
+        candidate: _device('changed-rollback', name: 'Changed'),
+        publicKey: 'new-key',
+        replaceIdentity: true,
+        expectedPublicKey: 'old-key',
+        requireCurrent: () {
+          if (!sessionCurrent) {
+            throw StateError('socket closed');
+          }
+        },
+      );
+      await blocked;
+      sessionCurrent = false;
+      blocker.release();
 
       await expectLater(
-        database.commitAuthenticatedDevice(
-          candidate: _device('changed-rollback', name: 'Changed'),
-          publicKey: 'new-key',
-          replaceIdentity: true,
-          expectedPublicKey: 'old-key',
-          requireCurrent: () {
-            guardCalls += 1;
-            if (guardCalls == 3) {
-              throw StateError('socket closed');
-            }
-          },
-        ),
+        commit,
         throwsStateError,
       );
 

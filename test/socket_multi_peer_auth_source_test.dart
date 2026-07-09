@@ -134,12 +134,25 @@ void main() {
       'Future<void> _handleServerProof(',
       'Future<void> _handleClientResult(',
     );
+    expect(
+      proof,
+      contains('AuthHandshakeLifecycle.completeServerAllow<DeviceData>('),
+    );
     expect(proof, contains('_completeAuthenticatedSession('));
     expect(proof, contains('_sendAuthEnvelope(sink, result)'));
     expect(
       proof.indexOf('_completeAuthenticatedSession('),
       lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),
     );
+  });
+
+  test('guarded UI resolution uses the tested failure boundary', () {
+    final guarded = section(
+      'void _runGuardedApproval({',
+      'Future<DeviceData> _deviceForSession(',
+    );
+    expect(guarded, contains('AuthHandshakeLifecycle.resolveGuarded('));
+    expect(guarded, contains('_failSocketSession('));
   });
 
   test('pending sessions participate in graceful shutdown', () {
@@ -156,18 +169,14 @@ void main() {
       'Future<void> _attachIncomingSocket(',
       'void _completeSocketAuth(',
     );
-    expect(
-      attach.indexOf('_sessionsBySink[sink]?.close()'),
-      lessThan(attach.indexOf('_handlePeerSocketDoneQueued(sink)')),
-    );
+    expect(attach, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
+    expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
     final connect = section(
       'Future<void> connectToServer(',
       'Future<void> closeGracefully(',
     );
-    expect(
-      connect.indexOf('_sessionsBySink[channelSink]?.close()'),
-      lessThan(connect.indexOf('_handlePeerSocketDoneQueued(channelSink)')),
-    );
+    expect(connect, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
+    expect(connect, contains('_handlePeerSocketDoneQueued(channelSink)'));
   });
 
   test('old socket cleanup removes only its own connection generation', () {
@@ -175,8 +184,12 @@ void main() {
       'Future<void> _handlePeerSocketDone(',
       'Future<PeerSocketSession> _createSocketSession(',
     );
-    expect(cleanup, contains('removeIfCurrent('));
-    expect(cleanup, contains('session.connectionGeneration'));
+    expect(
+      cleanup,
+      contains('AuthSocketLifecycle.removeConnectionIfCurrent('),
+    );
+    expect(cleanup, contains('closingSession: session'));
+    expect(cleanup, contains('currentSession: currentSession'));
     expect(cleanup, isNot(contains('_peerConnections.disconnect(peerId)')));
   });
 }

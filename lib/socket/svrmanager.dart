@@ -25,6 +25,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/auth_request_gate.dart';
+import 'package:whisper/socket/auth_handshake_lifecycle.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
@@ -493,9 +494,11 @@ class WsSvrManager {
     _releaseIncomingAuthForSink(sink);
     _clientTimersBySink.remove(sink)?.cancel();
     final peerId = _peerIdsBySink.remove(sink);
-    final isCurrentConnection = peerId != null &&
-        session != null &&
-        identical(_sessionsByPeerId[peerId], session);
+    final currentSession = peerId == null ? null : _sessionsByPeerId[peerId];
+    final isCurrentConnection = AuthSocketLifecycle.isCurrentSession(
+      closingSession: session,
+      currentSession: currentSession,
+    );
     if (isCurrentConnection) {
       _sessionsByPeerId.remove(peerId);
     }
@@ -505,11 +508,12 @@ class WsSvrManager {
       }
       return;
     }
-    if (!isCurrentConnection ||
-        !await _peerConnections.removeIfCurrent(
-          peerId,
-          session.connectionGeneration,
-        )) {
+    if (!await AuthSocketLifecycle.removeConnectionIfCurrent(
+      connections: _peerConnections,
+      peerId: peerId,
+      closingSession: session,
+      currentSession: currentSession,
+    )) {
       return;
     }
     await _handlePeerDisconnected(peerId);
@@ -563,14 +567,20 @@ class WsSvrManager {
           _handleIncomingMessage(message, sink: sink, asServer: true),
         );
       }, onError: (Object error, StackTrace stackTrace) {
-        _sessionsBySink[sink]?.close();
-        logger.i('连接服务异常: ${error.runtimeType}');
-        _dispatchToPrimary((event) => event.onError(error.toString()));
-        _completeSocketAuth(sink, false, 'socket_error');
-        unawaited(_handlePeerSocketDoneQueued(sink));
+        AuthSocketLifecycle.closeBeforeQueuedCleanup(
+          _sessionsBySink[sink],
+          () {
+            logger.i('连接服务异常: ${error.runtimeType}');
+            _dispatchToPrimary((event) => event.onError(error.toString()));
+            _completeSocketAuth(sink, false, 'socket_error');
+            unawaited(_handlePeerSocketDoneQueued(sink));
+          },
+        );
       }, onDone: () {
-        _sessionsBySink[sink]?.close();
-        unawaited(_handlePeerSocketDoneQueued(sink));
+        AuthSocketLifecycle.closeBeforeQueuedCleanup(
+          _sessionsBySink[sink],
+          () => unawaited(_handlePeerSocketDoneQueued(sink)),
+        );
       });
     } catch (error) {
       _completeSocketAuth(sink, false, 'session_setup_failed');
@@ -682,14 +692,20 @@ class WsSvrManager {
           _handleIncomingMessage(message, sink: channelSink, asServer: false),
         );
       }, onError: (error, stackTrace) {
-        _sessionsBySink[channelSink]?.close();
-        logger.i('客户端服务异常: ${error.runtimeType}');
-        _dispatchToPrimary((event) => event.onError(error.toString()));
-        _completeSocketAuth(channelSink, false, 'socket_error');
-        unawaited(_handlePeerSocketDoneQueued(channelSink));
+        AuthSocketLifecycle.closeBeforeQueuedCleanup(
+          _sessionsBySink[channelSink],
+          () {
+            logger.i('客户端服务异常: ${error.runtimeType}');
+            _dispatchToPrimary((event) => event.onError(error.toString()));
+            _completeSocketAuth(channelSink, false, 'socket_error');
+            unawaited(_handlePeerSocketDoneQueued(channelSink));
+          },
+        );
       }, onDone: () {
-        _sessionsBySink[channelSink]?.close();
-        unawaited(_handlePeerSocketDoneQueued(channelSink));
+        AuthSocketLifecycle.closeBeforeQueuedCleanup(
+          _sessionsBySink[channelSink],
+          () => unawaited(_handlePeerSocketDoneQueued(channelSink)),
+        );
       });
       await _sendAuthEnvelope(channelSink, await session.createHello());
       final authResult = await authCompleter.future;
@@ -720,12 +736,14 @@ class WsSvrManager {
     bool closeServer = false,
     bool forceServerClose = false,
   }) async {
-    final hadActiveConnection = _sink != null ||
-        _clientTimer != null ||
-        _sessionsBySink.isNotEmpty ||
-        _authResultsBySink.isNotEmpty ||
-        _peerConnections.connectedPeerIds.isNotEmpty ||
-        receiver.isNotEmpty;
+    final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
+      hasSelectedSink: _sink != null,
+      hasClientTimer: _clientTimer != null,
+      hasPendingSessions: _sessionsBySink.isNotEmpty,
+      hasPendingResults: _authResultsBySink.isNotEmpty,
+      hasPeerConnections: _peerConnections.connectedPeerIds.isNotEmpty,
+      hasReceiver: receiver.isNotEmpty,
+    );
     if (!hadActiveConnection && !closeServer) {
       return;
     }
@@ -740,17 +758,19 @@ class WsSvrManager {
     _incomingAuthPeerIdsBySink.clear();
     _identityPinPlansBySink.clear();
     _authRequestGate.clear();
-    for (final entry in _authResultsBySink.entries.toList(growable: false)) {
-      if (!entry.value.isCompleted) {
-        entry.value.complete(
-          const _SocketAuthResult(false, 'connection_closed'),
-        );
-      }
-    }
+    AuthSocketLifecycle.closePendingAuth(
+      sessions: _sessionsBySink.values,
+      completeFailures: _authResultsBySink.values.map((completer) {
+        return () {
+          if (!completer.isCompleted) {
+            completer.complete(
+              const _SocketAuthResult(false, 'connection_closed'),
+            );
+          }
+        };
+      }),
+    );
     _authResultsBySink.clear();
-    for (final session in _sessionsBySink.values) {
-      session.close();
-    }
     _sessionsBySink.clear();
     _sessionsByPeerId.clear();
     _endpointsBySink.clear();
@@ -1140,14 +1160,32 @@ class WsSvrManager {
       if (!_isCurrentSession(session, sink, generation)) {
         return;
       }
-      final storedDevice = await _completeAuthenticatedSession(
-        session,
-        sink,
-        pinPlan: pinPlan,
+      await AuthHandshakeLifecycle.completeServerAllow<DeviceData>(
+        commit: () => _completeAuthenticatedSession(
+          session,
+          sink,
+          pinPlan: pinPlan,
+        ),
+        sendAllow: (storedDevice) async {
+          _requireCurrentAuthenticatedSession(session, sink, generation);
+          await _sendAuthEnvelope(sink, result);
+        },
+        onAuthenticated: (storedDevice) {
+          _announceAuthenticatedSession(session, sink, storedDevice);
+        },
+        onFailure: (error, stackTrace) async {
+          logger.i('完成服务端配对失败: $error\n$stackTrace');
+          if (_isSameSession(session, sink, generation)) {
+            await _failSocketSession(
+              session,
+              sink,
+              error is AuthHandshakeException
+                  ? error.code
+                  : 'authentication_failed',
+            );
+          }
+        },
       );
-      _requireCurrentAuthenticatedSession(session, sink, generation);
-      await _sendAuthEnvelope(sink, result);
-      _announceAuthenticatedSession(session, sink, storedDevice);
     }
 
     if (pinPlan.reason == null) {
@@ -1244,10 +1282,9 @@ class WsSvrManager {
     required int generation,
     required Future<void> Function() resolve,
   }) {
-    unawaited(() async {
-      try {
-        await resolve();
-      } catch (error, stackTrace) {
+    final handling = AuthHandshakeLifecycle.resolveGuarded(
+      resolve: resolve,
+      onFailure: (error, stackTrace) async {
         logger.i('处理配对决定失败: $error\n$stackTrace');
         if (_isSameSession(session, sink, generation)) {
           await _failSocketSession(
@@ -1258,8 +1295,12 @@ class WsSvrManager {
                 : 'authentication_failed',
           );
         }
-      }
-    }());
+      },
+    );
+    _ignoreFuture(
+      handling.then<void>((_) {}),
+      context: 'handle guarded pairing decision',
+    );
   }
 
   Future<DeviceData> _deviceForSession(
