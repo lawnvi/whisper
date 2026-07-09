@@ -61,6 +61,9 @@ class RemoteInputManager {
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
+  final Set<StreamSubscription<dynamic>> _channelSubscriptions =
+      <StreamSubscription<dynamic>>{};
+  final Set<WebSocketSink> _channelSinks = <WebSocketSink>{};
 
   RemoteInputSession? session(String sessionId) => _sessions[sessionId];
 
@@ -222,12 +225,31 @@ class RemoteInputManager {
   }
 
   void attachChannel(WebSocketChannel channel) {
-    channel.stream.listen((message) {
+    late final StreamSubscription<dynamic> subscription;
+    subscription = channel.stream.listen((message) {
       final bytes = _messageBytes(message);
       if (bytes != null) {
         handlePacketBytes(bytes);
       }
+    }, onDone: () {
+      _channelSubscriptions.remove(subscription);
+      _channelSinks.remove(channel.sink);
     });
+    _channelSubscriptions.add(subscription);
+    _channelSinks.add(channel.sink);
+  }
+
+  Future<void> closeChannels() async {
+    final subscriptions = _channelSubscriptions.toList(growable: false);
+    final sinks = _channelSinks.toList(growable: false);
+    _channelSubscriptions.clear();
+    _channelSinks.clear();
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
+    for (final sink in sinks) {
+      await sink.close();
+    }
   }
 
   shelf.Handler webSocketHandler({

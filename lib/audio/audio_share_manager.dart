@@ -64,6 +64,9 @@ class AudioShareManager {
   final AudioShareDiagnostics _diagnostics;
   final Map<String, AudioShareSession> _sessions =
       <String, AudioShareSession>{};
+  final Set<StreamSubscription<dynamic>> _channelSubscriptions =
+      <StreamSubscription<dynamic>>{};
+  final Set<WebSocketSink> _channelSinks = <WebSocketSink>{};
 
   AudioShareSession? session(String sessionId) => _sessions[sessionId];
 
@@ -215,15 +218,36 @@ class AudioShareManager {
 
   void attachChannel(WebSocketChannel channel) {
     _diagnostics.audioChannelAttached();
-    channel.stream.listen((message) {
-      final bytes = _messageBytes(message);
-      if (bytes != null) {
-        _diagnostics.audioChannelMessageBytes(bytes.length);
-        handlePacketBytes(bytes);
-      }
-    },
+    late final StreamSubscription<dynamic> subscription;
+    subscription = channel.stream.listen(
+        (message) {
+          final bytes = _messageBytes(message);
+          if (bytes != null) {
+            _diagnostics.audioChannelMessageBytes(bytes.length);
+            handlePacketBytes(bytes);
+          }
+        },
         onError: _diagnostics.audioChannelError,
-        onDone: _diagnostics.audioChannelClosed);
+        onDone: () {
+          _channelSubscriptions.remove(subscription);
+          _channelSinks.remove(channel.sink);
+          _diagnostics.audioChannelClosed();
+        });
+    _channelSubscriptions.add(subscription);
+    _channelSinks.add(channel.sink);
+  }
+
+  Future<void> closeChannels() async {
+    final subscriptions = _channelSubscriptions.toList(growable: false);
+    final sinks = _channelSinks.toList(growable: false);
+    _channelSubscriptions.clear();
+    _channelSinks.clear();
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
+    for (final sink in sinks) {
+      await sink.close();
+    }
   }
 
   shelf.Handler webSocketHandler({

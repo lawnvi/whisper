@@ -10,7 +10,7 @@ void main() {
         source,
         contains(
             "import 'package:whisper/audio/audio_group_coordinator.dart';"));
-    expect(source, contains('void sendAudioGroupControlTo('));
+    expect(source, contains('Future<bool> sendAudioGroupControlTo('));
     expect(source, contains('MessageEnum.AudioGroupControl'));
     expect(source, contains('receiverOverride: peerId'));
 

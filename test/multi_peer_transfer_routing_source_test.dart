@@ -6,7 +6,7 @@ void main() {
   test('v3 transfer controls route to the transfer peer', () {
     final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
-    expect(source, contains('void _sendFileTransferV3ControlTo('));
+    expect(source, contains('Future<bool> _sendFileTransferV3ControlTo('));
     expect(source,
         contains('_sendFileTransferV3ControlTo(\n      transfer.peerUid'));
     expect(source,
@@ -17,7 +17,7 @@ void main() {
   test('v3 transfer offers route to the transfer peer', () {
     final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
-    expect(source, contains('void _sendFileTransferV3OfferTo('));
+    expect(source, contains('Future<bool> _sendFileTransferV3OfferTo('));
     expect(source, contains('_sendFileTransferV3OfferTo(peerId, message)'));
     expect(
         source, contains('_sendFileTransferV3OfferTo(item.peerUid, message)'));

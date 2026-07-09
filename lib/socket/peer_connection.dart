@@ -1,4 +1,5 @@
 typedef PeerMessageSender = void Function(Object message);
+typedef PeerMessageAsyncSender = Future<bool> Function(Object message);
 typedef PeerConnectionCloser = Future<void> Function();
 
 class PeerConnectionSnapshot {
@@ -18,13 +19,16 @@ class PeerConnection {
     required this.peerId,
     required this.connectionId,
     required PeerMessageSender send,
+    PeerMessageAsyncSender? sendAsync,
     required PeerConnectionCloser close,
   })  : _send = send,
+        _sendAsync = sendAsync,
         _close = close;
 
   final String peerId;
   final int connectionId;
   final PeerMessageSender _send;
+  final PeerMessageAsyncSender? _sendAsync;
   final PeerConnectionCloser _close;
   bool _isClosed = false;
 
@@ -39,6 +43,18 @@ class PeerConnection {
   bool send(Object message) {
     if (_isClosed) {
       return false;
+    }
+    _send(message);
+    return true;
+  }
+
+  Future<bool> sendAwaited(Object message) async {
+    if (_isClosed) {
+      return false;
+    }
+    final sender = _sendAsync;
+    if (sender != null) {
+      return sender(message);
     }
     _send(message);
     return true;
@@ -89,6 +105,25 @@ class PeerConnectionRegistry {
       return false;
     }
     return connection.send(message);
+  }
+
+  Future<bool> sendToAwaited(String peerId, Object message) async {
+    final connection = _connections[peerId];
+    if (connection == null) {
+      return false;
+    }
+    return connection.sendAwaited(message);
+  }
+
+  Future<bool> sendTargetedOrDefault({
+    required String? peerId,
+    required Object message,
+    required Future<bool> Function() sendDefault,
+  }) {
+    if (peerId != null) {
+      return sendToAwaited(peerId, message);
+    }
+    return sendDefault();
   }
 
   Future<void> disconnect(String peerId) async {

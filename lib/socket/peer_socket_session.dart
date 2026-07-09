@@ -9,7 +9,10 @@ import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/auth_session_keys.dart';
 import 'package:whisper/socket/auth_transcript.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
+import 'package:whisper/socket/bounded_outbound_queue.dart';
+import 'package:whisper/socket/bounded_receive_queue.dart';
 import 'package:whisper/socket/device_identity.dart';
+import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 enum PeerSocketRole { server, client }
@@ -85,6 +88,10 @@ final class PeerSocketSession {
   bool _authenticationCommitted = false;
   bool _closed = false;
   Future<void> _sendChain = Future<void>.value();
+  BoundedReceiveQueue? _inboundQueue;
+  BoundedOutboundQueue? _outboundQueue;
+  StreamSubscription<dynamic>? _subscription;
+  AdmissionLease? _admissionLease;
 
   static Future<PeerSocketSession> create({
     required PeerSocketRole role,
@@ -142,6 +149,91 @@ final class PeerSocketSession {
   }
 
   bool get isClosed => _closed;
+
+  int get pendingReceiveItems => _inboundQueue?.pendingItems ?? 0;
+  int get pendingOutboundItems => _outboundQueue?.pendingItems ?? 0;
+
+  void attachTransport({
+    required StreamSubscription<dynamic> subscription,
+    required Future<void> Function(Stream<Object>) addStream,
+    AdmissionLease? admissionLease,
+    required void Function() onOverflow,
+  }) {
+    if (_subscription != null ||
+        _inboundQueue != null ||
+        _outboundQueue != null) {
+      throw StateError('transport already attached');
+    }
+    _subscription = subscription;
+    _admissionLease = admissionLease;
+    _inboundQueue = BoundedReceiveQueue(
+      onPause: subscription.pause,
+      onResume: subscription.resume,
+      onOverflow: onOverflow,
+    );
+    _outboundQueue = BoundedOutboundQueue.chat(
+      addStream: addStream,
+      onOverflow: onOverflow,
+    );
+  }
+
+  Future<bool> enqueueIncoming(
+    int byteLength,
+    Future<void> Function() action,
+  ) {
+    final queue = _inboundQueue;
+    if (queue == null) {
+      return Future<bool>.value(false);
+    }
+    return queue.add(byteLength, action);
+  }
+
+  Future<bool> enqueueOutgoing(
+    Object value, {
+    required int byteLength,
+  }) {
+    final queue = _outboundQueue;
+    if (queue == null) {
+      return Future<bool>.value(false);
+    }
+    return queue.add(value, byteLength: byteLength);
+  }
+
+  Future<bool> enqueueAuthenticatedOutgoing(
+    Uint8List payload, {
+    required int byteLength,
+  }) {
+    final queue = _outboundQueue;
+    if (queue == null) {
+      return Future<bool>.value(false);
+    }
+    return queue.addLazy(
+      () => encodeOutgoing(payload),
+      byteLength: byteLength,
+    );
+  }
+
+  void markTransportAuthenticated() {
+    _admissionLease?.markAuthenticated();
+  }
+
+  Future<void> stopReceivingAndDrain({bool cancelSubscription = true}) async {
+    final subscription = _subscription;
+    _subscription = null;
+    if (cancelSubscription) {
+      await subscription?.cancel();
+    }
+    await _inboundQueue?.closeAndDrain();
+  }
+
+  Future<void> drainOutbound() async {
+    await _outboundQueue?.closeAndDrain();
+  }
+
+  void releaseAdmission() {
+    _admissionLease?.close();
+    _admissionLease = null;
+  }
 
   Future<Uint8List> encodeOutgoing(Uint8List payload) {
     final completer = Completer<Uint8List>();

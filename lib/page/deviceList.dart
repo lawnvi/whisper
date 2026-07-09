@@ -704,7 +704,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var localProfileUpdate = device != null && device!.name != temp.name;
 
     if (isFirst || device?.port != temp.port) {
-      _startServer(port: temp.port);
+      await _startServer(port: temp.port);
     }
 
     final latestMessages = await db
@@ -2189,31 +2189,34 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  void _startServer({port}) {
-    socketManager.startServer(port ?? device?.port ?? 10002, (ok, msg) {
-      setState(() {
-        socketManager.started = ok;
-        if (!ok) {
-          showLoadingDialog(
-            context,
-            title: AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败',
-            description: "error: $msg",
-            isLoading: true,
-            // 是否显示加载指示器
-            icon: const Icon(
-              Icons.warning_rounded,
-              color: Colors.red,
-            ),
-            cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
-            onCancel: () {
-              // 处理取消操作
-              Navigator.of(context).pop(); // 关闭对话框
-            },
-            task: (VoidCallback onCancel) async {},
-          );
-        }
-      });
+  Future<void> _startServer({port}) async {
+    final result = await socketManager.startServer(
+      port ?? device?.port ?? 10002,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      socketManager.started = result.isSuccess;
     });
+    if (result.isSuccess) {
+      return;
+    }
+    showLoadingDialog(
+      context,
+      title: AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败',
+      description: 'error: ${result.error}',
+      isLoading: true,
+      icon: const Icon(
+        Icons.warning_rounded,
+        color: Colors.red,
+      ),
+      cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
+      onCancel: () {
+        Navigator.of(context).pop();
+      },
+      task: (VoidCallback onCancel) async {},
+    );
   }
 
   @override

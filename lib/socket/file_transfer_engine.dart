@@ -39,7 +39,8 @@ typedef TransferMessageBuilder = MessageData Function(
 /// 与 socket 层的全部交互经构造注入的回调完成,不直接持有连接对象。
 class FileTransferEngine {
   FileTransferEngine({
-    required bool Function(String peerId, Object bytes) sendBytesToPeer,
+    required FutureOr<bool> Function(String peerId, Object bytes)
+        sendBytesToPeer,
     required void Function(TransferSnapshot snapshot) emitTransferUpdated,
     required void Function(String message) notify,
     required PeerProfile? Function(String peerId) remoteProfileFor,
@@ -68,7 +69,7 @@ class FileTransferEngine {
   static const String defaultTransferChecksumAlgorithm = 'none';
   static const int _transferChunkSize = defaultTransferChunkSize;
 
-  final bool Function(String peerId, Object bytes) _sendBytesToPeer;
+  final FutureOr<bool> Function(String peerId, Object bytes) _sendBytesToPeer;
   final void Function(TransferSnapshot snapshot) _emitTransferUpdated;
   final void Function(String message) _notify;
   final PeerProfile? Function(String peerId) _remoteProfileFor;
@@ -120,7 +121,7 @@ class FileTransferEngine {
       final message =
           await _database().fetchMessageByUuid(transfer.messageUuid);
       if (message != null) {
-        _sendFileTransferV3OfferTo(transfer.peerUid, message);
+        await _sendFileTransferV3OfferTo(transfer.peerUid, message);
       }
       await _updateTransfer(
         transferId,
@@ -149,7 +150,7 @@ class FileTransferEngine {
     );
     if (_supportsFileTransferV3For(transfer.peerUid) &&
         _isConnectedTo(transfer.peerUid)) {
-      _sendFileTransferV3ControlTo(
+      await _sendFileTransferV3ControlTo(
         transfer.peerUid,
         FileTransferV3Control(
           action: FileTransferV3Action.cancel,
@@ -256,8 +257,7 @@ class FileTransferEngine {
         ),
       );
       _dispatchOutgoingMessage(message);
-      _sendFileTransferV3OfferTo(peerId, message);
-      return true;
+      return _sendFileTransferV3OfferTo(peerId, message);
     });
   }
 
@@ -333,8 +333,7 @@ class FileTransferEngine {
         ),
       );
       _dispatchOutgoingMessage(message);
-      _sendFileTransferV3OfferTo(peerId, message);
-      return true;
+      return _sendFileTransferV3OfferTo(peerId, message);
     });
   }
 
@@ -392,8 +391,10 @@ class FileTransferEngine {
 
   /// 原 svrmanager `closeGracefully` 中的 transfer 清理段:
   /// 标记可恢复传输等待重连,并冲刷/关闭全部续传句柄。
-  Future<void> closeAll() async {
-    unawaited(_markRecoverableTransfersWaitingReconnect());
+  Future<void> closeAll({bool persistRecoverable = true}) async {
+    if (persistRecoverable) {
+      await _markRecoverableTransfersWaitingReconnect();
+    }
     await _closeResumableHandles();
   }
 
@@ -466,8 +467,11 @@ class FileTransferEngine {
     }
   }
 
-  void _sendFileTransferV3OfferTo(String peerId, MessageData message) {
-    _sendFileTransferV3FrameTo(
+  Future<bool> _sendFileTransferV3OfferTo(
+    String peerId,
+    MessageData message,
+  ) {
+    return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
         type: WhisperFrameType.fileOffer,
@@ -479,7 +483,7 @@ class FileTransferEngine {
     );
   }
 
-  void _sendFileTransferV3ControlTo(
+  Future<bool> _sendFileTransferV3ControlTo(
     String peerId,
     FileTransferV3Control control,
   ) {
@@ -490,7 +494,7 @@ class FileTransferEngine {
       FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
       FileTransferV3Action.error => WhisperFrameType.fileError,
     };
-    _sendFileTransferV3FrameTo(
+    return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
         type: type,
@@ -502,7 +506,10 @@ class FileTransferEngine {
     );
   }
 
-  bool _sendFileTransferV3FrameTo(String peerId, WhisperFrameV3 frame) {
+  Future<bool> _sendFileTransferV3FrameTo(
+    String peerId,
+    WhisperFrameV3 frame,
+  ) async {
     return _sendBytesToPeer(peerId, frame.encode());
   }
 
@@ -510,7 +517,7 @@ class FileTransferEngine {
     final metadata = _FileTransferMetadata.fromContent(message.content);
     if (metadata == null ||
         metadata.protocolVersion != fileTransferV3ProtocolVersion) {
-      _sendFileTransferV3ControlTo(
+      await _sendFileTransferV3ControlTo(
         message.sender,
         FileTransferV3Control(
           action: FileTransferV3Action.error,
@@ -554,7 +561,7 @@ class FileTransferEngine {
           updatedAt: now,
         );
         await _persistTransfer(transfer);
-        _sendFileTransferV3ControlTo(
+        await _sendFileTransferV3ControlTo(
           transfer.peerUid,
           FileTransferV3Control(
             action: FileTransferV3Action.error,
@@ -646,7 +653,7 @@ class FileTransferEngine {
       committedBytes: durableOffset,
       lastError: '',
     );
-    _sendFileTransferV3ControlTo(
+    await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.ready,
@@ -756,7 +763,7 @@ class FileTransferEngine {
     _outgoingWindowSentAt.remove(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
-    _sendFileTransferV3ControlTo(
+    await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.error,
@@ -854,7 +861,7 @@ class FileTransferEngine {
           message.path,
         );
       }
-      final sent = _sendFileTransferV3FrameTo(
+      final sent = await _sendFileTransferV3FrameTo(
         transfer.peerUid,
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
@@ -898,7 +905,7 @@ class FileTransferEngine {
         transfer,
         expectedOffset,
       );
-      _sendFileTransferV3Ack(transfer, durableOffset);
+      await _sendFileTransferV3Ack(transfer, durableOffset);
       return;
     }
 
@@ -918,7 +925,7 @@ class FileTransferEngine {
           await truncatingWriter.close();
         }
       } else if (currentLength < frame.offset) {
-        _sendFileTransferV3Ack(transfer, currentLength);
+        await _sendFileTransferV3Ack(transfer, currentLength);
         return;
       }
       writer = await tempFile.open(mode: FileMode.writeOnlyAppend);
@@ -969,7 +976,7 @@ class FileTransferEngine {
       );
       if (updated != null) {
         _receivingTransfers[updated.transferId] = updated;
-        _sendFileTransferV3Ack(updated, durableOffset);
+        await _sendFileTransferV3Ack(updated, durableOffset);
       }
     }
   }
@@ -1000,7 +1007,7 @@ class FileTransferEngine {
       committedBytes: math.min(durableOffset, transfer.size),
       lastError: message,
     );
-    _sendFileTransferV3ControlTo(
+    await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.error,
@@ -1085,11 +1092,11 @@ class FileTransferEngine {
     return math.min(offset, transfer.size);
   }
 
-  void _sendFileTransferV3Ack(
+  Future<void> _sendFileTransferV3Ack(
     FileTransferData transfer,
     int durableOffset,
-  ) {
-    _sendFileTransferV3ControlTo(
+  ) async {
+    await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.ack,
@@ -1268,7 +1275,7 @@ class FileTransferEngine {
       committedBytes: transfer.size,
       lastError: '',
     );
-    _sendFileTransferV3ControlTo(
+    await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.complete,
@@ -1361,24 +1368,17 @@ class FileTransferEngine {
   }
 
   Future<void> _markRecoverableTransfersWaitingReconnect() async {
-    final peerIds = <String>{
-      ..._connectedPeerIds(),
-      if (_defaultPeerId().isNotEmpty) _defaultPeerId(),
-    };
-    for (final peerId in peerIds) {
-      final items =
-          await _database().fetchRecoverableFileTransfersForPeer(peerId);
-      for (final item in items) {
-        if (item.state == FileTransferState.completed ||
-            item.state == FileTransferState.failed ||
-            item.state == FileTransferState.canceled) {
-          continue;
-        }
-        await _updateTransfer(
-          item.transferId,
-          state: FileTransferState.waitingReconnect,
-        );
+    final items = await _database().fetchRecoverableFileTransfers();
+    for (final item in items) {
+      if (item.state == FileTransferState.completed ||
+          item.state == FileTransferState.failed ||
+          item.state == FileTransferState.canceled) {
+        continue;
       }
+      await _updateTransfer(
+        item.transferId,
+        state: FileTransferState.waitingReconnect,
+      );
     }
   }
 
@@ -1479,7 +1479,7 @@ class FileTransferEngine {
           item.messageUuid,
         );
         if (message != null) {
-          _sendFileTransferV3OfferTo(item.peerUid, message);
+          await _sendFileTransferV3OfferTo(item.peerUid, message);
         }
         await _updateTransfer(
           item.transferId,

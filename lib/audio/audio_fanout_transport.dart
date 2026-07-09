@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
@@ -6,7 +7,7 @@ import 'package:whisper/socket/packet_byte_transport.dart';
 typedef AudioGroupSinkFailure = void Function(String sinkPeerId, Object error);
 
 abstract class AudioGroupPacketTransport {
-  void send(AudioGroupPacketFrame packet);
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet);
 
   Future<void> close();
 }
@@ -20,14 +21,16 @@ class AudioGroupPacketByteTransport implements AudioGroupPacketTransport {
           closeSink: closeSink ?? () async {},
         );
 
+  AudioGroupPacketByteTransport.withTransport(this._inner);
+
   final PacketByteTransport _inner;
 
   @override
-  void send(AudioGroupPacketFrame packet) {
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet) {
     if (_inner.isClosed) {
-      return;
+      return Future<PacketSendResult>.value(PacketSendResult.closed);
     }
-    _inner.send(packet.encode());
+    return _inner.send(packet.encode());
   }
 
   @override
@@ -36,10 +39,7 @@ class AudioGroupPacketByteTransport implements AudioGroupPacketTransport {
 
 class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
   AudioGroupWebSocketPacketTransport._(PacketByteTransport channelTransport)
-      : super(
-          sendBytes: (bytes) => channelTransport.send(bytes),
-          closeSink: channelTransport.close,
-        );
+      : super.withTransport(channelTransport);
 
   static Future<AudioGroupWebSocketPacketTransport> connect(Uri uri) async {
     final channelTransport = await connectPacketWebSocket(uri);
@@ -78,7 +78,24 @@ class AudioFanoutTransport {
     final entries = _transports.entries.toList(growable: false);
     for (final entry in entries) {
       try {
-        entry.value.send(packet);
+        final delivery = entry.value.send(packet);
+        unawaited(delivery.then((result) {
+          if (result != PacketSendResult.transportFailure ||
+              !identical(_transports[entry.key], entry.value)) {
+            return;
+          }
+          _transports.remove(entry.key);
+          _onSinkFailure(
+            entry.key,
+            StateError('audio group packet transport failed'),
+          );
+        }, onError: (Object error, StackTrace _) {
+          if (!identical(_transports[entry.key], entry.value)) {
+            return;
+          }
+          _transports.remove(entry.key);
+          _onSinkFailure(entry.key, error);
+        }));
       } catch (error) {
         _transports.remove(entry.key);
         _onSinkFailure(entry.key, error);

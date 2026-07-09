@@ -25,7 +25,7 @@ void main() {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final sendMessageData = methodBody(
       source,
-      'void _sendMessageData(',
+      'Future<bool> _sendMessageData(',
       'void _dispatchOutgoingMessage',
     );
 
@@ -49,7 +49,8 @@ void main() {
   });
 
   test('sendFileTo requires v3 and sends a file offer frame', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendFileTo = methodBody(
       source,
       'Future<bool> sendFileTo(String peerId, String path)',
@@ -64,7 +65,8 @@ void main() {
   });
 
   test('v3 file data path does not use raw payload continuation frames', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<void> _sendFileTransferV3Window(',
@@ -78,7 +80,8 @@ void main() {
   });
 
   test('v3 outgoing send uses sliding window credit from durable acks', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<void> _sendFileTransferV3Window(',
@@ -106,7 +109,8 @@ void main() {
   });
 
   test('v3 outgoing file sender yields between data frames', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<void> _sendFileTransferV3Window(',
@@ -122,7 +126,8 @@ void main() {
   });
 
   test('v3 incoming file data acks before the full send window', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final handleData = methodBody(
       source,
       'Future<void> _handleFileTransferV3Data',
@@ -142,7 +147,8 @@ void main() {
 
   test('queued incoming transfers always resume via v3 (WSP2 stack removed)',
       () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final startNext = methodBody(
       source,
       'Future<void> _startNextQueuedIncomingTransfer',
@@ -158,7 +164,8 @@ void main() {
   });
 
   test('v3 complete starts the next queued outgoing transfer', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final handleComplete = methodBody(
       source,
       'Future<void> _handleFileTransferV3Complete',
@@ -173,7 +180,8 @@ void main() {
   });
 
   test('v3 incoming file data uses awaited random access writes', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final handleData = methodBody(
       source,
       'Future<void> _handleFileTransferV3Data',
@@ -186,7 +194,8 @@ void main() {
   });
 
   test('v3 transfer failures do not bubble into connection errors', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final frameHandler = methodBody(
       source,
       'Future<void> handleFrame(',
@@ -219,7 +228,7 @@ void main() {
     expect(outgoingError, isNot(contains('onError(')));
   });
 
-  test('peer socket close cleanup is serialized behind received frames', () {
+  test('peer socket close cleanup drains its own received frames', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
     final queuedDone = methodBody(
       source,
@@ -231,26 +240,20 @@ void main() {
       'Future<void> _attachIncomingSocket(',
       'void _completeSocketAuth(',
     );
-    final startServer = methodBody(
-      source,
-      'void startServer(',
-      'Future<void> connectToServer(',
-    );
     final connectToServer = methodBody(
       source,
       'Future<void> connectToServer(',
       'Future<void> closeGracefully(',
     );
 
-    expect(queuedDone, contains('_receiveQueue = _receiveQueue.then'));
+    expect(queuedDone, contains('stopReceivingAndDrain('));
     expect(queuedDone, contains('await _handlePeerSocketDone(sink)'));
-    expect(attachIncomingSocket, contains('_handlePeerSocketDoneQueued(sink)'));
-    expect(
-        connectToServer, contains('_handlePeerSocketDoneQueued(channelSink)'));
+    expect(attachIncomingSocket, contains('_attachSocketTransport('));
+    expect(connectToServer, contains('_attachSocketTransport('));
     expect(attachIncomingSocket,
         isNot(contains('_handlePeerSocketDone(webSocket.sink)')));
-    expect(startServer, contains('_attachIncomingSocket(webSocket)'));
     expect(connectToServer,
         isNot(contains('_handlePeerSocketDone(channel.sink)')));
+    expect(source, isNot(contains('Future<void> _receiveQueue')));
   });
 }

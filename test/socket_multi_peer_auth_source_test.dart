@@ -111,7 +111,7 @@ void main() {
   test('identity pin commits use captured compare-and-set state', () {
     final completion = section(
       'Future<DeviceData> _completeAuthenticatedSession(',
-      'void _sendUpgradeRequired(',
+      'Future<void> _sendUpgradeRequired(',
     );
     expect(completion, contains('database.commitAuthenticatedDevice('));
     expect(completion, contains('pinPlan.expectedPublicKey'));
@@ -166,8 +166,8 @@ void main() {
 
   test('stream terminal callbacks close sessions before queued cleanup', () {
     final attach = section(
+      'void _attachSocketTransport(',
       'Future<void> _attachIncomingSocket(',
-      'void _completeSocketAuth(',
     );
     expect(attach, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
     expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
@@ -175,8 +175,7 @@ void main() {
       'Future<void> connectToServer(',
       'Future<void> closeGracefully(',
     );
-    expect(connect, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
-    expect(connect, contains('_handlePeerSocketDoneQueued(channelSink)'));
+    expect(connect, contains('_attachSocketTransport('));
   });
 
   test('old socket cleanup removes only its own connection generation', () {

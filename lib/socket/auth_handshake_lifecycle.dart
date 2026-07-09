@@ -79,7 +79,9 @@ final class AuthSocketLifecycle {
       completeFailure();
     }
     for (final session in sessions) {
-      session.close();
+      if (!session.isAuthenticated) {
+        session.close();
+      }
     }
   }
 

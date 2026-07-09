@@ -234,11 +234,23 @@ void main() {
       });
     }
 
-    test('pending auth is active work and is closed during shutdown', () async {
-      final session = await _session(
+    test('shutdown closes only pending auth sessions', () async {
+      final pendingSession = await _session(
         role: PeerSocketRole.client,
         generation: 8,
         seed: 8,
+      );
+      final authenticatedPair = await _approvedServer();
+      addTearDown(pendingSession.close);
+      addTearDown(authenticatedPair.client.close);
+      addTearDown(authenticatedPair.server.close);
+      expect(
+        await authenticatedPair.server.commitAuthentication(
+          generation: authenticatedPair.server.connectionGeneration,
+          persistIdentity: () async {},
+          registerPeer: () async {},
+        ),
+        isTrue,
       );
 
       expect(
@@ -254,13 +266,17 @@ void main() {
       );
       final authResult = Completer<bool>();
       AuthSocketLifecycle.closePendingAuth(
-        sessions: <PeerSocketSession>[session],
+        sessions: <PeerSocketSession>[
+          pendingSession,
+          authenticatedPair.server,
+        ],
         completeFailures: <void Function()>[
           () => authResult.complete(false),
         ],
       );
 
-      expect(session.phase, PeerSocketPhase.closing);
+      expect(pendingSession.phase, PeerSocketPhase.closing);
+      expect(authenticatedPair.server.isAuthenticated, isTrue);
       expect(await authResult.future, isFalse);
     });
 

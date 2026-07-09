@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
@@ -15,21 +16,23 @@ class AudioPacketByteTransport implements AudioPacketTransport {
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
     AudioShareDiagnostics? diagnostics,
-  }) : _diagnostics = diagnostics ?? AudioShareDiagnostics.shared {
-    _inner = PacketByteTransport(
-      sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-      closeSink: closeSink ?? () async {},
-      onPacketSent: _emitSent,
-      onPacketDropped: _emitDropped,
-    );
-  }
+  }) : this.withTransport(
+          PacketByteTransport(
+            sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+            closeSink: closeSink ?? () async {},
+          ),
+          diagnostics: diagnostics,
+        );
+
+  AudioPacketByteTransport.withTransport(
+    this._inner, {
+    AudioShareDiagnostics? diagnostics,
+  }) : _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   final AudioShareDiagnostics _diagnostics;
-  late final PacketByteTransport _inner;
-  AudioPacketFrame? _pending;
+  final PacketByteTransport _inner;
 
-  void _emitSent() {
-    final packet = _pending!;
+  void _emitSent(AudioPacketFrame packet) {
     _diagnostics.audioPacketSent(
       sessionId: packet.sessionId,
       sequence: packet.sequence,
@@ -37,19 +40,34 @@ class AudioPacketByteTransport implements AudioPacketTransport {
     );
   }
 
-  void _emitDropped() {
-    final packet = _pending!;
+  void _emitDropped(AudioPacketFrame packet, {required String reason}) {
     _diagnostics.audioPacketSendDropped(
       sessionId: packet.sessionId,
       sequence: packet.sequence,
-      reason: 'closed',
+      reason: reason,
     );
   }
 
   @override
   void send(AudioPacketFrame packet) {
-    _pending = packet;
-    _inner.send(_inner.isClosed ? Uint8List(0) : packet.encode());
+    if (_inner.isClosed) {
+      _emitDropped(packet, reason: 'closed');
+      return;
+    }
+    final delivery = _inner.send(packet.encode());
+    unawaited(delivery.then((result) {
+      if (result == PacketSendResult.sent) {
+        _emitSent(packet);
+      } else {
+        final reason = switch (result) {
+          PacketSendResult.sent => 'sent',
+          PacketSendResult.dropped => 'backpressure',
+          PacketSendResult.closed => 'closed',
+          PacketSendResult.transportFailure => 'transport',
+        };
+        _emitDropped(packet, reason: reason);
+      }
+    }));
   }
 
   @override
@@ -60,9 +78,8 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
   AudioWebSocketPacketTransport._(
     PacketByteTransport channelTransport, {
     required AudioShareDiagnostics diagnostics,
-  }) : super(
-          sendBytes: (bytes) => channelTransport.send(bytes),
-          closeSink: channelTransport.close,
+  }) : super.withTransport(
+          channelTransport,
           diagnostics: diagnostics,
         );
 

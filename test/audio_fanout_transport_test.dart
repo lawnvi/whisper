@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 void main() {
   AudioGroupPacketFrame packet(int sequence) {
@@ -89,6 +91,64 @@ void main() {
     expect(left.sent, isEmpty);
     expect(right.sent, isEmpty);
   });
+
+  test('legacy synchronous sink failure detaches the broken sink', () {
+    final failures = <Object>[];
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach(
+        'broken',
+        AudioGroupPacketByteTransport(
+          sendBytes: (_) => throw StateError('legacy sink failed'),
+        ),
+      );
+
+    fanout.send(packet(1));
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures.single, isA<StateError>());
+  });
+
+  test('queued writer failure detaches but drop-oldest backpressure does not',
+      () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    var shouldFailWriter = false;
+    final failures = <Object>[];
+    final bytes = PacketByteTransport.audio(
+      addStream: (stream) async {
+        await stream.single;
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+        if (shouldFailWriter) {
+          throw StateError('queued writer failed');
+        }
+      },
+      closeSink: () async {},
+      maxItems: 2,
+      maxBytes: 1024 * 1024,
+    );
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('queued', AudioGroupPacketByteTransport.withTransport(bytes));
+
+    fanout.send(packet(1));
+    await firstWriteStarted.future;
+    fanout.send(packet(2));
+    fanout.send(packet(3));
+    expect(fanout.sinkPeerIds, contains('queued'));
+    expect(failures, isEmpty);
+
+    shouldFailWriter = true;
+    releaseFirstWrite.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures.single, isA<StateError>());
+  });
 }
 
 class _FakeGroupTransport implements AudioGroupPacketTransport {
@@ -99,13 +159,16 @@ class _FakeGroupTransport implements AudioGroupPacketTransport {
   bool closed = false;
 
   @override
-  void send(AudioGroupPacketFrame packet) {
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet) {
     if (throwOnSend) {
       throw StateError('sink failed');
     }
     if (!closed) {
       sent.add(packet);
     }
+    return Future<PacketSendResult>.value(
+      closed ? PacketSendResult.closed : PacketSendResult.sent,
+    );
   }
 
   @override

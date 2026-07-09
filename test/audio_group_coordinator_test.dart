@@ -10,6 +10,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -667,7 +668,8 @@ void main() {
       );
     });
 
-    test('pausePlaybackAsSink during pending rejoin sends groupStop from context',
+    test(
+        'pausePlaybackAsSink during pending rejoin sends groupStop from context',
         () async {
       final sent = <_SentGroupControl>[];
       final coordinator = AudioGroupCoordinator(
@@ -701,8 +703,7 @@ void main() {
       expect(sent.single.control.sinkPeerId, 'phone');
       expect(sent.single.control.channelRole, AudioChannelRole.right);
       expect(sent.single.control.targetLatencyMs, 77);
-      expect(coordinator.canRejoinAsSink, isTrue,
-          reason: '暂停后媒体卡的播放键仍是重试入口');
+      expect(coordinator.canRejoinAsSink, isTrue, reason: '暂停后媒体卡的播放键仍是重试入口');
       expect(coordinator.rejoinSourcePeerId, 'mac');
     });
 
@@ -745,8 +746,7 @@ void main() {
 
       expect(coordinator.isPlaybackActive, isFalse,
           reason: '暂停后交错到达的陈旧 offer 不得被自动接受回到"播放中"');
-      expect(coordinator.canRejoinAsSink, isTrue,
-          reason: '媒体卡的播放键仍是重试入口');
+      expect(coordinator.canRejoinAsSink, isTrue, reason: '媒体卡的播放键仍是重试入口');
       expect(sent, hasLength(1));
       expect(sent.single.peerId, 'mac');
       expect(sent.single.control.action, AudioGroupControlAction.groupStop,
@@ -1812,10 +1812,13 @@ class _FakeAudioGroupTransport implements AudioGroupPacketTransport {
   bool closed = false;
 
   @override
-  void send(AudioGroupPacketFrame packet) {
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet) {
     if (!closed) {
       sentPackets.add(packet);
     }
+    return Future<PacketSendResult>.value(
+      closed ? PacketSendResult.closed : PacketSendResult.sent,
+    );
   }
 
   @override

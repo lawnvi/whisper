@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/socket/auth_handshake_lifecycle.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
@@ -68,6 +69,36 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
   final challenge = await server.receiveHello(hello);
   await client.receiveChallenge(challenge);
   return (client: client, server: server);
+}
+
+Future<({PeerSocketSession client, PeerSocketSession server})>
+    _authenticatedPair() async {
+  final pair = await _reachClientApproval();
+  pair.client.resolveLocalApproval(
+    generation: pair.client.connectionGeneration,
+    allow: true,
+  );
+  await pair.server.receiveProof(await pair.client.createProof());
+  pair.server.resolveLocalApproval(
+    generation: pair.server.connectionGeneration,
+    allow: true,
+  );
+  final result = await pair.server.createResult(
+    allow: true,
+    reason: 'approved',
+  );
+  await pair.client.receiveResult(result);
+  await pair.server.commitAuthentication(
+    generation: pair.server.connectionGeneration,
+    persistIdentity: () async {},
+    registerPeer: () async {},
+  );
+  await pair.client.commitAuthentication(
+    generation: pair.client.connectionGeneration,
+    persistIdentity: () async {},
+    registerPeer: () async {},
+  );
+  return pair;
 }
 
 void main() {
@@ -169,6 +200,64 @@ void main() {
     expect(
       await pair.server.codec!.decode(encoded),
       orderedEquals(<int>[1, 2, 3]),
+    );
+  });
+
+  test('shutdown drains queued authenticated frames before closing', () async {
+    final pair = await _authenticatedPair();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    final incoming = StreamController<Object>();
+    addTearDown(incoming.close);
+    final subscription = incoming.stream.listen((_) {});
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final writes = <Object>[];
+
+    pair.client.attachTransport(
+      subscription: subscription,
+      addStream: (stream) async {
+        final value = await stream.single;
+        writes.add(value);
+        if (writes.length == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+      },
+      onOverflow: () => fail('outbound queue overflowed'),
+    );
+    final first = pair.client.enqueueOutgoing(
+      Uint8List.fromList(<int>[9]),
+      byteLength: 1,
+    );
+    await firstWriteStarted.future;
+    final payload = Uint8List.fromList(<int>[1, 2, 3]);
+    final queued = pair.client.enqueueAuthenticatedOutgoing(
+      payload,
+      byteLength: payload.length,
+    );
+
+    AuthSocketLifecycle.closePendingAuth(
+      sessions: <PeerSocketSession>[pair.client],
+      completeFailures: const <void Function()>[],
+    );
+    expect(pair.client.isAuthenticated, isTrue);
+
+    final shutdown = () async {
+      await pair.client.stopReceivingAndDrain();
+      await pair.client.drainOutbound();
+      pair.client.close();
+    }();
+    releaseFirstWrite.complete();
+
+    expect(await first, isTrue);
+    expect(await queued, isTrue);
+    await shutdown;
+    expect(pair.client.phase, PeerSocketPhase.closing);
+    expect(writes, hasLength(2));
+    expect(
+      await pair.server.decodeIncoming(writes.last as Uint8List),
+      orderedEquals(payload),
     );
   });
 

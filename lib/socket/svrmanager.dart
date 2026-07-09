@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
@@ -34,6 +35,7 @@ import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
+import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
@@ -79,9 +81,27 @@ typedef _IdentityPinPlan = ({
   String expectedPublicKey,
 });
 
+final class ServerStartResult {
+  const ServerStartResult.success(this.port)
+      : isSuccess = true,
+        error = null;
+
+  const ServerStartResult.failure(this.error)
+      : isSuccess = false,
+        port = 0;
+
+  final bool isSuccess;
+  final int port;
+  final Object? error;
+}
+
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
+  static const int _maxPreAuthMessageBytes = 256 * 1024;
+  static const int _maxAuthenticatedMessageBytes = 1024 * 1024;
+  static const int _authenticatedFrameOverhead = 48;
+  static const int _maxFileDataPayloadBytes = 512 * 1024;
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
@@ -123,12 +143,20 @@ class WsSvrManager {
       <String, PeerProfile>{};
   final Map<WebSocketSink, Timer> _clientTimersBySink =
       <WebSocketSink, Timer>{};
+  final Map<WebSocketSink, Future<void>> _socketCleanups =
+      <WebSocketSink, Future<void>>{};
+  final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
+  final SocketAdmissionController _admission = SocketAdmissionController();
+  final Lock _serverLifecycleLock = Lock();
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
   bool started = false;
   String receiver = "";
   String sender = "";
-  Future<void> _receiveQueue = Future<void>.value();
+  Future<void>? _closeFuture;
+  bool _closeServerRequested = false;
+  bool _forceServerCloseRequested = false;
+  HttpServer? _serverClosing;
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
   int _remoteProfileRevision = 0;
@@ -458,8 +486,17 @@ class WsSvrManager {
         connectionId: session.connectionGeneration,
         send: (message) {
           if (session.isAuthenticated) {
-            _sendBytesOnSink(sink, message);
+            _ignoreFuture(
+              _sendBytesOnSink(sink, message).then<void>((_) {}),
+              context: 'send peer message',
+            );
           }
+        },
+        sendAsync: (message) {
+          if (!session.isAuthenticated) {
+            return Future<bool>.value(false);
+          }
+          return _sendBytesOnSink(sink, message);
         },
         close: () async {
           _peerIdsBySink.remove(sink);
@@ -474,19 +511,34 @@ class WsSvrManager {
   }
 
   Future<void> _handlePeerSocketDoneQueued(WebSocketSink sink) {
-    _receiveQueue = _receiveQueue.then((_) async {
+    final existing = _socketCleanups[sink];
+    if (existing != null) {
+      return existing;
+    }
+    late final Future<void> cleanup;
+    cleanup = () async {
       try {
+        await _sessionsBySink[sink]?.stopReceivingAndDrain(
+          cancelSubscription: false,
+        );
         await _handlePeerSocketDone(sink);
       } catch (error, stackTrace) {
         logger.i('处理 websocket 关闭失败: $error\n$stackTrace');
+      } finally {
+        if (identical(_socketCleanups[sink], cleanup)) {
+          _socketCleanups.remove(sink);
+        }
       }
-    });
-    return _receiveQueue;
+    }();
+    _socketCleanups[sink] = cleanup;
+    return cleanup;
   }
 
   Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
     final session = _sessionsBySink.remove(sink);
     session?.close();
+    await session?.drainOutbound();
+    session?.releaseAdmission();
     _endpointsBySink.remove(sink);
     _identityPinPlansBySink.remove(sink);
     _completeSocketAuth(sink, false, 'connection_closed');
@@ -558,33 +610,98 @@ class WsSvrManager {
     return session;
   }
 
-  Future<void> _attachIncomingSocket(WebSocketChannel webSocket) async {
+  void _attachSocketTransport(
+    WebSocketChannel webSocket,
+    PeerSocketSession session, {
+    AdmissionLease? admissionLease,
+    required bool asServer,
+  }) {
+    final sink = webSocket.sink;
+    late final StreamSubscription<dynamic> subscription;
+    subscription = webSocket.stream.listen((message) {
+      final handling = _handleIncomingMessage(
+        message,
+        sink: sink,
+        asServer: asServer,
+      );
+      _ignoreFuture(
+        handling.then<void>((_) {}),
+        context: 'process websocket message',
+      );
+    }, onError: (Object error, StackTrace stackTrace) {
+      AuthSocketLifecycle.closeBeforeQueuedCleanup(
+        _sessionsBySink[sink],
+        () {
+          logger.i('${asServer ? '连接服务' : '客户端服务'}异常: ${error.runtimeType}');
+          _dispatchToPrimary((event) => event.onError(error.toString()));
+          _completeSocketAuth(sink, false, 'socket_error');
+          _ignoreFuture(
+            _handlePeerSocketDoneQueued(sink),
+            context: 'cleanup failed websocket',
+          );
+        },
+      );
+    }, onDone: () {
+      AuthSocketLifecycle.closeBeforeQueuedCleanup(
+        _sessionsBySink[sink],
+        () => _ignoreFuture(
+          _handlePeerSocketDoneQueued(sink),
+          context: 'cleanup closed websocket',
+        ),
+      );
+    });
+    session.attachTransport(
+      subscription: subscription,
+      addStream: sink.addStream,
+      admissionLease: admissionLease,
+      onOverflow: () {
+        if (!identical(_sessionsBySink[sink], session)) {
+          return;
+        }
+        session.close();
+        _completeSocketAuth(sink, false, 'queue_overflow');
+        _ignoreFuture(sink.close(), context: 'close overflowing websocket');
+      },
+    );
+  }
+
+  Future<void> _attachIncomingSocket(
+    WebSocketChannel webSocket,
+    AdmissionLease admissionLease,
+  ) async {
     final sink = webSocket.sink;
     try {
-      await _createSocketSession(sink: sink, role: PeerSocketRole.server);
-      webSocket.stream.listen((message) {
-        unawaited(
-          _handleIncomingMessage(message, sink: sink, asServer: true),
-        );
-      }, onError: (Object error, StackTrace stackTrace) {
-        AuthSocketLifecycle.closeBeforeQueuedCleanup(
-          _sessionsBySink[sink],
-          () {
-            logger.i('连接服务异常: ${error.runtimeType}');
-            _dispatchToPrimary((event) => event.onError(error.toString()));
-            _completeSocketAuth(sink, false, 'socket_error');
-            unawaited(_handlePeerSocketDoneQueued(sink));
-          },
-        );
-      }, onDone: () {
-        AuthSocketLifecycle.closeBeforeQueuedCleanup(
-          _sessionsBySink[sink],
-          () => unawaited(_handlePeerSocketDoneQueued(sink)),
-        );
-      });
-    } catch (error) {
+      final session = await _createSocketSession(
+        sink: sink,
+        role: PeerSocketRole.server,
+      );
+      _attachSocketTransport(
+        webSocket,
+        session,
+        admissionLease: admissionLease,
+        asServer: true,
+      );
+    } catch (_) {
+      admissionLease.close();
       _completeSocketAuth(sink, false, 'session_setup_failed');
       await sink.close();
+    }
+  }
+
+  void _trackIncomingSocketAttachment(
+    WebSocketChannel webSocket,
+    AdmissionLease admissionLease,
+    Completer<void> pendingUpgrade,
+  ) {
+    final attachment = _attachIncomingSocket(webSocket, admissionLease)
+        .whenComplete(() => _completePendingSocketAttachment(pendingUpgrade));
+    _ignoreFuture(attachment, context: 'attach incoming websocket');
+  }
+
+  void _completePendingSocketAttachment(Completer<void> pendingUpgrade) {
+    _pendingSocketAttachments.remove(pendingUpgrade.future);
+    if (!pendingUpgrade.isCompleted) {
+      pendingUpgrade.complete();
     }
   }
 
@@ -612,14 +729,38 @@ class WsSvrManager {
     }
   }
 
-  void startServer(int port, var callback) {
-    close(closeServer: true);
+  Future<ServerStartResult> startServer(
+    int port, [
+    void Function(bool ok, Object? message)? callback,
+  ]) {
+    final pendingClose = _closeFuture;
+    final operation = () async {
+      await pendingClose;
+      return _serverLifecycleLock.synchronized(() async {
+        await _performCloseGracefully(
+          closeServer: true,
+          forceServerClose: false,
+        );
+        return _startServer(port);
+      });
+    }();
+    if (callback != null) {
+      final reporting = operation.then<void>(
+        (result) {
+          callback(result.isSuccess, result.error);
+        },
+        onError: (Object error, StackTrace stackTrace) =>
+            callback(false, error),
+      );
+      _ignoreFuture(reporting, context: 'report server start result');
+    }
+    return operation;
+  }
+
+  Future<ServerStartResult> _startServer(int port) async {
     AudioShareManager.shared.onGroupPacket = (packet) {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
-    final chatHandler = webSocketHandler((WebSocketChannel webSocket) {
-      unawaited(_attachIncomingSocket(webSocket));
-    }, pingInterval: _serverPingInterval);
     final audioHandler = AudioShareManager.shared.webSocketHandler(
       pingInterval: _serverPingInterval,
     );
@@ -627,26 +768,104 @@ class WsSvrManager {
       pingInterval: _serverPingInterval,
     );
 
-    FutureOr<shelf.Response> handler(shelf.Request request) {
-      if (request.url.path == 'audio') {
+    FutureOr<shelf.Response> handler(shelf.Request request) async {
+      final path = request.url.path;
+      if (path != 'chat' && path != 'audio' && path != 'input') {
+        return shelf.Response.notFound('Not Found');
+      }
+      if (request.method != 'GET' || !_isValidWebSocketUpgrade(request)) {
+        return shelf.Response.badRequest(body: 'Bad Request');
+      }
+      final origin = request.headers['origin'];
+      if (origin != null && origin.trim().isNotEmpty) {
+        return shelf.Response.forbidden('Forbidden');
+      }
+      if (path == 'audio') {
         return audioHandler(request);
       }
-      if (request.url.path == 'input') {
+      if (path == 'input') {
         return remoteInputHandler(request);
       }
-      return chatHandler(request);
+
+      final connectionInfo =
+          request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
+      final admission = _admission.tryOpen(
+        connectionInfo?.remoteAddress ?? request.requestedUri.host,
+        DateTime.now(),
+      );
+      final lease = admission.lease;
+      if (lease == null) {
+        return shelf.Response(429, body: 'Too Many Requests');
+      }
+      final pendingUpgrade = Completer<void>();
+      _pendingSocketAttachments.add(pendingUpgrade.future);
+      final chatHandler = webSocketHandler(
+        (WebSocketChannel webSocket) {
+          _trackIncomingSocketAttachment(
+            webSocket,
+            lease,
+            pendingUpgrade,
+          );
+        },
+        allowedOrigins: const <String>[],
+        pingInterval: _serverPingInterval,
+      );
+      late final shelf.Response response;
+      try {
+        response = await chatHandler(request);
+      } on shelf.HijackException {
+        rethrow;
+      } catch (_) {
+        _completePendingSocketAttachment(pendingUpgrade);
+        lease.close();
+        rethrow;
+      }
+      if (response.statusCode != HttpStatus.switchingProtocols) {
+        _completePendingSocketAttachment(pendingUpgrade);
+        lease.close();
+      }
+      return response;
     }
 
-    shelf_io.serve(handler, '0.0.0.0', port, shared: true).then((server) {
+    try {
+      final server = await shelf_io.serve(
+        handler,
+        '0.0.0.0',
+        port,
+        shared: true,
+      );
       _server = server;
       started = true;
-      var host = "${server.address.host}:${server.port}";
+      final host = '${server.address.host}:${server.port}';
       logger.i('Serving at ws://$host');
-      callback(true, "");
-    }).onError((error, stackTrace) {
+      return ServerStartResult.success(server.port);
+    } catch (error, stackTrace) {
       logger.i("服务启动失败: $error\n$stackTrace");
-      callback(false, error);
-    });
+      started = false;
+      return ServerStartResult.failure(error);
+    }
+  }
+
+  bool _isValidWebSocketUpgrade(shelf.Request request) {
+    final connection = request.headers[HttpHeaders.connectionHeader];
+    final upgrade = request.headers[HttpHeaders.upgradeHeader];
+    final version = request.headers['sec-websocket-version'];
+    final key = request.headers['sec-websocket-key'];
+    if (connection == null ||
+        !connection
+            .split(',')
+            .map((token) => token.trim().toLowerCase())
+            .contains('upgrade') ||
+        upgrade?.trim().toLowerCase() != 'websocket' ||
+        version?.trim() != '13' ||
+        key == null) {
+      return false;
+    }
+    try {
+      return base64.decode(key.trim()).length == 16;
+    } on FormatException {
+      return false;
+    }
   }
 
   Future<void> connectToServer(
@@ -667,7 +886,7 @@ class WsSvrManager {
     }
     WebSocketChannel? channel;
     try {
-      final wsUrl = Uri.parse('ws://$host:$port');
+      final wsUrl = Uri(scheme: 'ws', host: host, port: port, path: 'chat');
       channel = IOWebSocketChannel(
         WebSocket.connect(
           wsUrl.toString(),
@@ -687,26 +906,11 @@ class WsSvrManager {
         intendedPeerId: peerId ?? '',
         intendedPublicKeyHash: intendedPublicKeyHash ?? '',
       );
-      connectedChannel.stream.listen((message) {
-        unawaited(
-          _handleIncomingMessage(message, sink: channelSink, asServer: false),
-        );
-      }, onError: (error, stackTrace) {
-        AuthSocketLifecycle.closeBeforeQueuedCleanup(
-          _sessionsBySink[channelSink],
-          () {
-            logger.i('客户端服务异常: ${error.runtimeType}');
-            _dispatchToPrimary((event) => event.onError(error.toString()));
-            _completeSocketAuth(channelSink, false, 'socket_error');
-            unawaited(_handlePeerSocketDoneQueued(channelSink));
-          },
-        );
-      }, onDone: () {
-        AuthSocketLifecycle.closeBeforeQueuedCleanup(
-          _sessionsBySink[channelSink],
-          () => unawaited(_handlePeerSocketDoneQueued(channelSink)),
-        );
-      });
+      _attachSocketTransport(
+        connectedChannel,
+        session,
+        asServer: false,
+      );
       await _sendAuthEnvelope(channelSink, await session.createHello());
       final authResult = await authCompleter.future;
       _releaseOutgoingAuthForSink(channelSink);
@@ -735,11 +939,60 @@ class WsSvrManager {
   Future<void> closeGracefully({
     bool closeServer = false,
     bool forceServerClose = false,
+  }) {
+    _closeServerRequested =
+        _closeServerRequested || closeServer || forceServerClose;
+    _forceServerCloseRequested = _forceServerCloseRequested || forceServerClose;
+    final existing = _closeFuture;
+    if (existing != null) {
+      final closingServer = _serverClosing;
+      if (forceServerClose && closingServer != null) {
+        _ignoreFuture(
+          closingServer.close(force: true).then<void>((_) {}),
+          context: 'upgrade graceful server close',
+        );
+      }
+      return existing;
+    }
+    final operation = _serverLifecycleLock.synchronized(() async {
+      while (true) {
+        final requestedServerClose = _closeServerRequested;
+        final requestedForceClose = _forceServerCloseRequested;
+        await _performCloseGracefully(
+          closeServer: requestedServerClose,
+          forceServerClose: requestedForceClose,
+        );
+        final needsServerClose =
+            _closeServerRequested && !requestedServerClose && _server != null;
+        final needsForceClose = _forceServerCloseRequested &&
+            !requestedForceClose &&
+            (_server != null || _serverClosing != null);
+        if (!needsServerClose && !needsForceClose) {
+          return;
+        }
+      }
+    });
+    late final Future<void> tracked;
+    tracked = operation.whenComplete(() {
+      if (identical(_closeFuture, tracked)) {
+        _closeFuture = null;
+        _closeServerRequested = false;
+        _forceServerCloseRequested = false;
+      }
+    });
+    _closeFuture = tracked;
+    return tracked;
+  }
+
+  Future<void> _performCloseGracefully({
+    required bool closeServer,
+    required bool forceServerClose,
   }) async {
     final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
       hasSelectedSink: _sink != null,
       hasClientTimer: _clientTimer != null,
-      hasPendingSessions: _sessionsBySink.isNotEmpty,
+      hasPendingSessions:
+          _sessionsBySink.isNotEmpty || _pendingSocketAttachments.isNotEmpty,
       hasPendingResults: _authResultsBySink.isNotEmpty,
       hasPeerConnections: _peerConnections.connectedPeerIds.isNotEmpty,
       hasReceiver: receiver.isNotEmpty,
@@ -758,8 +1011,26 @@ class WsSvrManager {
     _incomingAuthPeerIdsBySink.clear();
     _identityPinPlansBySink.clear();
     _authRequestGate.clear();
+    while (_pendingSocketAttachments.isNotEmpty) {
+      await Future.wait(
+        _pendingSocketAttachments.toList(growable: false),
+      );
+    }
+    final sessionEntries = _sessionsBySink.entries.toList(growable: false);
+    final authenticatedEntries = sessionEntries
+        .where((entry) => entry.value.isAuthenticated)
+        .toList(growable: false);
+    final hadAuthenticatedConnection = authenticatedEntries.isNotEmpty ||
+        _peerConnections.connectedPeerIds.isNotEmpty;
+    final pendingEntries = sessionEntries
+        .where((entry) => !entry.value.isAuthenticated)
+        .toList(growable: false);
+    final pendingSinks = <WebSocketSink>{
+      ...pendingEntries.map((entry) => entry.key),
+      ..._authResultsBySink.keys,
+    };
     AuthSocketLifecycle.closePendingAuth(
-      sessions: _sessionsBySink.values,
+      sessions: pendingEntries.map((entry) => entry.value),
       completeFailures: _authResultsBySink.values.map((completer) {
         return () {
           if (!completer.isCompleted) {
@@ -771,25 +1042,70 @@ class WsSvrManager {
       }),
     );
     _authResultsBySink.clear();
+    await Future.wait(pendingSinks.map((sink) async {
+      try {
+        await Future.wait(<Future<void>>[
+          sink.close(),
+          if (_sessionsBySink[sink] case final session?)
+            session.stopReceivingAndDrain(cancelSubscription: false),
+        ]);
+      } catch (error, stackTrace) {
+        logger.i('关闭待认证 websocket 失败: $error\n$stackTrace');
+      }
+      await _handlePeerSocketDoneQueued(sink);
+    }));
+    final activeCleanups = _socketCleanups.values.toList(growable: false);
+    if (activeCleanups.isNotEmpty) {
+      await Future.wait(activeCleanups);
+    }
+    final authenticatedSessions = authenticatedEntries
+        .map((entry) => entry.value)
+        .toSet()
+        .toList(growable: false);
+    for (final session in authenticatedSessions) {
+      await session.stopReceivingAndDrain();
+    }
+    await _transferEngine.closeAll(
+      persistRecoverable: hadAuthenticatedConnection,
+    );
+    if (hadAuthenticatedConnection) {
+      await AudioShareCoordinator.shared.stopLocal();
+      await AudioGroupCoordinator.shared.stopLocal();
+      await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
+        sendControlTo: sendRemoteInputControlTo,
+      );
+      await RemoteInputCoordinator.shared.stopLocal();
+    }
+    await AudioShareManager.shared.closeChannels();
+    await RemoteInputManager.shared.closeChannels();
+    for (final session in authenticatedSessions) {
+      await session.drainOutbound();
+    }
+    _sink = null;
+    await _peerConnections.disconnectAll();
+    for (final entry in authenticatedEntries) {
+      await _handlePeerSocketDoneQueued(entry.key);
+    }
+    for (final session in authenticatedSessions) {
+      session.releaseAdmission();
+    }
     _sessionsBySink.clear();
     _sessionsByPeerId.clear();
     _endpointsBySink.clear();
-    await _transferEngine.closeAll();
-    await AudioShareCoordinator.shared.stopLocal();
-    await AudioGroupCoordinator.shared.stopLocal();
-    await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
-      sendControlTo: sendRemoteInputControlTo,
-    );
-    await RemoteInputCoordinator.shared.stopLocal();
-    _sink = null;
-    await _peerConnections.disconnectAll();
     _peerIdsBySink.clear();
     _remoteProfilesByPeerId.clear();
     if (closeServer) {
       started = false;
       final server = _server;
       _server = null;
-      await server?.close(force: forceServerClose);
+      _serverClosing = server;
+      try {
+        await server?.close(force: forceServerClose);
+      } finally {
+        if (identical(_serverClosing, server)) {
+          _serverClosing = null;
+        }
+      }
     }
     _remoteProfile = null;
     _completeRemoteProfileRefreshWaiters();
@@ -826,56 +1142,52 @@ class WsSvrManager {
     }
   }
 
-  void close({bool closeServer = false}) {
-    unawaited(closeGracefully(closeServer: closeServer));
+  Future<void> close({bool closeServer = false}) {
+    return closeGracefully(closeServer: closeServer);
   }
 
-  bool _sendTo(String peerId, Object message) {
-    if (peerId.isEmpty) {
-      return false;
-    }
-    return _peerConnections.sendTo(peerId, message);
-  }
-
-  void _sendBytesOnSink(
+  Future<bool> _sendBytesOnSink(
     WebSocketSink sink,
     Object message, {
     bool rawAuth = false,
-  }) {
-    if (rawAuth) {
-      sink.add(message);
-      return;
-    }
+  }) async {
     final session = _sessionsBySink[sink];
-    if (session == null || !session.isAuthenticated) {
-      unawaited(sink.close());
-      return;
+    final bytes = _outgoingBytes(message);
+    if (session == null || bytes == null) {
+      await sink.close();
+      return false;
     }
-    final Uint8List bytes;
-    if (message is Uint8List) {
-      bytes = message;
-    } else if (message is List<int>) {
-      bytes = Uint8List.fromList(message);
-    } else if (message is String) {
-      bytes = Uint8List.fromList(utf8.encode(message));
-    } else {
-      unawaited(sink.close());
-      return;
-    }
-    unawaited(_encodeAndSend(session, sink, bytes));
-  }
-
-  Future<void> _encodeAndSend(
-    PeerSocketSession session,
-    WebSocketSink sink,
-    Uint8List bytes,
-  ) async {
-    try {
-      sink.add(await session.encodeOutgoing(bytes));
-    } catch (_) {
+    final maxBytes =
+        rawAuth ? _maxPreAuthMessageBytes : _maxAuthenticatedMessageBytes;
+    if (bytes.length > maxBytes) {
       session.close();
       await sink.close();
+      return false;
     }
+    if (rawAuth) {
+      return session.enqueueOutgoing(bytes, byteLength: bytes.length);
+    }
+    if (!session.isAuthenticated) {
+      await sink.close();
+      return false;
+    }
+    return session.enqueueAuthenticatedOutgoing(
+      bytes,
+      byteLength: bytes.length + _authenticatedFrameOverhead,
+    );
+  }
+
+  Uint8List? _outgoingBytes(Object message) {
+    if (message is Uint8List) {
+      return message;
+    }
+    if (message is List<int>) {
+      return Uint8List.fromList(message);
+    }
+    if (message is String) {
+      return Uint8List.fromList(utf8.encode(message));
+    }
+    return null;
   }
 
   Uint8List _messageFrame(Uint8List payload) {
@@ -888,12 +1200,12 @@ class WsSvrManager {
     ).encode();
   }
 
-  void _sendMessageData(
+  Future<bool> _sendMessageData(
     MessageData message, {
     String? peerId,
     WebSocketSink? sink,
     bool rawAuth = false,
-  }) {
+  }) async {
     final payload = WhisperFrameV3(
       type: WhisperFrameType.message,
       transferId: '',
@@ -902,62 +1214,75 @@ class WsSvrManager {
       payload: Uint8List.fromList(utf8.encode(encodeWireMessage(message))),
     ).encode();
     if (sink != null) {
-      _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
-      return;
+      return _sendBytesOnSink(sink, payload, rawAuth: rawAuth);
     }
-    if (peerId != null && _peerConnections.sendTo(peerId, payload)) {
-      return;
-    }
-    _send(encodeWireMessage(message));
+    return _peerConnections.sendTargetedOrDefault(
+      peerId: peerId,
+      message: payload,
+      sendDefault: () => _send(encodeWireMessage(message)),
+    );
   }
 
   void _dispatchOutgoingMessage(MessageData message) {
     _dispatchToAll((event) => event.onMessage(message));
   }
 
-  bool _sendBytesToPeer(String peerId, Object bytes) {
-    if (peerId.isNotEmpty && _peerConnections.sendTo(peerId, bytes)) {
-      return true;
+  Future<bool> _sendBytesToPeer(String peerId, Object bytes) async {
+    if (peerId.isNotEmpty) {
+      return _peerConnections.sendToAwaited(peerId, bytes);
     }
-    if (peerId.isEmpty || peerId == receiver) {
+    if (peerId.isEmpty) {
       final sink = _sink;
       if (sink != null) {
-        _sendBytesOnSink(sink, bytes);
+        return _sendBytesOnSink(sink, bytes);
       }
-      return _sink != null;
+      return false;
     }
     return false;
   }
 
-  void _send(String message) {
+  Future<bool> _send(String message) async {
     final payload = _messageFrame(Uint8List.fromList(utf8.encode(message)));
-    if (!_sendTo(receiver, payload)) {
-      final sink = _sink;
-      if (sink != null) {
-        _sendBytesOnSink(sink, payload);
-      }
+    if (_peerConnections.isConnectedTo(receiver)) {
+      return _peerConnections.sendToAwaited(receiver, payload);
     }
+    final sink = _sink;
+    if (sink != null) {
+      return _sendBytesOnSink(sink, payload);
+    }
+    return false;
   }
 
   /// [asServer] 是本条 socket 的角色(服务端接入=true/本机拨出=false),
   /// 随消息逐层透传;设备可同时对不同 peer 兼具两种角色,不存在全局角色。
   Future<void> _handleIncomingMessage(
     dynamic message, {
-    WebSocketSink? sink,
+    required WebSocketSink sink,
     required bool asServer,
-  }) {
-    _receiveQueue = _receiveQueue.then((_) async {
+  }) async {
+    final session = _sessionsBySink[sink];
+    if (session == null ||
+        (asServer && session.role != PeerSocketRole.server) ||
+        (!asServer && session.role != PeerSocketRole.client)) {
+      await sink.close();
+      return;
+    }
+    final byteLength = _incomingByteLength(message);
+    final maxBytes = session.isAuthenticated
+        ? _maxAuthenticatedMessageBytes + _authenticatedFrameOverhead
+        : _maxPreAuthMessageBytes;
+    if (byteLength < 0 || byteLength > maxBytes) {
+      await _failSocketSession(session, sink, 'message_too_large');
+      return;
+    }
+    final accepted = await session.enqueueIncoming(byteLength, () async {
       try {
-        final session = sink == null ? null : _sessionsBySink[sink];
-        if (session == null ||
-            (asServer && session.role != PeerSocketRole.server) ||
-            (!asServer && session.role != PeerSocketRole.client)) {
-          await sink?.close();
-          return;
-        }
         var bytes = _incomingBytes(message);
         if (session.isAuthenticated) {
           bytes = await session.decodeIncoming(bytes);
+          if (bytes.length > _maxAuthenticatedMessageBytes) {
+            throw const AuthHandshakeException('message_too_large');
+          }
         }
         await _listen(
           bytes,
@@ -967,18 +1292,30 @@ class WsSvrManager {
         );
       } catch (error) {
         logger.i('处理 websocket 消息失败: ${error.runtimeType}');
-        final failedSession = sink == null ? null : _sessionsBySink[sink];
-        if (sink != null && failedSession != null) {
+        final failedSession = _sessionsBySink[sink];
+        if (failedSession != null) {
           final message = error is AuthHandshakeException
               ? error.code
               : 'authentication_failed';
           await _failSocketSession(failedSession, sink, message);
         } else {
-          await sink?.close();
+          await sink.close();
         }
       }
     });
-    return _receiveQueue;
+    if (!accepted && identical(_sessionsBySink[sink], session)) {
+      await _failSocketSession(session, sink, 'queue_overflow');
+    }
+  }
+
+  int _incomingByteLength(dynamic message) {
+    if (message is String) {
+      return utf8.encode(message).length;
+    }
+    if (message is List<int>) {
+      return message.length;
+    }
+    return -1;
   }
 
   Uint8List _incomingBytes(dynamic message) {
@@ -1010,7 +1347,9 @@ class WsSvrManager {
           ? envelope.intendedPeerId ?? ''
           : _sessionsBySink[sink]?.remotePeerId,
     );
-    _sendMessageData(message, sink: sink, rawAuth: true);
+    if (!await _sendMessageData(message, sink: sink, rawAuth: true)) {
+      throw const AuthHandshakeException('send_failed');
+    }
   }
 
   Future<void> _handleAuthMessage(
@@ -1041,13 +1380,13 @@ class WsSvrManager {
       }
     } on FormatException {
       if (session.role == PeerSocketRole.server) {
-        _sendUpgradeRequired(sink, session);
+        await _sendUpgradeRequired(sink, session);
       }
       await _failSocketSession(session, sink, 'upgrade_required');
     } on AuthHandshakeException catch (error) {
       if (error.code == 'upgrade_required' &&
           session.role == PeerSocketRole.server) {
-        _sendUpgradeRequired(sink, session);
+        await _sendUpgradeRequired(sink, session);
       }
       await _failSocketSession(session, sink, error.code);
     }
@@ -1369,6 +1708,7 @@ class WsSvrManager {
       throw const AuthHandshakeException('session_expired');
     }
     _requireCurrentAuthenticatedSession(session, sink, generation);
+    session.markTransportAuthenticated();
     final device = storedDevice;
     if (device == null) {
       throw const AuthHandshakeException('identity_pin_state_missing');
@@ -1446,10 +1786,10 @@ class WsSvrManager {
     }
   }
 
-  void _sendUpgradeRequired(
+  Future<void> _sendUpgradeRequired(
     WebSocketSink sink,
     PeerSocketSession session,
-  ) {
+  ) async {
     final payload = jsonEncode(<String, Object?>{
       'action': 'upgrade_required',
       'version': PeerSocketSession.protocolVersion,
@@ -1464,7 +1804,7 @@ class WsSvrManager {
       senderOverride: session.localProfile.uid,
       receiverOverride: session.remotePeerId,
     );
-    _sendMessageData(message, sink: sink, rawAuth: true);
+    await _sendMessageData(message, sink: sink, rawAuth: true);
   }
 
   Future<void> _handleWhisperFrameV3(
@@ -1474,6 +1814,12 @@ class WsSvrManager {
     required PeerSocketSession session,
   }) async {
     if (!session.isAuthenticated && frame.type != WhisperFrameType.message) {
+      session.close();
+      await sink?.close();
+      return;
+    }
+    if (frame.type == WhisperFrameType.fileData &&
+        frame.payload.length > _maxFileDataPayloadBytes) {
       session.close();
       await sink?.close();
       return;
@@ -1943,7 +2289,11 @@ class WsSvrManager {
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
     // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
-    _sendMessageData(decodeWireMessage(json), peerId: data.sender);
+    _ignoreFuture(
+      _sendMessageData(decodeWireMessage(json), peerId: data.sender)
+          .then<void>((_) {}),
+      context: 'send acknowledgement',
+    );
   }
 
   Future<void> _heartBeat({
@@ -1964,7 +2314,7 @@ class WsSvrManager {
         false,
         uid: "",
         receiverOverride: peerId);
-    _sendMessageData(message, peerId: peerId, sink: sink);
+    await _sendMessageData(message, peerId: peerId, sink: sink);
   }
 
   Future<void> refreshConnectionLiveness() async {
@@ -1981,11 +2331,14 @@ class WsSvrManager {
     }
   }
 
-  void sendAudioControl(AudioControlMessage control) {
-    sendAudioControlTo(receiver, control);
+  Future<bool> sendAudioControl(AudioControlMessage control) {
+    return sendAudioControlTo(receiver, control);
   }
 
-  void sendAudioControlTo(String peerId, AudioControlMessage control) {
+  Future<bool> sendAudioControlTo(
+    String peerId,
+    AudioControlMessage control,
+  ) {
     final message = _buildMessage(
       MessageEnum.AudioControl,
       jsonEncode(control.toJson()),
@@ -1996,14 +2349,14 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    _sendMessageData(message, peerId: peerId);
+    return _sendMessageData(message, peerId: peerId);
   }
 
-  void sendAudioGroupControl(AudioGroupControlMessage control) {
-    sendAudioGroupControlTo(receiver, control);
+  Future<bool> sendAudioGroupControl(AudioGroupControlMessage control) {
+    return sendAudioGroupControlTo(receiver, control);
   }
 
-  void sendAudioGroupControlTo(
+  Future<bool> sendAudioGroupControlTo(
     String peerId,
     AudioGroupControlMessage control,
   ) {
@@ -2017,14 +2370,14 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    _sendMessageData(message, peerId: peerId);
+    return _sendMessageData(message, peerId: peerId);
   }
 
-  void sendRemoteInputControl(RemoteInputControlMessage control) {
-    sendRemoteInputControlTo(receiver, control);
+  Future<bool> sendRemoteInputControl(RemoteInputControlMessage control) {
+    return sendRemoteInputControlTo(receiver, control);
   }
 
-  void sendRemoteInputControlTo(
+  Future<bool> sendRemoteInputControlTo(
     String peerId,
     RemoteInputControlMessage control,
   ) {
@@ -2043,28 +2396,28 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    _sendMessageData(message, peerId: peerId);
+    return _sendMessageData(message, peerId: peerId);
   }
 
-  Future<void> sendMessage(String content, {clipboard = false}) async {
-    await sendMessageTo(receiver, content, clipboard: clipboard);
+  Future<bool> sendMessage(String content, {clipboard = false}) {
+    return sendMessageTo(receiver, content, clipboard: clipboard);
   }
 
-  Future<void> sendMessageTo(
+  Future<bool> sendMessageTo(
     String peerId,
     String content, {
     bool clipboard = false,
   }) async {
     final canUseLegacySink = peerId == receiver && _sink != null;
     if (peerId.isEmpty || (!isConnectedTo(peerId) && !canUseLegacySink)) {
-      return;
+      return false;
     }
     if (clipboard && content.isEmpty) {
       var str = await readClipboardTextForSync() ?? "";
       content = str.trimRight();
     }
     if (content.trim().isEmpty) {
-      return;
+      return false;
     }
     var message = _buildMessage(
       MessageEnum.Text,
@@ -2077,7 +2430,7 @@ class WsSvrManager {
     );
     await LocalDatabase().insertMessage(message);
     logger.i("创建新消息, uuid: ${message.uuid}");
-    _sendMessageData(message, peerId: peerId);
+    return _sendMessageData(message, peerId: peerId);
   }
 
   Future<void> sendNotification(
@@ -2094,7 +2447,7 @@ class WsSvrManager {
 
     var message = _buildMessage(
         MessageEnum.Notification, jsonEncode(content), "", "", 0, false);
-    _send(encodeWireMessage(message));
+    await _send(encodeWireMessage(message));
   }
 
   Future<bool> sendFile(String path) async {
