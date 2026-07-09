@@ -82,6 +82,7 @@ final class PeerSocketSession {
   bool _approvalResolved = false;
   bool _approvalAllowed = false;
   bool _authenticationCommitted = false;
+  bool _closed = false;
   Future<void> _sendChain = Future<void>.value();
 
   static Future<PeerSocketSession> create({
@@ -126,8 +127,9 @@ final class PeerSocketSession {
   String get remoteIdentityPublicKey => _remoteIdentityPublicKey ?? '';
   String get pairingCode => _transcript?.pairingCode() ?? '';
   AuthenticatedFrameCodec? get codec => _codec;
-  bool get isAuthenticated => phase == PeerSocketPhase.authenticated;
-  bool get isClosed => phase == PeerSocketPhase.closing;
+  bool get isAuthenticated =>
+      !_closed && phase == PeerSocketPhase.authenticated;
+  bool get isClosed => _closed;
 
   Future<Uint8List> encodeOutgoing(Uint8List payload) {
     final completer = Completer<Uint8List>();
@@ -345,9 +347,10 @@ final class PeerSocketSession {
     _approvalResolved = true;
     _approvalAllowed = allow;
     if (role == PeerSocketRole.client) {
-      phase = allow ? PeerSocketPhase.awaitingResult : PeerSocketPhase.closing;
-      if (!allow) {
-        _handshakeTimer.cancel();
+      if (allow) {
+        phase = PeerSocketPhase.awaitingResult;
+      } else {
+        close();
       }
     }
     return true;
@@ -390,8 +393,10 @@ final class PeerSocketSession {
       allow: allow,
       reason: reason,
     );
+    _requireOpen();
     if (allow) {
       await _enableCodec();
+      _requireOpen();
       phase = PeerSocketPhase.authenticated;
       _handshakeTimer.cancel();
     } else {
@@ -427,6 +432,7 @@ final class PeerSocketSession {
         ),
         signatureBase64Url: result.signature!,
       );
+      _requireOpen();
       if (!valid) {
         return _fail('invalid_result_signature');
       }
@@ -435,6 +441,7 @@ final class PeerSocketSession {
         return false;
       }
       await _enableCodec();
+      _requireOpen();
       phase = PeerSocketPhase.authenticated;
       _handshakeTimer.cancel();
       return true;
@@ -465,9 +472,10 @@ final class PeerSocketSession {
   }
 
   void close() {
-    if (phase == PeerSocketPhase.closing) {
+    if (_closed) {
       return;
     }
+    _closed = true;
     phase = PeerSocketPhase.closing;
     _handshakeTimer.cancel();
   }
@@ -478,6 +486,7 @@ final class PeerSocketSession {
       remoteEphemeralPublicKey: _remoteEphemeralPublicKey!,
       transcriptHash: _transcript!.transcriptHash(),
     );
+    _requireOpen();
     _codec = role == PeerSocketRole.client
         ? AuthenticatedFrameCodec(
             sendKey: keys.clientToServerChat,
@@ -548,8 +557,14 @@ final class PeerSocketSession {
   }
 
   void _require(PeerSocketRole expectedRole, PeerSocketPhase expectedPhase) {
-    if (role != expectedRole || phase != expectedPhase) {
+    if (isClosed || role != expectedRole || phase != expectedPhase) {
       _fail<void>('unexpected_phase');
+    }
+  }
+
+  void _requireOpen() {
+    if (isClosed) {
+      throw const AuthHandshakeException('session_closed');
     }
   }
 

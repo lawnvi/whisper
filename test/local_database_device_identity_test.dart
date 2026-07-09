@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show DataClass, Insertable, Value, Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -78,7 +78,10 @@ void main() {
       expect(await database.hasPinnedIdentity('legacy', 'public-key'), isFalse);
       expect(await database.fetchTrustedPeerIds(), isNot(contains('legacy')));
 
-      await database.pinDeviceIdentity('legacy', 'public-key');
+      expect(
+        await database.pinDeviceIdentity('legacy', 'public-key'),
+        DeviceIdentityPinResult.pinned,
+      );
 
       expect(await database.fetchPinnedIdentityKey('legacy'), 'public-key');
       expect(await database.hasPinnedIdentity('legacy', 'public-key'), isTrue);
@@ -89,7 +92,10 @@ void main() {
     test('concurrent discovery upserts retain auth and pinned key', () async {
       await database.upsertDevice(_device('peer-a'));
       await database.authDevice('peer-a', true);
-      await database.pinDeviceIdentity('peer-a', 'pinned-key');
+      expect(
+        await database.pinDeviceIdentity('peer-a', 'pinned-key'),
+        DeviceIdentityPinResult.pinned,
+      );
 
       await Future.wait(List<Future<void>>.generate(
         20,
@@ -108,6 +114,107 @@ void main() {
       final stored = await database.fetchDevice('peer-a');
       expect(stored!.auth, isTrue);
       expect(stored.identityPublicKey, 'pinned-key');
+    });
+
+    test('DeviceData retains generated Drift row contracts', () async {
+      final row = _device(
+        'row-contract',
+        identityPublicKey: 'identity-key',
+      );
+
+      expect(row, isA<DataClass>());
+      expect(row, isA<Insertable<DeviceData>>());
+      expect(
+        (row as Insertable<DeviceData>).toColumns(true).keys,
+        containsAll(<String>[
+          'uid',
+          'identity_public_key',
+          'host',
+          'port',
+        ]),
+      );
+      final companion = row.toCompanion(true);
+      expect(companion.identityPublicKey.value, 'identity-key');
+      final copied = row.copyWithCompanion(
+        const DeviceCompanion(
+          name: Value<String>('Renamed'),
+          password: Value<String?>(null),
+        ),
+      );
+      expect(copied.name, 'Renamed');
+      expect(copied.password, isNull);
+
+      final nullable = row.copyWith(
+        password: const Value<String?>(null),
+        around: const Value<bool?>(null),
+      );
+      expect(nullable.toColumns(true), isNot(contains('password')));
+      expect(nullable.toColumns(true), isNot(contains('around')));
+      final explicitNulls = nullable.toColumns(false);
+      expect(
+        (explicitNulls['password']! as Variable<String>).value,
+        isNull,
+      );
+      expect(
+        (explicitNulls['around']! as Variable<bool>).value,
+        isNull,
+      );
+      final nullableCompanion = nullable.toCompanion(false);
+      expect(nullableCompanion.password.present, isTrue);
+      expect(nullableCompanion.password.value, isNull);
+      expect(nullableCompanion.around.present, isTrue);
+      expect(nullableCompanion.around.value, isNull);
+
+      await database.into(database.device).insert(row);
+      expect(
+        (await database.fetchDevice('row-contract'))?.identityPublicKey,
+        'identity-key',
+      );
+    });
+
+    test('pin and replacement APIs use compare-and-set semantics', () async {
+      await database.upsertDevice(_device('peer-race'));
+
+      final results = await Future.wait(<Future<DeviceIdentityPinResult>>[
+        database.pinDeviceIdentity('peer-race', 'first-key'),
+        database.pinDeviceIdentity('peer-race', 'second-key'),
+      ]);
+      expect(results, contains(DeviceIdentityPinResult.pinned));
+      expect(results, contains(DeviceIdentityPinResult.conflict));
+      final current = await database.fetchPinnedIdentityKey('peer-race');
+      expect(current, isNotNull);
+      expect(
+        await database.pinDeviceIdentity('peer-race', current!),
+        DeviceIdentityPinResult.alreadyPinned,
+      );
+      expect(
+        await database.replaceDeviceIdentity(
+          'peer-race',
+          expectedPublicKey: 'stale-key',
+          newPublicKey: 'replacement-key',
+        ),
+        DeviceIdentityPinResult.conflict,
+      );
+      expect(
+        await database.replaceDeviceIdentity(
+          'peer-race',
+          expectedPublicKey: current,
+          newPublicKey: 'replacement-key',
+        ),
+        DeviceIdentityPinResult.replaced,
+      );
+      expect(
+        await database.pinDeviceIdentity('missing', 'key'),
+        DeviceIdentityPinResult.missingDevice,
+      );
+      expect(
+        await database.replaceDeviceIdentity(
+          'missing',
+          expectedPublicKey: 'old',
+          newPublicKey: 'new',
+        ),
+        DeviceIdentityPinResult.missingDevice,
+      );
     });
   });
 
@@ -142,6 +249,15 @@ void main() {
         ('peer-a', 'trusted', '192.168.1.3', 10003, 1, 0, 4),
         ('peer-a', 'latest', '192.168.1.4', 10004, 0, 0, 9)
     ''');
+    raw.execute('''
+      CREATE TABLE message (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER REFERENCES device(id)
+      )
+    ''');
+    raw.execute('''
+      INSERT INTO message (device_id) VALUES (2), (3), (4)
+    ''');
     raw.execute('PRAGMA user_version = 5');
     raw.dispose();
 
@@ -150,10 +266,19 @@ void main() {
       final rows = await database.fetchAllDevice();
       expect(rows, hasLength(1));
       expect(rows.single.uid, 'peer-a');
-      expect(rows.single.name, 'trusted');
+      expect(rows.single.name, 'latest');
+      expect(rows.single.host, '192.168.1.4');
+      expect(rows.single.port, 10004);
       expect(rows.single.auth, isTrue);
       expect(rows.single.clipboard, isTrue);
       expect(rows.single.identityPublicKey, isEmpty);
+      final messageRows = await database
+          .customSelect('SELECT device_id FROM message ORDER BY id')
+          .get();
+      expect(
+        messageRows.map((row) => row.read<int>('device_id')),
+        everyElement(rows.single.id),
+      );
       expect(await _hasUniqueUidIndex(database), isTrue);
       expect(database.schemaVersion, 6);
     } finally {

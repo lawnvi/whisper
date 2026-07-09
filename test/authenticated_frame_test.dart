@@ -116,4 +116,50 @@ void main() {
       throwsA(isA<AuthenticatedFrameException>()),
     );
   });
+
+  test('concurrent encoding assigns a unique increasing sequence', () async {
+    final codec = AuthenticatedFrameCodec(
+      sendKey: _key(0),
+      receiveKey: _key(32),
+    );
+
+    final frames = await Future.wait(
+      List<Future<Uint8List>>.generate(
+        20,
+        (index) => codec.encode(Uint8List.fromList(<int>[index])),
+      ),
+    );
+    final sequences = frames
+        .map((frame) => ByteData.sublistView(frame, 4, 12).getUint64(0))
+        .toList(growable: false);
+
+    expect(
+        sequences, orderedEquals(List<int>.generate(20, (index) => index + 1)));
+    expect(codec.lastSentSequence, 20);
+  });
+
+  test('concurrent decoding accepts a frame only once', () async {
+    final sender = AuthenticatedFrameCodec(
+      sendKey: _key(0),
+      receiveKey: _key(32),
+    );
+    final receiver = AuthenticatedFrameCodec(
+      sendKey: _key(32),
+      receiveKey: _key(0),
+    );
+    final frame = await sender.encode(Uint8List.fromList(<int>[1]));
+
+    final accepted = await Future.wait(
+      List<Future<bool>>.generate(
+        2,
+        (_) => receiver.decode(frame).then(
+              (_) => true,
+              onError: (_) => false,
+            ),
+      ),
+    );
+
+    expect(accepted.where((value) => value), hasLength(1));
+    expect(receiver.lastReceivedSequence, 1);
+  });
 }

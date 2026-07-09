@@ -184,7 +184,7 @@ void main() {
         nonce: _b64(32, 64),
         profileDigest: _b64(32, 96),
         intendedPeerId: 'server-b',
-        intendedPublicKeyHash: 'pkh',
+        intendedPublicKeyHash: _b64(32, 128),
       );
       final challenge = AuthEnvelope.challenge(
         protocolVersion: 5,
@@ -237,7 +237,7 @@ void main() {
         ephemeralPublicKey: _b64(32, 32),
         nonce: _b64(32, 64),
         profileDigest: _b64(32, 96),
-        intendedPublicKeyHash: 'pkh',
+        intendedPublicKeyHash: _b64(32, 128),
       ).toJson();
 
       expect(
@@ -266,7 +266,7 @@ void main() {
         ephemeralPublicKey: _b64(32, 32),
         nonce: _b64(32, 64),
         profileDigest: _b64(32, 96),
-        intendedPublicKeyHash: 'pkh',
+        intendedPublicKeyHash: _b64(32, 128),
       ).toJson();
 
       expect(
@@ -295,6 +295,103 @@ void main() {
           ...valid,
           'version': 0,
         })),
+        throwsFormatException,
+      );
+    });
+
+    test('validates intended peer id and public key hash bounds', () {
+      final valid = AuthEnvelope.hello(
+        protocolVersion: 5,
+        peerId: 'client-a',
+        identityPublicKey: _b64(32, 0),
+        ephemeralPublicKey: _b64(32, 32),
+        nonce: _b64(32, 64),
+        profileDigest: _b64(32, 96),
+        intendedPeerId: 'server-b',
+        intendedPublicKeyHash: _b64(32, 128),
+      ).toJson();
+
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'intendedPeerId': List<String>.filled(257, 'a').join(),
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'intendedPeerId': '',
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'intendedPkh': _b64(31, 0),
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => AuthEnvelope.fromJson(<String, Object?>{
+          ...valid,
+          'intendedPkh': '${_b64(32, 0)}=',
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('deep-copies and freezes nested profile values', () {
+      final nested = <String, Object?>{'name': 'before'};
+      final values = <Object?>[nested];
+      final envelope = AuthEnvelope.hello(
+        protocolVersion: 5,
+        peerId: 'client-a',
+        identityPublicKey: _b64(32, 0),
+        ephemeralPublicKey: _b64(32, 32),
+        nonce: _b64(32, 64),
+        profileDigest: _b64(32, 96),
+        profile: <String, Object?>{'values': values},
+      );
+
+      nested['name'] = 'after';
+      values.add('new');
+      final storedValues = envelope.profile!['values']! as List<Object?>;
+      final storedNested = storedValues.single as Map<String, Object?>;
+
+      expect(storedNested['name'], 'before');
+      expect(() => storedValues.add('other'), throwsUnsupportedError);
+      expect(
+        () => storedNested['name'] = 'changed',
+        throwsUnsupportedError,
+      );
+    });
+
+    test('rejects overly deep and oversized profiles', () {
+      Object? nested = 'leaf';
+      for (var depth = 0; depth < 20; depth += 1) {
+        nested = <String, Object?>{'child': nested};
+      }
+      final oversized = List<String>.filled(64 * 1024, 'x').join();
+
+      AuthEnvelope helloWithProfile(Map<String, Object?> profile) {
+        return AuthEnvelope.hello(
+          protocolVersion: 5,
+          peerId: 'client-a',
+          identityPublicKey: _b64(32, 0),
+          ephemeralPublicKey: _b64(32, 32),
+          nonce: _b64(32, 64),
+          profileDigest: _b64(32, 96),
+          profile: profile,
+        );
+      }
+
+      expect(
+        () => helloWithProfile(nested! as Map<String, Object?>),
+        throwsFormatException,
+      );
+      expect(
+        () => helloWithProfile(<String, Object?>{'value': oversized}),
         throwsFormatException,
       );
     });

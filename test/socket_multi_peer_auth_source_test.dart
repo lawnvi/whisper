@@ -98,13 +98,36 @@ void main() {
   test('signed result verification precedes client registration', () {
     final result = section(
       'Future<void> _handleClientResult(',
-      'Future<PairingReason?> _pairingReason(',
+      'Future<_IdentityPinPlan> _pairingReason(',
     );
     expect(result, contains('session.receiveResult(result)'));
-    expect(result, contains('_completeAuthenticatedSession(session, sink)'));
+    expect(result, contains('_completeAuthenticatedSession('));
     expect(
       result.indexOf('session.receiveResult(result)'),
-      lessThan(result.indexOf('_completeAuthenticatedSession(session, sink)')),
+      lessThan(result.indexOf('_completeAuthenticatedSession(')),
     );
+  });
+
+  test('identity pin commits use captured compare-and-set state', () {
+    final completion = section(
+      'Future<void> _completeAuthenticatedSession(',
+      'void _sendUpgradeRequired(',
+    );
+    expect(completion, contains('database.pinDeviceIdentity('));
+    expect(completion, contains('database.replaceDeviceIdentity('));
+    expect(completion, contains('pinPlan.expectedPublicKey'));
+    expect(completion, contains('PairingReason.identityChanged'));
+    expect(completion, contains('identity_pin_conflict'));
+    expect(completion, contains('_requireCurrentAuthenticatedSession('));
+    expect(
+      completion.indexOf('_requireCurrentAuthenticatedSession('),
+      lessThan(completion.indexOf('database.pinDeviceIdentity(')),
+    );
+
+    final challenge = section(
+      'Future<void> _handleClientChallenge(',
+      'Future<void> _handleServerProof(',
+    );
+    expect(challenge, contains('_identityPinPlansBySink[sink] = pinPlan'));
   });
 }

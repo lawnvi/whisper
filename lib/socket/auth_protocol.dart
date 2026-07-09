@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 enum AuthAction { hello, challenge, proof, result }
 
+const int _maxPeerIdBytes = 256;
+const int _maxProfileBytes = 64 * 1024;
+const int _maxProfileDepth = 16;
+
 final class AuthEnvelope {
   const AuthEnvelope._({
     required this.action,
@@ -294,8 +298,16 @@ AuthEnvelope _validated({
   if (protocolVersion <= 0 || protocolVersion > 0xffff) {
     throw const FormatException('Invalid protocol version');
   }
-  if (peerId.isEmpty || utf8.encode(peerId).length > 256) {
+  if (peerId.isEmpty || utf8.encode(peerId).length > _maxPeerIdBytes) {
     throw const FormatException('Invalid peer id');
+  }
+  if (intendedPeerId != null &&
+      (intendedPeerId.isEmpty ||
+          utf8.encode(intendedPeerId).length > _maxPeerIdBytes)) {
+    throw const FormatException('Invalid intended peer id');
+  }
+  if (intendedPublicKeyHash != null) {
+    decodeAuthBase64Url(intendedPublicKeyHash, expectedLength: 32);
   }
   decodeAuthBase64Url(nonce, expectedLength: 32);
   decodeAuthBase64Url(profileDigest, expectedLength: 32);
@@ -326,8 +338,7 @@ AuthEnvelope _validated({
     signature: signature,
     intendedPeerId: intendedPeerId,
     intendedPublicKeyHash: intendedPublicKeyHash,
-    profile:
-        profile == null ? null : Map<String, Object?>.unmodifiable(profile),
+    profile: profile == null ? null : _freezeProfile(profile),
     allow: allow,
     reason: reason,
   );
@@ -472,10 +483,61 @@ Map<String, Object?>? _optionalProfile(
     }
     result[entry.key as String] = entry.value;
   }
-  try {
-    jsonEncode(result);
-  } on JsonUnsupportedObjectError {
-    throw FormatException('Invalid $key');
-  }
   return result;
+}
+
+Map<String, Object?> _freezeProfile(Map<String, Object?> profile) {
+  final frozen = _freezeJsonMap(profile, depth: 1);
+  final String encoded;
+  try {
+    encoded = jsonEncode(frozen);
+  } on JsonUnsupportedObjectError {
+    throw const FormatException('Invalid profile');
+  }
+  if (utf8.encode(encoded).length > _maxProfileBytes) {
+    throw const FormatException('Profile is too large');
+  }
+  return frozen;
+}
+
+Map<String, Object?> _freezeJsonMap(
+  Map<dynamic, dynamic> value, {
+  required int depth,
+}) {
+  if (depth > _maxProfileDepth) {
+    throw const FormatException('Profile is too deep');
+  }
+  final result = <String, Object?>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String) {
+      throw const FormatException('Invalid profile key');
+    }
+    result[key] = _freezeJsonValue(entry.value, depth: depth + 1);
+  }
+  return Map<String, Object?>.unmodifiable(result);
+}
+
+Object? _freezeJsonValue(Object? value, {required int depth}) {
+  if (value == null || value is String || value is bool || value is int) {
+    return value;
+  }
+  if (value is double) {
+    if (!value.isFinite) {
+      throw const FormatException('Invalid profile number');
+    }
+    return value;
+  }
+  if (value is Map) {
+    return _freezeJsonMap(value, depth: depth);
+  }
+  if (value is List) {
+    if (depth > _maxProfileDepth) {
+      throw const FormatException('Profile is too deep');
+    }
+    return List<Object?>.unmodifiable(
+      value.map((item) => _freezeJsonValue(item, depth: depth + 1)),
+    );
+  }
+  throw const FormatException('Invalid profile value');
 }

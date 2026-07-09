@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:synchronized/synchronized.dart';
 
 final class AuthenticatedFrameException implements Exception {
   const AuthenticatedFrameException(this.code);
@@ -33,6 +34,8 @@ final class AuthenticatedFrameCodec {
   final SecretKey _sendKey;
   final SecretKey _receiveKey;
   final int maxPayloadBytes;
+  final Lock _sendLock = Lock();
+  final Lock _receiveLock = Lock();
 
   int _lastSentSequence = 0;
   int _lastReceivedSequence = 0;
@@ -40,7 +43,13 @@ final class AuthenticatedFrameCodec {
   int get lastSentSequence => _lastSentSequence;
   int get lastReceivedSequence => _lastReceivedSequence;
 
-  Future<Uint8List> encode(Uint8List payload) async {
+  Future<Uint8List> encode(Uint8List payload) {
+    return _sendLock.synchronized(() async {
+      return _encode(payload);
+    });
+  }
+
+  Future<Uint8List> _encode(Uint8List payload) async {
     if (payload.length > maxPayloadBytes) {
       throw const AuthenticatedFrameException('payload_too_large');
     }
@@ -61,7 +70,13 @@ final class AuthenticatedFrameCodec {
     return frame.takeBytes();
   }
 
-  Future<Uint8List> decode(Uint8List frame) async {
+  Future<Uint8List> decode(Uint8List frame) {
+    return _receiveLock.synchronized(() async {
+      return _decode(frame);
+    });
+  }
+
+  Future<Uint8List> _decode(Uint8List frame) async {
     if (frame.length < _headerLength + _macLength) {
       throw const AuthenticatedFrameException('truncated');
     }

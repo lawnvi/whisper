@@ -178,6 +178,7 @@ void main() {
       throwsA(isA<AuthHandshakeException>()),
     );
     expect(client.phase, PeerSocketPhase.closing);
+    expect(client.isClosed, isTrue);
   });
 
   test('tampered signed result cannot pin or register the peer', () async {
@@ -246,6 +247,32 @@ void main() {
     expect(registrations, 1);
   });
 
+  test('closing during result verification cannot revive or commit session',
+      () async {
+    final flow = await _completedServerHandshake();
+    addTearDown(flow.client.close);
+    addTearDown(flow.server.close);
+
+    final receiving = flow.client.receiveResult(flow.result);
+    flow.client.close();
+    await expectLater(receiving, throwsA(isA<AuthHandshakeException>()));
+    var pins = 0;
+    var registrations = 0;
+
+    expect(flow.client.isClosed, isTrue);
+    expect(flow.client.phase, PeerSocketPhase.closing);
+    expect(
+      await flow.client.commitAuthentication(
+        generation: flow.client.connectionGeneration,
+        pinIdentity: () async => pins += 1,
+        registerPeer: () async => registrations += 1,
+      ),
+      isFalse,
+    );
+    expect(pins, 0);
+    expect(registrations, 0);
+  });
+
   test('client and server rejection never authenticate', () async {
     final server = await _makeSession(PeerSocketRole.server, 32);
     final client = await _makeSession(PeerSocketRole.client, 1);
@@ -262,6 +289,7 @@ void main() {
       isTrue,
     );
     expect(client.phase, PeerSocketPhase.closing);
+    expect(client.isClosed, isTrue);
 
     final flow = await _serverAwaitingApproval();
     addTearDown(flow.client.close);
@@ -277,6 +305,8 @@ void main() {
     expect(await flow.client.receiveResult(denial), isFalse);
     expect(flow.client.phase, PeerSocketPhase.closing);
     expect(flow.server.phase, PeerSocketPhase.closing);
+    expect(flow.client.isClosed, isTrue);
+    expect(flow.server.isClosed, isTrue);
   });
 
   test('wire profile excludes local trust and endpoint fields', () {

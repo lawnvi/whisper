@@ -151,7 +151,7 @@ void main() {
       role: PeerSocketRole.client,
       generation: 4,
       seedStart: 0,
-      intendedPkh: 'wrong-pkh',
+      intendedPkh: encodeAuthBase64Url(List<int>.filled(32, 0)),
     );
     addTearDown(client.close);
     addTearDown(server.close);

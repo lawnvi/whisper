@@ -32,6 +32,14 @@ final class AuthSessionKeys {
       keyPair: localEphemeralKeyPair,
       remotePublicKey: remoteEphemeralPublicKey,
     );
+    final sharedSecretBytes = await sharedSecret.extractBytes();
+    var nonZero = 0;
+    for (final byte in sharedSecretBytes) {
+      nonZero |= byte;
+    }
+    if (nonZero == 0) {
+      throw const FormatException('Invalid X25519 shared secret');
+    }
     final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
 
     Future<SecretKey> derive(String label) {

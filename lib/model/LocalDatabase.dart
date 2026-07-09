@@ -15,6 +15,21 @@ export 'device.dart' show DeviceData;
 
 part 'LocalDatabase.g.dart';
 
+enum DeviceIdentityPinResult {
+  pinned,
+  alreadyPinned,
+  replaced,
+  conflict,
+  missingDevice,
+}
+
+extension DeviceIdentityPinResultX on DeviceIdentityPinResult {
+  bool get isSuccess =>
+      this == DeviceIdentityPinResult.pinned ||
+      this == DeviceIdentityPinResult.alreadyPinned ||
+      this == DeviceIdentityPinResult.replaced;
+}
+
 @DriftDatabase(tables: [Device, Message, FileTransfer, RemoteInputLayout])
 class LocalDatabase extends _$LocalDatabase {
   static final LocalDatabase _singleton = LocalDatabase._internal();
@@ -69,6 +84,11 @@ class LocalDatabase extends _$LocalDatabase {
     if (!hasIdentityColumn) {
       await migrator.addColumn(device, device.identityPublicKey);
     }
+    await customUpdate(
+      "UPDATE message SET device_id = NULL WHERE device_id IN "
+      "(SELECT id FROM device WHERE uid = '')",
+      updates: <TableInfo<Table, Object?>>{message},
+    );
     await customStatement("DELETE FROM device WHERE uid = ''");
 
     final duplicateUids = await customSelect(
@@ -78,7 +98,7 @@ class LocalDatabase extends _$LocalDatabase {
       final uid = duplicate.read<String>('uid');
       final rows = await customSelect(
         'SELECT id, auth, clipboard FROM device WHERE uid = ? '
-        'ORDER BY auth DESC, last_time DESC, id DESC',
+        'ORDER BY last_time DESC, id DESC',
         variables: <Variable<Object>>[Variable<String>(uid)],
       ).get();
       final keeperId = rows.first.read<int>('id');
@@ -93,6 +113,16 @@ class LocalDatabase extends _$LocalDatabase {
           Variable<int>(keeperId),
         ],
         updates: <TableInfo<Table, Object?>>{device},
+      );
+      await customUpdate(
+        'UPDATE message SET device_id = ? WHERE device_id IN '
+        '(SELECT id FROM device WHERE uid = ? AND id <> ?)',
+        variables: <Variable<Object>>[
+          Variable<int>(keeperId),
+          Variable<String>(uid),
+          Variable<int>(keeperId),
+        ],
+        updates: <TableInfo<Table, Object?>>{message},
       );
       await customUpdate(
         'DELETE FROM device WHERE uid = ? AND id <> ?',
@@ -264,13 +294,70 @@ class LocalDatabase extends _$LocalDatabase {
     return key.isEmpty ? null : key;
   }
 
-  Future<void> pinDeviceIdentity(String uid, String publicKey) async {
+  Future<DeviceIdentityPinResult> pinDeviceIdentity(
+    String uid,
+    String publicKey,
+  ) async {
     if (uid.isEmpty || publicKey.isEmpty) {
       throw ArgumentError('uid and publicKey must not be empty');
     }
-    await (update(device)..where((table) => table.uid.equals(uid))).write(
-      DeviceCompanion(identityPublicKey: Value<String>(publicKey)),
+    final updated = await customUpdate(
+      'UPDATE device SET identity_public_key = ? '
+      "WHERE uid = ? AND identity_public_key = ''",
+      variables: <Variable<Object>>[
+        Variable<String>(publicKey),
+        Variable<String>(uid),
+      ],
+      updates: <TableInfo<Table, Object?>>{device},
     );
+    if (updated == 1) {
+      return DeviceIdentityPinResult.pinned;
+    }
+    final current = await fetchPinnedIdentityKey(uid);
+    if (current == null) {
+      return await fetchDevice(uid) == null
+          ? DeviceIdentityPinResult.missingDevice
+          : DeviceIdentityPinResult.conflict;
+    }
+    return current == publicKey
+        ? DeviceIdentityPinResult.alreadyPinned
+        : DeviceIdentityPinResult.conflict;
+  }
+
+  Future<DeviceIdentityPinResult> replaceDeviceIdentity(
+    String uid, {
+    required String expectedPublicKey,
+    required String newPublicKey,
+  }) async {
+    if (uid.isEmpty || expectedPublicKey.isEmpty || newPublicKey.isEmpty) {
+      throw ArgumentError(
+        'uid, expectedPublicKey, and newPublicKey must not be empty',
+      );
+    }
+    final updated = await customUpdate(
+      'UPDATE device SET identity_public_key = ? '
+      'WHERE uid = ? AND identity_public_key = ?',
+      variables: <Variable<Object>>[
+        Variable<String>(newPublicKey),
+        Variable<String>(uid),
+        Variable<String>(expectedPublicKey),
+      ],
+      updates: <TableInfo<Table, Object?>>{device},
+    );
+    if (updated == 1) {
+      return expectedPublicKey == newPublicKey
+          ? DeviceIdentityPinResult.alreadyPinned
+          : DeviceIdentityPinResult.replaced;
+    }
+    final current = await fetchPinnedIdentityKey(uid);
+    if (current == null) {
+      return await fetchDevice(uid) == null
+          ? DeviceIdentityPinResult.missingDevice
+          : DeviceIdentityPinResult.conflict;
+    }
+    return current == newPublicKey
+        ? DeviceIdentityPinResult.alreadyPinned
+        : DeviceIdentityPinResult.conflict;
   }
 
   Future<bool> hasPinnedIdentity(String uid, String publicKey) async {
@@ -498,6 +585,52 @@ class LocalDatabase extends _$LocalDatabase {
       committedBytes: data.committedBytes,
       lastError: data.lastError,
       updatedAt: data.updatedAt,
+    );
+  }
+}
+
+extension DeviceDataDriftX on DeviceData {
+  DeviceCompanion toCompanion(bool nullToAbsent) {
+    return DeviceCompanion(
+      id: Value<int>(id),
+      uid: Value<String>(uid),
+      identityPublicKey: Value<String>(identityPublicKey),
+      name: Value<String>(name),
+      host: Value<String>(host),
+      port: Value<int>(port),
+      password: password == null && nullToAbsent
+          ? const Value<String?>.absent()
+          : Value<String?>(password),
+      platform: Value<String>(platform),
+      isServer: Value<bool>(isServer),
+      online: Value<bool>(online),
+      clipboard: Value<bool>(clipboard),
+      auth: Value<bool>(auth),
+      lastTime: Value<int>(lastTime),
+      around: around == null && nullToAbsent
+          ? const Value<bool?>.absent()
+          : Value<bool?>(around),
+    );
+  }
+
+  DeviceData copyWithCompanion(DeviceCompanion data) {
+    return DeviceData(
+      id: data.id.present ? data.id.value : id,
+      uid: data.uid.present ? data.uid.value : uid,
+      identityPublicKey: data.identityPublicKey.present
+          ? data.identityPublicKey.value
+          : identityPublicKey,
+      name: data.name.present ? data.name.value : name,
+      host: data.host.present ? data.host.value : host,
+      port: data.port.present ? data.port.value : port,
+      password: data.password.present ? data.password.value : password,
+      platform: data.platform.present ? data.platform.value : platform,
+      isServer: data.isServer.present ? data.isServer.value : isServer,
+      online: data.online.present ? data.online.value : online,
+      clipboard: data.clipboard.present ? data.clipboard.value : clipboard,
+      auth: data.auth.present ? data.auth.value : auth,
+      lastTime: data.lastTime.present ? data.lastTime.value : lastTime,
+      around: data.around.present ? data.around.value : around,
     );
   }
 }

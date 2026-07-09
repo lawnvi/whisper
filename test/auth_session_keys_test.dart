@@ -103,4 +103,23 @@ void main() {
       )),
     );
   });
+
+  test('rejects an all-zero X25519 shared secret', () async {
+    final localPair = await X25519().newKeyPairFromSeed(
+      List<int>.filled(32, 7),
+    );
+    final allZeroPublicKey = SimplePublicKey(
+      List<int>.filled(32, 0),
+      type: KeyPairType.x25519,
+    );
+
+    await expectLater(
+      AuthSessionKeys.derive(
+        localEphemeralKeyPair: localPair,
+        remoteEphemeralPublicKey: allZeroPublicKey,
+        transcriptHash: Uint8List(32),
+      ),
+      throwsFormatException,
+    );
+  });
 }

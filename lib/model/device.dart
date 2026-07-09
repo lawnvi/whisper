@@ -21,7 +21,7 @@ class Device extends Table {
       boolean().nullable().withDefault(const Constant(false))();
 }
 
-final class DeviceData {
+final class DeviceData extends DataClass implements Insertable<DeviceData> {
   const DeviceData({
     required this.id,
     required this.uid,
@@ -54,6 +54,31 @@ final class DeviceData {
   final int lastTime;
   final bool? around;
 
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{
+      'id': Variable<int>(id),
+      'uid': Variable<String>(uid),
+      'identity_public_key': Variable<String>(identityPublicKey),
+      'name': Variable<String>(name),
+      'host': Variable<String>(host),
+      'port': Variable<int>(port),
+      'platform': Variable<String>(platform),
+      'is_server': Variable<bool>(isServer),
+      'online': Variable<bool>(online),
+      'clipboard': Variable<bool>(clipboard),
+      'auth': Variable<bool>(auth),
+      'last_time': Variable<int>(lastTime),
+    };
+    if (!nullToAbsent || password != null) {
+      map['password'] = Variable<String>(password);
+    }
+    if (!nullToAbsent || around != null) {
+      map['around'] = Variable<bool>(around);
+    }
+    return map;
+  }
+
   factory DeviceData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -79,6 +104,7 @@ final class DeviceData {
     );
   }
 
+  @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
