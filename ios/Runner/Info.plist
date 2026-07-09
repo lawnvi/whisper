@@ -63,7 +63,10 @@
     <key>NSLocalNetworkUsageDescription</key>
     <string>The app uses the local network to find and connect to nearby devices.</string>
     <key>NSAppTransportSecurity</key>
-    <string>The app uses the local network to find and connect to nearby devices.</string>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>NSBonjourServices</key>
     <array>
         <string>_whisper._tcp</string>
