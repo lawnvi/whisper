@@ -44,6 +44,7 @@ class LocalSetting {
   final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
   final String _audioSharePlaybackGain = "_audio_share_playback_gain";
   final String _remoteInputScrollMultiplier = "_remote_input_scroll_multiplier";
+  final String _deviceIdentitySeed = "_device_identity_seed";
 
   SharedPreferences? _cachedPreferences;
 
@@ -103,6 +104,18 @@ class LocalSetting {
     } else if (value is List<String>) {
       await sp.setStringList(key, value);
     }
+  }
+
+  Future<String?> deviceIdentitySeed() async {
+    final SharedPreferences sp = await _preferences();
+    return sp.getString(_deviceIdentitySeed);
+  }
+
+  Future<void> setDeviceIdentitySeed(String seed) async {
+    if (seed.isEmpty) {
+      throw ArgumentError.value(seed, 'seed', 'must not be empty');
+    }
+    await _setSP(_deviceIdentitySeed, seed);
   }
 
   Future<void> updateNickname(String nickname) async {

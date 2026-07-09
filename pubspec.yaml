@@ -58,6 +58,7 @@ dependencies:
 #  file_manager: ^1.0.2
   open_dir: ^0.0.2+1
   crypto: ^3.0.6
+  cryptography: ^2.9.0
   desktop_drop: ^0.5.0
   super_drag_and_drop: ^0.9.1
 #  ftpconnect: ^2.0.5

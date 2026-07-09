@@ -11,6 +11,8 @@ import 'device.dart';
 import 'file_transfer.dart';
 import 'message.dart';
 
+export 'device.dart' show DeviceData;
+
 part 'LocalDatabase.g.dart';
 
 @DriftDatabase(tables: [Device, Message, FileTransfer, RemoteInputLayout])
@@ -28,7 +30,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,11 +47,67 @@ class LocalDatabase extends _$LocalDatabase {
           if (from < 5) {
             await _repairRemoteInputLayoutColumns();
           }
+          if (from < 6) {
+            await _migrateDeviceIdentitySchema(m);
+          }
         },
         beforeOpen: (_) async {
           await _repairRemoteInputLayoutColumns();
         },
       );
+
+  Future<void> _migrateDeviceIdentitySchema(Migrator migrator) async {
+    final existingColumns =
+        await customSelect('PRAGMA table_info(device)').get();
+    if (existingColumns.isEmpty) {
+      await migrator.createTable(device);
+      return;
+    }
+    final hasIdentityColumn = existingColumns.any(
+      (row) => row.read<String>('name') == 'identity_public_key',
+    );
+    if (!hasIdentityColumn) {
+      await migrator.addColumn(device, device.identityPublicKey);
+    }
+    await customStatement("DELETE FROM device WHERE uid = ''");
+
+    final duplicateUids = await customSelect(
+      'SELECT uid FROM device GROUP BY uid HAVING COUNT(*) > 1',
+    ).get();
+    for (final duplicate in duplicateUids) {
+      final uid = duplicate.read<String>('uid');
+      final rows = await customSelect(
+        'SELECT id, auth, clipboard FROM device WHERE uid = ? '
+        'ORDER BY auth DESC, last_time DESC, id DESC',
+        variables: <Variable<Object>>[Variable<String>(uid)],
+      ).get();
+      final keeperId = rows.first.read<int>('id');
+      final mergedAuth = rows.any((row) => row.read<int>('auth') == 1);
+      final mergedClipboard =
+          rows.any((row) => row.read<int>('clipboard') == 1);
+      await customUpdate(
+        'UPDATE device SET auth = ?, clipboard = ? WHERE id = ?',
+        variables: <Variable<Object>>[
+          Variable<bool>(mergedAuth),
+          Variable<bool>(mergedClipboard),
+          Variable<int>(keeperId),
+        ],
+        updates: <TableInfo<Table, Object?>>{device},
+      );
+      await customUpdate(
+        'DELETE FROM device WHERE uid = ? AND id <> ?',
+        variables: <Variable<Object>>[
+          Variable<String>(uid),
+          Variable<int>(keeperId),
+        ],
+        updates: <TableInfo<Table, Object?>>{device},
+      );
+    }
+
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS device_uid_unique ON device(uid)',
+    );
+  }
 
   Future<void> _repairRemoteInputLayoutColumns() async {
     final columns =
@@ -139,29 +197,27 @@ class LocalDatabase extends _$LocalDatabase {
     if (data.uid.isEmpty) {
       return;
     }
-    var temp = await (select(device)..where((t) => t.uid.equals(data.uid)))
-        .getSingleOrNull();
-    if (temp == null) {
-      await into(device).insert(DeviceCompanion.insert(
-          uid: Value(data.uid),
-          name: Value(data.name),
-          host: data.host,
-          port: data.port,
-          platform: Value(data.platform),
-          isServer: Value(data.isServer),
-          online: Value(data.online),
-          clipboard: const Value(true),
-          auth: const Value(false),
-          lastTime: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000)));
-      return;
-    }
-    await (update(device)..where((t) => t.uid.equals(data.uid))).write(
-      DeviceCompanion(
-          host: Value(data.host),
-          port: Value(data.port),
-          name: Value(data.name),
-          online: Value(data.online),
-          lastTime: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000)),
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await customInsert(
+      'INSERT INTO device '
+      '(uid, identity_public_key, name, host, port, platform, is_server, '
+      'online, clipboard, auth, last_time, around) '
+      "VALUES (?, '', ?, ?, ?, ?, ?, ?, 1, 0, ?, ?) "
+      'ON CONFLICT(uid) DO UPDATE SET '
+      'name = excluded.name, host = excluded.host, port = excluded.port, '
+      'online = excluded.online, last_time = excluded.last_time',
+      variables: <Variable<Object>>[
+        Variable<String>(data.uid),
+        Variable<String>(data.name),
+        Variable<String>(data.host),
+        Variable<int>(data.port),
+        Variable<String>(data.platform),
+        Variable<bool>(data.isServer),
+        Variable<bool>(data.online),
+        Variable<int>(now),
+        Variable<bool>(data.around ?? false),
+      ],
+      updates: <TableInfo<Table, Object?>>{device},
     );
   }
 
@@ -188,9 +244,46 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<List<String>> fetchTrustedPeerIds() async {
-    final trustedDevices =
-        await (select(device)..where((t) => t.auth.equals(true))).get();
+    final trustedDevices = await (select(device)
+          ..where(
+              (t) => t.auth.equals(true) & t.identityPublicKey.isNotValue('')))
+        .get();
     return trustedDevices.map((item) => item.uid).toList(growable: false);
+  }
+
+  Future<String?> fetchPinnedIdentityKey(String uid) async {
+    if (uid.isEmpty) {
+      return null;
+    }
+    final stored = await (selectOnly(device)
+          ..addColumns(<Expression<Object>>[device.identityPublicKey])
+          ..where(device.uid.equals(uid))
+          ..limit(1))
+        .getSingleOrNull();
+    final key = stored?.read(device.identityPublicKey) ?? '';
+    return key.isEmpty ? null : key;
+  }
+
+  Future<void> pinDeviceIdentity(String uid, String publicKey) async {
+    if (uid.isEmpty || publicKey.isEmpty) {
+      throw ArgumentError('uid and publicKey must not be empty');
+    }
+    await (update(device)..where((table) => table.uid.equals(uid))).write(
+      DeviceCompanion(identityPublicKey: Value<String>(publicKey)),
+    );
+  }
+
+  Future<bool> hasPinnedIdentity(String uid, String publicKey) async {
+    if (uid.isEmpty || publicKey.isEmpty) {
+      return false;
+    }
+    final match = await (selectOnly(device)
+          ..addColumns(<Expression<Object>>[device.id])
+          ..where(device.uid.equals(uid) &
+              device.identityPublicKey.equals(publicKey))
+          ..limit(1))
+        .getSingleOrNull();
+    return match != null;
   }
 
   Future<DeviceData?> fetchDevice(String uid) {

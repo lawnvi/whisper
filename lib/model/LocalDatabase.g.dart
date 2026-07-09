@@ -23,7 +23,16 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
       'uid', aliasedName, false,
       type: DriftSqlType.string,
       requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
       defaultValue: const Constant(""));
+  static const VerificationMeta _identityPublicKeyMeta =
+      const VerificationMeta('identityPublicKey');
+  @override
+  late final GeneratedColumn<String> identityPublicKey =
+      GeneratedColumn<String>('identity_public_key', aliasedName, false,
+          type: DriftSqlType.string,
+          requiredDuringInsert: false,
+          defaultValue: const Constant(""));
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
@@ -116,6 +125,7 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
   List<GeneratedColumn> get $columns => [
         id,
         uid,
+        identityPublicKey,
         name,
         host,
         port,
@@ -144,6 +154,12 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
     if (data.containsKey('uid')) {
       context.handle(
           _uidMeta, uid.isAcceptableOrUnknown(data['uid']!, _uidMeta));
+    }
+    if (data.containsKey('identity_public_key')) {
+      context.handle(
+          _identityPublicKeyMeta,
+          identityPublicKey.isAcceptableOrUnknown(
+              data['identity_public_key']!, _identityPublicKeyMeta));
     }
     if (data.containsKey('name')) {
       context.handle(
@@ -206,6 +222,8 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       uid: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}uid'])!,
+      identityPublicKey: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}identity_public_key'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       host: attachedDatabase.typeMapping
@@ -237,209 +255,10 @@ class $DeviceTable extends Device with TableInfo<$DeviceTable, DeviceData> {
   }
 }
 
-class DeviceData extends DataClass implements Insertable<DeviceData> {
-  final int id;
-  final String uid;
-  final String name;
-  final String host;
-  final int port;
-  final String? password;
-  final String platform;
-  final bool isServer;
-  final bool online;
-  final bool clipboard;
-  final bool auth;
-  final int lastTime;
-  final bool? around;
-  const DeviceData(
-      {required this.id,
-      required this.uid,
-      required this.name,
-      required this.host,
-      required this.port,
-      this.password,
-      required this.platform,
-      required this.isServer,
-      required this.online,
-      required this.clipboard,
-      required this.auth,
-      required this.lastTime,
-      this.around});
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['uid'] = Variable<String>(uid);
-    map['name'] = Variable<String>(name);
-    map['host'] = Variable<String>(host);
-    map['port'] = Variable<int>(port);
-    if (!nullToAbsent || password != null) {
-      map['password'] = Variable<String>(password);
-    }
-    map['platform'] = Variable<String>(platform);
-    map['is_server'] = Variable<bool>(isServer);
-    map['online'] = Variable<bool>(online);
-    map['clipboard'] = Variable<bool>(clipboard);
-    map['auth'] = Variable<bool>(auth);
-    map['last_time'] = Variable<int>(lastTime);
-    if (!nullToAbsent || around != null) {
-      map['around'] = Variable<bool>(around);
-    }
-    return map;
-  }
-
-  DeviceCompanion toCompanion(bool nullToAbsent) {
-    return DeviceCompanion(
-      id: Value(id),
-      uid: Value(uid),
-      name: Value(name),
-      host: Value(host),
-      port: Value(port),
-      password: password == null && nullToAbsent
-          ? const Value.absent()
-          : Value(password),
-      platform: Value(platform),
-      isServer: Value(isServer),
-      online: Value(online),
-      clipboard: Value(clipboard),
-      auth: Value(auth),
-      lastTime: Value(lastTime),
-      around:
-          around == null && nullToAbsent ? const Value.absent() : Value(around),
-    );
-  }
-
-  factory DeviceData.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return DeviceData(
-      id: serializer.fromJson<int>(json['id']),
-      uid: serializer.fromJson<String>(json['uid']),
-      name: serializer.fromJson<String>(json['name']),
-      host: serializer.fromJson<String>(json['host']),
-      port: serializer.fromJson<int>(json['port']),
-      password: serializer.fromJson<String?>(json['password']),
-      platform: serializer.fromJson<String>(json['platform']),
-      isServer: serializer.fromJson<bool>(json['isServer']),
-      online: serializer.fromJson<bool>(json['online']),
-      clipboard: serializer.fromJson<bool>(json['clipboard']),
-      auth: serializer.fromJson<bool>(json['auth']),
-      lastTime: serializer.fromJson<int>(json['lastTime']),
-      around: serializer.fromJson<bool?>(json['around']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'uid': serializer.toJson<String>(uid),
-      'name': serializer.toJson<String>(name),
-      'host': serializer.toJson<String>(host),
-      'port': serializer.toJson<int>(port),
-      'password': serializer.toJson<String?>(password),
-      'platform': serializer.toJson<String>(platform),
-      'isServer': serializer.toJson<bool>(isServer),
-      'online': serializer.toJson<bool>(online),
-      'clipboard': serializer.toJson<bool>(clipboard),
-      'auth': serializer.toJson<bool>(auth),
-      'lastTime': serializer.toJson<int>(lastTime),
-      'around': serializer.toJson<bool?>(around),
-    };
-  }
-
-  DeviceData copyWith(
-          {int? id,
-          String? uid,
-          String? name,
-          String? host,
-          int? port,
-          Value<String?> password = const Value.absent(),
-          String? platform,
-          bool? isServer,
-          bool? online,
-          bool? clipboard,
-          bool? auth,
-          int? lastTime,
-          Value<bool?> around = const Value.absent()}) =>
-      DeviceData(
-        id: id ?? this.id,
-        uid: uid ?? this.uid,
-        name: name ?? this.name,
-        host: host ?? this.host,
-        port: port ?? this.port,
-        password: password.present ? password.value : this.password,
-        platform: platform ?? this.platform,
-        isServer: isServer ?? this.isServer,
-        online: online ?? this.online,
-        clipboard: clipboard ?? this.clipboard,
-        auth: auth ?? this.auth,
-        lastTime: lastTime ?? this.lastTime,
-        around: around.present ? around.value : this.around,
-      );
-  DeviceData copyWithCompanion(DeviceCompanion data) {
-    return DeviceData(
-      id: data.id.present ? data.id.value : this.id,
-      uid: data.uid.present ? data.uid.value : this.uid,
-      name: data.name.present ? data.name.value : this.name,
-      host: data.host.present ? data.host.value : this.host,
-      port: data.port.present ? data.port.value : this.port,
-      password: data.password.present ? data.password.value : this.password,
-      platform: data.platform.present ? data.platform.value : this.platform,
-      isServer: data.isServer.present ? data.isServer.value : this.isServer,
-      online: data.online.present ? data.online.value : this.online,
-      clipboard: data.clipboard.present ? data.clipboard.value : this.clipboard,
-      auth: data.auth.present ? data.auth.value : this.auth,
-      lastTime: data.lastTime.present ? data.lastTime.value : this.lastTime,
-      around: data.around.present ? data.around.value : this.around,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('DeviceData(')
-          ..write('id: $id, ')
-          ..write('uid: $uid, ')
-          ..write('name: $name, ')
-          ..write('host: $host, ')
-          ..write('port: $port, ')
-          ..write('password: $password, ')
-          ..write('platform: $platform, ')
-          ..write('isServer: $isServer, ')
-          ..write('online: $online, ')
-          ..write('clipboard: $clipboard, ')
-          ..write('auth: $auth, ')
-          ..write('lastTime: $lastTime, ')
-          ..write('around: $around')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(id, uid, name, host, port, password, platform,
-      isServer, online, clipboard, auth, lastTime, around);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is DeviceData &&
-          other.id == this.id &&
-          other.uid == this.uid &&
-          other.name == this.name &&
-          other.host == this.host &&
-          other.port == this.port &&
-          other.password == this.password &&
-          other.platform == this.platform &&
-          other.isServer == this.isServer &&
-          other.online == this.online &&
-          other.clipboard == this.clipboard &&
-          other.auth == this.auth &&
-          other.lastTime == this.lastTime &&
-          other.around == this.around);
-}
-
 class DeviceCompanion extends UpdateCompanion<DeviceData> {
   final Value<int> id;
   final Value<String> uid;
+  final Value<String> identityPublicKey;
   final Value<String> name;
   final Value<String> host;
   final Value<int> port;
@@ -454,6 +273,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   const DeviceCompanion({
     this.id = const Value.absent(),
     this.uid = const Value.absent(),
+    this.identityPublicKey = const Value.absent(),
     this.name = const Value.absent(),
     this.host = const Value.absent(),
     this.port = const Value.absent(),
@@ -469,6 +289,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   DeviceCompanion.insert({
     this.id = const Value.absent(),
     this.uid = const Value.absent(),
+    this.identityPublicKey = const Value.absent(),
     this.name = const Value.absent(),
     required String host,
     required int port,
@@ -485,6 +306,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   static Insertable<DeviceData> custom({
     Expression<int>? id,
     Expression<String>? uid,
+    Expression<String>? identityPublicKey,
     Expression<String>? name,
     Expression<String>? host,
     Expression<int>? port,
@@ -500,6 +322,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (uid != null) 'uid': uid,
+      if (identityPublicKey != null) 'identity_public_key': identityPublicKey,
       if (name != null) 'name': name,
       if (host != null) 'host': host,
       if (port != null) 'port': port,
@@ -517,6 +340,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
   DeviceCompanion copyWith(
       {Value<int>? id,
       Value<String>? uid,
+      Value<String>? identityPublicKey,
       Value<String>? name,
       Value<String>? host,
       Value<int>? port,
@@ -531,6 +355,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     return DeviceCompanion(
       id: id ?? this.id,
       uid: uid ?? this.uid,
+      identityPublicKey: identityPublicKey ?? this.identityPublicKey,
       name: name ?? this.name,
       host: host ?? this.host,
       port: port ?? this.port,
@@ -553,6 +378,9 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     }
     if (uid.present) {
       map['uid'] = Variable<String>(uid.value);
+    }
+    if (identityPublicKey.present) {
+      map['identity_public_key'] = Variable<String>(identityPublicKey.value);
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
@@ -595,6 +423,7 @@ class DeviceCompanion extends UpdateCompanion<DeviceData> {
     return (StringBuffer('DeviceCompanion(')
           ..write('id: $id, ')
           ..write('uid: $uid, ')
+          ..write('identityPublicKey: $identityPublicKey, ')
           ..write('name: $name, ')
           ..write('host: $host, ')
           ..write('port: $port, ')
@@ -2784,6 +2613,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
 typedef $$DeviceTableCreateCompanionBuilder = DeviceCompanion Function({
   Value<int> id,
   Value<String> uid,
+  Value<String> identityPublicKey,
   Value<String> name,
   required String host,
   required int port,
@@ -2799,6 +2629,7 @@ typedef $$DeviceTableCreateCompanionBuilder = DeviceCompanion Function({
 typedef $$DeviceTableUpdateCompanionBuilder = DeviceCompanion Function({
   Value<int> id,
   Value<String> uid,
+  Value<String> identityPublicKey,
   Value<String> name,
   Value<String> host,
   Value<int> port,
@@ -2845,6 +2676,10 @@ class $$DeviceTableFilterComposer
 
   ColumnFilters<String> get uid => $composableBuilder(
       column: $table.uid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get identityPublicKey => $composableBuilder(
+      column: $table.identityPublicKey,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
@@ -2916,6 +2751,10 @@ class $$DeviceTableOrderingComposer
   ColumnOrderings<String> get uid => $composableBuilder(
       column: $table.uid, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get identityPublicKey => $composableBuilder(
+      column: $table.identityPublicKey,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
 
@@ -2964,6 +2803,9 @@ class $$DeviceTableAnnotationComposer
 
   GeneratedColumn<String> get uid =>
       $composableBuilder(column: $table.uid, builder: (column) => column);
+
+  GeneratedColumn<String> get identityPublicKey => $composableBuilder(
+      column: $table.identityPublicKey, builder: (column) => column);
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
@@ -3045,6 +2887,7 @@ class $$DeviceTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> uid = const Value.absent(),
+            Value<String> identityPublicKey = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String> host = const Value.absent(),
             Value<int> port = const Value.absent(),
@@ -3060,6 +2903,7 @@ class $$DeviceTableTableManager extends RootTableManager<
               DeviceCompanion(
             id: id,
             uid: uid,
+            identityPublicKey: identityPublicKey,
             name: name,
             host: host,
             port: port,
@@ -3075,6 +2919,7 @@ class $$DeviceTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> uid = const Value.absent(),
+            Value<String> identityPublicKey = const Value.absent(),
             Value<String> name = const Value.absent(),
             required String host,
             required int port,
@@ -3090,6 +2935,7 @@ class $$DeviceTableTableManager extends RootTableManager<
               DeviceCompanion.insert(
             id: id,
             uid: uid,
+            identityPublicKey: identityPublicKey,
             name: name,
             host: host,
             port: port,
