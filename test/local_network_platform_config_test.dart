@@ -40,15 +40,29 @@ void main() {
     expect(plugin, contains('Build.VERSION.SDK_INT == 36'));
     expect(plugin, contains('android.permission.ACCESS_LOCAL_NETWORK'));
     expect(plugin, contains('Manifest.permission.NEARBY_WIFI_DEVICES'));
-    expect(plugin, contains('pendingResults'));
-    expect(plugin, contains('requestInFlight'));
+    expect(plugin, contains('LocalNetworkPermissionRequestState'));
+    expect(plugin, contains('state.enqueue(permission, result)'));
+    expect(plugin, contains('state.hasPendingRequest'));
     expect(plugin, contains('SecurityException'));
     expect(plugin, contains('finishPending'));
     expect(
       plugin,
+      contains('detachActivity(permanent = false)'),
+    );
+    expect(plugin, contains('detachActivity(permanent = true)'));
+    expect(
+      plugin,
+      contains('state.onActivityDetached(permanent = permanent)'),
+    );
+    expect(
+      plugin,
       contains(
-        'channel.setMethodCallHandler(null)\n        detachActivity()',
+        'state.complete(requestCode, permissions.asList()) ?: return false',
       ),
+    );
+    expect(
+      plugin,
+      contains('isPermissionRevokedByPolicy(permission, context.packageName)'),
     );
     expect(activity, contains('LocalNetworkPermissionPlugin()'));
   });
@@ -73,6 +87,23 @@ void main() {
     if (Platform.isMacOS) {
       final lint =
           Process.runSync('plutil', <String>['-lint', 'ios/Runner/Info.plist']);
+      expect(lint.exitCode, 0, reason: '${lint.stdout}${lint.stderr}');
+    }
+  });
+
+  test('macOS declares honest local-network and Bonjour usage', () {
+    final plist = File('macos/Runner/Info.plist').readAsStringSync();
+
+    expect(plist, contains('<key>NSLocalNetworkUsageDescription</key>'));
+    expect(plist, contains('<key>NSBonjourServices</key>'));
+    expect(plist, contains('<string>_whisper._tcp</string>'));
+    expect(plist.toLowerCase(), contains('local network'));
+
+    if (Platform.isMacOS) {
+      final lint = Process.runSync(
+        'plutil',
+        <String>['-lint', 'macos/Runner/Info.plist'],
+      );
       expect(lint.exitCode, 0, reason: '${lint.stdout}${lint.stderr}');
     }
   });

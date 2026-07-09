@@ -105,7 +105,7 @@ void main() {
     expect(calls, isEmpty);
   });
 
-  test('desktop platforms require no runtime local-network permission',
+  test('macOS starts unknown and does not fake a permission preflight',
       () async {
     final permission = LocalNetworkPermission(
       channel: channel,
@@ -114,7 +114,24 @@ void main() {
 
     expect(
       await permission.ensureGranted(),
-      LocalNetworkPermissionStatus.granted,
+      LocalNetworkPermissionStatus.unknown,
     );
+  });
+
+  test('Linux and Windows require no runtime local-network permission',
+      () async {
+    for (final platform in <TargetPlatform>[
+      TargetPlatform.linux,
+      TargetPlatform.windows,
+    ]) {
+      final permission = LocalNetworkPermission(
+        channel: channel,
+        targetPlatform: platform,
+      );
+      expect(
+        await permission.ensureGranted(),
+        LocalNetworkPermissionStatus.granted,
+      );
+    }
   });
 }

@@ -10,8 +10,9 @@ enum LocalNetworkPermissionStatus {
 
 /// Cross-platform boundary for LAN access permission state.
 ///
-/// iOS deliberately starts as [LocalNetworkPermissionStatus.unknown]: Apple
-/// exposes no general preflight API, so discovery owns policy-error inference.
+/// Apple platforms deliberately start as
+/// [LocalNetworkPermissionStatus.unknown]: Apple exposes no general preflight
+/// API, so discovery owns policy-error inference.
 final class LocalNetworkPermission {
   LocalNetworkPermission({
     MethodChannel? channel,
@@ -47,7 +48,8 @@ final class LocalNetworkPermission {
     required String method,
     required bool android16CompatTest,
   }) async {
-    if (_targetPlatform == TargetPlatform.iOS) {
+    if (_targetPlatform == TargetPlatform.iOS ||
+        _targetPlatform == TargetPlatform.macOS) {
       return LocalNetworkPermissionStatus.unknown;
     }
     if (_targetPlatform != TargetPlatform.android) {

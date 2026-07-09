@@ -13,13 +13,15 @@ void main() {
       expect(endpoint.chatUri.port, 10004);
     });
 
-    test('supports the complete RFC1918 IPv4 ranges', () {
+    test('accepts canonical addresses from every RFC1918 IPv4 range', () {
       for (final host in <String>[
         '10.0.0.1',
+        '10.0.0.0',
         '10.255.255.254',
         '172.16.0.1',
         '172.31.255.254',
         '192.168.0.1',
+        '192.168.1.255',
         '192.168.255.254',
       ]) {
         final endpoint = PeerEndpoint(host: host, port: 65535);
@@ -28,7 +30,42 @@ void main() {
       }
     });
 
-    test('supports ordinary and scoped IPv6 without hand-built URLs', () {
+    test('rejects non-private, special, and disguised IPv4 addresses', () {
+      for (final host in <String>[
+        '0.1.2.3',
+        '127.0.0.1',
+        '127.1',
+        '2130706433',
+        '169.254.1.2',
+        '8.8.8.8',
+        '100.64.0.1',
+        '172.15.255.254',
+        '172.32.0.1',
+        '224.0.0.251',
+        '255.255.255.255',
+        '192.168.001.1',
+      ]) {
+        expect(
+          () => PeerEndpoint(host: host, port: 10004),
+          throwsArgumentError,
+          reason: host,
+        );
+      }
+    });
+
+    test('accepts ULA, global unicast, and scoped link-local IPv6', () {
+      for (final host in <String>[
+        'fc00::1',
+        'fdff:ffff::1',
+        '2000::1',
+        '2001:db8::7',
+        '3fff:ffff::1',
+        'fe80::2%en0',
+        'febf::1%4',
+      ]) {
+        expect(PeerEndpoint(host: host, port: 10004).host, host);
+      }
+
       final global = PeerEndpoint(host: '2001:db8::7', port: 10004);
       final linkLocal = PeerEndpoint(host: 'fe80::2%en0', port: 10004);
 
@@ -41,10 +78,50 @@ void main() {
       expect(linkLocal.audioUri.host, 'fe80::2%25en0');
     });
 
-    test('supports resolved mDNS hostnames', () {
-      final endpoint = PeerEndpoint(host: 'peer-name.local', port: 10004);
+    test('rejects unsafe IPv6 scopes and address classes', () {
+      for (final host in <String>[
+        '::',
+        '::1',
+        '::ffff:192.168.1.2',
+        '::192.168.1.2',
+        'ff02::fb',
+        'fe80::1',
+        'fc00::1%en0',
+        '2001:db8::1%en0',
+        'fec0::1',
+        '4000::1',
+      ]) {
+        expect(
+          () => PeerEndpoint(host: host, port: 10004),
+          throwsArgumentError,
+          reason: host,
+        );
+      }
+    });
 
+    test('only accepts and normalizes mDNS local hostnames', () {
+      final endpoint = PeerEndpoint(host: 'PEER-Name.Local.', port: 10004);
+
+      expect(endpoint.host, 'peer-name.local');
       expect(endpoint.inputUri.toString(), 'ws://peer-name.local:10004/input');
+
+      for (final host in <String>[
+        'localhost',
+        'localhost.local',
+        'example.com',
+        'peer.local.example',
+        '123.local',
+        '1.2.local',
+        '127.0.0.1.local',
+        '2130706433.local',
+        'peer..local',
+      ]) {
+        expect(
+          () => PeerEndpoint(host: host, port: 10004),
+          throwsArgumentError,
+          reason: host,
+        );
+      }
     });
 
     test('rejects invalid ports and URL-injection host values', () {
@@ -63,6 +140,7 @@ void main() {
         'peer.local/chat',
         '[fe80::1]',
         'fe80::1%',
+        'peer',
       ]) {
         expect(
           () => PeerEndpoint(host: host, port: 10004),

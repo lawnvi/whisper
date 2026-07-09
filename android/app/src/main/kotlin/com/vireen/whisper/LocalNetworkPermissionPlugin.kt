@@ -23,9 +23,7 @@ class LocalNetworkPermissionPlugin :
     private lateinit var context: Context
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
-    private val pendingResults = mutableListOf<MethodChannel.Result>()
-    private var pendingPermission: String? = null
-    private var requestInFlight = false
+    private val state = LocalNetworkPermissionRequestState<MethodChannel.Result>()
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
@@ -35,7 +33,7 @@ class LocalNetworkPermissionPlugin :
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
-        detachActivity()
+        detachActivity(permanent = true)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -45,7 +43,7 @@ class LocalNetworkPermissionPlugin :
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
-        detachActivity()
+        detachActivity(permanent = false)
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -53,14 +51,17 @@ class LocalNetworkPermissionPlugin :
     }
 
     override fun onDetachedFromActivity() {
-        detachActivity()
+        detachActivity(permanent = true)
     }
 
-    private fun detachActivity() {
+    private fun detachActivity(permanent: Boolean) {
         activityBinding?.removeRequestPermissionsResultListener(this)
         activityBinding = null
         activity = null
-        finishPending(STATUS_UNKNOWN)
+        finishPending(
+            state.onActivityDetached(permanent = permanent),
+            NativeLocalNetworkPermissionStatus.UNKNOWN,
+        )
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -78,54 +79,64 @@ class LocalNetworkPermissionPlugin :
     ) {
         val permission = requiredPermission(android16CompatTest)
         if (permission == null) {
-            result.success(STATUS_GRANTED)
+            result.success(NativeLocalNetworkPermissionStatus.GRANTED.wireValue)
             return
         }
 
         when (permissionStatus(permission)) {
-            STATUS_GRANTED -> {
-                result.success(STATUS_GRANTED)
+            NativeLocalNetworkPermissionStatus.GRANTED -> {
+                result.success(NativeLocalNetworkPermissionStatus.GRANTED.wireValue)
                 return
             }
-            STATUS_RESTRICTED -> {
-                result.success(STATUS_RESTRICTED)
+            NativeLocalNetworkPermissionStatus.RESTRICTED -> {
+                result.success(NativeLocalNetworkPermissionStatus.RESTRICTED.wireValue)
                 return
             }
-        }
-
-        if (requestInFlight) {
-            if (pendingPermission == permission) {
-                pendingResults.add(result)
-            } else {
-                result.success(STATUS_UNKNOWN)
-            }
-            return
+            else -> Unit
         }
 
         val currentActivity = activity
-        if (currentActivity == null) {
-            result.success(STATUS_UNKNOWN)
+        if (!state.hasPendingRequest && currentActivity == null) {
+            result.success(NativeLocalNetworkPermissionStatus.UNKNOWN.wireValue)
             return
         }
 
-        pendingPermission = permission
-        pendingResults.add(result)
-        requestInFlight = true
+        val enqueue = state.enqueue(permission, result)
+        when (enqueue.disposition) {
+            PermissionRequestDisposition.MERGED -> return
+            PermissionRequestDisposition.CONFLICT -> {
+                result.success(NativeLocalNetworkPermissionStatus.UNKNOWN.wireValue)
+                return
+            }
+            PermissionRequestDisposition.START -> Unit
+        }
+        val requestCode = enqueue.requestCode!!
+        val requestActivity = currentActivity
+        if (requestActivity == null) {
+            finishPending(
+                state.complete(requestCode),
+                NativeLocalNetworkPermissionStatus.UNKNOWN,
+            )
+            return
+        }
         try {
             ActivityCompat.requestPermissions(
-                currentActivity,
+                requestActivity,
                 arrayOf(permission),
-                REQUEST_CODE,
+                requestCode,
             )
         } catch (_: SecurityException) {
-            finishPending(STATUS_RESTRICTED)
+            finishPending(
+                state.complete(requestCode),
+                NativeLocalNetworkPermissionStatus.RESTRICTED,
+            )
         }
     }
 
     private fun currentStatus(android16CompatTest: Boolean): String {
         val permission = requiredPermission(android16CompatTest)
-            ?: return STATUS_GRANTED
-        return permissionStatus(permission)
+            ?: return NativeLocalNetworkPermissionStatus.GRANTED.wireValue
+        return permissionStatus(permission).wireValue
     }
 
     private fun requiredPermission(android16CompatTest: Boolean): String? {
@@ -137,18 +148,17 @@ class LocalNetworkPermissionPlugin :
         }
     }
 
-    private fun permissionStatus(permission: String): String {
-        return try {
-            if (ContextCompat.checkSelfPermission(context, permission) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                STATUS_GRANTED
-            } else {
-                STATUS_DENIED
-            }
-        } catch (_: SecurityException) {
-            STATUS_RESTRICTED
-        }
+    private fun permissionStatus(permission: String): NativeLocalNetworkPermissionStatus {
+        return queryNativePermissionStatus(
+            isGranted = {
+                ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            },
+            isRevokedByPolicy = {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    context.packageManager.isPermissionRevokedByPolicy(permission, context.packageName)
+            },
+        )
     }
 
     override fun onRequestPermissionsResult(
@@ -156,23 +166,24 @@ class LocalNetworkPermissionPlugin :
         permissions: Array<out String>,
         grantResults: IntArray,
     ): Boolean {
-        if (requestCode != REQUEST_CODE) {
-            return false
-        }
-        val permission = pendingPermission ?: return true
-        val permissionIndex = permissions.indexOf(permission)
+        val completion = state.complete(requestCode, permissions.asList()) ?: return false
+        val permissionIndex = permissions.indexOf(completion.permission)
         val granted = permissionIndex >= 0 &&
             grantResults.getOrNull(permissionIndex) == PackageManager.PERMISSION_GRANTED
-        finishPending(if (granted) STATUS_GRANTED else STATUS_DENIED)
+        val status = if (granted) {
+            NativeLocalNetworkPermissionStatus.GRANTED
+        } else {
+            permissionStatus(completion.permission)
+        }
+        finishPending(completion, status)
         return true
     }
 
-    private fun finishPending(status: String) {
-        val results = pendingResults.toList()
-        pendingResults.clear()
-        pendingPermission = null
-        requestInFlight = false
-        results.forEach { it.success(status) }
+    private fun finishPending(
+        completion: PendingPermissionCompletion<MethodChannel.Result>?,
+        status: NativeLocalNetworkPermissionStatus,
+    ) {
+        completion?.callbacks?.forEach { it.success(status.wireValue) }
     }
 
     private companion object {
@@ -180,10 +191,5 @@ class LocalNetworkPermissionPlugin :
         const val ARG_COMPAT_TEST = "android16CompatTest"
         const val ACCESS_LOCAL_NETWORK_PERMISSION =
             "android.permission.ACCESS_LOCAL_NETWORK"
-        const val REQUEST_CODE = 8471
-        const val STATUS_GRANTED = "granted"
-        const val STATUS_DENIED = "denied"
-        const val STATUS_RESTRICTED = "restricted"
-        const val STATUS_UNKNOWN = "unknown"
     }
 }
