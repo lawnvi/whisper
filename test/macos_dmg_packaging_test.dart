@@ -83,9 +83,8 @@ void main() {
       () {
     final packageScript = File('script/build_and_run.sh').readAsStringSync();
 
-    // The cosmetic layout must not abort packaging by default. Headless CI
-    // runners can fail Finder scripting even though hdiutil can still produce a
-    // usable DMG.
+    // The cosmetic layout must not abort packaging by default — headless CI
+    // runners cannot script the mounted volume (-1728 "Can't get disk").
     expect(
       packageScript,
       contains('WHISPER_MACOS_REQUIRE_DMG_LAYOUT'),
@@ -98,9 +97,10 @@ void main() {
       ),
     );
 
-    final layoutFailure =
-        packageScript.indexOf('WHISPER_MACOS_REQUIRE_DMG_LAYOUT');
-    final convert = packageScript.indexOf(r'hdiutil convert "$rw_dmg_path"');
+    // The layout failure still runs the compression + verification afterwards.
+    final layoutFailure = packageScript.indexOf('WHISPER_MACOS_REQUIRE_DMG_LAYOUT');
+    final convert =
+        packageScript.indexOf('hdiutil convert "\$rw_dmg_path"');
     expect(layoutFailure, isNot(-1));
     expect(convert, isNot(-1));
     expect(layoutFailure, lessThan(convert));

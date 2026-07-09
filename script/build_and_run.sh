@@ -243,8 +243,10 @@ package_release_dmg() {
   ln -s /Applications "$DMG_ROOT/Applications"
   hdiutil create -volname "Whisper" -srcfolder "$DMG_ROOT" -ov -format UDRW "$rw_dmg_path"
   hdiutil attach "$rw_dmg_path" -mountpoint "$mount_point" -nobrowse -quiet
-  # The Finder window layout is cosmetic. Headless CI runners may not have a
-  # usable Finder session, so keep packaging unless strict layout is requested.
+  # The Finder window layout is purely cosmetic. Headless CI runners have no
+  # interactive Finder session, so scripting the mounted volume fails
+  # (-1728 "Can't get disk"). Treat it as best-effort so a functional DMG is
+  # still produced; require it only when explicitly demanded.
   if ! configure_dmg_finder_window "$mount_point"; then
     if [[ "${WHISPER_MACOS_REQUIRE_DMG_LAYOUT:-0}" == "1" ]]; then
       detach_dmg_mount "$mount_point" || true
