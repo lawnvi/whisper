@@ -51,6 +51,12 @@ final class _TransferAdmissionRejected implements Exception {
   final FileTransferAdmission decision;
 }
 
+enum _IncomingReadyResult {
+  retained,
+  sendFailed,
+  unavailable,
+}
+
 Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
 }
@@ -1262,7 +1268,27 @@ class FileTransferEngine {
     );
   }
 
-  Future<void> _sendFileTransferV3Ready(
+  Future<void> _releaseFailedIncomingReadyAttempt(
+    FileTransferData transfer, {
+    required TransferConnectionBinding? connection,
+    required bool startNext,
+  }) async {
+    await _releaseIncomingAndStartNext(
+      transfer,
+      flush: false,
+      connection: connection,
+      startNext: false,
+    );
+    if (startNext) {
+      await _startNextQueuedIncomingTransfer(
+        peerId: transfer.peerUid,
+        connection: connection,
+        excludedTransferIds: <String>{transfer.transferId},
+      );
+    }
+  }
+
+  Future<_IncomingReadyResult> _sendFileTransferV3Ready(
     String transferId, {
     void Function()? requireCurrent,
     TransferConnectionBinding? connection,
@@ -1271,7 +1297,7 @@ class FileTransferEngine {
     var transfer = await _database().fetchFileTransfer(transferId);
     requireCurrent?.call();
     if (transfer == null || isTerminalFileTransferState(transfer.state)) {
-      return;
+      return _IncomingReadyResult.unavailable;
     }
     connection ??= _incomingConnectionBindings[transfer.transferId];
     if (connection != null) {
@@ -1283,7 +1309,7 @@ class FileTransferEngine {
         transfer,
         requireCurrent: requireCurrent ?? () {},
       );
-      if (transfer == null) return;
+      if (transfer == null) return _IncomingReadyResult.unavailable;
     }
     final decision = _transferRuntime.enqueue(
       peerId: transfer.peerUid,
@@ -1291,7 +1317,7 @@ class FileTransferEngine {
       direction: FileTransferDirection.incoming,
     );
     if (decision == TransferRuntimeDecision.queued) {
-      return;
+      return _IncomingReadyResult.retained;
     }
     var tempFile = await _validatedIncomingTempFile(transfer);
     if (!await tempFile.exists()) {
@@ -1336,13 +1362,12 @@ class FileTransferEngine {
     requireCurrent?.call();
     if (updated == null) {
       checksum.close();
-      await _releaseIncomingAndStartNext(
+      await _releaseFailedIncomingReadyAttempt(
         transfer,
-        flush: false,
         connection: connection,
         startNext: startNextOnFailure,
       );
-      return;
+      return _IncomingReadyResult.unavailable;
     }
     _receivingTransfers[updated.transferId] = updated;
     _receivingChecksums[updated.transferId] = checksum;
@@ -1350,9 +1375,9 @@ class FileTransferEngine {
     _receivingTransferSequences[updated.transferId] = 0;
     if (durableOffset == updated.size) {
       await _finalizeIncomingFileTransferV3(updated);
-      return;
+      return _IncomingReadyResult.retained;
     }
-    await _sendFileTransferV3ControlTo(
+    final sent = await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
         action: FileTransferV3Action.ready,
@@ -1369,6 +1394,20 @@ class FileTransferEngine {
       ),
       connection: connection,
     );
+    if (sent) {
+      return _IncomingReadyResult.retained;
+    }
+    await _updateTransfer(
+      updated.transferId,
+      state: FileTransferState.waitingReconnect,
+      lastError: '',
+    );
+    await _releaseFailedIncomingReadyAttempt(
+      updated,
+      connection: connection,
+      startNext: startNextOnFailure,
+    );
+    return _IncomingReadyResult.sendFailed;
   }
 
   Future<void> _handleFileTransferV3Control(
@@ -2613,9 +2652,21 @@ class FileTransferEngine {
     }
   }
 
+  TransferConnectionBinding? _incomingProgressionConnection(
+    String candidatePeerId,
+    TransferConnectionBinding? preferred,
+  ) {
+    if (preferred?.peerId == candidatePeerId) {
+      return preferred;
+    }
+    final current = _currentConnectionBinding(candidatePeerId);
+    return current?.peerId == candidatePeerId ? current : null;
+  }
+
   Future<void> _startNextQueuedIncomingTransfer({
     String? peerId,
     TransferConnectionBinding? connection,
+    Set<String> excludedTransferIds = const <String>{},
   }) async {
     final peerIds = <String>{
       if (peerId?.isNotEmpty ?? false) peerId!,
@@ -2626,6 +2677,9 @@ class FileTransferEngine {
       if (_transferRuntime.activeIncomingFor(candidatePeerId) != null) {
         continue;
       }
+      final attemptedTransferIds = <String>{...excludedTransferIds};
+      var preferredConnection =
+          connection?.peerId == candidatePeerId ? connection : null;
       while (true) {
         final queuedId = _transferRuntime.claimNext(
           peerId: candidatePeerId,
@@ -2656,14 +2710,17 @@ class FileTransferEngine {
           );
           continue;
         }
-        final queuedConnection = connection ??
-            _incomingConnectionBindings[queuedId] ??
-            _currentConnectionBinding(candidatePeerId);
+        attemptedTransferIds.add(queuedId);
+        final queuedConnection = _incomingProgressionConnection(
+          candidatePeerId,
+          preferredConnection,
+        );
         if (queuedConnection != null) {
           _operationConnectionBindings[queuedId] = queuedConnection;
         }
+        late final _IncomingReadyResult readyResult;
         try {
-          await _sendFileTransferV3Ready(
+          readyResult = await _sendFileTransferV3Ready(
             queuedId,
             connection: queuedConnection,
             startNextOnFailure: false,
@@ -2673,7 +2730,14 @@ class FileTransferEngine {
             _operationConnectionBindings.remove(queuedId);
           }
         }
-        if (_transferRuntime.activeIncomingFor(candidatePeerId) == queuedId) {
+        if (readyResult == _IncomingReadyResult.sendFailed) {
+          if (queuedConnection == preferredConnection) {
+            preferredConnection = null;
+          }
+          continue;
+        }
+        if (readyResult == _IncomingReadyResult.retained &&
+            _transferRuntime.activeIncomingFor(candidatePeerId) == queuedId) {
           return;
         }
         final unclaimed = await _database().fetchFileTransfer(queuedId);
@@ -2693,6 +2757,9 @@ class FileTransferEngine {
       );
       items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       for (final item in items) {
+        if (attemptedTransferIds.contains(item.transferId)) {
+          continue;
+        }
         if (item.state == FileTransferState.queued ||
             item.state == FileTransferState.waitingReconnect) {
           if (await _database().fetchAssociatedFileTransferMessage(item) ==
@@ -2709,14 +2776,17 @@ class FileTransferEngine {
             return;
           }
           // WSP2 可续传栈已删除,排队中的接收任务统一走 V3 就绪握手。
-          final itemConnection = connection ??
-              _incomingConnectionBindings[item.transferId] ??
-              _currentConnectionBinding(candidatePeerId);
+          attemptedTransferIds.add(item.transferId);
+          final itemConnection = _incomingProgressionConnection(
+            candidatePeerId,
+            preferredConnection,
+          );
           if (itemConnection != null) {
             _operationConnectionBindings[item.transferId] = itemConnection;
           }
+          late final _IncomingReadyResult readyResult;
           try {
-            await _sendFileTransferV3Ready(
+            readyResult = await _sendFileTransferV3Ready(
               item.transferId,
               connection: itemConnection,
               startNextOnFailure: false,
@@ -2727,8 +2797,15 @@ class FileTransferEngine {
               _operationConnectionBindings.remove(item.transferId);
             }
           }
-          if (_transferRuntime.activeIncomingFor(candidatePeerId) ==
-              item.transferId) {
+          if (readyResult == _IncomingReadyResult.sendFailed) {
+            if (itemConnection == preferredConnection) {
+              preferredConnection = null;
+            }
+            continue;
+          }
+          if (readyResult == _IncomingReadyResult.retained &&
+              _transferRuntime.activeIncomingFor(candidatePeerId) ==
+                  item.transferId) {
             return;
           }
           final unclaimed =
@@ -2822,7 +2899,7 @@ class FileTransferEngine {
   }) async {
     await _closeReceivingTransferFile(transferId, flush: flush);
     _receivingTransfers.remove(transferId);
-    _receivingChecksums.remove(transferId);
+    _receivingChecksums.remove(transferId)?.close();
     _receivingTransferOffsets.remove(transferId);
     _receivingTransferSequences.remove(transferId);
   }

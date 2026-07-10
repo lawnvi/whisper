@@ -23,6 +23,10 @@ import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 const _binding = TransferConnectionBinding(peerId: 'peer-a', generation: 7);
+const _replacementBinding =
+    TransferConnectionBinding(peerId: 'peer-a', generation: 8);
+const _peerBBinding =
+    TransferConnectionBinding(peerId: 'peer-b', generation: 41);
 const _firstId = '01234567-89ab-4cde-8fab-0123456789ab';
 const _secondId = '11234567-89ab-4cde-8fab-0123456789ab';
 const _thirdId = '21234567-89ab-4cde-8fab-0123456789ab';
@@ -721,6 +725,181 @@ void main() {
     });
   }
 
+  test('incoming progression uses the matching generation for each peer',
+      () async {
+    final root = await Directory.systemTemp.createTemp('whisper-cross-peer-');
+    addTearDown(() => root.delete(recursive: true));
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sent = <WhisperFrameV3>[];
+    final routed = <({
+      TransferConnectionBinding connection,
+      WhisperFrameV3 frame,
+    })>[];
+    final engine = _engine(
+      database,
+      sent,
+      downloadDirectory: () async => root,
+      currentConnectionBinding: (peerId) => switch (peerId) {
+        'peer-a' => _binding,
+        'peer-b' => _peerBBinding,
+        _ => null,
+      },
+      connectedPeerIds: () => const <String>{'peer-a', 'peer-b'},
+      remoteProfileFor: (peerId) => _capablePeer(peerId),
+      sendBytesToConnection: (connection, frame) {
+        routed.add((connection: connection, frame: frame));
+        return true;
+      },
+    );
+    final checksum = bytesChecksum(const <int>[1], algorithm: 'sha256');
+    await engine.handleFrame(
+      _binding,
+      _offerFrame(_incomingMessage(_firstId, size: 1, checksum: checksum)),
+      requireCurrent: () {},
+    );
+    final peerBMessage = await database.insertMessageReturning(
+      _incomingMessage(
+        _secondId,
+        size: 1,
+        checksum: checksum,
+        peerId: 'peer-b',
+      ),
+    );
+    await database.upsertFileTransfer(
+      _incomingTransfer(
+        _secondId,
+        size: 1,
+        messageRowId: peerBMessage.id,
+        tempPath: await safeTransferTempPath(root, _secondId),
+        committedBytes: 0,
+        checksum: checksum,
+        peerId: 'peer-b',
+      ).copyWith(state: FileTransferState.queued),
+    );
+    routed.clear();
+
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(_control(
+        FileTransferV3Action.cancel,
+        _firstId,
+        size: 1,
+        offset: 0,
+      )),
+      requireCurrent: () {},
+    );
+
+    final peerBReady = routed
+        .where((send) =>
+            send.frame.type == WhisperFrameType.fileReady &&
+            send.frame.transferId == _secondId)
+        .toList();
+    expect(peerBReady, hasLength(1));
+    expect(peerBReady.single.connection, _peerBBinding);
+  });
+
+  test('false READY releases stale generation and advances each successor once',
+      () async {
+    final root = await Directory.systemTemp.createTemp('whisper-stale-ready-');
+    addTearDown(() => root.delete(recursive: true));
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sent = <WhisperFrameV3>[];
+    final routed = <({
+      TransferConnectionBinding connection,
+      WhisperFrameV3 frame,
+    })>[];
+    final engine = _engine(
+      database,
+      sent,
+      downloadDirectory: () async => root,
+      currentConnectionBinding: (_) => _replacementBinding,
+      sendBytesToConnection: (connection, frame) {
+        routed.add((connection: connection, frame: frame));
+        return frame.type != WhisperFrameType.fileReady ||
+            frame.transferId == _firstId ||
+            connection != _binding;
+      },
+    );
+    final checksum = bytesChecksum(const <int>[1], algorithm: 'sha256');
+    for (final id in <String>[_firstId, _secondId, _thirdId]) {
+      await engine.handleFrame(
+        _binding,
+        _offerFrame(_incomingMessage(id, size: 1, checksum: checksum)),
+        requireCurrent: () {},
+      );
+    }
+    sent.clear();
+
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(_control(
+        FileTransferV3Action.cancel,
+        _firstId,
+        size: 1,
+        offset: 0,
+      )),
+      requireCurrent: () {},
+    );
+
+    expect(_readyFrames(sent, _secondId), hasLength(1));
+    expect(_readyFrames(sent, _thirdId), hasLength(1));
+    expect(
+      routed
+          .singleWhere((send) => send.frame.transferId == _secondId)
+          .connection,
+      _binding,
+    );
+    expect(
+      routed
+          .singleWhere((send) => send.frame.transferId == _thirdId)
+          .connection,
+      _replacementBinding,
+    );
+    expect(
+      (await database.fetchFileTransfer(_secondId))?.state,
+      FileTransferState.waitingReconnect,
+    );
+    expect(
+      (await database.fetchFileTransfer(_thirdId))?.state,
+      FileTransferState.negotiating,
+    );
+  });
+
+  test('initial false READY is not retried recursively', () async {
+    final root = await Directory.systemTemp.createTemp('whisper-ready-once-');
+    addTearDown(() => root.delete(recursive: true));
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    var readyAttempts = 0;
+    final engine = _engine(
+      database,
+      <WhisperFrameV3>[],
+      downloadDirectory: () async => root,
+      sendBytesToConnection: (connection, frame) {
+        if (frame.type != WhisperFrameType.fileReady) {
+          return true;
+        }
+        readyAttempts++;
+        return readyAttempts > 1;
+      },
+    );
+    final checksum = bytesChecksum(const <int>[1], algorithm: 'sha256');
+
+    await engine.handleFrame(
+      _binding,
+      _offerFrame(_incomingMessage(_firstId, size: 1, checksum: checksum)),
+      requireCurrent: () {},
+    );
+
+    expect(readyAttempts, 1);
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.waitingReconnect,
+    );
+  });
+
   for (final action in <FileTransferV3Action>[
     FileTransferV3Action.cancel,
     FileTransferV3Action.error,
@@ -1125,12 +1304,17 @@ FileTransferEngine _engine(
     TransferConnectionBinding binding,
     WhisperFrameV3 frame,
   )? sendBytesToConnection,
+  TransferConnectionBinding? Function(String peerId)? currentConnectionBinding,
+  Set<String> Function()? connectedPeerIds,
+  PeerProfile? Function(String peerId)? remoteProfileFor,
 }) {
   return FileTransferEngine(
-    currentConnectionBinding: (peerId) =>
-        peerId == _binding.peerId ? _binding : null,
+    currentConnectionBinding: currentConnectionBinding ??
+        (peerId) => peerId == _binding.peerId ? _binding : null,
     sendBytesToConnection: (connection, bytes) {
-      expect(connection, _binding);
+      if (sendBytesToConnection == null) {
+        expect(connection, _binding);
+      }
       final frame = WhisperFrameV3.decode(bytes as Uint8List);
       sent.add(frame);
       return sendBytesToConnection?.call(connection, frame) ?? true;
@@ -1139,9 +1323,9 @@ FileTransferEngine _engine(
     ackWatchdog: ackWatchdog,
     emitTransferUpdated: (_) {},
     notify: (_) {},
-    remoteProfileFor: (_) => _capablePeer(),
+    remoteProfileFor: remoteProfileFor ?? (_) => _capablePeer(),
     isConnectedTo: (_) => true,
-    connectedPeerIds: () => const <String>{'peer-a'},
+    connectedPeerIds: connectedPeerIds ?? () => const <String>{'peer-a'},
     defaultPeerId: () => '',
     hasLegacySinkFor: (_) => false,
     localPeerIdFor: (_) => 'local',
@@ -1191,10 +1375,11 @@ MessageData _incomingMessage(
   String id, {
   required int size,
   required String checksum,
+  String peerId = 'peer-a',
 }) =>
     MessageData(
       id: 0,
-      sender: 'peer-a',
+      sender: peerId,
       receiver: 'local',
       name: '$id.bin',
       clipboard: false,
@@ -1243,12 +1428,13 @@ FileTransferData _incomingTransfer(
   required String tempPath,
   required int committedBytes,
   required String checksum,
+  String peerId = 'peer-a',
 }) =>
     FileTransferData(
       transferId: id,
       messageUuid: id,
       messageRowId: messageRowId,
-      peerUid: 'peer-a',
+      peerUid: peerId,
       direction: FileTransferDirection.incoming,
       state: FileTransferState.negotiating,
       finalPath: '',
@@ -1321,11 +1507,11 @@ Iterable<WhisperFrameV3> _readyFrames(
           frame.transferId == transferId,
     );
 
-PeerProfile _capablePeer() => PeerProfile(
-      device: const DeviceData(
+PeerProfile _capablePeer([String peerId = 'peer-a']) => PeerProfile(
+      device: DeviceData(
         id: 0,
-        uid: 'peer-a',
-        name: 'Peer A',
+        uid: peerId,
+        name: peerId,
         host: '192.168.1.2',
         port: 10002,
         password: '',
