@@ -2709,10 +2709,13 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
           result(nil)
         }
       } catch {
-        capture.sendError(sessionId: sessionId, message: error.localizedDescription)
+        let wasCancelled = error is CancellationError || capture.isStopRequested
+        if !wasCancelled {
+          capture.sendError(sessionId: sessionId, message: error.localizedDescription)
+        }
         DispatchQueue.main.async {
           result(FlutterError(
-            code: "audio-capture",
+            code: wasCancelled ? "audio-capture-cancelled" : "audio-capture",
             message: error.localizedDescription,
             details: nil))
         }
@@ -2772,9 +2775,15 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
 
   private let channel: FlutterMethodChannel
   private let sampleQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture")
+  private let stateQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture.state")
   private var stream: SCStream?
+  private var stopRequested = false
   private var sessionId = ""
   private var sequence: Int64 = 0
+
+  var isStopRequested: Bool {
+    stateQueue.sync { stopRequested }
+  }
 
   init(channel: FlutterMethodChannel) {
     self.channel = channel
@@ -2782,6 +2791,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   }
 
   func start(sessionId: String, format: [String: Any]) async throws {
+    try throwIfStopRequested()
     self.sessionId = sessionId
     sequence = 0
 
@@ -2790,6 +2800,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     let content = try await SCShareableContent.excludingDesktopWindows(
       false,
       onScreenWindowsOnly: true)
+    try throwIfStopRequested()
     guard let display = content.displays.first else {
       throw NSError(
         domain: "AudioSharePlugin",
@@ -2814,15 +2825,36 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       self,
       type: .audio,
       sampleHandlerQueue: sampleQueue)
+    try throwIfStopRequested()
     try await stream.startCapture()
-    self.stream = stream
+    let shouldKeepStream = stateQueue.sync { () -> Bool in
+      if stopRequested {
+        return false
+      }
+      self.stream = stream
+      return true
+    }
+    if !shouldKeepStream {
+      try? await stream.stopCapture()
+      throw CancellationError()
+    }
   }
 
   func stop() {
-    let stream = self.stream
-    self.stream = nil
+    let stream = stateQueue.sync { () -> SCStream? in
+      stopRequested = true
+      let current = self.stream
+      self.stream = nil
+      return current
+    }
     Task {
       try? await stream?.stopCapture()
+    }
+  }
+
+  private func throwIfStopRequested() throws {
+    if isStopRequested {
+      throw CancellationError()
     }
   }
 
