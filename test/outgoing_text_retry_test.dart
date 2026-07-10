@@ -414,6 +414,52 @@ void main() {
       expect(decision.decision, WireMessageReplayDecision.conflict);
       expect(persists, 0);
     });
+
+    test('file claims can ignore receiver-local path when matching replay',
+        () async {
+      final guard = WireMessageReplayGuard();
+      final incoming = _message(uuid: 'shared').copyWith(
+        type: MessageEnum.File,
+        path: '',
+      );
+      final persisted = incoming.copyWith(id: 7, path: '/downloads/file.bin');
+
+      var persists = 0;
+      final claim = await guard.claim(
+        incoming,
+        fetchExisting: (_) async => <MessageData>[persisted],
+        isDuplicate: (existing, message) =>
+            existing.uuid == message.uuid &&
+            existing.sender == message.sender &&
+            existing.receiver == message.receiver &&
+            existing.type == message.type &&
+            existing.content == message.content,
+        persist: (message) async {
+          persists++;
+          return message;
+        },
+      );
+
+      expect(claim.decision, WireMessageReplayDecision.duplicate);
+      expect(claim.message?.id, 7);
+      expect(persists, 0);
+    });
+
+    test('durable non-message UUID claims reject text persistence', () async {
+      var persists = 0;
+      final claim = await WireMessageReplayGuard().claim(
+        _message(uuid: 'transfer-owned'),
+        fetchExisting: (_) async => const <MessageData>[],
+        hasExternalClaim: (_) async => true,
+        persist: (message) async {
+          persists++;
+          return message;
+        },
+      );
+
+      expect(claim.decision, WireMessageReplayDecision.conflict);
+      expect(persists, 0);
+    });
   });
 
   test('acknowledgement failures are contained for local side effects',
@@ -449,6 +495,16 @@ void main() {
     expect(
       textMessageCase.indexOf('_dispatchToAll('),
       lessThan(textMessageCase.indexOf('await _ackMessage(message)')),
+    );
+
+    final duplicateReplayCase = source.substring(
+      source.indexOf('case WireMessageReplayDecision.duplicate:'),
+      source.indexOf('case WireMessageReplayDecision.conflict:'),
+    );
+    expect(duplicateReplayCase, contains('message = replay.message!'));
+    expect(
+      duplicateReplayCase.indexOf('_dispatchToAll('),
+      lessThan(duplicateReplayCase.indexOf('await _ackMessage(message)')),
     );
 
     final textCase = source.substring(

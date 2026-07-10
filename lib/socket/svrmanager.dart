@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -39,6 +38,7 @@ import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
+import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -136,6 +136,12 @@ class WsSvrManager {
   static const int _maxAuthenticatedMessageBytes = 1024 * 1024;
   static const int _authenticatedFrameOverhead = 48;
   static const int _maxFileDataPayloadBytes = 512 * 1024;
+  static final Set<String> _audioControlActions =
+      AudioControlAction.values.map((action) => action.name).toSet();
+  static final Set<String> _audioGroupControlActions =
+      AudioGroupControlAction.values.map((action) => action.name).toSet();
+  static final Set<String> _remoteInputControlActions =
+      RemoteInputControlAction.values.map((action) => action.name).toSet();
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
@@ -206,6 +212,8 @@ class WsSvrManager {
   final OutgoingTextSendLocks _outgoingTextSendLocks = OutgoingTextSendLocks();
   final WireMessageReplayGuard _wireMessageReplayGuard =
       WireMessageReplayGuard();
+  final WireControlSessionRegistry _wireControlSessions =
+      WireControlSessionRegistry();
   final SocketAdmissionController _admission;
   final AudioShareManager _audioManager;
   final RemoteInputManager _remoteInputManager;
@@ -239,9 +247,12 @@ class WsSvrManager {
     connectedPeerIds: () => _peerConnections.connectedPeerIds,
     defaultPeerId: () => receiver,
     hasLegacySinkFor: (peerId) => peerId == receiver && _sink != null,
+    localPeerIdFor: (peerId) =>
+        _sessionsByPeerId[peerId]?.localProfile.uid ?? '',
     buildMessage: _buildMessage,
     dispatchOutgoingMessage: _dispatchOutgoingMessage,
     ackMessage: _ackMessage,
+    wireMessageReplayGuard: _wireMessageReplayGuard,
   );
 
   PeerProfile? get _selectedRemoteProfile =>
@@ -1106,7 +1117,9 @@ class WsSvrManager {
         throw const _OutgoingConnectionCancelled();
       }
       final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
-        unawaited(_heartBeat(sink: channelSink));
+        unawaited(
+          _heartBeat(peerId: session.remotePeerId, sink: channelSink),
+        );
       });
       _clientTimersBySink[channelSink] = timer;
       _clientTimer = timer;
@@ -1414,6 +1427,7 @@ class WsSvrManager {
     }
     _sessionsBySink.clear();
     _sessionsByPeerId.clear();
+    _wireControlSessions.clearAll();
     _endpointsBySink.clear();
     _peerIdsBySink.clear();
     _remoteProfilesByPeerId.clear();
@@ -1452,7 +1466,45 @@ class WsSvrManager {
     _dispatchToAll((event) => event.onClose());
   }
 
+  Map<String, Set<String>> _preservedControlSessionsForPeer(String peerId) {
+    final preserved = <String, Set<String>>{};
+    final audioState = AudioShareCoordinator.shared.state;
+    if (audioState.isForPeer(peerId) && audioState.sessionId.isNotEmpty) {
+      preserved['audio'] = <String>{audioState.sessionId};
+    }
+
+    final group = AudioGroupCoordinator.shared.session;
+    final groupSessionIds = <String>{};
+    if (group != null) {
+      if (group.sourcePeerId == peerId) {
+        groupSessionIds.addAll(
+          group.sinks.values
+              .where((sink) => sink.sessionId.isNotEmpty)
+              .map((sink) => sink.sessionId),
+        );
+      } else {
+        final sink = group.sinks[peerId];
+        if (sink != null && sink.sessionId.isNotEmpty) {
+          groupSessionIds.add(sink.sessionId);
+        }
+      }
+    }
+    final rejoinSessionId = AudioGroupCoordinator.shared.rejoinSessionId;
+    if (AudioGroupCoordinator.shared.rejoinSourcePeerId == peerId &&
+        rejoinSessionId.isNotEmpty) {
+      groupSessionIds.add(rejoinSessionId);
+    }
+    if (groupSessionIds.isNotEmpty) {
+      preserved['audio-group'] = groupSessionIds;
+    }
+    return preserved;
+  }
+
   Future<void> _handlePeerDisconnected(String peerId) async {
+    _wireControlSessions.clearPeer(
+      peerId,
+      preservedSessions: _preservedControlSessionsForPeer(peerId),
+    );
     await _transferEngine.handlePeerDisconnected(peerId);
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
     if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
@@ -1601,6 +1653,11 @@ class WsSvrManager {
           if (bytes.length > _maxAuthenticatedMessageBytes) {
             throw const AuthHandshakeException('message_too_large');
           }
+          _requireCurrentBusinessSession(
+            session,
+            sink,
+            session.connectionGeneration,
+          );
         }
         await _listen(
           bytes,
@@ -1612,9 +1669,12 @@ class WsSvrManager {
         logger.i('处理 websocket 消息失败: ${error.runtimeType}');
         final failedSession = _sessionsBySink[sink];
         if (failedSession != null) {
-          final message = error is AuthHandshakeException
-              ? error.code
-              : 'authentication_failed';
+          final message = switch (error) {
+            AuthHandshakeException() => error.code,
+            WireInputRejected() => error.reason,
+            FormatException() => WireInputReason.malformedFrame,
+            _ => 'authentication_failed',
+          };
           await _failSocketSession(failedSession, sink, message);
         } else {
           await sink.close();
@@ -2093,6 +2153,32 @@ class WsSvrManager {
     }
   }
 
+  void _requireCurrentBusinessSession(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    int generation,
+  ) {
+    _requireCurrentAuthenticatedSession(session, sink, generation);
+    final peerId = session.remotePeerId;
+    WireInputPolicy.validateSessionBinding(
+      isAuthenticated: session.isAuthenticated,
+      sessionPeerId: peerId,
+      sinkPeerId: _peerIdsBySink[sink] ?? '',
+      sessionGeneration: generation,
+      isCurrentSession: identical(_sessionsByPeerId[peerId], session),
+      isCurrentConnection: _peerConnections.isCurrent(peerId, generation),
+    ).requireAccepted();
+  }
+
+  PeerProfile _requireRemoteProfileForSession(PeerSocketSession session) {
+    final peerId = session.remotePeerId;
+    final profile = _remoteProfilesByPeerId[peerId];
+    if (profile == null || profile.device.uid != peerId) {
+      throw const WireInputRejected(WireInputReason.sessionNotCurrent);
+    }
+    return profile;
+  }
+
   void _requireCurrentRegisterableSession(
     PeerSocketSession session,
     WebSocketSink sink,
@@ -2131,19 +2217,30 @@ class WsSvrManager {
     required bool asServer,
     required PeerSocketSession session,
   }) async {
+    if (session.isAuthenticated) {
+      if (sink == null) {
+        throw const WireInputRejected(WireInputReason.sessionNotCurrent);
+      }
+      _requireCurrentBusinessSession(
+        session,
+        sink,
+        session.connectionGeneration,
+      );
+    }
     if (!session.isAuthenticated && frame.type != WhisperFrameType.message) {
-      session.close();
-      await sink?.close();
-      return;
+      throw const WireInputRejected(
+        WireInputReason.sessionNotAuthenticated,
+      );
     }
     if (frame.type == WhisperFrameType.fileData &&
         frame.payload.length > _maxFileDataPayloadBytes) {
-      session.close();
-      await sink?.close();
-      return;
+      throw const WireInputRejected(
+        WireInputReason.transferPayloadInvalid,
+      );
     }
     switch (frame.type) {
       case WhisperFrameType.message:
+        WireInputPolicy.validateMessageFrame(frame).requireAccepted();
         await _listen(
           frame.payload,
           sink: sink,
@@ -2159,7 +2256,15 @@ class WsSvrManager {
       case WhisperFrameType.fileComplete:
       case WhisperFrameType.fileCancel:
       case WhisperFrameType.fileError:
-        await _transferEngine.handleFrame(frame);
+        await _transferEngine.handleFrame(
+          session.remotePeerId,
+          frame,
+          requireCurrent: () => _requireCurrentBusinessSession(
+            session,
+            sink!,
+            session.connectionGeneration,
+          ),
+        );
         break;
     }
   }
@@ -2204,21 +2309,46 @@ class WsSvrManager {
       // 需同时容忍 Error:type 以枚举序号上线,新版对端发来的越界序号
       // 会抛 RangeError(不是 Exception),此处降级为 UNKONWN 消息继续。
     }
-    final incomingPeerId =
-        message.sender.isNotEmpty ? message.sender : streamPeerId;
+    final incomingPeerId = session.isAuthenticated
+        ? session.remotePeerId
+        : (message.sender.isNotEmpty ? message.sender : streamPeerId);
+    void requireCurrentBusiness() {
+      if (!session.isAuthenticated || sink == null) {
+        throw const WireInputRejected(WireInputReason.sessionNotCurrent);
+      }
+      _requireCurrentBusinessSession(
+        session,
+        sink,
+        session.connectionGeneration,
+      );
+    }
 
     if (!session.isAuthenticated && message.type != MessageEnum.Auth) {
-      session.close();
-      await sink?.close();
-      return;
+      throw const WireInputRejected(
+        WireInputReason.sessionNotAuthenticated,
+      );
+    }
+    if (session.isAuthenticated) {
+      requireCurrentBusiness();
+      WireInputPolicy.validateMessage(
+        message,
+        authenticatedPeerId: session.remotePeerId,
+        localPeerId: session.localProfile.uid,
+      ).requireAccepted();
     }
     if (message.type == MessageEnum.Text) {
-      final replay = await _claimIncomingTextMessage(message);
+      final replay = await _claimIncomingTextMessage(
+        message,
+        requireCurrent: requireCurrentBusiness,
+      );
+      requireCurrentBusiness();
       switch (replay.decision) {
         case WireMessageReplayDecision.accept:
           message = replay.message!;
           break;
         case WireMessageReplayDecision.duplicate:
+          message = replay.message!;
+          _dispatchToAll((event) => event.onMessage(message));
           await _ackMessage(message);
           return;
         case WireMessageReplayDecision.conflict:
@@ -2238,13 +2368,23 @@ class WsSvrManager {
         }
       case MessageEnum.Ack:
         {
-          if (message.uuid.isEmpty) {
-            return;
+          if (sink == null) {
+            throw const WireInputRejected(WireInputReason.sessionNotCurrent);
           }
-          // logger.i("收到ACK消息: ${message.uuid} ${message.type}\n$str");
-          var msg = await LocalDatabase().ackMessage(message);
-          if (msg != null) {
-            _dispatchToAll((event) => event.onMessage(msg));
+          final database = LocalDatabase();
+          final acknowledged = await WireInputPolicy.acknowledgeOutgoing(
+            database: database,
+            acknowledgement: message,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+            requireCurrent: () => _requireCurrentBusinessSession(
+              session,
+              sink,
+              session.connectionGeneration,
+            ),
+          );
+          if (acknowledged != null) {
+            _dispatchToAll((event) => event.onMessage(acknowledged));
           }
           break;
         }
@@ -2254,12 +2394,14 @@ class WsSvrManager {
               "收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
           if (message.clipboard) {
             if ((await LocalSetting().instance()).clipboard) {
+              requireCurrentBusiness();
               copyToClipboard(
                 message.content ?? "",
                 suppressWatcher: true,
               );
             }
           }
+          requireCurrentBusiness();
           _dispatchToAll((event) => event.onMessage(message));
           await _ackMessage(message);
           logger.i("文本消息：$str");
@@ -2268,7 +2410,10 @@ class WsSvrManager {
       case MessageEnum.Notification:
         {
           var data = jsonDecode(message.content ?? "{}");
-          if (!await LocalSetting().ignoreAndroidNotification()) {
+          final ignoreNotification =
+              await LocalSetting().ignoreAndroidNotification();
+          requireCurrentBusiness();
+          if (!ignoreNotification) {
             if (supportNotification() && data['text'] != null) {
               NotificationHelper().showNotification(
                   title: "【${data['app']}】 ${data['title']}",
@@ -2277,11 +2422,13 @@ class WsSvrManager {
                 var code =
                     verifyCode('${data["title"] ?? ""}\n${data["text"] ?? ""}');
                 if (code.isNotEmpty && await LocalSetting().copyVerify()) {
+                  requireCurrentBusiness();
                   copyToClipboard(code);
                 }
               }
             }
           }
+          requireCurrentBusiness();
           _dispatchToAll((event) => event.onMessage(message));
           await _ackMessage(message);
           break;
@@ -2294,7 +2441,9 @@ class WsSvrManager {
           await _refreshRemoteProfileFromHeartbeat(
             message,
             peerId: incomingPeerId,
+            requireCurrent: requireCurrentBusiness,
           );
+          requireCurrentBusiness();
           if (message.message == _profileRefreshRequestMessage) {
             unawaited(_heartBeat(peerId: incomingPeerId, sink: sink));
           }
@@ -2312,22 +2461,45 @@ class WsSvrManager {
         {
           final json =
               jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          WireInputPolicy.validateControlEnvelope(
+            json,
+            allowedActions: _audioControlActions,
+          ).requireAccepted();
           final control = AudioControlMessage.fromJson(json);
+          WireInputPolicy.validateControlSessionId(
+            messageId: message.uuid,
+            sessionId: control.sessionId,
+          ).requireAccepted();
+          WireInputPolicy.validatePeerPair(
+            sourcePeerId: control.sourcePeerId,
+            sinkPeerId: control.sinkPeerId,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+          ).requireAccepted();
+          _wireControlSessions
+              .validateAndRemember(
+                namespace: 'audio',
+                sessionId: control.sessionId,
+                sourcePeerId: control.sourcePeerId,
+                sinkPeerId: control.sinkPeerId,
+                authenticatedPeerId: session.remotePeerId,
+                localPeerId: session.localProfile.uid,
+                isInitialOffer: control.action == AudioControlAction.offer,
+                isIncoming: true,
+              )
+              .requireAccepted();
           final self = await LocalSetting().instance();
-          final remoteProfile = incomingPeerId == null
-              ? _selectedRemoteProfile
-              : _remoteProfilesByPeerId[incomingPeerId] ??
-                  _selectedRemoteProfile;
-          final remoteDevice = remoteProfile?.device;
+          requireCurrentBusiness();
+          final remoteDevice = _requireRemoteProfileForSession(session).device;
           await AudioShareCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
-            remoteHost: remoteDevice?.host ?? '',
-            remotePort: remoteDevice?.port ?? 0,
-            sendControl: incomingPeerId == null
-                ? sendAudioControl
-                : (control) => sendAudioControlTo(incomingPeerId, control),
+            remoteHost: remoteDevice.host,
+            remotePort: remoteDevice.port,
+            sendControl: (control) =>
+                sendAudioControlTo(session.remotePeerId, control),
           );
+          requireCurrentBusiness();
           await _ackMessage(message);
           break;
         }
@@ -2335,23 +2507,49 @@ class WsSvrManager {
         {
           final json =
               jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          WireInputPolicy.validateControlEnvelope(
+            json,
+            allowedActions: _audioGroupControlActions,
+          ).requireAccepted();
           final control = AudioGroupControlMessage.fromJson(json);
+          WireInputPolicy.validateControlSessionId(
+            messageId: message.uuid,
+            sessionId: control.sessionId,
+          ).requireAccepted();
+          WireInputPolicy.validatePeerPair(
+            sourcePeerId: control.sourcePeerId,
+            sinkPeerId: control.sinkPeerId,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+          ).requireAccepted();
+          _wireControlSessions
+              .validateAndRemember(
+                namespace: 'audio-group',
+                sessionId: control.sessionId,
+                sourcePeerId: control.sourcePeerId,
+                sinkPeerId: control.sinkPeerId,
+                authenticatedPeerId: session.remotePeerId,
+                localPeerId: session.localProfile.uid,
+                isInitialOffer: control.action ==
+                        AudioGroupControlAction.groupOffer ||
+                    control.action == AudioGroupControlAction.sinkJoinRequest,
+                isIncoming: true,
+                reverseInitialDirection:
+                    control.action == AudioGroupControlAction.sinkJoinRequest,
+              )
+              .requireAccepted();
           final self = await LocalSetting().instance();
-          final remoteProfile = incomingPeerId == null
-              ? _selectedRemoteProfile
-              : _remoteProfilesByPeerId[incomingPeerId] ??
-                  _selectedRemoteProfile;
-          final remoteDevice = remoteProfile?.device;
+          requireCurrentBusiness();
+          final remoteDevice = _requireRemoteProfileForSession(session).device;
           await AudioGroupCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
-            remoteHost: remoteDevice?.host ?? '',
-            remotePort: remoteDevice?.port ?? 0,
-            sendControl: incomingPeerId == null
-                ? (_, control) => sendAudioGroupControl(control)
-                : (_, control) =>
-                    sendAudioGroupControlTo(incomingPeerId, control),
+            remoteHost: remoteDevice.host,
+            remotePort: remoteDevice.port,
+            sendControl: (_, control) =>
+                sendAudioGroupControlTo(session.remotePeerId, control),
           );
+          requireCurrentBusiness();
           await _ackMessage(message);
           break;
         }
@@ -2359,18 +2557,41 @@ class WsSvrManager {
         {
           final json =
               jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          WireInputPolicy.validateControlEnvelope(
+            json,
+            allowedActions: _remoteInputControlActions,
+          ).requireAccepted();
           final control = RemoteInputControlMessage.fromJson(json);
+          WireInputPolicy.validateControlSessionId(
+            messageId: message.uuid,
+            sessionId: control.sessionId,
+          ).requireAccepted();
+          WireInputPolicy.validatePeerPair(
+            sourcePeerId: control.sourcePeerId,
+            sinkPeerId: control.sinkPeerId,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+          ).requireAccepted();
+          _wireControlSessions
+              .validateAndRemember(
+                namespace: 'remote-input',
+                sessionId: control.sessionId,
+                sourcePeerId: control.sourcePeerId,
+                sinkPeerId: control.sinkPeerId,
+                authenticatedPeerId: session.remotePeerId,
+                localPeerId: session.localProfile.uid,
+                isInitialOffer:
+                    control.action == RemoteInputControlAction.offer,
+                isIncoming: true,
+              )
+              .requireAccepted();
           final self = await LocalSetting().instance();
-          final remoteProfile = incomingPeerId == null
-              ? _selectedRemoteProfile
-              : _remoteProfilesByPeerId[incomingPeerId] ??
-                  _selectedRemoteProfile;
-          final remoteDevice = remoteProfile?.device;
-          final storedRemote = remoteDevice == null
-              ? null
-              : await LocalDatabase().fetchDevice(remoteDevice.uid);
-          final authenticatedSession =
-              remoteDevice == null ? null : _sessionsByPeerId[remoteDevice.uid];
+          requireCurrentBusiness();
+          final remoteDevice = _requireRemoteProfileForSession(session).device;
+          final storedRemote =
+              await LocalDatabase().fetchDevice(remoteDevice.uid);
+          requireCurrentBusiness();
+          final authenticatedSession = _sessionsByPeerId[remoteDevice.uid];
           final isMutuallyTrusted = storedRemote?.auth == true &&
               storedRemote?.identityPublicKey.isNotEmpty == true &&
               storedRemote?.identityPublicKey ==
@@ -2380,8 +2601,8 @@ class WsSvrManager {
           _remoteInputTrace(
             'remote input recv control ${_remoteInputControlSummary(control)} '
             'local=${self.uid} '
-            'remote=${remoteDevice?.uid ?? ''} '
-            'remoteAddress=${remoteDevice?.host ?? ''}:${remoteDevice?.port ?? 0} '
+            'remote=${remoteDevice.uid} '
+            'remoteAddress=${remoteDevice.host}:${remoteDevice.port} '
             'storedAuth=${storedRemote?.auth == true} '
             'signedSession=${authenticatedSession?.isAuthenticated == true} '
             'mutualTrust=$isMutuallyTrusted '
@@ -2393,10 +2614,10 @@ class WsSvrManager {
               .handleIncomingOfferIfBusy(
             control,
             localPeerId: self.uid,
-            sendControlTo: (_, control) => incomingPeerId == null
-                ? sendRemoteInputControl(control)
-                : sendRemoteInputControlTo(incomingPeerId, control),
+            sendControlTo: (_, control) =>
+                sendRemoteInputControlTo(session.remotePeerId, control),
           );
+          requireCurrentBusiness();
           if (handledByWorkspaceBusy) {
             await _ackMessage(message);
             break;
@@ -2405,11 +2626,12 @@ class WsSvrManager {
               await RemoteInputWorkspaceCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
-            remoteHost: remoteDevice?.host ?? '',
-            remotePort: remoteDevice?.port ?? 0,
+            remoteHost: remoteDevice.host,
+            remotePort: remoteDevice.port,
             sendControlTo: (peerId, control) =>
                 sendRemoteInputControlTo(peerId, control),
           );
+          requireCurrentBusiness();
           if (handledByWorkspace) {
             await _ackMessage(message);
             break;
@@ -2417,16 +2639,15 @@ class WsSvrManager {
           await RemoteInputCoordinator.shared.handleControlMessage(
             control,
             localPeerId: self.uid,
-            remoteHost: remoteDevice?.host ?? '',
-            remotePort: remoteDevice?.port ?? 0,
+            remoteHost: remoteDevice.host,
+            remotePort: remoteDevice.port,
             isMutuallyTrusted: isMutuallyTrusted,
             localCanInject: localCanInject,
-            sendControl: incomingPeerId == null
-                ? sendRemoteInputControl
-                : (control) =>
-                    sendRemoteInputControlTo(incomingPeerId, control),
-            remotePlatform: remoteDevice?.platform ?? '',
+            sendControl: (control) =>
+                sendRemoteInputControlTo(session.remotePeerId, control),
+            remotePlatform: remoteDevice.platform,
           );
+          requireCurrentBusiness();
           final inputState = RemoteInputCoordinator.shared.state;
           _remoteInputTrace(
             'remote input handled control ${_remoteInputControlSummary(control)} '
@@ -2446,14 +2667,19 @@ class WsSvrManager {
   }
 
   Future<WireMessageReplayClaim> _claimIncomingTextMessage(
-    MessageData incoming,
-  ) async {
+    MessageData incoming, {
+    void Function()? requireCurrent,
+  }) async {
     final database = LocalDatabase();
     return _wireMessageReplayGuard.claim(
       incoming,
       fetchExisting: database.fetchMessagesByUuid,
-      persist: (message) =>
-          database.insertMessageReturning(message, acked: false),
+      hasExternalClaim: (uuid) async =>
+          await database.fetchFileTransfer(uuid) != null,
+      persist: (message) {
+        requireCurrent?.call();
+        return database.insertMessageReturning(message, acked: false);
+      },
     );
   }
 
@@ -2465,10 +2691,14 @@ class WsSvrManager {
       fileTimestamp = 0,
       String? senderOverride,
       String? receiverOverride}) {
+    final resolvedReceiver = receiverOverride ?? receiver;
+    final resolvedSender = senderOverride ??
+        _sessionsByPeerId[resolvedReceiver]?.localProfile.uid ??
+        sender;
     return MessageData(
         id: 0,
-        sender: senderOverride ?? sender,
-        receiver: receiverOverride ?? receiver,
+        sender: resolvedSender,
+        receiver: resolvedReceiver,
         name: fileName,
         clipboard: clipboard,
         size: size,
@@ -2590,6 +2820,7 @@ class WsSvrManager {
   Future<void> _refreshRemoteProfileFromHeartbeat(
     MessageData message, {
     String? peerId,
+    void Function()? requireCurrent,
   }) async {
     final content = message.content;
     if (content == null || content.isEmpty) {
@@ -2609,11 +2840,18 @@ class WsSvrManager {
         host: previousProfile?.device.host ?? '',
         port: previousProfile?.device.port ?? 0,
       );
+      WireInputPolicy.validateClaimedPeerId(
+        claimedPeerId: profile.device.uid,
+        authenticatedPeerId: resolvedPeerId,
+      ).requireAccepted();
+      requireCurrent?.call();
       final profileDeviceChanged =
           _profileDeviceChanged(previousProfile?.device, profile.device);
       _setRemoteProfile(profile, peerId: resolvedPeerId);
       if (profile.device.uid.isNotEmpty) {
+        requireCurrent?.call();
         await LocalDatabase().upsertDevice(profile.device);
+        requireCurrent?.call();
         if (_peerConnections.isConnectedTo(profile.device.uid)) {
           ConnectionCoordinator().markConnected(profile.device);
         }
@@ -2621,15 +2859,22 @@ class WsSvrManager {
           _dispatchToAll((event) => event.onConnect());
         }
       }
+    } on WireInputRejected {
+      rethrow;
     } catch (error) {
       _remoteInputTrace('heartbeat profile parse failed: $error');
     }
   }
 
   Future<void> _ackMessage(MessageData data) async {
+    if (data.type != MessageEnum.Text && data.type != MessageEnum.File) {
+      return;
+    }
     var json = data.toJson();
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
+    json["sender"] = data.receiver;
+    json["receiver"] = data.sender;
     // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
     await sendAcknowledgementBestEffort(
       send: () => _sendMessageData(
@@ -2647,8 +2892,30 @@ class WsSvrManager {
     WebSocketSink? sink,
     String? peerId,
   }) async {
-    if (sink == null && peerId == null && _sink == null) {
+    final targetPeerId = peerId?.isNotEmpty == true
+        ? peerId!
+        : sink == null
+            ? receiver
+            : _peerIdForSink(sink) ?? '';
+    if (targetPeerId.isEmpty) {
       return;
+    }
+    if (sink != null) {
+      final session = _sessionsBySink[sink];
+      if (session == null || session.remotePeerId != targetPeerId) {
+        return;
+      }
+      try {
+        _requireCurrentBusinessSession(
+          session,
+          sink,
+          session.connectionGeneration,
+        );
+      } on WireInputRejected {
+        return;
+      } on AuthHandshakeException {
+        return;
+      }
     }
     final profile = await _localPeerProfile();
     var message = _buildMessage(
@@ -2658,9 +2925,13 @@ class WsSvrManager {
         "",
         0,
         false,
-        uid: "",
-        receiverOverride: peerId);
-    await _sendMessageData(message, peerId: peerId, sink: sink);
+        senderOverride: profile.device.uid,
+        receiverOverride: targetPeerId);
+    await _sendMessageData(
+      message,
+      peerId: sink == null ? targetPeerId : null,
+      sink: sink,
+    );
   }
 
   Future<void> refreshConnectionLiveness() async {
@@ -2677,6 +2948,35 @@ class WsSvrManager {
     }
   }
 
+  bool _validateOutgoingControlSession({
+    required String namespace,
+    required String peerId,
+    required String sessionId,
+    required String sourcePeerId,
+    required String sinkPeerId,
+    required bool isInitialOffer,
+    bool reverseInitialDirection = false,
+  }) {
+    final session = _sessionsByPeerId[peerId];
+    if (session == null || !session.isAuthenticated) {
+      return false;
+    }
+    _wireControlSessions
+        .validateAndRemember(
+          namespace: namespace,
+          sessionId: sessionId,
+          sourcePeerId: sourcePeerId,
+          sinkPeerId: sinkPeerId,
+          authenticatedPeerId: peerId,
+          localPeerId: session.localProfile.uid,
+          isInitialOffer: isInitialOffer,
+          isIncoming: false,
+          reverseInitialDirection: reverseInitialDirection,
+        )
+        .requireAccepted();
+    return true;
+  }
+
   Future<bool> sendAudioControl(AudioControlMessage control) {
     return sendAudioControlTo(receiver, control);
   }
@@ -2685,6 +2985,16 @@ class WsSvrManager {
     String peerId,
     AudioControlMessage control,
   ) {
+    if (!_validateOutgoingControlSession(
+      namespace: 'audio',
+      peerId: peerId,
+      sessionId: control.sessionId,
+      sourcePeerId: control.sourcePeerId,
+      sinkPeerId: control.sinkPeerId,
+      isInitialOffer: control.action == AudioControlAction.offer,
+    )) {
+      return Future<bool>.value(false);
+    }
     final message = _buildMessage(
       MessageEnum.AudioControl,
       jsonEncode(control.toJson()),
@@ -2706,6 +3016,19 @@ class WsSvrManager {
     String peerId,
     AudioGroupControlMessage control,
   ) {
+    if (!_validateOutgoingControlSession(
+      namespace: 'audio-group',
+      peerId: peerId,
+      sessionId: control.sessionId,
+      sourcePeerId: control.sourcePeerId,
+      sinkPeerId: control.sinkPeerId,
+      isInitialOffer: control.action == AudioGroupControlAction.groupOffer ||
+          control.action == AudioGroupControlAction.sinkJoinRequest,
+      reverseInitialDirection:
+          control.action == AudioGroupControlAction.sinkJoinRequest,
+    )) {
+      return Future<bool>.value(false);
+    }
     final message = _buildMessage(
       MessageEnum.AudioGroupControl,
       jsonEncode(control.toJson()),
@@ -2727,6 +3050,16 @@ class WsSvrManager {
     String peerId,
     RemoteInputControlMessage control,
   ) {
+    if (!_validateOutgoingControlSession(
+      namespace: 'remote-input',
+      peerId: peerId,
+      sessionId: control.sessionId,
+      sourcePeerId: control.sourcePeerId,
+      sinkPeerId: control.sinkPeerId,
+      isInitialOffer: control.action == RemoteInputControlAction.offer,
+    )) {
+      return Future<bool>.value(false);
+    }
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '
       'sender=$sender receiver=$peerId connected=$isConnected '

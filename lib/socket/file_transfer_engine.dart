@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/file.dart';
@@ -17,7 +17,9 @@ import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
+import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 /// 与 svrmanager `_buildMessage` 现签名逐字对应(msg/fileName/path/uid/fileTimestamp 原本未标类型)。
@@ -35,6 +37,11 @@ typedef TransferMessageBuilder = MessageData Function(
   String? receiverOverride,
 });
 
+final class _IncomingFrameLockEntry {
+  final Lock lock = Lock();
+  int users = 0;
+}
+
 /// V3 文件传输引擎:从 WsSvrManager 机械抽离的发送/接收/断点恢复栈。
 /// 与 socket 层的全部交互经构造注入的回调完成,不直接持有连接对象。
 class FileTransferEngine {
@@ -48,9 +55,11 @@ class FileTransferEngine {
     required Set<String> Function() connectedPeerIds,
     required String Function() defaultPeerId,
     required bool Function(String peerId) hasLegacySinkFor,
+    required String Function(String authenticatedPeerId) localPeerIdFor,
     required TransferMessageBuilder buildMessage,
     required void Function(MessageData message) dispatchOutgoingMessage,
     required FutureOr<void> Function(MessageData message) ackMessage,
+    required WireMessageReplayGuard wireMessageReplayGuard,
     LocalDatabase Function() database = LocalDatabase.new,
   })  : _sendBytesToPeer = sendBytesToPeer,
         _emitTransferUpdated = emitTransferUpdated,
@@ -60,9 +69,11 @@ class FileTransferEngine {
         _connectedPeerIds = connectedPeerIds,
         _defaultPeerId = defaultPeerId,
         _hasLegacySinkFor = hasLegacySinkFor,
+        _localPeerIdFor = localPeerIdFor,
         _buildMessage = buildMessage,
         _dispatchOutgoingMessage = dispatchOutgoingMessage,
         _ackMessage = ackMessage,
+        _wireMessageReplayGuard = wireMessageReplayGuard,
         _database = database;
 
   static const int defaultTransferChunkSize = 32 * 1024 * 1024;
@@ -77,9 +88,11 @@ class FileTransferEngine {
   final Set<String> Function() _connectedPeerIds;
   final String Function() _defaultPeerId;
   final bool Function(String peerId) _hasLegacySinkFor;
+  final String Function(String authenticatedPeerId) _localPeerIdFor;
   final TransferMessageBuilder _buildMessage;
   final void Function(MessageData message) _dispatchOutgoingMessage;
   final FutureOr<void> Function(MessageData message) _ackMessage;
+  final WireMessageReplayGuard _wireMessageReplayGuard;
   final LocalDatabase Function() _database;
 
   final _sendFileLock = Lock();
@@ -92,9 +105,12 @@ class FileTransferEngine {
   final Map<String, StreamingChecksum> _receivingChecksums =
       <String, StreamingChecksum>{};
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
+  final Map<String, int> _receivingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowSentAt = <String, int>{};
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
+  final Map<String, _IncomingFrameLockEntry> _incomingFrameLocks =
+      <String, _IncomingFrameLockEntry>{};
 
   bool _supportsFileTransferV3For(String peerId) =>
       _remoteProfileFor(peerId)?.capabilities.fileTransferV3 == true;
@@ -340,20 +356,162 @@ class FileTransferEngine {
   /// fileOffer/fileData/fileReady/fileAck/fileComplete/fileCancel/fileError
   /// 帧入口(原 svrmanager `_handleWhisperFrameV3` 的非 message 分支);
   /// message 帧由 svrmanager 自行处理,不会转发到这里。
-  Future<void> handleFrame(WhisperFrameV3 frame) async {
+  Future<void> handleFrame(
+    String authenticatedPeerId,
+    WhisperFrameV3 frame, {
+    required void Function() requireCurrent,
+  }) async {
+    void requireBoundSession() {
+      try {
+        requireCurrent();
+      } on WireInputRejected {
+        rethrow;
+      } catch (_) {
+        throw const WireInputRejected(WireInputReason.sessionNotCurrent);
+      }
+    }
+
+    requireBoundSession();
+    if (frame.type == WhisperFrameType.message) {
+      throw const WireInputRejected(WireInputReason.transferFrameMismatch);
+    }
+    if (!isCanonicalTransferId(frame.transferId)) {
+      throw const WireInputRejected(WireInputReason.transferIdInvalid);
+    }
+    final lockEntry = _incomingFrameLocks.putIfAbsent(
+      frame.transferId,
+      _IncomingFrameLockEntry.new,
+    );
+    lockEntry.users++;
+    try {
+      await lockEntry.lock.synchronized(() async {
+        requireBoundSession();
+        await _handleFrameLocked(
+          authenticatedPeerId,
+          frame,
+          requireCurrent: requireBoundSession,
+        );
+      });
+    } finally {
+      lockEntry.users--;
+      if (lockEntry.users == 0 &&
+          identical(_incomingFrameLocks[frame.transferId], lockEntry)) {
+        _incomingFrameLocks.remove(frame.transferId);
+      }
+    }
+  }
+
+  Future<void> _handleFrameLocked(
+    String authenticatedPeerId,
+    WhisperFrameV3 frame, {
+    required void Function() requireCurrent,
+  }) async {
     switch (frame.type) {
       case WhisperFrameType.message:
-        break;
+        throw const WireInputRejected(WireInputReason.transferFrameMismatch);
       case WhisperFrameType.fileOffer:
         final message = decodeWireMessage(
           jsonDecode(utf8.decode(frame.payload)) as Map<String, dynamic>,
         );
-        await _handleFileTransferV3Offer(message);
+        WireInputPolicy.validateFileOffer(
+          frame: frame,
+          message: message,
+          authenticatedPeerId: authenticatedPeerId,
+          localPeerId: _localPeerIdFor(authenticatedPeerId),
+        ).requireAccepted();
+        final metadata = _FileTransferMetadata.fromContent(message.content);
+        if (metadata == null ||
+            metadata.protocolVersion != fileTransferV3ProtocolVersion) {
+          throw const WireInputRejected(WireInputReason.malformedFrame);
+        }
+        final existing = await _database().fetchFileTransfer(frame.transferId);
+        requireCurrent();
+        if (existing != null && existing.peerUid != authenticatedPeerId) {
+          throw const WireInputRejected(
+            WireInputReason.transferPeerMismatch,
+          );
+        }
+        if (existing != null &&
+            existing.direction != FileTransferDirection.incoming) {
+          throw const WireInputRejected(
+            WireInputReason.transferDirectionMismatch,
+          );
+        }
+        if (existing != null &&
+            (existing.messageUuid != message.uuid ||
+                existing.size != message.size)) {
+          throw const WireInputRejected(
+            WireInputReason.transferFrameMismatch,
+          );
+        }
+        final database = _database();
+        final replay = await _wireMessageReplayGuard.claim(
+          message,
+          fetchExisting: database.fetchMessagesByUuid,
+          isDuplicate: _matchesIncomingFileOffer,
+          persist: (incoming) {
+            requireCurrent();
+            return database.insertMessageReturning(incoming, acked: false);
+          },
+        );
+        if (replay.decision == WireMessageReplayDecision.conflict) {
+          throw const WireInputRejected(WireInputReason.messageIdConflict);
+        }
+        final messageClaimStarted =
+            replay.decision == WireMessageReplayDecision.accept;
+        if (!messageClaimStarted) {
+          requireCurrent();
+        }
+        await _handleFileTransferV3Offer(
+          message,
+          persistedMessage: replay.message!,
+          existingTransfer: existing,
+          metadata: metadata,
+          isNewMessage: messageClaimStarted,
+          requireCurrent: requireCurrent,
+        );
         break;
       case WhisperFrameType.fileData:
+        final transfer = await _database().fetchFileTransfer(frame.transferId);
+        requireCurrent();
+        if (transfer == null) {
+          throw const WireInputRejected(WireInputReason.transferNotFound);
+        }
+        if (transfer.peerUid != authenticatedPeerId) {
+          throw const WireInputRejected(
+            WireInputReason.transferPeerMismatch,
+          );
+        }
+        final expectedOffset = _receivingTransferOffsets[transfer.transferId] ??
+            transfer.committedBytes;
+        final expectedSequence =
+            _receivingTransferSequences[transfer.transferId] ?? 0;
+        final validation = WireInputPolicy.validateFileData(
+          frame: frame,
+          transfer: transfer,
+          authenticatedPeerId: authenticatedPeerId,
+          expectedOffset: expectedOffset,
+          expectedSequence: expectedSequence,
+          isActive: _transferRuntime.activeIncomingFor(transfer.peerUid) ==
+              transfer.transferId,
+        );
+        if (validation.isIgnored) {
+          return;
+        }
+        validation.requireAccepted();
         try {
-          await _handleFileTransferV3Data(frame);
+          await _handleFileTransferV3Data(
+            frame,
+            requireCurrent: requireCurrent,
+          );
+          if (_receivingTransferOffsets.containsKey(transfer.transferId)) {
+            _receivingTransferSequences[transfer.transferId] =
+                expectedSequence + 1;
+          }
         } catch (error, stackTrace) {
+          if (error is WireInputRejected) {
+            rethrow;
+          }
           await _handleIncomingFileTransferV3Error(
             frame.transferId,
             error,
@@ -369,9 +527,40 @@ class FileTransferEngine {
         final control = FileTransferV3Control.fromJson(
           jsonDecode(utf8.decode(frame.payload)) as Map<String, dynamic>,
         );
+        WireInputPolicy.validateFileControlHeader(
+          frame: frame,
+          control: control,
+        ).requireAccepted();
+        final transfer =
+            await _database().fetchFileTransfer(control.transferId);
+        requireCurrent();
+        if (transfer == null) {
+          throw const WireInputRejected(WireInputReason.transferNotFound);
+        }
+        if (transfer.peerUid != authenticatedPeerId) {
+          throw const WireInputRejected(
+            WireInputReason.transferPeerMismatch,
+          );
+        }
+        final validation = WireInputPolicy.validateFileControl(
+          frame: frame,
+          control: control,
+          transfer: transfer,
+          authenticatedPeerId: authenticatedPeerId,
+        );
+        if (validation.isIgnored) {
+          return;
+        }
+        validation.requireAccepted();
         try {
-          await _handleFileTransferV3Control(control);
+          await _handleFileTransferV3Control(
+            control,
+            requireCurrent: requireCurrent,
+          );
         } catch (error, stackTrace) {
+          if (error is WireInputRejected) {
+            rethrow;
+          }
           await _handleOutgoingFileTransferV3Error(
             control.transferId,
             error,
@@ -387,6 +576,24 @@ class FileTransferEngine {
   Future<void> handlePeerDisconnected(String peerId) async {
     await _markPeerTransfersWaitingReconnect(peerId);
     _transferRuntime.clearPeer(peerId);
+  }
+
+  bool _matchesIncomingFileOffer(
+    MessageData persisted,
+    MessageData incoming,
+  ) {
+    return persisted.sender == incoming.sender &&
+        persisted.receiver == incoming.receiver &&
+        persisted.name == incoming.name &&
+        persisted.clipboard == incoming.clipboard &&
+        persisted.size == incoming.size &&
+        persisted.type == MessageEnum.File &&
+        persisted.content == incoming.content &&
+        persisted.message == incoming.message &&
+        persisted.timestamp == incoming.timestamp &&
+        persisted.uuid == incoming.uuid &&
+        persisted.md5 == incoming.md5 &&
+        persisted.fileTimestamp == incoming.fileTimestamp;
   }
 
   /// 原 svrmanager `closeGracefully` 中的 transfer 清理段:
@@ -411,7 +618,11 @@ class FileTransferEngine {
     return data;
   }
 
-  Future<FileTransferData> _persistTransfer(FileTransferData data) async {
+  Future<FileTransferData> _persistTransfer(
+    FileTransferData data, {
+    void Function()? requireCurrent,
+  }) async {
+    requireCurrent?.call();
     await _database().upsertFileTransfer(data);
     _dispatchTransferData(data);
     return data;
@@ -425,7 +636,9 @@ class FileTransferEngine {
     String? finalPath,
     String? tempPath,
     String? checksumValue,
+    void Function()? requireCurrent,
   }) async {
+    requireCurrent?.call();
     await _database().updateFileTransfer(
       transferId,
       state: state == null ? const Value.absent() : Value(state),
@@ -471,6 +684,8 @@ class FileTransferEngine {
     String peerId,
     MessageData message,
   ) {
+    _outgoingTransferSequences[message.uuid] = 0;
+    _outgoingWindowEndOffsets.remove(message.uuid);
     return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
@@ -513,31 +728,26 @@ class FileTransferEngine {
     return _sendBytesToPeer(peerId, frame.encode());
   }
 
-  Future<void> _handleFileTransferV3Offer(MessageData message) async {
-    final metadata = _FileTransferMetadata.fromContent(message.content);
-    if (metadata == null ||
-        metadata.protocolVersion != fileTransferV3ProtocolVersion) {
-      await _sendFileTransferV3ControlTo(
-        message.sender,
-        FileTransferV3Control(
-          action: FileTransferV3Action.error,
-          transferId: message.uuid,
-          durableOffset: 0,
-          size: message.size,
-          errorCode: 'protocol',
-          errorMessage: '文件传输协议版本不支持',
-        ),
-      );
-      return;
-    }
-
+  Future<void> _handleFileTransferV3Offer(
+    MessageData message, {
+    required MessageData persistedMessage,
+    required FileTransferData? existingTransfer,
+    required _FileTransferMetadata metadata,
+    required bool isNewMessage,
+    required void Function() requireCurrent,
+  }) async {
+    var transitionStarted = isNewMessage;
     final db = _database();
-    var transfer = await db.fetchFileTransfer(message.uuid);
+    var transfer = existingTransfer;
+    var storageError = '';
     if (transfer == null) {
       final finalPath = await allocateFinalDownloadPath(message.name);
       final tempPath = await transferTempFilePath(message.uuid);
       final availableBytes =
           await availableBytesForPath((await downloadDir()).path);
+      if (!transitionStarted) {
+        requireCurrent();
+      }
       final now = DateTime.now().millisecondsSinceEpoch;
       if (!hasEnoughStorageForFile(
         fileSize: message.size,
@@ -560,47 +770,39 @@ class FileTransferEngine {
           createdAt: now,
           updatedAt: now,
         );
+        transitionStarted = true;
         await _persistTransfer(transfer);
-        await _sendFileTransferV3ControlTo(
-          transfer.peerUid,
-          FileTransferV3Control(
-            action: FileTransferV3Action.error,
-            transferId: transfer.transferId,
-            durableOffset: 0,
-            size: transfer.size,
-            errorCode: 'storage',
-            errorMessage: transfer.lastError,
-          ),
+        storageError = transfer.lastError;
+      } else {
+        transitionStarted = true;
+        final decision = _transferRuntime.enqueue(
+          peerId: message.sender,
+          transferId: message.uuid,
+          direction: FileTransferDirection.incoming,
         );
-        _notify(transfer.lastError);
-        return;
+        transfer = FileTransferData(
+          transferId: message.uuid,
+          messageUuid: message.uuid,
+          peerUid: message.sender,
+          direction: FileTransferDirection.incoming,
+          state: decision == TransferRuntimeDecision.started
+              ? FileTransferState.negotiating
+              : FileTransferState.queued,
+          finalPath: finalPath,
+          tempPath: tempPath,
+          size: message.size,
+          checksumAlgorithm: metadata.checksumAlgorithm,
+          checksumValue: metadata.checksumValue,
+          chunkSize: metadata.chunkSize,
+          committedBytes: 0,
+          lastError: '',
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _persistTransfer(transfer);
       }
-      final decision = _transferRuntime.enqueue(
-        peerId: message.sender,
-        transferId: message.uuid,
-        direction: FileTransferDirection.incoming,
-      );
-      transfer = FileTransferData(
-        transferId: message.uuid,
-        messageUuid: message.uuid,
-        peerUid: message.sender,
-        direction: FileTransferDirection.incoming,
-        state: decision == TransferRuntimeDecision.started
-            ? FileTransferState.negotiating
-            : FileTransferState.queued,
-        finalPath: finalPath,
-        tempPath: tempPath,
-        size: message.size,
-        checksumAlgorithm: metadata.checksumAlgorithm,
-        checksumValue: metadata.checksumValue,
-        chunkSize: metadata.chunkSize,
-        committedBytes: 0,
-        lastError: '',
-        createdAt: now,
-        updatedAt: now,
-      );
-      await _persistTransfer(transfer);
     } else if (!isTerminalFileTransferState(transfer.state)) {
+      transitionStarted = true;
       _transferRuntime.enqueue(
         peerId: transfer.peerUid,
         transferId: transfer.transferId,
@@ -608,14 +810,39 @@ class FileTransferEngine {
       );
     }
 
-    final existingMessage = await db.fetchMessageByUuid(message.uuid);
-    if (existingMessage == null) {
-      final json = message.toJson();
-      json['path'] = transfer.finalPath;
-      final newMessage = decodeWireMessage(json);
-      final persisted =
-          await db.insertMessageReturning(newMessage, acked: false);
-      _dispatchOutgoingMessage(persisted);
+    var visibleMessage = persistedMessage;
+    if (persistedMessage.path != transfer.finalPath) {
+      if (!transitionStarted) {
+        requireCurrent();
+      }
+      transitionStarted = true;
+      await db.customUpdate(
+        'UPDATE message SET path = ? WHERE id = ?',
+        variables: <Variable<Object>>[
+          Variable<String>(transfer.finalPath),
+          Variable<int>(persistedMessage.id),
+        ],
+        updates: {db.message},
+      );
+      visibleMessage = persistedMessage.copyWith(path: transfer.finalPath);
+    }
+    if (isNewMessage) {
+      _dispatchOutgoingMessage(visibleMessage);
+    }
+    if (storageError.isNotEmpty) {
+      await _sendFileTransferV3ControlTo(
+        transfer.peerUid,
+        FileTransferV3Control(
+          action: FileTransferV3Action.error,
+          transferId: transfer.transferId,
+          durableOffset: 0,
+          size: transfer.size,
+          errorCode: 'storage',
+          errorMessage: storageError,
+        ),
+      );
+      _notify(storageError);
+      return;
     }
     await _ackMessage(message);
 
@@ -625,8 +852,12 @@ class FileTransferEngine {
     }
   }
 
-  Future<void> _sendFileTransferV3Ready(String transferId) async {
+  Future<void> _sendFileTransferV3Ready(
+    String transferId, {
+    void Function()? requireCurrent,
+  }) async {
     final transfer = await _database().fetchFileTransfer(transferId);
+    requireCurrent?.call();
     if (transfer == null || isTerminalFileTransferState(transfer.state)) {
       return;
     }
@@ -667,52 +898,86 @@ class FileTransferEngine {
     );
     if (updated != null) {
       _receivingTransfers[updated.transferId] = updated;
+      _receivingTransferOffsets[updated.transferId] = durableOffset;
+      _receivingTransferSequences[updated.transferId] = 0;
     }
   }
 
   Future<void> _handleFileTransferV3Control(
-    FileTransferV3Control control,
-  ) async {
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
+    requireCurrent();
     switch (control.action) {
       case FileTransferV3Action.ready:
-        await _handleFileTransferV3Ready(control);
+        await _handleFileTransferV3Ready(
+          control,
+          requireCurrent: requireCurrent,
+        );
         break;
       case FileTransferV3Action.ack:
-        await _handleFileTransferV3Ack(control);
+        await _handleFileTransferV3Ack(
+          control,
+          requireCurrent: requireCurrent,
+        );
         break;
       case FileTransferV3Action.complete:
-        await _handleFileTransferV3Complete(control);
+        await _handleFileTransferV3Complete(
+          control,
+          requireCurrent: requireCurrent,
+        );
         break;
       case FileTransferV3Action.cancel:
-        await _handleFileTransferV3Cancel(control);
+        await _handleFileTransferV3Cancel(
+          control,
+          requireCurrent: requireCurrent,
+        );
         break;
       case FileTransferV3Action.error:
-        await _handleFileTransferV3Error(control);
+        await _handleFileTransferV3Error(
+          control,
+          requireCurrent: requireCurrent,
+        );
         break;
     }
   }
 
   Future<void> _handleFileTransferV3Ready(
-    FileTransferV3Control control,
-  ) async {
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
     final transfer = await _database().fetchFileTransfer(control.transferId);
+    requireCurrent();
     if (transfer == null ||
         transfer.direction != FileTransferDirection.outgoing ||
         isTerminalFileTransferState(transfer.state)) {
       return;
     }
     final message = await _database().fetchMessageByUuid(transfer.messageUuid);
+    requireCurrent();
     if (message == null) {
       return;
     }
     final source = _transferSourceForMessage(message, transfer);
+    late final bool sourceIsValid;
     try {
-      if (!await source.exists() || await source.length() != transfer.size) {
-        await _failOutgoingFileTransferV3(transfer, '源文件不存在或已变化，无法继续传输');
-        return;
-      }
+      sourceIsValid =
+          await source.exists() && await source.length() == transfer.size;
     } catch (error, stackTrace) {
-      await _handleOutgoingTransferError(transfer, error, stackTrace);
+      requireCurrent();
+      await _handleOutgoingTransferError(
+        transfer,
+        error,
+        stackTrace,
+      );
+      return;
+    }
+    requireCurrent();
+    if (!sourceIsValid) {
+      await _failOutgoingFileTransferV3(
+        transfer,
+        '源文件不存在或已变化，无法继续传输',
+      );
       return;
     }
     final activeOutgoing = _transferRuntime.activeOutgoingFor(transfer.peerUid);
@@ -744,7 +1009,11 @@ class FileTransferEngine {
     if (updated == null) {
       return;
     }
-    await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
+    await _sendFileTransferV3WindowSafely(
+      updated,
+      message,
+      offset: offset,
+    );
   }
 
   Future<void> _failOutgoingFileTransferV3(
@@ -794,7 +1063,10 @@ class FileTransferEngine {
       'file transfer v3 outgoing failed transfer=$transferId '
       'peer=${transfer.peerUid} error=$error\n$stackTrace',
     );
-    await _failOutgoingFileTransferV3(transfer, message);
+    await _failOutgoingFileTransferV3(
+      transfer,
+      message,
+    );
   }
 
   String _outgoingFileTransferV3ErrorMessage(Object error) {
@@ -813,7 +1085,11 @@ class FileTransferEngine {
     required int offset,
   }) async {
     try {
-      await _sendFileTransferV3Window(transfer, message, offset: offset);
+      await _sendFileTransferV3Window(
+        transfer,
+        message,
+        offset: offset,
+      );
     } catch (error, stackTrace) {
       await _handleOutgoingFileTransferV3Error(
         transfer.transferId,
@@ -887,9 +1163,13 @@ class FileTransferEngine {
     return Future<void>.delayed(Duration.zero);
   }
 
-  Future<void> _handleFileTransferV3Data(WhisperFrameV3 frame) async {
+  Future<void> _handleFileTransferV3Data(
+    WhisperFrameV3 frame, {
+    required void Function() requireCurrent,
+  }) async {
     var transfer = _receivingTransfers[frame.transferId];
     transfer ??= await _database().fetchFileTransfer(frame.transferId);
+    requireCurrent();
     if (transfer == null ||
         transfer.direction != FileTransferDirection.incoming ||
         isTerminalFileTransferState(transfer.state)) {
@@ -911,13 +1191,18 @@ class FileTransferEngine {
     }
 
     final tempFile = File(transfer.tempPath);
+    var transitionStarted = false;
     if (!tempFile.existsSync()) {
       await tempFile.parent.create(recursive: true);
       await tempFile.create(recursive: true);
+      transitionStarted = true;
     }
     var writer = _receivingTransferWritersV3[transfer.transferId];
     if (writer == null) {
       final currentLength = await tempFile.length();
+      if (!transitionStarted) {
+        requireCurrent();
+      }
       if (currentLength > frame.offset) {
         final truncatingWriter = await tempFile.open(mode: FileMode.write);
         try {
@@ -929,7 +1214,8 @@ class FileTransferEngine {
         await _sendFileTransferV3Ack(transfer, currentLength);
         return;
       }
-      writer = await tempFile.open(mode: FileMode.writeOnlyAppend);
+      final openedWriter = await tempFile.open(mode: FileMode.writeOnlyAppend);
+      writer = openedWriter;
       _receivingTransferWritersV3[transfer.transferId] = writer;
       _receivingTransfers[transfer.transferId] = transfer;
       _receivingTransferOffsets[transfer.transferId] = frame.offset;
@@ -1048,6 +1334,7 @@ class FileTransferEngine {
     _receivingTransfers.remove(transfer.transferId);
     _receivingChecksums.remove(transfer.transferId);
     _receivingTransferOffsets.remove(transfer.transferId);
+    _receivingTransferSequences.remove(transfer.transferId);
     _transferRuntime.complete(
       peerId: transfer.peerUid,
       transferId: transfer.transferId,
@@ -1110,8 +1397,12 @@ class FileTransferEngine {
     );
   }
 
-  Future<void> _handleFileTransferV3Ack(FileTransferV3Control control) async {
+  Future<void> _handleFileTransferV3Ack(
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
     final transfer = await _database().fetchFileTransfer(control.transferId);
+    requireCurrent();
     if (transfer == null ||
         transfer.direction != FileTransferDirection.outgoing ||
         isTerminalFileTransferState(transfer.state)) {
@@ -1177,17 +1468,23 @@ class FileTransferEngine {
     if (updated == null) {
       return;
     }
-    await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
+    await _sendFileTransferV3WindowSafely(
+      updated,
+      message,
+      offset: offset,
+    );
   }
 
   Future<void> _handleFileTransferV3Complete(
-    FileTransferV3Control control,
-  ) async {
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.completed,
       committedBytes: control.size,
       lastError: '',
+      requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
     String? nextTransferId;
@@ -1205,11 +1502,14 @@ class FileTransferEngine {
   }
 
   Future<void> _handleFileTransferV3Cancel(
-      FileTransferV3Control control) async {
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.canceled,
       lastError: control.errorMessage,
+      requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer == null) {
@@ -1228,11 +1528,15 @@ class FileTransferEngine {
     _outgoingTransferSequences.remove(transfer.transferId);
   }
 
-  Future<void> _handleFileTransferV3Error(FileTransferV3Control control) async {
+  Future<void> _handleFileTransferV3Error(
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.failed,
       lastError: control.errorMessage,
+      requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer != null) {
@@ -1433,6 +1737,7 @@ class FileTransferEngine {
     _receivingTransfers.remove(transferId);
     _receivingChecksums.remove(transferId);
     _receivingTransferOffsets.remove(transferId);
+    _receivingTransferSequences.remove(transferId);
     if (releaseRuntime && transfer != null) {
       _transferRuntime.complete(
         peerId: transfer.peerUid,
@@ -1447,6 +1752,7 @@ class FileTransferEngine {
     _receivingTransfers.clear();
     _receivingChecksums.clear();
     _receivingTransferOffsets.clear();
+    _receivingTransferSequences.clear();
     _receivingTransferWritersV3.clear();
     _transferRuntime.clearAll();
     _outgoingWindowSentAt.clear();

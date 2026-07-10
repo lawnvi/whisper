@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
+import 'package:whisper/socket/wire_message_replay.dart';
 
 FileTransferEngine _engine({
   bool Function(String, Object)? sendBytesToPeer,
@@ -19,11 +20,13 @@ FileTransferEngine _engine({
     connectedPeerIds: () => connectedPeerIds,
     defaultPeerId: () => '',
     hasLegacySinkFor: (_) => false,
+    localPeerIdFor: (_) => 'local',
     buildMessage: (type, content, msg, fileName, size, clipboard,
             {md5 = '', path = '', uid, fileTimestamp = 0, receiverOverride}) =>
         throw UnimplementedError('buildMessage 不应被本测试触达'),
     dispatchOutgoingMessage: (_) {},
     ackMessage: (_) {},
+    wireMessageReplayGuard: WireMessageReplayGuard(),
     database: database == null ? LocalDatabase.new : () => database,
   );
 }

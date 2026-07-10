@@ -69,12 +69,18 @@ WireMessageReplayDecision classifyWireMessageReplayCandidates({
 final class WireMessageReplayGuard {
   final Lock _lock = Lock();
 
+  Future<T> synchronized<T>(Future<T> Function() action) {
+    return _lock.synchronized(action);
+  }
+
   Future<WireMessageReplayClaim> claim(
     MessageData incoming, {
     required Future<List<MessageData>> Function(String uuid) fetchExisting,
     required Future<MessageData> Function(MessageData message) persist,
+    bool Function(MessageData existing, MessageData incoming)? isDuplicate,
+    Future<bool> Function(String uuid)? hasExternalClaim,
   }) {
-    return _lock.synchronized(() async {
+    return synchronized(() async {
       final existing = incoming.uuid.isEmpty
           ? const <MessageData>[]
           : await fetchExisting(incoming.uuid);
@@ -84,12 +90,13 @@ final class WireMessageReplayGuard {
         );
       }
       var uuidExists = false;
+      final matches = isDuplicate ?? hasSameWireMessageIdentity;
       for (final candidate in existing) {
         if (candidate.uuid != incoming.uuid) {
           continue;
         }
         uuidExists = true;
-        if (hasSameWireMessageIdentity(candidate, incoming)) {
+        if (matches(candidate, incoming)) {
           return WireMessageReplayClaim(
             decision: WireMessageReplayDecision.duplicate,
             message: candidate,
@@ -97,6 +104,11 @@ final class WireMessageReplayGuard {
         }
       }
       if (uuidExists) {
+        return const WireMessageReplayClaim(
+          decision: WireMessageReplayDecision.conflict,
+        );
+      }
+      if (await hasExternalClaim?.call(incoming.uuid) ?? false) {
         return const WireMessageReplayClaim(
           decision: WireMessageReplayDecision.conflict,
         );

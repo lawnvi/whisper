@@ -113,6 +113,8 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
   String get rejoinSourcePeerId => _sinkRejoinContext?.sourcePeerId ?? '';
 
+  String get rejoinSessionId => _sinkRejoinContext?.sessionId ?? '';
+
   bool isForPeer(String peerId) {
     final current = _session;
     if (current == null || peerId.isEmpty) {

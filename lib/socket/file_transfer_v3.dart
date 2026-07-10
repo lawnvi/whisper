@@ -41,20 +41,36 @@ class FileTransferV3Control {
       };
 
   factory FileTransferV3Control.fromJson(Map<String, dynamic> json) {
-    final actionName =
-        json['action'] as String? ?? FileTransferV3Action.error.name;
+    final protocolVersion = json['protocolVersion'];
+    final actionName = json['action'];
+    final transferId = json['transferId'];
+    final durableOffset = json['durableOffset'];
+    final size = json['size'];
+    final errorCode = json['errorCode'];
+    final errorMessage = json['errorMessage'];
+    if (protocolVersion is! int ||
+        actionName is! String ||
+        transferId is! String ||
+        durableOffset is! int ||
+        size is! int ||
+        errorCode is! String ||
+        errorMessage is! String) {
+      throw const FormatException('invalid file transfer control fields');
+    }
+    FileTransferV3Action action;
+    try {
+      action = FileTransferV3Action.values.byName(actionName);
+    } on ArgumentError {
+      throw const FormatException('unknown file transfer control action');
+    }
     return FileTransferV3Control(
-      protocolVersion:
-          json['protocolVersion'] as int? ?? fileTransferV3ProtocolVersion,
-      action: FileTransferV3Action.values.firstWhere(
-        (item) => item.name == actionName,
-        orElse: () => FileTransferV3Action.error,
-      ),
-      transferId: json['transferId'] as String? ?? '',
-      durableOffset: json['durableOffset'] as int? ?? 0,
-      size: json['size'] as int? ?? 0,
-      errorCode: json['errorCode'] as String? ?? '',
-      errorMessage: json['errorMessage'] as String? ?? '',
+      protocolVersion: protocolVersion,
+      action: action,
+      transferId: transferId,
+      durableOffset: durableOffset,
+      size: size,
+      errorCode: errorCode,
+      errorMessage: errorMessage,
     );
   }
 }

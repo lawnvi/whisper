@@ -21,6 +21,31 @@ void main() {
       expect(decoded.durableOffset, 16 * 1024 * 1024);
       expect(decoded.size, 64 * 1024 * 1024);
     });
+
+    test('rejects unknown actions and malformed numeric fields', () {
+      final valid = <String, Object?>{
+        'protocolVersion': 3,
+        'action': 'ack',
+        'transferId': 'transfer-1',
+        'durableOffset': 0,
+        'size': 1,
+        'errorCode': '',
+        'errorMessage': '',
+      };
+
+      expect(
+        () => FileTransferV3Control.fromJson(
+          <String, Object?>{...valid, 'action': 'surprise'},
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => FileTransferV3Control.fromJson(
+          <String, Object?>{...valid, 'durableOffset': '0'},
+        ),
+        throwsFormatException,
+      );
+    });
   });
 
   group('FileTransferV3Parameters', () {
