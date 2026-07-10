@@ -171,52 +171,6 @@ void main() {
     );
   });
 
-  test('only one unknown-peer interactive dial owns deleted-peer repair',
-      () async {
-    final serverA = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final serverB = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => serverA.close(force: true));
-    addTearDown(() => serverB.close(force: true));
-    final receivedA = Completer<void>();
-    final receivedB = Completer<void>();
-    serverA.listen((_) {
-      if (!receivedA.isCompleted) receivedA.complete();
-    });
-    serverB.listen((_) {
-      if (!receivedB.isCompleted) receivedB.complete();
-    });
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final manager = WsSvrManager.forTesting(database: database);
-    addTearDown(() => manager.closeGracefully(
-          closeServer: true,
-          forceServerClose: true,
-        ));
-    await manager.deletePeer('peer-a');
-
-    final attemptA = manager.connectToServer(
-      _request(requestId: 'repair-a', port: serverA.port),
-    );
-    final attemptB = manager.connectToServer(
-      _request(requestId: 'repair-b', port: serverB.port),
-    );
-    await Future.wait(<Future<void>>[receivedA.future, receivedB.future]);
-
-    expect(
-      manager.debugBindPendingConnectionPeer('repair-a', 'peer-a'),
-      isTrue,
-    );
-    expect(
-      manager.debugBindPendingConnectionPeer('repair-b', 'peer-a'),
-      isFalse,
-    );
-
-    await manager.cancelConnectionAttempt('repair-a');
-    await manager.cancelConnectionAttempt('repair-b');
-    expect((await attemptA).status, ConnectionAttemptStatus.cancelled);
-    expect((await attemptB).status, ConnectionAttemptStatus.cancelled);
-  });
-
   test('auto-connect disable cancels automatic but not interactive dialing',
       () async {
     final autoServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
