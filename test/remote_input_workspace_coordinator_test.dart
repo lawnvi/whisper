@@ -12,6 +12,7 @@ import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('RemoteInputWorkspaceCoordinator', () {
     late MethodChannel channel;
@@ -43,6 +44,8 @@ void main() {
       final coordinator = RemoteInputWorkspaceCoordinator(
         platform: platform,
         transportFactory: (uri) async {
+          expect(uri.queryParameters['session'], isNotEmpty);
+          expect(uri.queryParameters['token'], startsWith('workspace-token-'));
           final transport = _FakeRemoteInputTransport();
           transports[uri.host] = transport;
           return transport;
@@ -84,10 +87,12 @@ void main() {
           layoutEdge: RemoteInputEdge.right,
           releaseHotkey: 'ctrl+alt+esc',
           path: '/input',
+          transportToken: 'workspace-token-b',
         ),
         localPeerId: 'mac',
         remoteHost: 'peer-b.local',
         remotePort: 10002,
+        mediaSendKey: mediaKey,
         sendControlTo: (peerId, control) {
           sentControls.putIfAbsent(peerId, () => []).add(control);
         },
@@ -101,10 +106,12 @@ void main() {
           layoutEdge: RemoteInputEdge.right,
           releaseHotkey: 'ctrl+alt+esc',
           path: '/input',
+          transportToken: 'workspace-token-c',
         ),
         localPeerId: 'mac',
         remoteHost: 'peer-c.local',
         remotePort: 10002,
+        mediaSendKey: mediaKey,
         sendControlTo: (peerId, control) {
           sentControls.putIfAbsent(peerId, () => []).add(control);
         },

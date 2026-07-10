@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -75,8 +76,7 @@ class AudioShareCoordinator extends ChangeNotifier {
   })  : _manager = manager ?? AudioShareManager.shared,
         _platform = platform ?? AudioPlatform(),
         _codecFactory = codecFactory ?? createDefaultAudioCodec,
-        _transportFactory =
-            transportFactory ?? AudioWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _playbackGainProvider =
             playbackGainProvider ?? LocalSetting().audioSharePlaybackGain;
 
@@ -95,7 +95,7 @@ class AudioShareCoordinator extends ChangeNotifier {
   final AudioShareManager _manager;
   final AudioPlatform _platform;
   final AudioCodecFactory _codecFactory;
-  final AudioTransportFactory _transportFactory;
+  final AudioTransportFactory? _transportFactory;
   final AudioPlaybackGainProvider _playbackGainProvider;
 
   AudioShareRuntimeState _state = const AudioShareRuntimeState.idle();
@@ -142,6 +142,7 @@ class AudioShareCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required AudioControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     switch (message.action) {
       case AudioControlAction.offer:
@@ -158,6 +159,7 @@ class AudioShareCoordinator extends ChangeNotifier {
           remoteHost: remoteHost,
           remotePort: remotePort,
           sendControl: sendControl,
+          mediaSendKey: mediaSendKey,
         );
         break;
       case AudioControlAction.stop:
@@ -256,8 +258,31 @@ class AudioShareCoordinator extends ChangeNotifier {
       return;
     }
 
-    await _startPlayback(accept);
-    sendControl(accept);
+    try {
+      await _startPlayback(accept);
+      sendControl(accept);
+    } catch (error) {
+      final failedPeerId = offer.sourcePeerId;
+      await stopLocal();
+      _setState(
+        AudioShareRuntimeState(
+          status: AudioShareRuntimeStatus.failed,
+          role: AudioShareRuntimeRole.sink,
+          sessionId: offer.sessionId,
+          peerId: failedPeerId,
+          errorMessage: _friendlyErrorMessage(error),
+        ),
+      );
+      sendControl(
+        AudioControlMessage(
+          action: AudioControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: offer.sourcePeerId,
+          sinkPeerId: offer.sinkPeerId,
+          errorMessage: _state.errorMessage,
+        ),
+      );
+    }
   }
 
   Future<void> _handleAccept(
@@ -266,6 +291,7 @@ class AudioShareCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required AudioControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     _manager.handleControlMessage(accept);
     if (accept.sourcePeerId != localPeerId) {
@@ -279,6 +305,7 @@ class AudioShareCoordinator extends ChangeNotifier {
         accept,
         remoteHost: remoteHost,
         remotePort: remotePort,
+        mediaSendKey: mediaSendKey,
       );
     } catch (error) {
       final failedPeerId = accept.sinkPeerId;
@@ -347,6 +374,7 @@ class AudioShareCoordinator extends ChangeNotifier {
     AudioControlMessage message, {
     required String remoteHost,
     required int remotePort,
+    Uint8List? mediaSendKey,
   }) async {
     final format = message.format;
     if (format == null) {
@@ -361,13 +389,27 @@ class AudioShareCoordinator extends ChangeNotifier {
       ),
     );
     final codec = await _codecFactory(format);
-    final transport = await _transportFactory(
-      _audioUri(
-        host: remoteHost,
-        port: remotePort,
-        path: message.path,
-      ),
+    final uri = _audioUri(
+      host: remoteHost,
+      port: remotePort,
+      path: message.path,
+      sessionId: message.sessionId,
+      transportToken: message.transportToken,
     );
+    final transportFactory = _transportFactory;
+    final AudioPacketTransport transport;
+    if (transportFactory != null) {
+      transport = await transportFactory(uri);
+    } else {
+      if (message.transportToken.isEmpty || mediaSendKey == null) {
+        throw StateError('authenticated audio transport context missing');
+      }
+      transport = await AudioWebSocketPacketTransport.connect(
+        uri,
+        mediaMacKey: mediaSendKey,
+        sessionId: message.sessionId,
+      );
+    }
     final captureSource = AudioCaptureSource(
       codec: codec,
       platform: _platform,
@@ -393,12 +435,18 @@ class AudioShareCoordinator extends ChangeNotifier {
     required String host,
     required int port,
     required String path,
+    required String sessionId,
+    required String transportToken,
   }) {
     final normalizedPath = path.isEmpty ? '/audio' : path;
     return buildPeerPacketUri(
       host: host,
       port: port,
       path: normalizedPath,
+      queryParameters: <String, String>{
+        if (transportToken.isNotEmpty) 'session': sessionId,
+        if (transportToken.isNotEmpty) 'token': transportToken,
+      },
     );
   }
 

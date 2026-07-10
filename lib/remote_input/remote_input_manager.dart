@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 typedef RemoteInputPacketCallback = void Function(
     RemoteInputPacketFrame packet);
@@ -50,7 +52,9 @@ class RemoteInputSession {
 }
 
 class RemoteInputManager {
-  static const int maxChannelMessageBytes = 64 * 1024;
+  static const int maxPacketPayloadBytes = 64 * 1024;
+  static const int maxChannelMessageBytes =
+      maxPacketPayloadBytes + AuthenticatedMediaPacketEnvelope.overheadBytes;
 
   RemoteInputManager({
     this.onPacket,
@@ -63,8 +67,8 @@ class RemoteInputManager {
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
-  final Set<BoundedBinaryWebSocketSession> _channels =
-      <BoundedBinaryWebSocketSession>{};
+  final Map<BoundedBinaryWebSocketSession, SessionUpgradeClaim> _channels =
+      <BoundedBinaryWebSocketSession, SessionUpgradeClaim>{};
   final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
       <BoundedBinaryWebSocketSession, Future<void>>{};
   Future<void>? _closeChannelsFuture;
@@ -223,10 +227,61 @@ class RemoteInputManager {
         state: RemoteInputSessionState.stopped,
       );
     }
+    unawaited(
+      closeSessionChannels(
+        sessionId,
+        peerId: current?.sourcePeerId,
+        namespace: 'remote-input',
+      ),
+    );
   }
 
-  void handlePacketBytes(Uint8List bytes) {
+  Future<void> closeSessionChannels(
+    String sessionId, {
+    String? peerId,
+    String? namespace,
+  }) {
+    return _closeMatchingChannels(
+      (claim) =>
+          claim.sessionId == sessionId &&
+          (peerId == null || claim.peerId == peerId) &&
+          (namespace == null || claim.namespace == namespace),
+    );
+  }
+
+  Future<void> closePeerChannels(String peerId) {
+    return _closeMatchingChannels((claim) => claim.peerId == peerId);
+  }
+
+  Future<void> closeSupersededPeerChannels(
+    String peerId, {
+    required Uint8List mediaMacKey,
+  }) {
+    return _closeMatchingChannels(
+      (claim) =>
+          claim.peerId == peerId &&
+          !constantTimeBytesEqual(claim.mediaMacKey, mediaMacKey),
+    );
+  }
+
+  Future<void> _closeMatchingChannels(
+    bool Function(SessionUpgradeClaim claim) matches,
+  ) async {
+    final channels = _channels.entries
+        .where((entry) => matches(entry.value))
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    await Future.wait(channels.map(_trackChannelClose));
+  }
+
+  void handlePacketBytes(
+    Uint8List bytes, {
+    String? expectedSessionId,
+  }) {
     final packet = RemoteInputPacketFrame.decode(bytes);
+    if (expectedSessionId != null && packet.sessionId != expectedSessionId) {
+      throw const FormatException('remote input packet session mismatch');
+    }
     final activeSession = _sessions[packet.sessionId];
     if (activeSession?.state != RemoteInputSessionState.connected) {
       return;
@@ -234,18 +289,57 @@ class RemoteInputManager {
     onPacket?.call(packet);
   }
 
-  void attachChannel(WebSocketChannel channel) {
+  bool canAttachClaim(
+    SessionUpgradeClaim claim, {
+    bool Function(SessionUpgradeClaim claim)? claimValidator,
+  }) {
+    if (claim.route != '/input' ||
+        claim.namespace != 'remote-input' ||
+        claimValidator?.call(claim) == false ||
+        _channels.values.any(
+          (active) =>
+              active.route == claim.route &&
+              active.namespace == claim.namespace &&
+              active.sessionId == claim.sessionId &&
+              active.peerId == claim.peerId,
+        )) {
+      return false;
+    }
+    final session = _sessions[claim.sessionId];
+    return session?.state == RemoteInputSessionState.connected &&
+        session?.sourcePeerId == claim.peerId;
+  }
+
+  bool attachChannel(
+    WebSocketChannel channel, {
+    required SessionUpgradeClaim claim,
+    bool Function(SessionUpgradeClaim claim)? claimValidator,
+  }) {
+    if (!canAttachClaim(claim, claimValidator: claimValidator)) {
+      unawaited(channel.sink.close().catchError((Object _) {}));
+      return false;
+    }
+    final packetDecoder = AuthenticatedMediaPacketDecoder(
+      route: claim.route,
+      sessionId: claim.sessionId,
+      mediaMacKey: claim.mediaMacKey,
+      maxPayloadBytes: maxPacketPayloadBytes,
+    );
     late final BoundedBinaryWebSocketSession binding;
     binding = BoundedBinaryWebSocketSession(
       channel: channel,
       maxMessageBytes: maxChannelMessageBytes,
-      onMessage: handlePacketBytes,
+      onMessage: (bytes) => handlePacketBytes(
+        packetDecoder.decode(bytes),
+        expectedSessionId: claim.sessionId,
+      ),
       onClosed: () => _channels.remove(binding),
     );
-    _channels.add(binding);
+    _channels[binding] = claim;
     if (_closingChannels) {
       unawaited(_trackChannelClose(binding));
     }
+    return true;
   }
 
   Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {
@@ -281,7 +375,7 @@ class RemoteInputManager {
     unawaited(() async {
       try {
         while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
-          for (final channel in _channels.toList(growable: false)) {
+          for (final channel in _channels.keys.toList(growable: false)) {
             _trackChannelClose(channel);
           }
           final closes = _channelCloses.values.toList(growable: false);
@@ -308,13 +402,19 @@ class RemoteInputManager {
   }
 
   shelf.Handler webSocketHandler({
+    required SessionUpgradeClaim claim,
+    bool Function(SessionUpgradeClaim claim)? claimValidator,
     Duration pingInterval = const Duration(seconds: 15),
     void Function()? onAttachmentComplete,
   }) {
     return shelf_ws.webSocketHandler(
       (WebSocketChannel channel) {
         try {
-          attachChannel(channel);
+          attachChannel(
+            channel,
+            claim: claim,
+            claimValidator: claimValidator,
+          );
         } finally {
           onAttachmentComplete?.call();
         }

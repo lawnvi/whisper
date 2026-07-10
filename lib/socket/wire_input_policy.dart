@@ -94,6 +94,7 @@ final class _WireControlSessionBinding {
     required this.localPeerId,
     required this.sourcePeerId,
     required this.sinkPeerId,
+    required this.context,
   });
 
   final String namespace;
@@ -102,6 +103,7 @@ final class _WireControlSessionBinding {
   final String localPeerId;
   final String sourcePeerId;
   final String sinkPeerId;
+  final String context;
 }
 
 final class WireControlSessionRegistry {
@@ -110,6 +112,18 @@ final class WireControlSessionRegistry {
   final int maxEntries;
   final LinkedHashMap<String, _WireControlSessionBinding> _bindings =
       LinkedHashMap<String, _WireControlSessionBinding>();
+
+  int get length => _bindings.length;
+
+  bool forget({
+    required String namespace,
+    required String sessionId,
+  }) {
+    if (namespace.isEmpty || sessionId.isEmpty) {
+      return false;
+    }
+    return _bindings.remove('$namespace\u0000$sessionId') != null;
+  }
 
   void clearPeer(
     String authenticatedPeerId, {
@@ -140,6 +154,7 @@ final class WireControlSessionRegistry {
     required bool isInitialOffer,
     required bool isIncoming,
     bool reverseInitialDirection = false,
+    String context = '',
   }) {
     if (namespace.isEmpty ||
         !isCanonicalTransferId(sessionId) ||
@@ -156,7 +171,8 @@ final class WireControlSessionRegistry {
       if (existing.authenticatedPeerId != authenticatedPeerId ||
           existing.localPeerId != localPeerId ||
           existing.sourcePeerId != sourcePeerId ||
-          existing.sinkPeerId != sinkPeerId) {
+          existing.sinkPeerId != sinkPeerId ||
+          existing.context != context) {
         return const WireInputValidationResult.rejected(
           WireInputReason.controlSessionMismatch,
         );
@@ -186,6 +202,7 @@ final class WireControlSessionRegistry {
       localPeerId: localPeerId,
       sourcePeerId: sourcePeerId,
       sinkPeerId: sinkPeerId,
+      context: context,
     );
     return const WireInputValidationResult.accepted();
   }

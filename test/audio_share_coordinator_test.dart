@@ -20,6 +20,7 @@ void main() {
     frameDurationMs: 20,
     bitRate: 128000,
   );
+  final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('AudioShareCoordinator', () {
     late MethodChannel channel;
@@ -52,7 +53,9 @@ void main() {
         platform: platform,
         codecFactory: _pcmCodec,
         transportFactory: (uri) async {
-          expect(uri.toString(), 'ws://phone.local:10002/audio');
+          expect(uri.path, '/audio');
+          expect(uri.queryParameters['session'], isNotEmpty);
+          expect(uri.queryParameters['token'], 'audio-token');
           return transport;
         },
       );
@@ -77,10 +80,12 @@ void main() {
           sinkPeerId: 'phone',
           format: format,
           path: '/audio',
+          transportToken: 'audio-token',
         ),
         localPeerId: 'pc',
         remoteHost: 'phone.local',
         remotePort: 10002,
+        mediaSendKey: mediaKey,
         sendControl: sentControls.add,
       );
 
@@ -202,6 +207,46 @@ void main() {
       final writeCall = calls.singleWhere((call) => call.method == 'writePcm');
       final arguments = writeCall.arguments as Map<Object?, Object?>;
       expect(arguments['pcm'], Uint8List.fromList(<int>[2, 0, 4, 0]));
+    });
+
+    test('sink rolls back playback when sending the accept fails', () async {
+      final sentControls = <AudioControlMessage>[];
+      final manager = AudioShareManager();
+      final coordinator = AudioShareCoordinator(
+        manager: manager,
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => _FakeAudioTransport(),
+        playbackGainProvider: () async => 1.0,
+      );
+      void sendControl(AudioControlMessage control) {
+        sentControls.add(control);
+        if (control.action == AudioControlAction.accept) {
+          throw StateError('upgrade token registry is full');
+        }
+      }
+
+      await coordinator.handleControlMessage(
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
+          sessionId: 'audio-send-failure',
+          sourcePeerId: 'pc',
+          sinkPeerId: 'phone',
+          format: format,
+          path: '/audio',
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'pc.local',
+        remotePort: 10002,
+        sendControl: sendControl,
+      );
+
+      expect(sentControls.map((message) => message.action), <Object>[
+        AudioControlAction.accept,
+        AudioControlAction.error,
+      ]);
+      expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
+      expect(calls.map((call) => call.method), contains('stopPlayback'));
     });
 
     test('rejects a competing offer while an audio session is live', () async {

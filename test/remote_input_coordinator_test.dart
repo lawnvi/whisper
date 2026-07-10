@@ -13,6 +13,7 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('RemoteInputCoordinator', () {
     late MethodChannel channel;
@@ -44,7 +45,9 @@ void main() {
         manager: manager,
         platform: platform,
         transportFactory: (uri) async {
-          expect(uri.toString(), 'ws://win.local:10002/input');
+          expect(uri.path, '/input');
+          expect(uri.queryParameters['session'], isNotEmpty);
+          expect(uri.queryParameters['token'], 'input-token');
           return transport;
         },
       );
@@ -70,12 +73,14 @@ void main() {
           sinkPeerId: 'win',
           layoutEdge: RemoteInputEdge.right,
           releaseHotkey: 'ctrl+alt+esc',
+          transportToken: 'input-token',
         ),
         localPeerId: 'mac',
         remoteHost: 'win.local',
         remotePort: 10002,
         isMutuallyTrusted: true,
         localCanInject: true,
+        mediaSendKey: mediaKey,
         sendControl: sentControls.add,
       );
 

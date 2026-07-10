@@ -293,8 +293,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     RemoteInputWorkspaceSessionIdFactory? workspaceSessionIdFactory,
   })  : _manager = manager ?? RemoteInputManager(),
         _platform = platform ?? RemoteInputCoordinator.shared.platform,
-        _transportFactory =
-            transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _workspaceSessionIdFactory =
             workspaceSessionIdFactory ?? const Uuid().v4;
 
@@ -305,7 +304,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
-  final RemoteInputTransportFactory _transportFactory;
+  final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputWorkspaceSessionIdFactory _workspaceSessionIdFactory;
 
   RemoteInputWorkspaceSnapshot _snapshot =
@@ -437,6 +436,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputPeerControlSender sendControlTo,
+    Uint8List? mediaSendKey,
   }) async {
     _sendControlTo = sendControlTo;
     switch (message.action) {
@@ -446,6 +446,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           localPeerId: localPeerId,
           remoteHost: remoteHost,
           remotePort: remotePort,
+          mediaSendKey: mediaSendKey,
         );
       case RemoteInputControlAction.release:
         return _handleRelease(message);
@@ -506,6 +507,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String localPeerId,
     required String remoteHost,
     required int remotePort,
+    Uint8List? mediaSendKey,
   }) async {
     if (accept.sourcePeerId != localPeerId ||
         _snapshot.role != RemoteInputWorkspaceRole.controller) {
@@ -517,13 +519,29 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     }
     _manager.handleControlMessage(accept);
     final path = accept.path.isNotEmpty ? accept.path : target.offer.path;
-    target.transport = await _transportFactory(
-      buildPeerPacketUri(
-        host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
-        port: remotePort > 0 ? remotePort : target.request.port,
-        path: path,
-      ),
+    final uri = buildPeerPacketUri(
+      host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
+      port: remotePort > 0 ? remotePort : target.request.port,
+      path: path,
+      queryParameters: <String, String>{
+        if (accept.transportToken.isNotEmpty) 'session': accept.sessionId,
+        if (accept.transportToken.isNotEmpty) 'token': accept.transportToken,
+      },
     );
+    final transportFactory = _transportFactory;
+    if (transportFactory != null) {
+      target.transport = await transportFactory(uri);
+    } else {
+      if (accept.transportToken.isEmpty || mediaSendKey == null) {
+        throw StateError(
+            'authenticated remote input workspace context missing');
+      }
+      target.transport = await RemoteInputWebSocketPacketTransport.connect(
+        uri,
+        mediaMacKey: mediaSendKey,
+        sessionId: accept.sessionId,
+      );
+    }
     target.transportDoneSubscription = _listenForTargetTransportDone(target);
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.connected,

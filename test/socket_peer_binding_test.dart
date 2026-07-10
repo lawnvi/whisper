@@ -93,4 +93,66 @@ void main() {
     expect(source, contains('AudioGroupCoordinator.shared.rejoinSessionId'));
     expect(source, contains('preservedSessions:'));
   });
+
+  test('media accept binds one token to authenticated directional keys', () {
+    expect(source, contains('_sessionUpgradeTokens.issue('));
+    expect(source, contains('mediaMacKey: mediaReceiveKey'));
+    expect(source, contains('mediaSendKey: session.mediaSendKey'));
+    expect(source, contains("route: '/audio'"));
+    expect(source, contains("route: '/input'"));
+    expect(source, contains('withTransportToken('));
+    expect(source, contains('claimValidator: _isExpectedMediaPeerClaim'));
+    expect(source, contains('constantTimeBytesEqual(mediaReceiveKey'));
+  });
+
+  test('terminal controls and lifecycle cleanup release media claims', () {
+    expect(source, contains('_sessionUpgradeTokens.revoke('));
+    expect(source, contains('_sessionUpgradeTokens.clearPeer(peerId)'));
+    expect(source, contains('_sessionUpgradeTokens.clearAll()'));
+    expect(source, contains('_wireControlSessions.forget('));
+    expect(source, contains('_audioManager.closePeerChannels(peerId)'));
+    expect(source, contains('_remoteInputManager.closePeerChannels(peerId)'));
+    expect(source, contains('namespace: namespace'));
+  });
+
+  test('new peer generation revokes only superseded media keys', () {
+    expect(source, contains('await _closeSupersededMediaChannels(session);'));
+    expect(
+      source,
+      contains('_audioManager.closeSupersededPeerChannels('),
+    );
+    expect(
+      source,
+      contains('_remoteInputManager.closeSupersededPeerChannels('),
+    );
+    expect(source, contains('mediaMacKey: mediaReceiveKey'));
+  });
+
+  test('outgoing stale control binding returns false instead of throwing', () {
+    final start = source.indexOf('bool _validateOutgoingControlSession(');
+    final end = source.indexOf('String? _issueSessionUpgradeToken(', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final validation = source.substring(start, end);
+
+    expect(validation, contains('return result.isAccepted;'));
+    expect(validation, isNot(contains('.requireAccepted()')));
+  });
+
+  test('audio group token issuance binds the accepted group and stream', () {
+    final start = source.indexOf('Future<bool> sendAudioGroupControlTo(');
+    final end = source.indexOf('Future<bool> sendRemoteInputControl(', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final sendGroup = source.substring(start, end);
+
+    expect(
+      sendGroup,
+      contains('acceptedGroup?.groupId != control.groupId'),
+    );
+    expect(
+      sendGroup,
+      contains('acceptedGroup?.streamId != control.streamId'),
+    );
+  });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
@@ -27,12 +28,194 @@ void main() {
   });
 
   test('buildPeerPacketUri composes ws uri', () {
-    final uri =
-        buildPeerPacketUri(host: '192.168.1.2', port: 9200, path: '/audio');
+    final uri = buildPeerPacketUri(
+      host: '192.168.1.2',
+      port: 9200,
+      path: '/audio',
+      queryParameters: const <String, String>{
+        'session': 'audio-session',
+        'token': 'secret-token',
+      },
+    );
     expect(uri.scheme, 'ws');
     expect(uri.host, '192.168.1.2');
     expect(uri.port, 9200);
     expect(uri.path, '/audio');
+    expect(uri.queryParameters['session'], 'audio-session');
+    expect(uri.queryParameters['token'], 'secret-token');
+    expect(redactedPacketUri(uri).query, isEmpty);
+    expect(redactedPacketUri(uri).toString(), 'ws://192.168.1.2:9200/audio');
+  });
+
+  test('structured packet uri preserves scoped IPv6 and redacts all query', () {
+    final uri = buildPeerPacketUri(
+      host: 'fe80::1%en0',
+      port: 9200,
+      path: 'input',
+      queryParameters: const <String, String>{
+        'session': 'input-session',
+        'token': 'never-log-me',
+      },
+    );
+
+    expect(uri.host, 'fe80::1%25en0');
+    expect(uri.path, '/input');
+    expect(redactedPacketUri(uri).queryParameters, isEmpty);
+    expect(redactedPacketUri(uri).toString(), isNot(contains('never-log-me')));
+  });
+
+  group('authenticated media packet envelope', () {
+    final key = Uint8List.fromList(
+      List<int>.generate(32, (index) => index + 1),
+    );
+
+    AuthenticatedMediaPacketDecoder decoder({
+      String route = '/audio',
+      String sessionId = 'session-a',
+      Uint8List? mediaMacKey,
+      int maxPayloadBytes = 256 * 1024,
+    }) {
+      return AuthenticatedMediaPacketDecoder(
+        route: route,
+        sessionId: sessionId,
+        mediaMacKey: mediaMacKey ?? key,
+        maxPayloadBytes: maxPayloadBytes,
+      );
+    }
+
+    test('round-trips payloads with an exact monotonic envelope sequence', () {
+      final encoder = AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        sessionId: 'session-a',
+        mediaMacKey: key,
+        maxPayloadBytes: 256 * 1024,
+      );
+      final receiver = decoder();
+
+      expect(receiver.decode(encoder.encode(Uint8List.fromList(<int>[1, 2]))),
+          <int>[1, 2]);
+      expect(receiver.decode(encoder.encode(Uint8List.fromList(<int>[3]))),
+          <int>[3]);
+      expect(encoder.nextSequence, 2);
+      expect(receiver.expectedSequence, 2);
+    });
+
+    test('rejects tamper, wrong key, route, session, and declared length', () {
+      final encoded = AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        sessionId: 'session-a',
+        mediaMacKey: key,
+        maxPayloadBytes: 256 * 1024,
+      ).encode(Uint8List.fromList(<int>[1, 2, 3]));
+      final tampered = Uint8List.fromList(encoded)..last ^= 0xff;
+      final wrongLength = Uint8List.fromList(encoded);
+      ByteData.sublistView(wrongLength).setUint32(
+        AuthenticatedMediaPacketEnvelope.payloadLengthOffset,
+        4,
+      );
+      final wrongKey = Uint8List.fromList(key)..[0] ^= 0xff;
+
+      expect(() => decoder().decode(tampered), throwsFormatException);
+      expect(
+        () => decoder(mediaMacKey: wrongKey).decode(encoded),
+        throwsFormatException,
+      );
+      expect(
+        () => decoder(route: '/input').decode(encoded),
+        throwsFormatException,
+      );
+      expect(
+        () => decoder(sessionId: 'session-b').decode(encoded),
+        throwsFormatException,
+      );
+      expect(() => decoder().decode(wrongLength), throwsFormatException);
+    });
+
+    test('rejects replay and skipped envelope sequences', () {
+      final encoder = AuthenticatedMediaPacketEncoder(
+        route: '/input',
+        sessionId: 'input-session',
+        mediaMacKey: key,
+        maxPayloadBytes: 64 * 1024,
+      );
+      final first = encoder.encode(Uint8List.fromList(<int>[1]));
+      final second = encoder.encode(Uint8List.fromList(<int>[2]));
+      final replayReceiver = decoder(
+        route: '/input',
+        sessionId: 'input-session',
+        maxPayloadBytes: 64 * 1024,
+      );
+      replayReceiver.decode(first);
+
+      expect(() => replayReceiver.decode(first), throwsFormatException);
+      expect(
+        () => decoder(
+          route: '/input',
+          sessionId: 'input-session',
+          maxPayloadBytes: 64 * 1024,
+        ).decode(second),
+        throwsFormatException,
+      );
+    });
+
+    test('enforces the route payload cap before authenticating or decoding',
+        () {
+      final encoder = AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        sessionId: 'session-a',
+        mediaMacKey: key,
+        maxPayloadBytes: 4,
+      );
+      final maximum = encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4]));
+
+      expect(decoder(maxPayloadBytes: 4).decode(maximum), <int>[1, 2, 3, 4]);
+      expect(
+        () => encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4, 5])),
+        throwsArgumentError,
+      );
+      expect(
+        () => decoder(maxPayloadBytes: 3).decode(maximum),
+        throwsFormatException,
+      );
+    });
+
+    test('drop-oldest queue assigns envelope sequence only when written',
+        () async {
+      final firstWrite = Completer<void>();
+      final releaseFirstWrite = Completer<void>();
+      final written = <Uint8List>[];
+      final transport = PacketByteTransport.audio(
+        addStream: (stream) async {
+          written.add(await stream.single as Uint8List);
+          if (!firstWrite.isCompleted) {
+            firstWrite.complete();
+            await releaseFirstWrite.future;
+          }
+        },
+        closeSink: () async {},
+        maxItems: 2,
+        maxBytes: 1024,
+        packetEncoder: AuthenticatedMediaPacketEncoder(
+          route: '/audio',
+          sessionId: 'session-a',
+          mediaMacKey: key,
+          maxPayloadBytes: 256,
+        ),
+      );
+
+      transport.send(Uint8List.fromList(<int>[1]));
+      await firstWrite.future;
+      transport.send(Uint8List.fromList(<int>[2]));
+      transport.send(Uint8List.fromList(<int>[3]));
+      releaseFirstWrite.complete();
+      await transport.close();
+
+      final receiver = decoder(maxPayloadBytes: 256);
+      expect(written.map(receiver.decode), <List<int>>[
+        <int>[1],
+        <int>[3],
+      ]);
+    });
   });
 
   test('queued audio transport drains addStream before closing', () async {
@@ -149,5 +332,29 @@ void main() {
     await overflowClosed.future;
     releaseFirstWrite.complete();
     await transport.close();
+  });
+
+  test('websocket connection errors never expose capability queries', () async {
+    final uri = Uri.parse(
+      'ws://peer.local:10002/audio?session=session-a&token=secret-token',
+    );
+
+    Object? failure;
+    try {
+      await connectPacketWebSocket(
+        uri,
+        connector: (_) => Future<PacketWebSocketConnection>.error(
+          StateError('failed to connect $uri'),
+        ),
+      );
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure.toString(), contains('ws://peer.local:10002/audio'));
+    expect(failure.toString(), isNot(contains('secret-token')));
+    expect(failure.toString(), isNot(contains('session=session-a')));
+    expect(failure.toString(), isNot(contains('?')));
   });
 }

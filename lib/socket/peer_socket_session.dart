@@ -82,6 +82,8 @@ final class PeerSocketSession {
   Uint8List? _remoteNonce;
   AuthTranscript? _transcript;
   AuthenticatedFrameCodec? _codec;
+  Uint8List? _mediaSendKey;
+  Uint8List? _mediaReceiveKey;
   bool _approvalResolved = false;
   bool _approvalAllowed = false;
   bool _authenticationApproved = false;
@@ -136,6 +138,12 @@ final class PeerSocketSession {
   String get remoteIdentityPublicKey => _remoteIdentityPublicKey ?? '';
   String get pairingCode => _transcript?.pairingCode() ?? '';
   AuthenticatedFrameCodec? get codec => _codec;
+  Uint8List? get mediaSendKey => isAuthenticated && _mediaSendKey != null
+      ? Uint8List.fromList(_mediaSendKey!)
+      : null;
+  Uint8List? get mediaReceiveKey => isAuthenticated && _mediaReceiveKey != null
+      ? Uint8List.fromList(_mediaReceiveKey!)
+      : null;
   bool get isAuthenticated =>
       !_closed && phase == PeerSocketPhase.authenticated;
   bool get isAuthenticationReady {
@@ -657,6 +665,7 @@ final class PeerSocketSession {
     _closed = true;
     phase = PeerSocketPhase.closing;
     _handshakeTimer.cancel();
+    _clearMediaKeys();
   }
 
   Future<void> _enableCodec(PeerSocketPhase expectedPhase) async {
@@ -677,6 +686,27 @@ final class PeerSocketSession {
             sendKey: keys.serverToClientChat,
             receiveKey: keys.clientToServerChat,
           );
+    final sendMediaKey = role == PeerSocketRole.client
+        ? keys.clientToServerMedia
+        : keys.serverToClientMedia;
+    final receiveMediaKey = role == PeerSocketRole.client
+        ? keys.serverToClientMedia
+        : keys.clientToServerMedia;
+    _mediaSendKey = Uint8List.fromList(await sendMediaKey.extractBytes());
+    _mediaReceiveKey = Uint8List.fromList(await receiveMediaKey.extractBytes());
+  }
+
+  void _clearMediaKeys() {
+    final sendKey = _mediaSendKey;
+    final receiveKey = _mediaReceiveKey;
+    if (sendKey != null) {
+      sendKey.fillRange(0, sendKey.length, 0);
+    }
+    if (receiveKey != null) {
+      receiveKey.fillRange(0, receiveKey.length, 0);
+    }
+    _mediaSendKey = null;
+    _mediaReceiveKey = null;
   }
 
   WirePeerProfile _decodeProfile(AuthEnvelope envelope) {

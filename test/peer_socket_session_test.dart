@@ -204,6 +204,30 @@ void main() {
     );
   });
 
+  test('authenticated sessions expose inverse media keys as defensive copies',
+      () async {
+    final pair = await _authenticatedPair();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+
+    expect(
+      pair.client.mediaSendKey,
+      orderedEquals(pair.server.mediaReceiveKey!),
+    );
+    expect(
+      pair.client.mediaReceiveKey,
+      orderedEquals(pair.server.mediaSendKey!),
+    );
+    final exposed = pair.client.mediaSendKey!;
+    final originalFirstByte = exposed.first;
+    exposed[0] ^= 0xff;
+    expect(pair.client.mediaSendKey!.first, originalFirstByte);
+
+    pair.client.close();
+    expect(pair.client.mediaSendKey, isNull);
+    expect(pair.client.mediaReceiveKey, isNull);
+  });
+
   test('shutdown drains queued authenticated frames before closing', () async {
     final pair = await _authenticatedPair();
     addTearDown(pair.client.close);

@@ -125,6 +125,47 @@ void main() {
       expect(decoded.format, isNull);
       expect(decoded.errorMessage, 'capture permission denied');
     });
+
+    test('serializes a transport token only for a successful accept', () {
+      const accept = AudioControlMessage(
+        action: AudioControlAction.accept,
+        sessionId: 'audio-1',
+        sourcePeerId: 'peer-a',
+        sinkPeerId: 'peer-b',
+        transportToken: 'single-use-token',
+      );
+
+      expect(accept.toJson()['transportToken'], 'single-use-token');
+      expect(
+        AudioControlMessage.fromJson(accept.toJson()).transportToken,
+        'single-use-token',
+      );
+      for (final action in AudioControlAction.values
+          .where((action) => action != AudioControlAction.accept)) {
+        final message = AudioControlMessage(
+          action: action,
+          sessionId: 'audio-1',
+          sourcePeerId: 'peer-a',
+          sinkPeerId: 'peer-b',
+          transportToken: 'must-not-leak',
+        );
+        expect(message.toJson(), isNot(contains('transportToken')));
+        expect(
+          () => AudioControlMessage.fromJson(<String, dynamic>{
+            ...message.toJson(),
+            'transportToken': 'unexpected',
+          }),
+          throwsFormatException,
+        );
+      }
+      expect(
+        () => AudioControlMessage.fromJson(<String, dynamic>{
+          ...accept.toJson(),
+          'transportToken': '',
+        }),
+        throwsFormatException,
+      );
+    });
   });
 
   group('AudioGroupControlMessage', () {

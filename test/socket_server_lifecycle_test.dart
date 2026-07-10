@@ -1,13 +1,80 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
+import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/svrmanager.dart';
+
+const _audioSessionId = '11111111-1111-4111-8111-111111111111';
+const _inputSessionId = '22222222-2222-4222-8222-222222222222';
+const _sourcePeerId = 'source-peer';
+const _sinkPeerId = 'sink-peer';
+final _mediaKey = Uint8List.fromList(
+  List<int>.generate(32, (index) => index + 1),
+);
+
+void _activateAudioSession(AudioShareManager manager) {
+  manager.acceptOffer(
+    const AudioControlMessage(
+      action: AudioControlAction.offer,
+      sessionId: _audioSessionId,
+      sourcePeerId: _sourcePeerId,
+      sinkPeerId: _sinkPeerId,
+      format: AudioStreamFormat(
+        codec: AudioCodecKind.opus,
+        sampleRate: 48000,
+        channels: 2,
+        frameDurationMs: 20,
+        bitRate: 128000,
+      ),
+    ),
+  );
+}
+
+void _activateInputSession(RemoteInputManager manager) {
+  manager.acceptOffer(
+    const RemoteInputControlMessage(
+      action: RemoteInputControlAction.offer,
+      sessionId: _inputSessionId,
+      sourcePeerId: _sourcePeerId,
+      sinkPeerId: _sinkPeerId,
+      layoutEdge: RemoteInputEdge.right,
+    ),
+  );
+}
+
+Uri _authorizedMediaUri({
+  required int port,
+  required String route,
+  required String sessionId,
+  required SessionUpgradeTokenRegistry tokens,
+}) {
+  final token = tokens.issue(
+    route: route,
+    sessionId: sessionId,
+    peerId: _sourcePeerId,
+    mediaMacKey: _mediaKey,
+    now: DateTime.now(),
+  );
+  return buildPeerPacketUri(
+    host: '127.0.0.1',
+    port: port,
+    path: route,
+    queryParameters: <String, String>{
+      'session': sessionId,
+      'token': token,
+    },
+  );
+}
 
 final class _BlockingAudioManager extends AudioShareManager {
   final Completer<void> closeStarted = Completer<void>();
@@ -142,7 +209,7 @@ void main() {
           path: path,
           origin: '',
         ),
-        HttpStatus.forbidden,
+        path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
       );
       expect(
         await _rawUpgradeStatus(
@@ -150,7 +217,7 @@ void main() {
           path: path,
           origin: '   ',
         ),
-        HttpStatus.forbidden,
+        path == '/chat' ? HttpStatus.forbidden : HttpStatus.unauthorized,
       );
     }
     expect(
@@ -218,10 +285,16 @@ void main() {
     );
     final audioManager = AudioShareManager();
     final inputManager = RemoteInputManager();
+    final tokens = SessionUpgradeTokenRegistry();
+    _activateAudioSession(audioManager);
+    _activateInputSession(inputManager);
     final isolated = WsSvrManager.forTesting(
       admission: admission,
       audioManager: audioManager,
       remoteInputManager: inputManager,
+      sessionUpgradeTokens: tokens,
+      audioGroupClaimValidator: (_) => false,
+      mediaPeerClaimValidator: (_) => true,
     );
     addTearDown(() => isolated.closeGracefully(
           closeServer: true,
@@ -229,10 +302,20 @@ void main() {
         ));
     final started = await isolated.startServer(0);
     final audio = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/audio',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/audio',
+        sessionId: _audioSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     final input = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/input',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/input',
+        sessionId: _inputSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     addTearDown(audio.close);
     addTearDown(input.close);
@@ -250,14 +333,26 @@ void main() {
 
   test('manager-only media channels are awaited by graceful close', () async {
     final audioManager = AudioShareManager();
-    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    final tokens = SessionUpgradeTokenRegistry();
+    _activateAudioSession(audioManager);
+    final isolated = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      sessionUpgradeTokens: tokens,
+      audioGroupClaimValidator: (_) => false,
+      mediaPeerClaimValidator: (_) => true,
+    );
     addTearDown(() => isolated.closeGracefully(
           closeServer: true,
           forceServerClose: true,
         ));
     final started = await isolated.startServer(0);
     final audio = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/audio',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/audio',
+        sessionId: _audioSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     final remoteClosed = audio.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
@@ -270,13 +365,27 @@ void main() {
   });
 
   test('audio and input routes close oversized binary packets', () async {
-    expect(AudioShareManager.maxChannelMessageBytes, 256 * 1024);
-    expect(RemoteInputManager.maxChannelMessageBytes, 64 * 1024);
+    expect(AudioShareManager.maxPacketPayloadBytes, 256 * 1024);
+    expect(RemoteInputManager.maxPacketPayloadBytes, 64 * 1024);
+    expect(
+      AudioShareManager.maxChannelMessageBytes,
+      256 * 1024 + AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
+    expect(
+      RemoteInputManager.maxChannelMessageBytes,
+      64 * 1024 + AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
     final audioManager = AudioShareManager();
     final inputManager = RemoteInputManager();
+    final tokens = SessionUpgradeTokenRegistry();
+    _activateAudioSession(audioManager);
+    _activateInputSession(inputManager);
     final isolated = WsSvrManager.forTesting(
       audioManager: audioManager,
       remoteInputManager: inputManager,
+      sessionUpgradeTokens: tokens,
+      audioGroupClaimValidator: (_) => false,
+      mediaPeerClaimValidator: (_) => true,
     );
     addTearDown(() => isolated.closeGracefully(
           closeServer: true,
@@ -285,7 +394,12 @@ void main() {
     final started = await isolated.startServer(0);
 
     final audio = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/audio',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/audio',
+        sessionId: _audioSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     final audioClosed = audio.listen((_) {}).asFuture<void>();
     audio.add(
@@ -295,7 +409,12 @@ void main() {
     await _waitFor(() => audioManager.activeChannelCount == 0);
 
     final input = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/input',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/input',
+        sessionId: _inputSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     final inputClosed = input.listen((_) {}).asFuture<void>();
     input.add(
@@ -349,7 +468,14 @@ void main() {
   test('server stops accepting before existing channel cleanup completes',
       () async {
     final audioManager = _BlockingAudioManager();
-    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    final tokens = SessionUpgradeTokenRegistry();
+    _activateAudioSession(audioManager);
+    final isolated = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      sessionUpgradeTokens: tokens,
+      audioGroupClaimValidator: (_) => false,
+      mediaPeerClaimValidator: (_) => true,
+    );
     addTearDown(() {
       if (!audioManager.releaseClose.isCompleted) {
         audioManager.releaseClose.complete();
@@ -378,7 +504,14 @@ void main() {
   test('retained server rejects upgrades while closing and reopens after',
       () async {
     final audioManager = _BlockingAudioManager();
-    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    final tokens = SessionUpgradeTokenRegistry();
+    _activateAudioSession(audioManager);
+    final isolated = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      sessionUpgradeTokens: tokens,
+      audioGroupClaimValidator: (_) => false,
+      mediaPeerClaimValidator: (_) => true,
+    );
     addTearDown(() {
       if (!audioManager.releaseClose.isCompleted) {
         audioManager.releaseClose.complete();
@@ -390,7 +523,12 @@ void main() {
     });
     final started = await isolated.startServer(0);
     final existing = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/audio',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/audio',
+        sessionId: _audioSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     final existingClosed = existing.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
@@ -407,7 +545,12 @@ void main() {
     await closing;
     await existingClosed.timeout(const Duration(seconds: 2));
     final reopened = await WebSocket.connect(
-      'ws://127.0.0.1:${started.port}/audio',
+      _authorizedMediaUri(
+        port: started.port,
+        route: '/audio',
+        sessionId: _audioSessionId,
+        tokens: tokens,
+      ).toString(),
     );
     await reopened.close();
   });

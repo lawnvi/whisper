@@ -80,6 +80,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     WebSocketChannel channel, {
     int maxItems = 128,
     int maxBytes = 256 * 1024,
+    AuthenticatedMediaPacketEncoder? packetEncoder,
   }) =>
       RemoteInputWebSocketPacketTransport.forStreams(
         incoming: channel.stream,
@@ -87,6 +88,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
         closeSink: () => channel.sink.close(),
         maxItems: maxItems,
         maxBytes: maxBytes,
+        packetEncoder: packetEncoder,
       );
 
   factory RemoteInputWebSocketPacketTransport.forStreams({
@@ -95,6 +97,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     required Future<void> Function() closeSink,
     int maxItems = 128,
     int maxBytes = 256 * 1024,
+    AuthenticatedMediaPacketEncoder? packetEncoder,
   }) {
     late final RemoteInputWebSocketPacketTransport transport;
     transport = RemoteInputWebSocketPacketTransport._(
@@ -104,6 +107,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
         closeSink: closeSink,
         maxItems: maxItems,
         maxBytes: maxBytes,
+        packetEncoder: packetEncoder,
         onOverflow: () {
           transport._notifyDone();
           unawaited(closeSink().catchError((Object _) {}));
@@ -113,10 +117,31 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     return transport;
   }
 
-  static Future<RemoteInputWebSocketPacketTransport> connect(Uri uri) async {
-    final channel = IOWebSocketChannel.connect(uri);
-    await channel.ready;
-    return RemoteInputWebSocketPacketTransport.forChannel(channel);
+  static Future<RemoteInputWebSocketPacketTransport> connect(
+    Uri uri, {
+    required Uint8List mediaMacKey,
+    required String sessionId,
+  }) async {
+    try {
+      final channel = IOWebSocketChannel.connect(uri);
+      await channel.ready;
+      return RemoteInputWebSocketPacketTransport.forChannel(
+        channel,
+        packetEncoder: AuthenticatedMediaPacketEncoder(
+          route: '/input',
+          sessionId: sessionId,
+          mediaMacKey: mediaMacKey,
+          maxPayloadBytes: 64 * 1024,
+        ),
+      );
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        error is PacketWebSocketConnectException
+            ? error
+            : PacketWebSocketConnectException(uri, error),
+        stackTrace,
+      );
+    }
   }
 
   @override

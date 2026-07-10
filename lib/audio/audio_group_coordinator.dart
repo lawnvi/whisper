@@ -40,8 +40,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     AudioGroupIdFactory? sessionIdFactory,
   })  : _platform = platform ?? AudioPlatform(),
         _codecFactory = codecFactory ?? _createDefaultAudioGroupCodec,
-        _transportFactory =
-            transportFactory ?? AudioGroupWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _playbackGainProvider =
             playbackGainProvider ?? LocalSetting().audioSharePlaybackGain,
         _clockMicros =
@@ -63,7 +62,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
 
   final AudioPlatform _platform;
   final AudioGroupCodecFactory _codecFactory;
-  final AudioGroupTransportFactory _transportFactory;
+  final AudioGroupTransportFactory? _transportFactory;
   final AudioGroupPlaybackGainProvider _playbackGainProvider;
   final AudioGroupClock _clockMicros;
   final AudioGroupIdFactory _groupIdFactory;
@@ -277,6 +276,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required AudioGroupControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     if (message.action == AudioGroupControlAction.groupOffer) {
       await _handleOffer(
@@ -311,6 +311,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           remoteHost: remoteHost,
           remotePort: remotePort,
           sendControl: sendControl,
+          mediaSendKey: mediaSendKey,
         );
         break;
       case AudioGroupControlAction.groupReject:
@@ -720,6 +721,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required AudioGroupControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     if (current.sourcePeerId != localPeerId) {
       return;
@@ -730,13 +732,27 @@ class AudioGroupCoordinator extends ChangeNotifier {
     }
     try {
       if (remoteHost.isNotEmpty && remotePort > 0) {
-        final transport = await _transportFactory(
-          _audioUri(
-            host: remoteHost,
-            port: remotePort,
-            path: accept.path,
-          ),
+        final uri = _audioUri(
+          host: remoteHost,
+          port: remotePort,
+          path: accept.path,
+          sessionId: accept.sessionId,
+          transportToken: accept.transportToken,
         );
+        final transportFactory = _transportFactory;
+        final AudioGroupPacketTransport transport;
+        if (transportFactory != null) {
+          transport = await transportFactory(uri);
+        } else {
+          if (accept.transportToken.isEmpty || mediaSendKey == null) {
+            throw StateError('authenticated audio group context missing');
+          }
+          transport = await AudioGroupWebSocketPacketTransport.connect(
+            uri,
+            mediaMacKey: mediaSendKey,
+            sessionId: accept.sessionId,
+          );
+        }
         _fanout.attach(accept.sinkPeerId, transport);
       }
       var next = current.markSink(
@@ -1237,12 +1253,18 @@ class AudioGroupCoordinator extends ChangeNotifier {
     required String host,
     required int port,
     required String path,
+    required String sessionId,
+    required String transportToken,
   }) {
     final normalizedPath = path.isEmpty ? '/audio' : path;
     return buildPeerPacketUri(
       host: host,
       port: port,
       path: normalizedPath,
+      queryParameters: <String, String>{
+        if (transportToken.isNotEmpty) 'session': sessionId,
+        if (transportToken.isNotEmpty) 'token': transportToken,
+      },
     );
   }
 

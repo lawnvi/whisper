@@ -41,8 +41,20 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
   AudioGroupWebSocketPacketTransport._(PacketByteTransport channelTransport)
       : super.withTransport(channelTransport);
 
-  static Future<AudioGroupWebSocketPacketTransport> connect(Uri uri) async {
-    final channelTransport = await connectPacketWebSocket(uri);
+  static Future<AudioGroupWebSocketPacketTransport> connect(
+    Uri uri, {
+    required Uint8List mediaMacKey,
+    required String sessionId,
+  }) async {
+    final channelTransport = await connectPacketWebSocket(
+      uri,
+      packetEncoder: AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        sessionId: sessionId,
+        mediaMacKey: mediaMacKey,
+        maxPayloadBytes: 256 * 1024,
+      ),
+    );
     return AudioGroupWebSocketPacketTransport._(channelTransport);
   }
 }

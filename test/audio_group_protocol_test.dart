@@ -71,6 +71,44 @@ void main() {
     expect(decoded.format, format);
   });
 
+  test('group accept exclusively carries the single-use transport token', () {
+    const accept = AudioGroupControlMessage(
+      action: AudioGroupControlAction.groupAccept,
+      groupId: 'group-1',
+      streamId: 'stream-1',
+      sessionId: 'session-1',
+      sourcePeerId: 'source',
+      sinkPeerId: 'sink',
+      transportToken: 'group-token',
+    );
+
+    expect(accept.toJson()['transportToken'], 'group-token');
+    expect(
+      AudioGroupControlMessage.fromJson(accept.toJson()).transportToken,
+      'group-token',
+    );
+    for (final action in AudioGroupControlAction.values
+        .where((action) => action != AudioGroupControlAction.groupAccept)) {
+      final control = AudioGroupControlMessage(
+        action: action,
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-1',
+        sourcePeerId: 'source',
+        sinkPeerId: 'sink',
+        transportToken: 'must-not-leak',
+      );
+      expect(control.toJson(), isNot(contains('transportToken')));
+      expect(
+        () => AudioGroupControlMessage.fromJson(<String, dynamic>{
+          ...control.toJson(),
+          'transportToken': 'unexpected',
+        }),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('AudioGroupPacketFrame encodes synchronized stream metadata', () {
     final packet = AudioGroupPacketFrame(
       groupId: 'group-1',

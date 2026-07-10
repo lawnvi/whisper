@@ -52,6 +52,32 @@ void main() {
     expect(AudioShareDiagnostics.traceEnabled, isFalse);
   });
 
+  test('redacts media capability query from every transport diagnostic', () {
+    final logs = <String>[];
+    final diagnostics = AudioShareDiagnostics(sink: logs.add);
+    final uri = Uri.parse(
+      'ws://peer.local:10002/audio?session=session-a&token=secret-token',
+    );
+
+    diagnostics.transportConnecting(uri);
+    diagnostics.transportConnected(uri);
+    diagnostics.transportConnectFailed(
+      uri,
+      StateError('failed to connect $uri'),
+    );
+    diagnostics.audioChannelError(StateError('socket failed for $uri'));
+
+    expect(logs, hasLength(4));
+    for (final log in logs.take(3)) {
+      expect(log, contains('ws://peer.local:10002/audio'));
+    }
+    for (final log in logs) {
+      expect(log, isNot(contains('secret-token')));
+      expect(log, isNot(contains('session=session-a')));
+      expect(log, isNot(contains('?')));
+    }
+  });
+
   test('logs when audio packet bytes are dropped for a missing session', () {
     final logs = <String>[];
     final diagnostics = AudioShareDiagnostics(sink: logs.add);

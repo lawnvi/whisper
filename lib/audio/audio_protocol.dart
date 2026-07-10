@@ -115,6 +115,7 @@ class AudioControlMessage {
     this.format,
     this.transport = AudioTransport.websocket,
     this.path = '',
+    this.transportToken = '',
     this.errorMessage = '',
   });
 
@@ -125,7 +126,22 @@ class AudioControlMessage {
   final AudioStreamFormat? format;
   final AudioTransport transport;
   final String path;
+  final String transportToken;
   final String errorMessage;
+
+  AudioControlMessage withTransportToken(String token) {
+    return AudioControlMessage(
+      action: action,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      sinkPeerId: sinkPeerId,
+      format: format,
+      transport: transport,
+      path: path,
+      transportToken: token,
+      errorMessage: errorMessage,
+    );
+  }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'action': action.name,
@@ -135,6 +151,8 @@ class AudioControlMessage {
         if (format != null) 'format': format!.toJson(),
         'transport': transport.name,
         'path': path,
+        if (action == AudioControlAction.accept && transportToken.isNotEmpty)
+          'transportToken': transportToken,
         'errorMessage': errorMessage,
       };
 
@@ -158,6 +176,10 @@ class AudioControlMessage {
         AudioTransport.websocket,
       ),
       path: json['path'] as String? ?? '',
+      transportToken: _transportTokenFromJson(
+        json,
+        allowed: json['action'] == AudioControlAction.accept.name,
+      ),
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }
@@ -175,6 +197,7 @@ class AudioGroupControlMessage {
     this.format,
     this.transport = AudioTransport.websocket,
     this.path = '',
+    this.transportToken = '',
     this.channelRole = AudioChannelRole.stereo,
     this.targetLatencyMs = 160,
     this.sentAtMicros = 0,
@@ -200,6 +223,7 @@ class AudioGroupControlMessage {
   final AudioStreamFormat? format;
   final AudioTransport transport;
   final String path;
+  final String transportToken;
   final AudioChannelRole channelRole;
   final int targetLatencyMs;
   final int sentAtMicros;
@@ -214,6 +238,35 @@ class AudioGroupControlMessage {
   final int syncErrorMicros;
   final String errorMessage;
 
+  AudioGroupControlMessage withTransportToken(String token) {
+    return AudioGroupControlMessage(
+      action: action,
+      groupId: groupId,
+      streamId: streamId,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      sinkPeerId: sinkPeerId,
+      sinkPeerIds: sinkPeerIds,
+      format: format,
+      transport: transport,
+      path: path,
+      transportToken: token,
+      channelRole: channelRole,
+      targetLatencyMs: targetLatencyMs,
+      sentAtMicros: sentAtMicros,
+      receivedAtMicros: receivedAtMicros,
+      sinkClockMicros: sinkClockMicros,
+      playbackCursorMicros: playbackCursorMicros,
+      clockOffsetMicros: clockOffsetMicros,
+      rttMicros: rttMicros,
+      jitterMicros: jitterMicros,
+      bufferDepthMicros: bufferDepthMicros,
+      latePacketCount: latePacketCount,
+      syncErrorMicros: syncErrorMicros,
+      errorMessage: errorMessage,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'action': action.name,
         'groupId': groupId,
@@ -225,6 +278,9 @@ class AudioGroupControlMessage {
         if (format != null) 'format': format!.toJson(),
         'transport': transport.name,
         'path': path,
+        if (action == AudioGroupControlAction.groupAccept &&
+            transportToken.isNotEmpty)
+          'transportToken': transportToken,
         'channelRole': channelRole.name,
         'targetLatencyMs': targetLatencyMs,
         'sentAtMicros': sentAtMicros,
@@ -266,6 +322,10 @@ class AudioGroupControlMessage {
         AudioTransport.websocket,
       ),
       path: json['path'] as String? ?? '',
+      transportToken: _transportTokenFromJson(
+        json,
+        allowed: json['action'] == AudioGroupControlAction.groupAccept.name,
+      ),
       channelRole: enumByName(
         AudioChannelRole.values,
         json['channelRole'] as String?,
@@ -285,6 +345,24 @@ class AudioGroupControlMessage {
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }
+}
+
+String _transportTokenFromJson(
+  Map<String, dynamic> json, {
+  required bool allowed,
+}) {
+  final present = json.containsKey('transportToken');
+  if (!allowed) {
+    if (present) {
+      throw const FormatException('unexpected transport token');
+    }
+    return '';
+  }
+  final token = json['transportToken'];
+  if (token is! String || token.isEmpty) {
+    throw const FormatException('missing transport token');
+  }
+  return token;
 }
 
 class AudioPacketFrame {

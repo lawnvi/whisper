@@ -85,12 +85,22 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
 
   static Future<AudioWebSocketPacketTransport> connect(
     Uri uri, {
+    required Uint8List mediaMacKey,
+    required String sessionId,
     AudioShareDiagnostics? diagnostics,
   }) async {
     final resolvedDiagnostics = diagnostics ?? AudioShareDiagnostics.shared;
     resolvedDiagnostics.transportConnecting(uri);
     try {
-      final channelTransport = await connectPacketWebSocket(uri);
+      final channelTransport = await connectPacketWebSocket(
+        uri,
+        packetEncoder: AuthenticatedMediaPacketEncoder(
+          route: '/audio',
+          sessionId: sessionId,
+          mediaMacKey: mediaMacKey,
+          maxPayloadBytes: 256 * 1024,
+        ),
+      );
       resolvedDiagnostics.transportConnected(uri);
       return AudioWebSocketPacketTransport._(
         channelTransport,

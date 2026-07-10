@@ -84,8 +84,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputScrollMultiplierProvider? scrollMultiplierProvider,
   })  : _manager = manager ?? RemoteInputManager.shared,
         _platform = platform ?? RemoteInputPlatform(),
-        _transportFactory =
-            transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _keyTranslatorFactory = keyTranslatorFactory ??
             ((platform) => RemoteInputKeyTranslator(targetPlatform: platform)),
         _platformKindProvider =
@@ -99,7 +98,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
-  final RemoteInputTransportFactory _transportFactory;
+  final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputKeyTranslatorFactory _keyTranslatorFactory;
   final RemoteInputPlatformKindProvider _platformKindProvider;
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
@@ -284,6 +283,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool localCanInject,
     required RemoteInputControlSender sendControl,
     String remotePlatform = '',
+    Uint8List? mediaSendKey,
   }) async {
     _trace(
       'remote input coordinator handling ${_controlSummary(message)} '
@@ -309,6 +309,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           remoteHost: remoteHost,
           remotePort: remotePort,
           sendControl: sendControl,
+          mediaSendKey: mediaSendKey,
         );
         break;
       case RemoteInputControlAction.release:
@@ -505,6 +506,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     _manager.handleControlMessage(accept);
     if (accept.sourcePeerId != localPeerId) {
@@ -524,6 +526,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         remoteHost: remoteHost,
         remotePort: remotePort,
         sendControl: sendControl,
+        mediaSendKey: mediaSendKey,
       );
     } catch (error) {
       _trace('remote input start capture failed $error');
@@ -787,6 +790,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     final edge = message.layoutEdge;
     if (edge == null) {
@@ -798,8 +802,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       host: remoteHost,
       port: remotePort,
       path: message.path,
+      sessionId: message.sessionId,
+      transportToken: message.transportToken,
     );
-    _trace('remote input _startCapture ${_controlSummary(message)} uri=$uri');
+    _trace(
+      'remote input _startCapture ${_controlSummary(message)} '
+      'uri=${redactedPacketUri(uri)}',
+    );
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.connecting,
@@ -808,9 +817,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sinkPeerId,
       ),
     );
-    final transport = await _transportFactory(
-      uri,
-    );
+    final transportFactory = _transportFactory;
+    final RemoteInputPacketTransport transport;
+    if (transportFactory != null) {
+      transport = await transportFactory(uri);
+    } else {
+      if (message.transportToken.isEmpty || mediaSendKey == null) {
+        throw StateError('authenticated remote input context missing');
+      }
+      transport = await RemoteInputWebSocketPacketTransport.connect(
+        uri,
+        mediaMacKey: mediaSendKey,
+        sessionId: message.sessionId,
+      );
+    }
     _transport = transport;
     _transportDoneSubscription = _listenForSourceTransportDone(
       transport,
@@ -1188,12 +1208,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String host,
     required int port,
     required String path,
+    required String sessionId,
+    required String transportToken,
   }) {
     final normalizedPath = path.isEmpty ? '/input' : path;
     return buildPeerPacketUri(
       host: host,
       port: port,
       path: normalizedPath,
+      queryParameters: <String, String>{
+        if (transportToken.isNotEmpty) 'session': sessionId,
+        if (transportToken.isNotEmpty) 'token': transportToken,
+      },
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioShareDiagnosticsSink = void Function(String message);
 
@@ -24,15 +25,18 @@ class AudioShareDiagnostics {
   int _capturePacketCount = 0;
 
   void transportConnecting(Uri uri) {
-    _emit('audio transport connecting uri=$uri');
+    _emit('audio transport connecting uri=${redactedPacketUri(uri)}');
   }
 
   void transportConnected(Uri uri) {
-    _emit('audio transport connected uri=$uri');
+    _emit('audio transport connected uri=${redactedPacketUri(uri)}');
   }
 
   void transportConnectFailed(Uri uri, Object error) {
-    _emit('audio transport connect failed uri=$uri error=$error');
+    _emit(
+      'audio transport connect failed uri=${redactedPacketUri(uri)} '
+      'errorType=${error.runtimeType}',
+    );
   }
 
   void audioPacketSent({
@@ -111,7 +115,7 @@ class AudioShareDiagnostics {
   }
 
   void audioChannelError(Object error) {
-    _emit('audio websocket error=$error');
+    _emit('audio websocket errorType=${error.runtimeType}');
   }
 
   void audioChannelMessageBytes(int bytes) {

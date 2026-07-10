@@ -22,6 +22,7 @@ void main() {
     frameDurationMs: 20,
     bitRate: 128000,
   );
+  final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('AudioGroupCoordinator', () {
     late MethodChannel channel;
@@ -93,6 +94,8 @@ void main() {
         platform: platform,
         codecFactory: _pcmCodec,
         transportFactory: (uri) async {
+          expect(uri.queryParameters['session'], isNotEmpty);
+          expect(uri.queryParameters['token'], startsWith('group-token-'));
           final transport = _FakeAudioGroupTransport();
           transports[uri.host] = transport;
           return transport;
@@ -124,10 +127,12 @@ void main() {
           sinkPeerId: 'phone-left',
           channelRole: AudioChannelRole.left,
           path: '/audio',
+          transportToken: 'group-token-left',
         ),
         localPeerId: 'mac',
         remoteHost: 'left.local',
         remotePort: 10002,
+        mediaSendKey: mediaKey,
         sendControl: (peerId, control) {
           sent.add(_SentGroupControl(peerId, control));
         },
@@ -143,10 +148,12 @@ void main() {
           sinkPeerId: 'phone-right',
           channelRole: AudioChannelRole.right,
           path: '/audio',
+          transportToken: 'group-token-right',
         ),
         localPeerId: 'mac',
         remoteHost: 'right.local',
         remotePort: 10002,
+        mediaSendKey: mediaKey,
         sendControl: (peerId, control) {
           sent.add(_SentGroupControl(peerId, control));
         },

@@ -348,6 +348,34 @@ void main() {
       }
     });
 
+    test('binds audio group continuations to one group and stream context', () {
+      final registry = WireControlSessionRegistry();
+      WireInputValidationResult validate(String context, bool initial) {
+        return registry.validateAndRemember(
+          namespace: 'audio-group',
+          sessionId: _messageId,
+          sourcePeerId: 'peer-a',
+          sinkPeerId: 'local',
+          authenticatedPeerId: 'peer-a',
+          localPeerId: 'local',
+          isInitialOffer: initial,
+          isIncoming: true,
+          context: context,
+        );
+      }
+
+      expect(validate('group-a\u0000stream-a', true).isAccepted, isTrue);
+      expect(validate('group-a\u0000stream-a', false).isAccepted, isTrue);
+      expect(
+        validate('group-b\u0000stream-a', false).reason,
+        WireInputReason.controlSessionMismatch,
+      );
+      expect(
+        validate('group-a\u0000stream-b', false).reason,
+        WireInputReason.controlSessionMismatch,
+      );
+    });
+
     test('capacity exhaustion never evicts an existing peer binding', () {
       final registry = WireControlSessionRegistry(maxEntries: 1);
       expect(
@@ -439,6 +467,47 @@ void main() {
       );
       registry.clearAll();
       expect(offer('peer-a', _messageId).isAccepted, isTrue);
+    });
+
+    test(
+        'terminal session removal releases capacity without evicting live work',
+        () {
+      final registry = WireControlSessionRegistry(maxEntries: 1);
+      expect(
+        registry
+            .validateAndRemember(
+              namespace: 'audio',
+              sessionId: _messageId,
+              sourcePeerId: 'peer-a',
+              sinkPeerId: 'local',
+              authenticatedPeerId: 'peer-a',
+              localPeerId: 'local',
+              isInitialOffer: true,
+              isIncoming: true,
+            )
+            .isAccepted,
+        isTrue,
+      );
+      expect(registry.length, 1);
+
+      expect(
+          registry.forget(namespace: 'audio', sessionId: _messageId), isTrue);
+      expect(registry.length, 0);
+      expect(
+        registry
+            .validateAndRemember(
+              namespace: 'remote-input',
+              sessionId: '11234567-89ab-4cde-8fab-0123456789ab',
+              sourcePeerId: 'peer-b',
+              sinkPeerId: 'local',
+              authenticatedPeerId: 'peer-b',
+              localPeerId: 'local',
+              isInitialOffer: true,
+              isIncoming: true,
+            )
+            .isAccepted,
+        isTrue,
+      );
     });
 
     test('audio group sink rejoin can restore a cleared peer binding', () {

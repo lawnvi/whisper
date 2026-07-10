@@ -35,6 +35,7 @@ import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/socket_admission.dart';
+import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
@@ -155,19 +156,36 @@ class WsSvrManager {
     SocketAdmissionController? admission,
     AudioShareManager? audioManager,
     RemoteInputManager? remoteInputManager,
+    SessionUpgradeTokenRegistry? sessionUpgradeTokens,
+    bool Function(SessionUpgradeClaim claim)? audioGroupClaimValidator,
+    AudioGroupPacketClaimValidator? audioGroupPacketValidator,
+    bool Function(SessionUpgradeClaim claim)? mediaPeerClaimValidator,
   })  : _admission = admission ?? SocketAdmissionController(),
         _audioManager = audioManager ?? AudioShareManager.shared,
-        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared;
+        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
+        _sessionUpgradeTokens =
+            sessionUpgradeTokens ?? SessionUpgradeTokenRegistry(),
+        _audioGroupClaimValidator = audioGroupClaimValidator,
+        _audioGroupPacketValidator = audioGroupPacketValidator,
+        _mediaPeerClaimValidator = mediaPeerClaimValidator;
 
   @visibleForTesting
   WsSvrManager.forTesting({
     SocketAdmissionController? admission,
     AudioShareManager? audioManager,
     RemoteInputManager? remoteInputManager,
+    SessionUpgradeTokenRegistry? sessionUpgradeTokens,
+    bool Function(SessionUpgradeClaim claim)? audioGroupClaimValidator,
+    AudioGroupPacketClaimValidator? audioGroupPacketValidator,
+    bool Function(SessionUpgradeClaim claim)? mediaPeerClaimValidator,
   }) : this._internal(
           admission: admission,
           audioManager: audioManager,
           remoteInputManager: remoteInputManager,
+          sessionUpgradeTokens: sessionUpgradeTokens,
+          audioGroupClaimValidator: audioGroupClaimValidator,
+          audioGroupPacketValidator: audioGroupPacketValidator,
+          mediaPeerClaimValidator: mediaPeerClaimValidator,
         );
 
   // 工厂构造函数，返回单例实例
@@ -217,6 +235,10 @@ class WsSvrManager {
   final SocketAdmissionController _admission;
   final AudioShareManager _audioManager;
   final RemoteInputManager _remoteInputManager;
+  final SessionUpgradeTokenRegistry _sessionUpgradeTokens;
+  final bool Function(SessionUpgradeClaim claim)? _audioGroupClaimValidator;
+  final AudioGroupPacketClaimValidator? _audioGroupPacketValidator;
+  final bool Function(SessionUpgradeClaim claim)? _mediaPeerClaimValidator;
   Future<void> _serverLifecycleTail = Future<void>.value();
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
@@ -888,7 +910,7 @@ class WsSvrManager {
         return shelf.Response.badRequest(body: 'Bad Request');
       }
       final origin = request.headers['origin'];
-      if (origin != null) {
+      if (origin?.trim().isNotEmpty == true) {
         return shelf.Response.forbidden('Forbidden');
       }
       if (!_acceptingUpgrades) {
@@ -909,18 +931,36 @@ class WsSvrManager {
         return shelf.Response(429, body: 'Too Many Requests');
       }
       if (path == 'audio') {
+        final claim = _consumeMediaUpgradeClaim(request, '/audio');
+        if (claim == null ||
+            !_isExpectedMediaPeerClaim(claim) ||
+            !_isExpectedAudioUpgradeClaim(claim)) {
+          return shelf.Response.unauthorized('Unauthorized');
+        }
         return handleMediaUpgrade(
           request,
           (onAttachmentComplete) => _audioManager.webSocketHandler(
+            claim: claim,
+            additionalValidator: _isExpectedAudioGroupUpgradeClaim,
+            groupPacketValidator: _isExpectedAudioGroupPacket,
+            claimValidator: _isExpectedMediaPeerClaim,
             pingInterval: _serverPingInterval,
             onAttachmentComplete: onAttachmentComplete,
           ),
         );
       }
       if (path == 'input') {
+        final claim = _consumeMediaUpgradeClaim(request, '/input');
+        if (claim == null ||
+            !_isExpectedMediaPeerClaim(claim) ||
+            !_remoteInputManager.canAttachClaim(claim)) {
+          return shelf.Response.unauthorized('Unauthorized');
+        }
         return handleMediaUpgrade(
           request,
           (onAttachmentComplete) => _remoteInputManager.webSocketHandler(
+            claim: claim,
+            claimValidator: _isExpectedMediaPeerClaim,
             pingInterval: _serverPingInterval,
             onAttachmentComplete: onAttachmentComplete,
           ),
@@ -983,6 +1023,86 @@ class WsSvrManager {
       _acceptingOutgoingConnections = !_closeOperationQueued;
       return ServerStartResult.failure(error);
     }
+  }
+
+  SessionUpgradeClaim? _consumeMediaUpgradeClaim(
+    shelf.Request request,
+    String route,
+  ) {
+    final sessions = request.url.queryParametersAll['session'];
+    final tokens = request.url.queryParametersAll['token'];
+    if (sessions == null ||
+        sessions.length != 1 ||
+        sessions.single.isEmpty ||
+        tokens == null ||
+        tokens.length != 1 ||
+        tokens.single.isEmpty) {
+      return null;
+    }
+    return _sessionUpgradeTokens.consume(
+      route: route,
+      sessionId: sessions.single,
+      token: tokens.single,
+      now: DateTime.now(),
+    );
+  }
+
+  bool _isExpectedMediaPeerClaim(SessionUpgradeClaim claim) {
+    final injected = _mediaPeerClaimValidator;
+    if (injected != null) {
+      return injected(claim);
+    }
+    final session = _sessionsByPeerId[claim.peerId];
+    final mediaReceiveKey = session?.mediaReceiveKey;
+    return session?.isAuthenticated == true &&
+        mediaReceiveKey != null &&
+        constantTimeBytesEqual(mediaReceiveKey, claim.mediaMacKey);
+  }
+
+  bool _isExpectedAudioUpgradeClaim(SessionUpgradeClaim claim) {
+    return _audioManager.canAttachClaim(
+      claim,
+      additionalValidator: _isExpectedAudioGroupUpgradeClaim,
+    );
+  }
+
+  bool _isExpectedAudioGroupUpgradeClaim(SessionUpgradeClaim claim) {
+    final injected = _audioGroupClaimValidator;
+    if (injected != null) {
+      return injected(claim);
+    }
+    final group = AudioGroupCoordinator.shared.session;
+    if (claim.route != '/audio' ||
+        group == null ||
+        group.sourcePeerId != claim.peerId) {
+      return false;
+    }
+    return group.sinks.values.any(
+      (sink) => sink.sessionId == claim.sessionId && !sink.isTerminal,
+    );
+  }
+
+  bool _isExpectedAudioGroupPacket(
+    SessionUpgradeClaim claim,
+    AudioGroupPacketFrame packet,
+  ) {
+    final injected = _audioGroupPacketValidator;
+    if (injected != null) {
+      return injected(claim, packet);
+    }
+    final group = AudioGroupCoordinator.shared.session;
+    final sink = group?.sinks.values
+        .where((candidate) => candidate.sessionId == claim.sessionId)
+        .firstOrNull;
+    return claim.route == '/audio' &&
+        group != null &&
+        sink != null &&
+        !sink.isTerminal &&
+        group.sourcePeerId == claim.peerId &&
+        packet.groupId == group.groupId &&
+        packet.streamId == group.streamId &&
+        packet.sessionId == claim.sessionId &&
+        packet.sourcePeerId == claim.peerId;
   }
 
   bool _isValidWebSocketUpgrade(shelf.Request request) {
@@ -1428,6 +1548,7 @@ class WsSvrManager {
     _sessionsBySink.clear();
     _sessionsByPeerId.clear();
     _wireControlSessions.clearAll();
+    _sessionUpgradeTokens.clearAll();
     _endpointsBySink.clear();
     _peerIdsBySink.clear();
     _remoteProfilesByPeerId.clear();
@@ -1501,10 +1622,15 @@ class WsSvrManager {
   }
 
   Future<void> _handlePeerDisconnected(String peerId) async {
+    _sessionUpgradeTokens.clearPeer(peerId);
     _wireControlSessions.clearPeer(
       peerId,
       preservedSessions: _preservedControlSessionsForPeer(peerId),
     );
+    await Future.wait(<Future<void>>[
+      _audioManager.closePeerChannels(peerId),
+      _remoteInputManager.closePeerChannels(peerId),
+    ]);
     await _transferEngine.handlePeerDisconnected(peerId);
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
     if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
@@ -2086,12 +2212,31 @@ class WsSvrManager {
       throw const AuthHandshakeException('session_expired');
     }
     _requireCurrentAuthenticatedSession(session, sink, generation);
+    await _closeSupersededMediaChannels(session);
+    _requireCurrentAuthenticatedSession(session, sink, generation);
     session.markTransportAuthenticated();
     final device = storedDevice;
     if (device == null) {
       throw const AuthHandshakeException('identity_pin_state_missing');
     }
     return device;
+  }
+
+  Future<void> _closeSupersededMediaChannels(PeerSocketSession session) async {
+    final mediaReceiveKey = session.mediaReceiveKey;
+    if (mediaReceiveKey == null) {
+      throw const AuthHandshakeException('media_key_missing');
+    }
+    await Future.wait(<Future<void>>[
+      _audioManager.closeSupersededPeerChannels(
+        session.remotePeerId,
+        mediaMacKey: mediaReceiveKey,
+      ),
+      _remoteInputManager.closeSupersededPeerChannels(
+        session.remotePeerId,
+        mediaMacKey: mediaReceiveKey,
+      ),
+    ]);
   }
 
   void _announceAuthenticatedSession(
@@ -2491,14 +2636,29 @@ class WsSvrManager {
           final self = await LocalSetting().instance();
           requireCurrentBusiness();
           final remoteDevice = _requireRemoteProfileForSession(session).device;
-          await AudioShareCoordinator.shared.handleControlMessage(
-            control,
-            localPeerId: self.uid,
-            remoteHost: remoteDevice.host,
-            remotePort: remoteDevice.port,
-            sendControl: (control) =>
-                sendAudioControlTo(session.remotePeerId, control),
-          );
+          final isTerminal = control.action == AudioControlAction.reject ||
+              control.action == AudioControlAction.stop ||
+              control.action == AudioControlAction.error;
+          try {
+            await AudioShareCoordinator.shared.handleControlMessage(
+              control,
+              localPeerId: self.uid,
+              remoteHost: remoteDevice.host,
+              remotePort: remoteDevice.port,
+              mediaSendKey: session.mediaSendKey,
+              sendControl: (control) =>
+                  sendAudioControlTo(session.remotePeerId, control),
+            );
+          } finally {
+            if (isTerminal) {
+              await _releaseTerminalControl(
+                namespace: 'audio',
+                route: '/audio',
+                peerId: session.remotePeerId,
+                sessionId: control.sessionId,
+              );
+            }
+          }
           requireCurrentBusiness();
           await _ackMessage(message);
           break;
@@ -2536,19 +2696,36 @@ class WsSvrManager {
                 isIncoming: true,
                 reverseInitialDirection:
                     control.action == AudioGroupControlAction.sinkJoinRequest,
+                context: '${control.groupId}\u0000${control.streamId}',
               )
               .requireAccepted();
           final self = await LocalSetting().instance();
           requireCurrentBusiness();
           final remoteDevice = _requireRemoteProfileForSession(session).device;
-          await AudioGroupCoordinator.shared.handleControlMessage(
-            control,
-            localPeerId: self.uid,
-            remoteHost: remoteDevice.host,
-            remotePort: remoteDevice.port,
-            sendControl: (_, control) =>
-                sendAudioGroupControlTo(session.remotePeerId, control),
-          );
+          final isTerminal =
+              control.action == AudioGroupControlAction.groupReject ||
+                  control.action == AudioGroupControlAction.groupStop ||
+                  control.action == AudioGroupControlAction.error;
+          try {
+            await AudioGroupCoordinator.shared.handleControlMessage(
+              control,
+              localPeerId: self.uid,
+              remoteHost: remoteDevice.host,
+              remotePort: remoteDevice.port,
+              mediaSendKey: session.mediaSendKey,
+              sendControl: (_, control) =>
+                  sendAudioGroupControlTo(session.remotePeerId, control),
+            );
+          } finally {
+            if (isTerminal) {
+              await _releaseTerminalControl(
+                namespace: 'audio-group',
+                route: '/audio',
+                peerId: session.remotePeerId,
+                sessionId: control.sessionId,
+              );
+            }
+          }
           requireCurrentBusiness();
           await _ackMessage(message);
           break;
@@ -2609,6 +2786,10 @@ class WsSvrManager {
             'localCanInject=$localCanInject '
             'remoteSupports=$supportsRemoteInput',
           );
+          final isTerminal =
+              control.action == RemoteInputControlAction.reject ||
+                  control.action == RemoteInputControlAction.stop ||
+                  control.action == RemoteInputControlAction.error;
           final handledByWorkspaceBusy = await RemoteInputWorkspaceCoordinator
               .shared
               .handleIncomingOfferIfBusy(
@@ -2622,41 +2803,55 @@ class WsSvrManager {
             await _ackMessage(message);
             break;
           }
-          final handledByWorkspace =
-              await RemoteInputWorkspaceCoordinator.shared.handleControlMessage(
-            control,
-            localPeerId: self.uid,
-            remoteHost: remoteDevice.host,
-            remotePort: remoteDevice.port,
-            sendControlTo: (peerId, control) =>
-                sendRemoteInputControlTo(peerId, control),
-          );
-          requireCurrentBusiness();
-          if (handledByWorkspace) {
+          try {
+            final handledByWorkspace = await RemoteInputWorkspaceCoordinator
+                .shared
+                .handleControlMessage(
+              control,
+              localPeerId: self.uid,
+              remoteHost: remoteDevice.host,
+              remotePort: remoteDevice.port,
+              mediaSendKey: session.mediaSendKey,
+              sendControlTo: (peerId, control) =>
+                  sendRemoteInputControlTo(peerId, control),
+            );
+            requireCurrentBusiness();
+            if (handledByWorkspace) {
+              await _ackMessage(message);
+              break;
+            }
+            await RemoteInputCoordinator.shared.handleControlMessage(
+              control,
+              localPeerId: self.uid,
+              remoteHost: remoteDevice.host,
+              remotePort: remoteDevice.port,
+              isMutuallyTrusted: isMutuallyTrusted,
+              localCanInject: localCanInject,
+              mediaSendKey: session.mediaSendKey,
+              sendControl: (control) =>
+                  sendRemoteInputControlTo(session.remotePeerId, control),
+              remotePlatform: remoteDevice.platform,
+            );
+            requireCurrentBusiness();
+            final inputState = RemoteInputCoordinator.shared.state;
+            _remoteInputTrace(
+              'remote input handled control ${_remoteInputControlSummary(control)} '
+              'state=${inputState.role.name}/${inputState.status.name} '
+              'stateSession=${_shortSessionId(inputState.sessionId)} '
+              'statePeer=${inputState.peerId} '
+              'stateError=${inputState.errorMessage}',
+            );
             await _ackMessage(message);
-            break;
+          } finally {
+            if (isTerminal) {
+              await _releaseTerminalControl(
+                namespace: 'remote-input',
+                route: '/input',
+                peerId: session.remotePeerId,
+                sessionId: control.sessionId,
+              );
+            }
           }
-          await RemoteInputCoordinator.shared.handleControlMessage(
-            control,
-            localPeerId: self.uid,
-            remoteHost: remoteDevice.host,
-            remotePort: remoteDevice.port,
-            isMutuallyTrusted: isMutuallyTrusted,
-            localCanInject: localCanInject,
-            sendControl: (control) =>
-                sendRemoteInputControlTo(session.remotePeerId, control),
-            remotePlatform: remoteDevice.platform,
-          );
-          requireCurrentBusiness();
-          final inputState = RemoteInputCoordinator.shared.state;
-          _remoteInputTrace(
-            'remote input handled control ${_remoteInputControlSummary(control)} '
-            'state=${inputState.role.name}/${inputState.status.name} '
-            'stateSession=${_shortSessionId(inputState.sessionId)} '
-            'statePeer=${inputState.peerId} '
-            'stateError=${inputState.errorMessage}',
-          );
-          await _ackMessage(message);
           break;
         }
       default:
@@ -2956,25 +3151,104 @@ class WsSvrManager {
     required String sinkPeerId,
     required bool isInitialOffer,
     bool reverseInitialDirection = false,
+    String context = '',
   }) {
     final session = _sessionsByPeerId[peerId];
     if (session == null || !session.isAuthenticated) {
       return false;
     }
-    _wireControlSessions
-        .validateAndRemember(
-          namespace: namespace,
-          sessionId: sessionId,
-          sourcePeerId: sourcePeerId,
-          sinkPeerId: sinkPeerId,
-          authenticatedPeerId: peerId,
-          localPeerId: session.localProfile.uid,
-          isInitialOffer: isInitialOffer,
-          isIncoming: false,
-          reverseInitialDirection: reverseInitialDirection,
-        )
-        .requireAccepted();
-    return true;
+    final result = _wireControlSessions.validateAndRemember(
+      namespace: namespace,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      sinkPeerId: sinkPeerId,
+      authenticatedPeerId: peerId,
+      localPeerId: session.localProfile.uid,
+      isInitialOffer: isInitialOffer,
+      isIncoming: false,
+      reverseInitialDirection: reverseInitialDirection,
+      context: context,
+    );
+    return result.isAccepted;
+  }
+
+  String? _issueSessionUpgradeToken({
+    required String route,
+    required String namespace,
+    required String peerId,
+    required String sessionId,
+    required String sourcePeerId,
+    required String sinkPeerId,
+  }) {
+    final session = _sessionsByPeerId[peerId];
+    final mediaReceiveKey = session?.mediaReceiveKey;
+    if (session == null ||
+        !session.isAuthenticated ||
+        mediaReceiveKey == null ||
+        sourcePeerId != peerId ||
+        sinkPeerId != session.localProfile.uid) {
+      return null;
+    }
+    return _sessionUpgradeTokens.issue(
+      route: route,
+      namespace: namespace,
+      sessionId: sessionId,
+      peerId: peerId,
+      mediaMacKey: mediaReceiveKey,
+      now: DateTime.now(),
+    );
+  }
+
+  Future<void> _releaseTerminalControl({
+    required String namespace,
+    required String route,
+    required String peerId,
+    required String sessionId,
+  }) async {
+    _sessionUpgradeTokens.revoke(
+      route: route,
+      namespace: namespace,
+      sessionId: sessionId,
+      peerId: peerId,
+    );
+    if (route == '/audio') {
+      await _audioManager.closeSessionChannels(
+        sessionId,
+        peerId: peerId,
+        namespace: namespace,
+      );
+    } else if (route == '/input') {
+      await _remoteInputManager.closeSessionChannels(
+        sessionId,
+        peerId: peerId,
+        namespace: namespace,
+      );
+    }
+    _wireControlSessions.forget(
+      namespace: namespace,
+      sessionId: sessionId,
+    );
+  }
+
+  Future<bool> _sendControlWithLifecycle({
+    required Future<bool> send,
+    required bool isTerminal,
+    required String namespace,
+    required String route,
+    required String peerId,
+    required String sessionId,
+  }) {
+    if (!isTerminal) {
+      return send;
+    }
+    return send.whenComplete(() {
+      return _releaseTerminalControl(
+        namespace: namespace,
+        route: route,
+        peerId: peerId,
+        sessionId: sessionId,
+      );
+    });
   }
 
   Future<bool> sendAudioControl(AudioControlMessage control) {
@@ -2995,9 +3269,30 @@ class WsSvrManager {
     )) {
       return Future<bool>.value(false);
     }
+    var outgoing = control.withTransportToken('');
+    if (control.action == AudioControlAction.accept) {
+      final acceptedSession = _audioManager.session(control.sessionId);
+      if (acceptedSession?.state != AudioShareSessionState.connected ||
+          acceptedSession?.sourcePeerId != control.sourcePeerId ||
+          acceptedSession?.sinkPeerId != control.sinkPeerId) {
+        return Future<bool>.value(false);
+      }
+      final token = _issueSessionUpgradeToken(
+        route: '/audio',
+        namespace: 'audio',
+        peerId: peerId,
+        sessionId: control.sessionId,
+        sourcePeerId: control.sourcePeerId,
+        sinkPeerId: control.sinkPeerId,
+      );
+      if (token == null) {
+        return Future<bool>.value(false);
+      }
+      outgoing = control.withTransportToken(token);
+    }
     final message = _buildMessage(
       MessageEnum.AudioControl,
-      jsonEncode(control.toJson()),
+      jsonEncode(outgoing.toJson()),
       "",
       "",
       0,
@@ -3005,7 +3300,16 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    return _sendMessageData(message, peerId: peerId);
+    return _sendControlWithLifecycle(
+      send: _sendMessageData(message, peerId: peerId),
+      isTerminal: control.action == AudioControlAction.reject ||
+          control.action == AudioControlAction.stop ||
+          control.action == AudioControlAction.error,
+      namespace: 'audio',
+      route: '/audio',
+      peerId: peerId,
+      sessionId: control.sessionId,
+    );
   }
 
   Future<bool> sendAudioGroupControl(AudioGroupControlMessage control) {
@@ -3026,12 +3330,37 @@ class WsSvrManager {
           control.action == AudioGroupControlAction.sinkJoinRequest,
       reverseInitialDirection:
           control.action == AudioGroupControlAction.sinkJoinRequest,
+      context: '${control.groupId}\u0000${control.streamId}',
     )) {
       return Future<bool>.value(false);
     }
+    var outgoing = control.withTransportToken('');
+    if (control.action == AudioGroupControlAction.groupAccept) {
+      final acceptedGroup = AudioGroupCoordinator.shared.session;
+      final acceptedSink = acceptedGroup?.sinks[control.sinkPeerId];
+      if (acceptedGroup?.groupId != control.groupId ||
+          acceptedGroup?.streamId != control.streamId ||
+          acceptedGroup?.sourcePeerId != control.sourcePeerId ||
+          acceptedSink?.sessionId != control.sessionId ||
+          acceptedSink?.isTerminal != false) {
+        return Future<bool>.value(false);
+      }
+      final token = _issueSessionUpgradeToken(
+        route: '/audio',
+        namespace: 'audio-group',
+        peerId: peerId,
+        sessionId: control.sessionId,
+        sourcePeerId: control.sourcePeerId,
+        sinkPeerId: control.sinkPeerId,
+      );
+      if (token == null) {
+        return Future<bool>.value(false);
+      }
+      outgoing = control.withTransportToken(token);
+    }
     final message = _buildMessage(
       MessageEnum.AudioGroupControl,
-      jsonEncode(control.toJson()),
+      jsonEncode(outgoing.toJson()),
       "",
       "",
       0,
@@ -3039,7 +3368,16 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    return _sendMessageData(message, peerId: peerId);
+    return _sendControlWithLifecycle(
+      send: _sendMessageData(message, peerId: peerId),
+      isTerminal: control.action == AudioGroupControlAction.groupReject ||
+          control.action == AudioGroupControlAction.groupStop ||
+          control.action == AudioGroupControlAction.error,
+      namespace: 'audio-group',
+      route: '/audio',
+      peerId: peerId,
+      sessionId: control.sessionId,
+    );
   }
 
   Future<bool> sendRemoteInputControl(RemoteInputControlMessage control) {
@@ -3060,6 +3398,27 @@ class WsSvrManager {
     )) {
       return Future<bool>.value(false);
     }
+    var outgoing = control.withTransportToken('');
+    if (control.action == RemoteInputControlAction.accept) {
+      final acceptedSession = _remoteInputManager.session(control.sessionId);
+      if (acceptedSession?.state != RemoteInputSessionState.connected ||
+          acceptedSession?.sourcePeerId != control.sourcePeerId ||
+          acceptedSession?.sinkPeerId != control.sinkPeerId) {
+        return Future<bool>.value(false);
+      }
+      final token = _issueSessionUpgradeToken(
+        route: '/input',
+        namespace: 'remote-input',
+        peerId: peerId,
+        sessionId: control.sessionId,
+        sourcePeerId: control.sourcePeerId,
+        sinkPeerId: control.sinkPeerId,
+      );
+      if (token == null) {
+        return Future<bool>.value(false);
+      }
+      outgoing = control.withTransportToken(token);
+    }
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '
       'sender=$sender receiver=$peerId connected=$isConnected '
@@ -3067,7 +3426,7 @@ class WsSvrManager {
     );
     final message = _buildMessage(
       MessageEnum.RemoteInputControl,
-      jsonEncode(control.toJson()),
+      jsonEncode(outgoing.toJson()),
       "",
       "",
       0,
@@ -3075,7 +3434,16 @@ class WsSvrManager {
       uid: control.sessionId,
       receiverOverride: peerId,
     );
-    return _sendMessageData(message, peerId: peerId);
+    return _sendControlWithLifecycle(
+      send: _sendMessageData(message, peerId: peerId),
+      isTerminal: control.action == RemoteInputControlAction.reject ||
+          control.action == RemoteInputControlAction.stop ||
+          control.action == RemoteInputControlAction.error,
+      namespace: 'remote-input',
+      route: '/input',
+      peerId: peerId,
+      sessionId: control.sessionId,
+    );
   }
 
   Future<bool> sendMessage(String content, {clipboard = false}) {
