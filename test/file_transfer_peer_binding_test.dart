@@ -12,6 +12,7 @@ import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -19,6 +20,9 @@ import 'package:whisper/socket/wire_message_replay.dart';
 
 const _transferId = '01234567-89ab-4cde-8fab-0123456789ab';
 const _secondTransferId = '21234567-89ab-4cde-8fab-0123456789ab';
+
+TransferConnectionBinding _connection(String peerId) =>
+    TransferConnectionBinding(peerId: peerId, generation: 1);
 
 final class _DelayedUpdateDatabase extends LocalDatabase {
   _DelayedUpdateDatabase() : super.forTesting(NativeDatabase.memory());
@@ -72,10 +76,13 @@ FileTransferEngine _engine(
   WireMessageReplayGuard? replayGuard,
 }) {
   return FileTransferEngine(
-    sendBytesToPeer: (_, __) {
+    currentConnectionBinding: (peerId) =>
+        TransferConnectionBinding(peerId: peerId, generation: 1),
+    sendBytesToConnection: (binding, bytes) {
       onSend?.call();
-      return sendBytesToPeer?.call(_, __) ?? true;
+      return sendBytesToPeer?.call(binding.peerId, bytes) ?? true;
     },
+    markPeerUnresponsive: (_) => false,
     emitTransferUpdated: (_) => onTransferUpdated?.call(),
     notify: (_) {},
     remoteProfileFor: (_) => null,
@@ -217,7 +224,7 @@ void main() {
     );
 
     await expectLater(
-      engine.handleFrame('peer-b', frame, requireCurrent: () {}),
+      engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
       throwsA(
         isA<WireInputRejected>().having(
           (error) => error.reason,
@@ -275,7 +282,7 @@ void main() {
     );
 
     await expectLater(
-      engine.handleFrame('peer-a', frame, requireCurrent: () {}),
+      engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
       throwsA(
         isA<WireInputRejected>().having(
           (error) => error.reason,
@@ -321,7 +328,7 @@ void main() {
     );
 
     await expectLater(
-      engine.handleFrame('peer-b', frame, requireCurrent: () {}),
+      engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
       throwsA(
         isA<WireInputRejected>().having(
           (error) => error.reason,
@@ -390,7 +397,7 @@ void main() {
     );
 
     await expectLater(
-      engine.handleFrame('peer-a', frame, requireCurrent: () {}),
+      engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
       throwsA(
         isA<WireInputRejected>().having(
           (error) => error.reason,
@@ -412,7 +419,7 @@ void main() {
     final engine = _engine(database, onSend: () => sends++);
 
     await engine.handleFrame(
-      'peer-a',
+      _connection('peer-a'),
       _offerFrame(_offer(content: '{}')),
       requireCurrent: () {},
     );
@@ -449,7 +456,7 @@ void main() {
 
     await expectLater(
       engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         frame,
         requireCurrent: () {
           checks++;
@@ -493,7 +500,7 @@ void main() {
       },
     );
     final offerFuture = engine.handleFrame(
-      'peer-a',
+      _connection('peer-a'),
       _offerFrame(_offer()),
       requireCurrent: () {},
     );
@@ -547,7 +554,7 @@ void main() {
     Future<Object?> receive(String peerId) async {
       try {
         await engine.handleFrame(
-          peerId,
+          _connection(peerId),
           _offerFrame(_offer(sender: peerId)),
           requireCurrent: () {},
         );
@@ -584,12 +591,12 @@ void main() {
     var sends = 0;
     final engine = _engine(database, onSend: () => sends++);
     await engine.handleFrame(
-      'peer-a',
+      _connection('peer-a'),
       _offerFrame(_offer()),
       requireCurrent: () {},
     );
     await engine.handleFrame(
-      'peer-a',
+      _connection('peer-a'),
       _offerFrame(_offer(uuid: _secondTransferId)),
       requireCurrent: () {},
     );
@@ -616,7 +623,7 @@ void main() {
       payload: Uint8List.fromList(utf8.encode(jsonEncode(cancel.toJson()))),
     );
     final cancelFuture = engine.handleFrame(
-      'peer-a',
+      _connection('peer-a'),
       cancelFrame,
       requireCurrent: () {
         if (!isCurrent) {
@@ -662,7 +669,8 @@ void main() {
       payload: Uint8List.fromList(const <int>[1]),
     );
 
-    await engine.handleFrame('peer-a', frame, requireCurrent: () {});
+    await engine.handleFrame(_connection('peer-a'), frame,
+        requireCurrent: () {});
 
     expect((sends, updates), (0, 0));
     expect(

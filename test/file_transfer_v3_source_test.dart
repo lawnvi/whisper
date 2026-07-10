@@ -66,7 +66,10 @@ void main() {
     expect(sendFileTo, contains('_persistAndOfferOutgoingTransfer('));
     expect(
       persistAndOffer,
-      contains('_sendFileTransferV3OfferTo(peerId, message)'),
+      allOf(
+        contains('_sendFileTransferV3OfferTo('),
+        contains('connection: connection'),
+      ),
     );
     expect(sendFileTo,
         isNot(contains('_sendMessageData(message, peerId: peerId)')));
@@ -78,7 +81,7 @@ void main() {
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
-      'Future<void> _sendFileTransferV3Window(',
+      'Future<int?> _sendFileTransferV3Window(',
       'Future<void> _handleFileTransferV3Data',
     );
 
@@ -93,13 +96,13 @@ void main() {
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
-      'Future<void> _sendFileTransferV3Window(',
+      'Future<int?> _sendFileTransferV3Window(',
       'Future<void> _handleFileTransferV3Data',
     );
     final handleAck = methodBody(
       source,
       'Future<void> _handleFileTransferV3Ack',
-      'Future<void> _startQueuedOutgoingFileTransferV3',
+      'Future<void> _releaseOutgoingAndStartNext',
     );
 
     expect(
@@ -122,7 +125,7 @@ void main() {
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final sendWindow = methodBody(
       source,
-      'Future<void> _sendFileTransferV3Window(',
+      'Future<int?> _sendFileTransferV3Window(',
       'Future<void> _handleFileTransferV3Data',
     );
 
@@ -164,7 +167,14 @@ void main() {
       'Future<void> _markRecoverableTransfersWaitingReconnect',
     );
 
-    expect(startNext, contains('_sendFileTransferV3Ready(item.transferId)'));
+    expect(
+      startNext,
+      allOf(
+        contains('_sendFileTransferV3Ready('),
+        contains('item.transferId'),
+        contains('connection: itemConnection'),
+      ),
+    );
     expect(startNext, isNot(contains('_fileTransferUsesV3')));
     expect(
       startNext,
@@ -181,10 +191,9 @@ void main() {
       'Future<void> _handleFileTransferV3Cancel',
     );
 
-    expect(handleComplete, contains('String? nextTransferId'));
     expect(
       handleComplete,
-      contains('await _startQueuedOutgoingFileTransferV3(nextTransferId)'),
+      contains('await _releaseOutgoingAndStartNext('),
     );
   });
 

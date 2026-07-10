@@ -1101,6 +1101,40 @@ class LocalDatabase extends _$LocalDatabase {
     });
   }
 
+  Future<FileTransferData?> failRecoverableFileTransfer({
+    required String transferId,
+    required String peerUid,
+    required FileTransferDirection direction,
+    required String reason,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          transfer.peerUid != peerUid ||
+          transfer.direction != direction ||
+          isTerminalFileTransferState(transfer.state)) {
+        return null;
+      }
+      final affected = await (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.peerUid.equals(peerUid) &
+                  item.direction.equalsValue(direction) &
+                  item.messageRowId.equals(transfer.messageRowId) &
+                  item.state.equalsValue(transfer.state),
+            ))
+          .write(
+        FileTransferCompanion(
+          state: const Value(FileTransferState.failed),
+          lastError: Value(reason),
+          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      return affected == 1 ? fetchFileTransfer(transferId) : null;
+    });
+  }
+
   Future<FileTransferData> completeIncomingFileTransfer({
     required String transferId,
     required String finalPath,

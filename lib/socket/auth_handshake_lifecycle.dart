@@ -90,6 +90,7 @@ final class AuthSocketLifecycle {
     required String peerId,
     required PeerSocketSession? closingSession,
     required PeerSocketSession? currentSession,
+    FutureOr<void> Function(TransferConnectionBinding binding)? afterRemove,
   }) {
     // Identity is checked as well as the numeric generation so a late onDone
     // from a replaced socket cannot remove the replacement.
@@ -100,8 +101,11 @@ final class AuthSocketLifecycle {
       return Future<bool>.value(false);
     }
     return connections.removeIfCurrent(
-      peerId,
-      closingSession!.connectionGeneration,
+      TransferConnectionBinding(
+        peerId: peerId,
+        generation: closingSession!.connectionGeneration,
+      ),
+      afterRemove: afterRemove,
     );
   }
 

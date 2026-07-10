@@ -202,6 +202,46 @@ void main() {
       expect(result.isAccepted, isTrue);
     });
 
+    test('classifies a fully committed retransmission as duplicate', () {
+      final result = WireInputPolicy.validateFileData(
+        frame: _dataFrame(offset: 4, sequence: 2, payloadLength: 4),
+        transfer: _incomingTransfer(committedBytes: 8),
+        authenticatedPeerId: 'peer-a',
+        expectedOffset: 8,
+        expectedSequence: 2,
+        isActive: true,
+      );
+
+      expect(result.disposition, FileDataDisposition.duplicate);
+      expect(result.isDuplicate, isTrue);
+    });
+
+    test('duplicate classification still rejects sequence, overlap, and gap',
+        () {
+      FileDataValidationResult validate(WhisperFrameV3 frame) =>
+          WireInputPolicy.validateFileData(
+            frame: frame,
+            transfer: _incomingTransfer(committedBytes: 8, size: 16),
+            authenticatedPeerId: 'peer-a',
+            expectedOffset: 8,
+            expectedSequence: 2,
+            isActive: true,
+          );
+
+      expect(
+        validate(_dataFrame(offset: 4, sequence: 1)).reason,
+        WireInputReason.transferSequenceInvalid,
+      );
+      expect(
+        validate(_dataFrame(offset: 6, sequence: 2)).reason,
+        WireInputReason.transferOffsetInvalid,
+      );
+      expect(
+        validate(_dataFrame(offset: 9, sequence: 2)).reason,
+        WireInputReason.transferOffsetInvalid,
+      );
+    });
+
     test('rejects peer, direction, and inactive transfer before writing', () {
       expect(
         WireInputPolicy.validateFileData(

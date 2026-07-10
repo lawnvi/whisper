@@ -92,9 +92,7 @@ void main() {
       expect(runtime.activeIncomingFor('peer-c'), isNull);
     });
 
-    test(
-        'complete releases active state before the next queued transfer starts',
-        () {
+    test('release and claim advance an active transfer explicitly', () {
       final runtime = MultiPeerTransferRuntime();
       runtime.enqueue(
         peerId: 'peer-b',
@@ -107,15 +105,89 @@ void main() {
         direction: FileTransferDirection.incoming,
       );
 
-      final next = runtime.complete(
+      final released = runtime.release(
         peerId: 'peer-b',
         transferId: 'transfer-b-1',
         direction: FileTransferDirection.incoming,
       );
 
-      expect(next, 'transfer-b-2');
+      expect(released, TransferRuntimeReleaseKind.activeReleased);
       expect(runtime.activeIncomingFor('peer-b'), isNull);
+      expect(runtime.queuedIncomingFor('peer-b'), ['transfer-b-2']);
+
+      final next = runtime.claimNext(
+        peerId: 'peer-b',
+        direction: FileTransferDirection.incoming,
+      );
+      expect(next, 'transfer-b-2');
+      expect(runtime.activeIncomingFor('peer-b'), 'transfer-b-2');
       expect(runtime.queuedIncomingFor('peer-b'), isEmpty);
+    });
+
+    test('releasing a queued transfer never disturbs the active transfer', () {
+      final runtime = MultiPeerTransferRuntime();
+      runtime.enqueue(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-1',
+        direction: FileTransferDirection.outgoing,
+      );
+      runtime.enqueue(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-2',
+        direction: FileTransferDirection.outgoing,
+      );
+
+      final released = runtime.release(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-2',
+        direction: FileTransferDirection.outgoing,
+      );
+
+      expect(released, TransferRuntimeReleaseKind.queuedRemoved);
+      expect(runtime.activeOutgoingFor('peer-b'), 'transfer-b-1');
+      expect(runtime.queuedOutgoingFor('peer-b'), isEmpty);
+    });
+
+    test('claimNext is legal only while the direction is idle', () {
+      final runtime = MultiPeerTransferRuntime();
+      runtime.enqueue(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-1',
+        direction: FileTransferDirection.outgoing,
+      );
+      runtime.enqueue(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-2',
+        direction: FileTransferDirection.outgoing,
+      );
+
+      expect(
+        runtime.claimNext(
+          peerId: 'peer-b',
+          direction: FileTransferDirection.outgoing,
+        ),
+        isNull,
+      );
+      expect(runtime.queuedOutgoingFor('peer-b'), ['transfer-b-2']);
+    });
+
+    test('release reports absent without changing another transfer', () {
+      final runtime = MultiPeerTransferRuntime();
+      runtime.enqueue(
+        peerId: 'peer-b',
+        transferId: 'transfer-b-1',
+        direction: FileTransferDirection.incoming,
+      );
+
+      expect(
+        runtime.release(
+          peerId: 'peer-b',
+          transferId: 'missing',
+          direction: FileTransferDirection.incoming,
+        ),
+        TransferRuntimeReleaseKind.absent,
+      );
+      expect(runtime.activeIncomingFor('peer-b'), 'transfer-b-1');
     });
 
     test('disconnecting one peer clears only that peer transfer state', () {

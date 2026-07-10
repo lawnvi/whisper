@@ -14,6 +14,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -21,6 +22,9 @@ import 'package:whisper/socket/wire_message_replay.dart';
 
 FileTransferEngine _engine({
   FutureOr<bool> Function(String, Object)? sendBytesToPeer,
+  TransferConnectionBinding? Function(String)? currentConnectionBinding,
+  FutureOr<bool> Function(TransferConnectionBinding, Object)?
+      sendBytesToConnection,
   void Function(String)? notify,
   LocalDatabase? database,
   Set<String> connectedPeerIds = const <String>{},
@@ -31,7 +35,13 @@ FileTransferEngine _engine({
       transferSourceFactory,
 }) {
   return FileTransferEngine(
-    sendBytesToPeer: sendBytesToPeer ?? (_, __) => true,
+    currentConnectionBinding: currentConnectionBinding ??
+        (peerId) => TransferConnectionBinding(peerId: peerId, generation: 1),
+    sendBytesToConnection: (binding, bytes) =>
+        sendBytesToConnection?.call(binding, bytes) ??
+        sendBytesToPeer?.call(binding.peerId, bytes) ??
+        true,
+    markPeerUnresponsive: (_) => false,
     emitTransferUpdated: (_) {},
     notify: notify ?? (_) {},
     remoteProfileFor: (_) => supportsV3 ? _capablePeer() : null,
@@ -278,6 +288,48 @@ void main() {
 
     releaseSlowRead.complete();
     expect(await slowSend, isTrue);
+  });
+
+  test('delayed local offer stays bound to its captured generation', () async {
+    final directory = await Directory.systemTemp.createTemp('whisper-gen-');
+    addTearDown(() => directory.delete(recursive: true));
+    final source = File('${directory.path}/payload.bin');
+    await source.writeAsBytes(const <int>[1]);
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    var current =
+        const TransferConnectionBinding(peerId: 'peer-a', generation: 1);
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<void>();
+    final sentBindings = <TransferConnectionBinding>[];
+    final engine = _engine(
+      database: database,
+      supportsV3: true,
+      buildMessage: _messageBuilder(),
+      currentConnectionBinding: (_) => current,
+      sendBytesToConnection: (binding, _) {
+        sentBindings.add(binding);
+        return true;
+      },
+      transferSourceFactory: (_, __) => _MemoryTransferSource(
+        Uint8List.fromList(const <int>[1]),
+        onRead: () async {
+          if (!readStarted.isCompleted) {
+            readStarted.complete();
+          }
+          await releaseRead.future;
+        },
+      ),
+    );
+
+    final send = engine.sendFileTo('peer-a', source.path);
+    await readStarted.future;
+    current = const TransferConnectionBinding(peerId: 'peer-a', generation: 2);
+    releaseRead.complete();
+
+    expect(await send, isTrue);
+    expect(sentBindings, hasLength(1));
+    expect(sentBindings.single.generation, 1);
   });
 
   test('content uri stays local while its SHA-256 is sent', () async {

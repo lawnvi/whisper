@@ -258,7 +258,9 @@ class WsSvrManager {
   final List<Completer<PeerProfile?>> _remoteProfileRefreshWaiters =
       <Completer<PeerProfile?>>[];
   late final FileTransferEngine _transferEngine = FileTransferEngine(
-    sendBytesToPeer: _sendBytesToPeer,
+    currentConnectionBinding: _peerConnections.currentBinding,
+    sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
+    markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
     emitTransferUpdated: (snapshot) =>
         _dispatchToAll((event) => event.onTransferUpdated(snapshot)),
     notify: (message) => _dispatchToAll((event) => event.onNotice(message)),
@@ -562,10 +564,14 @@ class WsSvrManager {
     String peerId,
     PeerConnection connection,
   ) async {
-    await _peerConnections.register(connection);
-    if (receiver.isEmpty) {
-      receiver = peerId;
-    }
+    await _peerConnections.register(
+      connection,
+      afterRegister: (_) {
+        if (receiver.isEmpty) {
+          receiver = peerId;
+        }
+      },
+    );
   }
 
   Future<void> _registerPeerConnection({
@@ -577,7 +583,6 @@ class WsSvrManager {
     if (peerId.isEmpty || !session.isAuthenticationReady) {
       return;
     }
-    _peerIdsBySink[sink] = peerId;
     await _peerConnections.register(
       PeerConnection(
         peerId: peerId,
@@ -602,10 +607,22 @@ class WsSvrManager {
           await sink.close();
         },
       ),
+      afterRemove: (binding) => _afterPeerRemoved(
+        binding,
+        closingSession: _sessionsByPeerId[peerId],
+      ),
+      afterRegister: (binding) {
+        if (binding.generation != session.connectionGeneration ||
+            !session.isAuthenticationReady) {
+          throw StateError('stale peer registration');
+        }
+        _sessionsByPeerId[peerId] = session;
+        _peerIdsBySink[sink] = peerId;
+        receiver = peerId;
+        _sink = sink;
+        _setRemoteProfile(profile, peerId: peerId);
+      },
     );
-    receiver = peerId;
-    _sink = sink;
-    _setRemoteProfile(profile, peerId: peerId);
   }
 
   Future<void> _handlePeerSocketDoneQueued(WebSocketSink sink) {
@@ -647,13 +664,6 @@ class WsSvrManager {
     _clientTimersBySink.remove(sink)?.cancel();
     final peerId = _peerIdsBySink.remove(sink);
     final currentSession = peerId == null ? null : _sessionsByPeerId[peerId];
-    final isCurrentConnection = AuthSocketLifecycle.isCurrentSession(
-      closingSession: session,
-      currentSession: currentSession,
-    );
-    if (isCurrentConnection) {
-      _sessionsByPeerId.remove(peerId);
-    }
     if (peerId == null) {
       if (identical(_sink, sink)) {
         _sink = null;
@@ -665,23 +675,13 @@ class WsSvrManager {
       peerId: peerId,
       closingSession: session,
       currentSession: currentSession,
+      afterRemove: (binding) => _afterPeerRemoved(
+        binding,
+        closingSession: session,
+      ),
     )) {
       return;
     }
-    await _handlePeerDisconnected(peerId);
-    _remoteProfilesByPeerId.remove(peerId);
-    if (receiver == peerId) {
-      receiver = _peerConnections.connectedPeerIds.isEmpty
-          ? ''
-          : _peerConnections.connectedPeerIds.first;
-      if (receiver.isEmpty) {
-        _sink = null;
-        _setRemoteProfile(null);
-      } else {
-        _setRemoteProfile(_remoteProfilesByPeerId[receiver], peerId: receiver);
-      }
-    }
-    _dispatchToAll((event) => event.onClose());
   }
 
   Future<PeerSocketSession> _createSocketSession({
@@ -1568,23 +1568,81 @@ class WsSvrManager {
   }
 
   Future<void> disconnectPeer(String peerId) async {
-    if (peerId.isEmpty || !_peerConnections.isConnectedTo(peerId)) {
+    final binding = _peerConnections.currentBinding(peerId);
+    if (peerId.isEmpty || binding == null) {
       return;
     }
-    await _peerConnections.disconnect(peerId);
-    await _handlePeerDisconnected(peerId);
+    await _peerConnections.removeIfCurrent(
+      binding,
+      afterRemove: (removed) => _afterPeerRemoved(
+        removed,
+        closingSession: _sessionsByPeerId[peerId],
+      ),
+    );
+  }
+
+  Future<bool> _removeUnresponsivePeerIfCurrent(
+    TransferConnectionBinding binding,
+  ) {
+    return _peerConnections.removeIfCurrent(
+      binding,
+      afterRemove: (removed) => _afterPeerRemoved(
+        removed,
+        closingSession: _sessionsByPeerId[removed.peerId],
+      ),
+    );
+  }
+
+  bool _removedBindingOwnsPeerState(
+    TransferConnectionBinding binding,
+  ) {
+    if (_peerConnections.currentBinding(binding.peerId) != null) {
+      return false;
+    }
+    final session = _sessionsByPeerId[binding.peerId];
+    return session == null ||
+        session.connectionGeneration == binding.generation;
+  }
+
+  Future<void> _afterPeerRemoved(
+    TransferConnectionBinding binding, {
+    PeerSocketSession? closingSession,
+  }) async {
+    final peerId = binding.peerId;
+    final currentSession = _sessionsByPeerId[peerId];
+    if (currentSession != null &&
+        currentSession.connectionGeneration == binding.generation &&
+        (closingSession == null || identical(currentSession, closingSession))) {
+      _sessionsByPeerId.remove(peerId);
+    }
+    if (!_removedBindingOwnsPeerState(binding)) {
+      return;
+    }
+    await _handlePeerDisconnected(
+      peerId,
+      stillOwnsCleanup: () => _removedBindingOwnsPeerState(binding),
+    );
+    if (!_removedBindingOwnsPeerState(binding)) {
+      return;
+    }
     _remoteProfilesByPeerId.remove(peerId);
+    if (!_removedBindingOwnsPeerState(binding)) {
+      return;
+    }
     if (receiver == peerId) {
       receiver = _peerConnections.connectedPeerIds.isEmpty
           ? ''
           : _peerConnections.connectedPeerIds.first;
-      _sink = receiver.isEmpty ? null : _sink;
-      _setRemoteProfile(
-        receiver.isEmpty ? null : _remoteProfilesByPeerId[receiver],
-        peerId: receiver.isEmpty ? null : receiver,
-      );
+      if (receiver.isEmpty) {
+        _sink = null;
+        _setRemoteProfile(null);
+      } else {
+        _setRemoteProfile(_remoteProfilesByPeerId[receiver], peerId: receiver);
+      }
     }
-    _dispatchToAll((event) => event.onClose());
+    if (_removedBindingOwnsPeerState(binding)) {
+      _dispatchToAll((event) => event.onClose());
+    }
   }
 
   Map<String, Set<String>> _preservedControlSessionsForPeer(String peerId) {
@@ -1621,18 +1679,41 @@ class WsSvrManager {
     return preserved;
   }
 
-  Future<void> _handlePeerDisconnected(String peerId) async {
+  Future<void> _handlePeerDisconnected(
+    String peerId, {
+    bool Function()? stillOwnsCleanup,
+  }) async {
+    bool ownsCleanup() => stillOwnsCleanup?.call() ?? true;
+
+    if (!ownsCleanup()) {
+      return;
+    }
     _sessionUpgradeTokens.clearPeer(peerId);
+    if (!ownsCleanup()) {
+      return;
+    }
     _wireControlSessions.clearPeer(
       peerId,
       preservedSessions: _preservedControlSessionsForPeer(peerId),
     );
+    if (!ownsCleanup()) {
+      return;
+    }
     await Future.wait(<Future<void>>[
       _audioManager.closePeerChannels(peerId),
       _remoteInputManager.closePeerChannels(peerId),
     ]);
+    if (!ownsCleanup()) {
+      return;
+    }
     await _transferEngine.handlePeerDisconnected(peerId);
+    if (!ownsCleanup()) {
+      return;
+    }
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
+    if (!ownsCleanup()) {
+      return;
+    }
     if (RemoteInputCoordinator.shared.state.isForPeer(peerId)) {
       await RemoteInputCoordinator.shared.stopLocal();
     }
@@ -2198,7 +2279,6 @@ class WsSvrManager {
       registerPeer: () async {
         _requireCurrentRegisterableSession(session, sink, generation);
         final peerId = session.remotePeerId;
-        _sessionsByPeerId[peerId] = session;
         await _registerPeerConnection(
           peerId: peerId,
           sink: sink,
@@ -2402,7 +2482,10 @@ class WsSvrManager {
       case WhisperFrameType.fileCancel:
       case WhisperFrameType.fileError:
         await _transferEngine.handleFrame(
-          session.remotePeerId,
+          TransferConnectionBinding(
+            peerId: session.remotePeerId,
+            generation: session.connectionGeneration,
+          ),
           frame,
           requireCurrent: () => _requireCurrentBusinessSession(
             session,

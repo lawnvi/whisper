@@ -15,12 +15,16 @@ import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 
 const _emptySha256 =
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+TransferConnectionBinding _connection(String peerId) =>
+    TransferConnectionBinding(peerId: peerId, generation: 1);
 
 void main() {
   group('FileTransferV3Metadata', () {
@@ -159,7 +163,7 @@ void main() {
         resumeProofLength: 4,
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(matching),
         requireCurrent: () {},
       );
@@ -189,7 +193,7 @@ void main() {
         resumeProofLength: 4,
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(mismatched),
         requireCurrent: () {},
       );
@@ -248,7 +252,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(mismatch),
         requireCurrent: () {},
       );
@@ -283,7 +287,7 @@ void main() {
         downloadDirectory: () async => directory,
       );
       await recreatedEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(mismatch),
         requireCurrent: () {},
       );
@@ -336,7 +340,7 @@ void main() {
       );
 
       await recreatedEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -401,7 +405,7 @@ void main() {
       );
 
       await firstEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(mismatch),
         requireCurrent: () {},
       );
@@ -421,7 +425,7 @@ void main() {
         downloadDirectory: () async => directory,
       );
       await recreatedEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -490,7 +494,7 @@ void main() {
       );
 
       await firstEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _controlFrame(mismatch),
         requireCurrent: () {},
       );
@@ -510,7 +514,7 @@ void main() {
         downloadDirectory: () async => directory,
       );
       await recreatedEngine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -577,7 +581,7 @@ void main() {
         );
 
         await engine.handleFrame(
-          'peer-a',
+          _connection('peer-a'),
           _controlFrame(mismatch),
           requireCurrent: () {},
         );
@@ -634,12 +638,12 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -688,13 +692,13 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
       final tempPath = (await database.fetchFileTransfer(transferId))!.tempPath;
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -721,7 +725,7 @@ void main() {
 
       sent.clear();
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -768,7 +772,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(_message(
           transferId: transferId,
           sender: 'peer-a',
@@ -780,7 +784,7 @@ void main() {
         requireCurrent: () {},
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -822,7 +826,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(_message(
           transferId: transferId,
           sender: 'peer-a',
@@ -839,7 +843,7 @@ void main() {
       await Link(temp.path).create(outsideFile.path);
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -909,7 +913,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -932,7 +936,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -965,7 +969,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(_message(
           transferId: transferId,
           sender: 'peer-a',
@@ -1019,13 +1023,13 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
       final tempPath = (await database.fetchFileTransfer(transferId))!.tempPath;
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -1072,13 +1076,13 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
       final tempPath = (await database.fetchFileTransfer(transferId))!.tempPath;
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -1116,7 +1120,7 @@ void main() {
       final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(_message(
           transferId: transferId,
           sender: 'peer-a',
@@ -1128,7 +1132,7 @@ void main() {
         requireCurrent: () {},
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         WhisperFrameV3(
           type: WhisperFrameType.fileData,
           transferId: transferId,
@@ -1213,7 +1217,7 @@ void main() {
 
       for (final item in cases) {
         await engine.handleFrame(
-          'peer-a',
+          _connection('peer-a'),
           _offerFrame(item.message),
           requireCurrent: () {},
         );
@@ -1271,7 +1275,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -1319,7 +1323,7 @@ void main() {
       );
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(_message(
           transferId: transferId,
           sender: 'peer-a',
@@ -1378,7 +1382,7 @@ void main() {
       }
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: requireCurrent,
       );
@@ -1391,7 +1395,7 @@ void main() {
 
       current = true;
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: requireCurrent,
       );
@@ -1429,7 +1433,7 @@ void main() {
         checksum: bytesChecksum(const <int>[1], algorithm: 'sha256'),
       );
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -1439,7 +1443,7 @@ void main() {
       sent.clear();
 
       await engine.handleFrame(
-        'peer-a',
+        _connection('peer-a'),
         _offerFrame(offer),
         requireCurrent: () {},
       );
@@ -1533,10 +1537,13 @@ FileTransferEngine _engine(
   void Function(MessageData message)? dispatchOutgoingMessage,
 }) =>
     FileTransferEngine(
-      sendBytesToPeer: (_, bytes) {
+      currentConnectionBinding: (peerId) =>
+          TransferConnectionBinding(peerId: peerId, generation: 1),
+      sendBytesToConnection: (_, bytes) {
         sent.add(WhisperFrameV3.decode(bytes as Uint8List));
         return true;
       },
+      markPeerUnresponsive: (_) => false,
       emitTransferUpdated: (_) {},
       notify: (_) {},
       remoteProfileFor: (_) => null,

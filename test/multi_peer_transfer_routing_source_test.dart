@@ -18,7 +18,14 @@ void main() {
       source,
       isNot(contains('_sendFileTransferV3ControlTo(\n        message.sender')),
     );
-    expect(source, contains('_sendFileTransferV3Ready(item.transferId)'));
+    expect(
+      source,
+      contains(
+        '_sendFileTransferV3Ready(\n'
+        '              item.transferId,\n'
+        '              connection: itemConnection,',
+      ),
+    );
   });
 
   test('v3 transfer offers route to the transfer peer', () {
@@ -26,9 +33,15 @@ void main() {
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
 
     expect(source, contains('Future<bool> _sendFileTransferV3OfferTo('));
-    expect(source, contains('_sendFileTransferV3OfferTo(peerId, message)'));
     expect(
-        source, contains('_sendFileTransferV3OfferTo(item.peerUid, message)'));
+      source,
+      contains('_sendFileTransferV3OfferTo(\n        peerId'),
+    );
+    expect(
+      source,
+      contains('_sendFileTransferV3OfferTo(\n            item.peerUid'),
+    );
+    expect(source, contains('connection: connection'));
   });
 
   test('resumable transfer active state is tracked per peer', () {

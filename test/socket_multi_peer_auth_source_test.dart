@@ -24,6 +24,20 @@ void main() {
     expect(register, contains('_sink = sink'));
   });
 
+  test('authenticated direct replacement cleans the old generation first', () {
+    final register = section(
+      'Future<void> _registerPeerConnection(',
+      'Future<void> _handlePeerSocketDoneQueued(',
+    );
+
+    expect(register, contains('afterRemove:'));
+    expect(register, contains('_afterPeerRemoved('));
+    expect(
+      register.indexOf('afterRemove:'),
+      lessThan(register.indexOf('afterRegister:')),
+    );
+  });
+
   test('rejecting pairing closes only that socket', () {
     final proof = section(
       'Future<void> _handleServerProof(',

@@ -57,6 +57,43 @@ final class WireInputValidationResult {
   }
 }
 
+enum FileDataDisposition {
+  accepted,
+  duplicate,
+  ignoredTerminal,
+  rejected,
+}
+
+final class FileDataValidationResult {
+  const FileDataValidationResult.accepted()
+      : disposition = FileDataDisposition.accepted,
+        reason = '';
+
+  const FileDataValidationResult.duplicate()
+      : disposition = FileDataDisposition.duplicate,
+        reason = '';
+
+  const FileDataValidationResult.ignored()
+      : disposition = FileDataDisposition.ignoredTerminal,
+        reason = '';
+
+  const FileDataValidationResult.rejected(this.reason)
+      : disposition = FileDataDisposition.rejected;
+
+  final FileDataDisposition disposition;
+  final String reason;
+
+  bool get isAccepted => disposition == FileDataDisposition.accepted;
+  bool get isDuplicate => disposition == FileDataDisposition.duplicate;
+  bool get isIgnored => disposition == FileDataDisposition.ignoredTerminal;
+
+  void requireAccepted() {
+    if (!isAccepted) {
+      throw WireInputRejected(reason);
+    }
+  }
+}
+
 final class WireAcknowledgementValidationResult {
   const WireAcknowledgementValidationResult.accepted(this.original)
       : isAccepted = true,
@@ -496,7 +533,7 @@ abstract final class WireInputPolicy {
     return const WireInputValidationResult.accepted();
   }
 
-  static WireInputValidationResult validateFileData({
+  static FileDataValidationResult validateFileData({
     required WhisperFrameV3 frame,
     required FileTransferData transfer,
     required String authenticatedPeerId,
@@ -506,68 +543,73 @@ abstract final class WireInputPolicy {
   }) {
     if (!isCanonicalTransferId(frame.transferId) ||
         frame.transferId != transfer.transferId) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferIdInvalid,
       );
     }
     if (frame.type != WhisperFrameType.fileData) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferFrameMismatch,
       );
     }
     if (authenticatedPeerId.isEmpty ||
         transfer.peerUid != authenticatedPeerId) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferPeerMismatch,
       );
     }
     if (transfer.direction != FileTransferDirection.incoming) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferDirectionMismatch,
       );
     }
     if (frame.flags != 0) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferFlagsInvalid,
       );
     }
     if (frame.offset < 0) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferOffsetInvalid,
       );
     }
     if (frame.payload.isEmpty ||
         frame.payload.length > fileTransferV3FramePayloadSize) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferPayloadInvalid,
       );
     }
     if (transfer.size < 0 ||
         frame.offset > transfer.size ||
         frame.payload.length > transfer.size - frame.offset) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferSizeInvalid,
       );
     }
     if (isTerminalFileTransferState(transfer.state)) {
-      return const WireInputValidationResult.ignored();
+      return const FileDataValidationResult.ignored();
     }
     if (!isActive) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferInactive,
       );
     }
     if (frame.sequence < 0 || frame.sequence != expectedSequence) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferSequenceInvalid,
       );
     }
+    final frameEnd = frame.offset + frame.payload.length;
+    if (frame.offset < transfer.committedBytes &&
+        frameEnd <= transfer.committedBytes) {
+      return const FileDataValidationResult.duplicate();
+    }
     if (frame.offset != expectedOffset) {
-      return const WireInputValidationResult.rejected(
+      return const FileDataValidationResult.rejected(
         WireInputReason.transferOffsetInvalid,
       );
     }
-    return const WireInputValidationResult.accepted();
+    return const FileDataValidationResult.accepted();
   }
 
   static WireInputValidationResult validateFileControl({
