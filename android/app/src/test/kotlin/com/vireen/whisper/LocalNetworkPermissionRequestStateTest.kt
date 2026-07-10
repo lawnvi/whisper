@@ -9,6 +9,24 @@ import org.junit.Test
 
 class LocalNetworkPermissionRequestStateTest {
     @Test
+    fun requiredPermissionMatchesAndroid16CompatAndAndroid17Enforcement() {
+        assertNull(requiredLocalNetworkPermission(sdkInt = 35, android16CompatTest = true))
+        assertNull(requiredLocalNetworkPermission(sdkInt = 36, android16CompatTest = false))
+        assertEquals(
+            "android.permission.NEARBY_WIFI_DEVICES",
+            requiredLocalNetworkPermission(sdkInt = 36, android16CompatTest = true),
+        )
+        assertEquals(
+            "android.permission.ACCESS_LOCAL_NETWORK",
+            requiredLocalNetworkPermission(sdkInt = 37, android16CompatTest = false),
+        )
+        assertEquals(
+            "android.permission.ACCESS_LOCAL_NETWORK",
+            requiredLocalNetworkPermission(sdkInt = 40, android16CompatTest = false),
+        )
+    }
+
+    @Test
     fun configurationDetachPreservesPendingRequestAndMergedCallbacks() {
         val state = LocalNetworkPermissionRequestState<String>(100..110)
         val first = state.enqueue("permission", "first")
@@ -71,15 +89,65 @@ class LocalNetworkPermissionRequestStateTest {
     }
 
     @Test
-    fun differentPermissionDoesNotJoinAnInFlightRequest() {
+    fun differentPermissionsRunSerially() {
         val state = LocalNetworkPermissionRequestState<String>(400..410)
+        val firstCode = state.enqueue("permission-a", "first").requestCode!!
+
+        val queued = state.enqueue("permission-b", "second")
+
+        assertEquals(PermissionRequestDisposition.QUEUED, queued.disposition)
+        assertNull(queued.requestCode)
+
+        val first = state.complete(firstCode)
+        assertEquals("permission-a", first?.permission)
+        assertEquals(listOf("first"), first?.callbacks)
+        assertEquals("permission-b", first?.nextRequest?.permission)
+        assertTrue(state.hasPendingRequest)
+
+        val secondCode = first?.nextRequest?.requestCode!!
+        val second = state.complete(secondCode)
+        assertEquals("permission-b", second?.permission)
+        assertEquals(listOf("second"), second?.callbacks)
+        assertNull(second?.nextRequest)
+        assertFalse(state.hasPendingRequest)
+    }
+
+    @Test
+    fun matchingQueuedPermissionMergesBehindTheActiveRequest() {
+        val state = LocalNetworkPermissionRequestState<String>(420..430)
+        val firstCode = state.enqueue("permission-a", "first").requestCode!!
+
+        assertEquals(
+            PermissionRequestDisposition.QUEUED,
+            state.enqueue("permission-b", "second").disposition,
+        )
+        assertEquals(
+            PermissionRequestDisposition.MERGED,
+            state.enqueue("permission-b", "third").disposition,
+        )
+
+        val secondRequest = state.complete(firstCode)?.nextRequest!!
+        assertEquals(
+            listOf("second", "third"),
+            state.complete(secondRequest.requestCode)?.callbacks,
+        )
+    }
+
+    @Test
+    fun permanentDetachDrainsActiveAndQueuedCallbacks() {
+        val state = LocalNetworkPermissionRequestState<String>(440..450)
         state.enqueue("permission-a", "first")
+        state.enqueue("permission-b", "second")
+        state.enqueue("permission-b", "third")
 
-        val conflict = state.enqueue("permission-b", "second")
+        val completions = state.onActivityPermanentlyDetached()
 
-        assertEquals(PermissionRequestDisposition.CONFLICT, conflict.disposition)
-        assertNull(conflict.requestCode)
-        assertEquals(listOf("first"), state.complete(400)?.callbacks)
+        assertEquals(2, completions.size)
+        assertEquals("permission-a", completions[0].permission)
+        assertEquals(listOf("first"), completions[0].callbacks)
+        assertEquals("permission-b", completions[1].permission)
+        assertEquals(listOf("second", "third"), completions[1].callbacks)
+        assertFalse(state.hasPendingRequest)
     }
 
     @Test

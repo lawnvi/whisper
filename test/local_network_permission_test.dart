@@ -83,7 +83,8 @@ void main() {
     );
   });
 
-  test('iOS starts unknown and does not fake a permission preflight', () async {
+  test('iOS current status stays unknown without a permission preflight',
+      () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
@@ -98,11 +99,35 @@ void main() {
       await permission.currentStatus(),
       LocalNetworkPermissionStatus.unknown,
     );
-    expect(
-      await permission.ensureGranted(),
-      LocalNetworkPermissionStatus.unknown,
-    );
     expect(calls, isEmpty);
+  });
+
+  test('iOS ensure starts the foreground Bonjour probe and preserves outcomes',
+      () async {
+    var response = 'granted';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return response;
+    });
+    final permission = LocalNetworkPermission(
+      channel: channel,
+      targetPlatform: TargetPlatform.iOS,
+    );
+
+    for (final entry in <String, LocalNetworkPermissionStatus>{
+      'granted': LocalNetworkPermissionStatus.granted,
+      'denied': LocalNetworkPermissionStatus.denied,
+      'unavailable': LocalNetworkPermissionStatus.unavailable,
+      'retryable': LocalNetworkPermissionStatus.retryable,
+      'unknown': LocalNetworkPermissionStatus.unknown,
+    }.entries) {
+      response = entry.key;
+      expect(await permission.ensureGranted(), entry.value);
+    }
+
+    expect(calls, hasLength(5));
+    expect(calls.every((call) => call.method == 'ensureGranted'), isTrue);
   });
 
   test('macOS starts unknown and does not fake a permission preflight',

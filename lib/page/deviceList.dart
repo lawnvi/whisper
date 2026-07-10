@@ -24,6 +24,7 @@ import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -223,10 +224,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
       initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
-    } else {
-      if (await Permission.location.isDenied) {
-        await Permission.location.request();
-      }
+    } else if (Platform.isIOS) {
+      await LocalNetworkPermission().ensureGranted();
     }
 
     var permissions = [Permission.storage];

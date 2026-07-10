@@ -2,9 +2,11 @@ package com.vireen.whisper
 
 import android.Manifest
 import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -12,27 +14,44 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.PluginRegistry
 
 class LocalNetworkPermissionPlugin :
     FlutterPlugin,
     MethodChannel.MethodCallHandler,
     ActivityAware,
-    PluginRegistry.RequestPermissionsResultListener {
+    PluginRegistry.RequestPermissionsResultListener,
+    Application.ActivityLifecycleCallbacks,
+    EventChannel.StreamHandler {
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
+    private var eventChannel: EventChannel? = null
+    private var eventSink: EventChannel.EventSink? = null
+    private var application: Application? = null
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
+    private var observedPermission: String? = null
     private val state = LocalNetworkPermissionRequestState<MethodChannel.Result>()
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
         channel.setMethodCallHandler(this)
+        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL_NAME).also {
+            it.setStreamHandler(this)
+        }
+        application = binding.applicationContext as? Application
+        application?.registerActivityLifecycleCallbacks(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        eventChannel?.setStreamHandler(null)
+        eventChannel = null
+        eventSink = null
+        application?.unregisterActivityLifecycleCallbacks(this)
+        application = null
         detachActivity(permanent = true)
     }
 
@@ -58,10 +77,16 @@ class LocalNetworkPermissionPlugin :
         activityBinding?.removeRequestPermissionsResultListener(this)
         activityBinding = null
         activity = null
-        finishPending(
-            state.onActivityDetached(permanent = permanent),
-            NativeLocalNetworkPermissionStatus.UNKNOWN,
-        )
+        if (permanent) {
+            state.onActivityPermanentlyDetached().forEach { completion ->
+                finishPending(
+                    completion,
+                    NativeLocalNetworkPermissionStatus.UNKNOWN,
+                )
+            }
+        } else {
+            state.onActivityDetached(permanent = false)
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -77,7 +102,7 @@ class LocalNetworkPermissionPlugin :
         android16CompatTest: Boolean,
         result: MethodChannel.Result,
     ) {
-        val permission = requiredPermission(android16CompatTest)
+        val permission = observeRequiredPermission(android16CompatTest)
         if (permission == null) {
             result.success(NativeLocalNetworkPermissionStatus.GRANTED.wireValue)
             return
@@ -104,17 +129,25 @@ class LocalNetworkPermissionPlugin :
         val enqueue = state.enqueue(permission, result)
         when (enqueue.disposition) {
             PermissionRequestDisposition.MERGED -> return
-            PermissionRequestDisposition.CONFLICT -> {
-                result.success(NativeLocalNetworkPermissionStatus.UNKNOWN.wireValue)
-                return
-            }
+            PermissionRequestDisposition.QUEUED -> return
             PermissionRequestDisposition.START -> Unit
         }
-        val requestCode = enqueue.requestCode!!
-        val requestActivity = currentActivity
+        requestPermission(
+            PendingPermissionRequest(
+                permission = permission,
+                requestCode = enqueue.requestCode!!,
+            ),
+            currentActivity,
+        )
+    }
+
+    private fun requestPermission(
+        request: PendingPermissionRequest,
+        requestActivity: Activity? = activity,
+    ) {
         if (requestActivity == null) {
             finishPending(
-                state.complete(requestCode),
+                state.complete(request.requestCode),
                 NativeLocalNetworkPermissionStatus.UNKNOWN,
             )
             return
@@ -122,30 +155,36 @@ class LocalNetworkPermissionPlugin :
         try {
             ActivityCompat.requestPermissions(
                 requestActivity,
-                arrayOf(permission),
-                requestCode,
+                arrayOf(request.permission),
+                request.requestCode,
             )
         } catch (_: SecurityException) {
             finishPending(
-                state.complete(requestCode),
-                NativeLocalNetworkPermissionStatus.RESTRICTED,
+                state.complete(request.requestCode),
+                permissionStatus(request.permission),
             )
         }
     }
 
     private fun currentStatus(android16CompatTest: Boolean): String {
-        val permission = requiredPermission(android16CompatTest)
+        val permission = observeRequiredPermission(android16CompatTest)
             ?: return NativeLocalNetworkPermissionStatus.GRANTED.wireValue
         return permissionStatus(permission).wireValue
     }
 
-    private fun requiredPermission(android16CompatTest: Boolean): String? {
-        return when {
-            Build.VERSION.SDK_INT >= 37 -> ACCESS_LOCAL_NETWORK_PERMISSION
-            Build.VERSION.SDK_INT == 36 && android16CompatTest ->
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            else -> null
+    private fun observeRequiredPermission(android16CompatTest: Boolean): String? {
+        return requiredPermission(android16CompatTest)?.also { permission ->
+            observedPermission = permission
         }
+    }
+
+    private fun requiredPermission(android16CompatTest: Boolean): String? {
+        return requiredLocalNetworkPermission(
+            sdkInt = Build.VERSION.SDK_INT,
+            android16CompatTest = android16CompatTest,
+            nearbyWifiDevicesPermission = Manifest.permission.NEARBY_WIFI_DEVICES,
+            accessLocalNetworkPermission = ACCESS_LOCAL_NETWORK_PERMISSION,
+        )
     }
 
     private fun permissionStatus(permission: String): NativeLocalNetworkPermissionStatus {
@@ -183,11 +222,55 @@ class LocalNetworkPermissionPlugin :
         completion: PendingPermissionCompletion<MethodChannel.Result>?,
         status: NativeLocalNetworkPermissionStatus,
     ) {
-        completion?.callbacks?.forEach { it.success(status.wireValue) }
+        if (completion == null) {
+            return
+        }
+        completion.callbacks.forEach { it.success(status.wireValue) }
+        eventSink?.success(status.wireValue)
+        completion.nextRequest?.let(::requestPermission)
     }
+
+    override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+        eventSink = events
+        emitCurrentPermissionStatus()
+    }
+
+    override fun onCancel(arguments: Any?) {
+        eventSink = null
+    }
+
+    private fun emitCurrentPermissionStatus() {
+        val permission = observedPermission ?: requiredPermission(android16CompatTest = false)
+        val status = if (permission == null) {
+            NativeLocalNetworkPermissionStatus.GRANTED
+        } else {
+            permissionStatus(permission)
+        }
+        eventSink?.success(status.wireValue)
+    }
+
+    override fun onActivityResumed(activity: Activity) {
+        if (activity === this.activity) {
+            emitCurrentPermissionStatus()
+        }
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+    override fun onActivityStarted(activity: Activity) = Unit
+
+    override fun onActivityPaused(activity: Activity) = Unit
+
+    override fun onActivityStopped(activity: Activity) = Unit
+
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+    override fun onActivityDestroyed(activity: Activity) = Unit
 
     private companion object {
         const val CHANNEL_NAME = "com.vireen.whisper/local_network_permission"
+        const val EVENT_CHANNEL_NAME =
+            "com.vireen.whisper/local_network_permission/events"
         const val ARG_COMPAT_TEST = "android16CompatTest"
         const val ACCESS_LOCAL_NETWORK_PERMISSION =
             "android.permission.ACCESS_LOCAL_NETWORK"

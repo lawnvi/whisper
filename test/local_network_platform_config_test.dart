@@ -29,15 +29,25 @@ void main() {
 
   test('Android permission plugin covers normal, compat, and API 37 paths', () {
     final plugin = File(pluginPath).readAsStringSync();
+    final requestState = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/LocalNetworkPermissionRequestState.kt',
+    ).readAsStringSync();
     final activity = File(
       'android/app/src/main/kotlin/com/vireen/whisper/MainActivity.kt',
     ).readAsStringSync();
 
     expect(plugin, contains('ActivityAware'));
     expect(plugin, contains('RequestPermissionsResultListener'));
+    expect(plugin, contains('Application.ActivityLifecycleCallbacks'));
+    expect(plugin, contains('EventChannel.StreamHandler'));
+    expect(plugin, contains('registerActivityLifecycleCallbacks(this)'));
+    expect(plugin, contains('unregisterActivityLifecycleCallbacks(this)'));
+    expect(
+        plugin, contains('override fun onActivityResumed(activity: Activity)'));
+    expect(plugin, contains('emitCurrentPermissionStatus()'));
     expect(plugin, contains('android16CompatTest'));
-    expect(plugin, contains('Build.VERSION.SDK_INT >= 37'));
-    expect(plugin, contains('Build.VERSION.SDK_INT == 36'));
+    expect(requestState, contains('sdkInt >= 37'));
+    expect(requestState, contains('sdkInt == 36 && android16CompatTest'));
     expect(plugin, contains('android.permission.ACCESS_LOCAL_NETWORK'));
     expect(plugin, contains('Manifest.permission.NEARBY_WIFI_DEVICES'));
     expect(plugin, contains('LocalNetworkPermissionRequestState'));
@@ -52,7 +62,7 @@ void main() {
     expect(plugin, contains('detachActivity(permanent = true)'));
     expect(
       plugin,
-      contains('state.onActivityDetached(permanent = permanent)'),
+      contains('state.onActivityPermanentlyDetached()'),
     );
     expect(
       plugin,
@@ -83,6 +93,40 @@ void main() {
     );
     expect(plist, contains('<key>NSLocalNetworkUsageDescription</key>'));
     expect(plist, contains('<string>_whisper._tcp</string>'));
+    expect(plist, isNot(contains('NSLocationWhenInUseUsageDescription')));
+    expect(
+        plist, isNot(contains('NSLocationAlwaysAndWhenInUseUsageDescription')));
+
+    final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+    expect(appDelegate, contains('NWBrowser'));
+    expect(
+      appDelegate,
+      contains('.bonjour(type: "_whisper._tcp", domain: "local.")'),
+    );
+    expect(
+      appDelegate,
+      contains('UIApplication.shared.applicationState == .active'),
+    );
+    expect(appDelegate, contains('kDNSServiceErr_PolicyDenied'));
+    expect(appDelegate, contains('case "currentStatus":'));
+    expect(appDelegate, contains('result("unknown")'));
+    expect(appDelegate, contains('"unavailable"'));
+    expect(appDelegate, contains('"retryable"'));
+
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    expect(deviceList, isNot(contains('Permission.location')));
+
+    final entitlements =
+        File('ios/Runner/Runner.entitlements').readAsStringSync();
+    expect(
+      entitlements,
+      isNot(contains('com.apple.developer.networking.wifi-info')),
+    );
+    expect(
+      entitlements,
+      isNot(contains('com.apple.developer.networking.multicast')),
+      reason: 'A fixed Bonjour service does not require multicast entitlement',
+    );
 
     if (Platform.isMacOS) {
       final lint =
@@ -98,6 +142,15 @@ void main() {
     expect(plist, contains('<key>NSBonjourServices</key>'));
     expect(plist, contains('<string>_whisper._tcp</string>'));
     expect(plist.toLowerCase(), contains('local network'));
+
+    for (final path in <String>[
+      'macos/Runner/DebugProfile.entitlements',
+      'macos/Runner/Release.entitlements',
+    ]) {
+      final entitlements = File(path).readAsStringSync();
+      expect(entitlements, contains('com.apple.security.network.server'));
+      expect(entitlements, contains('com.apple.security.network.client'));
+    }
 
     if (Platform.isMacOS) {
       final lint = Process.runSync(

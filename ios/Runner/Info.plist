@@ -56,10 +56,6 @@
     <string>The app needs photo library access so that the user can select photos to share.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>The app saves received media to the photo library.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>The app requires the local IP to communicate.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>The app requires the local IP to communicate.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>The app uses the local network to find and connect to nearby devices.</string>
     <key>NSAppTransportSecurity</key>

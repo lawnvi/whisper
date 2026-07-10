@@ -2,12 +2,15 @@ import UIKit
 import Flutter
 import AVFoundation
 import MobileCoreServices
+import Network
+import dnssd
 
 @UIApplicationMain
 @objc class AppDelegate: FlutterAppDelegate {
 
     var documentBrowserViewController: UIDocumentBrowserViewController?
     private let audioSharePlugin = IOSAudioSharePlugin()
+    private let localNetworkPermissionPlugin = IOSLocalNetworkPermissionPlugin()
 
     override func application(
         _ application: UIApplication,
@@ -16,6 +19,7 @@ import MobileCoreServices
         let controller: FlutterViewController = window?.rootViewController as! FlutterViewController
         let dirChannel = FlutterMethodChannel(name: "com.vireen.whisper/ios_dir", binaryMessenger: controller.binaryMessenger)
         audioSharePlugin.register(binaryMessenger: controller.binaryMessenger)
+        localNetworkPermissionPlugin.register(binaryMessenger: controller.binaryMessenger)
 
         dirChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
             switch call.method {
@@ -88,6 +92,126 @@ import MobileCoreServices
         } catch {
             result(nil)
         }
+    }
+}
+
+final class IOSLocalNetworkPermissionPlugin {
+    private var channel: FlutterMethodChannel?
+    private var browser: NWBrowser?
+    private var pendingResults: [FlutterResult] = []
+    private var probeGeneration = 0
+    private var backgroundObserver: NSObjectProtocol?
+
+    deinit {
+        if let backgroundObserver = backgroundObserver {
+            NotificationCenter.default.removeObserver(backgroundObserver)
+        }
+    }
+
+    func register(binaryMessenger: FlutterBinaryMessenger) {
+        let channel = FlutterMethodChannel(
+            name: "com.vireen.whisper/local_network_permission",
+            binaryMessenger: binaryMessenger
+        )
+        self.channel = channel
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard let self = self else {
+                result("unknown")
+                return
+            }
+            switch call.method {
+            case "currentStatus":
+                result("unknown")
+            case "ensureGranted":
+                self.ensureGranted(result: result)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.finishProbe(status: "retryable")
+        }
+    }
+
+    private func ensureGranted(result: @escaping FlutterResult) {
+        guard UIApplication.shared.applicationState == .active else {
+            result("unavailable")
+            return
+        }
+        pendingResults.append(result)
+        guard browser == nil else {
+            return
+        }
+
+        probeGeneration += 1
+        let generation = probeGeneration
+        let browser = NWBrowser(
+            for: .bonjour(type: "_whisper._tcp", domain: "local."),
+            using: .tcp
+        )
+        self.browser = browser
+        browser.stateUpdateHandler = { [weak self, weak browser] state in
+            guard let self = self,
+                  let browser = browser,
+                  browser === self.browser else {
+                return
+            }
+            switch state {
+            case .ready:
+                self.finishProbe(status: "granted")
+            case .waiting(let error), .failed(let error):
+                self.finishProbe(status: self.status(for: error))
+            case .cancelled:
+                self.finishProbe(status: "retryable")
+            case .setup:
+                break
+            @unknown default:
+                self.finishProbe(status: "unknown")
+            }
+        }
+        browser.start(queue: .main)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self = self, self.probeGeneration == generation else {
+                return
+            }
+            self.finishProbe(status: "retryable")
+        }
+    }
+
+    private func status(for error: NWError) -> String {
+        switch error {
+        case .dns(let code):
+            return Int32(code) == kDNSServiceErr_PolicyDenied
+                ? "denied"
+                : "retryable"
+        case .posix(let code):
+            switch code {
+            case .ENETDOWN, .ENETUNREACH, .EHOSTUNREACH, .ENODEV, .ENXIO:
+                return "unavailable"
+            default:
+                return "retryable"
+            }
+        default:
+            return "retryable"
+        }
+    }
+
+    private func finishProbe(status: String) {
+        guard browser != nil || !pendingResults.isEmpty else {
+            return
+        }
+        probeGeneration += 1
+        let activeBrowser = browser
+        browser = nil
+        activeBrowser?.stateUpdateHandler = nil
+        activeBrowser?.cancel()
+        let results = pendingResults
+        pendingResults.removeAll()
+        results.forEach { $0(status) }
     }
 }
 
