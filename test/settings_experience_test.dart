@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/settings.dart';
@@ -70,6 +71,10 @@ Widget _host({
   SettingsPresentation presentation = _presentation,
   SettingsPresentationLoader? loader,
   Future<void> Function(bool enabled)? updateNotificationForwarding,
+  Future<void> Function(bool enabled)? writeNotificationForwarding,
+  Future<bool> Function()? readNotificationForwarding,
+  Future<void> Function(bool enabled)? syncNotificationForwardingListener,
+  Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
 }) {
   return MaterialApp(
@@ -95,6 +100,10 @@ Widget _host({
       updateNickname: (_) async {},
       updateServerPort: (_) async {},
       updateNotificationForwarding: updateNotificationForwarding,
+      writeNotificationForwarding: writeNotificationForwarding,
+      readNotificationForwarding: readNotificationForwarding,
+      syncNotificationForwardingListener: syncNotificationForwardingListener,
+      refreshNotificationRegistry: refreshNotificationRegistry,
       openNotificationApps: openNotificationApps,
     ),
   );
@@ -103,15 +112,20 @@ Widget _host({
 Future<void> _pumpAt(
   WidgetTester tester, {
   required double width,
+  double height = 900,
   double textScale = 1,
   Locale locale = const Locale('en'),
   SettingsPresentation presentation = _presentation,
   SettingsPresentationLoader? loader,
   Future<void> Function(bool enabled)? updateNotificationForwarding,
+  Future<void> Function(bool enabled)? writeNotificationForwarding,
+  Future<bool> Function()? readNotificationForwarding,
+  Future<void> Function(bool enabled)? syncNotificationForwardingListener,
+  Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
 }) async {
   tester.view
-    ..physicalSize = Size(width, 900)
+    ..physicalSize = Size(width, height)
     ..devicePixelRatio = 1;
   await tester.pumpWidget(_host(
     locale: locale,
@@ -119,6 +133,10 @@ Future<void> _pumpAt(
     presentation: presentation,
     loader: loader,
     updateNotificationForwarding: updateNotificationForwarding,
+    writeNotificationForwarding: writeNotificationForwarding,
+    readNotificationForwarding: readNotificationForwarding,
+    syncNotificationForwardingListener: syncNotificationForwardingListener,
+    refreshNotificationRegistry: refreshNotificationRegistry,
     openNotificationApps: openNotificationApps,
   ));
   await tester.pumpAndSettle();
@@ -458,7 +476,65 @@ void main() {
       tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
       isFalse,
     );
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
     semantics.dispose();
+  });
+
+  testWidgets(
+      'notification forwarding compensates persistence after refresh failure',
+      (tester) async {
+    var persisted = true;
+    var refreshes = 0;
+    final writes = <bool>[];
+    final listenerStates = <bool>[];
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: _androidPresentation,
+      writeNotificationForwarding: (enabled) async {
+        persisted = enabled;
+        writes.add(enabled);
+      },
+      readNotificationForwarding: () async => persisted,
+      syncNotificationForwardingListener: (enabled) async {
+        listenerStates.add(enabled);
+      },
+      refreshNotificationRegistry: () async {
+        refreshes += 1;
+        if (refreshes == 1) {
+          throw StateError('registry refresh failed');
+        }
+      },
+    );
+    await tester.scrollUntilVisible(
+      find.text('Mobile integration'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    final forwarding = find.widgetWithText(
+      AppInteractiveTile,
+      'Forward Android Notifications',
+    );
+    await tester.tap(forwarding);
+    await tester.pumpAndSettle();
+
+    expect(writes, <bool>[false, true]);
+    expect(listenerStates, <bool>[false, true]);
+    expect(refreshes, 2);
+    expect(persisted, isTrue);
+    expect(
+      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
+      isTrue,
+    );
+    expect(
+      find.text('Notification forwarding could not be updated'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('notification forwarding rolls back and reports update failure',
@@ -562,6 +638,99 @@ void main() {
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(find.text('Device and appearance'), findsOneWidget);
+  });
+
+  testWidgets('successful mutation refresh preserves list scroll and focus',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      '_clipboard': true,
+    });
+    final pendingRefresh = Completer<SettingsPresentation>();
+    var loads = 0;
+    await _pumpAt(
+      tester,
+      width: 760,
+      height: 500,
+      loader: () {
+        loads += 1;
+        return loads == 1
+            ? Future<SettingsPresentation>.value(_presentation)
+            : pendingRefresh.future;
+      },
+    );
+
+    final clipboard = find.widgetWithText(
+      AppInteractiveTile,
+      'Access Clipboard',
+    );
+    await tester.scrollUntilVisible(
+      clipboard,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    FocusManager.instance.primaryFocus?.unfocus();
+    for (var index = 0; index < 30; index += 1) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      if (tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused)) {
+        break;
+      }
+    }
+    expect(
+      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+    final scrollable = tester.state<ScrollableState>(
+      find.byType(Scrollable).first,
+    );
+    final offset = scrollable.position.pixels;
+    expect(offset, greaterThan(0));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    for (var index = 0; index < 5 && loads < 2; index += 1) {
+      await tester.pump();
+    }
+    await tester.pump();
+
+    expect(loads, 2);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(clipboard, findsOneWidget);
+    expect(scrollable.position.pixels, closeTo(offset, 0.1));
+    expect(
+      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+
+    pendingRefresh.complete(
+      SettingsPresentation(
+        device: _device.copyWith(clipboard: false),
+        saveDirectoryPath: _presentation.saveDirectoryPath,
+        version: _presentation.version,
+        closeToTray: _presentation.closeToTray,
+        copyVerificationCode: _presentation.copyVerificationCode,
+        listenAndroidNotifications: _presentation.listenAndroidNotifications,
+        ignoreAndroidNotifications: _presentation.ignoreAndroidNotifications,
+        autoConnect: _presentation.autoConnect,
+        launchAtStartup: _presentation.launchAtStartup,
+        androidBackgroundKeepAlive: _presentation.androidBackgroundKeepAlive,
+        audioSharePlaybackGain: _presentation.audioSharePlaybackGain,
+        remoteInputScrollMultiplier: _presentation.remoteInputScrollMultiplier,
+        themeMode: _presentation.themeMode,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(clipboard, findsOneWidget);
+    expect(scrollable.position.pixels, closeTo(offset, 0.1));
+    expect(
+      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
+      isTrue,
+    );
+    expect(
+      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isToggled),
+      isFalse,
+    );
   });
 
   testWidgets('latest retry ignores an older failure and hides retry at once',

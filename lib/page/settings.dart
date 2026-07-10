@@ -121,6 +121,10 @@ class SettingsScreen extends StatefulWidget {
     this.updateNickname,
     this.updateServerPort,
     this.updateNotificationForwarding,
+    this.writeNotificationForwarding,
+    this.readNotificationForwarding,
+    this.syncNotificationForwardingListener,
+    this.refreshNotificationRegistry,
     this.openNotificationApps,
   });
 
@@ -130,6 +134,10 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function(String nickname)? updateNickname;
   final Future<void> Function(int port)? updateServerPort;
   final Future<void> Function(bool enabled)? updateNotificationForwarding;
+  final Future<void> Function(bool enabled)? writeNotificationForwarding;
+  final Future<bool> Function()? readNotificationForwarding;
+  final Future<void> Function(bool enabled)? syncNotificationForwardingListener;
+  final Future<void> Function()? refreshNotificationRegistry;
   final Future<void> Function()? openNotificationApps;
 
   @override
@@ -168,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _refreshDevice();
+    _refreshDevice(showLoading: true);
   }
 
   Future<bool> _loadLaunchAtStartup() async {
@@ -222,9 +230,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _refreshDevice() async {
+  Future<void> _refreshDevice({bool showLoading = false}) async {
     final generation = ++_presentationLoadGeneration;
-    if (mounted) {
+    if (mounted && showLoading) {
       setState(() {
         _isLoading = true;
         _loadFailed = false;
@@ -304,7 +312,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: l10n.settingsLoadFailedTitle,
                     body: l10n.settingsLoadFailedBody,
                     actionLabel: l10n.retry,
-                    onAction: _refreshDevice,
+                    onAction: () => _refreshDevice(showLoading: true),
                   )
                 else ...<Widget>[
                   _buildSettingsSection(
@@ -733,9 +741,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _applyNotificationForwarding(bool enabled) async {
-    await LocalSetting().setAndroidListen(enabled);
-    await _syncAndroidNotificationListener(enabled);
-    await NotificationAppRegistry.instance.refresh();
+    final write =
+        widget.writeNotificationForwarding ?? LocalSetting().setAndroidListen;
+    final sync = widget.syncNotificationForwardingListener ??
+        _syncAndroidNotificationListener;
+    final refresh = widget.refreshNotificationRegistry ??
+        NotificationAppRegistry.instance.refresh;
+    await write(enabled);
+    await sync(enabled);
+    await refresh();
   }
 
   Future<bool> _restoreNotificationForwarding(bool previous) async {
@@ -749,7 +763,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
     try {
-      return await LocalSetting().isListenAndroid();
+      final read =
+          widget.readNotificationForwarding ?? LocalSetting().isListenAndroid;
+      return await read();
     } catch (error, stackTrace) {
       logger.e(
         'Failed to read restored notification forwarding state',
