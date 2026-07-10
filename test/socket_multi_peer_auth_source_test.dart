@@ -127,7 +127,7 @@ void main() {
       'Future<DeviceData> _completeAuthenticatedSession(',
       'Future<void> _sendUpgradeRequired(',
     );
-    expect(completion, contains('database.commitAuthenticatedDevice('));
+    expect(completion, contains('_database.commitAuthenticatedDevice('));
     expect(completion, contains('pinPlan.expectedPublicKey'));
     expect(completion, contains('PairingReason.identityChanged'));
     expect(completion, contains('_requireCurrentSession('));
@@ -186,10 +186,29 @@ void main() {
     expect(attach, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
     expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
     final connect = section(
-      'Future<void> connectToServer(',
+      'Future<ConnectionAttemptResult> connectToServer(',
       'Future<void> closeGracefully(',
     );
     expect(connect, contains('_attachSocketTransport('));
+  });
+
+  test('outbound auth outcomes are returned only to the awaiting caller', () {
+    final challenge = section(
+      'Future<void> _handleClientChallenge(',
+      'Future<bool> _automaticAttemptStillEligible(',
+    );
+    final result = section(
+      'Future<void> _handleClientResult(',
+      'Future<_IdentityPinPlan> _pairingReason(',
+    );
+    final announce = section(
+      'void _announceAuthenticatedSession(',
+      'bool _isSameSession(',
+    );
+
+    expect(challenge, isNot(contains('afterAuth(')));
+    expect(result, isNot(contains('afterAuth(')));
+    expect(announce, contains('session.role == PeerSocketRole.server'));
   });
 
   test('old socket cleanup removes only its own connection generation', () {

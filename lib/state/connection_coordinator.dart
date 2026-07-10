@@ -251,13 +251,13 @@ class ConnectionCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  void markConnected(DeviceData device) {
+  void markConnected(DeviceData device, {bool select = true}) {
     final connectedPeerIds = <String>{
       ..._snapshot.activePeerIds,
       device.uid,
     };
     _snapshot = ConnectionSnapshot(
-      activePeerId: device.uid,
+      activePeerId: select ? device.uid : _snapshot.activePeerId,
       activePeerIds: connectedPeerIds,
       state: ConnectionLifecycleState.connected,
     );

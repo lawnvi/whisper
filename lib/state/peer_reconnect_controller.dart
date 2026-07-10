@@ -1,14 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/peer_endpoint.dart';
-
-enum ConnectionAttemptResult {
-  authenticated,
-  cancelled,
-  rejected,
-  networkFailure,
-}
 
 enum ReconnectEligibilityResult {
   eligible,
@@ -39,6 +33,16 @@ final class ReconnectTarget {
       peerId: peerId,
       endpoint: PeerEndpoint(host: host, port: port),
     );
+  }
+
+  factory ReconnectTarget.endpoint({
+    required String peerId,
+    required PeerEndpoint endpoint,
+  }) {
+    if (peerId.isEmpty) {
+      throw ArgumentError.value(peerId, 'peerId', 'must not be empty');
+    }
+    return ReconnectTarget._(peerId: peerId, endpoint: endpoint);
   }
 
   const ReconnectTarget._({required this.peerId, required this.endpoint});
@@ -102,7 +106,7 @@ typedef ReconnectRandomDouble = double Function();
 typedef ReconnectEligibility = FutureOr<ReconnectEligibilityResult> Function(
   ReconnectTarget target,
 );
-typedef ReconnectAttempt = FutureOr<ConnectionAttemptResult> Function(
+typedef ReconnectAttempt = FutureOr<ConnectionAttemptStatus> Function(
   ReconnectAttemptContext attempt,
 );
 
@@ -312,7 +316,7 @@ final class PeerReconnectController {
       return;
     }
 
-    ConnectionAttemptResult result;
+    ConnectionAttemptStatus result;
     try {
       result = await _attempt(attemptContext);
     } catch (_) {
@@ -331,15 +335,15 @@ final class PeerReconnectController {
 
     _retireAttempt(attemptContext);
     switch (result) {
-      case ConnectionAttemptResult.authenticated:
+      case ConnectionAttemptStatus.authenticated:
         authenticated();
         break;
-      case ConnectionAttemptResult.networkFailure:
+      case ConnectionAttemptStatus.networkFailure:
         _attemptCount += 1;
         scheduleReconnect(scheduledTarget);
         break;
-      case ConnectionAttemptResult.cancelled:
-      case ConnectionAttemptResult.rejected:
+      case ConnectionAttemptStatus.cancelled:
+      case ConnectionAttemptStatus.rejected:
         _invalidate();
         break;
     }

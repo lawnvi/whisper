@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -71,13 +72,15 @@ void main() {
     await tester.tap(find.byKey(pairingApproveKey));
     expect(decisions, <bool>[false]);
     await tester.pump();
-    final reject = tester.widget<TextButton>(find.byKey(pairingRejectKey));
-    final approve = tester.widget<FilledButton>(find.byKey(pairingApproveKey));
+    final reject =
+        tester.widget<CupertinoDialogAction>(find.byKey(pairingRejectKey));
+    final approve =
+        tester.widget<CupertinoDialogAction>(find.byKey(pairingApproveKey));
     expect(reject.onPressed, isNull);
     expect(approve.onPressed, isNull);
   });
 
-  testWidgets('reject is the default focused action', (tester) async {
+  testWidgets('reject is the destructive action', (tester) async {
     final request = PairingRequest(
       device: _device(),
       pairingCode: '123456',
@@ -85,12 +88,9 @@ void main() {
       canApprove: true,
     );
     await tester.pumpWidget(_app(request, (_) {}));
-    await tester.pump();
-
-    expect(
-      tester.widget<TextButton>(find.byKey(pairingRejectKey)).autofocus,
-      isTrue,
-    );
+    final reject =
+        tester.widget<CupertinoDialogAction>(find.byKey(pairingRejectKey));
+    expect(reject.isDestructiveAction, isTrue);
   });
 
   testWidgets('repeated route decisions cannot pop the underlying page',

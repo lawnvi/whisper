@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Key, Theme;
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_request.dart';
 
@@ -11,7 +12,7 @@ Future<void> showPairingDialog(
   required PairingRequest request,
   required void Function(bool) resolve,
 }) async {
-  final decision = await showDialog<bool>(
+  final decision = await showCupertinoDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (context) => PairingDialog(
@@ -67,8 +68,7 @@ class _PairingDialogState extends State<PairingDialog> {
     final code = '${widget.request.pairingCode.substring(0, 3)} '
         '${widget.request.pairingCode.substring(3)}';
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return CupertinoAlertDialog(
       title: Text(title),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
@@ -107,14 +107,14 @@ class _PairingDialogState extends State<PairingDialog> {
         ),
       ),
       actions: <Widget>[
-        TextButton(
+        CupertinoDialogAction(
           key: pairingRejectKey,
-          autofocus: true,
+          isDestructiveAction: true,
           onPressed: _resolved ? null : () => _resolve(false),
           child: Text(l10n.pairingReject),
         ),
         if (widget.request.canApprove)
-          FilledButton(
+          CupertinoDialogAction(
             key: pairingApproveKey,
             onPressed: _resolved ? null : () => _resolve(true),
             child: Text(l10n.pairingApprove),

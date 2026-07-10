@@ -13,6 +13,8 @@ import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 
 const _audioSessionId = '11111111-1111-4111-8111-111111111111';
 const _inputSessionId = '22222222-2222-4222-8222-222222222222';
@@ -21,6 +23,13 @@ const _sinkPeerId = 'sink-peer';
 final _mediaKey = Uint8List.fromList(
   List<int>.generate(32, (index) => index + 1),
 );
+
+ConnectionAttemptRequest _attemptRequest(String requestId, int port) =>
+    ConnectionAttemptRequest(
+      requestId: requestId,
+      endpoint: PeerEndpoint.loopbackForTesting(port: port),
+      mode: ConnectionAttemptMode.interactive,
+    );
 
 void _activateAudioSession(AudioShareManager manager) {
   manager.acceptOffer(
@@ -573,25 +582,15 @@ void main() {
           closeServer: true,
           forceServerClose: true,
         ));
-    final callbackResults = <bool>[];
-    final callbackMessages = <Object?>[];
-
     final connecting = isolated.connectToServer(
-      '127.0.0.1',
-      stalledServer.port,
-      (bool ok, Object? message) {
-        callbackResults.add(ok);
-        callbackMessages.add(message);
-      },
+      _attemptRequest('graceful-close', stalledServer.port),
     );
     await requestReceived.future;
     final closing = isolated.closeGracefully();
 
-    await Future.wait(<Future<void>>[connecting, closing])
-        .timeout(const Duration(seconds: 2));
-    expect(callbackResults, <bool>[false]);
-    expect(
-        callbackMessages, <Object?>[WsSvrManager.connectionCancelledMessage]);
+    final result = await connecting.timeout(const Duration(seconds: 2));
+    await closing.timeout(const Duration(seconds: 2));
+    expect(result.status, ConnectionAttemptStatus.cancelled);
   });
 
   test('failed listener bind leaves outgoing connector available', () async {
@@ -612,20 +611,16 @@ void main() {
         ));
     final failedStart = await isolated.startServer(occupied.port);
     expect(failedStart.isSuccess, isFalse);
-    final callbackResults = <bool>[];
-
     final connecting = isolated.connectToServer(
-      '127.0.0.1',
-      peerServer.port,
-      (bool ok, Object? message) => callbackResults.add(ok),
+      _attemptRequest('failed-bind', peerServer.port),
     );
 
     await upgraded.future.timeout(const Duration(seconds: 2));
-    await connecting.timeout(const Duration(seconds: 2));
-    expect(callbackResults, <bool>[false]);
+    final result = await connecting.timeout(const Duration(seconds: 2));
+    expect(result.isAuthenticated, isFalse);
   });
 
-  test('outgoing callback errors do not break shutdown tracking', () async {
+  test('typed outgoing result remains tracked through shutdown', () async {
     final stalledServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
@@ -642,22 +637,16 @@ void main() {
           closeServer: true,
           forceServerClose: true,
         ));
-    var callbackCount = 0;
     final connecting = isolated.connectToServer(
-      '127.0.0.1',
-      stalledServer.port,
-      (bool ok, Object? message) {
-        callbackCount += 1;
-        throw StateError('callback failed');
-      },
+      _attemptRequest('tracked-close', stalledServer.port),
     );
     await requestReceived.future;
 
     final closing = isolated.closeGracefully();
 
-    await Future.wait(<Future<void>>[connecting, closing])
-        .timeout(const Duration(seconds: 2));
-    expect(callbackCount, 1);
+    final result = await connecting.timeout(const Duration(seconds: 2));
+    await closing.timeout(const Duration(seconds: 2));
+    expect(result.status, ConnectionAttemptStatus.cancelled);
   });
 
   test('outgoing websocket handshake does not follow redirects', () async {
@@ -689,9 +678,7 @@ void main() {
 
     await isolated
         .connectToServer(
-          '127.0.0.1',
-          redirectServer.port,
-          (bool ok, Object? message) {},
+          _attemptRequest('redirect', redirectServer.port),
         )
         .timeout(const Duration(seconds: 2));
 
@@ -722,20 +709,13 @@ void main() {
         socket.destroy();
       });
       final isolated = WsSvrManager.forTesting();
-      final callbackMessage = Completer<Object?>();
-
       final connecting = isolated.connectToServer(
-        '127.0.0.1',
-        peerServer.port,
-        (bool ok, Object? message) => callbackMessage.complete(message),
+        _attemptRequest('negotiation-${header.key}', peerServer.port),
       );
       await responseSent.future.timeout(const Duration(seconds: 2));
-      await connecting.timeout(const Duration(seconds: 2));
+      final result = await connecting.timeout(const Duration(seconds: 2));
 
-      expect(
-        (await callbackMessage.future).toString(),
-        contains('unexpected_websocket_negotiation'),
-      );
+      expect(result.status, ConnectionAttemptStatus.rejected);
       await isolated.closeGracefully(
         closeServer: true,
         forceServerClose: true,

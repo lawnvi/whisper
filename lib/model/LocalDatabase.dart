@@ -524,6 +524,40 @@ class LocalDatabase extends _$LocalDatabase {
     });
   }
 
+  /// Reverts the DB side of an authentication that lost its final connection
+  /// commit gate. The public-key comparison prevents stale attempts from
+  /// overwriting a newer identity decision.
+  Future<bool> rollbackAuthenticatedDevice({
+    required String peerId,
+    required String attemptedPublicKey,
+    required DeviceData? previous,
+  }) {
+    if (peerId.isEmpty || attemptedPublicKey.isEmpty) {
+      return Future<bool>.value(false);
+    }
+    return transaction(() async {
+      final current = await fetchDevice(peerId);
+      if (current == null || current.identityPublicKey != attemptedPublicKey) {
+        return false;
+      }
+      if (previous == null) {
+        final removed = await (delete(device)
+              ..where((row) =>
+                  row.uid.equals(peerId) &
+                  row.identityPublicKey.equals(attemptedPublicKey)))
+            .go();
+        return removed == 1;
+      }
+      if (previous.uid != peerId) {
+        return false;
+      }
+      final restored = await (update(device)
+            ..where((row) => row.uid.equals(peerId)))
+          .write(previous.toCompanion(false));
+      return restored == 1;
+    });
+  }
+
   Future<void> clipboardDevice(String uid, bool clipboard) async {
     if (uid.isEmpty) {
       return;
@@ -701,11 +735,14 @@ class LocalDatabase extends _$LocalDatabase {
     return latestMessages;
   }
 
-  Future<void> clearDevices(List<String> uids) async {
+  Future<void> clearDevices(
+    List<String> uids, {
+    String? localPeerId,
+  }) async {
     if (uids.isEmpty) {
       return;
     }
-    final selfUid = await localUUID();
+    final selfUid = localPeerId ?? await localUUID();
     final targetIds = List<String>.from(uids);
     await transaction(() async {
       final removedMessageIds = <int>{};

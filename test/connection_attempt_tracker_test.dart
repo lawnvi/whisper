@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 
 void main() {
@@ -27,4 +28,33 @@ void main() {
     tracker.cancelAll();
     expect(tracker.isCurrent('disposed', disposed), isFalse);
   });
+
+  test('background reconnect records a peer without changing selection', () {
+    final coordinator = ConnectionCoordinator();
+    coordinator.markDisconnected();
+    coordinator.markConnected(_device('peer-b'));
+
+    coordinator.markConnected(_device('peer-a'), select: false);
+
+    expect(coordinator.snapshot.activePeerId, 'peer-b');
+    expect(coordinator.snapshot.connectedPeerIds,
+        containsAll(['peer-a', 'peer-b']));
+    coordinator.markDisconnected();
+  });
 }
+
+DeviceData _device(String uid) => DeviceData(
+      id: 0,
+      uid: uid,
+      name: uid,
+      host: '192.168.1.10',
+      port: 10002,
+      password: '',
+      platform: 'test',
+      isServer: false,
+      online: true,
+      clipboard: true,
+      auth: true,
+      lastTime: 1,
+      around: true,
+    );

@@ -29,7 +29,10 @@ import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
@@ -113,6 +116,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       const DesktopClipboardImageReader();
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
+  final ConnectionAttemptTracker _connectionAttempts =
+      ConnectionAttemptTracker();
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -218,6 +223,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _connectionAttempts.cancelAll();
     socketManager.unregisterEvent(this);
     _audioCoordinator.removeListener(_handleAudioShareChanged);
     _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
@@ -1240,6 +1246,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
         cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
         onConfirm: () async {
+          _connectionAttempts.cancel('peer:${device.uid}');
           await socketManager.disconnectPeer(device.uid);
         },
       );
@@ -1251,27 +1258,67 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<bool> _connectServer(String host, int port) async {
-    if (await isLocalhost(host)) {
-      afterAuth(true, device);
-      return true;
-    }
-    final completer = Completer<bool>();
-    socketManager.connectToServer(host, port, (ok, message) {
-      if (!ok) {
-        if (!completer.isCompleted) {
-          completer.complete(false);
+    final targetKey = 'peer:${device.uid}';
+    final attemptGeneration = _connectionAttempts.begin(targetKey);
+    try {
+      if (await isLocalhost(host)) {
+        if (!_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+          return false;
         }
-        if (message == WsSvrManager.duplicateAuthRequestMessage) {
-          if (mounted) {
-            showAppToast(l10n.connectFailed);
-          }
-          return;
+        afterAuth(true, device);
+        return true;
+      }
+      late final ConnectionAttemptResult result;
+      try {
+        result = await socketManager.connectToServer(
+          ConnectionAttemptRequest(
+            requestId: '$targetKey:$attemptGeneration',
+            endpoint: PeerEndpoint(host: host, port: port),
+            expectedPeerId: device.uid,
+            mode: ConnectionAttemptMode.interactive,
+          ),
+        );
+      } on ArgumentError {
+        return false;
+      }
+      if (!mounted ||
+          !_isCurrentRoute ||
+          !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+        return false;
+      }
+      if (result.isAuthenticated &&
+          result.peerId == device.uid &&
+          socketManager.isCurrentConnectionGeneration(
+            result.peerId,
+            result.generation,
+          )) {
+        final stored = await db.fetchDevice(result.peerId);
+        if (!mounted ||
+            !_isCurrentRoute ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration) ||
+            stored == null ||
+            !socketManager.isCurrentConnectionGeneration(
+              result.peerId,
+              result.generation,
+            )) {
+          return false;
         }
-        final displayMessage = message == 'upgrade_required'
-            ? l10n.pairingUpgradeRequired
-            : message == 'pairing_expired'
-                ? l10n.pairingExpired
-                : l10n.connectFailed;
+        socketManager.selectPeer(result.peerId);
+        ConnectionCoordinator().markConnected(stored);
+        setState(() {
+          device = stored;
+        });
+        _refreshCurrentDeviceState();
+        unawaited(_maybeAutoStartRemoteInput());
+        return true;
+      }
+      if (result.status != ConnectionAttemptStatus.cancelled) {
+        final displayMessage =
+            result.reason == ConnectionAttemptReason.protocolMismatch
+                ? l10n.pairingUpgradeRequired
+                : result.reason == ConnectionAttemptReason.pairingExpired
+                    ? l10n.pairingExpired
+                    : l10n.connectFailed;
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??
@@ -1288,13 +1335,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
           },
           task: (VoidCallback onCancel) async {},
         );
-        return;
       }
-      if (!completer.isCompleted) {
-        completer.complete(true);
-      }
-    }, peerId: device.uid);
-    return completer.future;
+      return false;
+    } finally {
+      _connectionAttempts.complete(targetKey, attemptGeneration);
+    }
   }
 
   Future<bool> _restoreConnectionIfNeeded() async {
@@ -1304,20 +1349,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_canToggleConnection) {
       return false;
     }
-    final connected = await _connectServer(device.host, device.port);
-    if (!connected) {
-      return false;
-    }
-    for (var i = 0; i < 20; i++) {
-      if (!mounted) {
-        return false;
-      }
-      if (_isConnectedSession || socketManager.isConnectedTo(device.uid)) {
-        return true;
-      }
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
-    return _isConnectedSession;
+    return _connectServer(device.host, device.port);
   }
 
   Future<void> _toggleAudioShare() async {
@@ -2072,7 +2104,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) {
-    if (!allow || deviceData == null) {
+    if (!mounted || !_isCurrentRoute || !allow || deviceData == null) {
       return;
     }
     if (deviceData.uid != device.uid) {

@@ -46,7 +46,9 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/state/peer_reconnect_controller.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:path/path.dart' as p;
 
@@ -83,6 +85,44 @@ typedef _IdentityPinPlan = ({
   String expectedPublicKey,
 });
 
+typedef PeerReconnectControllerFactory = PeerReconnectController Function({
+  required ReconnectAttempt attempt,
+  required ReconnectEligibility eligibility,
+});
+typedef LocalPeerProfileLoader = Future<PeerProfile> Function();
+
+enum ConnectionAuthCommitStage {
+  beforePersistence,
+  afterPersistence,
+  beforeRegistration,
+  afterRegistration,
+}
+
+typedef ConnectionAuthCommitBarrier = Future<void> Function(
+  ConnectionAuthCommitStage stage,
+  String peerId,
+);
+
+enum PeerDisconnectCause {
+  network,
+  watchdog,
+  manual,
+  trustRevoked,
+  deviceDeleted,
+  superseded,
+  protocolFailure,
+  localFailure,
+  managerClose,
+}
+
+enum _PeerPolicyDisposition { manualDisconnect, trustRevoked, deviceDeleted }
+
+enum _PeerAuthSuppressionReason {
+  manualDisconnect,
+  trustRevoked,
+  deviceDeleted,
+}
+
 final class ServerStartResult {
   const ServerStartResult.success(this.port)
       : isSuccess = true,
@@ -98,19 +138,39 @@ final class ServerStartResult {
 }
 
 final class _PendingOutgoingConnection {
-  _PendingOutgoingConnection() : httpClient = HttpClient();
+  _PendingOutgoingConnection(
+    this.request, {
+    required this.globalPolicyEpoch,
+    required this.peerPolicyEpoch,
+    required this.startedPolicyRevision,
+  }) : httpClient = HttpClient();
 
+  final ConnectionAttemptRequest request;
+  final int globalPolicyEpoch;
+  int peerPolicyEpoch;
+  int startedPolicyRevision;
   final HttpClient httpClient;
   WebSocketChannel? channel;
-  HttpClientRequest? request;
-  Future<void>? completion;
+  HttpClientRequest? transportRequest;
+  PeerSocketSession? session;
+  String verifiedPeerId = '';
+  Future<ConnectionAttemptResult>? completion;
   Future<void>? _sinkCloseFuture;
   bool isCancelled = false;
   bool isReady = false;
+  bool allowsDeviceRepair = false;
+  ConnectionAttemptReason cancellationReason =
+      ConnectionAttemptReason.requestCancelled;
 
-  Future<void> cancel() {
+  Future<void> cancel({
+    ConnectionAttemptReason reason = ConnectionAttemptReason.requestCancelled,
+  }) {
+    session?.close();
+    if (!isCancelled) {
+      cancellationReason = reason;
+    }
     isCancelled = true;
-    request?.abort(const _OutgoingConnectionCancelled());
+    transportRequest?.abort(const _OutgoingConnectionCancelled());
     httpClient.close(force: true);
     final sink = channel?.sink;
     if (sink != null) {
@@ -145,9 +205,12 @@ class WsSvrManager {
       RemoteInputControlAction.values.map((action) => action.name).toSet();
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
-  static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
-  static const String connectionClosingMessage = 'connection_closing';
-  static const String connectionCancelledMessage = 'connection_cancelled';
+
+  static PeerReconnectController _defaultReconnectControllerFactory({
+    required ReconnectAttempt attempt,
+    required ReconnectEligibility eligibility,
+  }) =>
+      PeerReconnectController(attempt: attempt, eligibility: eligibility);
   // 创建一个私有的静态实例变量
   static final WsSvrManager _singleton = WsSvrManager._internal();
 
@@ -160,6 +223,14 @@ class WsSvrManager {
     bool Function(SessionUpgradeClaim claim)? audioGroupClaimValidator,
     AudioGroupPacketClaimValidator? audioGroupPacketValidator,
     bool Function(SessionUpgradeClaim claim)? mediaPeerClaimValidator,
+    LocalDatabase? database,
+    Future<bool> Function()? autoConnectEnabled,
+    Future<void> Function(bool enabled)? setAutoConnectEnabled,
+    PeerReconnectControllerFactory? reconnectControllerFactory,
+    DeviceIdentityStore? identityStore,
+    LocalPeerProfileLoader? localPeerProfileLoader,
+    bool manageSharedCoordinators = true,
+    ConnectionAuthCommitBarrier? authCommitBarrier,
   })  : _admission = admission ?? SocketAdmissionController(),
         _audioManager = audioManager ?? AudioShareManager.shared,
         _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -167,7 +238,18 @@ class WsSvrManager {
             sessionUpgradeTokens ?? SessionUpgradeTokenRegistry(),
         _audioGroupClaimValidator = audioGroupClaimValidator,
         _audioGroupPacketValidator = audioGroupPacketValidator,
-        _mediaPeerClaimValidator = mediaPeerClaimValidator;
+        _mediaPeerClaimValidator = mediaPeerClaimValidator,
+        _database = database ?? LocalDatabase(),
+        _autoConnectEnabled =
+            autoConnectEnabled ?? LocalSetting().autoConnectEnabled,
+        _setAutoConnectEnabled =
+            setAutoConnectEnabled ?? LocalSetting().setAutoConnectEnabled,
+        _reconnectControllerFactory =
+            reconnectControllerFactory ?? _defaultReconnectControllerFactory,
+        _identityStore = identityStore ?? DeviceIdentityStore(),
+        _localPeerProfileLoader = localPeerProfileLoader,
+        _manageSharedCoordinators = manageSharedCoordinators,
+        _authCommitBarrier = authCommitBarrier;
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -178,6 +260,14 @@ class WsSvrManager {
     bool Function(SessionUpgradeClaim claim)? audioGroupClaimValidator,
     AudioGroupPacketClaimValidator? audioGroupPacketValidator,
     bool Function(SessionUpgradeClaim claim)? mediaPeerClaimValidator,
+    LocalDatabase? database,
+    Future<bool> Function()? autoConnectEnabled,
+    Future<void> Function(bool enabled)? setAutoConnectEnabled,
+    PeerReconnectControllerFactory? reconnectControllerFactory,
+    DeviceIdentityStore? identityStore,
+    LocalPeerProfileLoader? localPeerProfileLoader,
+    bool manageSharedCoordinators = true,
+    ConnectionAuthCommitBarrier? authCommitBarrier,
   }) : this._internal(
           admission: admission,
           audioManager: audioManager,
@@ -186,6 +276,14 @@ class WsSvrManager {
           audioGroupClaimValidator: audioGroupClaimValidator,
           audioGroupPacketValidator: audioGroupPacketValidator,
           mediaPeerClaimValidator: mediaPeerClaimValidator,
+          database: database,
+          autoConnectEnabled: autoConnectEnabled,
+          setAutoConnectEnabled: setAutoConnectEnabled,
+          reconnectControllerFactory: reconnectControllerFactory,
+          identityStore: identityStore,
+          localPeerProfileLoader: localPeerProfileLoader,
+          manageSharedCoordinators: manageSharedCoordinators,
+          authCommitBarrier: authCommitBarrier,
         );
 
   // 工厂构造函数，返回单例实例
@@ -207,7 +305,7 @@ class WsSvrManager {
       <WebSocketSink, Completer<_SocketAuthResult>>{};
   final Map<WebSocketSink, ({String host, int port})> _endpointsBySink =
       <WebSocketSink, ({String host, int port})>{};
-  final DeviceIdentityStore _identityStore = DeviceIdentityStore();
+  final DeviceIdentityStore _identityStore;
   int _nextConnectionGeneration = 0;
   final AuthRequestGate _authRequestGate = AuthRequestGate();
   final Map<WebSocketSink, String> _outgoingAuthKeysBySink =
@@ -222,9 +320,17 @@ class WsSvrManager {
       <WebSocketSink, Timer>{};
   final Map<WebSocketSink, Future<void>> _socketCleanups =
       <WebSocketSink, Future<void>>{};
+  final Map<WebSocketSink, PeerDisconnectCause> _terminalDisconnectCauses =
+      <WebSocketSink, PeerDisconnectCause>{};
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
   final Set<_PendingOutgoingConnection> _pendingOutgoingConnections =
       <_PendingOutgoingConnection>{};
+  final Map<String, _PendingOutgoingConnection> _pendingOutgoingByRequestId =
+      <String, _PendingOutgoingConnection>{};
+  final Map<String, Set<_PendingOutgoingConnection>> _pendingOutgoingByPeerId =
+      <String, Set<_PendingOutgoingConnection>>{};
+  final Map<WebSocketSink, _PendingOutgoingConnection> _pendingOutgoingBySink =
+      <WebSocketSink, _PendingOutgoingConnection>{};
   final OutgoingTextRetryRegistry _outgoingTextRetries =
       OutgoingTextRetryRegistry();
   final OutgoingTextSendLocks _outgoingTextSendLocks = OutgoingTextSendLocks();
@@ -239,6 +345,29 @@ class WsSvrManager {
   final bool Function(SessionUpgradeClaim claim)? _audioGroupClaimValidator;
   final AudioGroupPacketClaimValidator? _audioGroupPacketValidator;
   final bool Function(SessionUpgradeClaim claim)? _mediaPeerClaimValidator;
+  final LocalDatabase _database;
+  final Future<bool> Function() _autoConnectEnabled;
+  final Future<void> Function(bool enabled) _setAutoConnectEnabled;
+  final PeerReconnectControllerFactory _reconnectControllerFactory;
+  final LocalPeerProfileLoader? _localPeerProfileLoader;
+  final bool _manageSharedCoordinators;
+  final ConnectionAuthCommitBarrier? _authCommitBarrier;
+  final Map<String, PeerReconnectController> _reconnectControllers =
+      <String, PeerReconnectController>{};
+  final Map<String, int> _peerPolicyEpochs = <String, int>{};
+  final Map<String, int> _peerInvalidationRevisions = <String, int>{};
+  final Map<String, _PeerPolicyDisposition> _peerPolicyDispositions =
+      <String, _PeerPolicyDisposition>{};
+  final Map<String, Set<_PeerAuthSuppressionReason>> _peerAuthSuppressions =
+      <String, Set<_PeerAuthSuppressionReason>>{};
+  final Map<PeerSocketSession, int> _sessionStartedPolicyRevisions =
+      <PeerSocketSession, int>{};
+  final Map<String, Future<void>> _peerAuthenticationTails =
+      <String, Future<void>>{};
+  int _globalPolicyEpoch = 0;
+  int _policyRevision = 0;
+  bool _reconnectManagerClosed = false;
+  bool? _autoConnectPolicyOverride;
   Future<void> _serverLifecycleTail = Future<void>.value();
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
@@ -277,6 +406,7 @@ class WsSvrManager {
     dispatchOutgoingMessage: _dispatchOutgoingMessage,
     ackMessage: _ackMessage,
     wireMessageReplayGuard: _wireMessageReplayGuard,
+    database: () => _database,
   );
 
   PeerProfile? get _selectedRemoteProfile =>
@@ -404,12 +534,33 @@ class WsSvrManager {
     return _peerConnections.isConnectedTo(peerId);
   }
 
+  bool isCurrentConnectionGeneration(String peerId, int generation) =>
+      _peerConnections.isCurrent(peerId, generation);
+
   void selectPeer(String peerId) {
     if (!_peerConnections.isConnectedTo(peerId)) {
       return;
     }
     receiver = peerId;
+    for (final entry in _peerIdsBySink.entries) {
+      if (entry.value == peerId) {
+        _sink = entry.key;
+        break;
+      }
+    }
+    _setSelectedRemoteProfile(_remoteProfilesByPeerId[peerId]);
   }
+
+  @visibleForTesting
+  Future<PeerProfile?> debugWaitForSelectedProfileUpdate() {
+    final completer = Completer<PeerProfile?>();
+    _remoteProfileRefreshWaiters.add(completer);
+    return completer.future;
+  }
+
+  @visibleForTesting
+  Future<void> debugSendProfileHeartbeatTo(String peerId) =>
+      _heartBeat(peerId: peerId);
 
   String _shortSessionId(String sessionId) {
     if (sessionId.length <= 8) {
@@ -574,6 +725,28 @@ class WsSvrManager {
     );
   }
 
+  @visibleForTesting
+  bool debugSendMalformedTransportFrame(String peerId) {
+    for (final entry in _peerIdsBySink.entries) {
+      if (entry.value == peerId) {
+        entry.key.add(Uint8List.fromList(const <int>[0]));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  Future<bool> debugDropPeerTransport(String peerId) async {
+    for (final entry in _peerIdsBySink.entries) {
+      if (entry.value == peerId) {
+        await entry.key.close();
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _registerPeerConnection({
     required String peerId,
     required WebSocketSink sink,
@@ -610,6 +783,7 @@ class WsSvrManager {
       afterRemove: (binding) => _afterPeerRemoved(
         binding,
         closingSession: _sessionsByPeerId[peerId],
+        cause: PeerDisconnectCause.superseded,
       ),
       afterRegister: (binding) {
         if (binding.generation != session.connectionGeneration ||
@@ -618,8 +792,11 @@ class WsSvrManager {
         }
         _sessionsByPeerId[peerId] = session;
         _peerIdsBySink[sink] = peerId;
-        receiver = peerId;
-        _sink = sink;
+        if (session.role == PeerSocketRole.server &&
+            (receiver.isEmpty || receiver == peerId)) {
+          receiver = peerId;
+          _sink = sink;
+        }
         _setRemoteProfile(profile, peerId: peerId);
       },
     );
@@ -652,7 +829,13 @@ class WsSvrManager {
   }
 
   Future<void> _handlePeerSocketDone(WebSocketSink sink) async {
+    final disconnectCause =
+        _terminalDisconnectCauses.remove(sink) ?? PeerDisconnectCause.network;
     final session = _sessionsBySink.remove(sink);
+    if (session != null &&
+        !_peerAuthenticationTails.containsKey(session.remotePeerId)) {
+      _sessionStartedPolicyRevisions.remove(session);
+    }
     session?.close();
     await session?.drainOutbound();
     session?.releaseAdmission();
@@ -678,6 +861,7 @@ class WsSvrManager {
       afterRemove: (binding) => _afterPeerRemoved(
         binding,
         closingSession: session,
+        cause: disconnectCause,
       ),
     )) {
       return;
@@ -706,6 +890,7 @@ class WsSvrManager {
         _ignoreFuture(sink.close(), context: 'close expired pairing socket');
       },
     );
+    _sessionStartedPolicyRevisions[session] = _policyRevision;
     _sessionsBySink[sink] = session;
     return session;
   }
@@ -815,8 +1000,10 @@ class WsSvrManager {
   Future<void> _failSocketSession(
     PeerSocketSession session,
     WebSocketSink sink,
-    String message,
-  ) async {
+    String message, {
+    PeerDisconnectCause cause = PeerDisconnectCause.protocolFailure,
+  }) async {
+    _terminalDisconnectCauses[sink] = cause;
     session.close();
     _identityPinPlansBySink.remove(sink);
     _completeSocketAuth(sink, false, message);
@@ -1011,6 +1198,7 @@ class WsSvrManager {
       );
       _server = server;
       started = true;
+      _reconnectManagerClosed = false;
       _acceptingUpgrades = !_closeOperationQueued;
       _acceptingOutgoingConnections = !_closeOperationQueued;
       final host = '${server.address.host}:${server.port}';
@@ -1127,77 +1315,632 @@ class WsSvrManager {
     }
   }
 
-  Future<void> connectToServer(
-    String host,
-    int port,
-    var callback, {
-    String? peerId,
-    String? intendedPublicKeyHash,
-  }) {
-    final attempt = _PendingOutgoingConnection();
-    final completer = Completer<void>();
-    final completion = completer.future;
-    attempt.completion = completion;
-    _pendingOutgoingConnections.add(attempt);
-    final operation = _connectToServer(
-      host,
-      port,
-      callback,
-      attempt: attempt,
-      peerId: peerId,
-      intendedPublicKeyHash: intendedPublicKeyHash,
+  PeerReconnectController _reconnectControllerFor(String peerId) {
+    return _reconnectControllers.putIfAbsent(
+      peerId,
+      () => _reconnectControllerFactory(
+        attempt: _runReconnectAttempt,
+        eligibility: _reconnectEligibility,
+      ),
     );
-    unawaited(operation.then<void>((_) {
-      _pendingOutgoingConnections.remove(attempt);
-      attempt.httpClient.close();
-      completer.complete();
-    }, onError: (Object error, StackTrace stackTrace) {
-      _pendingOutgoingConnections.remove(attempt);
-      attempt.httpClient.close(force: true);
-      completer.completeError(error, stackTrace);
-    }));
-    return completion;
   }
 
-  Future<void> _connectToServer(
+  void updateReconnectEndpoint(
+    String peerId,
     String host,
-    int port,
-    var callback, {
-    required _PendingOutgoingConnection attempt,
-    String? peerId,
-    String? intendedPublicKeyHash,
-  }) async {
-    var callbackReported = false;
-    void report(bool ok, Object? message) {
-      if (callbackReported) {
-        return;
-      }
-      callbackReported = true;
-      try {
-        callback(ok, message);
-      } catch (error, stackTrace) {
-        logger.i('连接结果回调失败: ${error.runtimeType}\n$stackTrace');
-      }
-    }
-
-    if (!_acceptingOutgoingConnections) {
-      report(false, connectionClosingMessage);
+    int port, {
+    bool accelerate = true,
+  }) {
+    if (peerId.isEmpty || _reconnectManagerClosed) {
       return;
     }
+    final target = ReconnectTarget(peerId: peerId, host: host, port: port);
+    _reconnectControllerFor(peerId).updateTarget(
+      target,
+      accelerate: accelerate,
+    );
+  }
+
+  void scheduleReconnect(String peerId, String host, int port) {
+    if (peerId.isEmpty || _reconnectManagerClosed) {
+      return;
+    }
+    final target = ReconnectTarget(peerId: peerId, host: host, port: port);
+    scheduleReconnectTarget(target);
+  }
+
+  @visibleForTesting
+  void scheduleReconnectTarget(ReconnectTarget target) {
+    if (_reconnectManagerClosed) {
+      return;
+    }
+    final controller = _reconnectControllerFor(target.peerId);
+    if (controller.target != target) {
+      controller.updateTarget(target);
+    }
+    controller.scheduleReconnect(target);
+  }
+
+  ReconnectTarget? reconnectTargetFor(String peerId) =>
+      _reconnectControllers[peerId]?.target;
+
+  Set<ReconnectSuppressionReason> reconnectSuppressionsFor(String peerId) =>
+      _reconnectControllers[peerId]?.suppressionReasons ??
+      const <ReconnectSuppressionReason>{};
+
+  FutureOr<ReconnectEligibilityResult> _reconnectEligibility(
+    ReconnectTarget target,
+  ) async {
+    if (_reconnectManagerClosed ||
+        _autoConnectPolicyOverride == false ||
+        !await _autoConnectEnabled()) {
+      return ReconnectEligibilityResult.autoConnectDisabled;
+    }
+    final stored = await _database.fetchDevice(target.peerId);
+    if (stored == null || !stored.auth) {
+      return ReconnectEligibilityResult.trustRevoked;
+    }
+    if (stored.identityPublicKey.isEmpty) {
+      return ReconnectEligibilityResult.identityUnpinned;
+    }
+    try {
+      identityPublicKeyHash(stored.identityPublicKey);
+    } on Object {
+      return ReconnectEligibilityResult.identityUnpinned;
+    }
+    return ReconnectEligibilityResult.eligible;
+  }
+
+  FutureOr<ConnectionAttemptStatus> _runReconnectAttempt(
+    ReconnectAttemptContext context,
+  ) async {
+    final target = context.target;
+    final eligibility = await _reconnectEligibility(target);
+    if (!context.isCurrent ||
+        eligibility != ReconnectEligibilityResult.eligible) {
+      return ConnectionAttemptStatus.cancelled;
+    }
+    final stored = await _database.fetchDevice(target.peerId);
+    if (!context.isCurrent ||
+        stored == null ||
+        !stored.auth ||
+        stored.identityPublicKey.isEmpty) {
+      return ConnectionAttemptStatus.cancelled;
+    }
+    late final String publicKeyHash;
+    try {
+      publicKeyHash = identityPublicKeyHash(stored.identityPublicKey);
+    } on Object {
+      return ConnectionAttemptStatus.rejected;
+    }
+    final result = await connectToServer(
+      ConnectionAttemptRequest(
+        requestId:
+            'reconnect:${target.peerId}:${context.generation}:${uuid.v4()}',
+        endpoint: target.endpoint,
+        expectedPeerId: target.peerId,
+        expectedPublicKeyHash: publicKeyHash,
+        mode: ConnectionAttemptMode.automatic,
+      ),
+      whenCancelled: context.whenCancelled,
+    );
+    if (context.isCurrent && result.isAuthenticated) {
+      final storedDevice = await _database.fetchDevice(result.peerId);
+      if (context.isCurrent &&
+          storedDevice != null &&
+          _peerConnections.isCurrent(result.peerId, result.generation)) {
+        final shouldSelect = receiver.isEmpty || receiver == result.peerId;
+        if (shouldSelect) {
+          selectPeer(result.peerId);
+        }
+        if (_manageSharedCoordinators) {
+          ConnectionCoordinator().markConnected(
+            storedDevice,
+            select: shouldSelect,
+          );
+        }
+      }
+    }
+    return result.status;
+  }
+
+  void _recordAuthenticatedReconnect(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    DeviceData device,
+  ) {
+    if (_reconnectManagerClosed || device.uid.isEmpty) {
+      return;
+    }
+    if (session.role == PeerSocketRole.server) {
+      final controller = _reconnectControllers[device.uid];
+      controller?.identityPinned();
+      controller?.trustRestored();
+      controller?.eligibilityRestored();
+      controller?.authenticated();
+      return;
+    }
+    final pending = _pendingOutgoingBySink[sink];
+    final endpoint = pending?.request.endpoint;
+    if (pending == null || endpoint == null) {
+      return;
+    }
+    final target =
+        ReconnectTarget.endpoint(peerId: device.uid, endpoint: endpoint);
+    final controller = _reconnectControllerFor(device.uid);
+    if (controller.target != target) {
+      controller.updateTarget(target, accelerate: false);
+    }
+    controller.identityPinned();
+    controller.trustRestored();
+    controller.eligibilityRestored();
+    if (!pending.request.isAutomatic) {
+      controller.authenticated();
+    }
+  }
+
+  void _invalidatePeerPolicy(
+    String peerId,
+    _PeerPolicyDisposition disposition,
+  ) {
+    _policyRevision += 1;
+    _peerInvalidationRevisions[peerId] = _policyRevision;
+    _peerPolicyDispositions[peerId] = disposition;
+    _peerPolicyEpochs[peerId] = (_peerPolicyEpochs[peerId] ?? 0) + 1;
+  }
+
+  Set<_PeerAuthSuppressionReason> _authSuppressionsFor(String peerId) =>
+      _peerAuthSuppressions.putIfAbsent(
+        peerId,
+        () => <_PeerAuthSuppressionReason>{},
+      );
+
+  void _addPeerAuthSuppression(
+    String peerId,
+    _PeerAuthSuppressionReason reason,
+  ) {
+    _authSuppressionsFor(peerId).add(reason);
+  }
+
+  void _replacePeerAuthSuppressionForDelete(String peerId) {
+    _authSuppressionsFor(peerId)
+      ..clear()
+      ..add(_PeerAuthSuppressionReason.deviceDeleted);
+  }
+
+  bool _removePeerAuthSuppression(
+    String peerId,
+    _PeerAuthSuppressionReason reason,
+  ) {
+    final suppressions = _peerAuthSuppressions[peerId];
+    if (suppressions == null || !suppressions.remove(reason)) {
+      return false;
+    }
+    if (suppressions.isEmpty) {
+      _peerAuthSuppressions.remove(peerId);
+    }
+    _policyRevision += 1;
+    _peerInvalidationRevisions[peerId] = _policyRevision;
+    _peerPolicyEpochs[peerId] = (_peerPolicyEpochs[peerId] ?? 0) + 1;
+    return true;
+  }
+
+  bool _isPeerAuthenticationAllowed(
+    String peerId, {
+    _PendingOutgoingConnection? attempt,
+  }) {
+    final suppressions = _peerAuthSuppressions[peerId];
+    if (suppressions == null || suppressions.isEmpty) {
+      return true;
+    }
+    return attempt?.allowsDeviceRepair == true &&
+        suppressions.length == 1 &&
+        suppressions.contains(_PeerAuthSuppressionReason.deviceDeleted);
+  }
+
+  void _authorizeInteractiveAttemptForPeer(
+    _PendingOutgoingConnection attempt,
+    String peerId,
+  ) {
+    if (!attempt.request.isAutomatic) {
+      _removePeerAuthSuppression(
+        peerId,
+        _PeerAuthSuppressionReason.manualDisconnect,
+      );
+      final suppressions = _peerAuthSuppressions[peerId];
+      attempt.allowsDeviceRepair =
+          suppressions?.contains(_PeerAuthSuppressionReason.deviceDeleted) ==
+                  true &&
+              suppressions?.contains(_PeerAuthSuppressionReason.trustRevoked) !=
+                  true;
+    }
+    attempt.peerPolicyEpoch = _peerPolicyEpochs[peerId] ?? 0;
+    attempt.startedPolicyRevision = _policyRevision;
+  }
+
+  void _completeDeviceRepairIfNeeded(
+    _PendingOutgoingConnection? attempt,
+    String peerId,
+  ) {
+    if (attempt?.allowsDeviceRepair != true) {
+      return;
+    }
+    _removePeerAuthSuppression(
+      peerId,
+      _PeerAuthSuppressionReason.deviceDeleted,
+    );
+    attempt!.allowsDeviceRepair = false;
+  }
+
+  void _cancelPendingAuthSessionsForPeer(String peerId) {
+    for (final entry in _sessionsBySink.entries.toList(growable: false)) {
+      final session = entry.value;
+      if (session.remotePeerId != peerId || session.isAuthenticated) {
+        continue;
+      }
+      session.close();
+      _ignoreFuture(
+        entry.key.close(),
+        context: 'cancel invalidated peer authentication',
+      );
+    }
+  }
+
+  Future<void> _cancelPendingAttemptsForPeer(
+    String peerId,
+    ConnectionAttemptReason reason,
+  ) async {
+    final attempts =
+        _pendingOutgoingByPeerId[peerId]?.toList(growable: false) ??
+            const <_PendingOutgoingConnection>[];
+    final cancellations = attempts
+        .map((attempt) => attempt.cancel(reason: reason))
+        .toList(growable: false);
+    await Future.wait(cancellations);
+    await Future.wait(
+      attempts.map(
+        (attempt) =>
+            attempt.completion ??
+            Future<ConnectionAttemptResult>.value(
+              ConnectionAttemptResult.cancelled(
+                requestId: attempt.request.requestId,
+              ),
+            ),
+      ),
+    );
+  }
+
+  Future<T> _serializePeerAuthentication<T>(
+    String peerId,
+    Future<T> Function() operation,
+  ) {
+    final previous = _peerAuthenticationTails[peerId];
+    final result = previous == null
+        ? Future<T>.sync(operation)
+        : previous.then<T>((_) => operation());
+    final tail = result.then<void>((_) {}, onError: (_, __) {});
+    _peerAuthenticationTails[peerId] = tail;
+    unawaited(tail.whenComplete(() {
+      if (identical(_peerAuthenticationTails[peerId], tail)) {
+        _peerAuthenticationTails.remove(peerId);
+      }
+    }));
+    return result;
+  }
+
+  Future<void> _waitForPeerAuthentication(String peerId) async {
+    await (_peerAuthenticationTails[peerId] ?? Future<void>.value());
+  }
+
+  Future<void> _waitForAuthCommitBarrier(
+    ConnectionAuthCommitStage stage,
+    String peerId,
+  ) async {
+    await _authCommitBarrier?.call(stage, peerId);
+  }
+
+  bool _isPendingPolicyCurrent(_PendingOutgoingConnection attempt) {
+    if (attempt.isCancelled ||
+        (attempt.request.isAutomatic &&
+            attempt.globalPolicyEpoch != _globalPolicyEpoch)) {
+      return false;
+    }
+    final peerId = attempt.verifiedPeerId.isNotEmpty
+        ? attempt.verifiedPeerId
+        : attempt.request.expectedPeerId;
+    return peerId.isEmpty ||
+        (attempt.peerPolicyEpoch == (_peerPolicyEpochs[peerId] ?? 0) &&
+            (_peerInvalidationRevisions[peerId] ?? 0) <=
+                attempt.startedPolicyRevision &&
+            _isPeerAuthenticationAllowed(peerId, attempt: attempt));
+  }
+
+  Future<void> setAutoConnectPolicy(bool enabled) async {
+    if (!enabled) {
+      _autoConnectPolicyOverride = false;
+      _globalPolicyEpoch += 1;
+      for (final controller in _reconnectControllers.values) {
+        controller.autoConnectDisabled();
+      }
+      final automaticAttempts = _pendingOutgoingConnections
+          .where((attempt) => attempt.request.isAutomatic)
+          .toList(growable: false);
+      final cancellations = automaticAttempts
+          .map(
+            (attempt) => attempt.cancel(
+              reason: ConnectionAttemptReason.autoConnectDisabled,
+            ),
+          )
+          .toList(growable: false);
+      await Future.wait(cancellations);
+      await Future.wait(
+        automaticAttempts.map(
+          (attempt) =>
+              attempt.completion ??
+              Future<ConnectionAttemptResult>.value(
+                ConnectionAttemptResult.cancelled(
+                  requestId: attempt.request.requestId,
+                ),
+              ),
+        ),
+      );
+      await _setAutoConnectEnabled(false);
+      return;
+    }
+    await _setAutoConnectEnabled(true);
+    _autoConnectPolicyOverride = true;
+    for (final controller in _reconnectControllers.values) {
+      controller.autoConnectEnabled();
+      final target = controller.target;
+      if (target != null && !controller.isSuppressed) {
+        controller.scheduleReconnect(target);
+      }
+    }
+  }
+
+  Future<bool> setPeerTrust(String peerId, bool trusted) async {
+    if (peerId.isEmpty) {
+      return false;
+    }
+    if (!trusted) {
+      _addPeerAuthSuppression(
+        peerId,
+        _PeerAuthSuppressionReason.trustRevoked,
+      );
+      _invalidatePeerPolicy(peerId, _PeerPolicyDisposition.trustRevoked);
+      _cancelPendingAuthSessionsForPeer(peerId);
+      _reconnectControllers[peerId]?.trustRevoked();
+      await _cancelPendingAttemptsForPeer(
+        peerId,
+        ConnectionAttemptReason.trustRevoked,
+      );
+      await _waitForPeerAuthentication(peerId);
+      await _removePeerConnection(peerId, PeerDisconnectCause.trustRevoked);
+      await _database.authDevice(peerId, false);
+      return true;
+    }
+    final stored = await _database.fetchDevice(peerId);
+    if (stored == null || stored.identityPublicKey.isEmpty) {
+      _reconnectControllers[peerId]?.identityUnpinned();
+      return false;
+    }
+    final updated =
+        await _database.authDeviceIfPinned(peerId, stored.identityPublicKey);
+    if (updated) {
+      _removePeerAuthSuppression(
+        peerId,
+        _PeerAuthSuppressionReason.trustRevoked,
+      );
+      final controller = _reconnectControllers[peerId];
+      controller?.identityPinned();
+      controller?.trustRestored();
+      final target = controller?.target;
+      if (controller != null && target != null && !controller.isSuppressed) {
+        controller.scheduleReconnect(target);
+      }
+    }
+    return updated;
+  }
+
+  Future<void> deletePeer(String peerId) async {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _replacePeerAuthSuppressionForDelete(peerId);
+    _invalidatePeerPolicy(peerId, _PeerPolicyDisposition.deviceDeleted);
+    _cancelPendingAuthSessionsForPeer(peerId);
+    _reconnectControllers[peerId]?.trustRevoked();
+    await _cancelPendingAttemptsForPeer(
+      peerId,
+      ConnectionAttemptReason.deviceDeleted,
+    );
+    await _waitForPeerAuthentication(peerId);
+    await _removePeerConnection(peerId, PeerDisconnectCause.deviceDeleted);
+    await _database.clearDevices(<String>[peerId], localPeerId: '');
+  }
+
+  Future<ConnectionAttemptResult> connectToServer(
+    ConnectionAttemptRequest request, {
+    Future<void>? whenCancelled,
+  }) {
+    if (request.mode == ConnectionAttemptMode.interactive &&
+        _reconnectManagerClosed &&
+        _acceptingOutgoingConnections) {
+      _reconnectManagerClosed = false;
+    }
+    if (request.mode == ConnectionAttemptMode.interactive &&
+        request.expectedPeerId.isNotEmpty &&
+        !_reconnectManagerClosed) {
+      final target = ReconnectTarget.endpoint(
+        peerId: request.expectedPeerId,
+        endpoint: request.endpoint,
+      );
+      _reconnectControllerFor(request.expectedPeerId)
+          .unsuppressForManualConnect(target);
+    }
+    if (_pendingOutgoingByRequestId.containsKey(request.requestId)) {
+      return Future<ConnectionAttemptResult>.value(
+        ConnectionAttemptResult.rejected(
+          requestId: request.requestId,
+          reason: ConnectionAttemptReason.duplicateRequest,
+        ),
+      );
+    }
+    final attempt = _PendingOutgoingConnection(
+      request,
+      globalPolicyEpoch: _globalPolicyEpoch,
+      peerPolicyEpoch: _peerPolicyEpochs[request.expectedPeerId] ?? 0,
+      startedPolicyRevision: _policyRevision,
+    );
+    if (request.mode == ConnectionAttemptMode.interactive &&
+        request.expectedPeerId.isNotEmpty) {
+      _authorizeInteractiveAttemptForPeer(attempt, request.expectedPeerId);
+    }
+    final completer = Completer<ConnectionAttemptResult>();
+    attempt.completion = completer.future;
+    _trackPendingOutgoing(attempt);
+    if (whenCancelled != null) {
+      unawaited(whenCancelled.then<void>((_) {
+        if (_pendingOutgoingByRequestId[request.requestId] == attempt) {
+          unawaited(attempt.cancel());
+        }
+      }));
+    }
+    final operation = _connectToServer(attempt);
+    unawaited(operation.then<void>((result) {
+      _untrackPendingOutgoing(attempt);
+      attempt.httpClient.close();
+      if (!completer.isCompleted) {
+        completer.complete(result);
+      }
+    }, onError: (Object _, StackTrace __) {
+      _untrackPendingOutgoing(attempt);
+      attempt.httpClient.close(force: true);
+      if (!completer.isCompleted) {
+        completer.complete(
+          ConnectionAttemptResult.networkFailure(
+            requestId: request.requestId,
+          ),
+        );
+      }
+    }));
+    return completer.future;
+  }
+
+  bool hasPendingConnectionAttempt(String requestId) =>
+      _pendingOutgoingByRequestId.containsKey(requestId);
+
+  bool hasPendingConnectionAttemptForPeer(String peerId) =>
+      _pendingOutgoingByPeerId[peerId]?.isNotEmpty == true;
+
+  @visibleForTesting
+  bool debugBindPendingConnectionPeer(String requestId, String peerId) {
+    final attempt = _pendingOutgoingByRequestId[requestId];
+    if (attempt == null) {
+      return false;
+    }
+    _bindPendingOutgoingPeer(attempt, peerId);
+    return _isPendingPolicyCurrent(attempt);
+  }
+
+  Future<void> cancelConnectionAttempt(String requestId) async {
+    final attempt = _pendingOutgoingByRequestId[requestId];
+    if (attempt != null) {
+      await attempt.cancel();
+      await attempt.completion;
+    }
+  }
+
+  void _trackPendingOutgoing(_PendingOutgoingConnection attempt) {
+    _pendingOutgoingConnections.add(attempt);
+    _pendingOutgoingByRequestId[attempt.request.requestId] = attempt;
+    _indexPendingOutgoingPeer(attempt, attempt.request.expectedPeerId);
+  }
+
+  void _indexPendingOutgoingPeer(
+    _PendingOutgoingConnection attempt,
+    String peerId,
+  ) {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _pendingOutgoingByPeerId
+        .putIfAbsent(peerId, () => <_PendingOutgoingConnection>{})
+        .add(attempt);
+  }
+
+  void _bindPendingOutgoingPeer(
+    _PendingOutgoingConnection attempt,
+    String peerId,
+  ) {
+    if (attempt.verifiedPeerId == peerId) {
+      return;
+    }
+    if (attempt.verifiedPeerId.isNotEmpty) {
+      _pendingOutgoingByPeerId[attempt.verifiedPeerId]?.remove(attempt);
+    }
+    attempt.verifiedPeerId = peerId;
+    if (attempt.request.expectedPeerId.isEmpty) {
+      attempt.peerPolicyEpoch = _peerPolicyEpochs[peerId] ?? 0;
+      final invalidationRevision = _peerInvalidationRevisions[peerId] ?? 0;
+      if (attempt.request.mode == ConnectionAttemptMode.interactive &&
+          invalidationRevision <= attempt.startedPolicyRevision) {
+        _authorizeInteractiveAttemptForPeer(attempt, peerId);
+      }
+    }
+    _indexPendingOutgoingPeer(attempt, peerId);
+  }
+
+  void _untrackPendingOutgoing(_PendingOutgoingConnection attempt) {
+    _pendingOutgoingConnections.remove(attempt);
+    if (identical(
+      _pendingOutgoingByRequestId[attempt.request.requestId],
+      attempt,
+    )) {
+      _pendingOutgoingByRequestId.remove(attempt.request.requestId);
+    }
+    for (final peerId in <String>{
+      attempt.request.expectedPeerId,
+      attempt.verifiedPeerId,
+    }) {
+      final attempts = _pendingOutgoingByPeerId[peerId];
+      attempts?.remove(attempt);
+      if (attempts?.isEmpty == true) {
+        _pendingOutgoingByPeerId.remove(peerId);
+      }
+    }
+    final sink = attempt.channel?.sink;
+    if (sink != null && identical(_pendingOutgoingBySink[sink], attempt)) {
+      _pendingOutgoingBySink.remove(sink);
+    }
+  }
+
+  Future<ConnectionAttemptResult> _connectToServer(
+    _PendingOutgoingConnection attempt,
+  ) async {
+    final request = attempt.request;
+    if (!_acceptingOutgoingConnections) {
+      return ConnectionAttemptResult.cancelled(
+        requestId: request.requestId,
+        reason: ConnectionAttemptReason.managerClosed,
+      );
+    }
+    final endpoint = request.endpoint;
     final authRequestKey = _authRequestKey(
-      peerId: peerId,
-      host: host,
-      port: port,
+      peerId: request.expectedPeerId,
+      host: endpoint.host,
+      port: endpoint.port,
     );
     if (!_authRequestGate.tryClaimOutgoing(authRequestKey)) {
-      report(false, duplicateAuthRequestMessage);
-      return;
+      return ConnectionAttemptResult.rejected(
+        requestId: request.requestId,
+        reason: ConnectionAttemptReason.duplicateRequest,
+      );
     }
     WebSocketChannel? channel;
     try {
-      final wsUrl = Uri(scheme: 'ws', host: host, port: port, path: 'chat');
       channel = IOWebSocketChannel(
-        _connectOutgoingWebSocket(wsUrl, attempt),
+        _connectOutgoingWebSocket(endpoint.chatUri, attempt),
       );
       attempt.channel = channel;
       final connectedChannel = channel;
@@ -1207,16 +1950,21 @@ class WsSvrManager {
         throw const _OutgoingConnectionCancelled();
       }
       final channelSink = connectedChannel.sink;
+      _pendingOutgoingBySink[channelSink] = attempt;
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
-      _endpointsBySink[channelSink] = (host: host, port: port);
+      _endpointsBySink[channelSink] = (
+        host: endpoint.host,
+        port: endpoint.port,
+      );
       final authCompleter = Completer<_SocketAuthResult>();
       _authResultsBySink[channelSink] = authCompleter;
       final session = await _createSocketSession(
         sink: channelSink,
         role: PeerSocketRole.client,
-        intendedPeerId: peerId ?? '',
-        intendedPublicKeyHash: intendedPublicKeyHash ?? '',
+        intendedPeerId: request.expectedPeerId,
+        intendedPublicKeyHash: request.expectedPublicKeyHash,
       );
+      attempt.session = session;
       if (attempt.isCancelled) {
         throw const _OutgoingConnectionCancelled();
       }
@@ -1228,22 +1976,34 @@ class WsSvrManager {
       await _sendAuthEnvelope(channelSink, await session.createHello());
       final authResult = await authCompleter.future;
       _releaseOutgoingAuthForSink(channelSink);
-      if (!authResult.allow) {
-        await channelSink.close();
-        report(false, authResult.message);
-        return;
-      }
       if (attempt.isCancelled) {
         throw const _OutgoingConnectionCancelled();
       }
-      final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
-        unawaited(
-          _heartBeat(peerId: session.remotePeerId, sink: channelSink),
+      if (!authResult.allow) {
+        await channelSink.close();
+        return _connectionFailureResult(request, authResult.message);
+      }
+      final peerId = session.remotePeerId;
+      final generation = session.connectionGeneration;
+      if (!_peerConnections.isCurrent(peerId, generation) ||
+          !identical(_sessionsByPeerId[peerId], session)) {
+        return ConnectionAttemptResult.cancelled(
+          requestId: request.requestId,
+          reason: ConnectionAttemptReason.superseded,
         );
+      }
+      final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
+        unawaited(_heartBeat(peerId: peerId, sink: channelSink));
       });
       _clientTimersBySink[channelSink] = timer;
-      _clientTimer = timer;
-      report(true, "");
+      if (receiver == peerId) {
+        _clientTimer = timer;
+      }
+      return ConnectionAttemptResult.authenticated(
+        requestId: request.requestId,
+        peerId: peerId,
+        generation: generation,
+      );
     } catch (error) {
       final wasCancelled = attempt.isCancelled ||
           error is _OutgoingConnectionCancelled ||
@@ -1252,7 +2012,7 @@ class WsSvrManager {
       try {
         await attempt.cancel();
       } catch (_) {
-        // The connection failure remains the primary error reported to UI.
+        // The typed result below remains authoritative.
       }
       if (channel != null) {
         _completeSocketAuth(channel.sink, false, 'connection_failed');
@@ -1261,9 +2021,77 @@ class WsSvrManager {
       } else {
         _authRequestGate.releaseOutgoing(authRequestKey);
       }
-      final message = wasCancelled ? connectionCancelledMessage : '连接失败：$error';
-      report(false, message);
+      if (wasCancelled) {
+        return ConnectionAttemptResult.cancelled(
+          requestId: request.requestId,
+          reason: attempt.cancellationReason,
+        );
+      }
+      return _connectionExceptionResult(request, error);
     }
+  }
+
+  ConnectionAttemptResult _connectionExceptionResult(
+    ConnectionAttemptRequest request,
+    Object error,
+  ) {
+    final isNetworkFailure = error is SocketException ||
+        error is HttpException ||
+        error is TimeoutException ||
+        (error is WebSocketChannelException && error.inner is SocketException);
+    if (isNetworkFailure) {
+      return ConnectionAttemptResult.networkFailure(
+        requestId: request.requestId,
+      );
+    }
+    return ConnectionAttemptResult.rejected(
+      requestId: request.requestId,
+      reason: error is AuthHandshakeException
+          ? ConnectionAttemptReason.authenticationFailed
+          : error is WebSocketException || error is WebSocketChannelException
+              ? ConnectionAttemptReason.protocolMismatch
+              : ConnectionAttemptReason.localStateFailure,
+    );
+  }
+
+  @visibleForTesting
+  ConnectionAttemptResult debugClassifyConnectionException(
+    ConnectionAttemptRequest request,
+    Object error,
+  ) =>
+      _connectionExceptionResult(request, error);
+
+  ConnectionAttemptResult _connectionFailureResult(
+    ConnectionAttemptRequest request,
+    String message,
+  ) {
+    final reason = switch (message) {
+      'pairing_expired' => ConnectionAttemptReason.pairingExpired,
+      'upgrade_required' => ConnectionAttemptReason.protocolMismatch,
+      'wrong_intended_peer' ||
+      'wrong_intended_pkh' ||
+      'identity_pin_conflict' =>
+        ConnectionAttemptReason.identityMismatch,
+      'automatic_pairing_required' =>
+        ConnectionAttemptReason.automaticPairingRequired,
+      'rejected' => ConnectionAttemptReason.peerRejected,
+      'socket_error' => ConnectionAttemptReason.socketError,
+      'connection_closed' ||
+      'connection_failed' =>
+        ConnectionAttemptReason.transportClosed,
+      _ => ConnectionAttemptReason.authenticationFailed,
+    };
+    if (reason == ConnectionAttemptReason.socketError ||
+        reason == ConnectionAttemptReason.transportClosed) {
+      return ConnectionAttemptResult.networkFailure(
+        requestId: request.requestId,
+        reason: reason,
+      );
+    }
+    return ConnectionAttemptResult.rejected(
+      requestId: request.requestId,
+      reason: reason,
+    );
   }
 
   Future<WebSocket> _connectOutgoingWebSocket(
@@ -1278,7 +2106,7 @@ class WsSvrManager {
       List<int>.generate(16, (_) => random.nextInt(256)),
     );
     final request = await attempt.httpClient.openUrl('GET', requestUri);
-    attempt.request = request;
+    attempt.transportRequest = request;
     request.followRedirects = false;
     if (attempt.isCancelled) {
       request.abort(const _OutgoingConnectionCancelled());
@@ -1291,7 +2119,7 @@ class WsSvrManager {
       ..set(HttpHeaders.cacheControlHeader, 'no-cache')
       ..set('Sec-WebSocket-Version', '13');
     final response = await request.close();
-    attempt.request = null;
+    attempt.transportRequest = null;
     if (attempt.isCancelled) {
       final socket = await response.detachSocket();
       socket.destroy();
@@ -1335,7 +2163,7 @@ class WsSvrManager {
   void _cancelPendingOutgoingConnections() {
     for (final attempt in _pendingOutgoingConnections.toList(growable: false)) {
       _ignoreFuture(
-        attempt.cancel(),
+        attempt.cancel(reason: ConnectionAttemptReason.managerClosed),
         context: 'cancel pending outgoing websocket',
       );
     }
@@ -1347,6 +2175,12 @@ class WsSvrManager {
   }) {
     _acceptingUpgrades = false;
     _acceptingOutgoingConnections = false;
+    _reconnectManagerClosed = true;
+    _globalPolicyEpoch += 1;
+    for (final controller in _reconnectControllers.values) {
+      controller.close();
+    }
+    _reconnectControllers.clear();
     _cancelPendingOutgoingConnections();
     _closeServerRequested =
         _closeServerRequested || closeServer || forceServerClose;
@@ -1524,7 +2358,7 @@ class WsSvrManager {
     await _transferEngine.closeAll(
       persistRecoverable: hadAuthenticatedConnection,
     );
-    if (hadAuthenticatedConnection) {
+    if (hadAuthenticatedConnection && _manageSharedCoordinators) {
       await AudioShareCoordinator.shared.stopLocal();
       await AudioGroupCoordinator.shared.stopLocal();
       await RemoteInputWorkspaceCoordinator.shared.stopControllerWorkspace(
@@ -1547,6 +2381,8 @@ class WsSvrManager {
     }
     _sessionsBySink.clear();
     _sessionsByPeerId.clear();
+    _terminalDisconnectCauses.clear();
+    _sessionStartedPolicyRevisions.clear();
     _wireControlSessions.clearAll();
     _sessionUpgradeTokens.clearAll();
     _endpointsBySink.clear();
@@ -1568,8 +2404,30 @@ class WsSvrManager {
   }
 
   Future<void> disconnectPeer(String peerId) async {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _addPeerAuthSuppression(
+      peerId,
+      _PeerAuthSuppressionReason.manualDisconnect,
+    );
+    _invalidatePeerPolicy(peerId, _PeerPolicyDisposition.manualDisconnect);
+    _cancelPendingAuthSessionsForPeer(peerId);
+    _reconnectControllers[peerId]?.manualDisconnect();
+    await _cancelPendingAttemptsForPeer(
+      peerId,
+      ConnectionAttemptReason.manualDisconnect,
+    );
+    await _waitForPeerAuthentication(peerId);
+    await _removePeerConnection(peerId, PeerDisconnectCause.manual);
+  }
+
+  Future<void> _removePeerConnection(
+    String peerId,
+    PeerDisconnectCause cause,
+  ) async {
     final binding = _peerConnections.currentBinding(peerId);
-    if (peerId.isEmpty || binding == null) {
+    if (binding == null) {
       return;
     }
     await _peerConnections.removeIfCurrent(
@@ -1577,6 +2435,7 @@ class WsSvrManager {
       afterRemove: (removed) => _afterPeerRemoved(
         removed,
         closingSession: _sessionsByPeerId[peerId],
+        cause: cause,
       ),
     );
   }
@@ -1589,8 +2448,18 @@ class WsSvrManager {
       afterRemove: (removed) => _afterPeerRemoved(
         removed,
         closingSession: _sessionsByPeerId[removed.peerId],
+        cause: PeerDisconnectCause.watchdog,
       ),
     );
+  }
+
+  @visibleForTesting
+  Future<bool> debugRemovePeerForWatchdog(String peerId) {
+    final binding = _peerConnections.currentBinding(peerId);
+    if (binding == null) {
+      return Future<bool>.value(false);
+    }
+    return _removeUnresponsivePeerIfCurrent(binding);
   }
 
   bool _removedBindingOwnsPeerState(
@@ -1607,6 +2476,7 @@ class WsSvrManager {
   Future<void> _afterPeerRemoved(
     TransferConnectionBinding binding, {
     PeerSocketSession? closingSession,
+    required PeerDisconnectCause cause,
   }) async {
     final peerId = binding.peerId;
     final currentSession = _sessionsByPeerId[peerId];
@@ -1637,11 +2507,22 @@ class WsSvrManager {
         _sink = null;
         _setRemoteProfile(null);
       } else {
-        _setRemoteProfile(_remoteProfilesByPeerId[receiver], peerId: receiver);
+        selectPeer(receiver);
       }
     }
     if (_removedBindingOwnsPeerState(binding)) {
       _dispatchToAll((event) => event.onClose());
+    }
+    if (_removedBindingOwnsPeerState(binding) &&
+        (cause == PeerDisconnectCause.network ||
+            cause == PeerDisconnectCause.watchdog) &&
+        _pendingOutgoingByPeerId[peerId]
+                ?.any((attempt) => !attempt.isCancelled) !=
+            true) {
+      final target = _reconnectControllers[peerId]?.target;
+      if (target != null) {
+        _reconnectControllers[peerId]?.scheduleReconnect(target);
+      }
     }
   }
 
@@ -1694,7 +2575,9 @@ class WsSvrManager {
     }
     _wireControlSessions.clearPeer(
       peerId,
-      preservedSessions: _preservedControlSessionsForPeer(peerId),
+      preservedSessions: _manageSharedCoordinators
+          ? _preservedControlSessionsForPeer(peerId)
+          : const <String, Set<String>>{},
     );
     if (!ownsCleanup()) {
       return;
@@ -1708,6 +2591,9 @@ class WsSvrManager {
     }
     await _transferEngine.handlePeerDisconnected(peerId);
     if (!ownsCleanup()) {
+      return;
+    }
+    if (!_manageSharedCoordinators) {
       return;
     }
     await RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected(peerId);
@@ -1882,7 +2768,19 @@ class WsSvrManager {
             FormatException() => WireInputReason.malformedFrame,
             _ => 'authentication_failed',
           };
-          await _failSocketSession(failedSession, sink, message);
+          final cause = switch (error) {
+            AuthHandshakeException() ||
+            WireInputRejected() ||
+            FormatException() =>
+              PeerDisconnectCause.protocolFailure,
+            _ => PeerDisconnectCause.localFailure,
+          };
+          await _failSocketSession(
+            failedSession,
+            sink,
+            message,
+            cause: cause,
+          );
         } else {
           await sink.close();
         }
@@ -1992,6 +2890,18 @@ class WsSvrManager {
     AuthEnvelope challenge,
   ) async {
     await session.receiveChallenge(challenge);
+    final attempt = _pendingOutgoingBySink[sink];
+    if (attempt == null || attempt.isCancelled) {
+      throw const AuthHandshakeException('session_expired');
+    }
+    _bindPendingOutgoingPeer(attempt, session.remotePeerId);
+    if (!_isPendingPolicyCurrent(attempt)) {
+      throw const AuthHandshakeException('session_expired');
+    }
+    if (attempt.request.isAutomatic &&
+        !await _automaticAttemptStillEligible(attempt, session)) {
+      throw const AuthHandshakeException('identity_pin_conflict');
+    }
     final pinPlan = await _pairingReason(session);
     final generation = session.connectionGeneration;
     Future<void> resolve(bool allow) async {
@@ -2004,7 +2914,6 @@ class WsSvrManager {
       }
       if (!allow) {
         _completeSocketAuth(sink, false, 'rejected');
-        _dispatchToAll((event) => event.afterAuth(false, null));
         await sink.close();
         return;
       }
@@ -2021,6 +2930,10 @@ class WsSvrManager {
 
     if (pinPlan.reason == null) {
       await resolve(true);
+    } else if (attempt.request.isAutomatic) {
+      _completeSocketAuth(sink, false, 'automatic_pairing_required');
+      session.close();
+      await sink.close();
     } else {
       await _requestPairingDecision(
         session,
@@ -2031,6 +2944,32 @@ class WsSvrManager {
     }
   }
 
+  Future<bool> _automaticAttemptStillEligible(
+    _PendingOutgoingConnection attempt,
+    PeerSocketSession session,
+  ) async {
+    if (!_isPendingPolicyCurrent(attempt) ||
+        _autoConnectPolicyOverride == false ||
+        !await _autoConnectEnabled()) {
+      return false;
+    }
+    final stored = await _database.fetchDevice(session.remotePeerId);
+    if (!_isPendingPolicyCurrent(attempt) ||
+        stored == null ||
+        !stored.auth ||
+        stored.identityPublicKey.isEmpty) {
+      return false;
+    }
+    try {
+      final storedHash = identityPublicKeyHash(stored.identityPublicKey);
+      final remoteHash = identityPublicKeyHash(session.remoteIdentityPublicKey);
+      return storedHash == attempt.request.expectedPublicKeyHash &&
+          remoteHash == storedHash;
+    } on Object {
+      return false;
+    }
+  }
+
   Future<void> _handleServerProof(
     PeerSocketSession session,
     WebSocketSink sink,
@@ -2038,6 +2977,9 @@ class WsSvrManager {
   ) async {
     await session.receiveProof(proof);
     final peerId = session.remotePeerId;
+    if (!_isSessionPeerPolicyCurrent(session)) {
+      throw const AuthHandshakeException('session_expired');
+    }
     final outgoingKey = _authRequestKey(peerId: peerId, host: '', port: 0);
     if (_authRequestGate.hasOutgoing(outgoingKey)) {
       final decision = resolveSimultaneousDial(
@@ -2106,6 +3048,9 @@ class WsSvrManager {
               error is AuthHandshakeException
                   ? error.code
                   : 'authentication_failed',
+              cause: error is AuthHandshakeException
+                  ? PeerDisconnectCause.protocolFailure
+                  : PeerDisconnectCause.localFailure,
             );
           }
         },
@@ -2132,7 +3077,6 @@ class WsSvrManager {
     if (!await session.receiveResult(result)) {
       _identityPinPlansBySink.remove(sink);
       _completeSocketAuth(sink, false, result.reason ?? 'rejected');
-      _dispatchToAll((event) => event.afterAuth(false, null));
       await sink.close();
       return;
     }
@@ -2149,7 +3093,7 @@ class WsSvrManager {
   }
 
   Future<_IdentityPinPlan> _pairingReason(PeerSocketSession session) async {
-    final stored = await LocalDatabase().fetchDevice(session.remotePeerId);
+    final stored = await _database.fetchDevice(session.remotePeerId);
     return (
       reason: pairingReasonForIdentity(stored, session.remoteIdentityPublicKey),
       expectedPublicKey: stored?.identityPublicKey ?? '',
@@ -2217,6 +3161,9 @@ class WsSvrManager {
             error is AuthHandshakeException
                 ? error.code
                 : 'authentication_failed',
+            cause: error is AuthHandshakeException
+                ? PeerDisconnectCause.protocolFailure
+                : PeerDisconnectCause.localFailure,
           );
         }
       },
@@ -2231,7 +3178,7 @@ class WsSvrManager {
     PeerSocketSession session,
     WebSocketSink sink,
   ) async {
-    final stored = await LocalDatabase().fetchDevice(session.remotePeerId);
+    final stored = await _database.fetchDevice(session.remotePeerId);
     final endpoint = _endpointsBySink[sink];
     final host =
         endpoint?.host.isNotEmpty == true ? endpoint!.host : stored?.host ?? '';
@@ -2245,61 +3192,114 @@ class WsSvrManager {
     PeerSocketSession session,
     WebSocketSink sink, {
     required _IdentityPinPlan pinPlan,
+  }) {
+    return _serializePeerAuthentication(
+      session.remotePeerId,
+      () => _completeAuthenticatedSessionSerialized(
+        session,
+        sink,
+        pinPlan: pinPlan,
+      ).whenComplete(() {
+        _sessionStartedPolicyRevisions.remove(session);
+      }),
+    );
+  }
+
+  Future<DeviceData> _completeAuthenticatedSessionSerialized(
+    PeerSocketSession session,
+    WebSocketSink sink, {
+    required _IdentityPinPlan pinPlan,
   }) async {
     final generation = session.connectionGeneration;
     _requireCurrentSession(session, sink, generation);
+    final previousDevice = await _database.fetchDevice(session.remotePeerId);
+    _requireCurrentAuthenticationCommit(session, sink, generation);
     DeviceData? storedDevice;
     PeerProfile? runtimeProfile;
-    final committed = await session.commitAuthentication(
-      generation: generation,
-      persistIdentity: () async {
-        _requireCurrentSession(session, sink, generation);
-        final candidate = await _deviceForSession(session, sink);
-        _requireCurrentSession(session, sink, generation);
-        final database = LocalDatabase();
-        final device = await database.commitAuthenticatedDevice(
-          candidate: candidate,
-          publicKey: session.remoteIdentityPublicKey,
-          replaceIdentity: pinPlan.reason == PairingReason.identityChanged,
-          expectedPublicKey: pinPlan.expectedPublicKey,
-          requireCurrent: () =>
-              _requireCurrentSession(session, sink, generation),
+    var published = false;
+    try {
+      final committed = await session.commitAuthentication(
+        generation: generation,
+        persistIdentity: () async {
+          await _waitForAuthCommitBarrier(
+            ConnectionAuthCommitStage.beforePersistence,
+            session.remotePeerId,
+          );
+          _requireCurrentAuthenticationCommit(session, sink, generation);
+          final candidate = await _deviceForSession(session, sink);
+          _requireCurrentAuthenticationCommit(session, sink, generation);
+          final device = await _database.commitAuthenticatedDevice(
+            candidate: candidate,
+            publicKey: session.remoteIdentityPublicKey,
+            replaceIdentity: pinPlan.reason == PairingReason.identityChanged,
+            expectedPublicKey: pinPlan.expectedPublicKey,
+            requireCurrent: () =>
+                _requireCurrentAuthenticationCommit(session, sink, generation),
+          );
+          storedDevice = device;
+          runtimeProfile = PeerProfile(
+            device: device,
+            trustedPeerIds: const <String>[],
+            autoApproveNewDevices: false,
+            autoConnectEnabled: true,
+            protocolVersion: session.remoteProfile!.protocolVersion,
+            capabilities: session.remoteProfile!.capabilities,
+            displayTopology: session.remoteProfile!.displayTopology,
+          );
+          await _waitForAuthCommitBarrier(
+            ConnectionAuthCommitStage.afterPersistence,
+            session.remotePeerId,
+          );
+          _requireCurrentAuthenticationCommit(session, sink, generation);
+        },
+        registerPeer: () async {
+          await _waitForAuthCommitBarrier(
+            ConnectionAuthCommitStage.beforeRegistration,
+            session.remotePeerId,
+          );
+          _requireCurrentRegisterableSession(session, sink, generation);
+          _requireCurrentAuthenticationCommit(session, sink, generation);
+          final peerId = session.remotePeerId;
+          await _registerPeerConnection(
+            peerId: peerId,
+            sink: sink,
+            session: session,
+            profile: runtimeProfile,
+          );
+          await _waitForAuthCommitBarrier(
+            ConnectionAuthCommitStage.afterRegistration,
+            session.remotePeerId,
+          );
+          _requireCurrentRegisterableSession(session, sink, generation);
+          _requireCurrentAuthenticationCommit(session, sink, generation);
+        },
+      );
+      if (!committed) {
+        throw const AuthHandshakeException('session_expired');
+      }
+      _requireCurrentAuthenticatedSession(session, sink, generation);
+      _requireCurrentAuthenticationCommit(session, sink, generation);
+      await _closeSupersededMediaChannels(session);
+      _requireCurrentAuthenticatedSession(session, sink, generation);
+      _requireCurrentAuthenticationCommit(session, sink, generation);
+      session.markTransportAuthenticated();
+      final device = storedDevice;
+      if (device == null) {
+        throw const AuthHandshakeException('identity_pin_state_missing');
+      }
+      published = true;
+      return device;
+    } catch (error, stackTrace) {
+      final attempted = storedDevice;
+      if (!published && attempted != null) {
+        await _database.rollbackAuthenticatedDevice(
+          peerId: session.remotePeerId,
+          attemptedPublicKey: session.remoteIdentityPublicKey,
+          previous: _rollbackPreviousDevice(session, previousDevice),
         );
-        storedDevice = device;
-        runtimeProfile = PeerProfile(
-          device: device,
-          trustedPeerIds: const <String>[],
-          autoApproveNewDevices: false,
-          autoConnectEnabled: true,
-          protocolVersion: session.remoteProfile!.protocolVersion,
-          capabilities: session.remoteProfile!.capabilities,
-          displayTopology: session.remoteProfile!.displayTopology,
-        );
-      },
-      registerPeer: () async {
-        _requireCurrentRegisterableSession(session, sink, generation);
-        final peerId = session.remotePeerId;
-        await _registerPeerConnection(
-          peerId: peerId,
-          sink: sink,
-          session: session,
-          profile: runtimeProfile,
-        );
-        _requireCurrentRegisterableSession(session, sink, generation);
-      },
-    );
-    if (!committed) {
-      throw const AuthHandshakeException('session_expired');
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
-    _requireCurrentAuthenticatedSession(session, sink, generation);
-    await _closeSupersededMediaChannels(session);
-    _requireCurrentAuthenticatedSession(session, sink, generation);
-    session.markTransportAuthenticated();
-    final device = storedDevice;
-    if (device == null) {
-      throw const AuthHandshakeException('identity_pin_state_missing');
-    }
-    return device;
   }
 
   Future<void> _closeSupersededMediaChannels(PeerSocketSession session) async {
@@ -2331,9 +3331,16 @@ class WsSvrManager {
     );
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
+    _completeDeviceRepairIfNeeded(
+      _pendingOutgoingBySink[sink],
+      storedDevice.uid,
+    );
+    _recordAuthenticatedReconnect(session, sink, storedDevice);
     _completeSocketAuth(sink, true, '');
     _dispatchToAll((event) => event.onConnect());
-    _dispatchToAll((event) => event.afterAuth(true, storedDevice));
+    if (session.role == PeerSocketRole.server) {
+      _dispatchToAll((event) => event.afterAuth(true, storedDevice));
+    }
     _ignoreFuture(
       _transferEngine.resumeRecoverableOutgoing(),
       context: 'resume outgoing transfers',
@@ -2365,6 +3372,57 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       throw const AuthHandshakeException('session_expired');
     }
+    if (session.role == PeerSocketRole.client && !session.isAuthenticated) {
+      final attempt = _pendingOutgoingBySink[sink];
+      if (attempt == null || !_isPendingPolicyCurrent(attempt)) {
+        throw const AuthHandshakeException('session_expired');
+      }
+    }
+  }
+
+  void _requireCurrentAuthenticationCommit(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    int generation,
+  ) {
+    _requireCurrentSession(session, sink, generation);
+    if (session.role == PeerSocketRole.server) {
+      if (!_isSessionPeerPolicyCurrent(session)) {
+        throw const AuthHandshakeException('session_expired');
+      }
+      return;
+    }
+    final attempt = _pendingOutgoingBySink[sink];
+    if (attempt == null || !_isPendingPolicyCurrent(attempt)) {
+      throw const AuthHandshakeException('session_expired');
+    }
+  }
+
+  bool _isSessionPeerPolicyCurrent(PeerSocketSession session) {
+    final startedRevision = _sessionStartedPolicyRevisions[session];
+    if (startedRevision == null || session.remotePeerId.isEmpty) {
+      return false;
+    }
+    return (_peerInvalidationRevisions[session.remotePeerId] ?? 0) <=
+            startedRevision &&
+        _isPeerAuthenticationAllowed(session.remotePeerId);
+  }
+
+  DeviceData? _rollbackPreviousDevice(
+    PeerSocketSession session,
+    DeviceData? previous,
+  ) {
+    final startedRevision = _sessionStartedPolicyRevisions[session];
+    final invalidationRevision =
+        _peerInvalidationRevisions[session.remotePeerId] ?? 0;
+    if (startedRevision == null || invalidationRevision <= startedRevision) {
+      return previous;
+    }
+    return switch (_peerPolicyDispositions[session.remotePeerId]) {
+      _PeerPolicyDisposition.deviceDeleted => null,
+      _PeerPolicyDisposition.trustRevoked => previous?.copyWith(auth: false),
+      _PeerPolicyDisposition.manualDisconnect || null => previous,
+    };
   }
 
   void _requireCurrentAuthenticatedSession(
@@ -2599,7 +3657,7 @@ class WsSvrManager {
           if (sink == null) {
             throw const WireInputRejected(WireInputReason.sessionNotCurrent);
           }
-          final database = LocalDatabase();
+          final database = _database;
           final acknowledged = await WireInputPolicy.acknowledgeOutgoing(
             database: database,
             acknowledgement: message,
@@ -2848,8 +3906,7 @@ class WsSvrManager {
           final self = await LocalSetting().instance();
           requireCurrentBusiness();
           final remoteDevice = _requireRemoteProfileForSession(session).device;
-          final storedRemote =
-              await LocalDatabase().fetchDevice(remoteDevice.uid);
+          final storedRemote = await _database.fetchDevice(remoteDevice.uid);
           requireCurrentBusiness();
           final authenticatedSession = _sessionsByPeerId[remoteDevice.uid];
           final isMutuallyTrusted = storedRemote?.auth == true &&
@@ -2948,7 +4005,7 @@ class WsSvrManager {
     MessageData incoming, {
     void Function()? requireCurrent,
   }) async {
-    final database = LocalDatabase();
+    final database = _database;
     return _wireMessageReplayGuard.claim(
       incoming,
       fetchExisting: database.fetchMessagesByUuid,
@@ -2992,6 +4049,10 @@ class WsSvrManager {
   }
 
   Future<PeerProfile> _localPeerProfile() async {
+    final injected = _localPeerProfileLoader;
+    if (injected != null) {
+      return injected();
+    }
     var device = await LocalSetting().instance(online: true);
     RemoteInputTopology? topology;
     if (supportsNativeRemoteInput()) {
@@ -3061,7 +4122,8 @@ class WsSvrManager {
   }
 
   void _setRemoteProfile(PeerProfile? profile, {String? peerId}) {
-    if (peerId != null && peerId.isNotEmpty) {
+    final hasPeerId = peerId != null && peerId.isNotEmpty;
+    if (hasPeerId) {
       if (profile == null) {
         _remoteProfilesByPeerId.remove(peerId);
       } else {
@@ -3070,6 +4132,14 @@ class WsSvrManager {
     } else if (profile == null) {
       _remoteProfilesByPeerId.clear();
     }
+
+    if (hasPeerId && peerId != receiver) {
+      return;
+    }
+    _setSelectedRemoteProfile(profile);
+  }
+
+  void _setSelectedRemoteProfile(PeerProfile? profile) {
     _remoteProfile = profile;
     _remoteProfileRevision++;
     _completeRemoteProfileRefreshWaiters();
@@ -3128,10 +4198,14 @@ class WsSvrManager {
       _setRemoteProfile(profile, peerId: resolvedPeerId);
       if (profile.device.uid.isNotEmpty) {
         requireCurrent?.call();
-        await LocalDatabase().upsertDevice(profile.device);
+        await _database.upsertDevice(profile.device);
         requireCurrent?.call();
-        if (_peerConnections.isConnectedTo(profile.device.uid)) {
-          ConnectionCoordinator().markConnected(profile.device);
+        if (_manageSharedCoordinators &&
+            _peerConnections.isConnectedTo(profile.device.uid)) {
+          ConnectionCoordinator().markConnected(
+            profile.device,
+            select: resolvedPeerId == receiver,
+          );
         }
         if (profileDeviceChanged) {
           _dispatchToAll((event) => event.onConnect());
@@ -3573,7 +4647,7 @@ class WsSvrManager {
       clipboard,
       receiverOverride: peerId,
     );
-    final database = LocalDatabase();
+    final database = _database;
     final retry = await _outgoingTextRetries.resolve(
       draft,
       fetchByUuid: database.fetchMessagesByUuid,

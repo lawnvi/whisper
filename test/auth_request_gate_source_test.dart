@@ -9,8 +9,11 @@ void main() {
     expect(source,
         contains("import 'package:whisper/socket/auth_request_gate.dart';"));
     expect(source, contains('final AuthRequestGate _authRequestGate'));
-    expect(source, contains('Future<void> connectToServer('));
-    expect(source, contains('{String? peerId}'));
+    expect(
+      source,
+      contains('Future<ConnectionAttemptResult> connectToServer('),
+    );
+    expect(source, contains('ConnectionAttemptRequest request'));
     expect(source, contains('tryClaimOutgoing'));
     expect(source, contains('releaseOutgoing'));
     expect(source, contains('tryClaimIncoming'));
@@ -21,7 +24,7 @@ void main() {
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
 
-    expect(deviceList, contains('peerId: peerId'));
-    expect(conversation, contains('peerId: device.uid'));
+    expect(deviceList, contains('expectedPeerId: peerId ??'));
+    expect(conversation, contains('expectedPeerId: device.uid'));
   });
 }

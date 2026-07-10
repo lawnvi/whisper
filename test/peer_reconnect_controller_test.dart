@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
@@ -13,7 +14,7 @@ void main() {
         scheduler: scheduler,
         attempt: (attempt) {
           attemptedTargets.add(attempt.target);
-          return ConnectionAttemptResult.networkFailure;
+          return ConnectionAttemptStatus.networkFailure;
         },
       );
 
@@ -45,7 +46,7 @@ void main() {
       final controller = _controller(
         scheduler: scheduler,
         randomDouble: () => randomValues.removeAt(0),
-        attempt: (_) => ConnectionAttemptResult.networkFailure,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
       );
 
       controller.scheduleReconnect(_target);
@@ -62,9 +63,9 @@ void main() {
 
     test('authenticated success stops retries and resets the delay', () async {
       final scheduler = _FakeScheduler();
-      final results = <ConnectionAttemptResult>[
-        ConnectionAttemptResult.networkFailure,
-        ConnectionAttemptResult.authenticated,
+      final results = <ConnectionAttemptStatus>[
+        ConnectionAttemptStatus.networkFailure,
+        ConnectionAttemptStatus.authenticated,
       ];
       final controller = _controller(
         scheduler: scheduler,
@@ -80,9 +81,9 @@ void main() {
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
     });
 
-    for (final result in <ConnectionAttemptResult>[
-      ConnectionAttemptResult.cancelled,
-      ConnectionAttemptResult.rejected,
+    for (final result in <ConnectionAttemptStatus>[
+      ConnectionAttemptStatus.cancelled,
+      ConnectionAttemptStatus.rejected,
     ]) {
       test('$result stops without another retry', () async {
         final scheduler = _FakeScheduler();
@@ -109,7 +110,7 @@ void main() {
       ),
       (
         name: 'asynchronous throw',
-        attempt: (_) => Future<ConnectionAttemptResult>.error(
+        attempt: (_) => Future<ConnectionAttemptStatus>.error(
               StateError('async attempt failure'),
             ),
       ),
@@ -141,7 +142,7 @@ void main() {
         scheduler: scheduler,
         attempt: (attempt) {
           attemptedTargets.add(attempt.target);
-          return ConnectionAttemptResult.cancelled;
+          return ConnectionAttemptStatus.cancelled;
         },
       );
       final refreshed = ReconnectTarget(
@@ -174,7 +175,7 @@ void main() {
       final scheduler = _FakeScheduler();
       final controller = _controller(
         scheduler: scheduler,
-        attempt: (_) => ConnectionAttemptResult.cancelled,
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
       );
       final refreshed = ReconnectTarget(
         peerId: _target.peerId,
@@ -194,7 +195,7 @@ void main() {
     test('new endpoint is attempted while an invalidated attempt is still hung',
         () async {
       final scheduler = _FakeScheduler();
-      final staleResult = Completer<ConnectionAttemptResult>();
+      final staleResult = Completer<ConnectionAttemptStatus>();
       final attemptedTargets = <ReconnectTarget>[];
       final attemptContexts = <ReconnectAttemptContext>[];
       var randomReads = 0;
@@ -210,7 +211,7 @@ void main() {
           if (attemptedTargets.length == 1) {
             return staleResult.future;
           }
-          return ConnectionAttemptResult.cancelled;
+          return ConnectionAttemptStatus.cancelled;
         },
       );
       final refreshed = ReconnectTarget(
@@ -233,7 +234,7 @@ void main() {
 
       expect(controller.attemptCount, 0);
       expect(attemptedTargets, [_target, refreshed]);
-      staleResult.complete(ConnectionAttemptResult.networkFailure);
+      staleResult.complete(ConnectionAttemptStatus.networkFailure);
       await pumpEventQueue();
       expect(scheduler.activeTimerCount, 0);
     });
@@ -247,7 +248,7 @@ void main() {
           randomReads += 1;
           return 0.5;
         },
-        attempt: (_) => ConnectionAttemptResult.cancelled,
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
       );
       final equalTarget = ReconnectTarget(
         peerId: _target.peerId,
@@ -278,7 +279,7 @@ void main() {
           randomReads += 1;
           return 0.5;
         },
-        attempt: (_) => ConnectionAttemptResult.cancelled,
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
       );
 
       timerController.scheduleReconnect(_target);
@@ -297,7 +298,7 @@ void main() {
       expect(randomReads, 1);
 
       final attemptScheduler = _FakeScheduler();
-      final result = Completer<ConnectionAttemptResult>();
+      final result = Completer<ConnectionAttemptStatus>();
       late ReconnectAttemptContext attemptContext;
       final attemptController = _controller(
         scheduler: attemptScheduler,
@@ -315,14 +316,14 @@ void main() {
       expect(attemptController.generation, attemptGeneration);
       expect(attemptContext.isCurrent, isTrue);
       expect(attemptScheduler.activeTimerCount, 0);
-      result.complete(ConnectionAttemptResult.cancelled);
+      result.complete(ConnectionAttemptStatus.cancelled);
       await pumpEventQueue();
     });
 
     test('an identical endpoint does not invalidate an in-flight guard',
         () async {
       final scheduler = _FakeScheduler();
-      final result = Completer<ConnectionAttemptResult>();
+      final result = Completer<ConnectionAttemptStatus>();
       late ReconnectAttemptContext attemptContext;
       var registrationSideEffects = 0;
       final controller = _controller(
@@ -351,7 +352,7 @@ void main() {
       expect(controller.generation, generation);
       expect(attemptContext.isCurrent, isTrue);
       expect(scheduler.activeTimerCount, 0);
-      result.complete(ConnectionAttemptResult.authenticated);
+      result.complete(ConnectionAttemptStatus.authenticated);
       await pumpEventQueue();
       expect(registrationSideEffects, 1);
     });
@@ -374,7 +375,7 @@ void main() {
         },
         attempt: (_) {
           attemptCalls += 1;
-          return ConnectionAttemptResult.networkFailure;
+          return ConnectionAttemptStatus.networkFailure;
         },
       );
 
@@ -419,7 +420,7 @@ void main() {
           eligibility: (_) => entry.value.result,
           attempt: (_) {
             attemptCalls += 1;
-            return ConnectionAttemptResult.authenticated;
+            return ConnectionAttemptStatus.authenticated;
           },
         );
 
@@ -444,7 +445,7 @@ void main() {
         eligibility: (_) => eligible.future,
         attempt: (_) {
           attemptCalls += 1;
-          return ConnectionAttemptResult.authenticated;
+          return ConnectionAttemptStatus.authenticated;
         },
       );
 
@@ -469,7 +470,7 @@ void main() {
         ),
         attempt: (_) {
           attemptCalls += 1;
-          return ConnectionAttemptResult.authenticated;
+          return ConnectionAttemptStatus.authenticated;
         },
       );
 
@@ -504,7 +505,7 @@ void main() {
           scheduler: scheduler,
           attempt: (_) {
             attemptCalls += 1;
-            return ConnectionAttemptResult.networkFailure;
+            return ConnectionAttemptStatus.networkFailure;
           },
         );
 
@@ -526,7 +527,7 @@ void main() {
     test('a late attempt result cannot resurrect a manual disconnect',
         () async {
       final scheduler = _FakeScheduler();
-      final result = Completer<ConnectionAttemptResult>();
+      final result = Completer<ConnectionAttemptStatus>();
       late ReconnectAttemptContext attemptContext;
       var registrationSideEffects = 0;
       final controller = _controller(
@@ -550,7 +551,7 @@ void main() {
       controller.manualDisconnect();
       expect(attemptContext.isCancelled, isTrue);
       await expectLater(attemptContext.whenCancelled, completes);
-      result.complete(ConnectionAttemptResult.networkFailure);
+      result.complete(ConnectionAttemptStatus.networkFailure);
       await pumpEventQueue();
 
       expect(controller.generation, greaterThan(generationBeforeCancel));
@@ -567,7 +568,7 @@ void main() {
         scheduler: scheduler,
         attempt: (attempt) {
           attemptedTargets.add(attempt.target);
-          return ConnectionAttemptResult.cancelled;
+          return ConnectionAttemptStatus.cancelled;
         },
       );
       final manualTarget = ReconnectTarget(
@@ -595,7 +596,7 @@ void main() {
         scheduler: scheduler,
         attempt: (_) {
           attemptCalls += 1;
-          return ConnectionAttemptResult.authenticated;
+          return ConnectionAttemptStatus.authenticated;
         },
       );
 
@@ -625,7 +626,7 @@ void main() {
       final scheduler = _FakeScheduler();
       final controller = _controller(
         scheduler: scheduler,
-        attempt: (_) => ConnectionAttemptResult.networkFailure,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
       );
 
       controller.scheduleReconnect(_target);
@@ -642,7 +643,7 @@ void main() {
     test('external authenticated signal invalidates an in-flight attempt',
         () async {
       final scheduler = _FakeScheduler();
-      final result = Completer<ConnectionAttemptResult>();
+      final result = Completer<ConnectionAttemptStatus>();
       late ReconnectAttemptContext attemptContext;
       final controller = _controller(
         scheduler: scheduler,
@@ -659,7 +660,7 @@ void main() {
       expect(attemptContext.isCancelled, isTrue);
       expect(controller.attemptCount, 0);
       expect(controller.isSuppressed, isFalse);
-      result.complete(ConnectionAttemptResult.networkFailure);
+      result.complete(ConnectionAttemptStatus.networkFailure);
       await pumpEventQueue();
       expect(scheduler.activeTimerCount, 0);
     });
@@ -704,7 +705,7 @@ void main() {
           scheduler: scheduler,
           attempt: (_) {
             attemptCalls += 1;
-            return ConnectionAttemptResult.cancelled;
+            return ConnectionAttemptStatus.cancelled;
           },
         );
 
@@ -728,7 +729,7 @@ void main() {
       final scheduler = _FakeScheduler();
       final controller = _controller(
         scheduler: scheduler,
-        attempt: (_) => ConnectionAttemptResult.authenticated,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
       );
 
       controller.manualDisconnect();
@@ -749,7 +750,7 @@ void main() {
       final scheduler = _FakeScheduler();
       final controller = _controller(
         scheduler: scheduler,
-        attempt: (_) => ConnectionAttemptResult.authenticated,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
       );
 
       controller.manualDisconnect();
@@ -777,7 +778,7 @@ void main() {
         eligibility: (_) => Future<ReconnectEligibilityResult>.error(
           StateError('eligibility unavailable'),
         ),
-        attempt: (_) => ConnectionAttemptResult.authenticated,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
       );
       final manualTarget = ReconnectTarget(
         peerId: _target.peerId,

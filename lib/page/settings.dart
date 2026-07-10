@@ -412,7 +412,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         trailing: CupertinoSwitch(
                           value: _autoConnect,
                           onChanged: (bool value) async {
-                            await LocalSetting().setAutoConnectEnabled(value);
+                            await WsSvrManager().setAutoConnectPolicy(value);
+                            if (!mounted) {
+                              return;
+                            }
                             setState(() {
                               _autoConnect = value;
                             });
@@ -1559,7 +1562,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       trailing: CupertinoSwitch(
                         value: device.auth,
                         onChanged: (bool value) async {
-                          await LocalDatabase().authDevice(device.uid, value);
+                          await WsSvrManager().setPeerTrust(device.uid, value);
                           await ConnectionCoordinator().refreshTrustState();
                           _refreshDevice();
                         },
@@ -1636,8 +1639,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           }
                           final deleteDevice = widget.deleteDevice;
                           if (deleteDevice == null) {
-                            await LocalDatabase()
-                                .clearDevices(<String>[device.uid]);
+                            await WsSvrManager().deletePeer(device.uid);
                           } else {
                             await deleteDevice(device.uid);
                           }

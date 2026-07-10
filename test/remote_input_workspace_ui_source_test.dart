@@ -152,7 +152,8 @@ void main() {
   test('socket disconnect clears remote input workspace state', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 
-    expect(source, contains('_handlePeerDisconnected(peerId)'));
+    expect(source, contains('Future<void> _handlePeerDisconnected('));
+    expect(source, contains('await _handlePeerDisconnected('));
     expect(
       source,
       contains('RemoteInputWorkspaceCoordinator.shared.handlePeerDisconnected'),

@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:whisper/socket/peer_socket_session.dart';
 
@@ -29,6 +30,19 @@ final class DiscoveryIdentity {
           'pkh': publicKeyHash,
         },
       );
+
+  static bool isCanonicalPublicKeyHash(String value) {
+    if (value.length != 43 || !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(value)) {
+      return false;
+    }
+    try {
+      final bytes = base64Url.decode('$value=');
+      return bytes.length == 32 &&
+          base64Url.encode(bytes).replaceAll('=', '') == value;
+    } on FormatException {
+      return false;
+    }
+  }
 
   @override
   bool operator ==(Object other) =>

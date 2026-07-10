@@ -34,7 +34,9 @@ import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
 import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
@@ -161,6 +163,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       TextEditingController();
   final FocusNode _desktopSearchFocusNode = FocusNode();
   final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
+  final ConnectionAttemptTracker _connectionAttempts =
+      ConnectionAttemptTracker();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   bool _isDesktopSearchExpanded = false;
@@ -365,6 +369,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
+    _connectionAttempts.cancelAll();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
     trayManager.removeListener(this);
@@ -603,6 +608,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
               visibleDevice,
               discovered: !isLost,
             );
+            if (!isLost && host != null) {
+              try {
+                socketManager.updateReconnectEndpoint(uid, host, port);
+              } on ArgumentError {
+                // Invalid discovery endpoints are never promoted to retries.
+              }
+            }
             for (var item in devices) {
               if (item.uid == uid) {
                 break;
@@ -1939,7 +1951,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   void _removeDevice(String uid) async {
-    await LocalDatabase().clearDevices([uid]);
+    _connectionAttempts.cancel('peer:$uid');
+    await socketManager.deletePeer(uid);
     if (!mounted) {
       return;
     }
@@ -2163,40 +2176,102 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (manual && peerId != null) {
       await ConnectionCoordinator().markManualSelection(peerId);
     }
+    if (!manual && peerId != null) {
+      ConnectionCoordinator().markConnecting(peerId, reconnecting: true);
+      _pendingAutoConnectPeerId = peerId;
+      try {
+        socketManager.scheduleReconnect(peerId, host, port);
+      } on ArgumentError {
+        ConnectionCoordinator().markDisconnected(peerId: peerId);
+        _pendingAutoConnectPeerId = null;
+      }
+      return;
+    }
     if (peerId != null) {
       ConnectionCoordinator().markConnecting(peerId);
       _pendingAutoConnectPeerId = peerId;
     }
-    socketManager.connectToServer(host, port, (ok, message) {
-      // _showToast(message);
-      if (!ok) {
-        if (message == WsSvrManager.duplicateAuthRequestMessage) {
-          if (manual && mounted) {
-            showAppToast(
-              AppLocalizations.of(context)?.connectFailed ??
-                  'Connection Failed',
-            );
+    final targetKey = peerId?.isNotEmpty == true
+        ? 'peer:$peerId'
+        : 'endpoint:${host.trim()}:$port';
+    final attemptGeneration = _connectionAttempts.begin(targetKey);
+    try {
+      ConnectionAttemptResult result;
+      try {
+        final endpoint = PeerEndpoint(host: host, port: port);
+        result = await socketManager.connectToServer(
+          ConnectionAttemptRequest(
+            requestId: '$targetKey:$attemptGeneration',
+            endpoint: endpoint,
+            expectedPeerId: peerId ?? '',
+            mode: ConnectionAttemptMode.interactive,
+          ),
+        );
+      } on ArgumentError {
+        result = ConnectionAttemptResult.networkFailure(
+          requestId: '$targetKey:$attemptGeneration',
+        );
+      }
+      if (!mounted ||
+          !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+        return;
+      }
+      if (result.isAuthenticated &&
+          socketManager.isCurrentConnectionGeneration(
+            result.peerId,
+            result.generation,
+          )) {
+        final connectedDevice = await db.fetchDevice(result.peerId);
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration) ||
+            connectedDevice == null ||
+            !socketManager.isCurrentConnectionGeneration(
+              result.peerId,
+              result.generation,
+            )) {
+          return;
+        }
+        socketManager.selectPeer(result.peerId);
+        ConnectionCoordinator().markConnected(connectedDevice);
+        _pendingAutoConnectPeerId = null;
+        await _refreshDevice();
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+          return;
+        }
+        if (isDesktop()) {
+          setState(() {
+            _selectedDesktopPeerId = connectedDevice.uid;
+          });
+        } else {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SendMessageScreen(device: connectedDevice),
+            ),
+          );
+          if (mounted) {
+            _refreshDevice();
           }
-          return;
         }
-        final l10n = AppLocalizations.of(context);
-        final displayMessage = message == 'upgrade_required'
-            ? l10n?.pairingUpgradeRequired ?? 'Connection Failed'
-            : message == 'pairing_expired'
-                ? l10n?.pairingExpired ?? 'Connection Failed'
-                : l10n?.connectFailed ?? 'Connection Failed';
-        ConnectionCoordinator()
-            .markDisconnected(peerId: peerId, error: displayMessage);
-        if (_pendingAutoConnectPeerId == peerId) {
-          _pendingAutoConnectPeerId = null;
-        }
-        if (!manual) {
-          _refreshDevice();
-          return;
-        }
+        return;
+      }
+      final localizations = AppLocalizations.of(context);
+      final displayMessage =
+          result.reason == ConnectionAttemptReason.protocolMismatch
+              ? localizations?.pairingUpgradeRequired ?? 'Connection Failed'
+              : result.reason == ConnectionAttemptReason.pairingExpired
+                  ? localizations?.pairingExpired ?? 'Connection Failed'
+                  : localizations?.connectFailed ?? 'Connection Failed';
+      ConnectionCoordinator()
+          .markDisconnected(peerId: peerId, error: displayMessage);
+      if (_pendingAutoConnectPeerId == peerId) {
+        _pendingAutoConnectPeerId = null;
+      }
+      if (manual && result.status != ConnectionAttemptStatus.cancelled) {
         showLoadingDialog(
           context,
-          title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
+          title: localizations?.connectFailed ?? '连接失败',
           description: displayMessage,
           isLoading: true,
           // 是否显示加载指示器
@@ -2211,18 +2286,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
           },
           task: (VoidCallback onCancel) async {},
         );
-        return;
       }
-    }, peerId: peerId);
+    } finally {
+      _connectionAttempts.complete(targetKey, attemptGeneration);
+    }
   }
 
   Future<void> _attemptAutoConnect() async {
     final candidate =
         await ConnectionCoordinator().chooseAutoConnectCandidate();
     if (candidate == null) {
-      return;
-    }
-    if (_pendingAutoConnectPeerId == candidate.peerId) {
       return;
     }
     await _connectServerInternal(
@@ -2336,6 +2409,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onConnect() {
+    _pendingAutoConnectPeerId = null;
     _refreshDevice();
   }
 

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 /// A validated resolved endpoint shared by chat, audio, and remote input.
 final class PeerEndpoint {
   factory PeerEndpoint({required String host, required int port}) {
@@ -11,6 +13,14 @@ final class PeerEndpoint {
   }
 
   const PeerEndpoint._({required this.host, required this.port});
+
+  @visibleForTesting
+  factory PeerEndpoint.loopbackForTesting({required int port}) {
+    if (port < 1 || port > 65535) {
+      throw ArgumentError.value(port, 'port', 'must be between 1 and 65535');
+    }
+    return PeerEndpoint._(host: '127.0.0.1', port: port);
+  }
 
   final String host;
   final int port;

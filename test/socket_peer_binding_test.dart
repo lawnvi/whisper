@@ -21,9 +21,10 @@ void main() {
   });
 
   test('client heartbeat timer captures its authenticated peer', () {
+    expect(source, contains('final peerId = session.remotePeerId'));
     expect(
       source,
-      contains('_heartBeat(peerId: session.remotePeerId, sink: channelSink)'),
+      contains('_heartBeat(peerId: peerId, sink: channelSink)'),
     );
     expect(source, isNot(contains('_heartBeat(sink: channelSink)')));
   });

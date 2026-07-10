@@ -260,7 +260,7 @@ void main() {
     );
     final connectToServer = methodBody(
       source,
-      'Future<void> connectToServer(',
+      'Future<ConnectionAttemptResult> connectToServer(',
       'Future<void> closeGracefully(',
     );
 
