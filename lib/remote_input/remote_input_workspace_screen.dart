@@ -12,191 +12,18 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
-import 'package:whisper/remote_input/remote_input_workspace_presentation.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
-
-abstract interface class RemoteInputWorkspaceCoordinatorApi {
-  RemoteInputWorkspaceSnapshot get snapshot;
-
-  RemoteInputRuntimeState get legacyState;
-
-  void addListener(VoidCallback listener);
-
-  void removeListener(VoidCallback listener);
-
-  Future<RemoteInputTopology> loadLocalTopology();
-
-  Future<void> startControllerWorkspace({
-    required String sourcePeerId,
-    required List<RemoteInputWorkspaceTargetRequest> targets,
-    required RemoteInputPeerControlSender sendControlTo,
-  });
-
-  Future<void> stopControllerWorkspace({
-    RemoteInputPeerControlSender? sendControlTo,
-  });
-}
-
-abstract interface class RemoteInputWorkspaceSocketApi {
-  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''});
-
-  bool supportsRemoteInputFor(String peerId);
-
-  bool supportsRemoteInputTopologyFor(String peerId);
-
-  RemoteInputTopology? remoteDisplayTopologyFor(String peerId);
-
-  bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId);
-
-  bool isConnectedTo(String peerId);
-
-  void sendRemoteInputControlTo(
-    String peerId,
-    RemoteInputControlMessage control,
-  );
-}
-
-abstract interface class RemoteInputWorkspaceStore {
-  Future<DeviceData?> fetchDevice(String peerId);
-
-  Future<RemoteInputLayoutData?> fetchLayout(String peerId);
-
-  Future<void> saveLayout(RemoteInputLayoutData layout);
-}
-
-class RemoteInputWorkspaceDependencies {
-  const RemoteInputWorkspaceDependencies({
-    required this.coordinator,
-    required this.socket,
-    required this.store,
-  });
-
-  factory RemoteInputWorkspaceDependencies.live() {
-    return RemoteInputWorkspaceDependencies(
-      coordinator: _LiveRemoteInputWorkspaceCoordinator(),
-      socket: _LiveRemoteInputWorkspaceSocket(),
-      store: _LiveRemoteInputWorkspaceStore(),
-    );
-  }
-
-  final RemoteInputWorkspaceCoordinatorApi coordinator;
-  final RemoteInputWorkspaceSocketApi socket;
-  final RemoteInputWorkspaceStore store;
-}
-
-class _LiveRemoteInputWorkspaceCoordinator
-    implements RemoteInputWorkspaceCoordinatorApi {
-  final RemoteInputWorkspaceCoordinator _workspace =
-      RemoteInputWorkspaceCoordinator.shared;
-  final RemoteInputCoordinator _legacy = RemoteInputCoordinator.shared;
-
-  @override
-  RemoteInputRuntimeState get legacyState => _legacy.state;
-
-  @override
-  RemoteInputWorkspaceSnapshot get snapshot => _workspace.snapshot;
-
-  @override
-  void addListener(VoidCallback listener) => _workspace.addListener(listener);
-
-  @override
-  Future<RemoteInputTopology> loadLocalTopology() => _legacy.displayTopology();
-
-  @override
-  void removeListener(VoidCallback listener) =>
-      _workspace.removeListener(listener);
-
-  @override
-  Future<void> startControllerWorkspace({
-    required String sourcePeerId,
-    required List<RemoteInputWorkspaceTargetRequest> targets,
-    required RemoteInputPeerControlSender sendControlTo,
-  }) {
-    return _workspace.startControllerWorkspace(
-      sourcePeerId: sourcePeerId,
-      targets: targets,
-      sendControlTo: sendControlTo,
-    );
-  }
-
-  @override
-  Future<void> stopControllerWorkspace({
-    RemoteInputPeerControlSender? sendControlTo,
-  }) {
-    return _workspace.stopControllerWorkspace(sendControlTo: sendControlTo);
-  }
-}
-
-class _LiveRemoteInputWorkspaceSocket implements RemoteInputWorkspaceSocketApi {
-  final WsSvrManager _socket = WsSvrManager();
-
-  @override
-  List<DeviceData> connectedRemoteInputDevices({String preferredPeerId = ''}) {
-    return _socket.connectedRemoteInputDevices(
-      preferredPeerId: preferredPeerId,
-    );
-  }
-
-  @override
-  bool isConnectedTo(String peerId) => _socket.isConnectedTo(peerId);
-
-  @override
-  RemoteInputTopology? remoteDisplayTopologyFor(String peerId) =>
-      _socket.remoteDisplayTopologyFor(peerId);
-
-  @override
-  bool remotePeerTrustsPeer(String remotePeerId, String trustedPeerId) =>
-      _socket.remotePeerTrustsPeer(remotePeerId, trustedPeerId);
-
-  @override
-  void sendRemoteInputControlTo(
-    String peerId,
-    RemoteInputControlMessage control,
-  ) {
-    _socket.sendRemoteInputControlTo(peerId, control);
-  }
-
-  @override
-  bool supportsRemoteInputFor(String peerId) =>
-      _socket.supportsRemoteInputFor(peerId);
-
-  @override
-  bool supportsRemoteInputTopologyFor(String peerId) =>
-      _socket.supportsRemoteInputTopologyFor(peerId);
-}
-
-class _LiveRemoteInputWorkspaceStore implements RemoteInputWorkspaceStore {
-  final LocalDatabase _database = LocalDatabase();
-
-  @override
-  Future<DeviceData?> fetchDevice(String peerId) =>
-      _database.fetchDevice(peerId);
-
-  @override
-  Future<RemoteInputLayoutData?> fetchLayout(String peerId) =>
-      _database.fetchRemoteInputLayout(peerId);
-
-  @override
-  Future<void> saveLayout(RemoteInputLayoutData layout) =>
-      _database.upsertRemoteInputLayout(layout);
-}
 
 class RemoteInputWorkspaceScreen extends StatefulWidget {
   const RemoteInputWorkspaceScreen({
     super.key,
     required this.initialDevices,
     this.preferredPeerId = '',
-    this.dependencies,
   });
-
-  static ValueKey<String> remoteDisplayKey(String peerId, String displayId) {
-    return ValueKey<String>('remote-input-display-$peerId-$displayId');
-  }
 
   final List<DeviceData> initialDevices;
   final String preferredPeerId;
-  final RemoteInputWorkspaceDependencies? dependencies;
 
   @override
   State<RemoteInputWorkspaceScreen> createState() =>
@@ -205,12 +32,13 @@ class RemoteInputWorkspaceScreen extends StatefulWidget {
 
 class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     with WidgetsBindingObserver {
-  late final RemoteInputWorkspaceSocketApi _socketManager;
-  late final RemoteInputWorkspaceCoordinatorApi _workspaceCoordinator;
-  late final RemoteInputWorkspaceStore _workspaceStore;
+  final WsSvrManager _socketManager = WsSvrManager();
+  final RemoteInputWorkspaceCoordinator _workspaceCoordinator =
+      RemoteInputWorkspaceCoordinator.shared;
+  final RemoteInputCoordinator _legacyCoordinator =
+      RemoteInputCoordinator.shared;
   final Map<String, RemoteInputLayoutData> _layouts =
       <String, RemoteInputLayoutData>{};
-  final Map<String, Timer> _layoutSaveTimers = <String, Timer>{};
   final Set<String> _selectedPeerIds = <String>{};
   RemoteInputTopology _localTopology = RemoteInputTopology.fallback();
   List<DeviceData> _devices = const <DeviceData>[];
@@ -221,11 +49,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   @override
   void initState() {
     super.initState();
-    final dependencies =
-        widget.dependencies ?? RemoteInputWorkspaceDependencies.live();
-    _socketManager = dependencies.socket;
-    _workspaceCoordinator = dependencies.coordinator;
-    _workspaceStore = dependencies.store;
     WidgetsBinding.instance.addObserver(this);
     _devices = widget.initialDevices;
     _focusedPeerId = widget.preferredPeerId;
@@ -237,9 +60,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _workspaceCoordinator.removeListener(_handleWorkspaceChanged);
-    for (final timer in _layoutSaveTimers.values) {
-      timer.cancel();
-    }
     super.dispose();
   }
 
@@ -256,7 +76,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
 
   Future<RemoteInputTopology> _loadLocalTopology() async {
     try {
-      final topology = await _workspaceCoordinator.loadLocalTopology();
+      final topology = await _legacyCoordinator.displayTopology();
       return topology.isNotEmpty ? topology : RemoteInputTopology.fallback();
     } catch (_) {
       return RemoteInputTopology.fallback();
@@ -347,7 +167,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required int index,
     required RemoteInputTopology localTopology,
   }) async {
-    final saved = await _workspaceStore.fetchLayout(device.uid);
+    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
     if (saved != null) {
       var next = _reanchorLegacyDefaultLayout(
         saved,
@@ -357,7 +177,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       );
       next = _normalizeRemoteTopologyLayout(next, device: device);
       if (next != saved) {
-        await _workspaceStore.saveLayout(next);
+        await LocalDatabase().upsertRemoteInputLayout(next);
       }
       return next;
     }
@@ -383,7 +203,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       releaseHotkey: 'ctrl+alt+esc',
       updatedAt: now,
     );
-    await _workspaceStore.saveLayout(layout);
+    await LocalDatabase().upsertRemoteInputLayout(layout);
     return layout;
   }
 
@@ -495,10 +315,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
         title: Text(l10n.remoteInputWorkspaceTitle),
-        leading: IconButton(
-          tooltip: l10n.back,
+        leading: CupertinoNavigationBarBackButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          color: Theme.of(context).colorScheme.onSurface,
         ),
         actions: [
           TextButton.icon(
@@ -520,18 +339,20 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       body: SafeArea(
         child: _loading
             ? const Center(child: CupertinoActivityIndicator())
-            : RemoteInputAdaptiveWorkspace(
-                devicesPanelLabel: l10n.remoteInputWorkspaceDevicesPanel,
-                detailsPanelLabel: l10n.remoteInputWorkspaceDetailsPanel,
-                openDevicesPanelLabel:
-                    l10n.remoteInputWorkspaceOpenDevicesPanel,
-                openDetailsPanelLabel:
-                    l10n.remoteInputWorkspaceOpenDetailsPanel,
-                closePanelLabel: l10n.remoteInputWorkspaceClosePanel,
-                devicePanel: _buildDevicePanel(l10n),
-                canvasPanel: _buildCanvasPanel(l10n),
-                detailsPanel: _buildDetailsPanel(l10n),
-                onEscape: () => Navigator.of(context).maybePop(),
+            : Row(
+                children: [
+                  SizedBox(
+                    width: 260,
+                    child: _buildDevicePanel(l10n),
+                  ),
+                  Expanded(
+                    child: _buildCanvasPanel(l10n),
+                  ),
+                  SizedBox(
+                    width: 280,
+                    child: _buildDetailsPanel(l10n),
+                  ),
+                ],
               ),
       ),
       bottomNavigationBar: _buildStatusBar(l10n),
@@ -539,30 +360,102 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }
 
   Widget _buildDevicePanel(AppLocalizations l10n) {
-    final items = _devices.map((device) {
-      final snapshot = _workspaceCoordinator.snapshot.targets[device.uid];
-      return RemoteInputDeviceTargetItem(
-        id: device.uid,
-        name: device.name,
-        status: _targetStatusLabel(l10n, snapshot),
-        selected: _selectedPeerIds.contains(device.uid),
-        focused: _focusedPeerId == device.uid,
-        onToggle: () => _togglePeerSelection(device),
-        onInspect: () {
-          setState(() => _focusedPeerId = device.uid);
-        },
-      );
-    }).toList(growable: false);
-    return RemoteInputDevicePanel(
-      title: l10n.remoteInputWorkspaceSelectTargets,
-      emptyTitle: l10n.remoteInputWorkspaceNoTargets,
-      emptyBody: l10n.emptyDevicesBody,
-      inspectTooltip: l10n.remoteInputWorkspaceFocusTarget,
-      items: items,
+    final palette = context.whisperPalette;
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        border: Border(
+          right: BorderSide(color: palette.borderSubtle),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+            child: Text(
+              l10n.remoteInputWorkspaceSelectTargets,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Expanded(
+            child: _devices.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        l10n.remoteInputWorkspaceNoTargets,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: palette.textMuted),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    itemCount: _devices.length,
+                    itemBuilder: (context, index) {
+                      final device = _devices[index];
+                      final selected = _selectedPeerIds.contains(device.uid);
+                      final focused = _focusedPeerId == device.uid;
+                      final snapshot =
+                          _workspaceCoordinator.snapshot.targets[device.uid];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Material(
+                          color: focused
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.08)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          child: CheckboxListTile(
+                            value: selected,
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  _selectedPeerIds.add(device.uid);
+                                  _focusedPeerId = device.uid;
+                                } else {
+                                  _selectedPeerIds.remove(device.uid);
+                                }
+                              });
+                            },
+                            onFocusChange: (_) {},
+                            title: Text(
+                              device.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              _targetStatusLabel(l10n, snapshot),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            secondary: IconButton(
+                              tooltip: l10n.remoteInputWorkspaceFocusTarget,
+                              onPressed: () {
+                                setState(() {
+                                  _focusedPeerId = device.uid;
+                                });
+                              },
+                              icon:
+                                  const Icon(Icons.center_focus_strong_rounded),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCanvasPanel(AppLocalizations l10n) {
+    final palette = context.whisperPalette;
     final selectedDevices = _devices
         .where((device) => _selectedPeerIds.contains(device.uid))
         .toList(growable: false);
@@ -572,25 +465,52 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           .whereType<RemoteInputWorkspaceTargetRequest>()
           .toList(growable: false),
     );
-    final hasAvailableDevices = _devices.isNotEmpty;
-    return RemoteInputWorkspaceCanvasPanel(
-      title: l10n.remoteInputWorkspaceCanvasTitle,
-      hasConflict: validation.hasConflict,
-      conflictLabel: l10n.remoteInputWorkspaceConflict,
-      empty: selectedDevices.isEmpty,
-      emptyTitle: hasAvailableDevices
-          ? l10n.remoteInputWorkspaceSelectTargets
-          : l10n.remoteInputWorkspaceNoTargets,
-      emptyBody: hasAvailableDevices
-          ? l10n.remoteInputWorkspaceSelectTargetBody
-          : l10n.emptyDevicesBody,
-      child: LayoutBuilder(
-        builder: (context, constraints) => _buildScreenCanvas(
-          constraints,
-          selectedDevices: selectedDevices,
-          conflicts: validation.conflictingPeerIds,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.remoteInputWorkspaceCanvasTitle,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (validation.hasConflict)
+                Text(
+                  l10n.remoteInputWorkspaceConflict,
+                  style: const TextStyle(color: Colors.orange),
+                ),
+            ],
+          ),
         ),
-      ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.surfaceElevated,
+                border: Border.all(color: palette.borderSubtle),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return _buildScreenCanvas(
+                      constraints,
+                      selectedDevices: selectedDevices,
+                      conflicts: validation.conflictingPeerIds,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -639,25 +559,20 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     return Stack(
       children: [
         for (final display in localDisplays)
-          RemoteInputPositionedScreenBlock(
-            visualRect: Rect.fromLTWH(
-              toCanvas(display.x, display.y).dx,
-              toCanvas(display.x, display.y).dy,
-              toSize(display.width, display.height).width,
-              toSize(display.width, display.height).height,
+          Positioned(
+            left: toCanvas(display.x, display.y).dx,
+            top: toCanvas(display.x, display.y).dy,
+            width: toSize(display.width, display.height).width,
+            height: toSize(display.width, display.height).height,
+            child: _ScreenBlock(
+              title: display.name.isEmpty
+                  ? AppLocalizations.of(context)!.remoteInputLocalScreen
+                  : display.name,
+              subtitle: _displaySizeLabel(display),
+              selected: false,
+              conflict: false,
+              local: true,
             ),
-            title: display.name.isEmpty
-                ? AppLocalizations.of(context)!.remoteInputLocalScreen
-                : display.name,
-            resolution: _displaySizeLabel(display),
-            roleLabel: AppLocalizations.of(context)!.remoteInputLocalScreen,
-            selectedLabel: AppLocalizations.of(context)!
-                .remoteInputWorkspaceSelectedScreen,
-            conflictLabel: AppLocalizations.of(context)!
-                .remoteInputWorkspaceConflictScreen,
-            selected: false,
-            conflict: false,
-            local: true,
           ),
         for (final device in selectedDevices)
           if (_layouts[device.uid] != null)
@@ -665,6 +580,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
               device,
               layout: _layouts[device.uid]!,
               toCanvas: toCanvas,
+              toSize: toSize,
               scale: scale,
               conflict: conflicts.contains(device.uid),
             ),
@@ -717,190 +633,142 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     DeviceData device, {
     required RemoteInputLayoutData layout,
     required Offset Function(int x, int y) toCanvas,
+    required Size Function(int w, int h) toSize,
     required double scale,
     required bool conflict,
   }) {
     final displays = _peerDisplaysForLayout(device, layout);
-    return Positioned.fill(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          for (final display in displays)
-            RemoteInputPositionedScreenBlock(
-              key: RemoteInputWorkspaceScreen.remoteDisplayKey(
-                device.uid,
-                display.displayId,
+    final bounds = _peerLayoutBounds(device, layout);
+    final offset = toCanvas(bounds.x, bounds.y);
+    final groupSize = toSize(bounds.width, bounds.height);
+    return Positioned(
+      left: offset.dx,
+      top: offset.dy,
+      width: groupSize.width,
+      height: groupSize.height,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() {
+            _focusedPeerId = device.uid;
+            _selectedPeerIds.add(device.uid);
+          });
+        },
+        onPanUpdate: (details) {
+          setState(() {
+            _focusedPeerId = device.uid;
+            final currentLayout = _layouts[device.uid] ?? layout;
+            _layouts[device.uid] = currentLayout.copyWith(
+              x: currentLayout.x + (details.delta.dx / scale).round(),
+              y: currentLayout.y + (details.delta.dy / scale).round(),
+            );
+          });
+        },
+        onPanEnd: (_) {
+          unawaited(_snapAndSaveLayout(device));
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final display in displays)
+              Positioned(
+                left: (display.left - bounds.left) * scale,
+                top: (display.top - bounds.top) * scale,
+                width: math.max(1.0, display.width * scale),
+                height: math.max(1.0, display.height * scale),
+                child: _ScreenBlock(
+                  title: display.name.isEmpty ? device.name : display.name,
+                  subtitle: _displaySizeLabel(display),
+                  selected: _focusedPeerId == device.uid,
+                  conflict: conflict,
+                  local: false,
+                ),
               ),
-              visualRect: Rect.fromLTWH(
-                toCanvas(display.left, display.top).dx,
-                toCanvas(display.left, display.top).dy,
-                math.max(1.0, display.width * scale),
-                math.max(1.0, display.height * scale),
-              ),
-              title: display.name.isEmpty ? device.name : display.name,
-              resolution: _displaySizeLabel(display),
-              roleLabel: AppLocalizations.of(context)!.remoteInputPeerScreen,
-              selectedLabel: AppLocalizations.of(context)!
-                  .remoteInputWorkspaceSelectedScreen,
-              conflictLabel: AppLocalizations.of(context)!
-                  .remoteInputWorkspaceConflictScreen,
-              selected: _focusedPeerId == device.uid,
-              conflict: conflict,
-              local: false,
-              onActivate: () {
-                setState(() {
-                  _focusedPeerId = device.uid;
-                  _selectedPeerIds.add(device.uid);
-                });
-              },
-              onToggle: () => _togglePeerSelection(device),
-              onMove: (direction, coarse) =>
-                  _movePeerLayoutByKey(device, direction, coarse),
-              onPanUpdate: (details) {
-                setState(() {
-                  _focusedPeerId = device.uid;
-                  final currentLayout = _layouts[device.uid] ?? layout;
-                  _layouts[device.uid] = currentLayout.copyWith(
-                    x: currentLayout.x + (details.delta.dx / scale).round(),
-                    y: currentLayout.y + (details.delta.dy / scale).round(),
-                  );
-                });
-              },
-              onPanEnd: (_) {
-                unawaited(_snapAndSaveLayout(device));
-              },
-            ),
-        ],
+          ],
+        ),
       ),
     );
-  }
-
-  void _togglePeerSelection(
-    DeviceData device, {
-    bool preserveFocus = false,
-  }) {
-    setState(() {
-      if (_selectedPeerIds.remove(device.uid)) {
-        if (!preserveFocus && _focusedPeerId == device.uid) {
-          _focusedPeerId = _selectedPeerIds.firstOrNull ?? '';
-        }
-      } else {
-        _selectedPeerIds.add(device.uid);
-        _focusedPeerId = device.uid;
-      }
-    });
-  }
-
-  void _movePeerLayoutByKey(
-    DeviceData device,
-    RemoteInputEdge direction,
-    bool coarse,
-  ) {
-    final current = _layouts[device.uid];
-    if (current == null) {
-      return;
-    }
-    final moved = moveRemoteLayoutByKey(
-      RemoteInputScreenRect(
-        x: current.x,
-        y: current.y,
-        width: current.width,
-        height: current.height,
-      ),
-      direction: direction,
-      coarse: coarse,
-    );
-    setState(() {
-      _focusedPeerId = device.uid;
-      _layouts[device.uid] = current.copyWith(x: moved.x, y: moved.y);
-    });
-    _layoutSaveTimers[device.uid]?.cancel();
-    _layoutSaveTimers[device.uid] = Timer(
-      const Duration(milliseconds: 160),
-      () => unawaited(_persistKeyboardMovedLayout(device)),
-    );
-  }
-
-  Future<void> _persistKeyboardMovedLayout(DeviceData device) async {
-    _layoutSaveTimers.remove(device.uid);
-    final layout = _layouts[device.uid];
-    if (layout == null) {
-      return;
-    }
-    final rect = RemoteInputScreenRect(
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
-    );
-    final layoutJson = _layoutJsonForSnappedLayout(layout, rect);
-    final next = layout.copyWith(
-      peerName: device.name,
-      layoutVersion: layoutJson.isEmpty ? 1 : 2,
-      layoutJson: layoutJson,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    await _workspaceStore.saveLayout(next);
-    if (!mounted) {
-      return;
-    }
-    final latest = _layouts[device.uid];
-    if (latest?.x == next.x && latest?.y == next.y) {
-      setState(() => _layouts[device.uid] = next);
-      await _restartControllerWorkspaceIfLive();
-    }
   }
 
   Widget _buildDetailsPanel(AppLocalizations l10n) {
+    final palette = context.whisperPalette;
     final focused =
         _devices.where((device) => device.uid == _focusedPeerId).firstOrNull;
     final snapshot = focused == null
         ? null
         : _workspaceCoordinator.snapshot.targets[focused.uid];
-    final selected = focused != null && _selectedPeerIds.contains(focused.uid);
-    return RemoteInputWorkspaceDetailsPanel(
-      title: l10n.remoteInputWorkspaceDetailsTitle,
-      emptyTitle: l10n.remoteInputWorkspaceNoTargets,
-      emptyBody: l10n.emptyDevicesBody,
-      deviceName: focused?.name,
-      address: focused == null ? null : _formatPeerAddress(focused),
-      details: focused == null
-          ? const <RemoteInputWorkspaceDetail>[]
-          : <RemoteInputWorkspaceDetail>[
-              RemoteInputWorkspaceDetail(
-                label: l10n.remoteInputLayoutTitle,
-                value: _focusedLayoutSummary(_layouts[focused.uid]),
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        border: Border(
+          left: BorderSide(color: palette.borderSubtle),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        child: focused == null
+            ? Text(
+                l10n.remoteInputWorkspaceNoTargets,
+                style: TextStyle(color: palette.textMuted),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    l10n.remoteInputWorkspaceDetailsTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    focused.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${focused.host}:${focused.port}',
+                    style: TextStyle(color: palette.textMuted),
+                  ),
+                  const SizedBox(height: 18),
+                  _DetailRow(
+                    label: l10n.remoteInputLayoutTitle,
+                    value: _focusedLayoutSummary(_layouts[focused.uid]),
+                  ),
+                  _DetailRow(
+                    label: l10n.remoteInputWorkspaceState,
+                    value: _targetStatusLabel(l10n, snapshot),
+                  ),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedPeerIds.contains(focused.uid)) {
+                          _selectedPeerIds.remove(focused.uid);
+                        } else {
+                          _selectedPeerIds.add(focused.uid);
+                        }
+                      });
+                    },
+                    icon: Icon(
+                      _selectedPeerIds.contains(focused.uid)
+                          ? Icons.visibility_off_rounded
+                          : Icons.add_rounded,
+                    ),
+                    label: Text(
+                      _selectedPeerIds.contains(focused.uid)
+                          ? l10n.remoteInputWorkspaceRemoveTarget
+                          : l10n.remoteInputWorkspaceAddTarget,
+                    ),
+                  ),
+                ],
               ),
-              RemoteInputWorkspaceDetail(
-                label: l10n.remoteInputWorkspaceState,
-                value: _targetStatusLabel(l10n, snapshot),
-              ),
-            ],
-      actionLabel: focused == null
-          ? null
-          : selected
-              ? l10n.remoteInputWorkspaceRemoveTarget
-              : l10n.remoteInputWorkspaceAddTarget,
-      actionIcon: focused == null
-          ? null
-          : selected
-              ? Icons.visibility_off_rounded
-              : Icons.add_rounded,
-      onAction: focused == null
-          ? null
-          : () => _togglePeerSelection(focused, preserveFocus: true),
+      ),
     );
   }
 
-  String _formatPeerAddress(DeviceData device) {
-    final host = device.host;
-    if (host.contains(':') && !(host.startsWith('[') && host.endsWith(']'))) {
-      return '[$host]:${device.port}';
-    }
-    return '$host:${device.port}';
-  }
-
   Widget _buildStatusBar(AppLocalizations l10n) {
+    final palette = context.whisperPalette;
     final snapshot = _workspaceCoordinator.snapshot;
     final status = switch (snapshot.status) {
       RemoteInputWorkspaceStatus.offering =>
@@ -912,7 +780,21 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         l10n.remoteInputWorkspaceStatusFailed(snapshot.errorMessage),
       RemoteInputWorkspaceStatus.idle => l10n.remoteInputWorkspaceStatusIdle,
     };
-    return RemoteInputWorkspaceStatusBar(status: status);
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        border: Border(top: BorderSide(color: palette.borderSubtle)),
+      ),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        status,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: palette.textMuted),
+      ),
+    );
   }
 
   Future<void> _toggleWorkspace() async {
@@ -928,7 +810,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       showAppToast(l10n.remoteInputWorkspaceNoTargets);
       return;
     }
-    final legacyState = _workspaceCoordinator.legacyState;
+    final legacyState = _legacyCoordinator.state;
     if (legacyState.status != RemoteInputRuntimeStatus.idle &&
         legacyState.status != RemoteInputRuntimeStatus.failed) {
       showAppToast(l10n.remoteInputStopCurrentFirst);
@@ -992,7 +874,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
           index: 0,
           localTopology: _localTopology,
         );
-    final storedDevice = await _workspaceStore.fetchDevice(device.uid);
+    final storedDevice = await LocalDatabase().fetchDevice(device.uid);
     final localTrustsRemote = storedDevice?.auth == true;
     final remoteTrustsLocal =
         _socketManager.remotePeerTrustsPeer(device.uid, sourcePeerId);
@@ -1239,7 +1121,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       layoutJson: updatedLayoutJson,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
-    await _workspaceStore.saveLayout(next);
+    await LocalDatabase().upsertRemoteInputLayout(next);
     if (!mounted) {
       return;
     }
@@ -1596,4 +1478,143 @@ class _WorkspaceSnapCandidate {
 
   final RemoteInputScreenRect rect;
   final int score;
+}
+
+class _ScreenBlock extends StatelessWidget {
+  const _ScreenBlock({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.conflict,
+    required this.local,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool conflict;
+  final bool local;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final borderColor = conflict
+        ? Colors.orange
+        : selected
+            ? colorScheme.primary
+            : palette.borderSubtle;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: local
+            ? colorScheme.primary.withValues(alpha: 0.08)
+            : palette.surfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: selected ? 2 : 1),
+        boxShadow: [
+          if (selected)
+            BoxShadow(
+              color: colorScheme.primary.withValues(alpha: 0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showTitle =
+              constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
+          final showSubtitle =
+              constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
+          final horizontalPadding = constraints.maxWidth >= 96 ? 12.0 : 4.0;
+          final verticalPadding = constraints.maxHeight >= 64 ? 10.0 : 2.0;
+          if (!showTitle) {
+            return const SizedBox.expand();
+          }
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.center,
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                if (showSubtitle) ...[
+                  const SizedBox(height: 4),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: Text(
+                        subtitle,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: palette.textMuted),
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

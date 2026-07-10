@@ -1265,12 +1265,6 @@ abstract class AppLocalizations {
   /// **'被控设备'**
   String get remoteInputWorkspaceSelectTargets;
 
-  /// No description provided for @remoteInputWorkspaceSelectTargetBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'请从设备面板至少将一台设备加入工作区，再排列它的屏幕。'**
-  String get remoteInputWorkspaceSelectTargetBody;
-
   /// No description provided for @remoteInputWorkspaceCanvasTitle.
   ///
   /// In zh, this message translates to:
@@ -1415,65 +1409,11 @@ abstract class AppLocalizations {
   /// **'新消息与提醒'**
   String get notificationChannelGeneralDesc;
 
-  /// No description provided for @emptyDevicesTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'还没有设备'**
-  String get emptyDevicesTitle;
-
-  /// No description provided for @emptyDevicesBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'附近设备和曾连接的设备会显示在这里。'**
-  String get emptyDevicesBody;
-
-  /// No description provided for @emptySearchTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'没有结果'**
-  String get emptySearchTitle;
-
-  /// No description provided for @emptySearchBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'没有设备符合当前搜索。'**
-  String get emptySearchBody;
-
-  /// No description provided for @emptySearchClear.
-  ///
-  /// In zh, this message translates to:
-  /// **'清除搜索'**
-  String get emptySearchClear;
-
-  /// No description provided for @emptyConversationTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'还没有消息'**
-  String get emptyConversationTitle;
-
-  /// No description provided for @emptyConversationConnectedBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'发送消息或文件即可开始会话。'**
-  String get emptyConversationConnectedBody;
-
-  /// No description provided for @emptyConversationDisconnectedBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接此设备后即可发送消息或文件。'**
-  String get emptyConversationDisconnectedBody;
-
   /// No description provided for @emptyAppsTitle.
   ///
   /// In zh, this message translates to:
   /// **'没有可用应用'**
   String get emptyAppsTitle;
-
-  /// No description provided for @emptyAppsBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'此设备上没有可用于通知转发的应用。'**
-  String get emptyAppsBody;
 
   /// No description provided for @emptyAppsSearchTitle.
   ///
@@ -1481,239 +1421,11 @@ abstract class AppLocalizations {
   /// **'没有找到应用'**
   String get emptyAppsSearchTitle;
 
-  /// No description provided for @emptyAppsSearchBody.
-  ///
-  /// In zh, this message translates to:
-  /// **'请尝试其他应用名称或包名。'**
-  String get emptyAppsSearchBody;
-
-  /// No description provided for @sessionGroupConnected.
-  ///
-  /// In zh, this message translates to:
-  /// **'已连接设备'**
-  String get sessionGroupConnected;
-
-  /// No description provided for @sessionGroupNearby.
-  ///
-  /// In zh, this message translates to:
-  /// **'附近可用'**
-  String get sessionGroupNearby;
-
-  /// No description provided for @sessionGroupRecent.
-  ///
-  /// In zh, this message translates to:
-  /// **'最近设备'**
-  String get sessionGroupRecent;
-
-  /// No description provided for @sessionGroupDeviceCount.
-  ///
-  /// In zh, this message translates to:
-  /// **'{count, plural, =0{没有设备} other{{count} 台设备}}'**
-  String sessionGroupDeviceCount(int count);
-
-  /// No description provided for @localDiscoveryStarting.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在启动局域网发现'**
-  String get localDiscoveryStarting;
-
-  /// No description provided for @localDiscoveryActive.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在广播并发现'**
-  String get localDiscoveryActive;
-
-  /// No description provided for @localDiscoveryStopped.
-  ///
-  /// In zh, this message translates to:
-  /// **'局域网发现已停止'**
-  String get localDiscoveryStopped;
-
-  /// No description provided for @localDiscoveryUnavailable.
-  ///
-  /// In zh, this message translates to:
-  /// **'局域网发现不可用'**
-  String get localDiscoveryUnavailable;
-
-  /// No description provided for @localDiscoveryPermissionUnknown.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在等待局域网权限'**
-  String get localDiscoveryPermissionUnknown;
-
-  /// No description provided for @localDiscoveryPermissionDenied.
-  ///
-  /// In zh, this message translates to:
-  /// **'局域网访问权限已拒绝'**
-  String get localDiscoveryPermissionDenied;
-
-  /// No description provided for @localDiscoveryPermissionRestricted.
-  ///
-  /// In zh, this message translates to:
-  /// **'局域网访问受到限制'**
-  String get localDiscoveryPermissionRestricted;
-
-  /// No description provided for @localDiscoveryFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'局域网发现失败：{error}'**
-  String localDiscoveryFailed(String error);
-
-  /// No description provided for @localDiscoveryAddress.
-  ///
-  /// In zh, this message translates to:
-  /// **'本机地址：{address}'**
-  String localDiscoveryAddress(String address);
-
-  /// No description provided for @localDiscoveryUnpairedCandidate.
-  ///
-  /// In zh, this message translates to:
-  /// **'附近未配对设备'**
-  String get localDiscoveryUnpairedCandidate;
-
-  /// No description provided for @workbenchActionManualConnect.
-  ///
-  /// In zh, this message translates to:
-  /// **'手动连接'**
-  String get workbenchActionManualConnect;
-
-  /// No description provided for @workbenchActionAudioShare.
-  ///
-  /// In zh, this message translates to:
-  /// **'共享系统音频'**
-  String get workbenchActionAudioShare;
-
-  /// No description provided for @workbenchActionRemoteInput.
-  ///
-  /// In zh, this message translates to:
-  /// **'键鼠工作区'**
-  String get workbenchActionRemoteInput;
-
-  /// No description provided for @workbenchActionSettings.
-  ///
-  /// In zh, this message translates to:
-  /// **'设置'**
-  String get workbenchActionSettings;
-
-  /// No description provided for @workbenchActionBack.
-  ///
-  /// In zh, this message translates to:
-  /// **'返回设备列表'**
-  String get workbenchActionBack;
-
-  /// No description provided for @workbenchActionSearch.
-  ///
-  /// In zh, this message translates to:
-  /// **'搜索设备'**
-  String get workbenchActionSearch;
-
-  /// No description provided for @workbenchActionClearSearch.
-  ///
-  /// In zh, this message translates to:
-  /// **'清除设备搜索'**
-  String get workbenchActionClearSearch;
-
-  /// No description provided for @workbenchActionRetryDiscovery.
-  ///
-  /// In zh, this message translates to:
-  /// **'重试发现'**
-  String get workbenchActionRetryDiscovery;
-
-  /// No description provided for @workbenchActionUnavailable.
-  ///
-  /// In zh, this message translates to:
-  /// **'暂不可用：{reason}'**
-  String workbenchActionUnavailable(String reason);
-
-  /// No description provided for @clipboardPreviewTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'剪贴板预览'**
-  String get clipboardPreviewTitle;
-
-  /// No description provided for @clipboardPreviewTextCount.
-  ///
-  /// In zh, this message translates to:
-  /// **'{count, plural, =0{空文本} other{{count} 个字符}}'**
-  String clipboardPreviewTextCount(int count);
-
-  /// No description provided for @clipboardPreviewImage.
-  ///
-  /// In zh, this message translates to:
-  /// **'剪贴板图片'**
-  String get clipboardPreviewImage;
-
-  /// No description provided for @clipboardPreviewImageDetails.
-  ///
-  /// In zh, this message translates to:
-  /// **'{file} · {size}'**
-  String clipboardPreviewImageDetails(String file, String size);
-
-  /// No description provided for @clipboardPreviewFiles.
-  ///
-  /// In zh, this message translates to:
-  /// **'{count, plural, =0{没有文件} other{{count} 个文件}}'**
-  String clipboardPreviewFiles(int count);
-
-  /// No description provided for @clipboardPreviewFilesDetails.
-  ///
-  /// In zh, this message translates to:
-  /// **'{file} · {count} 个文件 · {size}'**
-  String clipboardPreviewFilesDetails(String file, int count, String size);
-
-  /// No description provided for @clipboardPreviewRemove.
-  ///
-  /// In zh, this message translates to:
-  /// **'移除剪贴板预览'**
-  String get clipboardPreviewRemove;
-
-  /// No description provided for @clipboardPreviewSend.
-  ///
-  /// In zh, this message translates to:
-  /// **'发送剪贴板内容'**
-  String get clipboardPreviewSend;
-
-  /// No description provided for @clipboardPreviewEmpty.
-  ///
-  /// In zh, this message translates to:
-  /// **'剪贴板中没有支持的内容'**
-  String get clipboardPreviewEmpty;
-
-  /// No description provided for @clipboardPreviewReadFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'无法读取剪贴板：{error}'**
-  String clipboardPreviewReadFailed(String error);
-
-  /// No description provided for @fileDropAccepted.
-  ///
-  /// In zh, this message translates to:
-  /// **'松开发送到 {device}'**
-  String fileDropAccepted(String device);
-
   /// No description provided for @fileDropRejected.
   ///
   /// In zh, this message translates to:
   /// **'无法发送这些文件'**
   String get fileDropRejected;
-
-  /// No description provided for @fileDropRejectedDisconnected.
-  ///
-  /// In zh, this message translates to:
-  /// **'请先连接设备再拖入文件'**
-  String get fileDropRejectedDisconnected;
-
-  /// No description provided for @fileDropRejectedLocalSession.
-  ///
-  /// In zh, this message translates to:
-  /// **'不能向本机发送文件'**
-  String get fileDropRejectedLocalSession;
-
-  /// No description provided for @fileDropRejectedNoFiles.
-  ///
-  /// In zh, this message translates to:
-  /// **'拖入的内容中没有文件'**
-  String get fileDropRejectedNoFiles;
 
   /// No description provided for @validationRequired.
   ///
@@ -1936,54 +1648,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'危险操作'**
   String get dangerousActions;
-
-  /// No description provided for @remoteInputWorkspaceDevicesPanel.
-  ///
-  /// In zh, this message translates to:
-  /// **'设备面板'**
-  String get remoteInputWorkspaceDevicesPanel;
-
-  /// No description provided for @remoteInputWorkspaceDetailsPanel.
-  ///
-  /// In zh, this message translates to:
-  /// **'详情面板'**
-  String get remoteInputWorkspaceDetailsPanel;
-
-  /// No description provided for @remoteInputWorkspaceOpenDevicesPanel.
-  ///
-  /// In zh, this message translates to:
-  /// **'打开设备面板'**
-  String get remoteInputWorkspaceOpenDevicesPanel;
-
-  /// No description provided for @remoteInputWorkspaceOpenDetailsPanel.
-  ///
-  /// In zh, this message translates to:
-  /// **'打开详情面板'**
-  String get remoteInputWorkspaceOpenDetailsPanel;
-
-  /// No description provided for @remoteInputWorkspaceClosePanel.
-  ///
-  /// In zh, this message translates to:
-  /// **'关闭面板'**
-  String get remoteInputWorkspaceClosePanel;
-
-  /// No description provided for @remoteInputWorkspaceSaveShortcut.
-  ///
-  /// In zh, this message translates to:
-  /// **'保存屏幕排列'**
-  String get remoteInputWorkspaceSaveShortcut;
-
-  /// No description provided for @remoteInputWorkspaceSelectedScreen.
-  ///
-  /// In zh, this message translates to:
-  /// **'已选择屏幕'**
-  String get remoteInputWorkspaceSelectedScreen;
-
-  /// No description provided for @remoteInputWorkspaceConflictScreen.
-  ///
-  /// In zh, this message translates to:
-  /// **'屏幕与另一条边重叠'**
-  String get remoteInputWorkspaceConflictScreen;
 
   /// No description provided for @pairingNewDeviceTitle.
   ///

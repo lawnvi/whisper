@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,11 +27,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
+    await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Connect'));
     await tester.pump();
 
     expect(find.text('Host is required'), findsOneWidget);
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
   });
 
   testWidgets('valid Enter returns trimmed values', (tester) async {
@@ -52,7 +53,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField), '  Desk Mac  ');
+    await tester.enterText(find.byType(CupertinoTextField), '  Desk Mac  ');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
@@ -80,9 +81,8 @@ void main() {
     expect(await result, isNull);
   });
 
-  testWidgets('destructive confirmation is red and defaults focus to cancel',
+  testWidgets('destructive confirmation retains the original Cupertino colors',
       (tester) async {
-    final semantics = tester.ensureSemantics();
     await _pumpHost(tester, theme: AppTheme.lightTheme);
     final context = tester.element(find.byType(Scaffold));
 
@@ -96,38 +96,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final confirm = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Delete'),
-    );
-    final cancelFinder = find.widgetWithText(TextButton, 'Cancel');
-    final cancel = tester.widget<TextButton>(cancelFinder);
-    expect(
-      confirm.style?.foregroundColor?.resolve(<WidgetState>{}),
-      context.whisperPalette.danger,
-    );
-    expect(
-      cancel.style?.foregroundColor?.resolve(<WidgetState>{}),
-      Theme.of(context).colorScheme.onSurface,
-    );
-    expect(
-      tester.getSemantics(cancelFinder),
-      matchesSemantics(
-        label: 'Cancel',
-        hasEnabledState: true,
-        isEnabled: true,
-        isButton: true,
-        isFocused: true,
-        isFocusable: true,
-        hasTapAction: true,
-        hasFocusAction: true,
+    final confirmText = tester.widget<Text>(
+      find.descendant(
+        of: find.widgetWithText(CupertinoDialogAction, 'Delete'),
+        matching: find.text('Delete'),
       ),
     );
+    final cancelFinder = find.widgetWithText(CupertinoDialogAction, 'Cancel');
+    final cancelText = tester.widget<Text>(
+      find.descendant(of: cancelFinder, matching: find.text('Cancel')),
+    );
+    expect(confirmText.style?.color, Colors.red);
+    expect(cancelText.style?.color, Colors.red);
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(cancelFinder);
     await tester.pumpAndSettle();
     expect(await result, isFalse);
-
-    semantics.dispose();
   });
 }
 

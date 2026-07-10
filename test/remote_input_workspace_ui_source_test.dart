@@ -58,20 +58,22 @@ void main() {
   test('workspace canvas keeps screen geometry and labels peer resolution', () {
     final source = File('lib/remote_input/remote_input_workspace_screen.dart')
         .readAsStringSync();
-    final presentation =
-        File('lib/remote_input/remote_input_workspace_presentation.dart')
-            .readAsStringSync();
+    final canvas = RegExp(
+      r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
+    ).firstMatch(source)!.group(0)!;
     final peerBlock = RegExp(
       r'Widget _buildPeerScreenBlock\([\s\S]*?Widget _buildDetailsPanel',
     ).firstMatch(source)!.group(0)!;
 
-    expect(source, contains('RemoteInputPositionedScreenBlock'));
+    expect(canvas, isNot(contains('math.max(90, w * scale)')));
+    expect(canvas, isNot(contains('math.max(64, h * scale)')));
+    expect(canvas, contains('math.max(1.0, w * scale)'));
+    expect(canvas, contains('math.max(1.0, h * scale)'));
     expect(peerBlock, contains('_displaySizeLabel(display)'));
     expect(source, contains('String _peerScreenSubtitle'));
     expect(source, contains('_displaySizeLabelForLayout'));
     expect(source, contains('LayoutBuilder('));
-    expect(presentation, contains('showSubtitle'));
-    expect(presentation, isNot(contains('FittedBox(')));
+    expect(source, contains('showSubtitle'));
   });
 
   test('workspace canvas renders remote topology displays as a draggable group',
@@ -163,52 +165,15 @@ void main() {
   });
 
   test('workspace screen blocks center their labels', () {
-    final source =
-        File('lib/remote_input/remote_input_workspace_presentation.dart')
-            .readAsStringSync();
+    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
+        .readAsStringSync();
     final screenBlock = RegExp(
-      r'class RemoteInputScreenBlock extends StatefulWidget \{[\s\S]*?class _MoveRemoteScreenIntent',
+      r'class _ScreenBlock extends StatelessWidget \{[\s\S]*?class _DetailRow',
     ).firstMatch(source)!.group(0)!;
 
     expect(
         screenBlock, contains('crossAxisAlignment: CrossAxisAlignment.center'));
-    expect(
-        screenBlock, contains('mainAxisAlignment: MainAxisAlignment.center'));
+    expect(screenBlock, contains('alignment: Alignment.center'));
     expect(screenBlock, contains('textAlign: TextAlign.center'));
-  });
-
-  test('workspace presentation is adaptive and keyboard operable', () {
-    final presentation =
-        File('lib/remote_input/remote_input_workspace_presentation.dart')
-            .readAsStringSync();
-    final workspace =
-        File('lib/remote_input/remote_input_workspace_screen.dart')
-            .readAsStringSync();
-
-    expect(presentation, contains('paneLayoutForWidth'));
-    expect(presentation, contains('RemoteInputWorkspacePaneLayout.compact'));
-    expect(presentation, contains('RemoteInputWorkspacePaneLayout.medium'));
-    expect(presentation, contains('RemoteInputWorkspacePaneLayout.expanded'));
-    expect(presentation, contains('showModalBottomSheet'));
-    expect(presentation, contains('endDrawer:'));
-    expect(presentation, contains('FocusableActionDetector'));
-    expect(presentation, contains('LogicalKeyboardKey.arrowLeft'));
-    expect(presentation, contains('LogicalKeyboardKey.space'));
-    expect(workspace, contains('RemoteInputAdaptiveWorkspace'));
-    expect(workspace, contains('moveRemoteLayoutByKey'));
-  });
-
-  test('layout editor provides keyboard save and wrapping edge controls', () {
-    final source = File('lib/remote_input/remote_input_layout_editor.dart')
-        .readAsStringSync();
-
-    expect(source, contains('CallbackShortcuts'));
-    expect(source, contains('LogicalKeyboardKey.keyS'));
-    expect(source, contains('control: true'));
-    expect(source, contains('meta: true'));
-    expect(source, contains('LogicalKeyboardKey.escape'));
-    expect(source, contains('Wrap('));
-    expect(source, contains('Size.square(WhisperUi.minInteractiveSize)'));
-    expect(source, contains('selected: selected'));
   });
 }

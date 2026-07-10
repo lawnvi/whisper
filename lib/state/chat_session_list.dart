@@ -52,15 +52,6 @@ class ChatSessionItem {
   }
 }
 
-enum ChatSessionSectionKind { connected, nearby, recent }
-
-class ChatSessionSection {
-  const ChatSessionSection({required this.kind, required this.items});
-
-  final ChatSessionSectionKind kind;
-  final List<ChatSessionItem> items;
-}
-
 class ChatSessionListBuilder {
   const ChatSessionListBuilder._();
 
@@ -109,43 +100,6 @@ class ChatSessionListBuilder {
     return sessions
         .where((item) => item.matches(query))
         .toList(growable: false);
-  }
-
-  static List<ChatSessionSection> group(List<ChatSessionItem> sessions) {
-    final grouped = <ChatSessionSectionKind, List<ChatSessionItem>>{
-      for (final kind in ChatSessionSectionKind.values) kind: [],
-    };
-    for (final item in sessions) {
-      grouped[_sectionKind(item)]!.add(item);
-    }
-
-    return ChatSessionSectionKind.values
-        .map((kind) {
-          final items = grouped[kind]!
-            ..sort((left, right) {
-              final timestamp =
-                  right.lastTimestamp.compareTo(left.lastTimestamp);
-              if (timestamp != 0) {
-                return timestamp;
-              }
-              return left.device.name
-                  .toLowerCase()
-                  .compareTo(right.device.name.toLowerCase());
-            });
-          return ChatSessionSection(kind: kind, items: items);
-        })
-        .where((section) => section.items.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  static ChatSessionSectionKind _sectionKind(ChatSessionItem item) {
-    if (item.isConnected) {
-      return ChatSessionSectionKind.connected;
-    }
-    if (item.isNearby) {
-      return ChatSessionSectionKind.nearby;
-    }
-    return ChatSessionSectionKind.recent;
   }
 
   static ChatSessionItem _buildItem({

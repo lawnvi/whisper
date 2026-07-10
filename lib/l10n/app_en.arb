@@ -298,7 +298,6 @@
   "remoteInputWorkspaceStop": "Stop",
   "remoteInputWorkspaceNoTargets": "No available desktop control targets",
   "remoteInputWorkspaceSelectTargets": "Control targets",
-  "remoteInputWorkspaceSelectTargetBody": "Add at least one device from the Devices panel to arrange its screens.",
   "remoteInputWorkspaceCanvasTitle": "Screen arrangement",
   "remoteInputWorkspaceDetailsTitle": "Device details",
   "remoteInputWorkspaceFocusTarget": "Inspect device",
@@ -323,135 +322,9 @@
   "notificationChannelTransferDesc": "File transfer progress",
   "notificationChannelGeneral": "Messages",
   "notificationChannelGeneralDesc": "Incoming messages and alerts",
-  "emptyDevicesTitle": "No devices yet",
-  "emptyDevicesBody": "Nearby and previously connected devices will appear here.",
-  "emptySearchTitle": "No results",
-  "emptySearchBody": "No devices match your search.",
-  "emptySearchClear": "Clear search",
-  "emptyConversationTitle": "No messages yet",
-  "emptyConversationConnectedBody": "Send a message or file to start the conversation.",
-  "emptyConversationDisconnectedBody": "Connect to this device before sending a message or file.",
   "emptyAppsTitle": "No apps available",
-  "emptyAppsBody": "No notification apps are available on this device.",
   "emptyAppsSearchTitle": "No apps found",
-  "emptyAppsSearchBody": "Try a different app name or package.",
-  "sessionGroupConnected": "Connected devices",
-  "sessionGroupNearby": "Available nearby",
-  "sessionGroupRecent": "Recent devices",
-  "sessionGroupDeviceCount": "{count, plural, =0{No devices} =1{1 device} other{{count} devices}}",
-  "@sessionGroupDeviceCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "localDiscoveryStarting": "Starting local discovery",
-  "localDiscoveryActive": "Broadcasting and discovering",
-  "localDiscoveryStopped": "Local discovery is stopped",
-  "localDiscoveryUnavailable": "Local discovery is unavailable",
-  "localDiscoveryPermissionUnknown": "Waiting for local network permission",
-  "localDiscoveryPermissionDenied": "Local network access is denied",
-  "localDiscoveryPermissionRestricted": "Local network access is restricted",
-  "localDiscoveryFailed": "Local discovery failed: {error}",
-  "@localDiscoveryFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "localDiscoveryAddress": "Local address: {address}",
-  "@localDiscoveryAddress": {
-    "placeholders": {
-      "address": {
-        "type": "String"
-      }
-    }
-  },
-  "localDiscoveryUnpairedCandidate": "Unpaired nearby device",
-  "workbenchActionManualConnect": "Connect manually",
-  "workbenchActionAudioShare": "Share system audio",
-  "workbenchActionRemoteInput": "Keyboard and mouse workspace",
-  "workbenchActionSettings": "Settings",
-  "workbenchActionBack": "Back to devices",
-  "workbenchActionSearch": "Search devices",
-  "workbenchActionClearSearch": "Clear device search",
-  "workbenchActionRetryDiscovery": "Retry discovery",
-  "workbenchActionUnavailable": "Unavailable: {reason}",
-  "@workbenchActionUnavailable": {
-    "placeholders": {
-      "reason": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewTitle": "Clipboard preview",
-  "clipboardPreviewTextCount": "{count, plural, =0{Empty text} =1{1 character} other{{count} characters}}",
-  "@clipboardPreviewTextCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "clipboardPreviewImage": "Clipboard image",
-  "clipboardPreviewImageDetails": "{file} · {size}",
-  "@clipboardPreviewImageDetails": {
-    "placeholders": {
-      "file": {
-        "type": "String"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewFiles": "{count, plural, =0{No files} =1{1 file} other{{count} files}}",
-  "@clipboardPreviewFiles": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "clipboardPreviewFilesDetails": "{file} · {count, plural, =1{1 file} other{{count} files}} · {size}",
-  "@clipboardPreviewFilesDetails": {
-    "placeholders": {
-      "file": {
-        "type": "String"
-      },
-      "count": {
-        "type": "int"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewRemove": "Remove clipboard preview",
-  "clipboardPreviewSend": "Send clipboard content",
-  "clipboardPreviewEmpty": "The clipboard has no supported content",
-  "clipboardPreviewReadFailed": "Unable to read the clipboard: {error}",
-  "@clipboardPreviewReadFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "fileDropAccepted": "Drop to send to {device}",
-  "@fileDropAccepted": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "fileDropRejected": "These files cannot be sent",
-  "fileDropRejectedDisconnected": "Connect to the device before dropping files",
-  "fileDropRejectedLocalSession": "Files cannot be sent to this device",
-  "fileDropRejectedNoFiles": "No files were found in this drop",
   "validationRequired": "This field is required",
   "validationNicknameRequired": "Enter a nickname",
   "validationNicknameTooLong": "Nickname must be 64 characters or fewer",
@@ -486,31 +359,53 @@
   "appListSaveFailed": "Could not save the notification app selection",
   "notificationApps": "Notification apps",
   "notificationAppsSelected": "{count, plural, =0{No applications selected} =1{1 application selected} other{{count} applications selected}}",
-  "@notificationAppsSelected": {"placeholders": {"count": {"type": "int"}}},
+  "@notificationAppsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "notificationAppsDisabled": "Enable notification forwarding to choose applications",
   "notificationForwardingUpdateFailed": "Notification forwarding could not be updated",
   "dangerousActions": "Dangerous actions",
-  "remoteInputWorkspaceDevicesPanel": "Devices panel",
-  "remoteInputWorkspaceDetailsPanel": "Details panel",
-  "remoteInputWorkspaceOpenDevicesPanel": "Open devices panel",
-  "remoteInputWorkspaceOpenDetailsPanel": "Open details panel",
-  "remoteInputWorkspaceClosePanel": "Close panel",
-  "remoteInputWorkspaceSaveShortcut": "Save screen arrangement",
-  "remoteInputWorkspaceSelectedScreen": "Selected screen",
-  "remoteInputWorkspaceConflictScreen": "Screen overlaps another edge",
   "pairingNewDeviceTitle": "Pair a new device",
   "pairingNewDeviceDescription": "{device} wants to establish a trusted connection",
-  "@pairingNewDeviceDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingNewDeviceDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingIdentityChangedTitle": "Device identity changed",
   "pairingIdentityChangedDescription": "The identity key for {device} differs from the previous pairing. Continue only if the device was reinstalled or reset",
-  "@pairingIdentityChangedDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingIdentityChangedDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingLegacyTrustTitle": "Confirm this trusted device again",
   "pairingLegacyTrustDescription": "{device} uses a legacy trust record and must be paired again to bind its identity",
-  "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingLegacyTrustDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingCompareCode": "Confirm that both devices show the same six-digit code",
   "pairingNotificationBody": "Open Whisper to compare the six-digit pairing code in the app",
   "pairingCodeSemantics": "Pairing code {code}",
-  "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
+  "@pairingCodeSemantics": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "pairingReject": "Reject",
   "pairingApprove": "Codes match",
   "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",

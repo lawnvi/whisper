@@ -2,13 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 abstract final class WhisperUi {
-  static const radiusSmall = 4.0;
-  static const radiusMedium = 6.0;
-  static const radiusLarge = 8.0;
-  static const minInteractiveSize = 44.0;
   static const settingsMaxWidth = 760.0;
-  static const compactWindowBreakpoint = 760.0;
-  static const expandedWindowBreakpoint = 1100.0;
 }
 
 class WhisperPalette extends ThemeExtension<WhisperPalette> {
@@ -95,62 +89,56 @@ class AppTheme {
     brightness: Brightness.light,
     primary: Color(0xFF2563EB),
     onPrimary: Colors.white,
-    secondary: Color(0xFF5F6875),
+    secondary: Color(0xFF0EA5E9),
     onSecondary: Colors.white,
-    error: Color(0xFFC93838),
+    error: Color(0xFFDC2626),
     onError: Colors.white,
     surface: Colors.white,
-    onSurface: Color(0xFF171A1F),
-    tertiary: Color(0xFFB96A05),
-    onTertiary: Color(0xFF171A1F),
-    outline: Color(0xFF707985),
-    outlineVariant: Color(0xFFDDE1E6),
-    surfaceTint: Colors.transparent,
+    onSurface: Color(0xFF0F172A),
+    tertiary: Color(0xFFF59E0B),
+    onTertiary: Colors.white,
   );
 
   static const _darkScheme = ColorScheme(
     brightness: Brightness.dark,
     primary: Color(0xFF7CA7FF),
-    onPrimary: Color(0xFF07152E),
-    secondary: Color(0xFFA1A9B5),
-    onSecondary: Color(0xFF111318),
-    error: Color(0xFFFF8A8A),
-    onError: Color(0xFF3F0808),
-    surface: Color(0xFF111318),
-    onSurface: Color(0xFFF2F4F7),
-    tertiary: Color(0xFFF2B45F),
-    onTertiary: Color(0xFF2B1900),
-    outline: Color(0xFF929BA7),
-    outlineVariant: Color(0xFF303640),
-    surfaceTint: Colors.transparent,
+    onPrimary: Color(0xFF020617),
+    secondary: Color(0xFF94A3B8),
+    onSecondary: Color(0xFF020617),
+    error: Color(0xFFF87171),
+    onError: Color(0xFF450A0A),
+    surface: Color(0xFF000000),
+    onSurface: Color(0xFFE2E8F0),
+    tertiary: Color(0xFFFBBF24),
+    onTertiary: Color(0xFF451A03),
   );
 
   static const _lightPalette = WhisperPalette(
-    connected: Color(0xFF1D6FD8),
-    trusted: Color(0xFF18864B),
-    warning: Color(0xFFB96A05),
-    danger: Color(0xFFC93838),
-    surfaceMuted: Color(0xFFEEF0F3),
+    connected: Color(0xFF0284C7),
+    trusted: Color(0xFF16A34A),
+    warning: Color(0xFFD97706),
+    danger: Color(0xFFDC2626),
+    surfaceMuted: Color(0xFFE2E8F0),
     surfaceElevated: Colors.white,
-    surfaceCanvas: Color(0xFFF6F7F9),
-    borderSubtle: Color(0xFFDDE1E6),
-    textMuted: Color(0xFF5F6875),
-    messageIncoming: Color(0xFFF6F7F9),
-    messageOutgoing: Color(0xFFECF2FF),
+    surfaceCanvas: Color(0xFFF1F5F9),
+    borderSubtle: Color(0xFFE2E8F0),
+    textMuted: Color(0xFF64748B),
+    messageIncoming: Color(0xFFF8FAFC),
+    messageOutgoing: Color(0xFFEFF6FF),
   );
 
   static const _darkPalette = WhisperPalette(
-    connected: Color(0xFF77A9FF),
-    trusted: Color(0xFF56C987),
-    warning: Color(0xFFF2B45F),
-    danger: Color(0xFFFF8A8A),
-    surfaceMuted: Color(0xFF1D2127),
-    surfaceElevated: Color(0xFF171A20),
-    surfaceCanvas: Color(0xFF0B0D10),
-    borderSubtle: Color(0xFF303640),
-    textMuted: Color(0xFFA1A9B5),
-    messageIncoming: Color(0xFF171A20),
-    messageOutgoing: Color(0xFF1A2740),
+    connected: Color(0xFF38BDF8),
+    trusted: Color(0xFF4ADE80),
+    warning: Color(0xFFFBBF24),
+    danger: Color(0xFFF87171),
+    surfaceMuted: Color(0xFF141414),
+    surfaceElevated: Color(0xFF0A0A0A),
+    surfaceCanvas: Color(0xFF000000),
+    borderSubtle: Color(0xFF242424),
+    textMuted: Color(0xFF8A8F98),
+    messageIncoming: Color(0xFF101010),
+    messageOutgoing: Color(0xFF181818),
   );
 
   static WhisperPalette fallbackPalette(Brightness brightness) {
@@ -178,8 +166,7 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: colorScheme.surface,
       cardColor: colorScheme.surface,
-      dividerColor: palette.borderSubtle,
-      materialTapTargetSize: MaterialTapTargetSize.padded,
+      dividerColor: colorScheme.outlineVariant,
       cupertinoOverrideTheme: CupertinoThemeData(
         brightness: colorScheme.brightness,
         primaryColor: colorScheme.primary,
@@ -191,113 +178,60 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
       ),
       textSelectionTheme: TextSelectionThemeData(
-        cursorColor: colorScheme.primary,
-        selectionColor: colorScheme.primary.withValues(alpha: 0.24),
-        selectionHandleColor: colorScheme.primary,
+        cursorColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6)
+            : const Color(0xFF2563EB),
+        selectionColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6).withValues(alpha: 0.28)
+            : const Color(0xFF2563EB).withValues(alpha: 0.22),
+        selectionHandleColor: colorScheme.brightness == Brightness.dark
+            ? const Color(0xFF3B82F6)
+            : const Color(0xFF2563EB),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: palette.surfaceMuted,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-          borderSide: BorderSide(color: palette.borderSubtle),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-          borderSide: BorderSide(color: palette.borderSubtle),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: palette.surfaceMuted,
         selectedColor: colorScheme.primary.withValues(alpha: 0.12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusMedium),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         labelStyle: TextStyle(color: colorScheme.onSurface),
-        side: BorderSide(color: palette.borderSubtle),
+        side: BorderSide(color: colorScheme.outlineVariant),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: palette.surfaceElevated,
-        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+          borderRadius: BorderRadius.circular(24),
           side: BorderSide(color: palette.borderSubtle),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
       listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusMedium),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         iconColor: colorScheme.onSurface,
-      ),
-      dialogTheme: DialogThemeData(
-        elevation: 3,
-        backgroundColor: palette.surfaceElevated,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-        ),
-      ),
-      iconButtonTheme: IconButtonThemeData(
-        style: _buttonStyle(WhisperUi.radiusLarge),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: _buttonStyle(WhisperUi.radiusMedium),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: _buttonStyle(WhisperUi.radiusMedium),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: _buttonStyle(WhisperUi.radiusMedium),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: _buttonStyle(WhisperUi.radiusMedium),
       ),
     );
 
     return base.copyWith(
       extensions: <ThemeExtension<dynamic>>[palette],
-      textTheme: _systemTextTheme(base.textTheme, colorScheme.onSurface),
-    );
-  }
-
-  static ButtonStyle _buttonStyle(double radius) {
-    return ButtonStyle(
-      minimumSize: const WidgetStatePropertyAll(
-        Size.square(WhisperUi.minInteractiveSize),
+      textTheme: base.textTheme.apply(
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
       ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-      ),
-    );
-  }
-
-  static TextTheme _systemTextTheme(TextTheme source, Color color) {
-    TextStyle? style(TextStyle? value) =>
-        value?.copyWith(color: color, letterSpacing: 0);
-
-    return source.copyWith(
-      displayLarge: style(source.displayLarge),
-      displayMedium: style(source.displayMedium),
-      displaySmall: style(source.displaySmall),
-      headlineLarge: style(source.headlineLarge),
-      headlineMedium: style(source.headlineMedium),
-      headlineSmall: style(source.headlineSmall),
-      titleLarge: style(source.titleLarge),
-      titleMedium: style(source.titleMedium),
-      titleSmall: style(source.titleSmall),
-      bodyLarge: style(source.bodyLarge),
-      bodyMedium: style(source.bodyMedium),
-      bodySmall: style(source.bodySmall),
-      labelLarge: style(source.labelLarge),
-      labelMedium: style(source.labelMedium),
-      labelSmall: style(source.labelSmall),
     );
   }
 }

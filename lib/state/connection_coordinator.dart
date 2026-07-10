@@ -1,19 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:whisper/helper/local.dart';
-import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/auto_connect_planner.dart';
 import 'package:whisper/state/connection_models.dart';
 import 'package:whisper/state/peer_endpoint.dart';
-
-enum LocalDiscoveryPhase {
-  starting,
-  active,
-  stopped,
-  unavailable,
-  permissionDenied,
-  permissionRestricted,
-}
 
 enum LocalDiscoveryComponent { server, broadcast, discoveryEngine }
 
@@ -70,65 +60,6 @@ class LocalDiscoveryErrorState {
         ),
     };
   }
-}
-
-@immutable
-class LocalDiscoveryPresentation {
-  const LocalDiscoveryPresentation({
-    required this.phase,
-    required this.canRetry,
-    this.errorMessage,
-  });
-
-  factory LocalDiscoveryPresentation.fromRuntime({
-    required LocalNetworkPermissionStatus permissionStatus,
-    required bool serverStarted,
-    required bool broadcasting,
-    required bool discovering,
-    bool startupInProgress = false,
-    bool available = true,
-    String? errorMessage,
-  }) {
-    if (permissionStatus == LocalNetworkPermissionStatus.denied) {
-      return const LocalDiscoveryPresentation(
-        phase: LocalDiscoveryPhase.permissionDenied,
-        canRetry: true,
-      );
-    }
-    if (permissionStatus == LocalNetworkPermissionStatus.restricted) {
-      return const LocalDiscoveryPresentation(
-        phase: LocalDiscoveryPhase.permissionRestricted,
-        canRetry: false,
-      );
-    }
-    if (!available || (errorMessage?.isNotEmpty ?? false)) {
-      return LocalDiscoveryPresentation(
-        phase: LocalDiscoveryPhase.unavailable,
-        canRetry: true,
-        errorMessage: errorMessage,
-      );
-    }
-    if (serverStarted && broadcasting && discovering) {
-      return const LocalDiscoveryPresentation(
-        phase: LocalDiscoveryPhase.active,
-        canRetry: false,
-      );
-    }
-    if (startupInProgress) {
-      return const LocalDiscoveryPresentation(
-        phase: LocalDiscoveryPhase.starting,
-        canRetry: false,
-      );
-    }
-    return const LocalDiscoveryPresentation(
-      phase: LocalDiscoveryPhase.stopped,
-      canRetry: true,
-    );
-  }
-
-  final LocalDiscoveryPhase phase;
-  final bool canRetry;
-  final String? errorMessage;
 }
 
 @immutable

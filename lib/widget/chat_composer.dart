@@ -9,113 +9,40 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
-sealed class PendingClipboardDraft {
-  const PendingClipboardDraft();
-}
-
-final class PendingClipboardTextDraft extends PendingClipboardDraft {
-  const PendingClipboardTextDraft(this.text);
-
-  final String text;
-}
-
-final class PendingClipboardImageDraft extends PendingClipboardDraft {
-  const PendingClipboardImageDraft(this.image);
-
-  final ClipboardImageDraft image;
-}
-
-final class PendingClipboardFilesDraft extends PendingClipboardDraft {
-  const PendingClipboardFilesDraft(this.files);
-
-  final List<ClipboardFileDraft> files;
-}
-
-final class ClipboardDraftGeneration {
-  int _current = 0;
-
-  int start() => ++_current;
-
-  void invalidate() {
-    _current++;
-  }
-
-  bool isCurrent(int generation) => generation == _current;
-}
-
-final class ChatComposerSendGate {
-  bool _isInFlight = false;
-
-  bool get isInFlight => _isInFlight;
-
-  Future<bool> run(Future<bool> Function() action) async {
-    if (_isInFlight) {
-      return false;
-    }
-    _isInFlight = true;
-    try {
-      return await action();
-    } finally {
-      _isInFlight = false;
-    }
-  }
-}
-
-typedef ClipboardFilesReader = Future<List<ClipboardFileDraft>> Function();
-typedef ClipboardImageReader = Future<ClipboardImageDraft?> Function();
-typedef ClipboardTextReader = Future<String?> Function();
-
-Future<PendingClipboardDraft?> detectPendingClipboardDraft({
-  required ClipboardFilesReader readFiles,
-  required ClipboardImageReader readImage,
-  required ClipboardTextReader readText,
-  bool Function()? isCurrent,
-  bool trimText = true,
-}) async {
-  bool stillCurrent() => isCurrent?.call() ?? true;
-
-  if (!stillCurrent()) {
-    return null;
-  }
-  final files = await readFiles();
-  if (!stillCurrent()) {
-    return null;
-  }
-  if (files.isNotEmpty) {
-    return PendingClipboardFilesDraft(files);
-  }
-
-  final image = await readImage();
-  if (!stillCurrent()) {
-    return null;
-  }
-  if (image != null) {
-    return PendingClipboardImageDraft(image);
-  }
-
-  final text = await readText();
-  if (!stillCurrent() || text == null || text.trim().isEmpty) {
-    return null;
-  }
-  return PendingClipboardTextDraft(trimText ? text.trimRight() : text);
-}
-
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey =
       ValueKey('chat-composer-desktop-container');
   static const attachmentButtonKey = ValueKey('chat-composer-attachment');
   static const clipboardButtonKey = ValueKey('chat-composer-clipboard');
   static const sendButtonKey = ValueKey('chat-composer-send');
-  static const clipboardTextPreviewKey =
-      ValueKey('chat-composer-clipboard-text-preview');
   static const clipboardImagePreviewKey =
       ValueKey('chat-composer-clipboard-image-preview');
+  static const clipboardImageRemoveButtonKey =
+      ValueKey('chat-composer-clipboard-image-remove');
   static const clipboardFilesPreviewKey =
       ValueKey('chat-composer-clipboard-files-preview');
-  static const clipboardRemoveButtonKey =
-      ValueKey('chat-composer-clipboard-remove');
-  static const clipboardImageRemoveButtonKey = clipboardRemoveButtonKey;
-  static const clipboardFilesRemoveButtonKey = clipboardRemoveButtonKey;
+  static const clipboardFilesRemoveButtonKey =
+      ValueKey('chat-composer-clipboard-files-remove');
+
+  final bool clipboardEnabled;
+  final bool canSend;
+  final bool isInputEmpty;
+  final bool isLoading;
+  final bool isLocalhost;
+  final bool isDesktopStyle;
+  final Map<String, bool> keyPressedMap;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ClipboardImageDraft? pendingClipboardImage;
+  final List<ClipboardFileDraft> pendingClipboardFiles;
+  final Future<void> Function() onPickFiles;
+  final Future<void> Function() onSendClipboard;
+  final Future<bool> Function(String text) onSendText;
+  final Future<String?> Function()? onPasteClipboard;
+  final Future<void> Function()? onSendClipboardFiles;
+  final VoidCallback? onClearClipboardFiles;
+  final Future<void> Function()? onSendClipboardImage;
+  final VoidCallback? onClearClipboardImage;
 
   const ChatComposer({
     super.key,
@@ -128,143 +55,239 @@ class ChatComposer extends StatelessWidget {
     required this.keyPressedMap,
     required this.controller,
     required this.focusNode,
+    this.pendingClipboardImage,
+    this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
-    required this.onPreviewClipboard,
-    required this.onSendClipboardDraft,
-    required this.onClearClipboardDraft,
+    required this.onSendClipboard,
     required this.onSendText,
-    required this.onPasteClipboard,
-    this.pendingClipboardDraft,
+    this.onPasteClipboard,
+    this.onSendClipboardFiles,
+    this.onClearClipboardFiles,
+    this.onSendClipboardImage,
+    this.onClearClipboardImage,
   });
-
-  final bool clipboardEnabled;
-  final bool canSend;
-  final bool isInputEmpty;
-  final bool isLoading;
-  final bool isLocalhost;
-  final bool isDesktopStyle;
-  final Map<String, bool> keyPressedMap;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final PendingClipboardDraft? pendingClipboardDraft;
-  final Future<void> Function() onPickFiles;
-  final Future<void> Function() onPreviewClipboard;
-  final Future<bool> Function() onSendClipboardDraft;
-  final VoidCallback onClearClipboardDraft;
-  final Future<bool> Function(String text) onSendText;
-  final Future<String?> Function() onPasteClipboard;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (isDesktopStyle) {
-      return _buildDesktopComposer(context);
+      return _buildDesktopComposer(context, colorScheme);
     }
-    return _buildMobileComposer(context);
+
+    return _buildMobileComposer(context, colorScheme);
   }
 
-  Widget _buildDesktopComposer(BuildContext context) {
+  Widget _buildDesktopComposer(
+    BuildContext context,
+    ColorScheme colorScheme,
+  ) {
     final palette = context.whisperPalette;
+    final accentColor = colorScheme.primary;
+    final containerColor = palette.surfaceElevated;
+    final borderColor = palette.borderSubtle;
     return Container(
       key: desktopContainerKey,
       margin: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(20, 14, 18, 14),
       decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: _buildComposerContents(context, maxLines: 5),
-    );
-  }
-
-  Widget _buildMobileComposer(BuildContext context) {
-    final palette = context.whisperPalette;
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 10),
-          decoration: BoxDecoration(
-            color: palette.surfaceElevated,
-            borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-            border: Border.all(color: palette.borderSubtle),
+        color: containerColor,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: colorScheme.brightness == Brightness.dark ? 0.18 : 0.05,
+            ),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
           ),
-          child: _buildComposerContents(context, maxLines: 6),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildComposerContents(
-    BuildContext context, {
-    required int maxLines,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final l10n = AppLocalizations.of(context)!;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_hasClipboardDraft) ...[
-          _buildClipboardPreview(context),
-          const SizedBox(height: 8),
         ],
-        Focus(
-          onKeyEvent: (_, event) => _handleKeyEvent(event),
-          child: TextField(
-            key: const ValueKey('chat-composer-textfield'),
-            controller: controller,
-            focusNode: focusNode,
-            enabled: canSend,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            minLines: 1,
-            maxLines: maxLines,
-            autofocus: isDesktop(),
-            autocorrect: true,
-            cursorColor: colorScheme.primary,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: 16,
-              height: 1.42,
-            ),
-            decoration: InputDecoration(
-              isCollapsed: true,
-              isDense: true,
-              filled: false,
-              fillColor: Colors.transparent,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-              hintText: canSend ? l10n.sendTips : l10n.connectToSend,
-              hintStyle: TextStyle(color: palette.textMuted, fontSize: 16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_showsClipboardFilesPreview) ...[
+            _buildClipboardFilesPreview(context),
+            const SizedBox(height: 10),
+          ],
+          if (_showsClipboardImagePreview) ...[
+            _buildClipboardImagePreview(context),
+            const SizedBox(height: 10),
+          ],
+          Focus(
+            onKeyEvent: (_, event) => _handleKeyEvent(event),
+            child: TextField(
+              key: const ValueKey('chat-composer-textfield'),
+              controller: controller,
+              focusNode: focusNode,
+              enabled: canSend,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              minLines: 1,
+              maxLines: 5,
+              autofocus: isDesktop(),
+              autocorrect: true,
+              cursorColor: accentColor,
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontSize: 16,
+                height: 1.45,
+              ),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                isDense: true,
+                filled: false,
+                fillColor: Colors.transparent,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: canSend
+                    ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
+                    : (AppLocalizations.of(context)?.connectToSend ??
+                        '连接后即可发送消息'),
+                hintStyle: TextStyle(
+                  color: palette.textMuted,
+                  fontSize: 16,
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (clipboardEnabled)
-              _buildUtilityActionButton(
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (clipboardEnabled)
+                _buildUtilityActionButton(
+                  context,
+                  key: clipboardButtonKey,
+                  icon: Icons.content_copy_rounded,
+                  enabled: canSend && !isLoading,
+                  onPressed: onSendClipboard,
+                  buttonSize: 26,
+                  iconSize: 15,
+                  outlined: false,
+                ),
+              const Spacer(),
+              _buildPrimaryActionButton(
                 context,
-                key: clipboardButtonKey,
-                icon: Icons.content_copy_rounded,
-                tooltip: l10n.menuClipboard,
-                enabled: canSend && !isLoading,
-                onPressed: onPreviewClipboard,
+                colorScheme: colorScheme,
+                buttonSize: 48,
+                iconSize: 20,
               ),
-            const Spacer(),
-            _buildPrimaryActionButton(context),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileComposer(
+    BuildContext context,
+    ColorScheme colorScheme,
+  ) {
+    final palette = context.whisperPalette;
+    final accentColor = colorScheme.primary;
+    final outerContainerColor = colorScheme.surface;
+    final containerColor = palette.surfaceElevated;
+    final borderColor = palette.borderSubtle;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+      decoration: BoxDecoration(
+        color: outerContainerColor,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
+        decoration: BoxDecoration(
+          color: containerColor,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: colorScheme.brightness == Brightness.dark ? 0.12 : 0.05,
+              ),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
           ],
         ),
-      ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Focus(
+              onKeyEvent: (_, event) => _handleKeyEvent(event),
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                enabled: canSend,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                cursorColor: accentColor,
+                autofocus: isDesktop(),
+                autocorrect: true,
+                minLines: 1,
+                maxLines: 6,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                  height: 1.42,
+                ),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  isDense: true,
+                  filled: false,
+                  fillColor: Colors.transparent,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: canSend
+                      ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
+                      : (AppLocalizations.of(context)?.connectToSend ??
+                          '连接后即可发送消息'),
+                  hintStyle: TextStyle(
+                    color: palette.textMuted,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (clipboardEnabled)
+                  _buildUtilityActionButton(
+                    context,
+                    key: clipboardButtonKey,
+                    icon: Icons.content_copy_rounded,
+                    enabled: canSend && !isLoading,
+                    onPressed: onSendClipboard,
+                    buttonSize: 28,
+                    iconSize: 18,
+                    outlined: false,
+                  ),
+                const Spacer(),
+                _buildPrimaryActionButton(
+                  context,
+                  colorScheme: colorScheme,
+                  buttonSize: 42,
+                  iconSize: 20,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -272,252 +295,293 @@ class ChatComposer extends StatelessWidget {
     BuildContext context, {
     required Key key,
     required IconData icon,
-    required String tooltip,
     required bool enabled,
     required Future<void> Function() onPressed,
+    required double buttonSize,
+    required double iconSize,
+    required bool outlined,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final outlinedBorderColor = palette.borderSubtle;
+    final disabledFillColor = palette.surfaceMuted;
     return IconButton(
       key: key,
-      tooltip: tooltip,
-      onPressed: enabled ? () => unawaited(onPressed()) : null,
+      onPressed: enabled ? () => onPressed() : null,
       style: IconButton.styleFrom(
-        minimumSize: const Size.square(WhisperUi.minInteractiveSize),
-        maximumSize: const Size.square(WhisperUi.minInteractiveSize),
-        backgroundColor: Colors.transparent,
+        minimumSize: Size(buttonSize, buttonSize),
+        maximumSize: Size(buttonSize, buttonSize),
+        backgroundColor: outlined
+            ? (enabled
+                ? palette.surfaceElevated
+                : disabledFillColor.withValues(alpha: 0.65))
+            : Colors.transparent,
         foregroundColor:
             enabled ? colorScheme.onSurfaceVariant : colorScheme.outline,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+          borderRadius: BorderRadius.circular(outlined ? 16 : buttonSize / 2),
+          side: outlined
+              ? BorderSide(color: outlinedBorderColor)
+              : BorderSide.none,
         ),
         padding: EdgeInsets.zero,
         elevation: 0,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
       ),
-      icon: Icon(icon, size: 19),
+      icon: Icon(icon, size: iconSize),
     );
   }
 
-  Widget _buildClipboardPreview(BuildContext context) {
-    final draft = pendingClipboardDraft!;
+  Widget _buildClipboardImagePreview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
-    final l10n = AppLocalizations.of(context)!;
-    final Key previewKey;
-    final Widget leading;
-    final Widget details;
-
-    switch (draft) {
-      case PendingClipboardTextDraft(:final text):
-        previewKey = const ValueKey('chat-composer-clipboard-text-container');
-        leading = Icon(
-          Icons.text_snippet_outlined,
-          color: colorScheme.primary,
-          size: 22,
-        );
-        details = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SelectableText(
-              text,
-              key: clipboardTextPreviewKey,
-              maxLines: 3,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 13,
-                height: 1.3,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              l10n.clipboardPreviewTextCount(text.runes.length),
-              style: TextStyle(color: palette.textMuted, fontSize: 12),
-            ),
-          ],
-        );
-      case PendingClipboardImageDraft(:final image):
-        previewKey = clipboardImagePreviewKey;
-        leading = ClipRRect(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusMedium),
-          child: Image.memory(
-            image.bytes,
-            width: WhisperUi.minInteractiveSize,
-            height: WhisperUi.minInteractiveSize,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => ColoredBox(
-              color: palette.surfaceMuted,
-              child: const SizedBox.square(
-                dimension: WhisperUi.minInteractiveSize,
-                child: Icon(Icons.image_outlined, size: 20),
+    final draft = pendingClipboardImage!;
+    return Container(
+      key: clipboardImagePreviewKey,
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(
+              draft.bytes,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                width: 44,
+                height: 44,
+                color: colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.image_outlined,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
               ),
             ),
           ),
-        );
-        details = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.clipboardPreviewImage,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  draft.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _formatBytes(draft.size),
+                  style: TextStyle(
+                    color: palette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 3),
-            Text(
-              l10n.clipboardPreviewImageDetails(
-                image.fileName,
-                _formatBytes(image.size),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: palette.textMuted, fontSize: 12),
+          ),
+          IconButton(
+            key: clipboardImageRemoveButtonKey,
+            tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
+            onPressed: onClearClipboardImage,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(32, 32),
+              maximumSize: const Size(32, 32),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: Colors.transparent,
             ),
-          ],
-        );
-      case PendingClipboardFilesDraft(:final files):
-        final first = files.first;
-        final totalSize = files.fold<int>(0, (sum, file) => sum + file.size);
-        previewKey = clipboardFilesPreviewKey;
-        leading = SizedBox.square(
-          dimension: WhisperUi.minInteractiveSize,
-          child: DecoratedBox(
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClipboardFilesPreview(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final files = pendingClipboardFiles;
+    final first = files.first;
+    final totalSize =
+        files.fold<int>(0, (previous, draft) => previous + draft.size);
+    final l10n = AppLocalizations.of(context);
+    final countLabel = l10n?.clipboardFilesCount(files.length) ??
+        (files.length == 1 ? '1 file' : '${files.length} files');
+    return Container(
+      key: clipboardFilesPreviewKey,
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(WhisperUi.radiusMedium),
+              color: colorScheme.primary.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(10),
             ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.insert_drive_file_outlined,
               color: colorScheme.primary,
               size: 22,
             ),
           ),
-        );
-        details = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.clipboardPreviewFiles(files.length),
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              l10n.clipboardPreviewFilesDetails(
-                first.fileName,
-                files.length,
-                _formatBytes(totalSize),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: palette.textMuted, fontSize: 12),
-            ),
-          ],
-        );
-    }
-
-    return Semantics(
-      container: true,
-      label: l10n.clipboardPreviewTitle,
-      child: Container(
-        key: previewKey,
-        padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-        decoration: BoxDecoration(
-          color: palette.surfaceMuted.withValues(alpha: 0.56),
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-          border: Border.all(color: palette.borderSubtle),
-        ),
-        child: Row(
-          children: [
-            leading,
-            const SizedBox(width: 10),
-            Expanded(child: details),
-            IconButton(
-              key: clipboardRemoveButtonKey,
-              tooltip: l10n.clipboardPreviewRemove,
-              onPressed: onClearClipboardDraft,
-              style: IconButton.styleFrom(
-                minimumSize: const Size.square(WhisperUi.minInteractiveSize),
-                maximumSize: const Size.square(WhisperUi.minInteractiveSize),
-                foregroundColor: colorScheme.onSurfaceVariant,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  first.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                padding: EdgeInsets.zero,
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.close_rounded, size: 18),
+                const SizedBox(height: 3),
+                Text(
+                  '$countLabel · ${_formatBytes(totalSize)}',
+                  style: TextStyle(
+                    color: palette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          IconButton(
+            key: clipboardFilesRemoveButtonKey,
+            tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
+            onPressed: onClearClipboardFiles,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(32, 32),
+              maximumSize: const Size(32, 32),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: Colors.transparent,
+            ),
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPrimaryActionButton(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildPrimaryActionButton(
+    BuildContext context, {
+    required ColorScheme colorScheme,
+    required double buttonSize,
+    required double iconSize,
+  }) {
     final palette = context.whisperPalette;
-    final l10n = AppLocalizations.of(context)!;
+    final accentColor = colorScheme.primary;
+    final disabledBorderColor = palette.borderSubtle;
     final showsAttachmentAction = _showsAttachmentAction;
     final enabled = canSend &&
         !isLoading &&
-        (showsAttachmentAction || _hasDraftText || _hasClipboardDraft);
+        (showsAttachmentAction ||
+            _hasDraftText ||
+            _canSendPendingClipboardFiles ||
+            _canSendPendingClipboardImage);
+    final backgroundColor = showsAttachmentAction
+        ? Colors.transparent
+        : (enabled ? accentColor : palette.surfaceMuted);
+    final foregroundColor = showsAttachmentAction
+        ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
+        : (enabled ? Colors.white : colorScheme.outline);
     return IconButton(
       key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
-      tooltip: showsAttachmentAction
-          ? l10n.menuSendFile
-          : (_hasClipboardDraft ? l10n.clipboardPreviewSend : l10n.sendTips),
-      onPressed: enabled ? () => unawaited(_handlePrimaryAction()) : null,
+      onPressed: enabled ? _handlePrimaryAction : null,
       style: IconButton.styleFrom(
-        minimumSize: const Size.square(WhisperUi.minInteractiveSize),
-        maximumSize: const Size.square(WhisperUi.minInteractiveSize),
-        backgroundColor: showsAttachmentAction
-            ? Colors.transparent
-            : (enabled ? colorScheme.primary : palette.surfaceMuted),
-        foregroundColor: showsAttachmentAction
-            ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
-            : (enabled ? colorScheme.onPrimary : colorScheme.outline),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
-        ),
+        minimumSize: Size(buttonSize, buttonSize),
+        maximumSize: Size(buttonSize, buttonSize),
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor,
+        shape: const CircleBorder(),
+        padding: EdgeInsets.zero,
+        elevation: 0,
         side: showsAttachmentAction
             ? BorderSide.none
             : BorderSide(
-                color: enabled ? colorScheme.primary : palette.borderSubtle,
+                color: enabled ? accentColor : disabledBorderColor,
               ),
-        padding: EdgeInsets.zero,
-        elevation: 0,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
       ),
       icon: isLoading
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CupertinoActivityIndicator(),
+          ? SizedBox(
+              width: iconSize,
+              height: iconSize,
+              child: CupertinoActivityIndicator(
+                color: showsAttachmentAction ? accentColor : Colors.white,
+              ),
             )
           : Icon(
               showsAttachmentAction
                   ? Icons.add_rounded
                   : Icons.arrow_upward_rounded,
-              size: 20,
+              size: iconSize,
             ),
     );
   }
 
   bool get _hasDraftText => !isInputEmpty && controller.text.trim().isNotEmpty;
 
-  bool get _hasClipboardDraft => pendingClipboardDraft != null;
+  bool get _showsClipboardFilesPreview =>
+      isDesktopStyle && pendingClipboardFiles.isNotEmpty;
+
+  bool get _showsClipboardImagePreview =>
+      isDesktopStyle &&
+      pendingClipboardImage != null &&
+      !_showsClipboardFilesPreview;
+
+  bool get _canSendPendingClipboardFiles =>
+      _showsClipboardFilesPreview && onSendClipboardFiles != null;
+
+  bool get _canSendPendingClipboardImage =>
+      _showsClipboardImagePreview && onSendClipboardImage != null;
 
   bool get _showsAttachmentAction =>
-      !isLocalhost && !_hasDraftText && !_hasClipboardDraft;
+      !isLocalhost &&
+      !_hasDraftText &&
+      !_showsClipboardFilesPreview &&
+      !_showsClipboardImagePreview;
 
   Future<void> _handlePrimaryAction() async {
-    if (_hasClipboardDraft) {
-      await _sendClipboardDraftSafely();
+    if (_canSendPendingClipboardFiles) {
+      await onSendClipboardFiles!();
+      return;
+    }
+    if (_canSendPendingClipboardImage) {
+      await onSendClipboardImage!();
       return;
     }
     if (_showsAttachmentAction) {
@@ -537,13 +601,6 @@ class ChatComposer extends StatelessWidget {
     if (!canSend) {
       return KeyEventResult.ignored;
     }
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
-      onClearClipboardDraft();
-      return _hasClipboardDraft
-          ? KeyEventResult.handled
-          : KeyEventResult.ignored;
-    }
     if (_isPasteShortcut(event)) {
       unawaited(_handlePasteShortcut());
       return KeyEventResult.handled;
@@ -555,52 +612,29 @@ class ChatComposer extends StatelessWidget {
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
       keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is KeyDownEvent;
-      if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-        return KeyEventResult.ignored;
+      if (event is KeyDownEvent &&
+          (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
+              isMobile())) {
+        if (_canSendPendingClipboardFiles) {
+          unawaited(onSendClipboardFiles!());
+          return KeyEventResult.handled;
+        }
+        if (_canSendPendingClipboardImage) {
+          unawaited(onSendClipboardImage!());
+          return KeyEventResult.handled;
+        }
+        if (isLoading) {
+          return KeyEventResult.handled;
+        }
+        final snapshot = controller.value;
+        final nextText = snapshot.text.trimRight();
+        if (nextText.trim().isNotEmpty) {
+          unawaited(_sendTextSnapshot(snapshot, nextText));
+          return KeyEventResult.handled;
+        }
       }
-      final shiftPressed =
-          keyPressedMap[LogicalKeyboardKey.shift.keyLabel] == true ||
-              HardwareKeyboard.instance.isShiftPressed;
-      if (shiftPressed) {
-        return KeyEventResult.ignored;
-      }
-      if (event is KeyRepeatEvent || isLoading) {
-        return KeyEventResult.handled;
-      }
-      if (_hasClipboardDraft) {
-        unawaited(_sendClipboardDraftSafely());
-        return KeyEventResult.handled;
-      }
-      final snapshot = controller.value;
-      final nextText = snapshot.text.trimRight();
-      if (nextText.trim().isNotEmpty) {
-        unawaited(_sendTextSnapshot(snapshot, nextText));
-      }
-      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
-  }
-
-  Future<void> _sendClipboardDraftSafely() async {
-    try {
-      await onSendClipboardDraft();
-    } catch (_) {
-      // The owner reports send failures; keep unawaited UI actions contained.
-    }
-  }
-
-  Future<void> _sendTextSnapshot(
-    TextEditingValue snapshot,
-    String text,
-  ) async {
-    try {
-      final sent = await onSendText(text);
-      if (sent && controller.text == snapshot.text) {
-        controller.clear();
-      }
-    } catch (_) {
-      // The owner reports send failures; preserving the snapshot allows retry.
-    }
   }
 
   bool _isPasteShortcut(KeyEvent event) {
@@ -614,11 +648,25 @@ class ChatComposer extends StatelessWidget {
   }
 
   Future<void> _handlePasteShortcut() async {
-    final text = await onPasteClipboard();
+    final text = await onPasteClipboard?.call();
     if (text == null || text.isEmpty) {
       return;
     }
     _insertTextAtSelection(text);
+  }
+
+  Future<void> _sendTextSnapshot(
+    TextEditingValue snapshot,
+    String text,
+  ) async {
+    try {
+      final sent = await onSendText(text);
+      if (sent && controller.text == snapshot.text) {
+        controller.clear();
+      }
+    } catch (_) {
+      // The owner reports the failure; leaving the snapshot enables retry.
+    }
   }
 
   void _insertTextAtSelection(String text) {
@@ -630,8 +678,9 @@ class ChatComposer extends StatelessWidget {
     final end = selection.isValid
         ? math.max(selection.start, selection.end)
         : originalText.length;
+    final nextText = originalText.replaceRange(start, end, text);
     controller.value = TextEditingValue(
-      text: originalText.replaceRange(start, end, text),
+      text: nextText,
       selection: TextSelection.collapsed(offset: start + text.length),
       composing: TextRange.empty,
     );

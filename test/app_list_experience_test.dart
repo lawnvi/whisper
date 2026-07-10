@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/cupertino.dart';
@@ -11,8 +12,6 @@ import 'package:installed_apps/platform_type.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_empty_state.dart';
-import 'package:whisper/widget/app_interactive_tile.dart';
 
 const _mail = AppInfo(
   name: 'Mail',
@@ -39,6 +38,21 @@ const _messages = AppInfo(
   isLaunchableApp: true,
   category: AppCategory.social,
 );
+
+Finder _appRow(String title) => find
+    .ancestor(
+      of: find.text(title),
+      matching: find.byType(Semantics),
+    )
+    .first;
+
+CupertinoSwitch _switchFor(WidgetTester tester, String title) =>
+    tester.widget<CupertinoSwitch>(
+      find.descendant(
+        of: _appRow(title),
+        matching: find.byType(CupertinoSwitch),
+      ),
+    );
 
 Widget _host({
   required AppListLoader loader,
@@ -90,7 +104,7 @@ void main() {
     TestWidgetsFlutterBinding.instance.platformDispatcher.clearAllTestValues();
   });
 
-  testWidgets('loaded empty list uses the localized empty state',
+  testWidgets('loaded empty list uses the localized original status row',
       (tester) async {
     await _pumpAt(
       tester,
@@ -101,10 +115,9 @@ void main() {
       ),
     );
 
-    expect(find.byType(AppEmptyState), findsOneWidget);
     expect(find.text('No apps available'), findsOneWidget);
-    expect(find.text('No notification apps are available on this device.'),
-        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey<String>('empty-app-list')), findsOneWidget);
   });
 
   testWidgets('loader failure is consumed and retry restores the list',
@@ -158,29 +171,24 @@ void main() {
 
     await tester.tap(find.text('Mail'));
     await tester.pump();
-    var mail = tester.widget<AppInteractiveTile>(
-      find.widgetWithText(AppInteractiveTile, 'Mail'),
-    );
-    expect(mail.toggled, isTrue);
-    expect(mail.enabled, isFalse);
-    final selectAllButton = tester
-        .widgetList<IconButton>(find.byType(IconButton))
-        .singleWhere((button) => button.tooltip == 'Select All');
+    expect(_switchFor(tester, 'Mail').value, isTrue);
+    expect(_switchFor(tester, 'Mail').onChanged, isNull);
     expect(
-      selectAllButton.onPressed,
-      isNull,
-    );
+        tester
+            .widget<CupertinoButton>(find.widgetWithText(
+              CupertinoButton,
+              'Select All',
+            ))
+            .onPressed,
+        isNull);
     expect(calls.single.packages, <String>['com.example.mail']);
     expect(calls.single.add, isTrue);
     expect(calls.single.clear, isFalse);
 
     pending.completeError(StateError('disk full'));
     await tester.pumpAndSettle();
-    mail = tester.widget<AppInteractiveTile>(
-      find.widgetWithText(AppInteractiveTile, 'Mail'),
-    );
-    expect(mail.toggled, isFalse);
-    expect(mail.enabled, isTrue);
+    expect(_switchFor(tester, 'Mail').value, isFalse);
+    expect(_switchFor(tester, 'Mail').onChanged, isNotNull);
     expect(find.text('Could not save the notification app selection'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -227,7 +235,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(persisted, <String>{'com.example.mail'});
 
-    await tester.tap(find.byTooltip('Select All'));
+    await tester.tap(find.text('Select All'));
     await tester.pumpAndSettle();
     expect(calls[1].packages,
         <String>['com.example.mail', 'com.example.messages']);
@@ -235,7 +243,7 @@ void main() {
     expect(calls[1].clear, isFalse);
     expect(persisted, <String>{'com.example.mail', 'com.example.messages'});
 
-    await tester.tap(find.byTooltip('Deselect all'));
+    await tester.tap(find.text('Select All'));
     await tester.pumpAndSettle();
     expect(calls[2].packages,
         <String>['com.example.mail', 'com.example.messages']);
@@ -254,12 +262,8 @@ void main() {
     expect(calls[4].add, isFalse);
     expect(calls[4].clear, isFalse);
     expect(persisted, isEmpty);
-    final selectedInUi = tester
-        .widgetList<AppInteractiveTile>(find.byType(AppInteractiveTile))
-        .where((tile) => tile.toggled == true)
-        .map((tile) => tile.semanticLabel)
-        .toSet();
-    expect(selectedInUi, isEmpty);
+    expect(_switchFor(tester, 'Mail').value, isFalse);
+    expect(_switchFor(tester, 'Messages').value, isFalse);
   });
 
   testWidgets('disposing during a failed write does not leak an exception',
@@ -297,21 +301,29 @@ void main() {
       ),
     );
 
-    expect(find.text('Search apps'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'calendar');
+    expect(
+      tester
+          .widget<CupertinoSearchTextField>(
+            find.byType(CupertinoSearchTextField),
+          )
+          .placeholder,
+      isNull,
+    );
+    await tester.enterText(find.byType(CupertinoSearchTextField), 'calendar');
     await tester.pump();
 
-    expect(find.byType(AppEmptyState), findsOneWidget);
     expect(find.text('No apps found'), findsOneWidget);
     await tester.tap(find.text('Clear app search'));
     await tester.pump();
 
     expect(find.text('Mail'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
-    expect(find.byType(AppEmptyState), findsNothing);
+    expect(
+        find.byKey(const ValueKey<String>('empty-app-search')), findsNothing);
   });
 
-  testWidgets('search placeholder follows the current locale', (tester) async {
+  testWidgets('search field keeps the original native placeholder',
+      (tester) async {
     tester.view
       ..physicalSize = const Size(390, 900)
       ..devicePixelRatio = 1;
@@ -326,7 +338,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Buscar aplicaciones'), findsOneWidget);
+    expect(
+      tester
+          .widget<CupertinoSearchTextField>(
+            find.byType(CupertinoSearchTextField),
+          )
+          .placeholder,
+      isNull,
+    );
   });
 
   testWidgets('select all ignores stale package selections', (tester) async {
@@ -362,14 +381,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Select All'));
+    await tester.tap(find.text('Select All'));
     await tester.pump();
 
     expect(added, isTrue);
-    final tiles = tester
-        .widgetList<AppInteractiveTile>(find.byType(AppInteractiveTile))
-        .toList(growable: false);
-    expect(tiles.every((tile) => tile.toggled == true), isTrue);
+    expect(_switchFor(tester, 'Mail').value, isTrue);
+    expect(_switchFor(tester, 'Messages').value, isTrue);
+    expect(find.text('Select All'), findsOneWidget);
+    expect(find.text('Deselect all'), findsNothing);
   });
 
   testWidgets(
@@ -385,7 +404,7 @@ void main() {
       ),
     );
 
-    final tile = find.byType(AppInteractiveTile);
+    final tile = _appRow('Messages');
     expect(tile, findsOneWidget);
     final node = tester.getSemantics(tile);
     expect(node.label, contains('Messages'));
@@ -408,7 +427,21 @@ void main() {
           .excluding,
       isTrue,
     );
+    expect(
+      find.descendant(
+        of: tile,
+        matching: find.byIcon(Icons.apps_outlined),
+      ),
+      findsNothing,
+    );
     semantics.dispose();
+  });
+
+  test('app icon keeps the original direct Image.memory rendering', () {
+    final source = File('lib/page/appList.dart').readAsStringSync();
+
+    expect(source, contains('if (app.icon != null) AppIcon(icon: app.icon!)'));
+    expect(source, isNot(contains('errorBuilder:')));
   });
 
   testWidgets('app list remains overflow-free across supported widths',
@@ -425,7 +458,7 @@ void main() {
       );
       expect(tester.takeException(), isNull, reason: 'width $width');
       expect(
-        tester.getSize(find.byType(AppInteractiveTile).first).height,
+        tester.getSize(_appRow('Mail')).height,
         greaterThanOrEqualTo(56),
       );
     }

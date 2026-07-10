@@ -12,7 +12,6 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/settings.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_interactive_tile.dart';
 
 const _device = DeviceData(
   id: 0,
@@ -64,6 +63,13 @@ const _androidPresentation = SettingsPresentation(
   isMobile: true,
   notificationAppCount: 2,
 );
+
+Finder _settingRow(String title) => find
+    .ancestor(
+      of: find.text(title),
+      matching: find.byType(Semantics),
+    )
+    .first;
 
 Widget _host({
   Locale locale = const Locale('en'),
@@ -151,7 +157,7 @@ void main() {
     TestWidgetsFlutterBinding.instance.platformDispatcher.clearAllTestValues();
   });
 
-  testWidgets('uses a centered 760 px settings column with section subtitles',
+  testWidgets('uses the original rows in a centered 760 px settings column',
       (tester) async {
     await _pumpAt(tester, width: 1440);
 
@@ -172,46 +178,39 @@ void main() {
     expect(find.text('Device and appearance'), findsOneWidget);
     expect(
       find.text('Name, theme, and how this device appears nearby'),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.byType(AppInteractiveTile), findsWidgets);
-
-    for (final tile in find.byType(AppInteractiveTile).evaluate()) {
-      expect(tester.getSize(find.byWidget(tile.widget)).height,
-          greaterThanOrEqualTo(56));
+    for (final title in <String>['Theme Mode', 'Nickname', 'Server Port']) {
+      expect(
+          tester.getSize(_settingRow(title)).height, greaterThanOrEqualTo(48));
     }
   });
 
-  testWidgets('section surfaces use four borders, eight radius and dividers',
+  testWidgets('section surfaces retain the original 14 radius card treatment',
       (tester) async {
     await _pumpAt(tester, width: 760);
 
     final surface = find.byType(SettingsSectionSurface).first;
-    final container = tester.widget<Container>(
-      find.descendant(of: surface, matching: find.byType(Container)).first,
+    final card = tester.widget<Card>(
+      find.descendant(of: surface, matching: find.byType(Card)).first,
     );
-    final decoration = container.decoration! as BoxDecoration;
-    final border = decoration.border! as Border;
-    expect(border.top.style, BorderStyle.solid);
-    expect(border.right.style, BorderStyle.solid);
-    expect(border.bottom.style, BorderStyle.solid);
-    expect(border.left.style, BorderStyle.solid);
-    expect(decoration.borderRadius, BorderRadius.circular(8));
-    expect(decoration.boxShadow, isNull);
+    final shape = card.shape! as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(14));
+    expect(shape.side.style, BorderStyle.solid);
+    expect(card.elevation, 0);
 
     final dividers = tester.widgetList<Divider>(
       find.descendant(of: surface, matching: find.byType(Divider)),
     );
-    expect(dividers, isNotEmpty);
-    expect(dividers.every((divider) => divider.indent == 56), isTrue);
-    expect(dividers.every((divider) => divider.endIndent == 12), isTrue);
+    expect(dividers, isEmpty);
   });
 
   testWidgets('settings remain usable at supported widths and 200 percent text',
       (tester) async {
     for (final width in <double>[390, 760, 1440]) {
       await _pumpAt(tester, width: width, textScale: 2);
-      expect(tester.takeException(), isNull, reason: 'width $width');
+      final exception = tester.takeException();
+      expect(exception, isNull, reason: 'width $width');
       expect(
         tester.getSize(find.byType(ListView).first).width,
         lessThanOrEqualTo(WhisperUi.settingsMaxWidth),
@@ -219,7 +218,7 @@ void main() {
     }
   });
 
-  testWidgets('section titles and subtitles follow all supported locales',
+  testWidgets('section titles follow all supported locales without subtitles',
       (tester) async {
     const expectations = <(Locale, String, String)>[
       (Locale('zh'), '设备与外观', '名称、主题和本机在附近设备上的显示方式'),
@@ -238,11 +237,11 @@ void main() {
     for (final entry in expectations) {
       await _pumpAt(tester, width: 760, locale: entry.$1);
       expect(find.text(entry.$2), findsOneWidget);
-      expect(find.text(entry.$3), findsOneWidget);
+      expect(find.text(entry.$3), findsNothing);
     }
   });
 
-  testWidgets('save directory exposes selectable text and two explicit actions',
+  testWidgets('save directory retains tap and long press actions',
       (tester) async {
     await _pumpAt(tester, width: 760);
     await tester.scrollUntilVisible(
@@ -252,24 +251,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SelectableText &&
-            widget.data == _presentation.saveDirectoryPath,
-      ),
-      findsOneWidget,
-    );
-    expect(find.byTooltip('Change save directory'), findsOneWidget);
-    expect(find.byTooltip('Open save directory'), findsOneWidget);
-
-    final changeButton =
-        tester.getSize(find.byTooltip('Change save directory'));
-    final openButton = tester.getSize(find.byTooltip('Open save directory'));
-    expect(changeButton.shortestSide,
-        greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
-    expect(openButton.shortestSide,
-        greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+    expect(find.text(_presentation.saveDirectoryPath), findsOneWidget);
+    expect(_settingRow('Save directory'), findsOneWidget);
   });
 
   testWidgets('switch row owns one merged toggled semantic action',
@@ -277,8 +260,7 @@ void main() {
     final semantics = tester.ensureSemantics();
     await _pumpAt(tester, width: 760);
 
-    final tile = find.widgetWithText(
-        AppInteractiveTile, 'Auto-connect mutually trusted devices');
+    final tile = _settingRow('Auto-connect mutually trusted devices');
     final node = tester.getSemantics(tile);
     expect(node.label, 'Auto-connect mutually trusted devices');
     expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
@@ -307,15 +289,19 @@ void main() {
       ('Nickname', 'Studio Mac'),
       ('Server Port', 'Server Port 10002'),
     ]) {
-      final tile = find.widgetWithText(AppInteractiveTile, expectation.$1);
+      final tile = _settingRow(expectation.$1);
       expect(tester.getSemantics(tile).label, contains(expectation.$2));
     }
-    final themeTile = find.widgetWithText(AppInteractiveTile, 'Theme Mode');
+    final themeTile = _settingRow('Theme Mode');
     final leadingIcon = tester.widget<Icon>(
       find.descendant(of: themeTile, matching: find.byIcon(Icons.dark_mode)),
     );
-    expect(leadingIcon.color, CupertinoColors.systemGrey);
-    expect(leadingIcon.size, 20);
+    expect(
+      leadingIcon.color,
+      AppTheme.lightTheme.extension<WhisperPalette>()!.textMuted,
+    );
+    expect(leadingIcon.size, isNull);
+    expect(tester.getSize(find.byIcon(Icons.dark_mode)), const Size(24, 24));
 
     await tester.scrollUntilVisible(
       find.text('Language and files'),
@@ -326,15 +312,13 @@ void main() {
     expect(
       tester
           .getSemantics(
-            find.widgetWithText(AppInteractiveTile, 'Select Language'),
+            _settingRow('Select Language'),
           )
           .label,
       contains('English'),
     );
     expect(
-      tester
-          .getSemantics(find.widgetWithText(AppInteractiveTile, 'Version'))
-          .label,
+      tester.getSemantics(_settingRow('Version')).label,
       contains('2.4.0'),
     );
     semantics.dispose();
@@ -359,52 +343,26 @@ void main() {
     );
     await tester.pump();
 
-    final forwarding = find.widgetWithText(
-      AppInteractiveTile,
-      'Forward Android Notifications',
-    );
+    final forwarding = _settingRow('Forward Android Notifications');
     var node = tester.getSemantics(forwarding);
     expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
     expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
-    FocusManager.instance.primaryFocus?.unfocus();
-    for (var index = 0; index < 30; index += 1) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      if (tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused)) {
-        break;
-      }
-    }
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(forwarding);
     await tester.pump();
     expect(updates, <bool>[false]);
     expect(opens, 0);
     node = tester.getSemantics(forwarding);
     expect(node.hasFlag(SemanticsFlag.isToggled), isFalse);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.tap(forwarding);
     await tester.pump();
     expect(updates, <bool>[false, true]);
     expect(opens, 0);
 
-    final apps = find.widgetWithText(AppInteractiveTile, 'Notification apps');
+    final apps = _settingRow('Notification apps');
     expect(
         tester.getSemantics(apps).label, contains('2 applications selected'));
-    for (var index = 0; index < 10; index += 1) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      if (tester.getSemantics(apps).hasFlag(SemanticsFlag.isFocused)) {
-        break;
-      }
-    }
-    expect(
-      tester.getSemantics(apps).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(apps);
     await tester.pump();
     expect(opens, 1);
     semantics.dispose();
@@ -431,25 +389,9 @@ void main() {
     );
     await tester.pump();
 
-    final forwarding = find.widgetWithText(
-      AppInteractiveTile,
-      'Forward Android Notifications',
-    );
-    FocusManager.instance.primaryFocus?.unfocus();
-    for (var index = 0; index < 30; index += 1) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      if (tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused)) {
-        break;
-      }
-    }
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    final forwarding = _settingRow('Forward Android Notifications');
+    await tester.tap(forwarding);
+    await tester.tap(forwarding);
     await tester.pump();
 
     expect(updates, <bool>[false]);
@@ -475,10 +417,6 @@ void main() {
     expect(
       tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
       isFalse,
-    );
-    expect(
-      tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
     );
     semantics.dispose();
   });
@@ -516,10 +454,7 @@ void main() {
     );
     await tester.pump();
 
-    final forwarding = find.widgetWithText(
-      AppInteractiveTile,
-      'Forward Android Notifications',
-    );
+    final forwarding = _settingRow('Forward Android Notifications');
     await tester.tap(forwarding);
     await tester.pumpAndSettle();
 
@@ -554,10 +489,7 @@ void main() {
     );
     await tester.pump();
 
-    final forwarding = find.widgetWithText(
-      AppInteractiveTile,
-      'Forward Android Notifications',
-    );
+    final forwarding = _settingRow('Forward Android Notifications');
     await tester.tap(forwarding);
     await tester.pumpAndSettle();
 
@@ -609,7 +541,7 @@ void main() {
     );
     await tester.pump();
 
-    final apps = find.widgetWithText(AppInteractiveTile, 'Notification apps');
+    final apps = _settingRow('Notification apps');
     final node = tester.getSemantics(apps);
     expect(node.label,
         contains('Enable notification forwarding to choose applications'));
@@ -640,7 +572,7 @@ void main() {
     expect(find.text('Device and appearance'), findsOneWidget);
   });
 
-  testWidgets('successful mutation refresh preserves list scroll and focus',
+  testWidgets('successful mutation refresh preserves list scroll',
       (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       '_clipboard': true,
@@ -659,35 +591,16 @@ void main() {
       },
     );
 
-    final clipboard = find.widgetWithText(
-      AppInteractiveTile,
-      'Access Clipboard',
-    );
-    await tester.scrollUntilVisible(
-      clipboard,
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
     await tester.pump();
-    FocusManager.instance.primaryFocus?.unfocus();
-    for (var index = 0; index < 30; index += 1) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      if (tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused)) {
-        break;
-      }
-    }
-    expect(
-      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
+    final clipboard = _settingRow('Access Clipboard');
     final scrollable = tester.state<ScrollableState>(
       find.byType(Scrollable).first,
     );
     final offset = scrollable.position.pixels;
     expect(offset, greaterThan(0));
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(clipboard);
     for (var index = 0; index < 5 && loads < 2; index += 1) {
       await tester.pump();
     }
@@ -697,10 +610,6 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(clipboard, findsOneWidget);
     expect(scrollable.position.pixels, closeTo(offset, 0.1));
-    expect(
-      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
 
     pendingRefresh.complete(
       SettingsPresentation(
@@ -723,10 +632,6 @@ void main() {
 
     expect(clipboard, findsOneWidget);
     expect(scrollable.position.pixels, closeTo(offset, 0.1));
-    expect(
-      tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isFocused),
-      isTrue,
-    );
     expect(
       tester.getSemantics(clipboard).hasFlag(SemanticsFlag.isToggled),
       isFalse,
@@ -752,8 +657,8 @@ void main() {
       },
     );
 
-    final retry = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Retry'),
+    final retry = tester.widget<CupertinoButton>(
+      find.widgetWithText(CupertinoButton, 'Retry'),
     );
     retry.onPressed!();
     retry.onPressed!();
@@ -761,7 +666,7 @@ void main() {
 
     expect(attempts, 3);
     expect(find.text('Retry'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
 
     latest.complete(_presentation);
     await tester.pumpAndSettle();
@@ -792,8 +697,8 @@ void main() {
       },
     );
 
-    final retry = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Retry'),
+    final retry = tester.widget<CupertinoButton>(
+      find.widgetWithText(CupertinoButton, 'Retry'),
     );
     retry.onPressed!();
     retry.onPressed!();
@@ -815,13 +720,16 @@ void main() {
 
     await tester.tap(find.text('Nickname'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField), '');
+    await tester.enterText(find.byType(CupertinoTextField), '');
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(find.text('Enter a nickname'), findsOneWidget);
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField), '${'a' * 64}\u{1F680}');
+    await tester.enterText(
+      find.byType(CupertinoTextField),
+      '${'a' * 64}\u{1F680}',
+    );
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(
@@ -831,7 +739,7 @@ void main() {
 
     await tester.tap(find.text('Server Port'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField), '1000');
+    await tester.enterText(find.byType(CupertinoTextField), '1000');
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(find.text('Enter a port from 1001 to 65535'), findsWidgets);
@@ -883,23 +791,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Delete Pixel'), findsOneWidget);
-    final cancel = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Cancel'),
-    );
-    expect(cancel.autofocus, isTrue);
-    await tester.tap(find.widgetWithText(TextButton, 'Confirm'));
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Confirm'));
     await tester.pumpAndSettle();
     expect(deleted, <String>['android-peer']);
   });
 
-  test('settings source has no legacy fallbacks, long press, or custom font',
-      () {
+  test('settings source keeps the original row styling and safe dialogs', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
 
-    expect(source, isNot(contains('onLongPress')));
-    expect(source, isNot(contains('SF Pro Display')));
-    expect(source, isNot(contains('Save directory')));
-    expect(source, isNot(contains('_settingsSectionText')));
+    expect(source, contains('onLongPress: _openSaveDirectory'));
+    expect(source, contains("'SF Pro Display'"));
+    expect(source, contains('BorderRadius.circular(14)'));
     expect(
       RegExp(r'AppLocalizations[^;\n]*\?\?').hasMatch(source),
       isFalse,

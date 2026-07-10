@@ -23,8 +23,8 @@ void main() {
     expect(source, contains('final colorScheme = theme.colorScheme;'));
     expect(source, contains('final palette = context.whisperPalette;'));
     expect(source, contains('backgroundColor: colorScheme.surface'));
-    expect(source, contains('AppBar('));
-    expect(source, contains('foregroundColor: colorScheme.onSurface'));
+    expect(source, contains('CupertinoNavigationBar('));
+    expect(source, contains('automaticBackgroundVisibility: false'));
   });
 
   test('notification app picker shows package names under app names', () {
@@ -78,6 +78,6 @@ void main() {
     );
     expect(source, contains('AnimatedSwitcher('));
     expect(source, contains('final AppListLoader? loader;'));
-    expect(source, contains('AppEmptyState('));
+    expect(source, contains('Widget _buildStatus('));
   });
 }

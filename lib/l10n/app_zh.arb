@@ -381,7 +381,6 @@
   "remoteInputWorkspaceStop": "停止",
   "remoteInputWorkspaceNoTargets": "没有可用的桌面被控设备",
   "remoteInputWorkspaceSelectTargets": "被控设备",
-  "remoteInputWorkspaceSelectTargetBody": "请从设备面板至少将一台设备加入工作区，再排列它的屏幕。",
   "remoteInputWorkspaceCanvasTitle": "屏幕排列",
   "remoteInputWorkspaceDetailsTitle": "设备详情",
   "remoteInputWorkspaceFocusTarget": "查看设备",
@@ -420,135 +419,9 @@
   "notificationChannelTransferDesc": "文件传输进度",
   "notificationChannelGeneral": "消息",
   "notificationChannelGeneralDesc": "新消息与提醒",
-  "emptyDevicesTitle": "还没有设备",
-  "emptyDevicesBody": "附近设备和曾连接的设备会显示在这里。",
-  "emptySearchTitle": "没有结果",
-  "emptySearchBody": "没有设备符合当前搜索。",
-  "emptySearchClear": "清除搜索",
-  "emptyConversationTitle": "还没有消息",
-  "emptyConversationConnectedBody": "发送消息或文件即可开始会话。",
-  "emptyConversationDisconnectedBody": "连接此设备后即可发送消息或文件。",
   "emptyAppsTitle": "没有可用应用",
-  "emptyAppsBody": "此设备上没有可用于通知转发的应用。",
   "emptyAppsSearchTitle": "没有找到应用",
-  "emptyAppsSearchBody": "请尝试其他应用名称或包名。",
-  "sessionGroupConnected": "已连接设备",
-  "sessionGroupNearby": "附近可用",
-  "sessionGroupRecent": "最近设备",
-  "sessionGroupDeviceCount": "{count, plural, =0{没有设备} other{{count} 台设备}}",
-  "@sessionGroupDeviceCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "localDiscoveryStarting": "正在启动局域网发现",
-  "localDiscoveryActive": "正在广播并发现",
-  "localDiscoveryStopped": "局域网发现已停止",
-  "localDiscoveryUnavailable": "局域网发现不可用",
-  "localDiscoveryPermissionUnknown": "正在等待局域网权限",
-  "localDiscoveryPermissionDenied": "局域网访问权限已拒绝",
-  "localDiscoveryPermissionRestricted": "局域网访问受到限制",
-  "localDiscoveryFailed": "局域网发现失败：{error}",
-  "@localDiscoveryFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "localDiscoveryAddress": "本机地址：{address}",
-  "@localDiscoveryAddress": {
-    "placeholders": {
-      "address": {
-        "type": "String"
-      }
-    }
-  },
-  "localDiscoveryUnpairedCandidate": "附近未配对设备",
-  "workbenchActionManualConnect": "手动连接",
-  "workbenchActionAudioShare": "共享系统音频",
-  "workbenchActionRemoteInput": "键鼠工作区",
-  "workbenchActionSettings": "设置",
-  "workbenchActionBack": "返回设备列表",
-  "workbenchActionSearch": "搜索设备",
-  "workbenchActionClearSearch": "清除设备搜索",
-  "workbenchActionRetryDiscovery": "重试发现",
-  "workbenchActionUnavailable": "暂不可用：{reason}",
-  "@workbenchActionUnavailable": {
-    "placeholders": {
-      "reason": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewTitle": "剪贴板预览",
-  "clipboardPreviewTextCount": "{count, plural, =0{空文本} other{{count} 个字符}}",
-  "@clipboardPreviewTextCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "clipboardPreviewImage": "剪贴板图片",
-  "clipboardPreviewImageDetails": "{file} · {size}",
-  "@clipboardPreviewImageDetails": {
-    "placeholders": {
-      "file": {
-        "type": "String"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewFiles": "{count, plural, =0{没有文件} other{{count} 个文件}}",
-  "@clipboardPreviewFiles": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "clipboardPreviewFilesDetails": "{file} · {count} 个文件 · {size}",
-  "@clipboardPreviewFilesDetails": {
-    "placeholders": {
-      "file": {
-        "type": "String"
-      },
-      "count": {
-        "type": "int"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "clipboardPreviewRemove": "移除剪贴板预览",
-  "clipboardPreviewSend": "发送剪贴板内容",
-  "clipboardPreviewEmpty": "剪贴板中没有支持的内容",
-  "clipboardPreviewReadFailed": "无法读取剪贴板：{error}",
-  "@clipboardPreviewReadFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "fileDropAccepted": "松开发送到 {device}",
-  "@fileDropAccepted": {
-    "placeholders": {
-      "device": {
-        "type": "String"
-      }
-    }
-  },
   "fileDropRejected": "无法发送这些文件",
-  "fileDropRejectedDisconnected": "请先连接设备再拖入文件",
-  "fileDropRejectedLocalSession": "不能向本机发送文件",
-  "fileDropRejectedNoFiles": "拖入的内容中没有文件",
   "validationRequired": "此项不能为空",
   "validationNicknameRequired": "请输入昵称",
   "validationNicknameTooLong": "昵称不能超过 64 个字符",
@@ -583,31 +456,53 @@
   "appListSaveFailed": "无法保存通知应用选择",
   "notificationApps": "通知应用",
   "notificationAppsSelected": "{count, plural, =0{尚未选择应用} other{已选择 {count} 个应用}}",
-  "@notificationAppsSelected": {"placeholders": {"count": {"type": "int"}}},
+  "@notificationAppsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "notificationAppsDisabled": "开启通知转发后可选择应用",
   "notificationForwardingUpdateFailed": "无法更新通知转发，请重试",
   "dangerousActions": "危险操作",
-  "remoteInputWorkspaceDevicesPanel": "设备面板",
-  "remoteInputWorkspaceDetailsPanel": "详情面板",
-  "remoteInputWorkspaceOpenDevicesPanel": "打开设备面板",
-  "remoteInputWorkspaceOpenDetailsPanel": "打开详情面板",
-  "remoteInputWorkspaceClosePanel": "关闭面板",
-  "remoteInputWorkspaceSaveShortcut": "保存屏幕排列",
-  "remoteInputWorkspaceSelectedScreen": "已选择屏幕",
-  "remoteInputWorkspaceConflictScreen": "屏幕与另一条边重叠",
   "pairingNewDeviceTitle": "配对新设备",
   "pairingNewDeviceDescription": "{device} 请求建立可信连接",
-  "@pairingNewDeviceDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingNewDeviceDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingIdentityChangedTitle": "设备身份已变化",
   "pairingIdentityChangedDescription": "{device} 的身份公钥与上次配对不同。仅在你确认设备已重装或重置后继续",
-  "@pairingIdentityChangedDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingIdentityChangedDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingLegacyTrustTitle": "重新确认可信设备",
   "pairingLegacyTrustDescription": "{device} 来自旧版信任记录，需要重新配对以绑定设备身份",
-  "@pairingLegacyTrustDescription": {"placeholders": {"device": {"type": "String"}}},
+  "@pairingLegacyTrustDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
   "pairingCompareCode": "请确认两台设备显示相同的 6 位数字",
   "pairingNotificationBody": "打开 Whisper，在 App 内比对 6 位配对码",
   "pairingCodeSemantics": "配对码 {code}",
-  "@pairingCodeSemantics": {"placeholders": {"code": {"type": "String"}}},
+  "@pairingCodeSemantics": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "pairingReject": "拒绝",
   "pairingApprove": "数字一致",
   "pairingUpgradeRequired": "对方版本过低，请升级 Whisper 后重试",

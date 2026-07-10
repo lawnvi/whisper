@@ -8,8 +8,6 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_empty_state.dart';
-import 'package:whisper/widget/app_interactive_tile.dart';
 
 typedef AppListLoader = Future<AppListPresentation> Function();
 
@@ -260,71 +258,68 @@ class _AppListScreenState extends State<AppListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
-    final allSelected = apps.isNotEmpty &&
-        apps.every((app) => checkedApps[app.packageName] == true);
+    final navigationTextColor =
+        isDark ? palette.textMuted : colorScheme.onSurface;
 
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        foregroundColor: colorScheme.onSurface,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Divider(height: 1, color: palette.borderSubtle),
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: colorScheme.surface,
+        automaticBackgroundVisibility: false,
+        enableBackgroundFilterBlur: false,
+        border: Border(
+          bottom: BorderSide(color: palette.borderSubtle),
         ),
-        leading: const BackButton(),
-        title: Text(
+        middle: Text(
           l10n.selectNotifyApp,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: navigationTextColor),
         ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: allSelected ? l10n.deselectAll : l10n.selectAll,
-            onPressed:
-                isLoading || apps.isEmpty || _isSaving ? null : _toggleAll,
-            icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            l10n.back,
+            style: TextStyle(color: navigationTextColor),
           ),
-        ],
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: isLoading || apps.isEmpty || _isSaving ? null : _toggleAll,
+          child: Text(
+            l10n.selectAll,
+            style: TextStyle(
+              color: isLoading || apps.isEmpty || _isSaving
+                  ? palette.textMuted
+                  : navigationTextColor,
+            ),
+          ),
+        ),
       ),
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: WhisperUi.settingsMaxWidth,
-            ),
-            child: Column(
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: filterApps,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: l10n.appListSearchPlaceholder,
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: l10n.appListClearSearch,
-                              onPressed: _clearSearch,
-                              icon: const Icon(Icons.clear),
-                            ),
-                    ),
-                  ),
+      child: Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: SafeArea(
+          child: Column(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 2),
+                child: CupertinoSearchTextField(
+                  controller: searchController,
+                  onChanged: filterApps,
                 ),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: _buildBody(l10n),
-                  ),
+              ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: _buildBody(l10n),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -339,36 +334,29 @@ class _AppListScreenState extends State<AppListScreen> {
       );
     }
     if (_loadFailed) {
-      return AppEmptyState(
+      return _buildStatus(
         key: const ValueKey<String>('failed-app-list'),
-        icon: Icons.error_outline,
         title: l10n.appListLoadFailedTitle,
-        body: l10n.appListLoadFailedBody,
         actionLabel: l10n.retry,
-        onAction: loadApps,
+        onPressed: loadApps,
       );
     }
     if (apps.isEmpty) {
-      return AppEmptyState(
+      return _buildStatus(
         key: const ValueKey<String>('empty-app-list'),
-        icon: Icons.apps_outlined,
         title: l10n.emptyAppsTitle,
-        body: l10n.emptyAppsBody,
       );
     }
     if (filteredApps.isEmpty) {
-      return AppEmptyState(
+      return _buildStatus(
         key: const ValueKey<String>('empty-app-search'),
-        icon: Icons.search_off,
         title: l10n.emptyAppsSearchTitle,
-        body: l10n.emptyAppsSearchBody,
         actionLabel: l10n.appListClearSearch,
-        onAction: _clearSearch,
+        onPressed: _clearSearch,
       );
     }
     return ListView.builder(
       key: const ValueKey<String>('loaded-app-list'),
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
       itemCount: filteredApps.length,
       itemBuilder: (context, index) {
         final app = filteredApps[index];
@@ -380,6 +368,25 @@ class _AppListScreenState extends State<AppListScreen> {
           onChanged: (value) => _updateAppChecked(app.packageName, value),
         );
       },
+    );
+  }
+
+  Widget _buildStatus({
+    required Key key,
+    required String title,
+    String? actionLabel,
+    VoidCallback? onPressed,
+  }) {
+    return Center(
+      key: key,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(title),
+          if (actionLabel != null && onPressed != null)
+            CupertinoButton(onPressed: onPressed, child: Text(actionLabel)),
+        ],
+      ),
     );
   }
 }
@@ -400,28 +407,58 @@ class AppListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 56),
-      child: AppInteractiveTile(
-        semanticLabel: '${app.name}, ${app.packageName}',
-        toggled: isChecked,
-        enabled: enabled,
-        onActivate: () => onChanged(!isChecked),
-        leading: app.icon == null
-            ? const SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(Icons.apps_outlined),
-              )
-            : AppIcon(icon: app.icon!),
-        title: Text(app.name),
-        subtitle: Text(_appSubtitle(app)),
-        trailing: ExcludeFocus(
-          child: ExcludeSemantics(
-            child: CupertinoSwitch(
-              value: isChecked,
-              onChanged: enabled ? onChanged : null,
-            ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      container: true,
+      enabled: enabled,
+      toggled: isChecked,
+      label: '${app.name}, ${app.packageName}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? () => onChanged(!isChecked) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Row(
+            children: <Widget>[
+              if (app.icon != null) AppIcon(icon: app.icon!),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      app.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _appSubtitle(app),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.systemGrey,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ExcludeFocus(
+                child: ExcludeSemantics(
+                  child: CupertinoSwitch(
+                    value: isChecked,
+                    onChanged: enabled ? onChanged : null,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -440,16 +477,6 @@ class AppIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.memory(
-      icon,
-      width: 40,
-      height: 40,
-      gaplessPlayback: true,
-      errorBuilder: (context, error, stackTrace) => const SizedBox(
-        width: 40,
-        height: 40,
-        child: Icon(Icons.apps_outlined),
-      ),
-    );
+    return Image.memory(icon, width: 40, height: 40);
   }
 }

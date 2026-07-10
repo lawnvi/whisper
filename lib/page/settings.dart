@@ -28,8 +28,6 @@ import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
-import 'package:whisper/widget/app_empty_state.dart';
-import 'package:whisper/widget/app_interactive_tile.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -85,28 +83,21 @@ class SettingsSectionSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.whisperPalette;
-    return Container(
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        border: Border.all(color: palette.borderSubtle),
-        borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+      color: palette.surfaceElevated,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: palette.borderSubtle),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (var index = 0; index < children.length; index += 1) ...<Widget>[
-            children[index],
-            if (index < children.length - 1)
-              Divider(
-                height: 1,
-                thickness: 1,
-                indent: 56,
-                endIndent: 12,
-                color: palette.borderSubtle,
-              ),
-          ],
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
     );
   }
@@ -284,12 +275,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
     final locale = Localizations.localeOf(context);
+    final horizontalPagePadding = _isMobilePlatform ? 10.0 : 14.0;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(l10n.setting),
+        leading: MediaQuery.withNoTextScaling(
+          child: CupertinoNavigationBarBackButton(
+            previousPageTitle: '',
+            onPressed: () => Navigator.of(context).pop(),
+            color: colorScheme.onSurface,
+          ),
+        ),
+        title: Text(
+          l10n.setting,
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
       ),
       body: SafeArea(
         child: Align(
@@ -299,20 +300,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               maxWidth: WhisperUi.settingsMaxWidth,
             ),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPagePadding,
+                12,
+                horizontalPagePadding,
+                16,
+              ),
               children: [
                 if (_isLoading)
                   const SizedBox(
                     height: 240,
-                    child: Center(child: CircularProgressIndicator()),
+                    child: Center(child: CupertinoActivityIndicator()),
                   )
                 else if (_loadFailed)
-                  AppEmptyState(
-                    icon: Icons.error_outline,
-                    title: l10n.settingsLoadFailedTitle,
-                    body: l10n.settingsLoadFailedBody,
-                    actionLabel: l10n.retry,
-                    onAction: () => _refreshDevice(showLoading: true),
+                  SizedBox(
+                    height: 240,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(l10n.settingsLoadFailedTitle),
+                          CupertinoButton(
+                            onPressed: () => _refreshDevice(showLoading: true),
+                            child: Text(l10n.retry),
+                          ),
+                        ],
+                      ),
+                    ),
                   )
                 else ...<Widget>[
                   _buildSettingsSection(
@@ -1055,35 +1069,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     List<Widget> children,
   ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _buildSettingsSectionHeader(title, subtitle),
+          _buildSettingsSectionHeader(title),
           SettingsSectionSurface(children: children),
         ],
       ),
     );
   }
 
-  Widget _buildSettingsSectionHeader(String title, String subtitle) {
-    final theme = Theme.of(context);
+  Widget _buildSettingsSectionHeader(String title) {
     final palette = context.whisperPalette;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(title, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: palette.textMuted,
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: palette.textMuted,
+        ),
       ),
     );
   }
@@ -1096,6 +1106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String desc = '',
     Widget? subtitle,
     bool enabled = true,
+    GestureTapCallback? onLongPress,
   }) {
     final toggle = trailing is CupertinoSwitch ? trailing : null;
     final activate = onTap ??
@@ -1109,75 +1120,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 desc,
                 softWrap: true,
               ));
-    final semanticLabel = desc.isEmpty ? title : '$title, $desc';
+    final palette = context.whisperPalette;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 56),
-      child: AppInteractiveTile(
-        semanticLabel: semanticLabel,
-        toggled: toggle?.value,
-        enabled: enabled,
-        onActivate: activate,
-        leading: icon,
-        title: Text(title),
-        subtitle: resolvedSubtitle,
-        trailing: toggle == null
-            ? trailing
-            : IgnorePointer(
-                ignoring: !enabled,
-                child: ExcludeFocus(
-                  child: ExcludeSemantics(child: toggle),
-                ),
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: desc.isEmpty ? title : '$title, $desc',
+      button: activate != null,
+      enabled: enabled && activate != null,
+      toggled: toggle?.value,
+      onTap: enabled ? activate : null,
+      child: FocusableActionDetector(
+        enabled: enabled && activate != null,
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              activate?.call();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTap: enabled ? activate : null,
+          onLongPress: enabled ? onLongPress : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(icon.icon, color: palette.textMuted),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            color: colorScheme.onSurface,
+                            fontWeight:
+                                Platform.isWindows ? null : FontWeight.w500,
+                            fontFamily:
+                                Platform.isWindows ? null : 'SF Pro Display',
+                          ),
+                        ),
+                        if (resolvedSubtitle != null) ...<Widget>[
+                          const SizedBox(height: 4),
+                          DefaultTextStyle(
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: palette.textMuted,
+                              fontWeight:
+                                  Platform.isWindows ? null : FontWeight.w400,
+                              fontFamily:
+                                  Platform.isWindows ? null : 'SF Pro Display',
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            child: resolvedSubtitle,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) ...<Widget>[
+                    const SizedBox(width: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: ExcludeFocus(
+                        child: ExcludeSemantics(child: trailing),
+                      ),
+                    ),
+                  ],
+                ],
               ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildSaveDirectoryItem(AppLocalizations l10n) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: AppInteractiveTile(
-            semanticLabel: '${l10n.settingsSaveDirectory}, $_path',
-            onActivate: _pickSaveDir,
-            leading: const Icon(Icons.file_download_outlined),
-            title: Text(l10n.settingsSaveDirectory),
-            subtitle: SelectableText(_path),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 4,
-            children: <Widget>[
-              Tooltip(
-                message: l10n.settingsChangeDirectory,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    await _pickSaveDir();
-                  },
-                  icon: const Icon(Icons.drive_file_move_outline),
-                  label: Text(l10n.settingsChangeDirectory),
-                ),
-              ),
-              Tooltip(
-                message: l10n.settingsOpenDirectory,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    await _openSaveDirectory();
-                  },
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: Text(l10n.settingsOpenDirectory),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return _buildSettingItem(
+      l10n.settingsSaveDirectory,
+      const Icon(Icons.file_download_outlined),
+      desc: _path,
+      onTap: _pickSaveDir,
+      onLongPress: _openSaveDirectory,
     );
   }
 
@@ -1455,12 +1500,22 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
     final showRemoteInputSettings = _canConfigureRemoteInput;
+    final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(l10n.setting),
+        leading: MediaQuery.withNoTextScaling(
+          child: CupertinoNavigationBarBackButton(
+            previousPageTitle: '',
+            onPressed: () => Navigator.of(context).pop(),
+            color: colorScheme.onSurface,
+          ),
+        ),
+        title: Text(
+          l10n.setting,
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
       ),
       body: SafeArea(
         child: Align(
@@ -1470,7 +1525,12 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               maxWidth: WhisperUi.settingsMaxWidth,
             ),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPagePadding,
+                12,
+                horizontalPagePadding,
+                16,
+              ),
               children: [
                 _buildClientSettingsSection(
                   l10n.settingsSectionPermissionsSharing,
@@ -1588,33 +1648,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     String subtitle,
     List<Widget> children,
   ) {
-    final theme = Theme.of(context);
-    final palette = context.whisperPalette;
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(title, style: theme.textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SettingsSectionSurface(children: children),
-        ],
-      ),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: SettingsSectionSurface(children: children),
     );
   }
 
@@ -1941,6 +1977,7 @@ class _DeviceSettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final trailingWidget = trailing;
     final CupertinoSwitch? toggle =
         trailingWidget is CupertinoSwitch ? trailingWidget : null;
@@ -1949,17 +1986,66 @@ class _DeviceSettingTile extends StatelessWidget {
             ? null
             : () => toggle!.onChanged!.call(!toggle.value));
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 56),
-      child: AppInteractiveTile(
-        semanticLabel: title,
-        toggled: toggle?.value,
-        onActivate: activate,
-        leading: icon,
-        title: Text(title),
-        trailing: toggle == null
-            ? trailingWidget
-            : ExcludeFocus(child: ExcludeSemantics(child: toggle)),
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: title,
+      button: activate != null,
+      enabled: activate != null,
+      toggled: toggle?.value,
+      onTap: activate,
+      child: FocusableActionDetector(
+        enabled: activate != null,
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              activate?.call();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTap: activate,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                icon,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: Platform.isWindows ? null : 'SF Pro Display',
+                    ),
+                  ),
+                ),
+                if (trailingWidget != null) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ExcludeFocus(
+                      child: ExcludeSemantics(child: trailingWidget),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

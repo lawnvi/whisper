@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
-import 'package:whisper/remote_input/remote_input_workspace_presentation.dart';
 import 'package:whisper/theme/app_theme.dart';
 
 typedef RemoteInputTopologyLoader = Future<RemoteInputTopology?> Function();
@@ -119,122 +118,94 @@ class _RemoteInputLayoutEditorScreenState
     final connection = _currentConnection();
     final edge = connection?.segment.sourceEdge;
 
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-            _saveCurrentLayout,
-        const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
-            _saveCurrentLayout,
-        const SingleActivator(LogicalKeyboardKey.escape): _close,
-      },
-      child: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: Scaffold(
-          backgroundColor: colorScheme.surface,
-          appBar: AppBar(
-            leading: IconButton(
-              tooltip: l10n.back,
-              onPressed: _close,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            title: Text(
-              l10n.remoteInputLayoutTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-            actions: <Widget>[
-              IconButton(
-                tooltip: l10n.remoteInputLayoutSave,
-                onPressed: connection == null ? null : () => _save(connection),
-                icon: const Icon(Icons.check_rounded),
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        leading: CupertinoNavigationBarBackButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          color: colorScheme.primary,
+        ),
+        title: Text(
+          l10n.remoteInputLayoutTitle,
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
+        actions: [
+          IconButton(
+            tooltip: l10n.remoteInputLayoutSave,
+            onPressed: connection == null ? null : () => _save(connection),
+            icon: const Icon(Icons.check_rounded),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                child: _buildCanvas(context),
               ),
-            ],
-          ),
-          body: SafeArea(
-            child: Column(
-              children: <Widget>[
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                    child: _buildCanvas(context),
-                  ),
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: palette.surfaceElevated,
-                    border: Border(
-                      top: BorderSide(color: palette.borderSubtle),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Text(
-                          l10n.remoteInputCurrentEdge(_edgeLabel(l10n, edge)),
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: <Widget>[
-                            _EdgeIconButton(
-                              icon: Icons.align_horizontal_left_rounded,
-                              tooltip: l10n.remoteInputSnapLeft,
-                              selected: edge == RemoteInputEdge.left,
-                              onPressed: () => _snapTo(RemoteInputEdge.left),
-                            ),
-                            _EdgeIconButton(
-                              icon: Icons.align_horizontal_right_rounded,
-                              tooltip: l10n.remoteInputSnapRight,
-                              selected: edge == RemoteInputEdge.right,
-                              onPressed: () => _snapTo(RemoteInputEdge.right),
-                            ),
-                            _EdgeIconButton(
-                              icon: Icons.vertical_align_top_rounded,
-                              tooltip: l10n.remoteInputSnapTop,
-                              selected: edge == RemoteInputEdge.top,
-                              onPressed: () => _snapTo(RemoteInputEdge.top),
-                            ),
-                            _EdgeIconButton(
-                              icon: Icons.vertical_align_bottom_rounded,
-                              tooltip: l10n.remoteInputSnapBottom,
-                              selected: edge == RemoteInputEdge.bottom,
-                              onPressed: () => _snapTo(RemoteInputEdge.bottom),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.surfaceElevated,
+                border: Border(
+                  top: BorderSide(color: palette.borderSubtle),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n.remoteInputCurrentEdge(_edgeLabel(l10n, edge)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    _EdgeIconButton(
+                      icon: Icons.align_horizontal_left_rounded,
+                      tooltip: l10n.remoteInputSnapLeft,
+                      selected: edge == RemoteInputEdge.left,
+                      onPressed: () => _snapTo(RemoteInputEdge.left),
+                    ),
+                    _EdgeIconButton(
+                      icon: Icons.align_horizontal_right_rounded,
+                      tooltip: l10n.remoteInputSnapRight,
+                      selected: edge == RemoteInputEdge.right,
+                      onPressed: () => _snapTo(RemoteInputEdge.right),
+                    ),
+                    _EdgeIconButton(
+                      icon: Icons.vertical_align_top_rounded,
+                      tooltip: l10n.remoteInputSnapTop,
+                      selected: edge == RemoteInputEdge.top,
+                      onPressed: () => _snapTo(RemoteInputEdge.top),
+                    ),
+                    _EdgeIconButton(
+                      icon: Icons.vertical_align_bottom_rounded,
+                      tooltip: l10n.remoteInputSnapBottom,
+                      selected: edge == RemoteInputEdge.bottom,
+                      onPressed: () => _snapTo(RemoteInputEdge.bottom),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _saveCurrentLayout() {
-    final connection = _currentConnection();
-    if (connection != null) {
-      _save(connection);
-    }
-  }
-
-  void _close() {
-    Navigator.of(context).maybePop();
-  }
-
   Widget _buildCanvas(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
 
@@ -255,11 +226,11 @@ class _RemoteInputLayoutEditorScreenState
         return DecoratedBox(
           decoration: BoxDecoration(
             color: palette.surfaceCanvas,
-            borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: palette.borderSubtle),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+            borderRadius: BorderRadius.circular(12),
             child: Stack(
               children: [
                 Positioned.fill(
@@ -270,45 +241,47 @@ class _RemoteInputLayoutEditorScreenState
                   ),
                 ),
                 for (final display in _localTopology.displays)
-                  RemoteInputPositionedScreenBlock(
-                    visualRect: transform.toCanvasRect(display.rect),
-                    title: display.name.isEmpty
-                        ? l10n.remoteInputLocalScreen
-                        : display.name,
-                    resolution: '${display.width} x ${display.height}',
-                    roleLabel: l10n.remoteInputLocalScreen,
-                    selectedLabel: l10n.remoteInputWorkspaceSelectedScreen,
-                    conflictLabel: l10n.remoteInputWorkspaceConflictScreen,
-                    selected: false,
-                    conflict: false,
-                    local: true,
+                  Positioned.fromRect(
+                    rect: transform.toCanvasRect(display.rect),
+                    child: _ScreenRectView(
+                      label: display.name.isEmpty
+                          ? l10n.remoteInputLocalScreen
+                          : display.name,
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      borderColor: colorScheme.primary,
+                      textColor: colorScheme.onSurface,
+                    ),
                   ),
                 for (final display in _translatedRemoteDisplays())
-                  RemoteInputPositionedScreenBlock(
-                    visualRect: transform.toCanvasRect(display.rect),
-                    title: display.name.isEmpty
-                        ? widget.peerName.isEmpty
-                            ? l10n.remoteInputPeerScreen
-                            : widget.peerName
-                        : display.name,
-                    resolution: '${display.width} x ${display.height}',
-                    roleLabel: l10n.remoteInputPeerScreen,
-                    selectedLabel: l10n.remoteInputWorkspaceSelectedScreen,
-                    conflictLabel: l10n.remoteInputWorkspaceConflictScreen,
-                    selected: true,
-                    conflict: false,
-                    local: false,
-                    onMove: _moveRemoteByKey,
-                    onPanUpdate: (details) {
-                      setState(() {
-                        _hasUserAdjustedLayout = true;
-                        _sinkOffsetX +=
-                            (details.delta.dx / transform.scale).round();
-                        _sinkOffsetY +=
-                            (details.delta.dy / transform.scale).round();
-                      });
-                    },
-                    onPanEnd: (_) => _snapToNearestEdge(),
+                  Positioned.fromRect(
+                    rect: transform.toCanvasRect(display.rect),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.move,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _hasUserAdjustedLayout = true;
+                            _sinkOffsetX +=
+                                (details.delta.dx / transform.scale).round();
+                            _sinkOffsetY +=
+                                (details.delta.dy / transform.scale).round();
+                          });
+                        },
+                        onPanEnd: (_) => _snapToNearestEdge(),
+                        child: _ScreenRectView(
+                          label: display.name.isEmpty
+                              ? widget.peerName.isEmpty
+                                  ? l10n.remoteInputPeerScreen
+                                  : widget.peerName
+                              : display.name,
+                          color: palette.trusted.withValues(alpha: 0.14),
+                          borderColor: palette.trusted,
+                          textColor: colorScheme.onSurface,
+                          selected: true,
+                        ),
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -341,24 +314,6 @@ class _RemoteInputLayoutEditorScreenState
           _sinkOffsetY = source.bottom - sink.top;
           break;
       }
-    });
-  }
-
-  void _moveRemoteByKey(RemoteInputEdge direction, bool coarse) {
-    final moved = moveRemoteLayoutByKey(
-      RemoteInputScreenRect(
-        x: _sinkOffsetX,
-        y: _sinkOffsetY,
-        width: 1,
-        height: 1,
-      ),
-      direction: direction,
-      coarse: coarse,
-    );
-    setState(() {
-      _hasUserAdjustedLayout = true;
-      _sinkOffsetX = moved.x;
-      _sinkOffsetY = moved.y;
     });
   }
 
@@ -668,6 +623,61 @@ class _SnapCandidate {
   final int score;
 }
 
+class _ScreenRectView extends StatelessWidget {
+  const _ScreenRectView({
+    required this.label,
+    required this.color,
+    required this.borderColor,
+    required this.textColor,
+    this.selected = false,
+  });
+
+  final String label;
+  final Color color;
+  final Color borderColor;
+  final Color textColor;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: borderColor,
+          width: selected ? 2 : 1.4,
+        ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EdgeIconButton extends StatelessWidget {
   const _EdgeIconButton({
     required this.icon,
@@ -684,14 +694,8 @@ class _EdgeIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      container: true,
-      excludeSemantics: true,
-      label: tooltip,
-      button: true,
-      enabled: true,
-      selected: selected,
-      onTap: onPressed,
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
       child: IconButton(
         tooltip: tooltip,
         onPressed: onPressed,
@@ -701,9 +705,9 @@ class _EdgeIconButton extends StatelessWidget {
           backgroundColor: selected
               ? colorScheme.primary.withValues(alpha: 0.12)
               : Colors.transparent,
-          fixedSize: const Size.square(WhisperUi.minInteractiveSize),
+          fixedSize: const Size(40, 40),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(WhisperUi.radiusLarge),
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
