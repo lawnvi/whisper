@@ -31,12 +31,14 @@ import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
+import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -199,6 +201,11 @@ class WsSvrManager {
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
   final Set<_PendingOutgoingConnection> _pendingOutgoingConnections =
       <_PendingOutgoingConnection>{};
+  final OutgoingTextRetryRegistry _outgoingTextRetries =
+      OutgoingTextRetryRegistry();
+  final OutgoingTextSendLocks _outgoingTextSendLocks = OutgoingTextSendLocks();
+  final WireMessageReplayGuard _wireMessageReplayGuard =
+      WireMessageReplayGuard();
   final SocketAdmissionController _admission;
   final AudioShareManager _audioManager;
   final RemoteInputManager _remoteInputManager;
@@ -2205,6 +2212,19 @@ class WsSvrManager {
       await sink?.close();
       return;
     }
+    if (message.type == MessageEnum.Text) {
+      final replay = await _claimIncomingTextMessage(message);
+      switch (replay.decision) {
+        case WireMessageReplayDecision.accept:
+          message = replay.message!;
+          break;
+        case WireMessageReplayDecision.duplicate:
+          await _ackMessage(message);
+          return;
+        case WireMessageReplayDecision.conflict:
+          throw const AuthHandshakeException('message_uuid_conflict');
+      }
+    }
 
     switch (message.type) {
       case MessageEnum.Auth:
@@ -2232,8 +2252,6 @@ class WsSvrManager {
         {
           logger.i(
               "收到消息：${message.content} sender: ${message.sender} receiver: ${message.receiver}");
-          await LocalDatabase().insertMessage(message);
-          _ackMessage(message);
           if (message.clipboard) {
             if ((await LocalSetting().instance()).clipboard) {
               copyToClipboard(
@@ -2243,6 +2261,7 @@ class WsSvrManager {
             }
           }
           _dispatchToAll((event) => event.onMessage(message));
+          await _ackMessage(message);
           logger.i("文本消息：$str");
           break;
         }
@@ -2263,8 +2282,8 @@ class WsSvrManager {
               }
             }
           }
-          _ackMessage(message);
           _dispatchToAll((event) => event.onMessage(message));
+          await _ackMessage(message);
           break;
         }
       case MessageEnum.Heartbeat:
@@ -2279,7 +2298,7 @@ class WsSvrManager {
           if (message.message == _profileRefreshRequestMessage) {
             unawaited(_heartBeat(peerId: incomingPeerId, sink: sink));
           }
-          _ackMessage(message);
+          await _ackMessage(message);
           break;
         }
       case MessageEnum.File:
@@ -2309,7 +2328,7 @@ class WsSvrManager {
                 ? sendAudioControl
                 : (control) => sendAudioControlTo(incomingPeerId, control),
           );
-          _ackMessage(message);
+          await _ackMessage(message);
           break;
         }
       case MessageEnum.AudioGroupControl:
@@ -2333,7 +2352,7 @@ class WsSvrManager {
                 : (_, control) =>
                     sendAudioGroupControlTo(incomingPeerId, control),
           );
-          _ackMessage(message);
+          await _ackMessage(message);
           break;
         }
       case MessageEnum.RemoteInputControl:
@@ -2379,7 +2398,7 @@ class WsSvrManager {
                 : sendRemoteInputControlTo(incomingPeerId, control),
           );
           if (handledByWorkspaceBusy) {
-            _ackMessage(message);
+            await _ackMessage(message);
             break;
           }
           final handledByWorkspace =
@@ -2392,7 +2411,7 @@ class WsSvrManager {
                 sendRemoteInputControlTo(peerId, control),
           );
           if (handledByWorkspace) {
-            _ackMessage(message);
+            await _ackMessage(message);
             break;
           }
           await RemoteInputCoordinator.shared.handleControlMessage(
@@ -2416,7 +2435,7 @@ class WsSvrManager {
             'statePeer=${inputState.peerId} '
             'stateError=${inputState.errorMessage}',
           );
-          _ackMessage(message);
+          await _ackMessage(message);
           break;
         }
       default:
@@ -2424,6 +2443,18 @@ class WsSvrManager {
           logger.i("未知消息：$str");
         }
     }
+  }
+
+  Future<WireMessageReplayClaim> _claimIncomingTextMessage(
+    MessageData incoming,
+  ) async {
+    final database = LocalDatabase();
+    return _wireMessageReplayGuard.claim(
+      incoming,
+      fetchExisting: database.fetchMessagesByUuid,
+      persist: (message) =>
+          database.insertMessageReturning(message, acked: false),
+    );
   }
 
   MessageData _buildMessage(
@@ -2595,15 +2626,19 @@ class WsSvrManager {
     }
   }
 
-  void _ackMessage(MessageData data) {
+  Future<void> _ackMessage(MessageData data) async {
     var json = data.toJson();
     json["type"] = MessageEnum.Ack.index;
     json["acked"] = true;
     // logger.i("ack消息, ${data.type.name} uuid: ${data.uuid}");
-    _ignoreFuture(
-      _sendMessageData(decodeWireMessage(json), peerId: data.sender)
-          .then<void>((_) {}),
-      context: 'send acknowledgement',
+    await sendAcknowledgementBestEffort(
+      send: () => _sendMessageData(
+        decodeWireMessage(json),
+        peerId: data.sender,
+      ),
+      onError: (error, stackTrace) {
+        logger.i('send acknowledgement failed: ${error.runtimeType}');
+      },
     );
   }
 
@@ -2718,6 +2753,21 @@ class WsSvrManager {
     String peerId,
     String content, {
     bool clipboard = false,
+  }) {
+    return _outgoingTextSendLocks.synchronized(
+      peerId,
+      () => _sendMessageToSerialized(
+        peerId,
+        content,
+        clipboard: clipboard,
+      ),
+    );
+  }
+
+  Future<bool> _sendMessageToSerialized(
+    String peerId,
+    String content, {
+    required bool clipboard,
   }) async {
     final canUseLegacySink = peerId == receiver && _sink != null;
     if (peerId.isEmpty || (!isConnectedTo(peerId) && !canUseLegacySink)) {
@@ -2730,7 +2780,7 @@ class WsSvrManager {
     if (content.trim().isEmpty) {
       return false;
     }
-    var message = _buildMessage(
+    final draft = _buildMessage(
       MessageEnum.Text,
       content,
       "",
@@ -2739,9 +2789,38 @@ class WsSvrManager {
       clipboard,
       receiverOverride: peerId,
     );
-    await LocalDatabase().insertMessage(message);
-    logger.i("创建新消息, uuid: ${message.uuid}");
-    return _sendMessageData(message, peerId: peerId);
+    final database = LocalDatabase();
+    final retry = await _outgoingTextRetries.resolve(
+      draft,
+      fetchByUuid: database.fetchMessagesByUuid,
+    );
+    if (retry.alreadyAcknowledged) {
+      _dispatchOutgoingMessage(retry.message!);
+      return true;
+    }
+
+    final prepared = await prepareOutgoingTextWithRetryIdentity(
+      draft: draft,
+      retry: retry.message,
+      persist: database.insertMessageReturning,
+    );
+    final selectedMessage = prepared.message;
+    if (prepared.isNew) {
+      _dispatchOutgoingMessage(selectedMessage);
+    }
+    try {
+      logger.i("发送消息, uuid: ${selectedMessage.uuid}");
+      final accepted = await _sendMessageData(selectedMessage, peerId: peerId);
+      if (accepted) {
+        _outgoingTextRetries.clearAccepted(selectedMessage);
+      } else {
+        _outgoingTextRetries.rememberFailure(selectedMessage);
+      }
+      return accepted;
+    } catch (_) {
+      _outgoingTextRetries.rememberFailure(selectedMessage);
+      rethrow;
+    }
   }
 
   Future<void> sendNotification(

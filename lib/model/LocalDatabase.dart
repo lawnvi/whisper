@@ -45,12 +45,13 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
           await m.createAll();
+          await _ensureMessageUuidIndex();
         },
         onUpgrade: (Migrator m, int from, int to) async {
           if (from < 2) {
@@ -65,11 +66,28 @@ class LocalDatabase extends _$LocalDatabase {
           if (from < 6) {
             await _migrateDeviceIdentitySchema(m);
           }
+          if (from < 7) {
+            await _ensureMessageUuidIndex();
+          }
         },
         beforeOpen: (_) async {
           await _repairRemoteInputLayoutColumns();
+          await _ensureMessageUuidIndex();
         },
       );
+
+  Future<void> _ensureMessageUuidIndex() async {
+    final columns = await customSelect('PRAGMA table_info(message)').get();
+    final hasUuid = columns.any(
+      (row) => row.data['name'] == 'uuid',
+    );
+    if (!hasUuid) {
+      return;
+    }
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS message_uuid_lookup ON message(uuid)',
+    );
+  }
 
   Future<void> _migrateDeviceIdentitySchema(Migrator migrator) async {
     final existingColumns =
@@ -192,22 +210,41 @@ class LocalDatabase extends _$LocalDatabase {
     );
   }
 
-  Future<void> insertMessage(MessageData data) {
-    return into(message).insert(MessageCompanion.insert(
-        sender: Value(data.sender),
-        receiver: Value(data.receiver),
-        content: Value(data.content),
-        message: Value(data.message),
-        name: Value(data.name),
-        clipboard: Value(data.clipboard),
-        size: Value(data.size),
-        type: Value(data.type),
-        timestamp: Value(data.timestamp),
-        acked: const Value(false),
-        uuid: Value(data.uuid),
-        path: Value(data.path),
-        md5: Value(data.md5),
-        fileTimestamp: Value(data.fileTimestamp)));
+  MessageCompanion _messageCompanion(
+    MessageData data, {
+    required bool acked,
+  }) {
+    return MessageCompanion.insert(
+      sender: Value(data.sender),
+      receiver: Value(data.receiver),
+      content: Value(data.content),
+      message: Value(data.message),
+      name: Value(data.name),
+      clipboard: Value(data.clipboard),
+      size: Value(data.size),
+      type: Value(data.type),
+      timestamp: Value(data.timestamp),
+      acked: Value(acked),
+      uuid: Value(data.uuid),
+      path: Value(data.path),
+      md5: Value(data.md5),
+      fileTimestamp: Value(data.fileTimestamp),
+    );
+  }
+
+  Future<void> insertMessage(MessageData data) async {
+    await insertMessageReturning(data, acked: false);
+  }
+
+  Future<MessageData> insertMessageReturning(
+    MessageData data, {
+    bool? acked,
+  }) async {
+    final persistedAcked = acked ?? data.acked;
+    final id = await into(message).insert(
+      _messageCompanion(data, acked: persistedAcked),
+    );
+    return data.copyWith(id: id, acked: persistedAcked);
   }
 
   Future<MessageData?> ackMessage(MessageData data) async {
@@ -219,7 +256,10 @@ class LocalDatabase extends _$LocalDatabase {
         acked: Value(true),
       ),
     );
-    return await (select(message)..where((t) => t.uuid.equals(data.uuid)))
+    return (select(message)
+          ..where((t) => t.uuid.equals(data.uuid))
+          ..orderBy([(t) => OrderingTerm.asc(t.id)])
+          ..limit(1))
         .getSingleOrNull();
   }
 
@@ -584,8 +624,21 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<MessageData?> fetchMessageByUuid(String uuid) {
-    return (select(message)..where((t) => t.uuid.equals(uuid)))
+    return (select(message)
+          ..where((t) => t.uuid.equals(uuid))
+          ..orderBy([(t) => OrderingTerm.asc(t.id)])
+          ..limit(1))
         .getSingleOrNull();
+  }
+
+  Future<List<MessageData>> fetchMessagesByUuid(String uuid) {
+    if (uuid.isEmpty) {
+      return Future<List<MessageData>>.value(const <MessageData>[]);
+    }
+    return (select(message)
+          ..where((t) => t.uuid.equals(uuid))
+          ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+        .get();
   }
 
   Future<List<FileTransferData>> fetchRecoverableFileTransfers() {

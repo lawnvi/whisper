@@ -48,6 +48,14 @@ Future<bool> _hasUniqueUidIndex(LocalDatabase database) async {
   return indexes.any((row) => row.read<int>('unique') == 1);
 }
 
+Future<bool> _hasMessageUuidIndex(LocalDatabase database) async {
+  final indexes =
+      await database.customSelect('PRAGMA index_list(message)').get();
+  return indexes.any(
+    (row) => row.read<String>('name') == 'message_uuid_lookup',
+  );
+}
+
 class _BlockingIdentityUpdate extends QueryInterceptor {
   Completer<void>? _blocked;
   Completer<void>? _release;
@@ -404,7 +412,8 @@ void main() {
     raw.execute('''
       CREATE TABLE message (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        device_id INTEGER REFERENCES device(id)
+        device_id INTEGER REFERENCES device(id),
+        uuid TEXT NOT NULL DEFAULT ''
       )
     ''');
     raw.execute('''
@@ -432,7 +441,8 @@ void main() {
         everyElement(rows.single.id),
       );
       expect(await _hasUniqueUidIndex(database), isTrue);
-      expect(database.schemaVersion, 6);
+      expect(await _hasMessageUuidIndex(database), isTrue);
+      expect(database.schemaVersion, 7);
     } finally {
       await database.close();
     }
@@ -441,6 +451,7 @@ void main() {
     try {
       expect(await database.fetchAllDevice(), hasLength(1));
       expect(await _hasUniqueUidIndex(database), isTrue);
+      expect(await _hasMessageUuidIndex(database), isTrue);
     } finally {
       await database.close();
       await directory.delete(recursive: true);

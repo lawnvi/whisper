@@ -50,7 +50,7 @@ class FileTransferEngine {
     required bool Function(String peerId) hasLegacySinkFor,
     required TransferMessageBuilder buildMessage,
     required void Function(MessageData message) dispatchOutgoingMessage,
-    required void Function(MessageData message) ackMessage,
+    required FutureOr<void> Function(MessageData message) ackMessage,
     LocalDatabase Function() database = LocalDatabase.new,
   })  : _sendBytesToPeer = sendBytesToPeer,
         _emitTransferUpdated = emitTransferUpdated,
@@ -79,7 +79,7 @@ class FileTransferEngine {
   final bool Function(String peerId) _hasLegacySinkFor;
   final TransferMessageBuilder _buildMessage;
   final void Function(MessageData message) _dispatchOutgoingMessage;
-  final void Function(MessageData message) _ackMessage;
+  final FutureOr<void> Function(MessageData message) _ackMessage;
   final LocalDatabase Function() _database;
 
   final _sendFileLock = Lock();
@@ -230,7 +230,7 @@ class FileTransferEngine {
           md5: '',
           fileTimestamp: timestamp,
           receiverOverride: peerId);
-      await _database().insertMessage(message);
+      message = await _database().insertMessageReturning(message);
       final metadata = _FileTransferMetadata.fromJson(
         jsonDecode(content) as Map<String, dynamic>,
       );
@@ -293,7 +293,7 @@ class FileTransferEngine {
         ).toJson(),
       );
       final fileName = name.isNotEmpty ? name : 'document';
-      final message = _buildMessage(
+      final draft = _buildMessage(
         MessageEnum.File,
         content,
         '',
@@ -305,7 +305,7 @@ class FileTransferEngine {
         fileTimestamp: fileTimestamp > 0 ? fileTimestamp : now,
         receiverOverride: peerId,
       );
-      await _database().insertMessage(message);
+      final message = await _database().insertMessageReturning(draft);
       final metadata = _FileTransferMetadata.fromJson(
         jsonDecode(content) as Map<String, dynamic>,
       );
@@ -613,10 +613,11 @@ class FileTransferEngine {
       final json = message.toJson();
       json['path'] = transfer.finalPath;
       final newMessage = decodeWireMessage(json);
-      await db.insertMessage(newMessage);
-      _dispatchOutgoingMessage(newMessage);
+      final persisted =
+          await db.insertMessageReturning(newMessage, acked: false);
+      _dispatchOutgoingMessage(persisted);
     }
-    _ackMessage(message);
+    await _ackMessage(message);
 
     if (_transferRuntime.activeIncomingFor(transfer.peerUid) ==
         transfer.transferId) {
