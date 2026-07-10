@@ -39,25 +39,61 @@ enum PrivacyErrorKind {
   unknown,
 }
 
-enum PrivacyEvent { transferProgress, testEvent }
+enum PrivacyEvent {
+  audioDiagnostic,
+  discoveryState,
+  localOperation,
+  messageReceived,
+  notificationForwarded,
+  remoteInputDiagnostic,
+  settingsOperation,
+  toastUnavailable,
+  transferProgress,
+  testEvent,
+}
 
 extension on PrivacyEvent {
   String get wireName => switch (this) {
+        PrivacyEvent.audioDiagnostic => 'audio_diagnostic',
+        PrivacyEvent.discoveryState => 'discovery_state',
+        PrivacyEvent.localOperation => 'local_operation',
+        PrivacyEvent.messageReceived => 'message_received',
+        PrivacyEvent.notificationForwarded => 'notification_forwarded',
+        PrivacyEvent.remoteInputDiagnostic => 'remote_input_diagnostic',
+        PrivacyEvent.settingsOperation => 'settings_operation',
+        PrivacyEvent.toastUnavailable => 'toast_unavailable',
         PrivacyEvent.transferProgress => 'transfer_progress',
         PrivacyEvent.testEvent => 'test_event',
       };
 }
 
 enum PrivacyField {
+  action,
   allowed,
   bytes,
+  channels,
+  clipboard,
+  component,
+  count,
+  direction,
+  enabled,
   errorType,
+  exitCode,
+  height,
+  kind,
   peerId,
+  reason,
   retrying,
+  role,
   route,
+  sampleRate,
+  samples,
+  sequence,
   state,
+  success,
   transferId,
   value,
+  width,
 }
 
 final class PrivacyLog {
@@ -71,7 +107,7 @@ final class PrivacyLog {
 
   PrivacyShortId shortId(PrivacyIdKind kind, String raw) {
     if (!_canonicalIdPattern.hasMatch(raw)) {
-      throw ArgumentError.value(raw, 'raw', 'must be a canonical UUID');
+      throw ArgumentError('Privacy log ID must be a canonical UUID');
     }
     final input = utf8.encode(
       'whisper-privacy-short-id-v1\u0000${kind.name}\u0000$raw',
@@ -140,3 +176,5 @@ final class PrivacyLog {
     developer.log(line, name: 'whisper.privacy');
   }
 }
+
+final PrivacyLog privacyLog = PrivacyLog();

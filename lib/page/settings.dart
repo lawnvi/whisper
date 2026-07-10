@@ -14,6 +14,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/notification.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
@@ -30,6 +31,26 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
+
+enum SettingsOperationKind {
+  startupLoad,
+  startupUpdate,
+  notificationUpdate,
+  notificationRestore,
+  notificationRead,
+  remoteInputRestart,
+}
+
+void _logSettingsFailure(SettingsOperationKind kind, Object error) {
+  privacyLog.event(
+    PrivacyEvent.settingsOperation,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      PrivacyField.success: false,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    },
+  );
+}
 
 @immutable
 class SettingsPresentation {
@@ -177,7 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       return await DesktopStartupManager().isEnabled();
     } catch (error) {
-      logger.i('Failed to load desktop launch at startup: $error');
+      _logSettingsFailure(SettingsOperationKind.startupLoad, error);
       return false;
     }
   }
@@ -426,6 +447,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   await DesktopStartupManager()
                                       .setEnabled(value);
                                 } catch (error) {
+                                  _logSettingsFailure(
+                                    SettingsOperationKind.startupUpdate,
+                                    error,
+                                  );
                                   if (mounted) {
                                     setState(() {
                                       _launchAtStartup = previous;
@@ -433,7 +458,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   }
                                   showAppToast(
                                     l10n.launchAtStartupFailed(
-                                        error.toString()),
+                                      l10n.connectFailed,
+                                    ),
                                   );
                                 }
                               },
@@ -727,14 +753,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _listenAndroid = enabled;
         _notificationForwardingBusy = false;
       });
-    } catch (error, stackTrace) {
+    } catch (error) {
       var trustedValue = previous;
       if (update == null) {
-        logger.e(
-          'Failed to update notification forwarding',
-          error: error,
-          stackTrace: stackTrace,
-        );
+        _logSettingsFailure(SettingsOperationKind.notificationUpdate, error);
         trustedValue = await _restoreNotificationForwarding(previous);
       }
       if (!mounted) {
@@ -769,23 +791,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<bool> _restoreNotificationForwarding(bool previous) async {
     try {
       await _applyNotificationForwarding(previous);
-    } catch (error, stackTrace) {
-      logger.e(
-        'Failed to restore notification forwarding',
-        error: error,
-        stackTrace: stackTrace,
-      );
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.notificationRestore, error);
     }
     try {
       final read =
           widget.readNotificationForwarding ?? LocalSetting().isListenAndroid;
       return await read();
-    } catch (error, stackTrace) {
-      logger.e(
-        'Failed to read restored notification forwarding state',
-        error: error,
-        stackTrace: stackTrace,
-      );
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.notificationRead, error);
       return previous;
     }
   }
@@ -1860,12 +1874,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         sinkSegmentEnd: sharingPlan.sinkSegmentEnd,
         edgeMappings: sharingPlan.edgeMappings,
       );
-    } catch (error, stackTrace) {
-      logger.e(
-        'restart remote input sharing after layout save failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.remoteInputRestart, error);
     }
   }
 

@@ -9,8 +9,17 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 
-import 'helper.dart';
+enum FileOperationKind {
+  storageQuery,
+  pickerScan,
+  fileManagerOpen,
+  fileManagerReveal,
+  platformChannel,
+}
+
+enum FileOperationState { failed }
 
 const _androidDirChannel = MethodChannel("com.vireen.whisper/android_dir");
 const _iosDirChannel = MethodChannel("com.vireen.whisper/ios_dir");
@@ -61,7 +70,10 @@ Future<int?> availableBytesForPath(String path) async {
       return await _availableBytesFromDf(path);
     }
   } catch (error) {
-    logger.i('Failed to determine available storage for $path: $error');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      error: error,
+    );
   }
 
   return null;
@@ -78,7 +90,10 @@ Future<void> notifyFileVisibleToAndroidPickers(String path) async {
       {'path': path},
     );
   } catch (error) {
-    logger.i('Failed to scan Android file for picker visibility: $error');
+    _logFileOperation(
+      FileOperationKind.pickerScan,
+      error: error,
+    );
   }
 }
 
@@ -103,7 +118,10 @@ Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
       await notifyFileVisibleToAndroidPickers(entity.path);
     }
   } catch (error) {
-    logger.i('Failed to scan existing Android downloads: $error');
+    _logFileOperation(
+      FileOperationKind.pickerScan,
+      error: error,
+    );
   }
 }
 
@@ -128,7 +146,6 @@ void openDir(String path, {parent = false}) async {
     path = file.parent.path;
   }
 
-  logger.i("打开文件: $path");
   if (Platform.isMacOS) {
     openFinder(path);
   } else if (Platform.isAndroid) {
@@ -149,10 +166,11 @@ void openFinder(String path) async {
   ProcessResult result = await Process.run('open', [path]);
 
   // 处理执行结果
-  if (result.exitCode == 0) {
-    logger.i('Finder opened successfully');
-  } else {
-    logger.i('Error opening Finder: ${result.stderr}');
+  if (result.exitCode != 0) {
+    _logFileOperation(
+      FileOperationKind.fileManagerOpen,
+      exitCode: result.exitCode,
+    );
   }
 }
 
@@ -165,20 +183,24 @@ Future<bool> _revealFileInFileManager(String path) async {
     if (Platform.isMacOS) {
       final result = await Process.run('open', ['-R', path]);
       if (result.exitCode == 0) {
-        logger.i('Finder revealed file successfully');
         return true;
       }
-      logger.i('Error revealing file in Finder: ${result.stderr}');
+      _logFileOperation(
+        FileOperationKind.fileManagerReveal,
+        exitCode: result.exitCode,
+      );
       return false;
     }
 
     if (Platform.isWindows) {
       final result = await Process.run('explorer', ['/select,', path]);
       if (result.exitCode == 0) {
-        logger.i('Explorer revealed file successfully');
         return true;
       }
-      logger.i('Error revealing file in Explorer: ${result.stderr}');
+      _logFileOperation(
+        FileOperationKind.fileManagerReveal,
+        exitCode: result.exitCode,
+      );
       return false;
     }
 
@@ -192,7 +214,6 @@ Future<bool> _revealFileInFileManager(String path) async {
         try {
           final result = await Process.run(command.first, command.sublist(1));
           if (result.exitCode == 0) {
-            logger.i('${command.first} revealed file successfully');
             return true;
           }
         } catch (_) {
@@ -201,7 +222,10 @@ Future<bool> _revealFileInFileManager(String path) async {
       }
     }
   } catch (error) {
-    logger.i('Error revealing file in file manager: $error');
+    _logFileOperation(
+      FileOperationKind.fileManagerReveal,
+      error: error,
+    );
   }
 
   return false;
@@ -405,8 +429,11 @@ Future<bool> openAndroidDir(String path) async {
   bool result = false;
   try {
     await _androidDirChannel.invokeMethod('openFolder', {'path': path});
-  } on PlatformException catch (e) {
-    logger.i(e.toString());
+  } on PlatformException catch (error) {
+    _logFileOperation(
+      FileOperationKind.platformChannel,
+      error: error,
+    );
   }
   return result;
 }
@@ -415,17 +442,22 @@ Future<String> openIosDir(String path) async {
   String result = "";
   try {
     await _iosDirChannel.invokeMethod('openFolder', {'path': path});
-  } on PlatformException catch (e) {
-    logger.i(e.toString());
+  } on PlatformException catch (error) {
+    _logFileOperation(
+      FileOperationKind.platformChannel,
+      error: error,
+    );
   }
-  logger.i(result);
   return result;
 }
 
 Future<int?> _availableBytesFromDf(String path) async {
   final result = await Process.run('df', ['-k', path]);
   if (result.exitCode != 0) {
-    logger.i('df failed for $path: ${result.stderr}');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      exitCode: result.exitCode,
+    );
     return null;
   }
 
@@ -468,9 +500,28 @@ Future<int?> _availableBytesOnWindows(String path) async {
     ],
   );
   if (result.exitCode != 0) {
-    logger.i('PowerShell storage query failed for $path: ${result.stderr}');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      exitCode: result.exitCode,
+    );
     return null;
   }
 
   return int.tryParse(result.stdout.toString().trim());
+}
+
+void _logFileOperation(
+  FileOperationKind kind, {
+  Object? error,
+  int? exitCode,
+}) {
+  privacyLog.event(
+    PrivacyEvent.localOperation,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      PrivacyField.state: FileOperationState.failed,
+      if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
+      if (exitCode != null) PrivacyField.exitCode: exitCode,
+    },
+  );
 }

@@ -1,9 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/theme/app_theme.dart';
+
+enum ToastUnavailableReason { noOverlay, renderFailure }
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -16,7 +18,12 @@ void showAppToast(String message, {Duration? duration}) {
 Future<void> _showAppToast(String message, {Duration? duration}) async {
   final overlayState = appNavigatorKey.currentState?.overlay;
   if (overlayState == null) {
-    debugPrint('Toast unavailable: $message');
+    privacyLog.event(
+      PrivacyEvent.toastUnavailable,
+      <PrivacyField, Object>{
+        PrivacyField.reason: ToastUnavailableReason.noOverlay,
+      },
+    );
     return;
   }
 
@@ -35,7 +42,13 @@ Future<void> _showAppToast(String message, {Duration? duration}) async {
         ),
       );
   } catch (error) {
-    debugPrint('Toast unavailable: $message ($error)');
+    privacyLog.event(
+      PrivacyEvent.toastUnavailable,
+      <PrivacyField, Object>{
+        PrivacyField.reason: ToastUnavailableReason.renderFailure,
+        PrivacyField.errorType: privacyLog.errorType(error),
+      },
+    );
   }
 }
 

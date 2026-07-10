@@ -20,9 +20,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
@@ -34,7 +36,6 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/pairing_request.dart';
-import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
 import 'package:whisper/widget/context_menu_region.dart';
@@ -49,6 +50,47 @@ import 'conversation.dart';
 import 'settings.dart' as app_settings;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
+
+enum DeviceListOperationKind {
+  temporaryFileCleanup,
+  audioToggle,
+  socketDialog,
+  serverStart,
+}
+
+enum DiscoveryDiagnosticKind {
+  broadcastEvent,
+  discoveryEvent,
+  serviceFound,
+  discoveryStarted,
+  serviceSkipped,
+  serviceResolved,
+  serviceLost,
+}
+
+void _logDeviceListFailure(DeviceListOperationKind kind, Object error) {
+  privacyLog.event(
+    PrivacyEvent.localOperation,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      PrivacyField.success: false,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    },
+  );
+}
+
+void _logDiscovery(
+  DiscoveryDiagnosticKind kind, {
+  Enum? state,
+}) {
+  privacyLog.event(
+    PrivacyEvent.discoveryState,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      if (state != null) PrivacyField.state: state,
+    },
+  );
+}
 
 String buildWhisperServiceName(String baseName, String uid) {
   final normalizedUid = uid.trim();
@@ -186,9 +228,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var permissions = [Permission.storage];
 
     for (var item in permissions) {
-      logger.i("permission status: ${await item.status}");
       if (await item.isDenied) {
-        logger.i("permission request: ${await item.isRestricted}");
         await item.request();
       }
     }
@@ -202,13 +242,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @pragma('vm:entry-point')
   static void _callback(NotificationEvent evt) {
-    // send data to ui thread if necessary.
-    // try to send the event to ui
-    print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.isConnected &&
+    final allowed = soc.isConnected &&
         filterNotification(evt) &&
-        listenApps.containsKey(evt.packageName)) {
+        listenApps.containsKey(evt.packageName);
+    privacyLog.event(
+      PrivacyEvent.notificationForwarded,
+      <PrivacyField, Object>{PrivacyField.allowed: allowed},
+    );
+    if (allowed) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
@@ -221,8 +263,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _setDesktopWindow() async {
     if (isMobile()) {
-      logger.i(
-          "mobile clear file picker cache res: ${await FilePicker.platform.clearTemporaryFiles()}");
+      final cleared = await FilePicker.platform.clearTemporaryFiles();
+      privacyLog.event(
+        PrivacyEvent.localOperation,
+        <PrivacyField, Object>{
+          PrivacyField.kind: DeviceListOperationKind.temporaryFileCleanup,
+          PrivacyField.success: cleared ?? false,
+        },
+      );
       return;
     }
     await windowManager.setPreventClose(true);
@@ -305,7 +353,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   //
   //   // handle system tray event
   //   systemTray.registerSystemTrayEventHandler((eventName) {
-  //     debugPrint("eventName: $eventName");
   //     if (eventName == kSystemTrayEventClick) {
   //       Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
   //     } else if (eventName == kSystemTrayEventRightClick) {
@@ -317,7 +364,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
-    logger.i("dispose page");
     _broadcastRestartTimer?.cancel();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
@@ -436,10 +482,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
-    final trustedPeerIds = await db.fetchTrustedPeerIds();
-    final autoConnectEnabled = await LocalSetting().autoConnectEnabled();
-
-    logger.i("wifi ip: $wifiIP");
 
     if (wifiIP == "127.0.0.1") {
       _isBroadcasting = false;
@@ -457,8 +499,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
         'name': device?.name ?? await deviceName(),
         'platform': device?.platform ?? "未知",
         'uid': device?.uid ?? "",
-        'trustedPeers': trustedPeerIds.join(','),
-        'autoConnect': autoConnectEnabled ? '1' : '0',
       },
     );
 
@@ -468,7 +508,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     _broadcastSubscription?.cancel();
     _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
-      debugPrint('Broadcast event : ${event.type}');
+      _logDiscovery(
+        DiscoveryDiagnosticKind.broadcastEvent,
+        state: event.type,
+      );
     });
 
     await _broadcast!.start();
@@ -490,35 +533,35 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // This is the type of service we're looking for :
 
     // Once defined, we can start the discovery :
-    _discovery = BonsoirDiscovery(type: serviceType, printLogs: true);
+    _discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
     await _discovery!.ready;
 
     // If you want to listen to the discovery :
     _discoverySubscription?.cancel();
     _discoverySubscription = _discovery?.eventStream!.listen((event) async {
-      debugPrint('Discovery event : ${event.type}');
+      _logDiscovery(
+        DiscoveryDiagnosticKind.discoveryEvent,
+        state: event.type,
+      );
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
       if (service != null) {
         switch (event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
-            logger.i(
-                "event type: ${event.type}, service name: $serviceName ${service.name}");
+            _logDiscovery(DiscoveryDiagnosticKind.serviceFound);
             if (service.name.startsWith(serviceName) &&
                 _shouldResolveService(service)) {
               event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
-            logger.i(
-                "event type: ${event.type}, service name: ${service.name} start");
+            _logDiscovery(DiscoveryDiagnosticKind.discoveryStarted);
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolved ||
                 BonsoirDiscoveryEventType.discoveryServiceLost:
             final svr = service;
             if (!svr.attributes.containsKey('uid')) {
-              logger.i(
-                  "event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
+              _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
               return;
             }
             var isLost =
@@ -529,16 +572,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
             final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
-            final remoteTrustedPeerIds =
-                PeerProfile.trustedPeersFromDiscovery(svr.attributes);
-            final remoteAutoConnectEnabled =
-                PeerProfile.autoConnectFromDiscovery(svr.attributes);
-            logger.i("${isLost ? '丢失' : '发现'}本地设备");
-            logger.i("本地设备uid: $uid");
-            logger.i("本地设备name: $name");
-            logger.i("本地设备host: $host");
-            logger.i("本地设备port: $port");
-            logger.i("本地设备platform: $platform");
+            _logDiscovery(
+              isLost
+                  ? DiscoveryDiagnosticKind.serviceLost
+                  : DiscoveryDiagnosticKind.serviceResolved,
+            );
             if (uid == null || uid == device?.uid) {
               return;
             }
@@ -564,8 +602,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
             await ConnectionCoordinator().updateDiscovery(
               visibleDevice,
               discovered: !isLost,
-              remoteTrustedPeerIds: remoteTrustedPeerIds,
-              remoteAutoConnectEnabled: remoteAutoConnectEnabled,
             );
             for (var item in devices) {
               if (item.uid == uid) {
@@ -734,8 +770,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _selectedDesktopPeerId = selectedPeerId;
     });
 
-    logger.i(
-        "refresh ui: broadcasting=$_isBroadcasting discovering=$_isDiscovering serverPortUpdate=$serverPortUpdate localProfileUpdate=$localProfileUpdate");
     if (localProfileUpdate) {
       unawaited(socketManager.broadcastLocalProfileUpdate());
     }
@@ -1306,11 +1340,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
         sourcePeerId: self.uid,
         sinks: sinks,
       );
-    } catch (error, stackTrace) {
-      logger.e('desktop audio share toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.protocol,
+      );
+      _logDeviceListFailure(DeviceListOperationKind.audioToggle, error);
       if (mounted) {
-        showAppToast(l10n.audioShareFailed(error.toString()));
+        final detail = reason == AudioFailureReason.unsupported
+            ? l10n.audioShareUnsupportedCapture
+            : l10n.connectFailed;
+        showAppToast(l10n.audioShareFailed(detail));
       }
     }
   }
@@ -2132,16 +2172,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!ok) {
         if (message == WsSvrManager.duplicateAuthRequestMessage) {
           if (manual && mounted) {
-            showAppToast(message.toString());
+            showAppToast(
+              AppLocalizations.of(context)?.connectFailed ??
+                  'Connection Failed',
+            );
           }
           return;
         }
         final l10n = AppLocalizations.of(context);
         final displayMessage = message == 'upgrade_required'
-            ? l10n?.pairingUpgradeRequired ?? message.toString()
+            ? l10n?.pairingUpgradeRequired ?? 'Connection Failed'
             : message == 'pairing_expired'
-                ? l10n?.pairingExpired ?? message.toString()
-                : message.toString();
+                ? l10n?.pairingExpired ?? 'Connection Failed'
+                : l10n?.connectFailed ?? 'Connection Failed';
         ConnectionCoordinator()
             .markDisconnected(peerId: peerId, error: displayMessage);
         if (_pendingAutoConnectPeerId == peerId) {
@@ -2203,10 +2246,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (result.isSuccess) {
       return;
     }
+    final error = result.error;
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: DeviceListOperationKind.serverStart,
+        PrivacyField.success: false,
+        if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
+      },
+    );
+    final failureMessage =
+        AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败';
     showLoadingDialog(
       context,
-      title: AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败',
-      description: 'error: ${result.error}',
+      title: failureMessage,
+      description: failureMessage,
       isLoading: true,
       icon: const Icon(
         Icons.warning_rounded,
@@ -2306,7 +2360,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       final confirmed = await confirmAction(
         context,
         title: l10n?.timeoutTitle ?? "是否释放连接",
-        description: message,
+        description: l10n?.connectFailed ?? 'Connection Failed',
         confirmButtonText: l10n?.disconnect ?? "断开",
         cancelButtonText: l10n?.keepConnect ?? "取消",
       );
@@ -2314,8 +2368,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
         await WsSvrManager().close();
       }
     } catch (error) {
+      _logDeviceListFailure(DeviceListOperationKind.socketDialog, error);
       if (mounted) {
-        showAppToast(error.toString());
+        showAppToast(l10n?.connectFailed ?? 'Connection Failed');
       }
     } finally {
       _isAlert = false;
@@ -2324,7 +2379,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onNotice(String message) {
-    showAppToast(message);
+    showAppToast(
+      AppLocalizations.of(context)?.fileTransferFailedRetryable ??
+          'Transfer failed',
+    );
   }
 
   @override
@@ -2446,7 +2504,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     var rect = await windowManager.getBounds();
-    logger.i("resized window: ${rect.width} ${rect.height}");
     LocalSetting().setWindowWidth(rect.width);
     LocalSetting().setWindowHeight(rect.height);
   }

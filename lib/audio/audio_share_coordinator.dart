@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_codec.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_packet_transport.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_playback_sink.dart';
@@ -172,6 +172,8 @@ class AudioShareCoordinator extends ChangeNotifier {
       case AudioControlAction.error:
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
+          final failureReason =
+              audioFailureReasonFromWire(message.errorMessage);
           await stopLocal();
           _setState(
             AudioShareRuntimeState(
@@ -179,7 +181,7 @@ class AudioShareCoordinator extends ChangeNotifier {
               role: AudioShareRuntimeRole.none,
               sessionId: message.sessionId,
               peerId: _state.peerId,
-              errorMessage: message.errorMessage,
+              errorMessage: failureReason.name,
             ),
           );
         }
@@ -246,7 +248,7 @@ class AudioShareCoordinator extends ChangeNotifier {
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
-          errorMessage: 'Another audio session is already active',
+          errorMessage: AudioFailureReason.busy.name,
         ),
       );
       return;
@@ -254,7 +256,15 @@ class AudioShareCoordinator extends ChangeNotifier {
 
     final accept = _manager.acceptOffer(offer);
     if (accept.action == AudioControlAction.error) {
-      sendControl(accept);
+      sendControl(
+        AudioControlMessage(
+          action: AudioControlAction.error,
+          sessionId: accept.sessionId,
+          sourcePeerId: accept.sourcePeerId,
+          sinkPeerId: accept.sinkPeerId,
+          errorMessage: AudioFailureReason.protocol.name,
+        ),
+      );
       return;
     }
 
@@ -263,6 +273,10 @@ class AudioShareCoordinator extends ChangeNotifier {
       sendControl(accept);
     } catch (error) {
       final failedPeerId = offer.sourcePeerId;
+      final failureReason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.playback,
+      );
       await stopLocal();
       _setState(
         AudioShareRuntimeState(
@@ -270,7 +284,7 @@ class AudioShareCoordinator extends ChangeNotifier {
           role: AudioShareRuntimeRole.sink,
           sessionId: offer.sessionId,
           peerId: failedPeerId,
-          errorMessage: _friendlyErrorMessage(error),
+          errorMessage: failureReason.name,
         ),
       );
       sendControl(
@@ -309,6 +323,10 @@ class AudioShareCoordinator extends ChangeNotifier {
       );
     } catch (error) {
       final failedPeerId = accept.sinkPeerId;
+      final failureReason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.capture,
+      );
       await stopLocal();
       _setState(
         AudioShareRuntimeState(
@@ -316,7 +334,7 @@ class AudioShareCoordinator extends ChangeNotifier {
           role: AudioShareRuntimeRole.source,
           sessionId: accept.sessionId,
           peerId: failedPeerId,
-          errorMessage: _friendlyErrorMessage(error),
+          errorMessage: failureReason.name,
         ),
       );
       sendControl(
@@ -453,28 +471,6 @@ class AudioShareCoordinator extends ChangeNotifier {
   void _setState(AudioShareRuntimeState state) {
     _state = state;
     notifyListeners();
-  }
-
-  String _friendlyErrorMessage(Object error) {
-    if (error is PlatformException) {
-      return error.message?.trim().isNotEmpty == true
-          ? error.message!.trim()
-          : error.code;
-    }
-    final text = error.toString();
-    const platformPrefix = 'PlatformException(';
-    if (!text.startsWith(platformPrefix)) {
-      return text;
-    }
-    final parts = text
-        .substring(platformPrefix.length, text.length - 1)
-        .split(',')
-        .map((part) => part.trim())
-        .toList(growable: false);
-    if (parts.length >= 2 && parts[1].isNotEmpty) {
-      return parts[1];
-    }
-    return text;
   }
 }
 

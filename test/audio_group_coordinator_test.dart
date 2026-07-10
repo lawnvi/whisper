@@ -451,7 +451,7 @@ void main() {
       expect(sent.first.control.action, AudioGroupControlAction.groupAccept);
       expect(sent.last.peerId, 'mac-b');
       expect(sent.last.control.action, AudioGroupControlAction.groupReject);
-      expect(sent.last.control.errorMessage, contains('already active'));
+      expect(sent.last.control.errorMessage, 'busy');
       expect(coordinator.session?.groupId, 'group-a');
     });
 
@@ -1257,6 +1257,10 @@ void main() {
       expect(
         coordinator.session?.sinks['phone-a']?.state,
         AudioGroupSinkState.failed,
+      );
+      expect(
+        coordinator.session?.sinks['phone-a']?.lastError,
+        'remoteFailure',
       );
       expect(
         coordinator.session?.sinks['phone-b']?.state,

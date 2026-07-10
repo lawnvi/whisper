@@ -424,6 +424,88 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
     });
 
+    test('remote input errors are reduced to a stable local reason', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final offer = sentControls.single;
+      const remoteText =
+          'remote token=never-store-this /Users/alice/private.txt';
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          errorMessage: remoteText,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
+      expect(coordinator.state.errorMessage, 'remoteFailure');
+      expect(coordinator.state.errorMessage, isNot(contains(remoteText)));
+    });
+
+    test('remote input errors preserve an allowlisted wire reason', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final offer = sentControls.single;
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          errorMessage: 'permission',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.errorMessage, 'permission');
+    });
+
     test('sink auto-accepts trusted capable offers and injects packets',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
@@ -1475,8 +1557,7 @@ void main() {
       );
 
       expect(sentControls.single.action, RemoteInputControlAction.error);
-      expect(sentControls.single.errorMessage,
-          'Remote input is not available on this platform');
+      expect(sentControls.single.errorMessage, 'unsupported');
       expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
     });
   });

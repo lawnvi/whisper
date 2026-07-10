@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/audio/audio_capture_source.dart';
 import 'package:whisper/audio/audio_clock_sync.dart';
 import 'package:whisper/audio/audio_codec.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_group_playback_scheduler.dart';
 import 'package:whisper/audio/audio_group_session.dart';
@@ -316,11 +316,12 @@ class AudioGroupCoordinator extends ChangeNotifier {
         break;
       case AudioGroupControlAction.groupReject:
       case AudioGroupControlAction.error:
+        final failureReason = audioFailureReasonFromWire(message.errorMessage);
         _setSession(current.markSink(
           message.sinkPeerId,
           state: AudioGroupSinkState.failed,
           sessionId: message.sessionId,
-          lastError: message.errorMessage,
+          lastError: failureReason.name,
         ));
         break;
       case AudioGroupControlAction.groupStop:
@@ -636,7 +637,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
           channelRole: offer.channelRole,
-          errorMessage: 'Another audio group is already active',
+          errorMessage: AudioFailureReason.busy.name,
         ),
       );
       return;
@@ -652,7 +653,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
-          errorMessage: 'audio group offer missing format',
+          errorMessage: AudioFailureReason.protocol.name,
         ),
       );
       return;
@@ -693,6 +694,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
         ),
       );
     } catch (error) {
+      final failureReason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.playback,
+      );
       await stopLocal();
       if (previousRejoinContext != null) {
         _sinkRejoinContext = previousRejoinContext;
@@ -708,7 +713,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
           channelRole: offer.channelRole,
-          errorMessage: _friendlyErrorMessage(error),
+          errorMessage: failureReason.name,
         ),
       );
     }
@@ -770,7 +775,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
         sendControl: sendControl,
       );
     } catch (error) {
-      final errorMessage = _friendlyErrorMessage(error);
+      final errorMessage = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.transport,
+      ).name;
       _setSession(current.markSink(
         accept.sinkPeerId,
         state: AudioGroupSinkState.failed,
@@ -1240,7 +1248,10 @@ class AudioGroupCoordinator extends ChangeNotifier {
     _setSession(current.markSink(
       sinkPeerId,
       state: AudioGroupSinkState.failed,
-      lastError: _friendlyErrorMessage(error),
+      lastError: audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.transport,
+      ).name,
     ));
   }
 
@@ -1285,28 +1296,6 @@ class AudioGroupCoordinator extends ChangeNotifier {
       return 1.0;
     }
     return gain.clamp(1.0, 3.0).toDouble();
-  }
-
-  String _friendlyErrorMessage(Object error) {
-    if (error is PlatformException) {
-      return error.message?.trim().isNotEmpty == true
-          ? error.message!.trim()
-          : error.code;
-    }
-    final text = error.toString();
-    const platformPrefix = 'PlatformException(';
-    if (!text.startsWith(platformPrefix)) {
-      return text;
-    }
-    final parts = text
-        .substring(platformPrefix.length, text.length - 1)
-        .split(',')
-        .map((part) => part.trim())
-        .toList(growable: false);
-    if (parts.length >= 2 && parts[1].isNotEmpty) {
-      return parts[1];
-    }
-    return text;
   }
 }
 

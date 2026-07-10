@@ -206,23 +206,6 @@ class PeerProfile {
         capabilities: capabilities,
         displayTopology: displayTopology,
       );
-
-  static List<String> trustedPeersFromDiscovery(
-      Map<String, String> attributes) {
-    final raw = attributes['trustedPeers'];
-    if (raw == null || raw.isEmpty) {
-      return const [];
-    }
-    return raw
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  static bool autoConnectFromDiscovery(Map<String, String> attributes) {
-    return attributes['autoConnect'] != '0';
-  }
 }
 
 RemoteInputTopology? _topologyFromJson(Object? value) {

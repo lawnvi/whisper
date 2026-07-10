@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
@@ -16,6 +17,7 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
@@ -23,6 +25,7 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -41,6 +44,31 @@ import '../helper/notification.dart';
 import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
+
+enum ConversationOperationKind {
+  deleteFile,
+  sendDroppedFiles,
+  readClipboard,
+  sendClipboardFiles,
+  sendClipboardImage,
+  pickFiles,
+  audioToggle,
+  remoteInputToggle,
+  sendText,
+}
+
+enum ConversationRemoteInputDiagnostic { toggleStarted }
+
+void _logConversationFailure(ConversationOperationKind kind, Object error) {
+  privacyLog.event(
+    PrivacyEvent.localOperation,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      PrivacyField.success: false,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    },
+  );
+}
 
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
@@ -153,17 +181,26 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   _SendMessageScreen(this.device, this.embedded);
 
-  void _traceRemoteInput(String message) {
-    logger.i(message);
-    if (!kReleaseMode ||
-        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1') {
-      debugPrint(message);
+  void _traceRemoteInputStart({
+    required bool trusted,
+    required int mappingCount,
+  }) {
+    if (kReleaseMode &&
+        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] != '1') {
+      return;
     }
+    privacyLog.event(
+      PrivacyEvent.remoteInputDiagnostic,
+      <PrivacyField, Object>{
+        PrivacyField.kind: ConversationRemoteInputDiagnostic.toggleStarted,
+        PrivacyField.allowed: trusted,
+        PrivacyField.count: mappingCount,
+      },
+    );
   }
 
   @override
   void initState() {
-    logger.i("init conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
     _audioCoordinator.addListener(_handleAudioShareChanged);
@@ -180,7 +217,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void dispose() {
-    logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.removeObserver(this);
     socketManager.unregisterEvent(this);
     _audioCoordinator.removeListener(_handleAudioShareChanged);
@@ -244,7 +280,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _updatePercent(double num) {
-    // logger.i("percent: ${(100*num).toStringAsFixed(2)}%");
     setState(() {
       percent = num;
     });
@@ -289,7 +324,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _loadMessages() async {
-    logger.i("current device: ${device.uid}");
     final me = await LocalSetting().instance();
     final storedDevice =
         me.uid == device.uid ? null : await db.fetchDevice(device.uid);
@@ -349,7 +383,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _scrollController.position.maxScrollExtent) {
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
-      logger.i('滑倒顶部了！${messageList[0].id}');
       var arr = await LocalDatabase().fetchMessageList(device.uid,
           beforeId: messageList.last.id, limit: 12);
       if (arr.isEmpty) {
@@ -357,11 +390,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
 
       _insertItems(messageList.length, arr);
-    }
-    if (_scrollController.position.pixels == 0) {
-      // 用户滑动到了ListView的顶部
-      // 在这里执行你的操作
-      logger.i('滑倒底部了！');
     }
   }
 
@@ -439,9 +467,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case FileTransferState.completed:
         return formatSize(message.size);
       case FileTransferState.failed:
-        return transfer.lastError.isEmpty
-            ? l10n.fileTransferFailedRetryable
-            : transfer.lastError;
+        return l10n.fileTransferFailedRetryable;
       case FileTransferState.canceled:
         return l10n.fileTransferCanceled;
     }
@@ -473,17 +499,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     final file = File(path);
     if (!await file.exists()) {
-      logger.i("skip delete missing file $path");
       return;
     }
     try {
-      logger.i("delete $path");
       await file.delete();
     } on FileSystemException catch (error) {
       if (!await file.exists()) {
-        logger.i("skip delete missing file $path after delete error: $error");
         return;
       }
+      _logConversationFailure(ConversationOperationKind.deleteFile, error);
       rethrow;
     }
   }
@@ -608,9 +632,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
           return;
         }
       }
-    } catch (error, stackTrace) {
-      logger.e('send dropped files failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendDroppedFiles,
+        error,
+      );
       if (mounted) {
         showAppToast(l10n.fileDropRejected);
       }
@@ -1043,12 +1069,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return null;
       }
       return text;
-    } catch (error, stackTrace) {
-      logger.e(
-        'read clipboard content failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.readClipboard, error);
       return null;
     }
   }
@@ -1101,11 +1123,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (remaining.isNotEmpty) {
         showAppToast(l10n.clipboardFilesSendFailed);
       }
-    } catch (error, stackTrace) {
-      logger.e(
-        'send clipboard files failed',
-        error: error,
-        stackTrace: stackTrace,
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendClipboardFiles,
+        error,
       );
       if (mounted) {
         setState(() {
@@ -1142,11 +1163,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       } else {
         showAppToast(l10n.clipboardImageSendFailed);
       }
-    } catch (error, stackTrace) {
-      logger.e(
-        'send clipboard image failed',
-        error: error,
-        stackTrace: stackTrace,
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendClipboardImage,
+        error,
       );
       if (mounted) {
         showAppToast(l10n.clipboardImageSendFailed);
@@ -1192,8 +1212,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       for (final item in result) {
         await socketManager.sendPickedFileTo(device.uid, item);
       }
-    } catch (error, stackTrace) {
-      logger.e('pick files failed', error: error, stackTrace: stackTrace);
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.pickFiles, error);
       if (mounted) {
         showAppToast(
           AppLocalizations.of(context)?.filePickerOpenFailed ??
@@ -1243,7 +1263,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
         if (message == WsSvrManager.duplicateAuthRequestMessage) {
           if (mounted) {
-            showAppToast(message.toString());
+            showAppToast(l10n.connectFailed);
           }
           return;
         }
@@ -1251,7 +1271,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ? l10n.pairingUpgradeRequired
             : message == 'pairing_expired'
                 ? l10n.pairingExpired
-                : message.toString();
+                : l10n.connectFailed;
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??
@@ -1382,11 +1402,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted) {
         showAppToast(l10n.audioShareRequestingPlayback);
       }
-    } catch (error, stackTrace) {
-      logger.e('audio share toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.protocol,
+      );
+      _logConversationFailure(ConversationOperationKind.audioToggle, error);
       if (mounted) {
-        showAppToast(l10n.audioShareFailed(error.toString()));
+        showAppToast(l10n.audioShareFailed(_audioFailureDetail(reason)));
       }
     }
   }
@@ -1510,30 +1533,32 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
+  String _audioFailureDetail(AudioFailureReason reason) {
+    return switch (reason) {
+      AudioFailureReason.unsupported => l10n.audioShareUnsupportedCapture,
+      _ => l10n.connectFailed,
+    };
+  }
+
+  String _remoteInputFailureDetail(RemoteInputFailureReason reason) {
+    return switch (reason) {
+      RemoteInputFailureReason.trustRequired =>
+        l10n.remoteInputRequiresMutualTrust,
+      RemoteInputFailureReason.unsupported => l10n.remoteInputLocalUnsupported,
+      RemoteInputFailureReason.busy => l10n.remoteInputStopCurrentFirst,
+      _ => l10n.connectFailed,
+    };
+  }
+
   Future<void> _toggleRemoteInput({bool showToast = true}) async {
     if (!_isConnectedSession || _isLocalhost) {
-      _traceRemoteInput(
-        'remote input toggle ignored connected=$_isConnectedSession '
-        'localhost=$_isLocalhost peer=${device.uid}',
-      );
       return;
     }
     final l10n = this.l10n;
     final inputState = _remoteInputCoordinator.state;
     final isCurrentInputSession = inputState.isForPeer(device.uid);
-    _traceRemoteInput(
-      'remote input toggle requested peer=${device.uid} '
-      'showToast=$showToast '
-      'state=${inputState.role.name}/${inputState.status.name} '
-      'stateSession=${inputState.sessionId} '
-      'isCurrent=$isCurrentInputSession '
-      'supportsNative=${supportsNativeRemoteInput()} '
-      'remoteSupports=${socketManager.supportsRemoteInputFor(device.uid)}',
-    );
     try {
       if (isCurrentInputSession) {
-        _traceRemoteInput(
-            'remote input toggle stopping current session peer=${device.uid}');
         await _remoteInputCoordinator.stopSharing(
           sendControl: socketManager.sendRemoteInputControl,
         );
@@ -1544,18 +1569,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       if (inputState.status != RemoteInputRuntimeStatus.idle &&
           inputState.status != RemoteInputRuntimeStatus.failed) {
-        _traceRemoteInput(
-          'remote input toggle blocked: another session is active '
-          'peer=${inputState.peerId} session=${inputState.sessionId}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputStopCurrentFirst);
         }
         return;
       }
       if (!isDesktop()) {
-        _traceRemoteInput(
-            'remote input toggle blocked: local platform is not desktop');
         if (showToast) {
           showAppToast(l10n.remoteInputLocalUnsupported);
         }
@@ -1568,27 +1587,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
           socketManager.remotePeerTrustsPeer(device.uid, self.uid);
       final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
       if (!localTrustsRemote) {
-        _traceRemoteInput(
-          'remote input toggle blocked: stored auth missing peer=${device.uid}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputRequiresMutualTrust);
         }
         return;
       }
       if (!remoteTrustsLocal) {
-        _traceRemoteInput(
-          'remote input toggle blocked: remote peer does not trust local '
-          'peer=${device.uid} self=${self.uid}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
         }
         return;
       }
       if (!socketManager.supportsRemoteInputFor(device.uid)) {
-        _traceRemoteInput(
-            'remote input toggle blocked: remote peer lacks capability');
         if (showToast) {
           showAppToast(l10n.remoteInputPeerUnsupported);
         }
@@ -1630,10 +1640,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final edge =
           resolvedTopologyLayout?.sharedSegment.sourceEdge ?? legacyEdge;
       if (edge == null) {
-        _traceRemoteInput(
-          'remote input toggle blocked: no adjacent edge peer=${device.uid} '
-          'layout=${layout.x},${layout.y},${layout.width},${layout.height}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputLayoutRequired);
         }
@@ -1651,11 +1657,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
           : topologyMappings
               .map((mapping) => mapping.sourceSegmentEnd)
               .reduce(max);
-      _traceRemoteInput(
-        'remote input toggle starting peer=${device.uid} '
-        'self=${self.uid} edge=${edge.name} '
-        'mappings=${topologyMappings.length} '
-        'host=${device.host}:${device.port}',
+      _traceRemoteInputStart(
+        trusted: isMutuallyTrusted,
+        mappingCount: topologyMappings.length,
       );
       await _remoteInputCoordinator.startSharingToConnectedPeer(
         sourcePeerId: self.uid,
@@ -1680,11 +1684,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted && showToast) {
         showAppToast(l10n.remoteInputEnabledMoveToEdge);
       }
-    } catch (error, stackTrace) {
-      logger.e('remote input toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = remoteInputFailureReasonFor(
+        error,
+        context: RemoteInputFailureContext.protocol,
+      );
+      _logConversationFailure(
+        ConversationOperationKind.remoteInputToggle,
+        error,
+      );
       if (mounted && showToast) {
-        showAppToast(l10n.remoteInputFailed(error.toString()));
+        showAppToast(l10n.remoteInputFailed(_remoteInputFailureDetail(reason)));
       }
     }
   }
@@ -1785,8 +1795,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         showAppToast(l10n.messageSendFailed);
       }
       return sent;
-    } catch (error, stackTrace) {
-      logger.e('send text failed', error: error, stackTrace: stackTrace);
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.sendText, error);
       if (mounted) {
         showAppToast(l10n.messageSendFailed);
       }
@@ -2041,7 +2051,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _isAlert = true;
     showConfirmationDialog(context,
         title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
-        description: message,
+        description: l10n.connectFailed,
         confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
         cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
         onConfirm: () {
@@ -2057,7 +2067,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_isCurrentRoute) {
       return;
     }
-    showAppToast(message);
+    showAppToast(l10n.fileTransferFailedRetryable);
   }
 
   @override
@@ -2085,7 +2095,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onMessage(MessageData messageData) {
-    logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
+    privacyLog.event(
+      PrivacyEvent.messageReceived,
+      <PrivacyField, Object>{
+        PrivacyField.kind: messageData.type,
+        PrivacyField.bytes: utf8.encode(messageData.content ?? '').length,
+        PrivacyField.clipboard: messageData.clipboard,
+      },
+    );
     if (_isLocalhost && messageData.receiver.isEmpty ||
         messageData.sender == device.uid ||
         messageData.receiver == device.uid) {

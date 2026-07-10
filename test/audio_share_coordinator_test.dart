@@ -156,9 +156,83 @@ void main() {
       );
 
       expect(sentControls.last.action, AudioControlAction.error);
-      expect(sentControls.last.errorMessage, contains('Screen recording'));
+      expect(sentControls.last.errorMessage, 'permission');
       expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
+      expect(coordinator.state.errorMessage, 'permission');
       expect(transport.closed, isTrue);
+    });
+
+    test('remote audio errors are reduced to a stable local reason', () async {
+      final sentControls = <AudioControlMessage>[];
+      final manager = AudioShareManager();
+      final coordinator = AudioShareCoordinator(
+        manager: manager,
+        platform: platform,
+        codecFactory: _pcmCodec,
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'pc',
+        sinkPeerId: 'phone',
+        sinkHost: 'phone.local',
+        sinkPort: 10002,
+        sendControl: sentControls.add,
+        format: format,
+      );
+      final offer = sentControls.single;
+      const remoteText =
+          'remote token=never-store-this /Users/alice/private.wav';
+
+      await coordinator.handleControlMessage(
+        AudioControlMessage(
+          action: AudioControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'pc',
+          sinkPeerId: 'phone',
+          errorMessage: remoteText,
+        ),
+        localPeerId: 'pc',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
+      expect(coordinator.state.errorMessage, 'remoteFailure');
+      expect(coordinator.state.errorMessage, isNot(contains(remoteText)));
+    });
+
+    test('remote audio errors preserve an allowlisted wire reason', () async {
+      final sentControls = <AudioControlMessage>[];
+      final coordinator = AudioShareCoordinator(
+        manager: AudioShareManager(),
+        platform: platform,
+        codecFactory: _pcmCodec,
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'pc',
+        sinkPeerId: 'phone',
+        sinkHost: 'phone.local',
+        sinkPort: 10002,
+        sendControl: sentControls.add,
+        format: format,
+      );
+      final offer = sentControls.single;
+
+      await coordinator.handleControlMessage(
+        AudioControlMessage(
+          action: AudioControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'pc',
+          sinkPeerId: 'phone',
+          errorMessage: 'unsupported',
+        ),
+        localPeerId: 'pc',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.errorMessage, 'unsupported');
     });
 
     test('sink auto-accepts offers and writes received packets to playback',

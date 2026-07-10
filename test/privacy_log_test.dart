@@ -47,6 +47,23 @@ void main() {
     }
   });
 
+  test('shortId rejection never includes the rejected identifier', () {
+    final log = PrivacyLog(sink: (_) {});
+    const secret = 'pairing-code-482913-token-never-log-this';
+
+    Object? thrown;
+    try {
+      log.shortId(PrivacyIdKind.peer, secret);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown, isA<ArgumentError>());
+    expect(thrown.toString(), isNot(contains(secret)));
+    expect(thrown.toString(), isNot(contains('482913')));
+    expect(thrown.toString(), isNot(contains('token-never-log-this')));
+  });
+
   test('redactUri maps only exact allowlisted paths to route categories', () {
     final log = PrivacyLog(sink: (_) {});
 

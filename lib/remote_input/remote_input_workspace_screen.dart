@@ -5,15 +5,19 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
+
+enum _RemoteInputWorkspaceUiDiagnostic { startFailed }
 
 class RemoteInputWorkspaceScreen extends StatefulWidget {
   const RemoteInputWorkspaceScreen({
@@ -777,7 +781,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       RemoteInputWorkspaceStatus.active =>
         l10n.remoteInputWorkspaceStatusActive(_activeTargetName()),
       RemoteInputWorkspaceStatus.failed =>
-        l10n.remoteInputWorkspaceStatusFailed(snapshot.errorMessage),
+        l10n.remoteInputWorkspaceStatusFailed(
+          _failureDetail(l10n, snapshot.errorMessage),
+        ),
       RemoteInputWorkspaceStatus.idle => l10n.remoteInputWorkspaceStatusIdle,
     };
     return Container(
@@ -848,13 +854,20 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         sendControlTo: _socketManager.sendRemoteInputControlTo,
       );
       showAppToast(l10n.remoteInputEnabledMoveToEdge);
-    } catch (error, stackTrace) {
-      logger.e(
-        'remote input workspace start failed',
-        error: error,
-        stackTrace: stackTrace,
+    } catch (error) {
+      final reason = remoteInputFailureReasonFor(
+        error,
+        context: RemoteInputFailureContext.protocol,
       );
-      showAppToast(l10n.remoteInputFailed(error.toString()));
+      privacyLog.event(
+        PrivacyEvent.remoteInputDiagnostic,
+        <PrivacyField, Object>{
+          PrivacyField.kind: _RemoteInputWorkspaceUiDiagnostic.startFailed,
+          PrivacyField.reason: reason,
+          PrivacyField.errorType: privacyLog.errorType(error),
+        },
+      );
+      showAppToast(l10n.remoteInputFailed(_failureDetail(l10n, reason.name)));
     } finally {
       if (mounted) {
         setState(() {
@@ -1413,10 +1426,21 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       case RemoteInputWorkspaceTargetStatus.connected:
         return l10n.remoteInputWorkspaceStatusArmed;
       case RemoteInputWorkspaceTargetStatus.failed:
-        return l10n.remoteInputWorkspaceStatusFailed(snapshot.errorMessage);
+        return l10n.remoteInputWorkspaceStatusFailed(
+          _failureDetail(l10n, snapshot.errorMessage),
+        );
       case RemoteInputWorkspaceTargetStatus.stopped:
         return l10n.remoteInputWorkspaceStatusIdle;
     }
+  }
+
+  String _failureDetail(AppLocalizations l10n, String reason) {
+    return switch (reason) {
+      'trustRequired' => l10n.remoteInputRequiresMutualTrust,
+      'unsupported' => l10n.remoteInputLocalUnsupported,
+      'busy' => l10n.remoteInputStopCurrentFirst,
+      _ => l10n.connectFailed,
+    };
   }
 
   String _activeTargetName() {

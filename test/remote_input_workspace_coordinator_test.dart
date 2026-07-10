@@ -286,8 +286,7 @@ void main() {
       expect(handled, isTrue);
       expect(
           sentControls['peer-d']!.last.action, RemoteInputControlAction.reject);
-      expect(sentControls['peer-d']!.last.errorMessage,
-          contains('controller workspace'));
+      expect(sentControls['peer-d']!.last.errorMessage, 'busy');
     });
 
     test('returns to idle when the only target rejects the offer', () async {
@@ -333,6 +332,103 @@ void main() {
       expect(coordinator.snapshot.role, RemoteInputWorkspaceRole.idle);
       expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
       expect(coordinator.snapshot.liveTargetPeerIds, isEmpty);
+    });
+
+    test('workspace drops remote error text before publishing failure',
+        () async {
+      final sentControls = <String, List<RemoteInputControlMessage>>{};
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        workspaceSessionIdFactory: () => 'workspace-private',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      final offer = sentControls['peer-b']!.single;
+      const remoteText =
+          'remote token=never-store-this /Users/alice/private.txt';
+
+      final handled = await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'peer-b',
+          errorMessage: remoteText,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'peer-b.local',
+        remotePort: 10002,
+        sendControlTo: (peerId, control) {},
+      );
+
+      expect(handled, isTrue);
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.failed);
+      expect(coordinator.snapshot.errorMessage, 'remoteFailure');
+      expect(
+        coordinator.snapshot.targets['peer-b']?.errorMessage,
+        'remoteFailure',
+      );
+      expect(coordinator.snapshot.errorMessage, isNot(contains(remoteText)));
+    });
+
+    test('workspace preserves an allowlisted remote failure reason', () async {
+      final sentControls = <String, List<RemoteInputControlMessage>>{};
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        workspaceSessionIdFactory: () => 'workspace-reason',
+      );
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer-b',
+            host: 'peer-b.local',
+            routeId: 'route-b',
+            start: 0,
+            end: 400,
+          ),
+        ],
+        sendControlTo: (peerId, control) {
+          sentControls.putIfAbsent(peerId, () => []).add(control);
+        },
+      );
+      final offer = sentControls['peer-b']!.single;
+
+      final handled = await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'peer-b',
+          errorMessage: 'trustRequired',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'peer-b.local',
+        remotePort: 10002,
+        sendControlTo: (peerId, control) {},
+      );
+
+      expect(handled, isTrue);
+      expect(coordinator.snapshot.errorMessage, 'trustRequired');
+      expect(
+        coordinator.snapshot.targets['peer-b']?.errorMessage,
+        'trustRequired',
+      );
     });
 
     test('stops capture when the only target packet transport closes',

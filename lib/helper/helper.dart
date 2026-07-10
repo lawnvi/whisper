@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -16,6 +17,10 @@ var logger = Logger();
 const LocalUuid = Uuid();
 String? _suppressedClipboardText;
 DateTime? _suppressedClipboardAt;
+
+enum LocalOperationKind { localhostCheck, clipboardRead, filePicker }
+
+enum LocalOperationState { failed, selected, canceled }
 
 bool isDesktop() {
   return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
@@ -155,8 +160,15 @@ Future<bool> isLocalhost(String address) async {
         }
       }
     }
-  } catch (e) {
-    logger.i("is local err: $e");
+  } catch (error) {
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: LocalOperationKind.localhostCheck,
+        PrivacyField.state: LocalOperationState.failed,
+        PrivacyField.errorType: privacyLog.errorType(error),
+      },
+    );
   }
 
   return false;
@@ -197,7 +209,14 @@ Future<String?> getClipboardText() async {
       return null;
     }
   }).catchError((error) {
-    logger.i('Error getting clipboard data: $error');
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: LocalOperationKind.clipboardRead,
+        PrivacyField.state: LocalOperationState.failed,
+        PrivacyField.errorType: privacyLog.errorType(error),
+      },
+    );
     return null;
   });
 }
@@ -234,20 +253,29 @@ bool shouldIgnoreClipboardSync(String content) {
 }
 
 void pickFile(var callback) async {
-  var p = await FilePicker.platform.getDirectoryPath();
-  logger.i("current path: $p");
+  await FilePicker.platform.getDirectoryPath();
   // 打开文件选择器
   FilePickerResult? result = await FilePicker.platform.pickFiles();
 
   if (result != null) {
     PlatformFile file = result.files.first;
-    logger.i('选择的文件路径: ${file.path}');
-    logger.i('选择的文件名: ${file.name}');
-    logger.i('选择的文件大小: ${file.size}');
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: LocalOperationKind.filePicker,
+        PrivacyField.state: LocalOperationState.selected,
+        PrivacyField.bytes: file.size,
+      },
+    );
     callback(file.path);
   } else {
-    // 用户取消了文件选择
-    logger.i('用户取消了文件选择');
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: LocalOperationKind.filePicker,
+        PrivacyField.state: LocalOperationState.canceled,
+      },
+    );
   }
 }
 
