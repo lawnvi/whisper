@@ -3058,6 +3058,7 @@ class WsSvrManager {
       }
       if (!allow) {
         await _sendAuthEnvelope(sink, result);
+        session.close();
         _releaseIncomingAuthForSink(sink);
         _dispatchToAll((event) => event.afterAuth(false, null));
         await _closeSocketSink(sink);

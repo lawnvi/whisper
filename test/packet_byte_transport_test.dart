@@ -441,6 +441,7 @@ void main() {
     final releaseFirstWrite = Completer<void>();
     final overflowClosed = Completer<void>();
     var writes = 0;
+    var closes = 0;
     final transport = await connectPacketWebSocket(
       Uri.parse('ws://127.0.0.1:10002/input'),
       remoteInputMaxItems: 2,
@@ -455,6 +456,7 @@ void main() {
           }
         },
         closeSink: () async {
+          closes += 1;
           if (!overflowClosed.isCompleted) {
             overflowClosed.complete();
           }
@@ -477,8 +479,15 @@ void main() {
     );
 
     await overflowClosed.future;
+    expect(transport.isClosed, isTrue);
+    expect(
+      (await transport.done).reason,
+      PacketTransportTerminationReason.writerFailure,
+    );
+    expect(closes, 1);
     releaseFirstWrite.complete();
     await transport.close();
+    expect(closes, 1);
   });
 
   test('websocket connection errors never expose capability queries', () async {

@@ -12,7 +12,7 @@ void main() {
     final firstWriteStarted = Completer<void>();
     final releaseFirstWrite = Completer<void>();
     var writes = 0;
-    var socketClosed = false;
+    var socketCloses = 0;
     final transport = RemoteInputWebSocketPacketTransport.forStreams(
       incoming: incoming.stream,
       addStream: (stream) async {
@@ -23,7 +23,7 @@ void main() {
           await releaseFirstWrite.future;
         }
       },
-      closeSink: () async => socketClosed = true,
+      closeSink: () async => socketCloses += 1,
       maxItems: 2,
       maxBytes: 1024 * 1024,
     );
@@ -42,10 +42,9 @@ void main() {
     transport.send(packet(3));
 
     await done;
-    expect(socketClosed, isTrue);
-
     releaseFirstWrite.complete();
     await transport.close();
+    expect(socketCloses, 1);
     await incoming.close();
   });
 }

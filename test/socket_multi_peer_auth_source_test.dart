@@ -44,6 +44,15 @@ void main() {
       'Future<void> _handleClientResult(',
     );
     expect(proof, contains('await _closeSocketSink(sink)'));
+    final denial = proof.substring(proof.indexOf('if (!allow)'));
+    expect(
+      denial.indexOf('await _sendAuthEnvelope(sink, result)'),
+      lessThan(denial.indexOf('session.close()')),
+    );
+    expect(
+      denial.indexOf('session.close()'),
+      lessThan(denial.indexOf('await _closeSocketSink(sink)')),
+    );
     expect(proof, isNot(contains('closeGracefully(')));
     expect(proof, isNot(contains('close(closeServer')));
   });
