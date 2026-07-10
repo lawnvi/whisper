@@ -1,8 +1,187 @@
 import 'package:flutter/foundation.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/auto_connect_planner.dart';
 import 'package:whisper/state/connection_models.dart';
+import 'package:whisper/state/peer_endpoint.dart';
+
+enum LocalDiscoveryPhase {
+  starting,
+  active,
+  stopped,
+  unavailable,
+  permissionDenied,
+  permissionRestricted,
+}
+
+enum LocalDiscoveryComponent { server, broadcast, discoveryEngine }
+
+@immutable
+class LocalDiscoveryErrorState {
+  const LocalDiscoveryErrorState({
+    this.server,
+    this.broadcast,
+    this.discoveryEngine,
+  });
+
+  final String? server;
+  final String? broadcast;
+  final String? discoveryEngine;
+
+  String? get message => server ?? broadcast ?? discoveryEngine;
+
+  LocalDiscoveryErrorState withFailure(
+    LocalDiscoveryComponent component,
+    String message,
+  ) {
+    return switch (component) {
+      LocalDiscoveryComponent.server => LocalDiscoveryErrorState(
+          server: message,
+          broadcast: broadcast,
+          discoveryEngine: discoveryEngine,
+        ),
+      LocalDiscoveryComponent.broadcast => LocalDiscoveryErrorState(
+          server: server,
+          broadcast: message,
+          discoveryEngine: discoveryEngine,
+        ),
+      LocalDiscoveryComponent.discoveryEngine => LocalDiscoveryErrorState(
+          server: server,
+          broadcast: broadcast,
+          discoveryEngine: message,
+        ),
+    };
+  }
+
+  LocalDiscoveryErrorState clear(LocalDiscoveryComponent component) {
+    return switch (component) {
+      LocalDiscoveryComponent.server => LocalDiscoveryErrorState(
+          broadcast: broadcast,
+          discoveryEngine: discoveryEngine,
+        ),
+      LocalDiscoveryComponent.broadcast => LocalDiscoveryErrorState(
+          server: server,
+          discoveryEngine: discoveryEngine,
+        ),
+      LocalDiscoveryComponent.discoveryEngine => LocalDiscoveryErrorState(
+          server: server,
+          broadcast: broadcast,
+        ),
+    };
+  }
+}
+
+@immutable
+class LocalDiscoveryPresentation {
+  const LocalDiscoveryPresentation({
+    required this.phase,
+    required this.canRetry,
+    this.errorMessage,
+  });
+
+  factory LocalDiscoveryPresentation.fromRuntime({
+    required LocalNetworkPermissionStatus permissionStatus,
+    required bool serverStarted,
+    required bool broadcasting,
+    required bool discovering,
+    bool startupInProgress = false,
+    bool available = true,
+    String? errorMessage,
+  }) {
+    if (permissionStatus == LocalNetworkPermissionStatus.denied) {
+      return const LocalDiscoveryPresentation(
+        phase: LocalDiscoveryPhase.permissionDenied,
+        canRetry: true,
+      );
+    }
+    if (permissionStatus == LocalNetworkPermissionStatus.restricted) {
+      return const LocalDiscoveryPresentation(
+        phase: LocalDiscoveryPhase.permissionRestricted,
+        canRetry: false,
+      );
+    }
+    if (!available || (errorMessage?.isNotEmpty ?? false)) {
+      return LocalDiscoveryPresentation(
+        phase: LocalDiscoveryPhase.unavailable,
+        canRetry: true,
+        errorMessage: errorMessage,
+      );
+    }
+    if (serverStarted && broadcasting && discovering) {
+      return const LocalDiscoveryPresentation(
+        phase: LocalDiscoveryPhase.active,
+        canRetry: false,
+      );
+    }
+    if (startupInProgress) {
+      return const LocalDiscoveryPresentation(
+        phase: LocalDiscoveryPhase.starting,
+        canRetry: false,
+      );
+    }
+    return const LocalDiscoveryPresentation(
+      phase: LocalDiscoveryPhase.stopped,
+      canRetry: true,
+    );
+  }
+
+  final LocalDiscoveryPhase phase;
+  final bool canRetry;
+  final String? errorMessage;
+}
+
+@immutable
+class NearbyCandidatePresentation {
+  const NearbyCandidatePresentation({
+    required this.publicKeyHash,
+    required this.serviceName,
+    required this.endpoint,
+    required this.lastSeenAt,
+    this.displayName,
+    this.platform,
+  });
+
+  final String publicKeyHash;
+  final String serviceName;
+  final PeerEndpoint endpoint;
+  final DateTime lastSeenAt;
+  final String? displayName;
+  final String? platform;
+
+  String get id => publicKeyHash;
+}
+
+class ConnectionAttemptTracker {
+  final Map<String, int> _generationByTarget = <String, int>{};
+  int _nextGeneration = 0;
+
+  int begin(String target) {
+    final generation = ++_nextGeneration;
+    _generationByTarget[target] = generation;
+    return generation;
+  }
+
+  bool isCurrent(String target, int generation) {
+    return _generationByTarget[target] == generation;
+  }
+
+  bool complete(String target, int generation) {
+    if (!isCurrent(target, generation)) {
+      return false;
+    }
+    _generationByTarget.remove(target);
+    return true;
+  }
+
+  void cancel(String target) {
+    _generationByTarget.remove(target);
+  }
+
+  void cancelAll() {
+    _generationByTarget.clear();
+  }
+}
 
 class ConnectionCoordinator extends ChangeNotifier {
   ConnectionCoordinator._internal();
@@ -18,6 +197,7 @@ class ConnectionCoordinator extends ChangeNotifier {
   final LocalSetting _settings = LocalSetting();
 
   final Map<String, DevicePresence> _presenceByPeerId = {};
+  final Map<String, NearbyCandidatePresentation> _nearbyCandidatesByPkh = {};
   ConnectionSnapshot _snapshot = const ConnectionSnapshot();
   String _localPeerId = '';
 
@@ -27,6 +207,23 @@ class ConnectionCoordinator extends ChangeNotifier {
     final values = _presenceByPeerId.values.toList()
       ..sort((left, right) => right.lastSeenAt.compareTo(left.lastSeenAt));
     return values;
+  }
+
+  List<NearbyCandidatePresentation> get nearbyCandidates {
+    final values = _nearbyCandidatesByPkh.values.toList()
+      ..sort((left, right) => right.lastSeenAt.compareTo(left.lastSeenAt));
+    return List<NearbyCandidatePresentation>.unmodifiable(values);
+  }
+
+  void presentNearbyCandidate(NearbyCandidatePresentation candidate) {
+    _nearbyCandidatesByPkh[candidate.id] = candidate;
+    notifyListeners();
+  }
+
+  void removeNearbyCandidate(String publicKeyHash) {
+    if (_nearbyCandidatesByPkh.remove(publicKeyHash) != null) {
+      notifyListeners();
+    }
   }
 
   Future<void> bootstrap(String localPeerId) async {

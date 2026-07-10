@@ -23,6 +23,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
@@ -34,10 +35,18 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
+import 'package:whisper/widget/adaptive_device_shell.dart';
+import 'package:whisper/widget/app_dialogs.dart'
+    show
+        InputDialogField,
+        confirmAction,
+        showLoadingDialog,
+        showValidatedInputDialog;
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/device_workbench.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
@@ -47,7 +56,7 @@ import '../socket/svrmanager.dart';
 import 'appList.dart';
 import 'conversation.dart';
 import 'settings.dart' as app_settings;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'dart:io' show Platform;
 
 String buildWhisperServiceName(String baseName, String uid) {
@@ -56,6 +65,42 @@ String buildWhisperServiceName(String baseName, String uid) {
     return baseName;
   }
   return "$baseName-$normalizedUid";
+}
+
+List<DeviceData> reconcileDiscoveryDeviceList({
+  required List<DeviceData> currentDevices,
+  required String peerId,
+  required bool isLost,
+  required DeviceData? storedDevice,
+  required DeviceData visibleDevice,
+}) {
+  final reconciled = currentDevices.toList();
+  final previousIndex = reconciled.indexWhere((item) => item.uid == peerId);
+  if (previousIndex >= 0) {
+    reconciled.removeAt(previousIndex);
+  }
+  if (isLost) {
+    if (storedDevice != null) {
+      final insertionIndex = previousIndex < 0
+          ? reconciled.length
+          : previousIndex.clamp(0, reconciled.length);
+      reconciled.insert(insertionIndex, visibleDevice);
+    }
+  } else {
+    reconciled.insert(0, visibleDevice);
+  }
+  return reconciled;
+}
+
+Future<bool> removeDeviceAfterConfirmation({
+  required Future<bool> Function() confirm,
+  required Future<void> Function() clear,
+}) async {
+  if (!await confirm()) {
+    return false;
+  }
+  await clear();
+  return true;
 }
 
 class _AudioGroupSetupResult {
@@ -108,6 +153,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final serviceType = "_whisper._tcp";
   bool _isBroadcasting = false;
   bool _isDiscovering = false;
+  LocalNetworkPermissionStatus _localNetworkPermissionStatus =
+      LocalNetworkPermissionStatus.unknown;
+  bool _localDiscoveryAvailable = true;
+  bool _localDiscoveryStartupInProgress = true;
+  LocalDiscoveryErrorState _localDiscoveryErrors =
+      const LocalDiscoveryErrorState();
   bool _didBootstrapDiscovery = false;
   Timer? _broadcastRestartTimer;
   final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
@@ -119,6 +170,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       TextEditingController();
   final FocusNode _desktopSearchFocusNode = FocusNode();
   final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
+  final ConnectionAttemptTracker _connectionAttempts =
+      ConnectionAttemptTracker();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   bool _isDesktopSearchExpanded = false;
@@ -164,6 +217,22 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _requestPermission() async {
+    final localNetworkPermissionStatus =
+        await LocalNetworkPermission().ensureGranted();
+    if (mounted) {
+      setState(() {
+        _localNetworkPermissionStatus = localNetworkPermissionStatus;
+        if (localNetworkPermissionStatus ==
+                LocalNetworkPermissionStatus.denied ||
+            localNetworkPermissionStatus ==
+                LocalNetworkPermissionStatus.restricted) {
+          _localDiscoveryStartupInProgress = false;
+        }
+      });
+    } else {
+      _localNetworkPermissionStatus = localNetworkPermissionStatus;
+    }
+
     if (!isMobile()) {
       return;
     }
@@ -325,6 +394,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
     socketManager.unregisterEvent(this);
+    _connectionAttempts.cancelAll();
     _desktopSearchFocusNode.removeListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.removeListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.removeListener(_handleDesktopAudioChanged);
@@ -434,177 +504,287 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await windowManager.destroy();
   }
 
-  void _broadcastService({port}) async {
-    final wifiIP = await getLocalIpAddress();
-    final trustedPeerIds = await db.fetchTrustedPeerIds();
-    final autoConnectEnabled = await LocalSetting().autoConnectEnabled();
-
-    logger.i("wifi ip: $wifiIP");
-
-    if (wifiIP == "127.0.0.1") {
-      _isBroadcasting = false;
-      return;
+  void _updateLocalDiscoveryState(VoidCallback update) {
+    if (mounted) {
+      setState(update);
+    } else {
+      update();
     }
-
-    await _stopBroadcast(close: false);
-    BonsoirService service = BonsoirService(
-      name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
-      type: serviceType,
-      port: 10004,
-      attributes: {
-        'host': wifiIP,
-        'port': (port ?? device?.port ?? 10002).toString(),
-        'name': device?.name ?? await deviceName(),
-        'platform': device?.platform ?? "未知",
-        'uid': device?.uid ?? "",
-        'trustedPeers': trustedPeerIds.join(','),
-        'autoConnect': autoConnectEnabled ? '1' : '0',
-      },
-    );
-
-    // And now we can broadcast it :
-    _broadcast = BonsoirBroadcast(service: service);
-    await _broadcast!.ready;
-
-    _broadcastSubscription?.cancel();
-    _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
-      debugPrint('Broadcast event : ${event.type}');
-    });
-
-    await _broadcast!.start();
-    _isBroadcasting = true;
   }
 
-  Future<void> _stopBroadcast({close = true}) async {
+  void _clearLocalDiscoveryError(LocalDiscoveryComponent component) {
+    _updateLocalDiscoveryState(() {
+      _localDiscoveryErrors = _localDiscoveryErrors.clear(component);
+    });
+  }
+
+  void _markLocalDiscoveryStarted() {
+    _updateLocalDiscoveryState(() {
+      _isDiscovering = true;
+      _localDiscoveryAvailable = true;
+      _localDiscoveryErrors = _localDiscoveryErrors.clear(
+        LocalDiscoveryComponent.discoveryEngine,
+      );
+    });
+  }
+
+  void _markLocalDiscoveryStopped() {
+    _updateLocalDiscoveryState(() {
+      _isDiscovering = false;
+      _localDiscoveryStartupInProgress = false;
+    });
+  }
+
+  bool get _localNetworkPermissionBlocked =>
+      _localNetworkPermissionStatus == LocalNetworkPermissionStatus.denied ||
+      _localNetworkPermissionStatus == LocalNetworkPermissionStatus.restricted;
+
+  Future<void> _broadcastService({port}) async {
+    if (_localNetworkPermissionBlocked) {
+      _updateLocalDiscoveryState(() {
+        _isBroadcasting = false;
+        _localDiscoveryStartupInProgress = false;
+      });
+      return;
+    }
+    _updateLocalDiscoveryState(() {
+      _localDiscoveryStartupInProgress = true;
+      _localDiscoveryAvailable = true;
+    });
+    try {
+      final wifiIP = await getLocalIpAddress();
+      final trustedPeerIds = await db.fetchTrustedPeerIds();
+      final autoConnectEnabled = await LocalSetting().autoConnectEnabled();
+
+      logger.i("wifi ip: $wifiIP");
+
+      if (wifiIP == "127.0.0.1") {
+        _updateLocalDiscoveryState(() {
+          _isBroadcasting = false;
+          _localDiscoveryAvailable = false;
+        });
+        return;
+      }
+
+      await _stopBroadcast();
+      final service = BonsoirService(
+        name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
+        type: serviceType,
+        port: 10004,
+        attributes: {
+          'host': wifiIP,
+          'port': (port ?? device?.port ?? 10002).toString(),
+          'name': device?.name ?? await deviceName(),
+          'platform': device?.platform ?? "未知",
+          'uid': device?.uid ?? "",
+          'trustedPeers': trustedPeerIds.join(','),
+          'autoConnect': autoConnectEnabled ? '1' : '0',
+        },
+      );
+
+      _broadcast = BonsoirBroadcast(service: service);
+      await _broadcast!.ready;
+
+      await _broadcastSubscription?.cancel();
+      _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
+        debugPrint('Broadcast event : ${event.type}');
+      });
+
+      await _broadcast!.start();
+      _updateLocalDiscoveryState(() {
+        _isBroadcasting = true;
+      });
+      _clearLocalDiscoveryError(LocalDiscoveryComponent.broadcast);
+    } catch (error, stackTrace) {
+      logger.e(
+        'local broadcast failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _updateLocalDiscoveryState(() {
+        _isBroadcasting = false;
+        _localDiscoveryErrors = _localDiscoveryErrors.withFailure(
+          LocalDiscoveryComponent.broadcast,
+          error.toString(),
+        );
+      });
+    } finally {
+      _updateLocalDiscoveryState(() {
+        _localDiscoveryStartupInProgress = false;
+      });
+    }
+  }
+
+  Future<void> _stopBroadcast() async {
     _broadcastRestartTimer?.cancel();
     _broadcastRestartTimer = null;
     await _broadcastSubscription?.cancel();
     _broadcastSubscription = null;
     await _broadcast?.stop();
     _broadcast = null;
-    _isBroadcasting = !close;
+    _isBroadcasting = false;
   }
 
   Future<void> _discoverService() async {
-    await _stopDiscovery();
-    // This is the type of service we're looking for :
+    if (_localNetworkPermissionBlocked) {
+      _updateLocalDiscoveryState(() {
+        _isDiscovering = false;
+        _localDiscoveryStartupInProgress = false;
+      });
+      return;
+    }
+    _updateLocalDiscoveryState(() {
+      _localDiscoveryStartupInProgress = true;
+      _localDiscoveryAvailable = true;
+    });
+    try {
+      await _stopDiscovery();
+      // This is the type of service we're looking for :
 
-    // Once defined, we can start the discovery :
-    _discovery = BonsoirDiscovery(type: serviceType, printLogs: true);
-    await _discovery!.ready;
+      // Once defined, we can start the discovery :
+      _discovery = BonsoirDiscovery(type: serviceType, printLogs: true);
+      await _discovery!.ready;
 
-    // If you want to listen to the discovery :
-    _discoverySubscription?.cancel();
-    _discoverySubscription = _discovery?.eventStream!.listen((event) async {
-      debugPrint('Discovery event : ${event.type}');
-      // `eventStream` is not null as the discovery instance is "ready" !
-      final service = event.service;
-      if (service != null) {
+      // If you want to listen to the discovery :
+      await _discoverySubscription?.cancel();
+      _discoverySubscription = _discovery?.eventStream!.listen((event) async {
+        debugPrint('Discovery event : ${event.type}');
         switch (event.type) {
-          case BonsoirDiscoveryEventType.discoveryServiceFound:
-            logger.i(
-                "event type: ${event.type}, service name: $serviceName ${service.name}");
-            if (service.name.startsWith(serviceName) &&
-                _shouldResolveService(service)) {
-              event.service!.resolve(_discovery!.serviceResolver);
-            }
-            break;
           case BonsoirDiscoveryEventType.discoveryStarted:
-            logger.i(
-                "event type: ${event.type}, service name: ${service.name} start");
+            _markLocalDiscoveryStarted();
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolved ||
                 BonsoirDiscoveryEventType.discoveryServiceLost:
-            final svr = service;
-            if (!svr.attributes.containsKey('uid')) {
-              logger.i(
-                  "event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
-              return;
-            }
-            var isLost =
-                event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
-            final host = svr.attributes["host"];
-            final port =
-                int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
-            final uid = svr.attributes["uid"];
-            final name = svr.attributes["name"];
-            final platform = svr.attributes["platform"];
-            final remoteTrustedPeerIds =
-                PeerProfile.trustedPeersFromDiscovery(svr.attributes);
-            final remoteAutoConnectEnabled =
-                PeerProfile.autoConnectFromDiscovery(svr.attributes);
-            logger.i("${isLost ? '丢失' : '发现'}本地设备");
-            logger.i("本地设备uid: $uid");
-            logger.i("本地设备name: $name");
-            logger.i("本地设备host: $host");
-            logger.i("本地设备port: $port");
-            logger.i("本地设备platform: $platform");
-            if (uid == null || uid == device?.uid) {
-              return;
-            }
-            if (isLost) {
-              _resolveLimiter.clear(_serviceResolveKey(svr));
-            }
-            var temp = await LocalDatabase().fetchDevice(uid);
-            final resolvedDevice = buildDevice(
-              uid: uid,
-              name: temp?.name ?? name,
-              port: port,
-              host: host,
-              platform: platform,
-              around: !isLost,
+            _clearLocalDiscoveryError(
+              LocalDiscoveryComponent.discoveryEngine,
             );
-            final visibleDevice = _mergeStoredDeviceWithDiscovery(
-              temp,
-              resolvedDevice,
-            );
-            if (!isLost) {
-              await db.upsertDevice(visibleDevice);
-            }
-            await ConnectionCoordinator().updateDiscovery(
-              visibleDevice,
-              discovered: !isLost,
-              remoteTrustedPeerIds: remoteTrustedPeerIds,
-              remoteAutoConnectEnabled: remoteAutoConnectEnabled,
-            );
-            for (var item in devices) {
-              if (item.uid == uid) {
-                break;
-              }
-            }
-            setState(() {
-              var index = -1;
-              for (var i = devices.length - 1; i >= 0; i--) {
-                if (devices[i].uid == uid) {
-                  index = i;
-                  devices.removeAt(i);
-                  break;
-                }
-              }
-              if (isLost && temp != null) {
-                devices.insert(index, temp);
-              } else if (!isLost) {
-                devices.insert(0, visibleDevice);
-              }
-            });
-            _refreshDevice();
-            if (!isLost) {
-              await _attemptAutoConnect();
-            }
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
-          // TODO: Handle this case.
+            final service = event.service;
+            if (service != null) {
+              _resolveLimiter.clear(_serviceResolveKey(service));
+            }
+            break;
           case BonsoirDiscoveryEventType.discoveryStopped:
-          // TODO: Handle this case.
-          case BonsoirDiscoveryEventType.unknown:
-          // TODO: Handle this case.
+            _markLocalDiscoveryStopped();
+            break;
+          case BonsoirDiscoveryEventType.discoveryServiceFound ||
+                BonsoirDiscoveryEventType.unknown:
+            break;
         }
-      }
-    });
+        // `eventStream` is not null as the discovery instance is "ready" !
+        final service = event.service;
+        if (service != null) {
+          switch (event.type) {
+            case BonsoirDiscoveryEventType.discoveryServiceFound:
+              logger.i(
+                  "event type: ${event.type}, service name: $serviceName ${service.name}");
+              if (service.name.startsWith(serviceName) &&
+                  _shouldResolveService(service)) {
+                event.service!.resolve(_discovery!.serviceResolver);
+              }
+              break;
+            case BonsoirDiscoveryEventType.discoveryServiceResolved ||
+                  BonsoirDiscoveryEventType.discoveryServiceLost:
+              final svr = service;
+              if (!svr.attributes.containsKey('uid')) {
+                logger.i(
+                    "event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
+                return;
+              }
+              var isLost =
+                  event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+              final host = svr.attributes["host"];
+              final port =
+                  int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
+              final uid = svr.attributes["uid"];
+              final name = svr.attributes["name"];
+              final platform = svr.attributes["platform"];
+              final remoteTrustedPeerIds =
+                  PeerProfile.trustedPeersFromDiscovery(svr.attributes);
+              final remoteAutoConnectEnabled =
+                  PeerProfile.autoConnectFromDiscovery(svr.attributes);
+              logger.i("${isLost ? '丢失' : '发现'}本地设备");
+              logger.i("本地设备uid: $uid");
+              logger.i("本地设备name: $name");
+              logger.i("本地设备host: $host");
+              logger.i("本地设备port: $port");
+              logger.i("本地设备platform: $platform");
+              if (uid == null || uid == device?.uid) {
+                return;
+              }
+              if (isLost) {
+                _resolveLimiter.clear(_serviceResolveKey(svr));
+              }
+              var temp = await LocalDatabase().fetchDevice(uid);
+              final resolvedDevice = buildDevice(
+                uid: uid,
+                name: temp?.name ?? name,
+                port: port,
+                host: host,
+                platform: platform,
+                around: !isLost,
+              );
+              final visibleDevice = _mergeStoredDeviceWithDiscovery(
+                temp,
+                resolvedDevice,
+              );
+              if (!isLost) {
+                await db.upsertDevice(visibleDevice);
+              }
+              await ConnectionCoordinator().updateDiscovery(
+                visibleDevice,
+                discovered: !isLost,
+                remoteTrustedPeerIds: remoteTrustedPeerIds,
+                remoteAutoConnectEnabled: remoteAutoConnectEnabled,
+              );
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                devices = reconcileDiscoveryDeviceList(
+                  currentDevices: devices,
+                  peerId: uid,
+                  isLost: isLost,
+                  storedDevice: temp,
+                  visibleDevice: visibleDevice,
+                );
+              });
+              _refreshDevice();
+              if (!isLost) {
+                await _attemptAutoConnect();
+              }
+              break;
+            case BonsoirDiscoveryEventType.discoveryStarted ||
+                  BonsoirDiscoveryEventType.discoveryServiceResolveFailed ||
+                  BonsoirDiscoveryEventType.discoveryStopped ||
+                  BonsoirDiscoveryEventType.unknown:
+              break;
+          }
+        }
+      });
 
-    // Start discovery **after** having listened to discovery events :
-    await _discovery?.start();
-    _isDiscovering = true;
+      // Start discovery **after** having listened to discovery events :
+      await _discovery?.start();
+      _markLocalDiscoveryStarted();
+    } catch (error, stackTrace) {
+      logger.e(
+        'local discovery failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _updateLocalDiscoveryState(() {
+        _isDiscovering = false;
+        _localDiscoveryErrors = _localDiscoveryErrors.withFailure(
+          LocalDiscoveryComponent.discoveryEngine,
+          error.toString(),
+        );
+      });
+    } finally {
+      _updateLocalDiscoveryState(() {
+        _localDiscoveryStartupInProgress = false;
+      });
+    }
   }
 
   Future<void> _stopDiscovery() async {
@@ -613,6 +793,32 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await _discovery?.stop();
     _discovery = null;
     _isDiscovering = false;
+  }
+
+  Future<void> _retryLocalDiscovery() async {
+    _updateLocalDiscoveryState(() {
+      _localDiscoveryErrors = const LocalDiscoveryErrorState();
+      _localDiscoveryAvailable = true;
+      _localDiscoveryStartupInProgress = true;
+    });
+    final permissionStatus = await LocalNetworkPermission().ensureGranted();
+    _updateLocalDiscoveryState(() {
+      _localNetworkPermissionStatus = permissionStatus;
+    });
+    if (_localNetworkPermissionBlocked) {
+      _updateLocalDiscoveryState(() {
+        _localDiscoveryStartupInProgress = false;
+      });
+      return;
+    }
+    if (!socketManager.started) {
+      await _startServer(port: device?.port ?? 10002);
+    }
+    if (!socketManager.started) {
+      return;
+    }
+    await _broadcastService(port: device?.port ?? 10002);
+    await _discoverService();
   }
 
   DeviceData buildDevice(
@@ -744,11 +950,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _broadcastRestartTimer?.cancel();
       _broadcastRestartTimer = Timer(const Duration(milliseconds: 100), () {
         _broadcastRestartTimer = null;
-        _broadcastService();
+        unawaited(_broadcastService());
       });
     }
     if (isFirst && !_isDiscovering) {
-      _discoverService();
+      unawaited(_discoverService());
       setListenApps();
     }
   }
@@ -779,14 +985,158 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return null;
   }
 
+  LocalDiscoveryPresentation get _localDiscoveryPresentation =>
+      LocalDiscoveryPresentation.fromRuntime(
+        permissionStatus: _localNetworkPermissionStatus,
+        serverStarted: socketManager.started,
+        broadcasting: _isBroadcasting,
+        discovering: _isDiscovering,
+        startupInProgress: _localDiscoveryStartupInProgress,
+        available: _localDiscoveryAvailable,
+        errorMessage: _localDiscoveryErrors.message,
+      );
+
+  String get _localDeviceAddress {
+    final host = device?.host ?? '127.0.0.1';
+    final formattedHost = host.contains(':') ? '[$host]' : host;
+    return '$formattedHost:${device?.port ?? 10002}';
+  }
+
+  bool get _isRemoteInputWorkspaceActive {
+    final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
+    final legacyState = _remoteInputCoordinator.state;
+    final legacyLive = legacyState.status != RemoteInputRuntimeStatus.idle &&
+        legacyState.status != RemoteInputRuntimeStatus.failed;
+    return snapshot.isControllerLive || snapshot.isControlledLive || legacyLive;
+  }
+
+  List<DeviceWorkbenchAction> _workbenchActions() {
+    final l10n = AppLocalizations.of(context)!;
+    final actions = <DeviceWorkbenchAction>[
+      DeviceWorkbenchAction(
+        kind: DeviceWorkbenchActionKind.manualConnect,
+        onPressed: () => unawaited(_showManualConnectDialog()),
+      ),
+    ];
+    if (isDesktop()) {
+      final audioActive = _isDesktopAudioShareActive;
+      final audioBusy = _isDesktopAudioShareBusy;
+      final audioCandidates = socketManager.connectedAudioGroupSinkDevices(
+        preferredPeerId: _selectedDesktopPeerId ?? '',
+      );
+      final String? audioDisabledReason = audioBusy
+          ? l10n.audioShareCaptureConnecting
+          : !audioActive && !supportsNativeSystemAudio()
+              ? l10n.audioShareUnsupportedCapture
+              : !audioActive && audioCandidates.isEmpty
+                  ? l10n.audioGroupSelectAtLeastOne
+                  : null;
+      actions.add(
+        DeviceWorkbenchAction(
+          kind: DeviceWorkbenchActionKind.audioShare,
+          active: audioActive || audioBusy,
+          onPressed: audioDisabledReason == null
+              ? () => unawaited(_toggleDesktopAudioShare())
+              : null,
+          disabledReason: audioDisabledReason,
+        ),
+      );
+
+      final remoteActive = _isRemoteInputWorkspaceActive;
+      final remoteCandidates = socketManager.connectedRemoteInputDevices(
+        preferredPeerId: _selectedDesktopPeerId ?? '',
+      );
+      final remoteDisabledReason = !remoteActive && remoteCandidates.isEmpty
+          ? l10n.remoteInputWorkspaceNoTargets
+          : null;
+      actions.add(
+        DeviceWorkbenchAction(
+          kind: DeviceWorkbenchActionKind.remoteInput,
+          active: remoteActive,
+          onPressed: remoteDisabledReason == null
+              ? () => unawaited(_openRemoteInputWorkspace())
+              : null,
+          disabledReason: remoteDisabledReason,
+        ),
+      );
+    }
+    actions.add(
+      DeviceWorkbenchAction(
+        kind: DeviceWorkbenchActionKind.settings,
+        onPressed: () => unawaited(_openSettings()),
+      ),
+    );
+    return actions;
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const app_settings.SettingsScreen(),
+      ),
+    );
+    await _refreshDevice();
+  }
+
+  void _selectWorkbenchSession(ChatSessionItem session) {
+    _openConv(session.device);
+  }
+
+  void _selectNearbyCandidate(NearbyCandidatePresentation candidate) {
+    unawaited(
+      _connectServer(
+        candidate.endpoint.host,
+        candidate.endpoint.port,
+        intendedPublicKeyHash: candidate.publicKeyHash,
+      ),
+    );
+  }
+
+  Widget _buildDeviceWorkbench() {
+    return DeviceWorkbenchPane(
+      localDeviceName: device?.name ?? 'Whisper',
+      localPlatform: device?.platform ?? defaultTargetPlatform.name,
+      localAddress: _localDeviceAddress,
+      discovery: _localDiscoveryPresentation,
+      sessions: _sessionItems,
+      candidates: ConnectionCoordinator().nearbyCandidates,
+      selectedPeerId: _selectedDesktopPeerId,
+      actions: _workbenchActions(),
+      onSelectSession: _selectWorkbenchSession,
+      onSelectCandidate: _selectNearbyCandidate,
+      onRetryDiscovery: _retryLocalDiscovery,
+      sessionContextActions: (session) =>
+          _buildSessionContextActions(session.device),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDesk = isDesktop();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (isDesk) {
-      return _buildDesktopScaffold(isDark);
-    }
-    return _buildMobileScaffold(isDark);
+    final selectedSession = _selectedDesktopSession();
+    return Scaffold(
+      backgroundColor: context.whisperPalette.surfaceCanvas,
+      body: SafeArea(
+        child: AdaptiveDeviceShell(
+          workbench: _buildDeviceWorkbench(),
+          detail: selectedSession == null
+              ? null
+              : SendMessageScreen(
+                  key: ValueKey('adaptive-${selectedSession.device.uid}'),
+                  device: selectedSession.device,
+                  embedded: true,
+                ),
+          emptyDetail: _buildDesktopPlaceholder(isDark),
+          backLabel: AppLocalizations.of(context)!.workbenchActionBack,
+          onBack: () {
+            setState(() {
+              _selectedDesktopPeerId = null;
+            });
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildMobileScaffold(bool isDark) {
@@ -1807,7 +2157,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ContextMenuActionItem(
           label: l10n?.delete ?? '删除',
           onSelected: () {
-            _removeDevice(deviceItem.uid);
+            unawaited(_removeDevice(deviceItem));
           },
         ),
     ];
@@ -1861,22 +2211,53 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return DateFormat('yyyy/MM/dd').format(messageTime);
   }
 
-  void _showManualConnectDialog() {
-    showInputAlertDialog(
+  Future<void> _showManualConnectDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showValidatedInputDialog(
       context,
-      title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
-      description:
-          AppLocalizations.of(context)?.connectDeviceDesc ?? '输入对方局域网地址与端口',
-      inputHints: [
-        {device?.host ?? "192.168.0.1": false},
-        {"10002": true}
+      title: l10n.connectDeviceTitle,
+      description: l10n.connectDeviceDesc,
+      fields: <InputDialogField>[
+        InputDialogField(
+          initialValue: '',
+          label: l10n.connectTo,
+          keyboardType: TextInputType.url,
+          validator: (value) {
+            try {
+              PeerEndpoint(host: value, port: 10002);
+              return null;
+            } on ArgumentError {
+              return l10n.validationHostInvalid;
+            }
+          },
+        ),
+        InputDialogField(
+          initialValue: '10002',
+          label: l10n.port,
+          keyboardType: TextInputType.number,
+          inputFormatters: <TextInputFormatter>[
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          validator: (value) {
+            final port = int.tryParse(value);
+            return port == null || port < 1001 || port > 65535
+                ? l10n.validationPortInvalid
+                : null;
+          },
+        ),
       ],
-      confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-      onConfirm: (List<String> inputValues) async {
-        _connectServer(inputValues[0], int.parse(inputValues[1]));
-      },
+      confirmButtonText: l10n.connect,
+      cancelButtonText: l10n.cancel,
     );
+    if (values == null || values.length != 2) {
+      return;
+    }
+    final port = int.tryParse(values[1]);
+    if (port == null) {
+      return;
+    }
+    final endpoint = PeerEndpoint(host: values[0], port: port);
+    await _connectServer(endpoint.host, endpoint.port);
   }
 
   void _openConv(DeviceData deviceItem) async {
@@ -1898,42 +2279,28 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _refreshDevice();
   }
 
-  void _removeDevice(String uid) async {
-    await LocalDatabase().clearDevices([uid]);
-    if (!mounted) {
+  Future<void> _removeDevice(DeviceData deviceItem) async {
+    final l10n = AppLocalizations.of(context)!;
+    final removed = await removeDeviceAfterConfirmation(
+      confirm: () => confirmAction(
+        context,
+        title: l10n.deleteDeviceTitle(deviceItem.name),
+        description: l10n.deleteDeviceDesc,
+        confirmButtonText: l10n.confirm,
+        cancelButtonText: l10n.cancel,
+        isDestructive: true,
+      ),
+      clear: () => LocalDatabase().clearDevices(<String>[deviceItem.uid]),
+    );
+    if (!removed || !mounted) {
       return;
     }
     setState(() {
-      if (_selectedDesktopPeerId == uid) {
+      if (_selectedDesktopPeerId == deviceItem.uid) {
         _selectedDesktopPeerId = null;
       }
     });
-    _refreshDevice();
-  }
-
-  void _handleDeviceConnect(DeviceData deviceItem) {
-    final isConnected = socketManager.isConnectedTo(deviceItem.uid);
-    showConfirmationDialog(
-      context,
-      title: isConnected
-          ? AppLocalizations.of(context)?.brokeConnectTitle ?? "断开连接"
-          : AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
-      description:
-          '${isConnected ? AppLocalizations.of(context)?.disconnect ?? "断开" : AppLocalizations.of(context)?.connectTo ?? "连接到"} ${deviceItem.name}',
-      confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-      onConfirm: () async {
-        if (isConnected) {
-          await socketManager.disconnectPeer(deviceItem.uid);
-        } else {
-          _connectServer(
-            deviceItem.host,
-            deviceItem.port,
-            peerId: deviceItem.uid,
-          );
-        }
-      },
-    );
+    await _refreshDevice();
   }
 
   @Deprecated("use context menu, just for mobile")
@@ -2004,7 +2371,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                   );
                   return;
                 }
-                _removeDevice(deviceItem.uid);
+                unawaited(_removeDevice(deviceItem));
               }),
       ],
       child: InkWell(
@@ -2101,12 +2468,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  void _connectServer(String host, int port, {String? peerId}) async {
+  Future<void> _connectServer(
+    String host,
+    int port, {
+    String? peerId,
+    String? intendedPublicKeyHash,
+  }) async {
     await _connectServerInternal(
       host,
       port,
       manual: true,
       peerId: peerId,
+      intendedPublicKeyHash: intendedPublicKeyHash,
     );
   }
 
@@ -2115,62 +2488,98 @@ class _DeviceListScreen extends State<DeviceListScreen>
     int port, {
     required bool manual,
     String? peerId,
+    String? intendedPublicKeyHash,
   }) async {
-    if (await isLocalhost(host)) {
-      afterAuth(true, device);
-      return;
-    }
-    if (manual && peerId != null) {
-      await ConnectionCoordinator().markManualSelection(peerId);
-    }
-    if (peerId != null) {
-      ConnectionCoordinator().markConnecting(peerId);
-      _pendingAutoConnectPeerId = peerId;
-    }
-    socketManager.connectToServer(host, port, (ok, message) {
-      // _showToast(message);
-      if (!ok) {
-        if (message == WsSvrManager.duplicateAuthRequestMessage) {
-          if (manual && mounted) {
-            showAppToast(message.toString());
-          }
-          return;
+    final attemptTarget = peerId?.isNotEmpty == true
+        ? 'peer:$peerId'
+        : intendedPublicKeyHash?.isNotEmpty == true
+            ? 'pkh:$intendedPublicKeyHash'
+            : 'endpoint:${host.toLowerCase()}:$port';
+    final attemptGeneration = _connectionAttempts.begin(attemptTarget);
+    try {
+      if (await isLocalhost(host)) {
+        if (mounted &&
+            _connectionAttempts.isCurrent(
+              attemptTarget,
+              attemptGeneration,
+            )) {
+          afterAuth(true, device);
         }
-        final l10n = AppLocalizations.of(context);
-        final displayMessage = message == 'upgrade_required'
-            ? l10n?.pairingUpgradeRequired ?? message.toString()
-            : message == 'pairing_expired'
-                ? l10n?.pairingExpired ?? message.toString()
-                : message.toString();
-        ConnectionCoordinator()
-            .markDisconnected(peerId: peerId, error: displayMessage);
-        if (_pendingAutoConnectPeerId == peerId) {
-          _pendingAutoConnectPeerId = null;
-        }
-        if (!manual) {
-          _refreshDevice();
-          return;
-        }
-        showLoadingDialog(
-          context,
-          title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
-          description: displayMessage,
-          isLoading: true,
-          // 是否显示加载指示器
-          icon: const Icon(
-            Icons.warning_rounded,
-            color: Colors.red,
-          ),
-          cancelButtonText: 'Cancel',
-          onCancel: () {
-            // 处理取消操作
-            Navigator.of(context).pop(); // 关闭对话框
-          },
-          task: (VoidCallback onCancel) async {},
-        );
         return;
       }
-    }, peerId: peerId);
+      if (!mounted ||
+          !_connectionAttempts.isCurrent(attemptTarget, attemptGeneration)) {
+        return;
+      }
+      if (manual && peerId != null) {
+        await ConnectionCoordinator().markManualSelection(peerId);
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(
+              attemptTarget,
+              attemptGeneration,
+            )) {
+          return;
+        }
+      }
+      if (peerId != null) {
+        ConnectionCoordinator().markConnecting(peerId);
+        _pendingAutoConnectPeerId = peerId;
+      }
+      await socketManager.connectToServer(host, port, (ok, message) {
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(
+              attemptTarget,
+              attemptGeneration,
+            )) {
+          return;
+        }
+        if (!ok) {
+          if (message == WsSvrManager.duplicateAuthRequestMessage) {
+            if (manual) {
+              showAppToast(message.toString());
+            }
+            return;
+          }
+          final l10n = AppLocalizations.of(context);
+          final displayMessage = message == 'upgrade_required'
+              ? l10n?.pairingUpgradeRequired ?? message.toString()
+              : message == 'pairing_expired'
+                  ? l10n?.pairingExpired ?? message.toString()
+                  : message.toString();
+          if (peerId != null) {
+            ConnectionCoordinator()
+                .markDisconnected(peerId: peerId, error: displayMessage);
+          }
+          if (_pendingAutoConnectPeerId == peerId) {
+            _pendingAutoConnectPeerId = null;
+          }
+          if (!manual) {
+            unawaited(_refreshDevice());
+            return;
+          }
+          unawaited(
+            showLoadingDialog(
+              context,
+              title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
+              description: displayMessage,
+              isLoading: true,
+              icon: const Icon(
+                Icons.warning_rounded,
+                color: Colors.red,
+              ),
+              cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
+              onCancel: () {
+                Navigator.of(context).pop();
+              },
+              task: (VoidCallback onCancel) async {},
+            ),
+          );
+          return;
+        }
+      }, peerId: peerId, intendedPublicKeyHash: intendedPublicKeyHash);
+    } finally {
+      _connectionAttempts.complete(attemptTarget, attemptGeneration);
+    }
   }
 
   Future<void> _attemptAutoConnect() async {
@@ -2199,8 +2608,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     setState(() {
       socketManager.started = result.isSuccess;
+      if (!result.isSuccess) {
+        _localDiscoveryErrors = _localDiscoveryErrors.withFailure(
+          LocalDiscoveryComponent.server,
+          result.error?.toString() ?? 'server_start_failed',
+        );
+        _localDiscoveryStartupInProgress = false;
+      }
     });
     if (result.isSuccess) {
+      _clearLocalDiscoveryError(LocalDiscoveryComponent.server);
       return;
     }
     showLoadingDialog(
@@ -2477,247 +2894,4 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _clipboardText = text;
     socketManager.sendMessage(text, clipboard: true);
   }
-}
-
-class DeviceDetailsScreen extends StatelessWidget {
-  final DeviceData device;
-
-  const DeviceDetailsScreen({super.key, required this.device});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(device.name.toString()),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text('Device Name: ${device.name.toString()}'),
-            Text('IP Address: ${device.host.toString()}'),
-            device.isServer
-                ? const Icon(Icons.desktop_mac) // Server 图标
-                : const Icon(Icons.phone_android), // Client 图标
-            // 其他设备详情信息...
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-void showConfirmationDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required String confirmButtonText,
-  required String cancelButtonText,
-  required VoidCallback onConfirm,
-  VoidCallback? onCancel,
-}) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(
-              height: 14,
-            ),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
-            ),
-            onPressed: () {
-              if (onCancel != null) {
-                onCancel();
-              }
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-              onConfirm();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-void showInputAlertDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required List<Map<String, bool>> inputHints,
-  required String confirmButtonText,
-  required String cancelButtonText,
-  required Function(List<String>) onConfirm,
-}) {
-  List<TextEditingController> controllers = [];
-  List<Widget> inputFields = [];
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller =
-        TextEditingController(text: inputHints[i].keys.first);
-    controllers.add(controller);
-
-    inputFields.add(
-      Column(
-        children: [
-          const SizedBox(height: 8),
-          CupertinoTextField(
-            controller: controller,
-            placeholder: inputHints[i].keys.first,
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black,
-            ),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[800] : Colors.white,
-              border: Border.all(
-                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            inputFormatters: inputHints[i].values.first
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                  ]
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...inputFields,
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
-            ),
-            onPressed: () {
-              List<String> inputValues =
-                  controllers.map((controller) => controller.text).toList();
-              onConfirm(inputValues);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-void showLoadingDialog(
-  BuildContext context, {
-  required String title,
-  required String description,
-  required bool isLoading,
-  required Widget icon,
-  required String cancelButtonText,
-  bool showCancel = true,
-  required VoidCallback onCancel,
-  required Function(VoidCallback onCancel) task,
-}) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              height: 12,
-            ),
-            if (isLoading) icon,
-            const SizedBox(
-              height: 8,
-            ),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          if (isLoading && showCancel)
-            CupertinoDialogAction(
-              onPressed: onCancel,
-              child: Text(
-                cancelButtonText,
-                style: const TextStyle(
-                  color: Colors.red,
-                ),
-              ),
-            ),
-        ],
-      );
-    },
-  );
-  await task(onCancel);
 }

@@ -218,5 +218,119 @@ void main() {
         ['nearby'],
       );
     });
+
+    test('groups connected nearby and recent sessions exclusively', () {
+      final sessions = ChatSessionListBuilder.build(
+        devices: [
+          buildDevice(
+            'connected-nearby',
+            name: 'Connected nearby',
+            host: '192.168.1.10',
+            around: true,
+          ),
+          buildDevice(
+            'nearby',
+            name: 'Nearby',
+            host: '192.168.1.11',
+            around: true,
+          ),
+          buildDevice(
+            'recent',
+            name: 'Recent',
+            host: '192.168.1.12',
+          ),
+        ],
+        latestMessages: const {},
+        connectedPeerIds: const {'connected-nearby'},
+        strings: strings,
+      );
+
+      final sections = ChatSessionListBuilder.group(sessions);
+
+      expect(sections.map((section) => section.kind), [
+        ChatSessionSectionKind.connected,
+        ChatSessionSectionKind.nearby,
+        ChatSessionSectionKind.recent,
+      ]);
+      expect(
+        sections.expand((section) => section.items).map(
+              (item) => item.device.uid,
+            ),
+        ['connected-nearby', 'nearby', 'recent'],
+      );
+    });
+
+    test('sorts each group by newest activity with a stable name tie break',
+        () {
+      final sessions = ChatSessionListBuilder.build(
+        devices: [
+          buildDevice(
+            'alpha',
+            name: 'Alpha',
+            host: '192.168.1.10',
+            around: true,
+            lastTime: 10,
+          ),
+          buildDevice(
+            'zulu',
+            name: 'Zulu',
+            host: '192.168.1.11',
+            around: true,
+            lastTime: 20,
+          ),
+          buildDevice(
+            'beta',
+            name: 'Beta',
+            host: '192.168.1.12',
+            around: true,
+            lastTime: 20,
+          ),
+        ],
+        latestMessages: const {},
+        strings: strings,
+      );
+
+      final nearby = ChatSessionListBuilder.group(sessions).single;
+
+      expect(nearby.kind, ChatSessionSectionKind.nearby);
+      expect(
+        nearby.items.map((item) => item.device.uid),
+        ['beta', 'zulu', 'alpha'],
+      );
+    });
+
+    test('filtering before grouping does not return empty sections', () {
+      final sessions = ChatSessionListBuilder.build(
+        devices: [
+          buildDevice(
+            'connected',
+            name: 'Desk Mac',
+            host: '192.168.1.10',
+            around: true,
+          ),
+          buildDevice(
+            'nearby',
+            name: 'Phone',
+            host: '192.168.1.11',
+            around: true,
+          ),
+          buildDevice(
+            'recent',
+            name: 'Laptop',
+            host: '192.168.1.12',
+          ),
+        ],
+        latestMessages: const {},
+        connectedPeerIds: const {'connected'},
+        strings: strings,
+      );
+
+      final filtered = ChatSessionListBuilder.filter(sessions, 'phone');
+      final sections = ChatSessionListBuilder.group(filtered);
+
+      expect(sections, hasLength(1));
+      expect(sections.single.kind, ChatSessionSectionKind.nearby);
+      expect(sections.single.items.single.device.uid, 'nearby');
+    });
   });
 }
