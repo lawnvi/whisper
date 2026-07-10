@@ -151,6 +151,8 @@ final class _ControlledChannel implements WebSocketChannel {
   Completer<void> get releaseClose => _sink.releaseClose;
   int get closeCount => _sink.closeCount;
 
+  Future<void> closeRemote() => _controller.close();
+
   @override
   int? get closeCode => null;
 
@@ -218,6 +220,59 @@ final class _ControlledSink implements WebSocketSink {
 }
 
 void main() {
+  test('remote input callback completion drives websocket receive watermarks',
+      () async {
+    final manager = RemoteInputManager();
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    manager.acceptOffer(
+      const RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: sessionId,
+        sourcePeerId: 'peer-a',
+        sinkPeerId: 'local',
+        layoutEdge: RemoteInputEdge.right,
+      ),
+    );
+    final firstStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final delivered = <int>[];
+    manager.onPacket = (packet) async {
+      delivered.add(packet.sequence);
+      if (packet.sequence == 1) {
+        firstStarted.complete();
+        await releaseFirst.future;
+      }
+    };
+    final channel = _ReentrantChannel();
+    final session = BoundedBinaryWebSocketSession(
+      channel: channel,
+      maxMessageBytes: RemoteInputManager.maxChannelMessageBytes,
+      onMessage: manager.handlePacketBytes,
+    );
+    Uint8List packet(int sequence) => RemoteInputPacketFrame(
+          sessionId: sessionId,
+          sequence: sequence,
+          timestampMicros: sequence,
+          eventType: RemoteInputEventType.release,
+          payload: Uint8List(0),
+        ).encode();
+
+    channel.addIncoming(packet(1));
+    await firstStarted.future;
+    channel.addIncoming(packet(2));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(delivered, <int>[1]);
+    expect(session.pendingItems, 2);
+
+    releaseFirst.complete();
+    for (var i = 0; i < 10 && delivered.length < 2; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(delivered, <int>[1, 2]);
+    await session.close();
+  });
+
   test('a blocked media socket does not block another socket', () async {
     final loopback = await _LoopbackSockets.start();
     addTearDown(loopback.close);
@@ -388,6 +443,101 @@ void main() {
     expect(first.closeCount, 1);
     expect(second.closeCount, 1);
     expect(manager.activeChannelCount, 0);
+  });
+
+  test('audio manager reports an unexpected remote channel close', () async {
+    final manager = AudioShareManager();
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    manager.acceptOffer(
+      const AudioControlMessage(
+        action: AudioControlAction.offer,
+        sessionId: sessionId,
+        sourcePeerId: 'peer-a',
+        sinkPeerId: 'local',
+        format: AudioStreamFormat(
+          codec: AudioCodecKind.opus,
+          sampleRate: 48000,
+          channels: 2,
+          frameDurationMs: 20,
+          bitRate: 128000,
+        ),
+      ),
+    );
+    final channel = _ControlledChannel(failClose: false);
+    final event = Completer<AudioMediaChannelClosedEvent>();
+    manager.addChannelLifecycleListener(event.complete);
+    manager.attachChannel(
+      channel,
+      claim: SessionUpgradeClaim(
+        route: '/audio',
+        namespace: 'audio',
+        sessionId: sessionId,
+        peerId: 'peer-a',
+        mediaMacKey: Uint8List(32),
+      ),
+    );
+
+    await channel.closeRemote();
+    await channel.closeStarted.future;
+    channel.releaseClose.complete();
+
+    final observed = await event.future;
+    expect(observed.claim.sessionId, sessionId);
+    expect(observed.expected, isFalse);
+    expect(manager.activeChannelCount, 0);
+  });
+
+  test('audio manager distinguishes session stop from peer loss', () async {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+
+    Future<AudioMediaChannelClosedEvent> close({
+      required bool stopSession,
+    }) async {
+      final manager = AudioShareManager();
+      manager.acceptOffer(
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
+          sessionId: sessionId,
+          sourcePeerId: 'peer-a',
+          sinkPeerId: 'local',
+          format: AudioStreamFormat(
+            codec: AudioCodecKind.opus,
+            sampleRate: 48000,
+            channels: 2,
+            frameDurationMs: 20,
+            bitRate: 128000,
+          ),
+        ),
+      );
+      final channel = _ControlledChannel(failClose: false);
+      final event = Completer<AudioMediaChannelClosedEvent>();
+      manager.addChannelLifecycleListener(event.complete);
+      manager.attachChannel(
+        channel,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: sessionId,
+          peerId: 'peer-a',
+          mediaMacKey: Uint8List(32),
+        ),
+      );
+
+      final closing = stopSession
+          ? manager.closeSessionChannels(
+              sessionId,
+              peerId: 'peer-a',
+              namespace: 'audio',
+            )
+          : manager.closePeerChannels('peer-a');
+      await channel.closeStarted.future;
+      channel.releaseClose.complete();
+      await closing;
+      return event.future;
+    }
+
+    expect((await close(stopSession: true)).expected, isTrue);
+    expect((await close(stopSession: false)).expected, isFalse);
   });
 
   test('attach revalidates the authenticated peer after token consumption',

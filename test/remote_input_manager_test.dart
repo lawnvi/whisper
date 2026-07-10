@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +51,46 @@ void main() {
       expect(accept.action, RemoteInputControlAction.accept);
       expect(received, hasLength(1));
       expect(received.single.sessionId, 'input-1');
+    });
+
+    test('propagates asynchronous packet handling to websocket backpressure',
+        () async {
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) {
+          gate.complete();
+        }
+      });
+      final manager = RemoteInputManager(onPacket: (_) => gate.future);
+      manager.acceptOffer(
+        const RemoteInputControlMessage(
+          action: RemoteInputControlAction.offer,
+          sessionId: 'input-async-1',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+        ),
+      );
+      final dynamic handlePacket = manager.handlePacketBytes;
+
+      final dynamic result = handlePacket(
+        RemoteInputPacketFrame(
+          sessionId: 'input-async-1',
+          sequence: 1,
+          timestampMicros: 2,
+          eventType: RemoteInputEventType.release,
+          payload: Uint8List(0),
+        ).encode(),
+      );
+
+      expect(result, isA<Future<void>>());
+      var completed = false;
+      unawaited((result as Future<void>).then((_) => completed = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse);
+      gate.complete();
+      await result;
+      expect(completed, isTrue);
     });
   });
 }

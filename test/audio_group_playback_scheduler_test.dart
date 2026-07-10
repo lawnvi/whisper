@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -320,5 +321,203 @@ void main() {
     await scheduler.pump();
 
     expect(writes.single, <int>[500, 500, 500, 500]);
+  });
+
+  test('bounds queued group audio and drops the oldest packets', () async {
+    var now = 0;
+    final writes = <int>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => now,
+      writePcm: (pcm, _) async => writes.add(pcm.first),
+      lateToleranceMicros: 1000000,
+      maxQueueItems: 3,
+      maxQueueBytes: 12,
+      maxBufferDuration: const Duration(milliseconds: 60),
+    );
+    for (var sequence = 1; sequence <= 5; sequence++) {
+      scheduler.enqueue(
+        packet(
+          sequence: sequence,
+          targetPlaybackTimeMicros: 1000 + (sequence - 1) * 20000,
+        ),
+        Int16List.fromList(<int>[sequence, sequence]),
+      );
+    }
+
+    expect(scheduler.report.queuedPacketCount, 3);
+    expect(scheduler.report.queuedBytes, lessThanOrEqualTo(12));
+    expect(scheduler.report.droppedPacketCount, 2);
+
+    now = 100000;
+    await scheduler.pump();
+    expect(writes, <int>[3, 4, 5]);
+  });
+
+  test('closing group scheduler clears queued writes after the active write',
+      () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final writes = <int>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => 100000,
+      lateToleranceMicros: 1000000,
+      writePcm: (pcm, _) async {
+        writes.add(pcm.first);
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+      },
+    );
+    for (var sequence = 1; sequence <= 3; sequence++) {
+      scheduler.enqueue(
+        packet(sequence: sequence, targetPlaybackTimeMicros: 100000),
+        Int16List.fromList(<int>[sequence, sequence]),
+      );
+    }
+
+    final pumping = scheduler.pump();
+    await firstWriteStarted.future;
+    scheduler.close();
+    releaseFirstWrite.complete();
+    await pumping;
+
+    expect(writes, <int>[1]);
+    expect(scheduler.report.queuedPacketCount, 0);
+  });
+
+  test('concurrent group pump requests keep one native write in flight',
+      () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final writes = <int>[];
+    var writesInFlight = 0;
+    var maxWritesInFlight = 0;
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => 100000,
+      lateToleranceMicros: 1000000,
+      writePcm: (pcm, _) async {
+        writesInFlight += 1;
+        maxWritesInFlight = writesInFlight > maxWritesInFlight
+            ? writesInFlight
+            : maxWritesInFlight;
+        writes.add(pcm.first);
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+        writesInFlight -= 1;
+      },
+    );
+    for (var sequence = 1; sequence <= 2; sequence++) {
+      scheduler.enqueue(
+        packet(sequence: sequence, targetPlaybackTimeMicros: 100000),
+        Int16List.fromList(<int>[sequence, sequence]),
+      );
+    }
+
+    final firstPump = scheduler.pump();
+    await firstWriteStarted.future;
+    final secondPump = scheduler.pump();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(maxWritesInFlight, 1);
+    releaseFirstWrite.complete();
+    await Future.wait(<Future<void>>[firstPump, secondPump]);
+    expect(writes, <int>[1, 2]);
+    expect(maxWritesInFlight, 1);
+  });
+
+  test('group buffer hard caps include the active native write', () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final writes = <int>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => 1000000,
+      lateToleranceMicros: 10000000,
+      maxQueueItems: 3,
+      maxQueueBytes: 12,
+      maxBufferDuration: const Duration(milliseconds: 60),
+      writePcm: (pcm, _) async {
+        writes.add(pcm.first);
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+      },
+    );
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 100000),
+      Int16List.fromList(<int>[1, 1]),
+    );
+    final pumping = scheduler.pump();
+    await firstWriteStarted.future;
+    for (var sequence = 2; sequence <= 8; sequence++) {
+      scheduler.enqueue(
+        packet(
+          sequence: sequence,
+          targetPlaybackTimeMicros: 100000 + (sequence - 1) * 20000,
+        ),
+        Int16List.fromList(<int>[sequence, sequence]),
+      );
+    }
+
+    expect(scheduler.report.queuedPacketCount, lessThanOrEqualTo(3));
+    expect(scheduler.report.queuedBytes, lessThanOrEqualTo(12));
+    expect(scheduler.report.droppedPacketCount, 5);
+
+    releaseFirstWrite.complete();
+    await pumping;
+    expect(writes, <int>[1, 7, 8]);
+  });
+
+  test('group duration cap includes the active frame', () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final writes = <int>[];
+    final scheduler = AudioGroupPlaybackScheduler(
+      channelRole: AudioChannelRole.stereo,
+      channels: 2,
+      clockMicros: () => 1000000,
+      lateToleranceMicros: 10000000,
+      maxQueueItems: 10,
+      maxQueueBytes: 1024,
+      maxBufferDuration: const Duration(milliseconds: 60),
+      writePcm: (pcm, _) async {
+        writes.add(pcm.first);
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+      },
+    );
+    scheduler.enqueue(
+      packet(sequence: 1, targetPlaybackTimeMicros: 100000),
+      Int16List.fromList(<int>[1, 1]),
+    );
+    final pumping = scheduler.pump();
+    await firstWriteStarted.future;
+    for (var sequence = 2; sequence <= 5; sequence++) {
+      scheduler.enqueue(
+        packet(
+          sequence: sequence,
+          targetPlaybackTimeMicros: 100000 + (sequence - 1) * 20000,
+        ),
+        Int16List.fromList(<int>[sequence, sequence]),
+      );
+    }
+
+    expect(scheduler.report.droppedPacketCount, 2);
+    releaseFirstWrite.complete();
+    await pumping;
+    expect(writes, <int>[1, 4, 5]);
   });
 }

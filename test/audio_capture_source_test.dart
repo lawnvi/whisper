@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -208,6 +209,81 @@ void main() {
     });
   });
 
+  test('stop waits for an in-flight native start before forcing capture stop',
+      () async {
+    final startEntered = Completer<void>();
+    final releaseStart = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      calls.add(call);
+      if (call.method == 'startCapture') {
+        startEntered.complete();
+        await releaseStart.future;
+      }
+      return null;
+    });
+    final source = AudioCaptureSource(
+      codec: PcmPassthroughAudioCodec(config),
+      platform: AudioPlatform(),
+      onPacket: (_) {},
+    );
+
+    final starting = source.start(sessionId: 'audio-race', format: format);
+    await startEntered.future;
+    var stopCompleted = false;
+    final stopping = source.stop().whenComplete(() => stopCompleted = true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(stopCompleted, isFalse);
+    expect(calls.map((call) => call.method), <String>['startCapture']);
+
+    releaseStart.complete();
+    await starting;
+    await stopping;
+
+    expect(
+      calls.map((call) => call.method),
+      <String>['startCapture', 'stopCapture'],
+    );
+    expect(calls.last.arguments, <String, dynamic>{'sessionId': 'audio-race'});
+  });
+
+  test('stop still forces native cleanup when an in-flight start fails',
+      () async {
+    final startEntered = Completer<void>();
+    final releaseStart = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      calls.add(call);
+      if (call.method == 'startCapture') {
+        startEntered.complete();
+        await releaseStart.future;
+        throw PlatformException(code: 'audio-capture-start-failed');
+      }
+      return null;
+    });
+    final source = AudioCaptureSource(
+      codec: PcmPassthroughAudioCodec(config),
+      platform: AudioPlatform(),
+      onPacket: (_) {},
+    );
+
+    final starting =
+        source.start(sessionId: 'audio-failed-start', format: format);
+    final startFailure =
+        expectLater(starting, throwsA(isA<PlatformException>()));
+    await startEntered.future;
+    final stopping = source.stop();
+    releaseStart.complete();
+
+    await startFailure;
+    await stopping;
+    expect(
+      calls.map((call) => call.method),
+      <String>['startCapture', 'stopCapture'],
+    );
+  });
+
   test('logs native capture frames and encoded audio packets', () async {
     final platform = AudioPlatform();
     final logs = <String>[];
@@ -234,9 +310,9 @@ void main() {
       logs,
       contains(
         allOf(
-          contains('audio capture frame'),
-          contains('session=audio-1'),
-          contains('nativeSeq=5'),
+          contains('"kind":"captureFrame"'),
+          contains('"sequence":5'),
+          contains('"samples":${pcm.length}'),
         ),
       ),
     );
@@ -244,10 +320,9 @@ void main() {
       logs,
       contains(
         allOf(
-          contains('audio capture packet'),
-          contains('session=audio-1'),
-          contains('seq=0'),
-          contains('payload=${pcm.length * 2}'),
+          contains('"kind":"capturePacket"'),
+          contains('"sequence":0'),
+          contains('"bytes":${pcm.length * 2}'),
         ),
       ),
     );

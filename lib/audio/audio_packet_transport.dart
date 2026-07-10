@@ -11,7 +11,11 @@ abstract class AudioPacketTransport {
   Future<void> close();
 }
 
-class AudioPacketByteTransport implements AudioPacketTransport {
+abstract class AudioObservablePacketTransport implements AudioPacketTransport {
+  Future<PacketTransportTermination> get done;
+}
+
+class AudioPacketByteTransport implements AudioObservablePacketTransport {
   AudioPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
@@ -31,6 +35,9 @@ class AudioPacketByteTransport implements AudioPacketTransport {
 
   final AudioShareDiagnostics _diagnostics;
   final PacketByteTransport _inner;
+
+  @override
+  Future<PacketTransportTermination> get done => _inner.done;
 
   void _emitSent(AudioPacketFrame packet) {
     _diagnostics.audioPacketSent(

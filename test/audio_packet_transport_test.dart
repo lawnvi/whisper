@@ -62,9 +62,9 @@ void main() {
       logs,
       contains(
         allOf(
-          contains('audio packet sent'),
-          contains('session=audio-1'),
-          contains('seq=3'),
+          contains('"kind":"packetSent"'),
+          contains('"sequence":3'),
+          contains('"bytes":3'),
         ),
       ),
     );
@@ -72,8 +72,8 @@ void main() {
       logs,
       contains(
         allOf(
-          contains('audio packet send dropped'),
-          contains('reason=closed'),
+          contains('"kind":"packetSendDropped"'),
+          contains('"state":"closed"'),
         ),
       ),
     );
@@ -117,16 +117,45 @@ void main() {
     await transport.close();
 
     expect(writtenSequences, <int>[1, 3]);
-    final sentLogs =
-        logs.where((message) => message.contains('audio packet sent')).toList();
+    final sentLogs = logs
+        .where((message) => message.contains('"kind":"packetSent"'))
+        .toList();
     expect(sentLogs, hasLength(2));
-    expect(sentLogs.first, contains('seq=1'));
-    expect(sentLogs.last, contains('seq=3'));
+    expect(sentLogs.first, contains('"sequence":1'));
+    expect(sentLogs.last, contains('"sequence":3'));
     expect(
       logs.singleWhere(
-        (message) => message.contains('audio packet send dropped'),
+        (message) => message.contains('"kind":"packetSendDropped"'),
       ),
-      allOf(contains('seq=2'), contains('reason=backpressure')),
+      allOf(
+        contains('"sequence":2'),
+        contains('"state":"backpressure"'),
+      ),
     );
+  });
+
+  test('queued writer failure is observable through the audio transport',
+      () async {
+    final byteTransport = PacketByteTransport.audio(
+      addStream: (stream) async {
+        await stream.drain<void>();
+        throw StateError('writer failed');
+      },
+      closeSink: () async {},
+    );
+    final transport = AudioPacketByteTransport.withTransport(byteTransport);
+
+    transport.send(
+      AudioPacketFrame(
+        sessionId: 'audio-failure',
+        sequence: 1,
+        captureTimeMicros: 1,
+        payload: Uint8List.fromList(<int>[1]),
+      ),
+    );
+
+    final termination = await transport.done;
+    expect(termination.reason, PacketTransportTerminationReason.writerFailure);
+    await transport.close();
   });
 }

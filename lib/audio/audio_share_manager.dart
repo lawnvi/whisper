@@ -17,6 +17,21 @@ typedef AudioGroupPacketClaimValidator = bool Function(
   SessionUpgradeClaim claim,
   AudioGroupPacketFrame packet,
 );
+typedef AudioMediaChannelLifecycleListener = void Function(
+  AudioMediaChannelClosedEvent event,
+);
+
+final class AudioMediaChannelClosedEvent {
+  const AudioMediaChannelClosedEvent({
+    required this.claim,
+    required this.expected,
+    this.error,
+  });
+
+  final SessionUpgradeClaim claim;
+  final bool expected;
+  final Object? error;
+}
 
 enum AudioShareSessionState {
   offering,
@@ -78,6 +93,12 @@ class AudioShareManager {
       <BoundedBinaryWebSocketSession, SessionUpgradeClaim>{};
   final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
       <BoundedBinaryWebSocketSession, Future<void>>{};
+  final Set<BoundedBinaryWebSocketSession> _expectedChannelClosures =
+      <BoundedBinaryWebSocketSession>{};
+  final Map<BoundedBinaryWebSocketSession, Object> _channelErrors =
+      <BoundedBinaryWebSocketSession, Object>{};
+  final Set<AudioMediaChannelLifecycleListener> _channelLifecycleListeners =
+      <AudioMediaChannelLifecycleListener>{};
   Future<void>? _closeChannelsFuture;
   bool _closingChannels = false;
   Object? _channelCloseError;
@@ -87,6 +108,13 @@ class AudioShareManager {
   int get activeChannelCount => _channels.length;
   bool get hasActiveChannels => _channels.isNotEmpty;
   bool get isClosingChannels => _closingChannels;
+
+  void Function() addChannelLifecycleListener(
+    AudioMediaChannelLifecycleListener listener,
+  ) {
+    _channelLifecycleListeners.add(listener);
+    return () => _channelLifecycleListeners.remove(listener);
+  }
 
   AudioControlMessage createOffer({
     required String sourcePeerId,
@@ -199,6 +227,22 @@ class AudioShareManager {
     );
   }
 
+  void failSession(String sessionId) {
+    final current = _sessions[sessionId];
+    if (current == null) {
+      return;
+    }
+    _sessions[sessionId] = current.copyWith(
+      state: AudioShareSessionState.failed,
+    );
+    unawaited(
+      closeSessionChannels(
+        sessionId,
+        namespace: 'audio',
+      ),
+    );
+  }
+
   Future<void> closeSessionChannels(
     String sessionId, {
     String? peerId,
@@ -209,6 +253,7 @@ class AudioShareManager {
           claim.sessionId == sessionId &&
           (peerId == null || claim.peerId == peerId) &&
           (namespace == null || claim.namespace == namespace),
+      expected: true,
     );
   }
 
@@ -228,13 +273,18 @@ class AudioShareManager {
   }
 
   Future<void> _closeMatchingChannels(
-    bool Function(SessionUpgradeClaim claim) matches,
-  ) async {
+    bool Function(SessionUpgradeClaim claim) matches, {
+    bool expected = false,
+  }) async {
     final channels = _channels.entries
         .where((entry) => matches(entry.value))
         .map((entry) => entry.key)
         .toList(growable: false);
-    await Future.wait(channels.map(_trackChannelClose));
+    await Future.wait(
+      channels.map(
+        (channel) => _trackChannelClose(channel, expected: expected),
+      ),
+    );
   }
 
   void handlePacketBytes(Uint8List bytes) {
@@ -383,20 +433,48 @@ class AudioShareManager {
           groupPacketValidator: groupPacketValidator,
         );
       },
-      onError: _diagnostics.audioChannelError,
+      onError: (error) {
+        _channelErrors[binding] = error;
+        _diagnostics.audioChannelError(error);
+      },
       onClosed: () {
-        _channels.remove(binding);
-        _diagnostics.audioChannelClosed();
+        _handleChannelClosed(binding);
       },
     );
     _channels[binding] = claim;
     if (_closingChannels) {
-      unawaited(_trackChannelClose(binding));
+      unawaited(_trackChannelClose(binding, expected: true));
     }
     return true;
   }
 
-  Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {
+  void _handleChannelClosed(BoundedBinaryWebSocketSession channel) {
+    final claim = _channels.remove(channel);
+    final expected = _expectedChannelClosures.remove(channel);
+    final error = _channelErrors.remove(channel);
+    _diagnostics.audioChannelClosed();
+    if (claim == null) {
+      return;
+    }
+    final event = AudioMediaChannelClosedEvent(
+      claim: claim,
+      expected: expected,
+      error: error,
+    );
+    for (final listener in _channelLifecycleListeners.toList(growable: false)) {
+      try {
+        listener(event);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _trackChannelClose(
+    BoundedBinaryWebSocketSession channel, {
+    bool expected = false,
+  }) {
+    if (expected) {
+      _expectedChannelClosures.add(channel);
+    }
     final existing = _channelCloses[channel];
     if (existing != null) {
       return existing;
@@ -430,7 +508,7 @@ class AudioShareManager {
       try {
         while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
           for (final channel in _channels.keys.toList(growable: false)) {
-            _trackChannelClose(channel);
+            _trackChannelClose(channel, expected: true);
           }
           final closes = _channelCloses.values.toList(growable: false);
           if (closes.isNotEmpty) {

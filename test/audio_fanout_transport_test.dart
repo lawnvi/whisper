@@ -149,6 +149,41 @@ void main() {
     expect(fanout.sinkPeerIds, isEmpty);
     expect(failures.single, isA<StateError>());
   });
+
+  test('unexpected observable close detaches a group sink exactly once',
+      () async {
+    final failures = <Object>[];
+    final sink = _FakeObservableGroupTransport();
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('phone', sink);
+
+    sink.fail(
+      const PacketTransportTermination(
+        PacketTransportTerminationReason.remoteClosed,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures, hasLength(1));
+    await fanout.closeAll();
+    expect(failures, hasLength(1));
+  });
+
+  test('intentional observable close does not fail a group sink', () async {
+    final failures = <Object>[];
+    final sink = _FakeObservableGroupTransport();
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('phone', sink);
+
+    await fanout.detachAndClose('phone');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.closed, isTrue);
+    expect(failures, isEmpty);
+  });
 }
 
 class _FakeGroupTransport implements AudioGroupPacketTransport {
@@ -174,5 +209,32 @@ class _FakeGroupTransport implements AudioGroupPacketTransport {
   @override
   Future<void> close() async {
     closed = true;
+  }
+}
+
+class _FakeObservableGroupTransport extends _FakeGroupTransport
+    implements AudioGroupObservablePacketTransport {
+  final Completer<PacketTransportTermination> _done =
+      Completer<PacketTransportTermination>();
+
+  @override
+  Future<PacketTransportTermination> get done => _done.future;
+
+  void fail(PacketTransportTermination termination) {
+    if (!_done.isCompleted) {
+      _done.complete(termination);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    await super.close();
+    if (!_done.isCompleted) {
+      _done.complete(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.localClosed,
+        ),
+      );
+    }
   }
 }

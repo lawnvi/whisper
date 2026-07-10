@@ -10,8 +10,9 @@ import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
-typedef RemoteInputPacketCallback = void Function(
-    RemoteInputPacketFrame packet);
+typedef RemoteInputPacketCallback = FutureOr<void> Function(
+  RemoteInputPacketFrame packet,
+);
 
 enum RemoteInputSessionState {
   offering,
@@ -274,7 +275,7 @@ class RemoteInputManager {
     await Future.wait(channels.map(_trackChannelClose));
   }
 
-  void handlePacketBytes(
+  FutureOr<void> handlePacketBytes(
     Uint8List bytes, {
     String? expectedSessionId,
   }) {
@@ -284,9 +285,13 @@ class RemoteInputManager {
     }
     final activeSession = _sessions[packet.sessionId];
     if (activeSession?.state != RemoteInputSessionState.connected) {
-      return;
+      return Future<void>.value();
     }
-    onPacket?.call(packet);
+    final callback = onPacket;
+    if (callback == null) {
+      return Future<void>.value();
+    }
+    return callback(packet);
   }
 
   bool canAttachClaim(

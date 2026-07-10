@@ -250,6 +250,78 @@ void main() {
     expect(sinkClosed, isTrue);
   });
 
+  test('queued audio transport reports a remote close exactly once', () async {
+    final incoming = StreamController<dynamic>();
+    var sinkCloses = 0;
+    final transport = PacketByteTransport.audio(
+      incoming: incoming.stream,
+      addStream: (stream) => stream.drain<void>(),
+      closeSink: () async => sinkCloses += 1,
+    );
+
+    final done = transport.done;
+    await incoming.close();
+
+    final termination = await done;
+    expect(termination.reason, PacketTransportTerminationReason.remoteClosed);
+    expect(await transport.send(<int>[1]), PacketSendResult.closed);
+    await transport.close();
+    expect(sinkCloses, 1);
+    expect(await transport.done, same(termination));
+  });
+
+  test('queued audio transport reports a remote stream error', () async {
+    final incoming = StreamController<dynamic>();
+    final transport = PacketByteTransport.audio(
+      incoming: incoming.stream,
+      addStream: (stream) => stream.drain<void>(),
+      closeSink: incoming.close,
+    );
+    final error = StateError('remote audio stream failed');
+
+    incoming.addError(error);
+
+    final termination = await transport.done;
+    expect(termination.reason, PacketTransportTerminationReason.remoteError);
+    expect(termination.error, same(error));
+    await transport.close();
+  });
+
+  test('queued audio transport reports writer failure and closes', () async {
+    var sinkCloses = 0;
+    final transport = PacketByteTransport.audio(
+      addStream: (stream) async {
+        await stream.drain<void>();
+        throw StateError('writer failed');
+      },
+      closeSink: () async => sinkCloses += 1,
+    );
+
+    expect(
+      await transport.send(Uint8List.fromList(<int>[1])),
+      PacketSendResult.transportFailure,
+    );
+    final termination = await transport.done;
+    expect(termination.reason, PacketTransportTerminationReason.writerFailure);
+    await transport.close();
+    expect(sinkCloses, 1);
+  });
+
+  test('intentional queued audio close reports local closure only', () async {
+    final incoming = StreamController<dynamic>();
+    final transport = PacketByteTransport.audio(
+      incoming: incoming.stream,
+      addStream: (stream) => stream.drain<void>(),
+      closeSink: incoming.close,
+    );
+
+    await transport.close();
+
+    final termination = await transport.done;
+    expect(termination.reason, PacketTransportTerminationReason.localClosed);
+    expect(termination.isUnexpected, isFalse);
+  });
+
   test('queued input transport forwards packet kind for coalescing', () async {
     final firstGate = Completer<void>();
     final sent = <Object>[];

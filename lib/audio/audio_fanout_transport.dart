@@ -12,7 +12,13 @@ abstract class AudioGroupPacketTransport {
   Future<void> close();
 }
 
-class AudioGroupPacketByteTransport implements AudioGroupPacketTransport {
+abstract class AudioGroupObservablePacketTransport
+    implements AudioGroupPacketTransport {
+  Future<PacketTransportTermination> get done;
+}
+
+class AudioGroupPacketByteTransport
+    implements AudioGroupObservablePacketTransport {
   AudioGroupPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
@@ -24,6 +30,9 @@ class AudioGroupPacketByteTransport implements AudioGroupPacketTransport {
   AudioGroupPacketByteTransport.withTransport(this._inner);
 
   final PacketByteTransport _inner;
+
+  @override
+  Future<PacketTransportTermination> get done => _inner.done;
 
   @override
   Future<PacketSendResult> send(AudioGroupPacketFrame packet) {
@@ -75,6 +84,18 @@ class AudioFanoutTransport {
       return;
     }
     _transports[sinkPeerId] = transport;
+    if (transport is AudioGroupObservablePacketTransport) {
+      unawaited(transport.done.then((termination) {
+        if (termination.isUnexpected) {
+          _failSink(
+            sinkPeerId,
+            transport,
+            termination.error ??
+                StateError('audio group packet transport closed'),
+          );
+        }
+      }));
+    }
   }
 
   void detach(String sinkPeerId) {
@@ -92,27 +113,34 @@ class AudioFanoutTransport {
       try {
         final delivery = entry.value.send(packet);
         unawaited(delivery.then((result) {
-          if (result != PacketSendResult.transportFailure ||
-              !identical(_transports[entry.key], entry.value)) {
+          if (result != PacketSendResult.transportFailure) {
             return;
           }
-          _transports.remove(entry.key);
-          _onSinkFailure(
+          _failSink(
             entry.key,
+            entry.value,
             StateError('audio group packet transport failed'),
           );
         }, onError: (Object error, StackTrace _) {
-          if (!identical(_transports[entry.key], entry.value)) {
-            return;
-          }
-          _transports.remove(entry.key);
-          _onSinkFailure(entry.key, error);
+          _failSink(entry.key, entry.value, error);
         }));
       } catch (error) {
-        _transports.remove(entry.key);
-        _onSinkFailure(entry.key, error);
+        _failSink(entry.key, entry.value, error);
       }
     }
+  }
+
+  void _failSink(
+    String sinkPeerId,
+    AudioGroupPacketTransport transport,
+    Object error,
+  ) {
+    if (!identical(_transports[sinkPeerId], transport)) {
+      return;
+    }
+    _transports.remove(sinkPeerId);
+    unawaited(transport.close().catchError((Object _) {}));
+    _onSinkFailure(sinkPeerId, error);
   }
 
   Future<void> closeAll() async {

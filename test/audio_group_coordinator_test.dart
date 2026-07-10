@@ -4,13 +4,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -234,6 +237,636 @@ void main() {
       expect(leftPacket.sequence, rightPacket.sequence);
       expect(leftPacket.captureTimeMicros, 1234);
       expect(leftPacket.targetPlaybackTimeMicros, 127000);
+    });
+
+    test('concurrent sink accepts merge into the latest group state', () async {
+      final leftStarted = Completer<void>();
+      final rightStarted = Completer<void>();
+      final releaseLeft = Completer<void>();
+      final releaseRight = Completer<void>();
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (uri) async {
+          if (uri.host == 'left.local') {
+            leftStarted.complete();
+            await releaseLeft.future;
+          } else {
+            rightStarted.complete();
+            await releaseRight.future;
+          }
+          return _FakeAudioGroupTransport();
+        },
+        groupIdFactory: () => 'group-concurrent-accept',
+        streamIdFactory: () => 'stream-concurrent-accept',
+        sessionIdFactory: () => 'offered-session',
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'left': AudioChannelRole.left,
+          'right': AudioChannelRole.right,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+
+      final acceptingLeft = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-concurrent-accept',
+          streamId: 'stream-concurrent-accept',
+          sessionId: 'left-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'left',
+          channelRole: AudioChannelRole.left,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'left.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      final acceptingRight = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-concurrent-accept',
+          streamId: 'stream-concurrent-accept',
+          sessionId: 'right-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'right',
+          channelRole: AudioChannelRole.right,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'right.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await Future.wait(
+          <Future<void>>[leftStarted.future, rightStarted.future]);
+
+      releaseLeft.complete();
+      await acceptingLeft;
+      releaseRight.complete();
+      await acceptingRight;
+
+      expect(
+        coordinator.session?.sinks['left']?.state,
+        AudioGroupSinkState.active,
+      );
+      expect(
+        coordinator.session?.sinks['right']?.state,
+        AudioGroupSinkState.active,
+      );
+    });
+
+    test('accept completing after group stop closes its stale transport',
+        () async {
+      final connectStarted = Completer<void>();
+      final releaseConnect = Completer<void>();
+      final transport = _FakeAudioGroupTransport();
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async {
+          connectStarted.complete();
+          await releaseConnect.future;
+          return transport;
+        },
+        groupIdFactory: () => 'group-stale-accept',
+        streamIdFactory: () => 'stream-stale-accept',
+        sessionIdFactory: () => 'offered-session',
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      final accepting = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-stale-accept',
+          streamId: 'stream-stale-accept',
+          sessionId: 'phone-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await connectStarted.future;
+
+      await coordinator.stopLocal();
+      releaseConnect.complete();
+      await accepting;
+
+      expect(coordinator.session, isNull);
+      expect(transport.closed, isTrue);
+    });
+
+    test('capture startup completing after group stop stays cancelled',
+        () async {
+      final codecRequested = Completer<void>();
+      final releaseCodec = Completer<void>();
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: (format) async {
+          codecRequested.complete();
+          await releaseCodec.future;
+          return _pcmCodec(format);
+        },
+        transportFactory: (_) async => _FakeAudioGroupTransport(),
+        groupIdFactory: () => 'group-stale-capture',
+        streamIdFactory: () => 'stream-stale-capture',
+        sessionIdFactory: () => 'offered-session',
+        clockMicros: () => 61000,
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-stale-capture',
+          streamId: 'stream-stale-capture',
+          sessionId: 'phone-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      final reporting = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-stale-capture',
+          streamId: 'stream-stale-capture',
+          sessionId: 'phone-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sentAtMicros: 1000,
+          receivedAtMicros: 51000,
+          sinkClockMicros: 52000,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await codecRequested.future;
+
+      await coordinator.stopLocal();
+      releaseCodec.complete();
+      await reporting;
+
+      expect(coordinator.session, isNull);
+      expect(calls.map((call) => call.method), isNot(contains('startCapture')));
+    });
+
+    test('group stop waits for pending native capture start then stops it',
+        () async {
+      final startEntered = Completer<void>();
+      final releaseStart = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'startCapture') {
+          startEntered.complete();
+          await releaseStart.future;
+        }
+        return null;
+      });
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => _FakeAudioGroupTransport(),
+        groupIdFactory: () => 'group-native-start-race',
+        streamIdFactory: () => 'stream-native-start-race',
+        sessionIdFactory: () => 'offered-session',
+        clockMicros: () => 61000,
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-native-start-race',
+          streamId: 'stream-native-start-race',
+          sessionId: 'phone-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      final reporting = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-native-start-race',
+          streamId: 'stream-native-start-race',
+          sessionId: 'phone-session',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sentAtMicros: 1000,
+          receivedAtMicros: 51000,
+          sinkClockMicros: 52000,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await startEntered.future;
+
+      var stopCompleted = false;
+      final stopping = coordinator.stopLocal().whenComplete(() {
+        stopCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(stopCompleted, isFalse);
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        isEmpty,
+      );
+
+      releaseStart.complete();
+      await Future.wait(<Future<void>>[reporting, stopping]);
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        hasLength(1),
+      );
+      expect(coordinator.session, isNull);
+    });
+
+    test('concurrent clock reports share one capture startup', () async {
+      final codecRequested = Completer<void>();
+      final releaseCodec = Completer<void>();
+      var codecCalls = 0;
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: (format) async {
+          codecCalls += 1;
+          if (!codecRequested.isCompleted) {
+            codecRequested.complete();
+          }
+          await releaseCodec.future;
+          return _pcmCodec(format);
+        },
+        transportFactory: (_) async => _FakeAudioGroupTransport(),
+        groupIdFactory: () => 'group-capture-single-flight',
+        streamIdFactory: () => 'stream-capture-single-flight',
+        sessionIdFactory: () => 'offered-session',
+        clockMicros: () => 61000,
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'left': AudioChannelRole.left,
+          'right': AudioChannelRole.right,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      for (final peerId in <String>['left', 'right']) {
+        await coordinator.handleControlMessage(
+          AudioGroupControlMessage(
+            action: AudioGroupControlAction.groupAccept,
+            groupId: 'group-capture-single-flight',
+            streamId: 'stream-capture-single-flight',
+            sessionId: '$peerId-session',
+            sourcePeerId: 'mac',
+            sinkPeerId: peerId,
+            channelRole: peerId == 'left'
+                ? AudioChannelRole.left
+                : AudioChannelRole.right,
+            path: '/audio',
+          ),
+          localPeerId: 'mac',
+          remoteHost: '$peerId.local',
+          remotePort: 10002,
+          sendControl: (_, __) {},
+        );
+      }
+
+      Future<void> report(String peerId) => coordinator.handleControlMessage(
+            AudioGroupControlMessage(
+              action: AudioGroupControlAction.clockReport,
+              groupId: 'group-capture-single-flight',
+              streamId: 'stream-capture-single-flight',
+              sessionId: '$peerId-session',
+              sourcePeerId: 'mac',
+              sinkPeerId: peerId,
+              sentAtMicros: 1000,
+              receivedAtMicros: 51000,
+              sinkClockMicros: 52000,
+            ),
+            localPeerId: 'mac',
+            remoteHost: '$peerId.local',
+            remotePort: 10002,
+            sendControl: (_, __) {},
+          );
+
+      await report('left');
+      final rightReport = report('right');
+      await codecRequested.future;
+      final crossingReport = report('left');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(codecCalls, 1);
+      releaseCodec.complete();
+      await Future.wait(<Future<void>>[rightReport, crossingReport]);
+      expect(
+        calls.where((call) => call.method == 'startCapture'),
+        hasLength(1),
+      );
+    });
+
+    test('last failed group transport stops source capture exactly once',
+        () async {
+      final transport = _ObservableFakeAudioGroupTransport();
+      var now = 61000;
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => transport,
+        groupIdFactory: () => 'group-transport-failure',
+        streamIdFactory: () => 'stream-transport-failure',
+        sessionIdFactory: () => 'session-phone',
+        clockMicros: () => now,
+      );
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-transport-failure',
+          streamId: 'stream-transport-failure',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-transport-failure',
+          streamId: 'stream-transport-failure',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sentAtMicros: 1000,
+          receivedAtMicros: 51000,
+          sinkClockMicros: 52000,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      expect(
+        calls.where((call) => call.method == 'startCapture'),
+        hasLength(1),
+      );
+
+      transport.fail(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.remoteClosed,
+        ),
+      );
+      await _waitForCondition(
+        () => calls.where((call) => call.method == 'stopCapture').length == 1,
+      );
+
+      expect(coordinator.session?.state, AudioGroupState.failed);
+      expect(
+        coordinator.session?.sinks['phone']?.state,
+        AudioGroupSinkState.failed,
+      );
+      expect(coordinator.session?.sinks['phone']?.lastError, 'transport');
+      expect(transport.closeCount, 1);
+
+      await coordinator.stopLocal();
+      expect(
+        calls.where((call) => call.method == 'stopCapture'),
+        hasLength(1),
+      );
+      expect(transport.closeCount, 1);
+    });
+
+    test('intentional group stop does not mark observable sink failed',
+        () async {
+      final transport = _ObservableFakeAudioGroupTransport();
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        transportFactory: (_) async => transport,
+        groupIdFactory: () => 'group-intentional-stop',
+        streamIdFactory: () => 'stream-intentional-stop',
+        sessionIdFactory: () => 'session-phone',
+        clockMicros: () => 61000,
+      );
+      var failedSessionNotifications = 0;
+      coordinator.addListener(() {
+        if (coordinator.session?.state == AudioGroupState.failed) {
+          failedSessionNotifications += 1;
+        }
+      });
+      coordinator.startGroup(
+        sourcePeerId: 'mac',
+        sinks: const <String, AudioChannelRole>{
+          'phone': AudioChannelRole.stereo,
+        },
+        format: format,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupAccept,
+          groupId: 'group-intentional-stop',
+          streamId: 'stream-intentional-stop',
+          sessionId: 'session-phone',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          channelRole: AudioChannelRole.stereo,
+          path: '/audio',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'phone.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      await coordinator.stopGroup(sendControl: (_, __) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(coordinator.session, isNull);
+      expect(failedSessionNotifications, 0);
+      expect(transport.closeCount, 1);
+    });
+
+    test(
+        'unexpected group receiver close fails before blocked playback cleanup',
+        () async {
+      final releaseStopPlayback = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'stopPlayback') {
+          await releaseStopPlayback.future;
+        }
+        return null;
+      });
+      final manager = AudioShareManager();
+      final coordinator = AudioGroupCoordinator(
+        manager: manager,
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-receiver-close',
+          streamId: 'stream-receiver-close',
+          sessionId: 'session-receiver-close',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.stereo,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      final mediaChannel = _RemoteCloseAudioGroupChannel();
+      expect(
+        manager.attachChannel(
+          mediaChannel,
+          claim: SessionUpgradeClaim(
+            route: '/audio',
+            namespace: 'audio-group',
+            sessionId: 'session-receiver-close',
+            peerId: 'mac',
+            mediaMacKey: Uint8List(32),
+          ),
+          additionalValidator: (_) => true,
+          groupPacketValidator: (_, __) => true,
+        ),
+        isTrue,
+      );
+
+      await mediaChannel.closeRemote();
+      await _waitForCondition(
+        () => calls.any((call) => call.method == 'stopPlayback'),
+      );
+
+      expect(coordinator.session?.state, AudioGroupState.failed);
+      expect(
+        coordinator.session?.sinks['phone']?.state,
+        AudioGroupSinkState.failed,
+      );
+      expect(coordinator.session?.sinks['phone']?.lastError, 'transport');
+      expect(coordinator.isPlaybackActive, isFalse);
+      expect(coordinator.canRejoinAsSink, isTrue);
+      expect(manager.activeChannelCount, 0);
+      expect(releaseStopPlayback.isCompleted, isFalse);
+
+      releaseStopPlayback.complete();
+      await Future<void>.delayed(Duration.zero);
+      await coordinator.stopLocal();
+      expect(
+        calls.where((call) => call.method == 'stopPlayback'),
+        hasLength(1),
+      );
+    });
+
+    test('cancelled group sink startup never sends a stale accept', () async {
+      final codecRequested = Completer<void>();
+      final releaseCodec = Completer<void>();
+      final sent = <_SentGroupControl>[];
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: (format) async {
+          codecRequested.complete();
+          await releaseCodec.future;
+          return _pcmCodec(format);
+        },
+        playbackGainProvider: () async => 1.0,
+      );
+
+      final handling = coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-cancelled-start',
+          streamId: 'stream-cancelled-start',
+          sessionId: 'session-cancelled-start',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.stereo,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (peerId, control) {
+          sent.add(_SentGroupControl(peerId, control));
+        },
+      );
+      await codecRequested.future;
+
+      await coordinator.stopLocal();
+      releaseCodec.complete();
+      await handling;
+
+      expect(sent, isEmpty);
+      expect(coordinator.session, isNull);
+      expect(coordinator.isPlaybackActive, isFalse);
+      expect(
+          calls.map((call) => call.method), isNot(contains('startPlayback')));
     });
 
     test('source adapts group latency from the slowest synchronized sink',
@@ -1677,6 +2310,134 @@ void main() {
       expect(sent.single.control.syncErrorMicros, 0);
     });
 
+    test('group packet decode failures throw synchronously to the channel',
+        () async {
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-decode-failure',
+          streamId: 'stream-decode-failure',
+          sessionId: 'session-decode-failure',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.stereo,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      Future<void>? pending;
+      Object? synchronousError;
+
+      try {
+        pending = coordinator.handlePacket(
+          AudioGroupPacketFrame(
+            groupId: 'group-decode-failure',
+            streamId: 'stream-decode-failure',
+            sessionId: 'session-decode-failure',
+            sourcePeerId: 'mac',
+            sequence: 1,
+            captureTimeMicros: 0,
+            targetPlaybackTimeMicros: 0,
+            durationMicros: 20000,
+            channelMask: AudioChannelMask.stereo,
+            payload: Uint8List.fromList(<int>[1]),
+          ),
+        );
+      } catch (error) {
+        synchronousError = error;
+      }
+      if (pending != null) {
+        await pending.catchError((Object _) {});
+      }
+
+      expect(synchronousError, isA<FormatException>());
+    });
+
+    test('native group playback write failure fails the sink once', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'writePcm') {
+          throw PlatformException(code: 'audio-playback-write-failed');
+        }
+        return null;
+      });
+      final coordinator = AudioGroupCoordinator(
+        platform: platform,
+        codecFactory: _pcmCodec,
+        playbackGainProvider: () async => 1.0,
+        clockMicros: () => 100000,
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.groupOffer,
+          groupId: 'group-native-write-failure',
+          streamId: 'stream-native-write-failure',
+          sessionId: 'session-native-write-failure',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          sinkPeerIds: <String>['phone'],
+          format: format,
+          path: '/audio',
+          channelRole: AudioChannelRole.stereo,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+      await coordinator.handleControlMessage(
+        const AudioGroupControlMessage(
+          action: AudioGroupControlAction.clockReport,
+          groupId: 'group-native-write-failure',
+          streamId: 'stream-native-write-failure',
+          sessionId: 'session-native-write-failure',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'phone',
+          clockOffsetMicros: 0,
+        ),
+        localPeerId: 'phone',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        sendControl: (_, __) {},
+      );
+
+      await coordinator.handlePacket(
+        AudioGroupPacketFrame(
+          groupId: 'group-native-write-failure',
+          streamId: 'stream-native-write-failure',
+          sessionId: 'session-native-write-failure',
+          sourcePeerId: 'mac',
+          sequence: 1,
+          captureTimeMicros: 0,
+          targetPlaybackTimeMicros: 100000,
+          durationMicros: 20000,
+          channelMask: AudioChannelMask.stereo,
+          payload: Uint8List.fromList(<int>[1, 0, 2, 0]),
+        ),
+      );
+      await _waitForCondition(
+        () => coordinator.session?.state == AudioGroupState.failed,
+      );
+
+      expect(coordinator.session?.sinks['phone']?.lastError, 'playbackIo');
+      expect(coordinator.isPlaybackActive, isFalse);
+      expect(
+        calls.where((call) => call.method == 'stopPlayback'),
+        hasLength(1),
+      );
+    });
+
     test('sink packet handling is not blocked by a slow native audio write',
         () async {
       final slowWrite = Completer<void>();
@@ -1749,8 +2510,24 @@ void main() {
       );
       expect(calls.where((call) => call.method == 'writePcm'), hasLength(1));
 
+      await coordinator.handlePacket(AudioGroupPacketFrame(
+        groupId: 'group-1',
+        streamId: 'stream-1',
+        sessionId: 'session-phone',
+        sourcePeerId: 'mac',
+        sequence: 2,
+        captureTimeMicros: 20000,
+        targetPlaybackTimeMicros: now,
+        durationMicros: 20000,
+        channelMask: AudioChannelMask.stereo,
+        payload: Uint8List.fromList(<int>[3, 0, 4, 0]),
+      ));
+      await coordinator.stopLocal().timeout(const Duration(milliseconds: 50));
+
       slowWrite.complete();
       await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls.where((call) => call.method == 'writePcm'), hasLength(1));
     });
 
     test('group playback uses a smaller Dart-side native lead window', () {
@@ -1835,5 +2612,104 @@ class _FakeAudioGroupTransport implements AudioGroupPacketTransport {
   @override
   Future<void> close() async {
     closed = true;
+  }
+}
+
+class _ObservableFakeAudioGroupTransport
+    implements AudioGroupObservablePacketTransport {
+  final Completer<PacketTransportTermination> _done =
+      Completer<PacketTransportTermination>();
+  int closeCount = 0;
+
+  @override
+  Future<PacketTransportTermination> get done => _done.future;
+
+  void fail(PacketTransportTermination termination) {
+    if (!_done.isCompleted) {
+      _done.complete(termination);
+    }
+  }
+
+  @override
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet) async {
+    return PacketSendResult.sent;
+  }
+
+  @override
+  Future<void> close() async {
+    closeCount += 1;
+    if (!_done.isCompleted) {
+      _done.complete(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.localClosed,
+        ),
+      );
+    }
+  }
+}
+
+Future<void> _waitForCondition(bool Function() condition) async {
+  for (var attempt = 0; attempt < 50 && !condition(); attempt++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+  expect(condition(), isTrue);
+}
+
+final class _RemoteCloseAudioGroupChannel implements WebSocketChannel {
+  _RemoteCloseAudioGroupChannel() {
+    _sink = _ImmediateAudioGroupWebSocketSink(_controller.close);
+  }
+
+  final StreamController<dynamic> _controller = StreamController<dynamic>();
+  late final _ImmediateAudioGroupWebSocketSink _sink;
+
+  Future<void> closeRemote() => _controller.close();
+
+  @override
+  int? get closeCode => null;
+
+  @override
+  String? get closeReason => null;
+
+  @override
+  String? get protocol => null;
+
+  @override
+  Future<void> get ready => Future<void>.value();
+
+  @override
+  WebSocketSink get sink => _sink;
+
+  @override
+  Stream<dynamic> get stream => _controller.stream;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+final class _ImmediateAudioGroupWebSocketSink implements WebSocketSink {
+  _ImmediateAudioGroupWebSocketSink(this._closeStream);
+
+  final Future<void> Function() _closeStream;
+  final Completer<void> _done = Completer<void>();
+
+  @override
+  Future<void> get done => _done.future;
+
+  @override
+  void add(dynamic data) {}
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {}
+
+  @override
+  Future<void> addStream(Stream<dynamic> stream) => stream.drain<void>();
+
+  @override
+  Future<void> close([int? closeCode, String? closeReason]) async {
+    await _closeStream();
+    if (!_done.isCompleted) {
+      _done.complete();
+    }
   }
 }

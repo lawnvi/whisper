@@ -10,6 +10,23 @@ import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 enum PacketSendResult { sent, dropped, closed, transportFailure }
 
+enum PacketTransportTerminationReason {
+  localClosed,
+  remoteClosed,
+  remoteError,
+  writerFailure,
+}
+
+final class PacketTransportTermination {
+  const PacketTransportTermination(this.reason, {this.error});
+
+  final PacketTransportTerminationReason reason;
+  final Object? error;
+
+  bool get isUnexpected =>
+      reason != PacketTransportTerminationReason.localClosed;
+}
+
 /// Shared byte-transport core for the three packet-transport subsystems
 /// (audio / audio group / remote input): close is idempotent and `send` after
 /// close silently drops (with an optional hook).
@@ -32,6 +49,7 @@ class PacketByteTransport {
   PacketByteTransport.audio({
     required Future<void> Function(Stream<Object>) addStream,
     required Future<void> Function() closeSink,
+    Stream<dynamic>? incoming,
     this.onPacketSent,
     this.onPacketDropped,
     int maxItems = 32,
@@ -43,7 +61,9 @@ class PacketByteTransport {
           addStream: addStream,
           maxItems: maxItems,
           maxBytes: maxBytes,
-        );
+        ) {
+    _observeIncoming(incoming);
+  }
 
   PacketByteTransport.remoteInput({
     required Future<void> Function(Stream<Object>) addStream,
@@ -69,10 +89,14 @@ class PacketByteTransport {
   final void Function()? onPacketSent;
   final void Function()? onPacketDropped;
   final AuthenticatedMediaPacketEncoder? packetEncoder;
+  final Completer<PacketTransportTermination> _doneCompleter =
+      Completer<PacketTransportTermination>();
+  StreamSubscription<dynamic>? _incomingSubscription;
   bool _closed = false;
   Future<void>? _closeFuture;
 
   bool get isClosed => _closed;
+  Future<PacketTransportTermination> get done => _doneCompleter.future;
 
   Future<PacketSendResult> send(
     Object bytes, {
@@ -84,9 +108,19 @@ class PacketByteTransport {
     }
     final queue = _queue;
     if (queue == null) {
-      _sendBytes!(_encodePacket(bytes));
-      onPacketSent?.call();
-      return Future<PacketSendResult>.value(PacketSendResult.sent);
+      try {
+        _sendBytes!(_encodePacket(bytes));
+        onPacketSent?.call();
+        return Future<PacketSendResult>.value(PacketSendResult.sent);
+      } catch (error, stackTrace) {
+        _terminateUnexpected(
+          PacketTransportTermination(
+            PacketTransportTerminationReason.writerFailure,
+            error: error,
+          ),
+        );
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     }
     return queue
         .addLazyWithResult(
@@ -103,6 +137,14 @@ class PacketByteTransport {
       } else {
         onPacketDropped?.call();
       }
+      if (result == OutboundQueueResult.writerFailure) {
+        _terminateUnexpected(
+          PacketTransportTermination(
+            PacketTransportTerminationReason.writerFailure,
+            error: StateError('packet transport writer failed'),
+          ),
+        );
+      }
       return switch (result) {
         OutboundQueueResult.sent => PacketSendResult.sent,
         OutboundQueueResult.dropped => PacketSendResult.dropped,
@@ -112,16 +154,78 @@ class PacketByteTransport {
     });
   }
 
-  Future<void> close() {
+  Future<void> close() => _beginClose(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.localClosed,
+        ),
+      );
+
+  void _observeIncoming(Stream<dynamic>? incoming) {
+    if (incoming == null) {
+      return;
+    }
+    _incomingSubscription = incoming.listen(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _terminateUnexpected(
+          PacketTransportTermination(
+            PacketTransportTerminationReason.remoteError,
+            error: error,
+          ),
+        );
+      },
+      onDone: () {
+        _terminateUnexpected(
+          const PacketTransportTermination(
+            PacketTransportTerminationReason.remoteClosed,
+          ),
+        );
+      },
+      cancelOnError: false,
+    );
+  }
+
+  void _terminateUnexpected(PacketTransportTermination termination) {
+    if (_closed) {
+      return;
+    }
+    unawaited(
+      _beginClose(termination).catchError((Object _, StackTrace __) {}),
+    );
+  }
+
+  Future<void> _beginClose(PacketTransportTermination termination) {
     final existing = _closeFuture;
     if (existing != null) {
       return existing;
     }
     _closed = true;
-    return _closeFuture = () async {
-      await _queue?.closeAndDrain();
-      await _closeSink();
-    }();
+    if (!_doneCompleter.isCompleted) {
+      _doneCompleter.complete(termination);
+    }
+    final completer = Completer<void>();
+    final closeFuture = completer.future;
+    _closeFuture = closeFuture;
+    final subscription = _incomingSubscription;
+    _incomingSubscription = null;
+    unawaited(() async {
+      await subscription?.cancel();
+      if (termination.isUnexpected) {
+        await Future.wait(<Future<void>>[
+          _closeSink(),
+          if (_queue case final queue?) queue.closeAndDrain(),
+        ]);
+      } else {
+        await _queue?.closeAndDrain();
+        await _closeSink();
+      }
+    }()
+        .then<void>(
+      (_) => completer.complete(),
+      onError: (Object error, StackTrace stackTrace) =>
+          completer.completeError(error, stackTrace),
+    ));
+    return closeFuture;
   }
 
   Object _encodePacket(Object bytes) {
@@ -425,10 +529,12 @@ Future<PacketByteTransport> connectPacketWebSocket(
   int remoteInputMaxBytes = 256 * 1024,
 }) async {
   final PacketWebSocketConnection connection;
+  Stream<dynamic>? incoming;
   try {
     if (connector == null) {
       final channel = IOWebSocketChannel.connect(uri);
       await channel.ready;
+      incoming = channel.stream;
       connection = (
         addStream: channel.sink.addStream,
         closeSink: () => channel.sink.close(),
@@ -459,6 +565,7 @@ Future<PacketByteTransport> connectPacketWebSocket(
   return PacketByteTransport.audio(
     addStream: connection.addStream,
     closeSink: connection.closeSink,
+    incoming: incoming,
     packetEncoder: packetEncoder,
   );
 }

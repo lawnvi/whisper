@@ -28,12 +28,22 @@ class AudioCaptureSource {
   String _sessionId = '';
   int _nextPacketSequence = 0;
   int _pendingCaptureTimeMicros = 0;
+  Future<void>? _startFuture;
+  Future<void>? _stopFuture;
+  bool _startInvoked = false;
+  bool _stopRequested = false;
+  bool _codecDisposed = false;
 
   Future<void> start({
     required String sessionId,
     required AudioStreamFormat format,
-  }) async {
-    await _subscription?.cancel();
+  }) {
+    if (_startInvoked || _stopRequested) {
+      return Future<void>.error(
+        StateError('audio capture source is single-use'),
+      );
+    }
+    _startInvoked = true;
     _sessionId = sessionId;
     _pendingPcm.clear();
     _nextPacketSequence = 0;
@@ -44,20 +54,62 @@ class AudioCaptureSource {
       sampleRate: format.sampleRate,
       channels: format.channels,
     );
-    await _platform.startCapture(sessionId: sessionId, format: format);
+    return _startFuture = _platform.startCapture(
+      sessionId: sessionId,
+      format: format,
+    );
   }
 
-  Future<void> stop() async {
+  Future<void> stop() {
+    final existing = _stopFuture;
+    if (existing != null) {
+      return existing;
+    }
+    _stopRequested = true;
     final sessionId = _sessionId;
     _sessionId = '';
-    await _subscription?.cancel();
+    final subscription = _subscription;
     _subscription = null;
     _pendingPcm.clear();
     _pendingCaptureTimeMicros = 0;
-    if (sessionId.isNotEmpty) {
-      await _platform.stopCapture(sessionId: sessionId);
+    return _stopFuture = _stop(
+      sessionId: sessionId,
+      subscription: subscription,
+    );
+  }
+
+  Future<void> _stop({
+    required String sessionId,
+    required StreamSubscription<PlatformPcmFrame>? subscription,
+  }) async {
+    Object? cleanupError;
+    StackTrace? cleanupStackTrace;
+    try {
+      await subscription?.cancel();
+    } catch (error, stackTrace) {
+      cleanupError = error;
+      cleanupStackTrace = stackTrace;
     }
-    _codec.dispose();
+    try {
+      await _startFuture;
+    } catch (_) {
+      // A partially created native capture still needs the stop below.
+    }
+    if (sessionId.isNotEmpty) {
+      try {
+        await _platform.stopCapture(sessionId: sessionId);
+      } catch (error, stackTrace) {
+        cleanupError ??= error;
+        cleanupStackTrace ??= stackTrace;
+      }
+    }
+    if (!_codecDisposed) {
+      _codecDisposed = true;
+      _codec.dispose();
+    }
+    if (cleanupError != null) {
+      Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
+    }
   }
 
   void _handleFrame(PlatformPcmFrame frame) {

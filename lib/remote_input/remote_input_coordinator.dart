@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -110,6 +111,24 @@ class RemoteInputRuntimeState {
   }
 }
 
+final class _PendingInjectionEntry {
+  _PendingInjectionEntry({
+    required this.frame,
+    required this.byteLength,
+    required this.completion,
+  });
+
+  RemoteInputPacketFrame frame;
+  int byteLength;
+  final Completer<void> completion;
+
+  void complete() {
+    if (!completion.isCompleted) {
+      completion.complete();
+    }
+  }
+}
+
 class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputCoordinator({
     RemoteInputManager? manager,
@@ -118,6 +137,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputKeyTranslatorFactory? keyTranslatorFactory,
     RemoteInputPlatformKindProvider? platformKindProvider,
     RemoteInputScrollMultiplierProvider? scrollMultiplierProvider,
+    Duration nativeInjectionTimeout = const Duration(seconds: 2),
   })  : _manager = manager ?? RemoteInputManager.shared,
         _platform = platform ?? RemoteInputPlatform(),
         _transportFactory = transportFactory,
@@ -126,11 +146,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _platformKindProvider =
             platformKindProvider ?? currentRemoteInputPlatformKind,
         _scrollMultiplierProvider = scrollMultiplierProvider ??
-            LocalSetting().remoteInputScrollMultiplier;
+            LocalSetting().remoteInputScrollMultiplier,
+        _nativeInjectionTimeout = nativeInjectionTimeout,
+        assert(nativeInjectionTimeout.inMicroseconds > 0);
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
   static const int _packetTraceLimit = 8;
+  static const int maxPendingInjectionItems = 256;
+  static const int maxPendingInjectionBytes = 1024 * 1024;
+  static const int _injectionFrameOverheadBytes = 128;
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
@@ -138,12 +163,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputKeyTranslatorFactory _keyTranslatorFactory;
   final RemoteInputPlatformKindProvider _platformKindProvider;
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
+  final Duration _nativeInjectionTimeout;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
-  final List<RemoteInputPacketFrame> _pendingInjectionFrames =
-      <RemoteInputPacketFrame>[];
-  bool _injectionPumpRunning = false;
+  final ListQueue<_PendingInjectionEntry> _pendingInjectionFrames =
+      ListQueue<_PendingInjectionEntry>();
+  _PendingInjectionEntry? _activeInjectionEntry;
+  int _retainedInjectionItems = 0;
+  int _retainedInjectionBytes = 0;
+  int _injectionQueueGeneration = 0;
+  int? _injectionPumpGeneration;
+  String _injectionQueueSessionId = '';
+  String _failedInjectionSessionId = '';
   RemoteInputKeyTranslator? _keyTranslator;
   StreamSubscription<RemoteInputPacketFrame>? _inputSubscription;
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
@@ -163,6 +195,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   RemoteInputRuntimeState get state => _state;
   RemoteInputPlatform get platform => _platform;
+
+  @visibleForTesting
+  int get debugPendingInjectionItems => _retainedInjectionItems;
+
+  @visibleForTesting
+  int get debugPendingInjectionBytes => _retainedInjectionBytes;
 
   void updateScrollMultiplier(double multiplier) {
     _scrollMultiplier = RemoteInputScrollNormalizer.clampMultiplier(multiplier);
@@ -391,7 +429,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     await stopLocal();
   }
 
-  Future<void> stopLocal() async {
+  Future<void> stopLocal() => _stopLocal();
+
+  Future<void> _stopLocal({bool sessionAlreadyStopped = false}) async {
     final current = _state;
     _trace(
       RemoteInputDiagnosticKind.stopped,
@@ -401,8 +441,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final transport = _transport;
     _transport = null;
     _keyTranslator = null;
-    _pendingInjectionFrames.clear();
-    _injectionPumpRunning = false;
+    _resetInjectionQueue();
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
     _latestSinkPacketSequence = 0;
@@ -430,7 +469,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (current.role == RemoteInputRuntimeRole.sink) {
         await _platform.stopInjection(sessionId: current.sessionId);
       }
-      _manager.stopSession(current.sessionId);
+      if (!sessionAlreadyStopped) {
+        _manager.stopSession(current.sessionId);
+      }
     }
     await transport?.close();
     _setState(const RemoteInputRuntimeState.idle());
@@ -695,6 +736,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _trace(RemoteInputDiagnosticKind.platformDiagnostic);
       }
     });
+    _beginInjectionQueue(message.sessionId);
     _manager.onPacket = (packet) {
       final routedPacket = _routeSinkActiveStartPacket(packet, message);
       if (packet.sessionId == message.sessionId &&
@@ -727,7 +769,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
           count: _sinkPacketTraceCount,
         );
       }
-      _enqueueInjection(message.sessionId, translated);
+      return _enqueueInjection(
+        message,
+        translated,
+        sendControl: sendControl,
+      );
     };
     _setState(
       RemoteInputRuntimeState(
@@ -751,71 +797,261 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _sinkEntryTravel < _sinkEntryReleaseDistance;
   }
 
-  void _enqueueInjection(
-    String sessionId,
-    List<RemoteInputPacketFrame> frames,
-  ) {
-    for (final frame in frames) {
-      if (frame.sessionId == sessionId) {
-        _appendPendingInjectionFrame(frame);
-      }
-    }
-    _startInjectionPump();
+  void _beginInjectionQueue(String sessionId) {
+    _resetInjectionQueue();
+    _injectionQueueSessionId = sessionId;
+    _failedInjectionSessionId = '';
   }
 
-  void _appendPendingInjectionFrame(RemoteInputPacketFrame frame) {
-    if (_pendingInjectionFrames.isNotEmpty) {
-      final previous = _pendingInjectionFrames.last;
-      final coalesced = _coalesceQueuedMouseMove(previous, frame);
-      if (coalesced != null) {
-        _pendingInjectionFrames[_pendingInjectionFrames.length - 1] = coalesced;
-        return;
-      }
+  void _resetInjectionQueue() {
+    _injectionQueueGeneration++;
+    _injectionPumpGeneration = null;
+    _activeInjectionEntry?.complete();
+    _activeInjectionEntry = null;
+    for (final entry in _pendingInjectionFrames) {
+      entry.complete();
     }
-    _pendingInjectionFrames.add(frame);
+    _pendingInjectionFrames.clear();
+    _retainedInjectionItems = 0;
+    _retainedInjectionBytes = 0;
+    _injectionQueueSessionId = '';
   }
 
-  void _startInjectionPump() {
-    if (_injectionPumpRunning) {
-      return;
+  Future<void> _enqueueInjection(
+    RemoteInputControlMessage message,
+    List<RemoteInputPacketFrame> frames, {
+    required RemoteInputControlSender sendControl,
+  }) {
+    if (_state.role != RemoteInputRuntimeRole.sink ||
+        _state.sessionId != message.sessionId ||
+        _injectionQueueSessionId != message.sessionId ||
+        _failedInjectionSessionId == message.sessionId) {
+      return Future<void>.value();
     }
-    _injectionPumpRunning = true;
-    unawaited(_drainInjectionQueue());
-  }
-
-  Future<void> _drainInjectionQueue() async {
-    while (_pendingInjectionFrames.isNotEmpty) {
-      final frame = _pendingInjectionFrames.removeAt(0);
-      if (_state.role != RemoteInputRuntimeRole.sink ||
-          _state.sessionId != frame.sessionId) {
+    final acceptedFrames = frames
+        .where((frame) => frame.sessionId == message.sessionId)
+        .toList(growable: false);
+    if (acceptedFrames.isEmpty) {
+      return Future<void>.value();
+    }
+    final completions = <Completer<void>>[
+      for (var i = 0; i < acceptedFrames.length; i++) Completer<void>(),
+    ];
+    for (var i = 0; i < acceptedFrames.length; i++) {
+      if (_appendPendingInjectionFrame(acceptedFrames[i], completions[i])) {
         continue;
       }
-      try {
-        await _platform.injectEvent(frame);
-      } catch (_) {}
+      for (final completion in completions) {
+        if (!completion.isCompleted) {
+          completion.complete();
+        }
+      }
+      _failInjectionQueue(
+        message,
+        sendControl: sendControl,
+        reason: RemoteInputFailureReason.injection,
+      );
+      break;
     }
-    _injectionPumpRunning = false;
+    if (_failedInjectionSessionId != message.sessionId) {
+      _startInjectionPump(message, sendControl: sendControl);
+    }
+    return Future.wait(completions.map((completion) => completion.future));
+  }
+
+  bool _appendPendingInjectionFrame(
+    RemoteInputPacketFrame frame,
+    Completer<void> completion,
+  ) {
     if (_pendingInjectionFrames.isNotEmpty) {
-      _startInjectionPump();
+      final previous = _pendingInjectionFrames.last;
+      final coalesced = _coalesceQueuedInjectionFrame(previous.frame, frame);
+      if (coalesced != null) {
+        final coalescedBytes = _retainedFrameBytes(coalesced);
+        final nextRetainedBytes =
+            _retainedInjectionBytes - previous.byteLength + coalescedBytes;
+        if (nextRetainedBytes > maxPendingInjectionBytes) {
+          return false;
+        }
+        previous
+          ..frame = coalesced
+          ..byteLength = coalescedBytes;
+        _retainedInjectionBytes = nextRetainedBytes;
+        completion.complete();
+        return true;
+      }
     }
+    final byteLength = _retainedFrameBytes(frame);
+    if (_retainedInjectionItems >= maxPendingInjectionItems ||
+        byteLength > maxPendingInjectionBytes - _retainedInjectionBytes) {
+      return false;
+    }
+    _pendingInjectionFrames.add(
+      _PendingInjectionEntry(
+        frame: frame,
+        byteLength: byteLength,
+        completion: completion,
+      ),
+    );
+    _retainedInjectionItems++;
+    _retainedInjectionBytes += byteLength;
+    return true;
+  }
+
+  int _retainedFrameBytes(RemoteInputPacketFrame frame) {
+    return frame.payload.length +
+        frame.sessionId.length * 2 +
+        _injectionFrameOverheadBytes;
+  }
+
+  void _startInjectionPump(
+    RemoteInputControlMessage message, {
+    required RemoteInputControlSender sendControl,
+  }) {
+    final generation = _injectionQueueGeneration;
+    if (_injectionPumpGeneration == generation) {
+      return;
+    }
+    _injectionPumpGeneration = generation;
+    unawaited(
+      _drainInjectionQueue(
+        message,
+        generation: generation,
+        sendControl: sendControl,
+      ),
+    );
+  }
+
+  Future<void> _drainInjectionQueue(
+    RemoteInputControlMessage message, {
+    required int generation,
+    required RemoteInputControlSender sendControl,
+  }) async {
+    try {
+      while (_isCurrentInjectionQueue(message.sessionId, generation) &&
+          _pendingInjectionFrames.isNotEmpty) {
+        final entry = _pendingInjectionFrames.removeFirst();
+        _activeInjectionEntry = entry;
+        try {
+          await _platform
+              .injectEvent(entry.frame)
+              .timeout(_nativeInjectionTimeout);
+        } catch (error) {
+          if (_isCurrentInjectionQueue(message.sessionId, generation)) {
+            _failInjectionQueue(
+              message,
+              sendControl: sendControl,
+              reason: RemoteInputFailureReason.injection,
+              localError: error,
+            );
+          }
+          return;
+        } finally {
+          entry.complete();
+          if (_isCurrentInjectionQueue(message.sessionId, generation) &&
+              identical(_activeInjectionEntry, entry)) {
+            _activeInjectionEntry = null;
+            _retainedInjectionItems--;
+            _retainedInjectionBytes -= entry.byteLength;
+          }
+        }
+      }
+    } finally {
+      if (_isCurrentInjectionQueue(message.sessionId, generation) &&
+          _injectionPumpGeneration == generation) {
+        _injectionPumpGeneration = null;
+        if (_pendingInjectionFrames.isNotEmpty) {
+          _startInjectionPump(message, sendControl: sendControl);
+        }
+      }
+    }
+  }
+
+  bool _isCurrentInjectionQueue(String sessionId, int generation) {
+    return _injectionQueueGeneration == generation &&
+        _injectionQueueSessionId == sessionId &&
+        _failedInjectionSessionId != sessionId;
+  }
+
+  void _failInjectionQueue(
+    RemoteInputControlMessage message, {
+    required RemoteInputControlSender sendControl,
+    required RemoteInputFailureReason reason,
+    Object? localError,
+  }) {
+    if (_failedInjectionSessionId == message.sessionId ||
+        _state.role != RemoteInputRuntimeRole.sink ||
+        _state.sessionId != message.sessionId) {
+      return;
+    }
+    _failedInjectionSessionId = message.sessionId;
+    _trace(
+      RemoteInputDiagnosticKind.platformError,
+      reason: reason,
+      localError: localError,
+    );
+    _resetInjectionQueue();
+    _manager.onPacket = null;
+    _manager.stopSession(message.sessionId);
+    try {
+      sendControl(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: message.sessionId,
+          sourcePeerId: message.sourcePeerId,
+          sinkPeerId: message.sinkPeerId,
+          errorMessage: reason.name,
+        ),
+      );
+    } catch (_) {}
+    unawaited(_finishFailedInjectionStop(message.sessionId));
+  }
+
+  Future<void> _finishFailedInjectionStop(String sessionId) async {
+    try {
+      await _stopLocal(sessionAlreadyStopped: true);
+    } catch (_) {
+      if (_state.role == RemoteInputRuntimeRole.sink &&
+          _state.sessionId == sessionId) {
+        _manager.onPacket = null;
+        _setState(const RemoteInputRuntimeState.idle());
+      }
+    }
+  }
+
+  RemoteInputPacketFrame? _coalesceQueuedInjectionFrame(
+    RemoteInputPacketFrame previous,
+    RemoteInputPacketFrame next,
+  ) {
+    if (previous.sessionId != next.sessionId ||
+        previous.eventType != next.eventType) {
+      return null;
+    }
+    return switch (next.eventType) {
+      RemoteInputEventType.mouseMove =>
+        _coalesceQueuedMouseMove(previous, next),
+      RemoteInputEventType.mouseWheel =>
+        _coalesceQueuedMouseWheel(previous, next),
+      _ => null,
+    };
   }
 
   RemoteInputPacketFrame? _coalesceQueuedMouseMove(
     RemoteInputPacketFrame previous,
     RemoteInputPacketFrame next,
   ) {
-    if (previous.sessionId != next.sessionId ||
-        previous.eventType != RemoteInputEventType.mouseMove ||
-        next.eventType != RemoteInputEventType.mouseMove) {
-      return null;
-    }
     final previousPayload = _mousePayload(previous);
     final nextPayload = _mousePayload(next);
     if (previousPayload == null || nextPayload == null) {
       return null;
     }
     if (previousPayload['activeStart'] == true ||
-        nextPayload['activeStart'] == true) {
+        nextPayload['activeStart'] == true ||
+        !_payloadsMatchExcept(
+          previousPayload,
+          nextPayload,
+          const <String>{'deltaX', 'deltaY', 'x', 'y'},
+        )) {
       return null;
     }
     final mergedPayload = Map<String, dynamic>.from(nextPayload);
@@ -824,12 +1060,68 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _numberPayload(nextPayload['deltaX']);
     mergedPayload['deltaY'] = _numberPayload(previousPayload['deltaY']) +
         _numberPayload(nextPayload['deltaY']);
+    return _copyPacketWithPayload(next, mergedPayload);
+  }
+
+  RemoteInputPacketFrame? _coalesceQueuedMouseWheel(
+    RemoteInputPacketFrame previous,
+    RemoteInputPacketFrame next,
+  ) {
+    final previousPayload = _mousePayload(previous);
+    final nextPayload = _mousePayload(next);
+    const additiveKeys = <String>{
+      'deltaX',
+      'deltaY',
+      'scrollDeltaX',
+      'scrollDeltaY',
+      'pointDeltaX',
+      'pointDeltaY',
+    };
+    if (previousPayload == null ||
+        nextPayload == null ||
+        !_payloadsMatchExcept(previousPayload, nextPayload, additiveKeys)) {
+      return null;
+    }
+    final mergedPayload = Map<String, dynamic>.from(nextPayload);
+    var mergedAny = false;
+    for (final key in additiveKeys) {
+      if (!previousPayload.containsKey(key) && !nextPayload.containsKey(key)) {
+        continue;
+      }
+      mergedPayload[key] = _numberPayload(previousPayload[key]) +
+          _numberPayload(nextPayload[key]);
+      mergedAny = true;
+    }
+    return mergedAny ? _copyPacketWithPayload(next, mergedPayload) : null;
+  }
+
+  bool _payloadsMatchExcept(
+    Map<String, dynamic> first,
+    Map<String, dynamic> second,
+    Set<String> ignoredKeys,
+  ) {
+    final keys = <String>{...first.keys, ...second.keys}
+      ..removeAll(ignoredKeys);
+    for (final key in keys) {
+      if (!first.containsKey(key) ||
+          !second.containsKey(key) ||
+          jsonEncode(first[key]) != jsonEncode(second[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  RemoteInputPacketFrame _copyPacketWithPayload(
+    RemoteInputPacketFrame packet,
+    Map<String, dynamic> payload,
+  ) {
     return RemoteInputPacketFrame(
-      sessionId: next.sessionId,
-      sequence: next.sequence,
-      timestampMicros: next.timestampMicros,
-      eventType: next.eventType,
-      payload: Uint8List.fromList(utf8.encode(jsonEncode(mergedPayload))),
+      sessionId: packet.sessionId,
+      sequence: packet.sequence,
+      timestampMicros: packet.timestampMicros,
+      eventType: packet.eventType,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
     );
   }
 
