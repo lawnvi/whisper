@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
 
@@ -546,6 +547,7 @@ Future<PacketByteTransport> connectPacketWebSocket(
   Uri uri, {
   PacketWebSocketConnector? connector,
   AuthenticatedMediaPacketEncoder? packetEncoder,
+  MediaUpgradeClientContext? mediaUpgradeContext,
   int remoteInputMaxItems = 128,
   int remoteInputMaxBytes = 256 * 1024,
 }) async {
@@ -553,14 +555,31 @@ Future<PacketByteTransport> connectPacketWebSocket(
   Stream<dynamic>? incoming;
   try {
     if (connector == null) {
-      final channel = IOWebSocketChannel.connect(uri);
+      WebSocketChannel channel = IOWebSocketChannel.connect(uri);
       await channel.ready;
+      if (mediaUpgradeContext case final context?) {
+        channel = await authenticateMediaWebSocketClient(
+          channel,
+          uri: uri,
+          route: uri.path,
+          namespace: context.namespace,
+          sessionId: context.sessionId,
+          peerId: context.peerId,
+          mediaMacKey: context.mediaMacKey,
+          timeout: context.timeout,
+        );
+      }
       incoming = channel.stream;
       connection = (
         addStream: channel.sink.addStream,
         closeSink: () => channel.sink.close(),
       );
     } else {
+      if (mediaUpgradeContext != null) {
+        throw UnsupportedError(
+          'custom packet websocket connectors cannot skip media proof',
+        );
+      }
       connection = await connector(uri);
     }
   } catch (error, stackTrace) {

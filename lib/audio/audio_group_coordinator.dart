@@ -797,6 +797,7 @@ class AudioGroupCoordinator extends ChangeNotifier {
             uri,
             mediaMacKey: mediaSendKey,
             sessionId: accept.sessionId,
+            peerId: accept.sourcePeerId,
           );
         }
       }

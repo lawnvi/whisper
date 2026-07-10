@@ -11,12 +11,14 @@ final class SessionUpgradeClaim {
     required this.sessionId,
     required this.peerId,
     required Uint8List mediaMacKey,
+    this.connectionGeneration = 0,
   }) : _mediaMacKey = Uint8List.fromList(mediaMacKey);
 
   final String route;
   final String namespace;
   final String sessionId;
   final String peerId;
+  final int connectionGeneration;
   final Uint8List _mediaMacKey;
 
   Uint8List get mediaMacKey => Uint8List.fromList(_mediaMacKey);
@@ -49,6 +51,7 @@ final class SessionUpgradeTokenRegistry {
     required String sessionId,
     required String peerId,
     required Uint8List mediaMacKey,
+    int connectionGeneration = 0,
     required DateTime now,
   }) {
     final normalizedRoute = normalizeMediaRoute(route);
@@ -56,7 +59,7 @@ final class SessionUpgradeTokenRegistry {
       namespace,
       route: normalizedRoute,
     );
-    if (sessionId.isEmpty || peerId.isEmpty) {
+    if (sessionId.isEmpty || peerId.isEmpty || connectionGeneration < 0) {
       throw ArgumentError('sessionId and peerId must not be empty');
     }
     if (mediaMacKey.length != 32) {
@@ -90,6 +93,7 @@ final class SessionUpgradeTokenRegistry {
           sessionId: sessionId,
           peerId: peerId,
           mediaMacKey: Uint8List.fromList(mediaMacKey),
+          connectionGeneration: connectionGeneration,
           expiresAt: now.add(timeToLive),
         ),
       );
@@ -103,12 +107,48 @@ final class SessionUpgradeTokenRegistry {
     required String sessionId,
     required String token,
     required DateTime now,
+    SessionUpgradeClaim? expected,
+  }) {
+    final matchingIndex = _findMatchingIndex(
+      route: route,
+      sessionId: sessionId,
+      token: token,
+      now: now,
+      expected: expected,
+    );
+    if (matchingIndex < 0) {
+      return null;
+    }
+    return _claimFor(_entries.removeAt(matchingIndex));
+  }
+
+  SessionUpgradeClaim? lookup({
+    required String route,
+    required String sessionId,
+    required String token,
+    required DateTime now,
+  }) {
+    final matchingIndex = _findMatchingIndex(
+      route: route,
+      sessionId: sessionId,
+      token: token,
+      now: now,
+    );
+    return matchingIndex < 0 ? null : _claimFor(_entries[matchingIndex]);
+  }
+
+  int _findMatchingIndex({
+    required String route,
+    required String sessionId,
+    required String token,
+    required DateTime now,
+    SessionUpgradeClaim? expected,
   }) {
     final normalizedRoute = _tryNormalizeMediaRoute(route);
     final tokenBytes = _decodeToken(token);
     _purgeExpired(now);
     if (normalizedRoute == null || sessionId.isEmpty || tokenBytes == null) {
-      return null;
+      return -1;
     }
 
     var matchingIndex = -1;
@@ -117,20 +157,22 @@ final class SessionUpgradeTokenRegistry {
       final tokenMatches = constantTimeBytesEqual(entry.tokenBytes, tokenBytes);
       if (tokenMatches &&
           entry.route == normalizedRoute &&
-          entry.sessionId == sessionId) {
+          entry.sessionId == sessionId &&
+          (expected == null || _entryMatchesClaim(entry, expected))) {
         matchingIndex = index;
       }
     }
-    if (matchingIndex < 0) {
-      return null;
-    }
-    final entry = _entries.removeAt(matchingIndex);
+    return matchingIndex;
+  }
+
+  SessionUpgradeClaim _claimFor(_SessionUpgradeEntry entry) {
     return SessionUpgradeClaim(
       route: entry.route,
       namespace: entry.namespace,
       sessionId: entry.sessionId,
       peerId: entry.peerId,
       mediaMacKey: entry.mediaMacKey,
+      connectionGeneration: entry.connectionGeneration,
     );
   }
 
@@ -271,6 +313,7 @@ final class _SessionUpgradeEntry {
     required this.sessionId,
     required this.peerId,
     required this.mediaMacKey,
+    required this.connectionGeneration,
     required this.expiresAt,
   });
 
@@ -280,5 +323,18 @@ final class _SessionUpgradeEntry {
   final String sessionId;
   final String peerId;
   final Uint8List mediaMacKey;
+  final int connectionGeneration;
   final DateTime expiresAt;
+}
+
+bool _entryMatchesClaim(
+  _SessionUpgradeEntry entry,
+  SessionUpgradeClaim claim,
+) {
+  return entry.route == claim.route &&
+      entry.namespace == claim.namespace &&
+      entry.sessionId == claim.sessionId &&
+      entry.peerId == claim.peerId &&
+      entry.connectionGeneration == claim.connectionGeneration &&
+      constantTimeBytesEqual(entry.mediaMacKey, claim.mediaMacKey);
 }

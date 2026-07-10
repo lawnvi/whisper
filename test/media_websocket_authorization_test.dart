@@ -4,11 +4,17 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/audio/audio_fanout_transport.dart';
+import 'package:whisper/audio/audio_packet_transport.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
+import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/svrmanager.dart';
 
@@ -77,6 +83,54 @@ Future<void> _waitFor(bool Function() predicate) async {
   }
 }
 
+Future<WebSocketChannel> _connectMediaChannel(
+  Uri uri, {
+  required String namespace,
+  Uint8List? mediaMacKey,
+  String peerId = _sourcePeerId,
+}) async {
+  WebSocketChannel channel = IOWebSocketChannel.connect(uri);
+  await channel.ready;
+  return authenticateMediaWebSocketClient(
+    channel,
+    uri: uri,
+    route: uri.path,
+    namespace: namespace,
+    sessionId: uri.queryParameters['session']!,
+    peerId: peerId,
+    mediaMacKey: mediaMacKey ?? _mediaKey,
+  );
+}
+
+Future<
+    ({
+      WebSocket socket,
+      StreamIterator<dynamic> events,
+      MediaUpgradeChallenge challenge,
+    })> _openProvisionalMediaSocket(Uri uri) async {
+  final socket = await WebSocket.connect(uri.toString());
+  final events = StreamIterator<dynamic>(socket);
+  if (!await events.moveNext().timeout(const Duration(seconds: 1))) {
+    throw StateError('media challenge socket closed early');
+  }
+  return (
+    socket: socket,
+    events: events,
+    challenge: MediaUpgradeChallenge.fromWire(events.current),
+  );
+}
+
+Future<String> _nextProvisionalOutcome(
+  StreamIterator<dynamic> events,
+) async {
+  final hasMessage =
+      await events.moveNext().timeout(const Duration(seconds: 1));
+  if (!hasMessage) {
+    return 'closed';
+  }
+  return isMediaUpgradeReady(events.current) ? 'ready' : 'unexpected';
+}
+
 void main() {
   late SessionUpgradeTokenRegistry tokens;
   late AudioShareManager audioManager;
@@ -84,10 +138,12 @@ void main() {
   late WsSvrManager server;
   late int port;
   late bool allowAudioGroupClaim;
+  int? expectedMediaGeneration;
 
   setUp(() async {
     tokens = SessionUpgradeTokenRegistry();
     allowAudioGroupClaim = false;
+    expectedMediaGeneration = null;
     audioManager = AudioShareManager();
     inputManager = RemoteInputManager();
     audioManager.acceptOffer(
@@ -128,7 +184,9 @@ void main() {
           claim.sessionId == _audioGroupSessionId &&
           packet.groupId == 'group-a' &&
           packet.streamId == 'stream-a',
-      mediaPeerClaimValidator: (_) => true,
+      mediaPeerClaimValidator: (claim) =>
+          expectedMediaGeneration == null ||
+          claim.connectionGeneration == expectedMediaGeneration,
     );
     final result = await server.startServer(0);
     expect(result.isSuccess, isTrue);
@@ -137,6 +195,17 @@ void main() {
 
   tearDown(() async {
     await server.closeGracefully(closeServer: true, forceServerClose: true);
+  });
+
+  test('rejects non-positive media proof resource limits', () {
+    expect(
+      () => WsSvrManager.forTesting(mediaProofTimeout: Duration.zero),
+      throwsArgumentError,
+    );
+    expect(
+      () => WsSvrManager.forTesting(maxProvisionalMediaSockets: 0),
+      throwsArgumentError,
+    );
   });
 
   test('missing token is 401 and a non-empty Origin is 403 before consume',
@@ -163,8 +232,260 @@ void main() {
       await _upgradeStatus(uri, origin: 'https://attacker.invalid'),
       HttpStatus.forbidden,
     );
-    final socket = await WebSocket.connect(uri.toString());
-    await socket.close();
+    final socket = await _connectMediaChannel(uri, namespace: 'audio');
+    await socket.sink.close();
+  });
+
+  test('invalid media proof closes provisionally without consuming the token',
+      () async {
+    final token = tokens.issue(
+      route: '/audio',
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
+      mediaMacKey: _mediaKey,
+      now: DateTime.now(),
+    );
+    final uri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: token,
+    );
+    final attacker = await WebSocket.connect(uri.toString());
+    final events = StreamIterator<dynamic>(attacker);
+
+    expect(
+      await events.moveNext().timeout(const Duration(milliseconds: 500)),
+      isTrue,
+    );
+    expect(
+      jsonDecode(events.current as String),
+      containsPair('type', 'whisper-media-challenge-v1'),
+    );
+    attacker.add(jsonEncode(<String, Object>{
+      'type': 'whisper-media-proof-v1',
+      'proof': base64Url.encode(Uint8List(32)).replaceAll('=', ''),
+    }));
+
+    expect(
+      await events.moveNext().timeout(const Duration(seconds: 1)),
+      isFalse,
+    );
+    expect(tokens.length, 1);
+    expect(audioManager.activeChannelCount, 0);
+  });
+
+  test('proof replay against a fresh nonce does not consume the token',
+      () async {
+    final token = tokens.issue(
+      route: '/audio',
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
+      mediaMacKey: _mediaKey,
+      now: DateTime.now(),
+    );
+    final uri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: token,
+    );
+    final first = await _openProvisionalMediaSocket(uri);
+    final replayedProof = createMediaUpgradeProof(
+      challenge: first.challenge,
+      mediaMacKey: _mediaKey,
+    );
+    await first.socket.close();
+    await _waitFor(() => server.debugProvisionalMediaSocketCount == 0);
+
+    final second = await _openProvisionalMediaSocket(uri);
+    expect(second.challenge.nonce, isNot(first.challenge.nonce));
+    second.socket.add(encodeMediaUpgradeProof(replayedProof));
+
+    expect(await _nextProvisionalOutcome(second.events), 'closed');
+    expect(tokens.length, 1);
+    expect(audioManager.activeChannelCount, 0);
+
+    final valid = await _connectMediaChannel(uri, namespace: 'audio');
+    expect(tokens.length, 0);
+    await valid.sink.close();
+  });
+
+  test('proof from a superseded connection generation cannot claim the token',
+      () async {
+    expectedMediaGeneration = 7;
+    final token = tokens.issue(
+      route: '/audio',
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
+      mediaMacKey: _mediaKey,
+      connectionGeneration: 7,
+      now: DateTime.now(),
+    );
+    final uri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: token,
+    );
+    final provisional = await _openProvisionalMediaSocket(uri);
+    final proof = createMediaUpgradeProof(
+      challenge: provisional.challenge,
+      mediaMacKey: _mediaKey,
+    );
+
+    expectedMediaGeneration = 8;
+    provisional.socket.add(encodeMediaUpgradeProof(proof));
+
+    expect(await _nextProvisionalOutcome(provisional.events), 'closed');
+    expect(tokens.length, 1);
+    expect(audioManager.activeChannelCount, 0);
+
+    expectedMediaGeneration = 7;
+    final valid = await _connectMediaChannel(uri, namespace: 'audio');
+    expect(tokens.length, 0);
+    await valid.sink.close();
+  });
+
+  test('concurrent valid proofs atomically select exactly one winner',
+      () async {
+    final token = tokens.issue(
+      route: '/audio',
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
+      mediaMacKey: _mediaKey,
+      now: DateTime.now(),
+    );
+    final uri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: token,
+    );
+    final first = await _openProvisionalMediaSocket(uri);
+    final second = await _openProvisionalMediaSocket(uri);
+
+    first.socket.add(
+      encodeMediaUpgradeProof(
+        createMediaUpgradeProof(
+          challenge: first.challenge,
+          mediaMacKey: _mediaKey,
+        ),
+      ),
+    );
+    second.socket.add(
+      encodeMediaUpgradeProof(
+        createMediaUpgradeProof(
+          challenge: second.challenge,
+          mediaMacKey: _mediaKey,
+        ),
+      ),
+    );
+
+    final outcomes = await Future.wait(<Future<String>>[
+      _nextProvisionalOutcome(first.events),
+      _nextProvisionalOutcome(second.events),
+    ]);
+    expect(outcomes.where((outcome) => outcome == 'ready'), hasLength(1));
+    expect(outcomes.where((outcome) => outcome == 'closed'), hasLength(1));
+    expect(tokens.length, 0);
+    expect(audioManager.activeChannelCount, 1);
+
+    await Future.wait(<Future<void>>[
+      first.socket.close(),
+      second.socket.close(),
+    ]);
+  });
+
+  test('proof timeout releases bounded quota without consuming either token',
+      () async {
+    await server.closeGracefully(closeServer: true, forceServerClose: true);
+    server = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      remoteInputManager: inputManager,
+      sessionUpgradeTokens: tokens,
+      mediaPeerClaimValidator: (_) => true,
+      mediaProofTimeout: const Duration(milliseconds: 100),
+      maxProvisionalMediaSockets: 1,
+    );
+    final result = await server.startServer(0);
+    expect(result.isSuccess, isTrue);
+    port = result.port;
+    String issueToken() => tokens.issue(
+          route: '/audio',
+          sessionId: _audioSessionId,
+          peerId: _sourcePeerId,
+          mediaMacKey: _mediaKey,
+          now: DateTime.now(),
+        );
+    final firstUri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: issueToken(),
+    );
+    final secondUri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: issueToken(),
+    );
+    final first = await _openProvisionalMediaSocket(firstUri);
+
+    expect(server.debugProvisionalMediaSocketCount, 1);
+    expect(audioManager.activeChannelCount, 0);
+    expect(await _upgradeStatus(secondUri), HttpStatus.tooManyRequests);
+    expect(tokens.length, 2);
+
+    expect(await _nextProvisionalOutcome(first.events), 'closed');
+    expect(server.debugProvisionalMediaSocketCount, 0);
+    expect(audioManager.activeChannelCount, 0);
+    expect(tokens.length, 2);
+
+    final valid = await _connectMediaChannel(secondUri, namespace: 'audio');
+    expect(server.debugProvisionalMediaSocketCount, 0);
+    expect(audioManager.activeChannelCount, 1);
+    expect(tokens.length, 1);
+    await valid.sink.close();
+  });
+
+  test('random generation failure releases quota and pending attachment',
+      () async {
+    await server.closeGracefully(closeServer: true, forceServerClose: true);
+    server = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      remoteInputManager: inputManager,
+      sessionUpgradeTokens: tokens,
+      mediaPeerClaimValidator: (_) => true,
+      maxProvisionalMediaSockets: 1,
+      mediaProofRandomBytes: (_) => throw StateError('entropy unavailable'),
+    );
+    final result = await server.startServer(0);
+    expect(result.isSuccess, isTrue);
+    port = result.port;
+    final token = tokens.issue(
+      route: '/audio',
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
+      mediaMacKey: _mediaKey,
+      now: DateTime.now(),
+    );
+    final uri = _mediaUri(
+      port,
+      '/audio',
+      sessionId: _audioSessionId,
+      token: token,
+    );
+
+    expect(
+      await _upgradeStatus(uri),
+      HttpStatus.internalServerError,
+    );
+    expect(server.debugProvisionalMediaSocketCount, 0);
+    expect(tokens.length, 1);
+    await server
+        .closeGracefully(closeServer: true, forceServerClose: true)
+        .timeout(const Duration(seconds: 1));
   });
 
   test('malformed expired and mismatched claims return 401 without reuse',
@@ -242,8 +563,8 @@ void main() {
       HttpStatus.unauthorized,
     );
 
-    final socket = await WebSocket.connect(validUri.toString());
-    await socket.close();
+    final socket = await _connectMediaChannel(validUri, namespace: 'audio');
+    await socket.sink.close();
     expect(await _upgradeStatus(validUri), HttpStatus.unauthorized);
   });
 
@@ -264,21 +585,18 @@ void main() {
       sessionId: _audioSessionId,
       token: token,
     );
-    final socket = await WebSocket.connect(uri.toString());
-    final encoder = AuthenticatedMediaPacketEncoder(
-      route: '/audio',
-      sessionId: _audioSessionId,
+    final transport = await AudioWebSocketPacketTransport.connect(
+      uri,
       mediaMacKey: _mediaKey,
-      maxPayloadBytes: AudioShareManager.maxPacketPayloadBytes,
+      sessionId: _audioSessionId,
+      peerId: _sourcePeerId,
     );
-    socket.add(
-      encoder.encode(
-        AudioPacketFrame(
-          sessionId: _audioSessionId,
-          sequence: 1,
-          captureTimeMicros: 10,
-          payload: Uint8List.fromList(<int>[1, 2, 3]),
-        ).encode(),
+    transport.send(
+      AudioPacketFrame(
+        sessionId: _audioSessionId,
+        sequence: 1,
+        captureTimeMicros: 10,
+        payload: Uint8List.fromList(<int>[1, 2, 3]),
       ),
     );
 
@@ -287,7 +605,7 @@ void main() {
       <int>[1, 2, 3],
     );
     expect(await _upgradeStatus(uri), HttpStatus.unauthorized);
-    await socket.close();
+    await transport.close();
   });
 
   test('input claim attaches once and verifies the route-specific packet MAC',
@@ -307,22 +625,19 @@ void main() {
       sessionId: _inputSessionId,
       token: token,
     );
-    final socket = await WebSocket.connect(uri.toString());
-    final encoder = AuthenticatedMediaPacketEncoder(
-      route: '/input',
-      sessionId: _inputSessionId,
+    final transport = await RemoteInputWebSocketPacketTransport.connect(
+      uri,
       mediaMacKey: _mediaKey,
-      maxPayloadBytes: RemoteInputManager.maxPacketPayloadBytes,
+      sessionId: _inputSessionId,
+      peerId: _sourcePeerId,
     );
-    socket.add(
-      encoder.encode(
-        RemoteInputPacketFrame(
-          sessionId: _inputSessionId,
-          sequence: 1,
-          timestampMicros: 10,
-          eventType: RemoteInputEventType.key,
-          payload: Uint8List.fromList(<int>[4, 5]),
-        ).encode(),
+    transport.send(
+      RemoteInputPacketFrame(
+        sessionId: _inputSessionId,
+        sequence: 1,
+        timestampMicros: 10,
+        eventType: RemoteInputEventType.key,
+        payload: Uint8List.fromList(<int>[4, 5]),
       ),
     );
 
@@ -330,7 +645,7 @@ void main() {
       (await delivered.future.timeout(const Duration(seconds: 2))).payload,
       <int>[4, 5],
     );
-    await socket.close();
+    await transport.close();
   });
 
   test('claim whose peer or session is not active never attaches', () async {
@@ -364,40 +679,36 @@ void main() {
       mediaMacKey: _mediaKey,
       now: DateTime.now(),
     );
-    final socket = await WebSocket.connect(
+    final transport = await AudioGroupWebSocketPacketTransport.connect(
       _mediaUri(
         port,
         '/audio',
         sessionId: _audioGroupSessionId,
         token: token,
-      ).toString(),
+      ),
+      mediaMacKey: _mediaKey,
+      sessionId: _audioGroupSessionId,
+      peerId: _sourcePeerId,
     );
-    socket.add(
-      AuthenticatedMediaPacketEncoder(
-        route: '/audio',
+    await transport.send(
+      AudioGroupPacketFrame(
+        groupId: 'group-a',
+        streamId: 'stream-a',
         sessionId: _audioGroupSessionId,
-        mediaMacKey: _mediaKey,
-        maxPayloadBytes: AudioShareManager.maxPacketPayloadBytes,
-      ).encode(
-        AudioGroupPacketFrame(
-          groupId: 'group-a',
-          streamId: 'stream-a',
-          sessionId: _audioGroupSessionId,
-          sourcePeerId: _sourcePeerId,
-          sequence: 1,
-          captureTimeMicros: 10,
-          targetPlaybackTimeMicros: 20,
-          durationMicros: 20000,
-          channelMask: AudioChannelMask.stereo,
-          payload: Uint8List.fromList(<int>[6, 7]),
-        ).encode(),
+        sourcePeerId: _sourcePeerId,
+        sequence: 1,
+        captureTimeMicros: 10,
+        targetPlaybackTimeMicros: 20,
+        durationMicros: 20000,
+        channelMask: AudioChannelMask.stereo,
+        payload: Uint8List.fromList(<int>[6, 7]),
       ),
     );
 
     final packet = await delivered.future.timeout(const Duration(seconds: 2));
     expect(packet.sessionId, _audioGroupSessionId);
     expect(packet.sourcePeerId, _sourcePeerId);
-    await socket.close();
+    await transport.close();
   });
 
   for (final mismatch
@@ -421,20 +732,21 @@ void main() {
         mediaMacKey: _mediaKey,
         now: DateTime.now(),
       );
-      final socket = await WebSocket.connect(
+      final socket = await _connectMediaChannel(
         _mediaUri(
           port,
           '/audio',
           sessionId: _audioGroupSessionId,
           token: token,
-        ).toString(),
+        ),
+        namespace: 'audio-group',
       );
-      socket.listen((_) {}).asFuture<void>().then((_) {
+      socket.stream.listen((_) {}).asFuture<void>().then((_) {
         if (!outcome.isCompleted) {
           outcome.complete('closed');
         }
       });
-      socket.add(
+      socket.sink.add(
         AuthenticatedMediaPacketEncoder(
           route: '/audio',
           sessionId: _audioGroupSessionId,
@@ -471,15 +783,16 @@ void main() {
       mediaMacKey: _mediaKey,
       now: DateTime.now(),
     );
-    final socket = await WebSocket.connect(
+    final socket = await _connectMediaChannel(
       _mediaUri(
         port,
         '/audio',
         sessionId: _audioSessionId,
         token: token,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final closed = socket.listen((_) {}).asFuture<void>();
+    final closed = socket.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
 
     audioManager.stopSession(_audioSessionId);
@@ -496,15 +809,16 @@ void main() {
       mediaMacKey: _mediaKey,
       now: DateTime.now(),
     );
-    final socket = await WebSocket.connect(
+    final socket = await _connectMediaChannel(
       _mediaUri(
         port,
         '/input',
         sessionId: _inputSessionId,
         token: token,
-      ).toString(),
+      ),
+      namespace: 'remote-input',
     );
-    final closed = socket.listen((_) {}).asFuture<void>();
+    final closed = socket.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() => inputManager.activeChannelCount == 1);
 
     inputManager.stopSession(_inputSessionId);
@@ -530,7 +844,7 @@ void main() {
       );
     }
 
-    final first = await WebSocket.connect(issueUri().toString());
+    final first = await _connectMediaChannel(issueUri(), namespace: 'audio');
     await _waitFor(() => audioManager.activeChannelCount == 1);
     final duplicate = await WebSocket.connect(issueUri().toString())
         .then<Object>((socket) async {
@@ -540,7 +854,7 @@ void main() {
 
     expect(duplicate, isA<WebSocketException>());
     expect(audioManager.activeChannelCount, 1);
-    await first.close();
+    await first.sink.close();
   });
 
   test('peer disconnect closes every claimed media channel', () async {
@@ -554,24 +868,26 @@ void main() {
       );
     }
 
-    final audio = await WebSocket.connect(
+    final audio = await _connectMediaChannel(
       _mediaUri(
         port,
         '/audio',
         sessionId: _audioSessionId,
         token: issue('/audio', _audioSessionId),
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final input = await WebSocket.connect(
+    final input = await _connectMediaChannel(
       _mediaUri(
         port,
         '/input',
         sessionId: _inputSessionId,
         token: issue('/input', _inputSessionId),
-      ).toString(),
+      ),
+      namespace: 'remote-input',
     );
-    final audioClosed = audio.listen((_) {}).asFuture<void>();
-    final inputClosed = input.listen((_) {}).asFuture<void>();
+    final audioClosed = audio.stream.listen((_) {}).asFuture<void>();
+    final inputClosed = input.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() =>
         audioManager.activeChannelCount == 1 &&
         inputManager.activeChannelCount == 1);
@@ -606,8 +922,8 @@ void main() {
       sessionId: _audioSessionId,
       token: token,
     );
-    final socket = await WebSocket.connect(uri.toString());
-    final closed = socket.listen((_) {}).asFuture<void>();
+    final socket = await _connectMediaChannel(uri, namespace: 'audio');
+    final closed = socket.stream.listen((_) {}).asFuture<void>();
     final encoded = AuthenticatedMediaPacketEncoder(
       route: '/audio',
       sessionId: _audioSessionId,
@@ -622,7 +938,7 @@ void main() {
       ).encode(),
     );
     encoded.last ^= 0xff;
-    socket.add(encoded);
+    socket.sink.add(encoded);
 
     await closed.timeout(const Duration(seconds: 2));
     expect(delivered, isEmpty);
@@ -658,20 +974,21 @@ void main() {
       mediaMacKey: _mediaKey,
       now: DateTime.now(),
     );
-    final socket = await WebSocket.connect(
+    final socket = await _connectMediaChannel(
       _mediaUri(
         port,
         '/audio',
         sessionId: _audioSessionId,
         token: token,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    socket.listen((_) {}).asFuture<void>().then((_) {
+    socket.stream.listen((_) {}).asFuture<void>().then((_) {
       if (!outcome.isCompleted) {
         outcome.complete('closed');
       }
     });
-    socket.add(
+    socket.sink.add(
       AuthenticatedMediaPacketEncoder(
         route: '/audio',
         sessionId: _audioSessionId,
@@ -716,20 +1033,21 @@ void main() {
       mediaMacKey: _mediaKey,
       now: DateTime.now(),
     );
-    final socket = await WebSocket.connect(
+    final socket = await _connectMediaChannel(
       _mediaUri(
         port,
         '/input',
         sessionId: _inputSessionId,
         token: token,
-      ).toString(),
+      ),
+      namespace: 'remote-input',
     );
-    socket.listen((_) {}).asFuture<void>().then((_) {
+    socket.stream.listen((_) {}).asFuture<void>().then((_) {
       if (!outcome.isCompleted) {
         outcome.complete('closed');
       }
     });
-    socket.add(
+    socket.sink.add(
       AuthenticatedMediaPacketEncoder(
         route: '/input',
         sessionId: _inputSessionId,

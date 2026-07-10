@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef AudioGroupSinkFailure = void Function(String sinkPeerId, Object error);
@@ -54,9 +55,16 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
     Uri uri, {
     required Uint8List mediaMacKey,
     required String sessionId,
+    required String peerId,
   }) async {
     final channelTransport = await connectPacketWebSocket(
       uri,
+      mediaUpgradeContext: MediaUpgradeClientContext(
+        namespace: 'audio-group',
+        sessionId: sessionId,
+        peerId: peerId,
+        mediaMacKey: mediaMacKey,
+      ),
       packetEncoder: AuthenticatedMediaPacketEncoder(
         route: '/audio',
         sessionId: sessionId,

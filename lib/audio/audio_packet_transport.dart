@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_diagnostics.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class AudioPacketTransport {
@@ -94,6 +95,7 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
     Uri uri, {
     required Uint8List mediaMacKey,
     required String sessionId,
+    required String peerId,
     AudioShareDiagnostics? diagnostics,
   }) async {
     final resolvedDiagnostics = diagnostics ?? AudioShareDiagnostics.shared;
@@ -101,6 +103,12 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
     try {
       final channelTransport = await connectPacketWebSocket(
         uri,
+        mediaUpgradeContext: MediaUpgradeClientContext(
+          namespace: 'audio',
+          sessionId: sessionId,
+          peerId: peerId,
+          mediaMacKey: mediaMacKey,
+        ),
         packetEncoder: AuthenticatedMediaPacketEncoder(
           route: '/audio',
           sessionId: sessionId,

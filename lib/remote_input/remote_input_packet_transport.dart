@@ -5,6 +5,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class RemoteInputPacketTransport {
@@ -120,10 +121,20 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     Uri uri, {
     required Uint8List mediaMacKey,
     required String sessionId,
+    required String peerId,
   }) async {
     try {
-      final channel = IOWebSocketChannel.connect(uri);
+      WebSocketChannel channel = IOWebSocketChannel.connect(uri);
       await channel.ready;
+      channel = await authenticateMediaWebSocketClient(
+        channel,
+        uri: uri,
+        route: '/input',
+        namespace: 'remote-input',
+        sessionId: sessionId,
+        peerId: peerId,
+        mediaMacKey: mediaMacKey,
+      );
       return RemoteInputWebSocketPacketTransport.forChannel(
         channel,
         packetEncoder: AuthenticatedMediaPacketEncoder(

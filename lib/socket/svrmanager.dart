@@ -30,6 +30,7 @@ import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/dial_tiebreaker.dart';
 import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/outgoing_text_retry.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
@@ -90,6 +91,14 @@ typedef PeerReconnectControllerFactory = PeerReconnectController Function({
   required ReconnectAttempt attempt,
   required ReconnectEligibility eligibility,
 });
+
+Uint8List _secureMediaProofRandomBytes(int length) {
+  final random = math.Random.secure();
+  return Uint8List.fromList(
+    List<int>.generate(length, (_) => random.nextInt(256)),
+  );
+}
+
 typedef LocalPeerProfileLoader = Future<PeerProfile> Function();
 
 enum ConnectionAuthCommitStage {
@@ -214,6 +223,20 @@ class WsSvrManager {
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
 
+  static Duration _validateMediaProofTimeout(Duration value) {
+    if (value <= Duration.zero) {
+      throw ArgumentError.value(value, 'mediaProofTimeout');
+    }
+    return value;
+  }
+
+  static int _validateMaxProvisionalMediaSockets(int value) {
+    if (value <= 0) {
+      throw ArgumentError.value(value, 'maxProvisionalMediaSockets');
+    }
+    return value;
+  }
+
   static PeerReconnectController _defaultReconnectControllerFactory({
     required ReconnectAttempt attempt,
     required ReconnectEligibility eligibility,
@@ -240,6 +263,9 @@ class WsSvrManager {
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
     Duration socketCloseTimeout = const Duration(seconds: 2),
+    Duration mediaProofTimeout = const Duration(seconds: 3),
+    int maxProvisionalMediaSockets = 32,
+    SecureRandomBytes? mediaProofRandomBytes,
   })  : _admission = admission ?? SocketAdmissionController(),
         _audioManager = audioManager ?? AudioShareManager.shared,
         _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -259,7 +285,12 @@ class WsSvrManager {
         _localPeerProfileLoader = localPeerProfileLoader,
         _manageSharedCoordinators = manageSharedCoordinators,
         _authCommitBarrier = authCommitBarrier,
-        _socketCloseTimeout = socketCloseTimeout;
+        _socketCloseTimeout = socketCloseTimeout,
+        _mediaProofTimeout = _validateMediaProofTimeout(mediaProofTimeout),
+        _maxProvisionalMediaSockets =
+            _validateMaxProvisionalMediaSockets(maxProvisionalMediaSockets),
+        _mediaProofRandomBytes =
+            mediaProofRandomBytes ?? _secureMediaProofRandomBytes;
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -279,6 +310,9 @@ class WsSvrManager {
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
     Duration socketCloseTimeout = const Duration(seconds: 2),
+    Duration mediaProofTimeout = const Duration(seconds: 3),
+    int maxProvisionalMediaSockets = 32,
+    SecureRandomBytes? mediaProofRandomBytes,
   }) : this._internal(
           admission: admission,
           audioManager: audioManager,
@@ -296,6 +330,9 @@ class WsSvrManager {
           manageSharedCoordinators: manageSharedCoordinators,
           authCommitBarrier: authCommitBarrier,
           socketCloseTimeout: socketCloseTimeout,
+          mediaProofTimeout: mediaProofTimeout,
+          maxProvisionalMediaSockets: maxProvisionalMediaSockets,
+          mediaProofRandomBytes: mediaProofRandomBytes,
         );
 
   // 工厂构造函数，返回单例实例
@@ -367,6 +404,10 @@ class WsSvrManager {
   final bool _manageSharedCoordinators;
   final ConnectionAuthCommitBarrier? _authCommitBarrier;
   final Duration _socketCloseTimeout;
+  final Duration _mediaProofTimeout;
+  final int _maxProvisionalMediaSockets;
+  final SecureRandomBytes _mediaProofRandomBytes;
+  int _provisionalMediaSocketCount = 0;
   final Map<String, PeerReconnectController> _reconnectControllers =
       <String, PeerReconnectController>{};
   final Map<String, int> _peerPolicyEpochs = <String, int>{};
@@ -576,6 +617,9 @@ class WsSvrManager {
   @visibleForTesting
   Future<void> debugSendProfileHeartbeatTo(String peerId) =>
       _heartBeat(peerId: peerId);
+
+  @visibleForTesting
+  int get debugProvisionalMediaSocketCount => _provisionalMediaSocketCount;
 
   String _shortSessionId(String sessionId) {
     if (sessionId.length <= 8) {
@@ -1102,27 +1146,99 @@ class WsSvrManager {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
 
-    Future<shelf.Response> handleMediaUpgrade(
-      shelf.Request request,
-      shelf.Handler Function(void Function() onAttachmentComplete)
-          createHandler,
-    ) async {
+    Future<shelf.Response> handleMediaUpgrade({
+      required shelf.Request request,
+      required String route,
+      required String sessionId,
+      required String token,
+      required SessionUpgradeClaim provisionalClaim,
+      required bool Function(SessionUpgradeClaim claim) canAttach,
+      required bool Function(
+        WebSocketChannel channel,
+        SessionUpgradeClaim claim,
+      ) attach,
+    }) async {
+      if (_provisionalMediaSocketCount >= _maxProvisionalMediaSockets) {
+        return shelf.Response(429, body: 'Too Many Requests');
+      }
+      _provisionalMediaSocketCount += 1;
+      var provisionalReleased = false;
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
-      final mediaHandler = createHandler(
-        () => _completePendingSocketAttachment(pendingUpgrade),
-      );
+      void releaseProvisional() {
+        if (provisionalReleased) {
+          return;
+        }
+        provisionalReleased = true;
+        _provisionalMediaSocketCount -= 1;
+        _completePendingSocketAttachment(pendingUpgrade);
+      }
+
+      late final shelf.Handler mediaHandler;
+      try {
+        final nonceBytes = _mediaProofRandomBytes(32);
+        if (nonceBytes.length != 32) {
+          releaseProvisional();
+          return shelf.Response.internalServerError();
+        }
+        final challenge = MediaUpgradeChallenge(
+          route: provisionalClaim.route,
+          namespace: provisionalClaim.namespace,
+          sessionId: provisionalClaim.sessionId,
+          tokenHash: mediaUpgradeTokenHash(token),
+          nonce: base64Url.encode(nonceBytes).replaceAll('=', ''),
+          peerId: provisionalClaim.peerId,
+          connectionGeneration: provisionalClaim.connectionGeneration,
+        );
+        mediaHandler = webSocketHandler(
+          (WebSocketChannel channel) {
+            try {
+              MediaUpgradeServerSession(
+                channel: channel,
+                challenge: challenge,
+                mediaMacKey: provisionalClaim.mediaMacKey,
+                timeout: _mediaProofTimeout,
+                onAuthenticated: (authenticatedChannel) {
+                  if (!canAttach(provisionalClaim)) {
+                    return false;
+                  }
+                  final consumed = _sessionUpgradeTokens.consume(
+                    route: route,
+                    sessionId: sessionId,
+                    token: token,
+                    now: DateTime.now(),
+                    expected: provisionalClaim,
+                  );
+                  return consumed != null &&
+                      attach(authenticatedChannel, consumed);
+                },
+                onProvisionalFinished: releaseProvisional,
+              );
+            } catch (_) {
+              releaseProvisional();
+              _ignoreFuture(
+                channel.sink.close(4001, 'media_auth_failed'),
+                context: 'close failed media proof session initialization',
+              );
+            }
+          },
+          pingInterval: _serverPingInterval,
+        );
+      } catch (_) {
+        releaseProvisional();
+        return shelf.Response.internalServerError();
+      }
       late final shelf.Response response;
       try {
         response = await mediaHandler(request);
       } on shelf.HijackException {
         rethrow;
       } catch (_) {
-        _completePendingSocketAttachment(pendingUpgrade);
+        releaseProvisional();
         rethrow;
       }
       if (response.statusCode != HttpStatus.switchingProtocols) {
-        _completePendingSocketAttachment(pendingUpgrade);
+        releaseProvisional();
       }
       return response;
     }
@@ -1157,38 +1273,66 @@ class WsSvrManager {
         return shelf.Response(429, body: 'Too Many Requests');
       }
       if (path == 'audio') {
-        final claim = _consumeMediaUpgradeClaim(request, '/audio');
+        final credentials = _mediaUpgradeCredentials(request);
+        final claim = credentials == null
+            ? null
+            : _sessionUpgradeTokens.lookup(
+                route: '/audio',
+                sessionId: credentials.sessionId,
+                token: credentials.token,
+                now: DateTime.now(),
+              );
         if (claim == null ||
             !_isExpectedMediaPeerClaim(claim) ||
             !_isExpectedAudioUpgradeClaim(claim)) {
           return shelf.Response.unauthorized('Unauthorized');
         }
         return handleMediaUpgrade(
-          request,
-          (onAttachmentComplete) => _audioManager.webSocketHandler(
-            claim: claim,
+          request: request,
+          route: '/audio',
+          sessionId: credentials!.sessionId,
+          token: credentials.token,
+          provisionalClaim: claim,
+          canAttach: (candidate) =>
+              _isExpectedMediaPeerClaim(candidate) &&
+              _isExpectedAudioUpgradeClaim(candidate),
+          attach: (channel, consumed) => _audioManager.attachChannel(
+            channel,
+            claim: consumed,
             additionalValidator: _isExpectedAudioGroupUpgradeClaim,
             groupPacketValidator: _isExpectedAudioGroupPacket,
             claimValidator: _isExpectedMediaPeerClaim,
-            pingInterval: _serverPingInterval,
-            onAttachmentComplete: onAttachmentComplete,
           ),
         );
       }
       if (path == 'input') {
-        final claim = _consumeMediaUpgradeClaim(request, '/input');
+        final credentials = _mediaUpgradeCredentials(request);
+        final claim = credentials == null
+            ? null
+            : _sessionUpgradeTokens.lookup(
+                route: '/input',
+                sessionId: credentials.sessionId,
+                token: credentials.token,
+                now: DateTime.now(),
+              );
         if (claim == null ||
             !_isExpectedMediaPeerClaim(claim) ||
             !_remoteInputManager.canAttachClaim(claim)) {
           return shelf.Response.unauthorized('Unauthorized');
         }
         return handleMediaUpgrade(
-          request,
-          (onAttachmentComplete) => _remoteInputManager.webSocketHandler(
-            claim: claim,
+          request: request,
+          route: '/input',
+          sessionId: credentials!.sessionId,
+          token: credentials.token,
+          provisionalClaim: claim,
+          canAttach: (candidate) =>
+              _isExpectedMediaPeerClaim(candidate) &&
+              _remoteInputManager.canAttachClaim(candidate),
+          attach: (channel, consumed) => _remoteInputManager.attachChannel(
+            channel,
+            claim: consumed,
             claimValidator: _isExpectedMediaPeerClaim,
-            pingInterval: _serverPingInterval,
-            onAttachmentComplete: onAttachmentComplete,
           ),
         );
       }
@@ -1252,9 +1396,8 @@ class WsSvrManager {
     }
   }
 
-  SessionUpgradeClaim? _consumeMediaUpgradeClaim(
+  ({String sessionId, String token})? _mediaUpgradeCredentials(
     shelf.Request request,
-    String route,
   ) {
     final sessions = request.url.queryParametersAll['session'];
     final tokens = request.url.queryParametersAll['token'];
@@ -1266,12 +1409,7 @@ class WsSvrManager {
         tokens.single.isEmpty) {
       return null;
     }
-    return _sessionUpgradeTokens.consume(
-      route: route,
-      sessionId: sessions.single,
-      token: tokens.single,
-      now: DateTime.now(),
-    );
+    return (sessionId: sessions.single, token: tokens.single);
   }
 
   bool _isExpectedMediaPeerClaim(SessionUpgradeClaim claim) {
@@ -1282,6 +1420,7 @@ class WsSvrManager {
     final session = _sessionsByPeerId[claim.peerId];
     final mediaReceiveKey = session?.mediaReceiveKey;
     return session?.isAuthenticated == true &&
+        session?.connectionGeneration == claim.connectionGeneration &&
         mediaReceiveKey != null &&
         constantTimeBytesEqual(mediaReceiveKey, claim.mediaMacKey);
   }
@@ -4393,6 +4532,7 @@ class WsSvrManager {
       sessionId: sessionId,
       peerId: peerId,
       mediaMacKey: mediaReceiveKey,
+      connectionGeneration: session.connectionGeneration,
       now: DateTime.now(),
     );
   }

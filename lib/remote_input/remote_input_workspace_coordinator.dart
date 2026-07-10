@@ -566,6 +566,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         uri,
         mediaMacKey: mediaSendKey,
         sessionId: accept.sessionId,
+        peerId: accept.sourcePeerId,
       );
     }
     target.transportDoneSubscription = _listenForTargetTransportDone(target);

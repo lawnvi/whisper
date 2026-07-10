@@ -4,11 +4,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/socket_admission.dart';
@@ -82,6 +84,23 @@ Uri _authorizedMediaUri({
       'session': sessionId,
       'token': token,
     },
+  );
+}
+
+Future<WebSocketChannel> _connectAuthorizedMedia({
+  required Uri uri,
+  required String namespace,
+}) async {
+  WebSocketChannel channel = IOWebSocketChannel.connect(uri);
+  await channel.ready;
+  return authenticateMediaWebSocketClient(
+    channel,
+    uri: uri,
+    route: uri.path,
+    namespace: namespace,
+    sessionId: uri.queryParameters['session']!,
+    peerId: _sourcePeerId,
+    mediaMacKey: _mediaKey,
   );
 }
 
@@ -310,24 +329,26 @@ void main() {
           forceServerClose: true,
         ));
     final started = await isolated.startServer(0);
-    final audio = await WebSocket.connect(
-      _authorizedMediaUri(
+    final audio = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/audio',
         sessionId: _audioSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final input = await WebSocket.connect(
-      _authorizedMediaUri(
+    final input = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/input',
         sessionId: _inputSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'remote-input',
     );
-    addTearDown(audio.close);
-    addTearDown(input.close);
+    addTearDown(audio.sink.close);
+    addTearDown(input.sink.close);
     await _waitFor(() =>
         audioManager.activeChannelCount == 1 &&
         inputManager.activeChannelCount == 1);
@@ -355,15 +376,16 @@ void main() {
           forceServerClose: true,
         ));
     final started = await isolated.startServer(0);
-    final audio = await WebSocket.connect(
-      _authorizedMediaUri(
+    final audio = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/audio',
         sessionId: _audioSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final remoteClosed = audio.listen((_) {}).asFuture<void>();
+    final remoteClosed = audio.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
 
     await isolated.closeGracefully();
@@ -402,31 +424,33 @@ void main() {
         ));
     final started = await isolated.startServer(0);
 
-    final audio = await WebSocket.connect(
-      _authorizedMediaUri(
+    final audio = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/audio',
         sessionId: _audioSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final audioClosed = audio.listen((_) {}).asFuture<void>();
-    audio.add(
+    final audioClosed = audio.stream.listen((_) {}).asFuture<void>();
+    audio.sink.add(
       List<int>.filled(AudioShareManager.maxChannelMessageBytes + 1, 0),
     );
     await audioClosed.timeout(const Duration(seconds: 2));
     await _waitFor(() => audioManager.activeChannelCount == 0);
 
-    final input = await WebSocket.connect(
-      _authorizedMediaUri(
+    final input = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/input',
         sessionId: _inputSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'remote-input',
     );
-    final inputClosed = input.listen((_) {}).asFuture<void>();
-    input.add(
+    final inputClosed = input.stream.listen((_) {}).asFuture<void>();
+    input.sink.add(
       List<int>.filled(RemoteInputManager.maxChannelMessageBytes + 1, 0),
     );
     await inputClosed.timeout(const Duration(seconds: 2));
@@ -531,15 +555,16 @@ void main() {
       );
     });
     final started = await isolated.startServer(0);
-    final existing = await WebSocket.connect(
-      _authorizedMediaUri(
+    final existing = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/audio',
         sessionId: _audioSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    final existingClosed = existing.listen((_) {}).asFuture<void>();
+    final existingClosed = existing.stream.listen((_) {}).asFuture<void>();
     await _waitFor(() => audioManager.activeChannelCount == 1);
     audioManager.arm();
 
@@ -553,15 +578,16 @@ void main() {
     audioManager.releaseClose.complete();
     await closing;
     await existingClosed.timeout(const Duration(seconds: 2));
-    final reopened = await WebSocket.connect(
-      _authorizedMediaUri(
+    final reopened = await _connectAuthorizedMedia(
+      uri: _authorizedMediaUri(
         port: started.port,
         route: '/audio',
         sessionId: _audioSessionId,
         tokens: tokens,
-      ).toString(),
+      ),
+      namespace: 'audio',
     );
-    await reopened.close();
+    await reopened.sink.close();
   });
 
   test('graceful close cancels and awaits an in-flight outgoing handshake',

@@ -1168,6 +1168,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         uri,
         mediaMacKey: mediaSendKey,
         sessionId: message.sessionId,
+        peerId: message.sourcePeerId,
       );
     }
     _transport = transport;
