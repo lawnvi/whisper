@@ -91,6 +91,7 @@ final class PeerSocketSession {
   BoundedReceiveQueue? _inboundQueue;
   BoundedOutboundQueue? _outboundQueue;
   StreamSubscription<dynamic>? _subscription;
+  Future<void>? _receiveStopFuture;
   AdmissionLease? _admissionLease;
 
   static Future<PeerSocketSession> create({
@@ -217,13 +218,20 @@ final class PeerSocketSession {
     _admissionLease?.markAuthenticated();
   }
 
-  Future<void> stopReceivingAndDrain({bool cancelSubscription = true}) async {
+  Future<void> stopReceivingAndDrain() {
+    return _receiveStopFuture ??= _stopReceivingAndDrain();
+  }
+
+  Future<void> _stopReceivingAndDrain() async {
     final subscription = _subscription;
-    _subscription = null;
-    if (cancelSubscription) {
+    try {
       await subscription?.cancel();
+    } finally {
+      if (identical(_subscription, subscription)) {
+        _subscription = null;
+      }
+      await _inboundQueue?.closeAndDrain();
     }
-    await _inboundQueue?.closeAndDrain();
   }
 
   Future<void> drainOutbound() async {

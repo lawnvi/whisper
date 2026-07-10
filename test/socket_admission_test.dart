@@ -85,6 +85,46 @@ void main() {
       );
     });
 
+    test('shares upgrade rate limits without reserving chat capacity', () {
+      final admission = SocketAdmissionController(
+        maxChatConnections: 1,
+        maxPreAuthConnections: 1,
+        maxPreAuthConnectionsPerIp: 1,
+        maxUpgradeAttemptsPerMinutePerIp: 2,
+      );
+      final now = DateTime.utc(2026, 7, 10, 12);
+
+      expect(admission.tryUpgrade('192.168.3.7', now), isNull);
+      expect(admission.tryUpgrade('::ffff:192.168.3.7', now), isNull);
+      expect(
+        admission.tryUpgrade('192.168.3.7', now),
+        SocketAdmissionRejection.upgradeRateLimit,
+      );
+      expect(admission.chatConnectionCount, 0);
+      expect(admission.preAuthConnectionCount, 0);
+    });
+
+    test('chat capacity can be reserved after a separate rate check', () {
+      final admission = SocketAdmissionController(
+        maxChatConnections: 1,
+        maxPreAuthConnections: 1,
+        maxPreAuthConnectionsPerIp: 1,
+      );
+      final now = DateTime.utc(2026, 7, 10, 12);
+
+      expect(admission.tryUpgrade('10.0.0.8', now), isNull);
+      final lease = admission.tryOpenChat('10.0.0.8').lease;
+
+      expect(lease, isNotNull);
+      expect(admission.chatConnectionCount, 1);
+      expect(admission.preAuthConnectionCount, 1);
+      expect(
+        admission.tryOpenChat('10.0.0.9').rejection,
+        SocketAdmissionRejection.chatCapacity,
+      );
+      lease!.close();
+    });
+
     test('default policy permits 32 authenticated chats and rejects the 33rd',
         () {
       final admission = SocketAdmissionController();

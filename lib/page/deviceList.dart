@@ -36,6 +36,7 @@ import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
@@ -2292,17 +2293,33 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context,
-        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+    unawaited(_handleSocketError(message));
+  }
+
+  Future<void> _handleSocketError(String message) async {
+    if (!mounted) {
+      _isAlert = false;
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    try {
+      final confirmed = await confirmAction(
+        context,
+        title: l10n?.timeoutTitle ?? "是否释放连接",
         description: message,
-        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-        cancelButtonText: AppLocalizations.of(context)?.keepConnect ?? "取消",
-        onConfirm: () {
-      WsSvrManager().close();
+        confirmButtonText: l10n?.disconnect ?? "断开",
+        cancelButtonText: l10n?.keepConnect ?? "取消",
+      );
+      if (confirmed) {
+        await WsSvrManager().close();
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppToast(error.toString());
+      }
+    } finally {
       _isAlert = false;
-    }, onCancel: () {
-      _isAlert = false;
-    });
+    }
   }
 
   @override

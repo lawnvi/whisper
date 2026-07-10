@@ -1,7 +1,88 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/audio/audio_share_manager.dart';
+import 'package:whisper/remote_input/remote_input_manager.dart';
+import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/svrmanager.dart';
+
+final class _BlockingAudioManager extends AudioShareManager {
+  final Completer<void> closeStarted = Completer<void>();
+  final Completer<void> releaseClose = Completer<void>();
+  bool _shouldBlock = true;
+  bool _armed = false;
+
+  void arm() => _armed = true;
+
+  @override
+  Future<void> closeChannels() async {
+    if (_armed && _shouldBlock) {
+      _shouldBlock = false;
+      closeStarted.complete();
+      await releaseClose.future;
+    }
+    await super.closeChannels();
+  }
+}
+
+Future<void> _waitFor(bool Function() predicate) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('condition was not met before timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
+Future<int> _upgradeStatus(Uri uri) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(uri.replace(scheme: 'http'));
+    request.headers
+      ..set(HttpHeaders.connectionHeader, 'Upgrade')
+      ..set(HttpHeaders.upgradeHeader, 'websocket')
+      ..set('Sec-WebSocket-Version', '13')
+      ..set('Sec-WebSocket-Key', 'dGhlIHNhbXBsZSBub25jZQ==');
+    final response = await request.close();
+    await response.drain<void>();
+    return response.statusCode;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<int> _rawUpgradeStatus({
+  required int port,
+  required String path,
+  required String origin,
+}) async {
+  final socket = await Socket.connect('127.0.0.1', port);
+  try {
+    socket.write(
+      'GET $path HTTP/1.1\r\n'
+      'Host: 127.0.0.1:$port\r\n'
+      'Connection: Upgrade\r\n'
+      'Upgrade: websocket\r\n'
+      'Sec-WebSocket-Version: 13\r\n'
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n'
+      'Origin: $origin\r\n'
+      '\r\n',
+    );
+    await socket.flush();
+    final statusLine = await utf8.decoder
+        .bind(socket)
+        .transform(const LineSplitter())
+        .first
+        .timeout(const Duration(seconds: 2));
+    return int.parse(statusLine.split(' ')[1]);
+  } finally {
+    socket.destroy();
+  }
+}
 
 void main() {
   final manager = WsSvrManager();
@@ -54,6 +135,22 @@ void main() {
         }))
             .statusCode,
         403,
+      );
+      expect(
+        await _rawUpgradeStatus(
+          port: started.port,
+          path: path,
+          origin: '',
+        ),
+        HttpStatus.forbidden,
+      );
+      expect(
+        await _rawUpgradeStatus(
+          port: started.port,
+          path: path,
+          origin: '   ',
+        ),
+        HttpStatus.forbidden,
       );
     }
     expect(
@@ -109,5 +206,398 @@ void main() {
       return socket;
     }).catchError((Object error) => error);
     expect(connection, isA<SocketException>());
+  });
+
+  test('audio and input share rate limits without consuming chat slots',
+      () async {
+    final admission = SocketAdmissionController(
+      maxChatConnections: 1,
+      maxPreAuthConnections: 1,
+      maxPreAuthConnectionsPerIp: 1,
+      maxUpgradeAttemptsPerMinutePerIp: 2,
+    );
+    final audioManager = AudioShareManager();
+    final inputManager = RemoteInputManager();
+    final isolated = WsSvrManager.forTesting(
+      admission: admission,
+      audioManager: audioManager,
+      remoteInputManager: inputManager,
+    );
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final started = await isolated.startServer(0);
+    final audio = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/audio',
+    );
+    final input = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/input',
+    );
+    addTearDown(audio.close);
+    addTearDown(input.close);
+    await _waitFor(() =>
+        audioManager.activeChannelCount == 1 &&
+        inputManager.activeChannelCount == 1);
+
+    expect(admission.chatConnectionCount, 0);
+    expect(admission.preAuthConnectionCount, 0);
+    final rejected = await _upgradeStatus(
+      Uri.parse('ws://127.0.0.1:${started.port}/chat'),
+    );
+    expect(rejected, HttpStatus.tooManyRequests);
+  });
+
+  test('manager-only media channels are awaited by graceful close', () async {
+    final audioManager = AudioShareManager();
+    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final started = await isolated.startServer(0);
+    final audio = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/audio',
+    );
+    final remoteClosed = audio.listen((_) {}).asFuture<void>();
+    await _waitFor(() => audioManager.activeChannelCount == 1);
+
+    await isolated.closeGracefully();
+
+    expect(audioManager.activeChannelCount, 0);
+    await remoteClosed.timeout(const Duration(seconds: 2));
+    expect(isolated.started, isTrue);
+  });
+
+  test('audio and input routes close oversized binary packets', () async {
+    expect(AudioShareManager.maxChannelMessageBytes, 256 * 1024);
+    expect(RemoteInputManager.maxChannelMessageBytes, 64 * 1024);
+    final audioManager = AudioShareManager();
+    final inputManager = RemoteInputManager();
+    final isolated = WsSvrManager.forTesting(
+      audioManager: audioManager,
+      remoteInputManager: inputManager,
+    );
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final started = await isolated.startServer(0);
+
+    final audio = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/audio',
+    );
+    final audioClosed = audio.listen((_) {}).asFuture<void>();
+    audio.add(
+      List<int>.filled(AudioShareManager.maxChannelMessageBytes + 1, 0),
+    );
+    await audioClosed.timeout(const Duration(seconds: 2));
+    await _waitFor(() => audioManager.activeChannelCount == 0);
+
+    final input = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/input',
+    );
+    final inputClosed = input.listen((_) {}).asFuture<void>();
+    input.add(
+      List<int>.filled(RemoteInputManager.maxChannelMessageBytes + 1, 0),
+    );
+    await inputClosed.timeout(const Duration(seconds: 2));
+    await _waitFor(() => inputManager.activeChannelCount == 0);
+  });
+
+  test('start followed immediately by close finishes stopped', () async {
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+
+    final starting = isolated.startServer(0);
+    final closing = isolated.closeGracefully(closeServer: true);
+    final started = await starting;
+    await closing;
+
+    expect(started.isSuccess, isTrue);
+    expect(isolated.started, isFalse);
+    final connection = await Socket.connect('127.0.0.1', started.port)
+        .then<Object>((socket) async {
+      await socket.close();
+      return socket;
+    }).catchError((Object error) => error);
+    expect(connection, isA<SocketException>());
+  });
+
+  test('close followed immediately by start finishes started', () async {
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    await isolated.startServer(0);
+
+    final closing = isolated.closeGracefully(closeServer: true);
+    final restarting = isolated.startServer(0);
+    await closing;
+    final restarted = await restarting;
+
+    expect(restarted.isSuccess, isTrue);
+    expect(isolated.started, isTrue);
+    final socket = await Socket.connect('127.0.0.1', restarted.port);
+    await socket.close();
+  });
+
+  test('server stops accepting before existing channel cleanup completes',
+      () async {
+    final audioManager = _BlockingAudioManager();
+    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    addTearDown(() {
+      if (!audioManager.releaseClose.isCompleted) {
+        audioManager.releaseClose.complete();
+      }
+      return isolated.closeGracefully(
+        closeServer: true,
+        forceServerClose: true,
+      );
+    });
+    final started = await isolated.startServer(0);
+    audioManager.arm();
+
+    final closing = isolated.closeGracefully(closeServer: true);
+    await audioManager.closeStarted.future;
+    final connection = await Socket.connect('127.0.0.1', started.port)
+        .then<Object>((socket) async {
+      await socket.close();
+      return socket;
+    }).catchError((Object error) => error);
+
+    expect(connection, isA<SocketException>());
+    audioManager.releaseClose.complete();
+    await closing;
+  });
+
+  test('retained server rejects upgrades while closing and reopens after',
+      () async {
+    final audioManager = _BlockingAudioManager();
+    final isolated = WsSvrManager.forTesting(audioManager: audioManager);
+    addTearDown(() {
+      if (!audioManager.releaseClose.isCompleted) {
+        audioManager.releaseClose.complete();
+      }
+      return isolated.closeGracefully(
+        closeServer: true,
+        forceServerClose: true,
+      );
+    });
+    final started = await isolated.startServer(0);
+    final existing = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/audio',
+    );
+    final existingClosed = existing.listen((_) {}).asFuture<void>();
+    await _waitFor(() => audioManager.activeChannelCount == 1);
+    audioManager.arm();
+
+    final closing = isolated.closeGracefully();
+    await audioManager.closeStarted.future;
+    final rejected = await _upgradeStatus(
+      Uri.parse('ws://127.0.0.1:${started.port}/audio'),
+    );
+    expect(rejected, HttpStatus.serviceUnavailable);
+
+    audioManager.releaseClose.complete();
+    await closing;
+    await existingClosed.timeout(const Duration(seconds: 2));
+    final reopened = await WebSocket.connect(
+      'ws://127.0.0.1:${started.port}/audio',
+    );
+    await reopened.close();
+  });
+
+  test('graceful close cancels and awaits an in-flight outgoing handshake',
+      () async {
+    final stalledServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() => stalledServer.close(force: true));
+    final requestReceived = Completer<void>();
+    stalledServer.listen((request) {
+      if (!requestReceived.isCompleted) {
+        requestReceived.complete();
+      }
+    });
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final callbackResults = <bool>[];
+    final callbackMessages = <Object?>[];
+
+    final connecting = isolated.connectToServer(
+      '127.0.0.1',
+      stalledServer.port,
+      (bool ok, Object? message) {
+        callbackResults.add(ok);
+        callbackMessages.add(message);
+      },
+    );
+    await requestReceived.future;
+    final closing = isolated.closeGracefully();
+
+    await Future.wait(<Future<void>>[connecting, closing])
+        .timeout(const Duration(seconds: 2));
+    expect(callbackResults, <bool>[false]);
+    expect(
+        callbackMessages, <Object?>[WsSvrManager.connectionCancelledMessage]);
+  });
+
+  test('failed listener bind leaves outgoing connector available', () async {
+    final occupied = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+    addTearDown(() => occupied.close(force: true));
+    final peerServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => peerServer.close(force: true));
+    final upgraded = Completer<void>();
+    peerServer.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      upgraded.complete();
+      await socket.close();
+    });
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final failedStart = await isolated.startServer(occupied.port);
+    expect(failedStart.isSuccess, isFalse);
+    final callbackResults = <bool>[];
+
+    final connecting = isolated.connectToServer(
+      '127.0.0.1',
+      peerServer.port,
+      (bool ok, Object? message) => callbackResults.add(ok),
+    );
+
+    await upgraded.future.timeout(const Duration(seconds: 2));
+    await connecting.timeout(const Duration(seconds: 2));
+    expect(callbackResults, <bool>[false]);
+  });
+
+  test('outgoing callback errors do not break shutdown tracking', () async {
+    final stalledServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() => stalledServer.close(force: true));
+    final requestReceived = Completer<void>();
+    stalledServer.listen((request) {
+      if (!requestReceived.isCompleted) {
+        requestReceived.complete();
+      }
+    });
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    var callbackCount = 0;
+    final connecting = isolated.connectToServer(
+      '127.0.0.1',
+      stalledServer.port,
+      (bool ok, Object? message) {
+        callbackCount += 1;
+        throw StateError('callback failed');
+      },
+    );
+    await requestReceived.future;
+
+    final closing = isolated.closeGracefully();
+
+    await Future.wait(<Future<void>>[connecting, closing])
+        .timeout(const Duration(seconds: 2));
+    expect(callbackCount, 1);
+  });
+
+  test('outgoing websocket handshake does not follow redirects', () async {
+    final targetServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => targetServer.close(force: true));
+    var targetReached = false;
+    targetServer.listen((request) async {
+      targetReached = true;
+      final socket = await WebSocketTransformer.upgrade(request);
+      await socket.close();
+    });
+    final redirectServer =
+        await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => redirectServer.close(force: true));
+    redirectServer.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set(
+          HttpHeaders.locationHeader,
+          'http://127.0.0.1:${targetServer.port}/chat',
+        );
+      await request.response.close();
+    });
+    final isolated = WsSvrManager.forTesting();
+    addTearDown(() => isolated.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+
+    await isolated
+        .connectToServer(
+          '127.0.0.1',
+          redirectServer.port,
+          (bool ok, Object? message) {},
+        )
+        .timeout(const Duration(seconds: 2));
+
+    expect(targetReached, isFalse);
+  });
+
+  test('outgoing websocket rejects unsolicited negotiation headers', () async {
+    for (final header in const <MapEntry<String, String>>[
+      MapEntry<String, String>('Sec-WebSocket-Protocol', 'unexpected'),
+      MapEntry<String, String>(
+        'Sec-WebSocket-Extensions',
+        'permessage-deflate',
+      ),
+    ]) {
+      final peerServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final responseSent = Completer<void>();
+      peerServer.listen((request) async {
+        final key = request.headers.value('Sec-WebSocket-Key')!;
+        request.response
+          ..statusCode = HttpStatus.switchingProtocols
+          ..headers.set(HttpHeaders.connectionHeader, 'Upgrade')
+          ..headers.set(HttpHeaders.upgradeHeader, 'websocket')
+          ..headers.set('Sec-WebSocket-Accept', WebSocketChannel.signKey(key))
+          ..headers.set(header.key, header.value);
+        final socket = await request.response.detachSocket();
+        responseSent.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        socket.destroy();
+      });
+      final isolated = WsSvrManager.forTesting();
+      final callbackMessage = Completer<Object?>();
+
+      final connecting = isolated.connectToServer(
+        '127.0.0.1',
+        peerServer.port,
+        (bool ok, Object? message) => callbackMessage.complete(message),
+      );
+      await responseSent.future.timeout(const Duration(seconds: 2));
+      await connecting.timeout(const Duration(seconds: 2));
+
+      expect(
+        (await callbackMessage.future).toString(),
+        contains('unexpected_websocket_negotiation'),
+      );
+      await isolated.closeGracefully(
+        closeServer: true,
+        forceServerClose: true,
+      );
+      await peerServer.close(force: true);
+    }
   });
 }

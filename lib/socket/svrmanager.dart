@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
-import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/io.dart';
@@ -95,6 +94,39 @@ final class ServerStartResult {
   final Object? error;
 }
 
+final class _PendingOutgoingConnection {
+  _PendingOutgoingConnection() : httpClient = HttpClient();
+
+  final HttpClient httpClient;
+  WebSocketChannel? channel;
+  HttpClientRequest? request;
+  Future<void>? completion;
+  Future<void>? _sinkCloseFuture;
+  bool isCancelled = false;
+  bool isReady = false;
+
+  Future<void> cancel() {
+    isCancelled = true;
+    request?.abort(const _OutgoingConnectionCancelled());
+    httpClient.close(force: true);
+    final sink = channel?.sink;
+    if (sink != null) {
+      _sinkCloseFuture ??= sink.close().then<void>((_) {});
+      unawaited(
+        _sinkCloseFuture!.catchError((Object _, StackTrace __) {}),
+      );
+    }
+    if (isReady && _sinkCloseFuture != null) {
+      return _sinkCloseFuture!;
+    }
+    return Future<void>.value();
+  }
+}
+
+final class _OutgoingConnectionCancelled implements Exception {
+  const _OutgoingConnectionCancelled();
+}
+
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
@@ -105,11 +137,30 @@ class WsSvrManager {
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
   static const String duplicateAuthRequestMessage = '连接请求正在等待对方确认';
+  static const String connectionClosingMessage = 'connection_closing';
+  static const String connectionCancelledMessage = 'connection_cancelled';
   // 创建一个私有的静态实例变量
   static final WsSvrManager _singleton = WsSvrManager._internal();
 
   // 私有构造函数，阻止类被直接实例化
-  WsSvrManager._internal();
+  WsSvrManager._internal({
+    SocketAdmissionController? admission,
+    AudioShareManager? audioManager,
+    RemoteInputManager? remoteInputManager,
+  })  : _admission = admission ?? SocketAdmissionController(),
+        _audioManager = audioManager ?? AudioShareManager.shared,
+        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared;
+
+  @visibleForTesting
+  WsSvrManager.forTesting({
+    SocketAdmissionController? admission,
+    AudioShareManager? audioManager,
+    RemoteInputManager? remoteInputManager,
+  }) : this._internal(
+          admission: admission,
+          audioManager: audioManager,
+          remoteInputManager: remoteInputManager,
+        );
 
   // 工厂构造函数，返回单例实例
   factory WsSvrManager() {
@@ -146,8 +197,12 @@ class WsSvrManager {
   final Map<WebSocketSink, Future<void>> _socketCleanups =
       <WebSocketSink, Future<void>>{};
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
-  final SocketAdmissionController _admission = SocketAdmissionController();
-  final Lock _serverLifecycleLock = Lock();
+  final Set<_PendingOutgoingConnection> _pendingOutgoingConnections =
+      <_PendingOutgoingConnection>{};
+  final SocketAdmissionController _admission;
+  final AudioShareManager _audioManager;
+  final RemoteInputManager _remoteInputManager;
+  Future<void> _serverLifecycleTail = Future<void>.value();
   final Set<ISocketEvent> _listeners = <ISocketEvent>{};
   ISocketEvent? _primaryEvent;
   bool started = false;
@@ -156,6 +211,9 @@ class WsSvrManager {
   Future<void>? _closeFuture;
   bool _closeServerRequested = false;
   bool _forceServerCloseRequested = false;
+  bool _closeOperationQueued = false;
+  bool _acceptingUpgrades = false;
+  bool _acceptingOutgoingConnections = true;
   HttpServer? _serverClosing;
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
@@ -518,9 +576,11 @@ class WsSvrManager {
     late final Future<void> cleanup;
     cleanup = () async {
       try {
-        await _sessionsBySink[sink]?.stopReceivingAndDrain(
-          cancelSubscription: false,
-        );
+        await _sessionsBySink[sink]?.stopReceivingAndDrain();
+      } catch (error, stackTrace) {
+        logger.i('停止 websocket 接收失败: $error\n$stackTrace');
+      }
+      try {
         await _handlePeerSocketDone(sink);
       } catch (error, stackTrace) {
         logger.i('处理 websocket 关闭失败: $error\n$stackTrace');
@@ -733,17 +793,13 @@ class WsSvrManager {
     int port, [
     void Function(bool ok, Object? message)? callback,
   ]) {
-    final pendingClose = _closeFuture;
-    final operation = () async {
-      await pendingClose;
-      return _serverLifecycleLock.synchronized(() async {
-        await _performCloseGracefully(
-          closeServer: true,
-          forceServerClose: false,
-        );
-        return _startServer(port);
-      });
-    }();
+    final operation = _enqueueServerLifecycle(() async {
+      await _performCloseGracefully(
+        closeServer: true,
+        forceServerClose: false,
+      );
+      return _startServer(port);
+    });
     if (callback != null) {
       final reporting = operation.then<void>(
         (result) {
@@ -757,16 +813,53 @@ class WsSvrManager {
     return operation;
   }
 
+  Future<T> _enqueueServerLifecycle<T>(Future<T> Function() operation) {
+    final result = Completer<T>();
+    final previous = _serverLifecycleTail;
+    _serverLifecycleTail = () async {
+      try {
+        await previous;
+      } catch (_) {
+        // Lifecycle failures are returned to their caller, not the queue tail.
+      }
+      try {
+        result.complete(await operation());
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    }();
+    return result.future;
+  }
+
   Future<ServerStartResult> _startServer(int port) async {
-    AudioShareManager.shared.onGroupPacket = (packet) {
+    _audioManager.onGroupPacket = (packet) {
       unawaited(AudioGroupCoordinator.shared.handlePacket(packet));
     };
-    final audioHandler = AudioShareManager.shared.webSocketHandler(
-      pingInterval: _serverPingInterval,
-    );
-    final remoteInputHandler = RemoteInputManager.shared.webSocketHandler(
-      pingInterval: _serverPingInterval,
-    );
+
+    Future<shelf.Response> handleMediaUpgrade(
+      shelf.Request request,
+      shelf.Handler Function(void Function() onAttachmentComplete)
+          createHandler,
+    ) async {
+      final pendingUpgrade = Completer<void>();
+      _pendingSocketAttachments.add(pendingUpgrade.future);
+      final mediaHandler = createHandler(
+        () => _completePendingSocketAttachment(pendingUpgrade),
+      );
+      late final shelf.Response response;
+      try {
+        response = await mediaHandler(request);
+      } on shelf.HijackException {
+        rethrow;
+      } catch (_) {
+        _completePendingSocketAttachment(pendingUpgrade);
+        rethrow;
+      }
+      if (response.statusCode != HttpStatus.switchingProtocols) {
+        _completePendingSocketAttachment(pendingUpgrade);
+      }
+      return response;
+    }
 
     FutureOr<shelf.Response> handler(shelf.Request request) async {
       final path = request.url.path;
@@ -777,22 +870,46 @@ class WsSvrManager {
         return shelf.Response.badRequest(body: 'Bad Request');
       }
       final origin = request.headers['origin'];
-      if (origin != null && origin.trim().isNotEmpty) {
+      if (origin != null) {
         return shelf.Response.forbidden('Forbidden');
       }
-      if (path == 'audio') {
-        return audioHandler(request);
+      if (!_acceptingUpgrades) {
+        return shelf.Response(
+          HttpStatus.serviceUnavailable,
+          body: 'Service Unavailable',
+        );
       }
-      if (path == 'input') {
-        return remoteInputHandler(request);
-      }
-
       final connectionInfo =
           request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
-      final admission = _admission.tryOpen(
-        connectionInfo?.remoteAddress ?? request.requestedUri.host,
+      final remoteAddress =
+          connectionInfo?.remoteAddress ?? request.requestedUri.host;
+      final rateRejection = _admission.tryUpgrade(
+        remoteAddress,
         DateTime.now(),
       );
+      if (rateRejection != null) {
+        return shelf.Response(429, body: 'Too Many Requests');
+      }
+      if (path == 'audio') {
+        return handleMediaUpgrade(
+          request,
+          (onAttachmentComplete) => _audioManager.webSocketHandler(
+            pingInterval: _serverPingInterval,
+            onAttachmentComplete: onAttachmentComplete,
+          ),
+        );
+      }
+      if (path == 'input') {
+        return handleMediaUpgrade(
+          request,
+          (onAttachmentComplete) => _remoteInputManager.webSocketHandler(
+            pingInterval: _serverPingInterval,
+            onAttachmentComplete: onAttachmentComplete,
+          ),
+        );
+      }
+
+      final admission = _admission.tryOpenChat(remoteAddress);
       final lease = admission.lease;
       if (lease == null) {
         return shelf.Response(429, body: 'Too Many Requests');
@@ -836,12 +953,16 @@ class WsSvrManager {
       );
       _server = server;
       started = true;
+      _acceptingUpgrades = !_closeOperationQueued;
+      _acceptingOutgoingConnections = !_closeOperationQueued;
       final host = '${server.address.host}:${server.port}';
       logger.i('Serving at ws://$host');
       return ServerStartResult.success(server.port);
     } catch (error, stackTrace) {
       logger.i("服务启动失败: $error\n$stackTrace");
       started = false;
+      _acceptingUpgrades = false;
+      _acceptingOutgoingConnections = !_closeOperationQueued;
       return ServerStartResult.failure(error);
     }
   }
@@ -874,27 +995,79 @@ class WsSvrManager {
     var callback, {
     String? peerId,
     String? intendedPublicKeyHash,
+  }) {
+    final attempt = _PendingOutgoingConnection();
+    final completer = Completer<void>();
+    final completion = completer.future;
+    attempt.completion = completion;
+    _pendingOutgoingConnections.add(attempt);
+    final operation = _connectToServer(
+      host,
+      port,
+      callback,
+      attempt: attempt,
+      peerId: peerId,
+      intendedPublicKeyHash: intendedPublicKeyHash,
+    );
+    unawaited(operation.then<void>((_) {
+      _pendingOutgoingConnections.remove(attempt);
+      attempt.httpClient.close();
+      completer.complete();
+    }, onError: (Object error, StackTrace stackTrace) {
+      _pendingOutgoingConnections.remove(attempt);
+      attempt.httpClient.close(force: true);
+      completer.completeError(error, stackTrace);
+    }));
+    return completion;
+  }
+
+  Future<void> _connectToServer(
+    String host,
+    int port,
+    var callback, {
+    required _PendingOutgoingConnection attempt,
+    String? peerId,
+    String? intendedPublicKeyHash,
   }) async {
+    var callbackReported = false;
+    void report(bool ok, Object? message) {
+      if (callbackReported) {
+        return;
+      }
+      callbackReported = true;
+      try {
+        callback(ok, message);
+      } catch (error, stackTrace) {
+        logger.i('连接结果回调失败: ${error.runtimeType}\n$stackTrace');
+      }
+    }
+
+    if (!_acceptingOutgoingConnections) {
+      report(false, connectionClosingMessage);
+      return;
+    }
     final authRequestKey = _authRequestKey(
       peerId: peerId,
       host: host,
       port: port,
     );
     if (!_authRequestGate.tryClaimOutgoing(authRequestKey)) {
-      callback(false, duplicateAuthRequestMessage);
+      report(false, duplicateAuthRequestMessage);
       return;
     }
     WebSocketChannel? channel;
     try {
       final wsUrl = Uri(scheme: 'ws', host: host, port: port, path: 'chat');
       channel = IOWebSocketChannel(
-        WebSocket.connect(
-          wsUrl.toString(),
-          compression: CompressionOptions.compressionOff,
-        ),
+        _connectOutgoingWebSocket(wsUrl, attempt),
       );
+      attempt.channel = channel;
       final connectedChannel = channel;
       await connectedChannel.ready;
+      attempt.isReady = true;
+      if (attempt.isCancelled) {
+        throw const _OutgoingConnectionCancelled();
+      }
       final channelSink = connectedChannel.sink;
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
       _endpointsBySink[channelSink] = (host: host, port: port);
@@ -906,6 +1079,9 @@ class WsSvrManager {
         intendedPeerId: peerId ?? '',
         intendedPublicKeyHash: intendedPublicKeyHash ?? '',
       );
+      if (attempt.isCancelled) {
+        throw const _OutgoingConnectionCancelled();
+      }
       _attachSocketTransport(
         connectedChannel,
         session,
@@ -916,23 +1092,112 @@ class WsSvrManager {
       _releaseOutgoingAuthForSink(channelSink);
       if (!authResult.allow) {
         await channelSink.close();
-        callback(false, authResult.message);
+        report(false, authResult.message);
         return;
+      }
+      if (attempt.isCancelled) {
+        throw const _OutgoingConnectionCancelled();
       }
       final timer = Timer.periodic(_clientHeartbeatInterval, (timer) {
         unawaited(_heartBeat(sink: channelSink));
       });
       _clientTimersBySink[channelSink] = timer;
       _clientTimer = timer;
-      callback(true, "");
-    } on Exception catch (e1) {
+      report(true, "");
+    } catch (error) {
+      final wasCancelled = attempt.isCancelled ||
+          error is _OutgoingConnectionCancelled ||
+          (error is WebSocketChannelException &&
+              error.inner is _OutgoingConnectionCancelled);
+      try {
+        await attempt.cancel();
+      } catch (_) {
+        // The connection failure remains the primary error reported to UI.
+      }
       if (channel != null) {
         _completeSocketAuth(channel.sink, false, 'connection_failed');
         _releaseOutgoingAuthForSink(channel.sink);
+        await _handlePeerSocketDoneQueued(channel.sink);
       } else {
         _authRequestGate.releaseOutgoing(authRequestKey);
       }
-      callback(false, "连接失败：$e1");
+      final message = wasCancelled ? connectionCancelledMessage : '连接失败：$error';
+      report(false, message);
+    }
+  }
+
+  Future<WebSocket> _connectOutgoingWebSocket(
+    Uri webSocketUri,
+    _PendingOutgoingConnection attempt,
+  ) async {
+    final requestUri = webSocketUri.replace(
+      scheme: webSocketUri.scheme == 'wss' ? 'https' : 'http',
+    );
+    final random = math.Random.secure();
+    final nonce = base64.encode(
+      List<int>.generate(16, (_) => random.nextInt(256)),
+    );
+    final request = await attempt.httpClient.openUrl('GET', requestUri);
+    attempt.request = request;
+    request.followRedirects = false;
+    if (attempt.isCancelled) {
+      request.abort(const _OutgoingConnectionCancelled());
+      throw const _OutgoingConnectionCancelled();
+    }
+    request.headers
+      ..set(HttpHeaders.connectionHeader, 'Upgrade')
+      ..set(HttpHeaders.upgradeHeader, 'websocket')
+      ..set('Sec-WebSocket-Key', nonce)
+      ..set(HttpHeaders.cacheControlHeader, 'no-cache')
+      ..set('Sec-WebSocket-Version', '13');
+    final response = await request.close();
+    attempt.request = null;
+    if (attempt.isCancelled) {
+      final socket = await response.detachSocket();
+      socket.destroy();
+      throw const _OutgoingConnectionCancelled();
+    }
+    final connectionTokens =
+        (response.headers[HttpHeaders.connectionHeader] ?? const <String>[])
+            .expand((value) => value.split(','))
+            .map((value) => value.trim().toLowerCase());
+    final upgrade = response.headers.value(HttpHeaders.upgradeHeader);
+    final accept = response.headers.value('Sec-WebSocket-Accept');
+    Future<Never> rejectResponse(String reason) async {
+      final socket = await response.detachSocket();
+      socket.destroy();
+      throw WebSocketException(reason, response.statusCode);
+    }
+
+    if (response.statusCode != HttpStatus.switchingProtocols ||
+        !connectionTokens.contains('upgrade') ||
+        upgrade?.trim().toLowerCase() != 'websocket' ||
+        accept?.trim() != WebSocketChannel.signKey(nonce)) {
+      return rejectResponse(
+        "Connection to '$webSocketUri' was not upgraded to websocket",
+      );
+    }
+    if (response.headers.value('Sec-WebSocket-Protocol') != null ||
+        response.headers.value('Sec-WebSocket-Extensions') != null) {
+      return rejectResponse('unexpected_websocket_negotiation');
+    }
+    final socket = await response.detachSocket();
+    if (attempt.isCancelled) {
+      socket.destroy();
+      throw const _OutgoingConnectionCancelled();
+    }
+    return WebSocket.fromUpgradedSocket(
+      socket,
+      serverSide: false,
+    );
+  }
+
+  void _cancelPendingOutgoingConnections() {
+    for (final attempt in _pendingOutgoingConnections.toList(growable: false)) {
+      _ignoreFuture(
+        attempt.cancel(),
+        context: 'cancel pending outgoing websocket',
+      );
     }
   }
 
@@ -940,6 +1205,9 @@ class WsSvrManager {
     bool closeServer = false,
     bool forceServerClose = false,
   }) {
+    _acceptingUpgrades = false;
+    _acceptingOutgoingConnections = false;
+    _cancelPendingOutgoingConnections();
     _closeServerRequested =
         _closeServerRequested || closeServer || forceServerClose;
     _forceServerCloseRequested = _forceServerCloseRequested || forceServerClose;
@@ -954,22 +1222,27 @@ class WsSvrManager {
       }
       return existing;
     }
-    final operation = _serverLifecycleLock.synchronized(() async {
-      while (true) {
-        final requestedServerClose = _closeServerRequested;
-        final requestedForceClose = _forceServerCloseRequested;
-        await _performCloseGracefully(
-          closeServer: requestedServerClose,
-          forceServerClose: requestedForceClose,
-        );
-        final needsServerClose =
-            _closeServerRequested && !requestedServerClose && _server != null;
-        final needsForceClose = _forceServerCloseRequested &&
-            !requestedForceClose &&
-            (_server != null || _serverClosing != null);
-        if (!needsServerClose && !needsForceClose) {
-          return;
+    _closeOperationQueued = true;
+    final operation = _enqueueServerLifecycle(() async {
+      try {
+        while (true) {
+          final requestedServerClose = _closeServerRequested;
+          final requestedForceClose = _forceServerCloseRequested;
+          await _performCloseGracefully(
+            closeServer: requestedServerClose,
+            forceServerClose: requestedForceClose,
+          );
+          final needsServerClose =
+              _closeServerRequested && !requestedServerClose && _server != null;
+          final needsForceClose = _forceServerCloseRequested &&
+              !requestedForceClose &&
+              (_server != null || _serverClosing != null);
+          if (!needsServerClose && !needsForceClose) {
+            return;
+          }
         }
+      } finally {
+        _closeOperationQueued = false;
       }
     });
     late final Future<void> tracked;
@@ -988,16 +1261,42 @@ class WsSvrManager {
     required bool closeServer,
     required bool forceServerClose,
   }) async {
+    _acceptingUpgrades = false;
+    _acceptingOutgoingConnections = false;
+    _cancelPendingOutgoingConnections();
+    HttpServer? closingServer;
+    Future<void>? serverCloseFuture;
+    if (closeServer) {
+      started = false;
+      closingServer = _server;
+      _server = null;
+      _serverClosing = closingServer;
+      serverCloseFuture = closingServer
+          ?.close(force: forceServerClose)
+          .then<void>((_) {})
+          .whenComplete(() {
+        if (identical(_serverClosing, closingServer)) {
+          _serverClosing = null;
+        }
+      });
+    }
     final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
       hasSelectedSink: _sink != null,
       hasClientTimer: _clientTimer != null,
-      hasPendingSessions:
-          _sessionsBySink.isNotEmpty || _pendingSocketAttachments.isNotEmpty,
+      hasPendingSessions: _sessionsBySink.isNotEmpty ||
+          _pendingSocketAttachments.isNotEmpty ||
+          _pendingOutgoingConnections.isNotEmpty ||
+          _audioManager.hasActiveChannels ||
+          _remoteInputManager.hasActiveChannels,
       hasPendingResults: _authResultsBySink.isNotEmpty,
       hasPeerConnections: _peerConnections.connectedPeerIds.isNotEmpty,
       hasReceiver: receiver.isNotEmpty,
     );
     if (!hadActiveConnection && !closeServer) {
+      if (_server != null && !_closeServerRequested) {
+        _acceptingUpgrades = true;
+      }
+      _acceptingOutgoingConnections = true;
       return;
     }
 
@@ -1047,7 +1346,7 @@ class WsSvrManager {
         await Future.wait(<Future<void>>[
           sink.close(),
           if (_sessionsBySink[sink] case final session?)
-            session.stopReceivingAndDrain(cancelSubscription: false),
+            session.stopReceivingAndDrain(),
         ]);
       } catch (error, stackTrace) {
         logger.i('关闭待认证 websocket 失败: $error\n$stackTrace');
@@ -1057,6 +1356,23 @@ class WsSvrManager {
     final activeCleanups = _socketCleanups.values.toList(growable: false);
     if (activeCleanups.isNotEmpty) {
       await Future.wait(activeCleanups);
+    }
+    while (_pendingOutgoingConnections.isNotEmpty) {
+      final attempts = _pendingOutgoingConnections.toList(growable: false);
+      await Future.wait(attempts.map((attempt) async {
+        try {
+          await attempt.cancel();
+        } catch (_) {
+          // The tracked connection operation performs authoritative cleanup.
+        }
+        try {
+          await attempt.completion;
+        } catch (error, stackTrace) {
+          logger.i(
+            '等待出站 websocket 清理失败: ${error.runtimeType}\n$stackTrace',
+          );
+        }
+      }));
     }
     final authenticatedSessions = authenticatedEntries
         .map((entry) => entry.value)
@@ -1076,8 +1392,8 @@ class WsSvrManager {
       );
       await RemoteInputCoordinator.shared.stopLocal();
     }
-    await AudioShareManager.shared.closeChannels();
-    await RemoteInputManager.shared.closeChannels();
+    await _audioManager.closeChannels();
+    await _remoteInputManager.closeChannels();
     for (final session in authenticatedSessions) {
       await session.drainOutbound();
     }
@@ -1095,17 +1411,12 @@ class WsSvrManager {
     _peerIdsBySink.clear();
     _remoteProfilesByPeerId.clear();
     if (closeServer) {
-      started = false;
-      final server = _server;
-      _server = null;
-      _serverClosing = server;
-      try {
-        await server?.close(force: forceServerClose);
-      } finally {
-        if (identical(_serverClosing, server)) {
-          _serverClosing = null;
-        }
+      await serverCloseFuture;
+    } else if (!_closeServerRequested) {
+      if (_server != null) {
+        _acceptingUpgrades = true;
       }
+      _acceptingOutgoingConnections = true;
     }
     _remoteProfile = null;
     _completeRemoteProfileRefreshWaiters();

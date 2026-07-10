@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart' as shelf;
@@ -7,6 +6,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 
 typedef RemoteInputPacketCallback = void Function(
     RemoteInputPacketFrame packet);
@@ -50,6 +50,8 @@ class RemoteInputSession {
 }
 
 class RemoteInputManager {
+  static const int maxChannelMessageBytes = 64 * 1024;
+
   RemoteInputManager({
     this.onPacket,
     Uuid? uuid,
@@ -61,11 +63,19 @@ class RemoteInputManager {
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
-  final Set<StreamSubscription<dynamic>> _channelSubscriptions =
-      <StreamSubscription<dynamic>>{};
-  final Set<WebSocketSink> _channelSinks = <WebSocketSink>{};
+  final Set<BoundedBinaryWebSocketSession> _channels =
+      <BoundedBinaryWebSocketSession>{};
+  final Map<BoundedBinaryWebSocketSession, Future<void>> _channelCloses =
+      <BoundedBinaryWebSocketSession, Future<void>>{};
+  Future<void>? _closeChannelsFuture;
+  bool _closingChannels = false;
+  Object? _channelCloseError;
+  StackTrace? _channelCloseStackTrace;
 
   RemoteInputSession? session(String sessionId) => _sessions[sessionId];
+  int get activeChannelCount => _channels.length;
+  bool get hasActiveChannels => _channels.isNotEmpty;
+  bool get isClosingChannels => _closingChannels;
 
   RemoteInputControlMessage createOffer({
     required String sourcePeerId,
@@ -225,54 +235,91 @@ class RemoteInputManager {
   }
 
   void attachChannel(WebSocketChannel channel) {
-    late final StreamSubscription<dynamic> subscription;
-    subscription = channel.stream.listen((message) {
-      final bytes = _messageBytes(message);
-      if (bytes != null) {
-        handlePacketBytes(bytes);
-      }
-    }, onDone: () {
-      _channelSubscriptions.remove(subscription);
-      _channelSinks.remove(channel.sink);
-    });
-    _channelSubscriptions.add(subscription);
-    _channelSinks.add(channel.sink);
+    late final BoundedBinaryWebSocketSession binding;
+    binding = BoundedBinaryWebSocketSession(
+      channel: channel,
+      maxMessageBytes: maxChannelMessageBytes,
+      onMessage: handlePacketBytes,
+      onClosed: () => _channels.remove(binding),
+    );
+    _channels.add(binding);
+    if (_closingChannels) {
+      unawaited(_trackChannelClose(binding));
+    }
   }
 
-  Future<void> closeChannels() async {
-    final subscriptions = _channelSubscriptions.toList(growable: false);
-    final sinks = _channelSinks.toList(growable: false);
-    _channelSubscriptions.clear();
-    _channelSinks.clear();
-    for (final subscription in subscriptions) {
-      await subscription.cancel();
+  Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {
+    final existing = _channelCloses[channel];
+    if (existing != null) {
+      return existing;
     }
-    for (final sink in sinks) {
-      await sink.close();
+    late final Future<void> tracked;
+    tracked = channel.close().then<void>((_) {},
+        onError: (Object error, StackTrace stackTrace) {
+      _channelCloseError ??= error;
+      _channelCloseStackTrace ??= stackTrace;
+    }).whenComplete(() {
+      if (identical(_channelCloses[channel], tracked)) {
+        _channelCloses.remove(channel);
+      }
+    });
+    _channelCloses[channel] = tracked;
+    return tracked;
+  }
+
+  Future<void> closeChannels() {
+    final existing = _closeChannelsFuture;
+    if (existing != null) {
+      return existing;
     }
+    _closingChannels = true;
+    final completer = Completer<void>();
+    final closeFuture = completer.future;
+    _closeChannelsFuture = closeFuture;
+    _channelCloseError = null;
+    _channelCloseStackTrace = null;
+    unawaited(() async {
+      try {
+        while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
+          for (final channel in _channels.toList(growable: false)) {
+            _trackChannelClose(channel);
+          }
+          final closes = _channelCloses.values.toList(growable: false);
+          if (closes.isNotEmpty) {
+            await Future.wait(closes);
+          }
+        }
+        if (_channelCloseError case final error?) {
+          Error.throwWithStackTrace(error, _channelCloseStackTrace!);
+        }
+      } finally {
+        _closingChannels = false;
+        if (identical(_closeChannelsFuture, closeFuture)) {
+          _closeChannelsFuture = null;
+        }
+      }
+    }()
+        .then<void>((_) {
+      completer.complete();
+    }, onError: (Object error, StackTrace stackTrace) {
+      completer.completeError(error, stackTrace);
+    }));
+    return closeFuture;
   }
 
   shelf.Handler webSocketHandler({
     Duration pingInterval = const Duration(seconds: 15),
+    void Function()? onAttachmentComplete,
   }) {
     return shelf_ws.webSocketHandler(
       (WebSocketChannel channel) {
-        attachChannel(channel);
+        try {
+          attachChannel(channel);
+        } finally {
+          onAttachmentComplete?.call();
+        }
       },
       pingInterval: pingInterval,
     );
-  }
-
-  Uint8List? _messageBytes(dynamic message) {
-    if (message is Uint8List) {
-      return message;
-    }
-    if (message is List<int>) {
-      return Uint8List.fromList(message);
-    }
-    if (message is String) {
-      return Uint8List.fromList(utf8.encode(message));
-    }
-    return null;
   }
 }

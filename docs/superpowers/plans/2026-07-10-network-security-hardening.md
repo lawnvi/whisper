@@ -182,6 +182,14 @@ git add lib/socket/socket_admission.dart lib/socket/bounded_receive_queue.dart l
 git commit -m "fix(socket): 限制升级请求并隔离连接接收队列"
 ```
 
+**Review repair evidence (2026-07-10):**
+
+- [x] 升级频率限制与 chat 容量租约分离；`/chat`、`/audio`、`/input` 共用 30/IP/minute，媒体连接不占 chat/pre-auth 配额。
+- [x] audio/input 使用独立的 bounded binary session；限制单包大小，并覆盖 pause/resume、跨 socket 隔离、非法输入 fail-close 与并发关闭。
+- [x] start/close 改为调用即入队的 FIFO 生命周期；close 先停止 listener 和新连接，再等待 chat/media、pending attachment、outbound handshake、subscription、queue 与 sink。
+- [x] 出站 WebSocket 握手可取消且拒绝 redirect、未请求的 protocol/extension；设备页确认关闭流程 await、捕获错误并检查 mounted。
+- [x] `flutter analyze` 无问题；Task 3 focused 115 项、audio/input 103 项及设备页 source test 全部通过。
+
 ---
 
 ### Task 4: 业务消息与 transfer 来源绑定

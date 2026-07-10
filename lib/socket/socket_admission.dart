@@ -92,15 +92,21 @@ final class SocketAdmissionController {
   int get trackedUpgradeAddressCount => _upgradeAttemptsByIp.length;
 
   SocketAdmissionResult tryOpen(Object address, DateTime now) {
+    final rateRejection = tryUpgrade(address, now);
+    if (rateRejection != null) {
+      return SocketAdmissionResult.rejected(rateRejection);
+    }
+    return tryOpenChat(address);
+  }
+
+  SocketAdmissionRejection? tryUpgrade(Object address, DateTime now) {
     final normalized = normalizeSocketAddress(address);
     final nowMillis = now.toUtc().millisecondsSinceEpoch;
     final cutoff = nowMillis - upgradeWindow.inMilliseconds;
     _cleanupExpiredUpgradeAttempts(nowMillis, cutoff);
     if (!_upgradeAttemptsByIp.containsKey(normalized) &&
         _upgradeAttemptsByIp.length >= maxTrackedUpgradeAddresses) {
-      return SocketAdmissionResult.rejected(
-        SocketAdmissionRejection.upgradeRateLimit,
-      );
+      return SocketAdmissionRejection.upgradeRateLimit;
     }
     final attempts = _upgradeAttemptsByIp.putIfAbsent(
       normalized,
@@ -108,12 +114,14 @@ final class SocketAdmissionController {
     );
     attempts.removeWhere((timestamp) => timestamp <= cutoff);
     if (attempts.length >= maxUpgradeAttemptsPerMinutePerIp) {
-      return SocketAdmissionResult.rejected(
-        SocketAdmissionRejection.upgradeRateLimit,
-      );
+      return SocketAdmissionRejection.upgradeRateLimit;
     }
     attempts.add(nowMillis);
+    return null;
+  }
 
+  SocketAdmissionResult tryOpenChat(Object address) {
+    final normalized = normalizeSocketAddress(address);
     if (_chatConnectionCount >= maxChatConnections) {
       return SocketAdmissionResult.rejected(
         SocketAdmissionRejection.chatCapacity,

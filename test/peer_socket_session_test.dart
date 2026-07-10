@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -259,6 +260,110 @@ void main() {
       await pair.server.decodeIncoming(writes.last as Uint8List),
       orderedEquals(payload),
     );
+  });
+
+  test('concurrent receive stops share and await subscription cancellation',
+      () async {
+    final session = await _session(
+      role: PeerSocketRole.server,
+      generation: 1,
+      seedStart: 32,
+    );
+    addTearDown(session.close);
+    final cancelStarted = Completer<void>();
+    final releaseCancel = Completer<void>();
+    var cancelCount = 0;
+    final incoming = StreamController<Object>(onCancel: () async {
+      cancelCount += 1;
+      cancelStarted.complete();
+      await releaseCancel.future;
+    });
+    addTearDown(incoming.close);
+    final subscription = incoming.stream.listen((_) {});
+    session.attachTransport(
+      subscription: subscription,
+      addStream: (_) async {},
+      onOverflow: () => fail('queue overflowed'),
+    );
+
+    final firstStop = session.stopReceivingAndDrain();
+    await cancelStarted.future;
+    var secondCompleted = false;
+    final secondStop = session.stopReceivingAndDrain().whenComplete(() {
+      secondCompleted = true;
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    expect(cancelCount, 1);
+    expect(secondCompleted, isFalse);
+
+    releaseCancel.complete();
+    await Future.wait(<Future<void>>[firstStop, secondStop]);
+    expect(cancelCount, 1);
+  });
+
+  test('real websocket shutdown drains an action and outbound frame', () async {
+    final pair = await _authenticatedPair();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    final httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => httpServer.close(force: true));
+    final accepted = Completer<WebSocket>();
+    httpServer.listen((request) async {
+      accepted.complete(await WebSocketTransformer.upgrade(request));
+    });
+    final client = await WebSocket.connect(
+      'ws://127.0.0.1:${httpServer.port}/chat',
+    );
+    final server = await accepted.future;
+    addTearDown(client.close);
+    addTearDown(server.close);
+    final actionStarted = Completer<void>();
+    final releaseAction = Completer<void>();
+    final outboundReceived = Completer<List<int>>();
+    server.listen((message) {
+      if (!outboundReceived.isCompleted && message is List<int>) {
+        outboundReceived.complete(message);
+      }
+    });
+    late final StreamSubscription<dynamic> subscription;
+    subscription = client.listen((message) {
+      final bytes = message as List<int>;
+      unawaited(pair.client.enqueueIncoming(bytes.length, () async {
+        actionStarted.complete();
+        await releaseAction.future;
+      }));
+    });
+    pair.client.attachTransport(
+      subscription: subscription,
+      addStream: client.addStream,
+      onOverflow: () => fail('queue overflowed'),
+    );
+
+    server.add(Uint8List.fromList(<int>[1]));
+    await actionStarted.future;
+    final outgoing = pair.client.enqueueOutgoing(
+      Uint8List.fromList(<int>[9, 8, 7]),
+      byteLength: 3,
+    );
+    var shutdownCompleted = false;
+    final shutdown = () async {
+      await pair.client.stopReceivingAndDrain();
+      await pair.client.drainOutbound();
+      shutdownCompleted = true;
+    }();
+
+    expect(await outgoing, isTrue);
+    expect(
+      await outboundReceived.future.timeout(const Duration(seconds: 2)),
+      orderedEquals(<int>[9, 8, 7]),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(shutdownCompleted, isFalse);
+
+    releaseAction.complete();
+    await shutdown;
+    expect(shutdownCompleted, isTrue);
   });
 
   test('persistence failure closes an approved session before registration',
