@@ -56,9 +56,18 @@ void main() {
       'Future<bool> sendFileTo(String peerId, String path)',
       'Future<bool> sendAndroidContentUriTo(',
     );
+    final persistAndOffer = methodBody(
+      source,
+      'Future<bool> _persistAndOfferOutgoingTransfer(',
+      '/// fileOffer/fileData/fileReady/fileAck/fileComplete/fileCancel/fileError',
+    );
 
     expect(sendFileTo, contains('_supportsFileTransferV3For(peerId)'));
-    expect(sendFileTo, contains('_sendFileTransferV3OfferTo(peerId, message)'));
+    expect(sendFileTo, contains('_persistAndOfferOutgoingTransfer('));
+    expect(
+      persistAndOffer,
+      contains('_sendFileTransferV3OfferTo(peerId, message)'),
+    );
     expect(sendFileTo,
         isNot(contains('_sendMessageData(message, peerId: peerId)')));
     expect(sendFileTo, isNot(contains('protocolVersion: 2')));

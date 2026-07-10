@@ -11,6 +11,9 @@ void main() {
         size: 64 * 1024 * 1024,
         errorCode: '',
         errorMessage: '',
+        resumeProofSha256:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        resumeProofLength: fileTransferV3ResumeProofWindowSize,
       );
 
       final decoded = FileTransferV3Control.fromJson(ready.toJson());
@@ -20,6 +23,8 @@ void main() {
       expect(decoded.transferId, 'transfer-1');
       expect(decoded.durableOffset, 16 * 1024 * 1024);
       expect(decoded.size, 64 * 1024 * 1024);
+      expect(decoded.resumeProofLength, fileTransferV3ResumeProofWindowSize);
+      expect(decoded.resumeProofSha256, ready.resumeProofSha256);
     });
 
     test('rejects unknown actions and malformed numeric fields', () {
@@ -31,6 +36,8 @@ void main() {
         'size': 1,
         'errorCode': '',
         'errorMessage': '',
+        'resumeProofSha256': '',
+        'resumeProofLength': 0,
       };
 
       expect(
@@ -45,6 +52,54 @@ void main() {
         ),
         throwsFormatException,
       );
+    });
+
+    test('validates ready proof shape against the durable offset', () {
+      Map<String, Object?> ready({
+        required int offset,
+        required String proof,
+        required int proofLength,
+      }) =>
+          <String, Object?>{
+            'protocolVersion': 3,
+            'action': 'ready',
+            'transferId': 'transfer-1',
+            'durableOffset': offset,
+            'size': 2 * 1024 * 1024,
+            'errorCode': '',
+            'errorMessage': '',
+            'resumeProofSha256': proof,
+            'resumeProofLength': proofLength,
+          };
+
+      expect(
+        FileTransferV3Control.fromJson(
+          ready(offset: 0, proof: '', proofLength: 0),
+        ).resumeProofLength,
+        0,
+      );
+      expect(
+        FileTransferV3Control.fromJson(
+          ready(
+            offset: 128,
+            proof:
+                '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+            proofLength: 128,
+          ),
+        ).resumeProofLength,
+        128,
+      );
+      for (final invalid in <Map<String, Object?>>[
+        ready(offset: 0, proof: '0' * 64, proofLength: 0),
+        ready(offset: 128, proof: '', proofLength: 0),
+        ready(offset: 128, proof: '0' * 64, proofLength: 127),
+        ready(offset: 128, proof: 'A' * 64, proofLength: 128),
+      ]) {
+        expect(
+          () => FileTransferV3Control.fromJson(invalid),
+          throwsFormatException,
+        );
+      }
     });
   });
 

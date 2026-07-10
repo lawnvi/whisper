@@ -37,7 +37,7 @@ void main() {
     expect(await source.readRange(4, 5), <int>[4, 5, 6, 7, 8]);
   });
 
-  test('resumeProofHashForTransferSource hashes previous full chunk', () async {
+  test('resume proof hashes the final min(1 MiB, offset) bytes', () async {
     final bytes = Uint8List.fromList(List<int>.generate(12, (index) => index));
     final picker = _FakeAndroidDocumentPicker(bytes);
     final source = AndroidContentUriTransferSource(
@@ -49,10 +49,35 @@ void main() {
     final proof = await resumeProofHashForTransferSource(
       source,
       resumeOffset: 8,
-      chunkSize: 4,
     );
 
-    expect(proof, bytesChecksum(bytes.sublist(4, 8), algorithm: 'sha256'));
+    expect(proof, bytesChecksum(bytes.sublist(0, 8), algorithm: 'sha256'));
+  });
+
+  test('checksum rejects a content uri that ends before its declared size',
+      () async {
+    final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
+    final source = AndroidContentUriTransferSource(
+      uri: 'content://documents/truncated',
+      expectedSize: 8,
+      picker: _FakeAndroidDocumentPicker(bytes),
+    );
+
+    await expectLater(
+      checksumForTransferSource(source, algorithm: 'sha256'),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
+  test('missing provider size stays unknown instead of becoming zero', () {
+    final metadata = AndroidDocumentFile.fromMap(
+      <Object?, Object?>{
+        'uri': 'content://documents/unknown',
+        'name': 'unknown.bin',
+      },
+    );
+
+    expect(metadata.size, -1);
   });
 }
 

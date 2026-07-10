@@ -517,8 +517,10 @@ void main() {
         File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     expect(transferSource, contains('await _ackMessage(message);'));
     expect(
-      RegExp(r'insertMessageReturning\(').allMatches(transferSource),
-      hasLength(3),
+      RegExp(r'\.admitFileTransfer\(').allMatches(transferSource),
+      hasLength(2),
     );
+    expect(transferSource, contains('.admitTransferForExistingMessage('));
+    expect(transferSource, isNot(contains('insertMessageReturning(')));
   });
 }

@@ -442,7 +442,7 @@ void main() {
       );
       expect(await _hasUniqueUidIndex(database), isTrue);
       expect(await _hasMessageUuidIndex(database), isTrue);
-      expect(database.schemaVersion, 7);
+      expect(database.schemaVersion, 8);
     } finally {
       await database.close();
     }

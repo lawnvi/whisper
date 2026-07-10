@@ -34,7 +34,7 @@ final class _DelayedUpdateDatabase extends LocalDatabase {
   }
 
   @override
-  Future<void> updateFileTransfer(
+  Future<int> updateFileTransfer(
     String transferId, {
     Value<FileTransferState> state = const Value.absent(),
     Value<int> committedBytes = const Value.absent(),
@@ -49,7 +49,7 @@ final class _DelayedUpdateDatabase extends LocalDatabase {
       updateStarted.complete();
       await resumeUpdate.future;
     }
-    await super.updateFileTransfer(
+    return super.updateFileTransfer(
       transferId,
       state: state,
       committedBytes: committedBytes,
@@ -95,16 +95,16 @@ FileTransferEngine _engine(
 }
 
 String _validMetadata() => jsonEncode(<String, Object>{
-      'checksumAlgorithm': 'none',
-      'checksumValue': '',
-      'chunkSize': fileTransferV3WindowSize,
-      'protocolVersion': fileTransferV3ProtocolVersion,
+      ...const FileTransferV3Metadata(
+        checksumValue:
+            'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      ).toJson(),
     });
 
 MessageData _offer({
   String sender = 'peer-a',
   String uuid = _transferId,
-  int size = 0,
+  int size = 8,
   String? content,
 }) {
   return MessageData(
@@ -164,16 +164,19 @@ FileTransferData _transfer({
   return FileTransferData(
     transferId: _transferId,
     messageUuid: _transferId,
+    messageRowId: 0,
     peerUid: peerUid,
     direction: direction,
     state: FileTransferState.transferring,
     finalPath: '/tmp/final.bin',
     tempPath: '/tmp/part.bin',
     size: 8,
-    checksumAlgorithm: 'none',
-    checksumValue: '',
-    chunkSize: 8,
+    checksumAlgorithm: 'sha256',
+    checksumValue:
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    chunkSize: fileTransferV3FramePayloadSize,
     committedBytes: 0,
+    resumeProofResetCount: 0,
     lastError: '',
     createdAt: 1,
     updatedAt: 1,
@@ -401,31 +404,22 @@ void main() {
     expect((sends, acknowledgements), (0, 0));
   });
 
-  test('malformed file metadata is rejected before claiming its UUID',
+  test('malformed file metadata returns an error before claiming its UUID',
       () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     var sends = 0;
     final engine = _engine(database, onSend: () => sends++);
 
-    await expectLater(
-      engine.handleFrame(
-        'peer-a',
-        _offerFrame(_offer(content: '{}')),
-        requireCurrent: () {},
-      ),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.malformedFrame,
-        ),
-      ),
+    await engine.handleFrame(
+      'peer-a',
+      _offerFrame(_offer(content: '{}')),
+      requireCurrent: () {},
     );
 
     expect(await database.fetchMessageByUuid(_transferId), isNull);
     expect(await database.fetchFileTransfer(_transferId), isNull);
-    expect(sends, 0);
+    expect(sends, 1);
   });
 
   test('stale generation inside control handling is normalized before mutation',
@@ -610,7 +604,7 @@ void main() {
       action: FileTransferV3Action.cancel,
       transferId: _transferId,
       durableOffset: 0,
-      size: 0,
+      size: 8,
       errorCode: '',
       errorMessage: '',
     );

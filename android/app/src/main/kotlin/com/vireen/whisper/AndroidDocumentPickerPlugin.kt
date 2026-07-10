@@ -215,7 +215,7 @@ class AndroidDocumentPickerPlugin :
 
     private fun metadataFor(uri: Uri): Map<String, Any?> {
         var name = uri.lastPathSegment ?: "document"
-        var size = 0L
+        var size: Long? = null
         var lastModified = 0L
         try {
             context.contentResolver.query(

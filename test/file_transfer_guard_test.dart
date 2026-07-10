@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/file.dart';
 import 'dart:io';
@@ -20,16 +22,19 @@ FileTransferData _incomingTransfer({
   return FileTransferData(
     transferId: _transferId,
     messageUuid: _transferId,
+    messageRowId: 0,
     peerUid: peerUid,
     direction: FileTransferDirection.incoming,
     state: FileTransferState.transferring,
     finalPath: '/tmp/final.bin',
     tempPath: '/tmp/part.bin',
     size: size,
-    checksumAlgorithm: 'none',
-    checksumValue: '',
-    chunkSize: 8,
+    checksumAlgorithm: 'sha256',
+    checksumValue:
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    chunkSize: fileTransferV3FramePayloadSize,
     committedBytes: committedBytes,
+    resumeProofResetCount: 0,
     lastError: '',
     createdAt: 1,
     updatedAt: 1,
@@ -65,7 +70,12 @@ MessageData _fileOfferMessage({
     clipboard: false,
     size: size,
     type: type,
-    content: '{}',
+    content: jsonEncode(
+      const FileTransferV3Metadata(
+        checksumValue:
+            'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      ).toJson(),
+    ),
     message: '',
     timestamp: 1,
     uuid: uuid,

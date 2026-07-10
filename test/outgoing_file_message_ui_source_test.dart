@@ -22,19 +22,28 @@ void main() {
     final sendAndroidUri = methodBody(
       source,
       'Future<bool> sendAndroidContentUriTo(',
-      'Future<void> handleFrame(',
+      'Future<bool> _persistAndOfferOutgoingTransfer(',
     );
 
     for (final body in [sendFileTo, sendAndroidUri]) {
-      final insertIndex = body.indexOf('await _database().insertMessage');
-      final dispatchIndex = body.indexOf('_dispatchOutgoingMessage(message)');
-      final sendIndex =
-          body.indexOf('_sendFileTransferV3OfferTo(peerId, message)');
-
-      expect(insertIndex, isNonNegative);
-      expect(dispatchIndex, greaterThan(insertIndex));
-      expect(sendIndex, greaterThan(dispatchIndex));
+      expect(body, contains('_persistAndOfferOutgoingTransfer('));
     }
+
+    final persistAndOffer = methodBody(
+      source,
+      'Future<bool> _persistAndOfferOutgoingTransfer(',
+      'Future<void> handleFrame(',
+    );
+    final admissionIndex =
+        persistAndOffer.indexOf('await _database().admitFileTransfer(');
+    final dispatchIndex =
+        persistAndOffer.indexOf('_dispatchOutgoingMessage(message)');
+    final sendIndex =
+        persistAndOffer.indexOf('_sendFileTransferV3OfferTo(peerId, message)');
+
+    expect(admissionIndex, isNonNegative);
+    expect(dispatchIndex, greaterThan(admissionIndex));
+    expect(sendIndex, greaterThan(dispatchIndex));
   });
 
   test('conversation updates an existing message with the same uuid', () {

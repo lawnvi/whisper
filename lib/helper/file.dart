@@ -359,39 +359,6 @@ Future<Directory> downloadDir() async {
   return dir;
 }
 
-Future<Directory> transferTempDir() async {
-  final base = await downloadDir();
-  final dir = Directory('${base.path}/.whisper/transfers');
-  if (!dir.existsSync()) {
-    dir.createSync(recursive: true);
-  }
-  return dir;
-}
-
-Future<String> allocateFinalDownloadPath(String fileName) async {
-  final appDir = await downloadDir();
-  var candidate = File('${appDir.path}/$fileName');
-  var idx = 1;
-  final arr = fileName.split(".");
-  var before = fileName;
-  var dot = "";
-  if (arr.length > 1) {
-    dot = arr[arr.length - 1];
-    before = fileName.substring(0, fileName.length - 1 - dot.length);
-  }
-  while (candidate.existsSync()) {
-    candidate =
-        File('${appDir.path}/$before-$idx${dot.isEmpty ? '' : '.$dot'}');
-    idx++;
-  }
-  return candidate.path;
-}
-
-Future<String> transferTempFilePath(String transferId) async {
-  final dir = await transferTempDir();
-  return '${dir.path}/$transferId.part';
-}
-
 Future<void> writeResumableChunk(
   File file, {
   required int offset,

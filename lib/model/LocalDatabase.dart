@@ -30,6 +30,29 @@ extension DeviceIdentityPinResultX on DeviceIdentityPinResult {
       this == DeviceIdentityPinResult.replaced;
 }
 
+const int maxNonterminalTransfersPerPeer = 32;
+const int maxNonterminalTransfersGlobal = 128;
+
+enum FileTransferAdmission {
+  admitted,
+  existing,
+  peerLimit,
+  globalLimit,
+  missing,
+}
+
+final class FileTransferAdmissionResult {
+  const FileTransferAdmissionResult({
+    required this.decision,
+    this.message,
+    this.transfer,
+  });
+
+  final FileTransferAdmission decision;
+  final MessageData? message;
+  final FileTransferData? transfer;
+}
+
 @DriftDatabase(tables: [Device, Message, FileTransfer, RemoteInputLayout])
 class LocalDatabase extends _$LocalDatabase {
   static final LocalDatabase _singleton = LocalDatabase._internal();
@@ -45,13 +68,14 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
           await m.createAll();
           await _ensureMessageUuidIndex();
+          await _ensureFileTransferMessageRowIndexes();
         },
         onUpgrade: (Migrator m, int from, int to) async {
           if (from < 2) {
@@ -69,12 +93,142 @@ class LocalDatabase extends _$LocalDatabase {
           if (from < 7) {
             await _ensureMessageUuidIndex();
           }
+          if (from < 8) {
+            await _migrateFileTransferHardeningSchema(m);
+          }
         },
         beforeOpen: (_) async {
           await _repairRemoteInputLayoutColumns();
           await _ensureMessageUuidIndex();
+          await _ensureFileTransferMessageRowIndexes();
         },
       );
+
+  Future<void> _migrateFileTransferHardeningSchema(Migrator migrator) async {
+    final columns =
+        await customSelect('PRAGMA table_info(file_transfer)').get();
+    if (columns.isEmpty) {
+      await migrator.createTable(fileTransfer);
+      await _ensureFileTransferMessageRowIndexes();
+      return;
+    }
+    final names = columns.map((row) => row.read<String>('name')).toSet();
+    if (!names.contains('message_row_id')) {
+      await migrator.addColumn(fileTransfer, fileTransfer.messageRowId);
+    }
+    if (!names.contains('resume_proof_reset_count')) {
+      await migrator.addColumn(
+        fileTransfer,
+        fileTransfer.resumeProofResetCount,
+      );
+    }
+    await _backfillUncontestedFileTransferMessageRows();
+    await customStatement('''
+      UPDATE file_transfer
+      SET state = '${FileTransferState.failed.name}',
+          last_error = 'message_association_unresolved'
+      WHERE message_row_id = 0
+        AND state NOT IN (
+          '${FileTransferState.completed.name}',
+          '${FileTransferState.failed.name}',
+          '${FileTransferState.canceled.name}'
+        )
+    ''');
+    await _ensureFileTransferMessageRowIndexes();
+  }
+
+  Future<void> _backfillUncontestedFileTransferMessageRows() async {
+    final rows = await customSelect('''
+      SELECT file_transfer.transfer_id AS transfer_id,
+             message.id AS message_id
+      FROM file_transfer
+      JOIN message
+        ON message.uuid = file_transfer.message_uuid
+       AND message.type = ${MessageEnum.File.index}
+       AND message.size = file_transfer.size
+       AND (
+         (file_transfer.direction = '${FileTransferDirection.incoming.name}'
+           AND message.sender = file_transfer.peer_uid)
+         OR
+         (file_transfer.direction = '${FileTransferDirection.outgoing.name}'
+           AND message.receiver = file_transfer.peer_uid)
+       )
+      WHERE file_transfer.message_row_id = 0
+        AND file_transfer.transfer_id = file_transfer.message_uuid
+    ''').get();
+    final candidatesByTransfer = <String, Set<int>>{};
+    final transfersByCandidate = <int, Set<String>>{};
+    for (final row in rows) {
+      final transferId = row.read<String>('transfer_id');
+      final messageId = row.read<int>('message_id');
+      candidatesByTransfer
+          .putIfAbsent(transferId, () => <int>{})
+          .add(messageId);
+      transfersByCandidate
+          .putIfAbsent(messageId, () => <String>{})
+          .add(transferId);
+    }
+    for (final entry in candidatesByTransfer.entries) {
+      if (entry.value.length != 1) continue;
+      final messageId = entry.value.single;
+      if (transfersByCandidate[messageId]?.length != 1) continue;
+      await customUpdate(
+        'UPDATE file_transfer SET message_row_id = ? '
+        'WHERE transfer_id = ? AND message_row_id = 0',
+        variables: <Variable<Object>>[
+          Variable<int>(messageId),
+          Variable<String>(entry.key),
+        ],
+        updates: <TableInfo<Table, Object?>>{fileTransfer},
+      );
+    }
+  }
+
+  Future<void> _ensureFileTransferMessageRowIndexes() async {
+    final columns =
+        await customSelect('PRAGMA table_info(file_transfer)').get();
+    if (!columns.any((row) => row.data['name'] == 'message_row_id')) {
+      return;
+    }
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS file_transfer_message_row_lookup '
+      'ON file_transfer(message_row_id)',
+    );
+    await customStatement('''
+      UPDATE file_transfer
+      SET state = '${FileTransferState.failed.name}',
+          last_error = 'message_association_conflict'
+      WHERE message_row_id > 0
+        AND state NOT IN (
+          '${FileTransferState.completed.name}',
+          '${FileTransferState.failed.name}',
+          '${FileTransferState.canceled.name}'
+        )
+        AND message_row_id IN (
+          SELECT message_row_id
+          FROM file_transfer
+          WHERE message_row_id > 0
+          GROUP BY message_row_id
+          HAVING COUNT(*) > 1
+        )
+    ''');
+    await customStatement('''
+      UPDATE file_transfer
+      SET message_row_id = 0
+      WHERE message_row_id > 0
+        AND message_row_id IN (
+          SELECT message_row_id
+          FROM file_transfer
+          WHERE message_row_id > 0
+          GROUP BY message_row_id
+          HAVING COUNT(*) > 1
+        )
+    ''');
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS file_transfer_message_row_unique '
+      'ON file_transfer(message_row_id) WHERE message_row_id > 0',
+    );
+  }
 
   Future<void> _ensureMessageUuidIndex() async {
     final columns = await customSelect('PRAGMA table_info(message)').get();
@@ -553,31 +707,358 @@ class LocalDatabase extends _$LocalDatabase {
     }
     final selfUid = await localUUID();
     final targetIds = List<String>.from(uids);
-    if (targetIds.contains(selfUid)) {
-      targetIds.remove(selfUid);
-      await (delete(message)
-            ..where((t) => t.sender.equals(selfUid) & t.receiver.equals("")))
-          .go();
-      await (delete(device)..where((t) => t.uid.equals(selfUid))).go();
-    }
-    if (targetIds.isNotEmpty) {
-      await (delete(message)
-            ..where(
-                (t) => t.sender.isIn(targetIds) | t.receiver.isIn(targetIds)))
-          .go();
-    }
-    await (delete(device)..where((t) => t.uid.isIn(targetIds))).go();
+    await transaction(() async {
+      final removedMessageIds = <int>{};
+      if (targetIds.remove(selfUid)) {
+        final selfMessages = await (select(message)
+              ..where(
+                (item) =>
+                    item.sender.equals(selfUid) & item.receiver.equals(''),
+              ))
+            .get();
+        removedMessageIds.addAll(selfMessages.map((item) => item.id));
+        await (delete(message)
+              ..where(
+                (item) =>
+                    item.sender.equals(selfUid) & item.receiver.equals(''),
+              ))
+            .go();
+        await (delete(device)..where((item) => item.uid.equals(selfUid))).go();
+      }
+      if (targetIds.isNotEmpty) {
+        final peerMessages = await (select(message)
+              ..where(
+                (item) =>
+                    item.sender.isIn(targetIds) | item.receiver.isIn(targetIds),
+              ))
+            .get();
+        removedMessageIds.addAll(peerMessages.map((item) => item.id));
+      }
+      await _detachFileTransfersForMessages(
+        removedMessageIds,
+        reason: 'device_cleared',
+      );
+      if (targetIds.isNotEmpty) {
+        await (delete(message)
+              ..where(
+                (item) =>
+                    item.sender.isIn(targetIds) | item.receiver.isIn(targetIds),
+              ))
+            .go();
+      }
+      await (delete(device)..where((item) => item.uid.isIn(targetIds))).go();
+    });
   }
 
   Future<void> deleteMessage(int id) async {
-    await (delete(message)..where((t) => t.id.equals(id))).go();
+    await transaction(() async {
+      await _detachFileTransfersForMessages(
+        <int>{id},
+        reason: 'message_deleted',
+      );
+      await (delete(message)..where((item) => item.id.equals(id))).go();
+    });
+  }
+
+  Future<void> _detachFileTransfersForMessages(
+    Set<int> messageIds, {
+    required String reason,
+  }) async {
+    if (messageIds.isEmpty) return;
+    final ids = messageIds.toList(growable: false);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await (update(fileTransfer)
+          ..where(
+            (item) =>
+                item.messageRowId.isIn(ids) &
+                item.state.isNotIn(const <String>[
+                  'completed',
+                  'failed',
+                  'canceled',
+                ]),
+          ))
+        .write(
+      FileTransferCompanion(
+        messageRowId: const Value(0),
+        state: const Value(FileTransferState.canceled),
+        lastError: Value(reason),
+        updatedAt: Value(now),
+      ),
+    );
+    await (update(fileTransfer)..where((item) => item.messageRowId.isIn(ids)))
+        .write(
+      FileTransferCompanion(
+        messageRowId: const Value(0),
+        updatedAt: Value(now),
+      ),
+    );
   }
 
   Future<void> upsertFileTransfer(FileTransferData data) {
     return into(fileTransfer).insertOnConflictUpdate(data);
   }
 
-  Future<void> updateFileTransfer(
+  Future<FileTransferAdmissionResult> admitFileTransfer({
+    required MessageData message,
+    required FileTransferData transfer,
+    bool acked = false,
+    int perPeerLimit = maxNonterminalTransfersPerPeer,
+    int globalLimit = maxNonterminalTransfersGlobal,
+  }) {
+    return transaction(() async {
+      if (!_isExactFileTransferMessageAssociation(transfer, message)) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
+      final existingTransfer = await fetchFileTransfer(transfer.transferId);
+      if (existingTransfer != null) {
+        final associated =
+            await fetchAssociatedFileTransferMessage(existingTransfer);
+        return FileTransferAdmissionResult(
+          decision: associated == null
+              ? FileTransferAdmission.missing
+              : FileTransferAdmission.existing,
+          message: associated,
+          transfer: existingTransfer,
+        );
+      }
+      if (await _nonterminalTransferCount(peerUid: transfer.peerUid) >=
+          perPeerLimit) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.peerLimit,
+        );
+      }
+      if (await _nonterminalTransferCount() >= globalLimit) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.globalLimit,
+        );
+      }
+      if ((await fetchMessagesByUuid(message.uuid)).isNotEmpty) {
+        throw StateError('message UUID already exists without a transfer');
+      }
+      final persistedMessage =
+          await insertMessageReturning(message, acked: acked);
+      final persistedTransfer = transfer.copyWith(
+        messageRowId: persistedMessage.id,
+      );
+      await upsertFileTransfer(persistedTransfer);
+      return FileTransferAdmissionResult(
+        decision: FileTransferAdmission.admitted,
+        message: persistedMessage,
+        transfer: persistedTransfer,
+      );
+    });
+  }
+
+  Future<FileTransferAdmissionResult> admitTransferForExistingMessage({
+    required MessageData message,
+    required FileTransferData transfer,
+    int perPeerLimit = maxNonterminalTransfersPerPeer,
+    int globalLimit = maxNonterminalTransfersGlobal,
+  }) {
+    return transaction(() async {
+      final existingTransfer = await fetchFileTransfer(transfer.transferId);
+      final existingMessage = await fetchMessageById(message.id);
+      if (existingMessage == null ||
+          !_isExactFileTransferMessageAssociation(
+            transfer,
+            existingMessage,
+          )) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
+      if (existingTransfer != null) {
+        final associated =
+            await fetchAssociatedFileTransferMessage(existingTransfer);
+        return FileTransferAdmissionResult(
+          decision: associated == null
+              ? FileTransferAdmission.missing
+              : FileTransferAdmission.existing,
+          message: associated,
+          transfer: existingTransfer,
+        );
+      }
+      final associatedTransfer = transfer.copyWith(
+        messageRowId: existingMessage.id,
+      );
+      if (await _nonterminalTransferCount(peerUid: transfer.peerUid) >=
+          perPeerLimit) {
+        final failed = associatedTransfer.copyWith(
+          state: FileTransferState.failed,
+          lastError: 'queue_full',
+        );
+        await upsertFileTransfer(failed);
+        return FileTransferAdmissionResult(
+          decision: FileTransferAdmission.peerLimit,
+          message: existingMessage,
+          transfer: failed,
+        );
+      }
+      if (await _nonterminalTransferCount() >= globalLimit) {
+        final failed = associatedTransfer.copyWith(
+          state: FileTransferState.failed,
+          lastError: 'queue_full',
+        );
+        await upsertFileTransfer(failed);
+        return FileTransferAdmissionResult(
+          decision: FileTransferAdmission.globalLimit,
+          message: existingMessage,
+          transfer: failed,
+        );
+      }
+      await upsertFileTransfer(associatedTransfer);
+      return FileTransferAdmissionResult(
+        decision: FileTransferAdmission.admitted,
+        message: existingMessage,
+        transfer: associatedTransfer,
+      );
+    });
+  }
+
+  Future<FileTransferAdmission> reacquireFileTransferCapacity(
+    String transferId, {
+    required FileTransferState nextState,
+    int perPeerLimit = maxNonterminalTransfersPerPeer,
+    int globalLimit = maxNonterminalTransfersGlobal,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null) {
+        return FileTransferAdmission.missing;
+      }
+      if (await fetchAssociatedFileTransferMessage(transfer) == null) {
+        return FileTransferAdmission.missing;
+      }
+      if (!isTerminalFileTransferState(transfer.state)) {
+        return FileTransferAdmission.existing;
+      }
+      if (transfer.state != FileTransferState.failed) {
+        return FileTransferAdmission.missing;
+      }
+      if (await _nonterminalTransferCount(peerUid: transfer.peerUid) >=
+          perPeerLimit) {
+        return FileTransferAdmission.peerLimit;
+      }
+      if (await _nonterminalTransferCount() >= globalLimit) {
+        return FileTransferAdmission.globalLimit;
+      }
+      final affected = await (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.messageRowId.equals(transfer.messageRowId) &
+                  item.state.equalsValue(FileTransferState.failed),
+            ))
+          .write(
+        FileTransferCompanion(
+          state: Value(nextState),
+          lastError: const Value(''),
+          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      return affected == 1
+          ? FileTransferAdmission.admitted
+          : FileTransferAdmission.missing;
+    });
+  }
+
+  Future<FileTransferData?> claimIncomingResumeProofReset(
+    String transferId, {
+    required int expectedOffset,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          transfer.direction != FileTransferDirection.incoming ||
+          isTerminalFileTransferState(transfer.state) ||
+          expectedOffset <= 0 ||
+          transfer.committedBytes != expectedOffset ||
+          transfer.resumeProofResetCount != 0 ||
+          transfer.tempPath.isEmpty) {
+        return null;
+      }
+      if (await fetchAssociatedFileTransferMessage(transfer) == null) {
+        return null;
+      }
+      final affected = await (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.direction.equalsValue(FileTransferDirection.incoming) &
+                  item.committedBytes.equals(expectedOffset) &
+                  item.resumeProofResetCount.equals(0),
+            ))
+          .write(
+        FileTransferCompanion(
+          resumeProofResetCount: const Value(pendingResumeProofResetMarker),
+          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      if (affected != 1) {
+        return null;
+      }
+      return fetchFileTransfer(transferId);
+    });
+  }
+
+  Future<FileTransferData?> completeIncomingResumeProofReset(
+    String transferId, {
+    required int expectedOffset,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          transfer.direction != FileTransferDirection.incoming ||
+          isTerminalFileTransferState(transfer.state) ||
+          expectedOffset <= 0 ||
+          transfer.committedBytes != expectedOffset ||
+          transfer.resumeProofResetCount != pendingResumeProofResetMarker ||
+          transfer.tempPath.isEmpty) {
+        return null;
+      }
+      if (await fetchAssociatedFileTransferMessage(transfer) == null) {
+        return null;
+      }
+      final affected = await (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.direction.equalsValue(FileTransferDirection.incoming) &
+                  item.committedBytes.equals(expectedOffset) &
+                  item.resumeProofResetCount.equals(
+                    pendingResumeProofResetMarker,
+                  ),
+            ))
+          .write(
+        FileTransferCompanion(
+          state: const Value(FileTransferState.negotiating),
+          committedBytes: const Value(0),
+          resumeProofResetCount: const Value(1),
+          lastError: const Value(''),
+          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      if (affected != 1) return null;
+      return fetchFileTransfer(transferId);
+    });
+  }
+
+  Future<int> _nonterminalTransferCount({String? peerUid}) async {
+    final peerClause = peerUid == null ? '' : ' AND peer_uid = ?';
+    final result = await customSelect(
+      'SELECT COUNT(*) AS amount FROM file_transfer '
+      "WHERE state NOT IN ('completed', 'failed', 'canceled')$peerClause",
+      variables: <Variable<Object>>[
+        if (peerUid != null) Variable<String>(peerUid),
+      ],
+      readsFrom: <ResultSetImplementation<Table, Object?>>{fileTransfer},
+    ).getSingle();
+    return result.read<int>('amount');
+  }
+
+  Future<int> updateFileTransfer(
     String transferId, {
     Value<FileTransferState> state = const Value.absent(),
     Value<int> committedBytes = const Value.absent(),
@@ -587,18 +1068,133 @@ class LocalDatabase extends _$LocalDatabase {
     Value<String> checksumValue = const Value.absent(),
     Value<int> updatedAt = const Value.absent(),
   }) {
-    return (update(fileTransfer)..where((t) => t.transferId.equals(transferId)))
-        .write(
-      FileTransferCompanion(
-        state: state,
-        committedBytes: committedBytes,
-        lastError: lastError,
-        finalPath: finalPath,
-        tempPath: tempPath,
-        checksumValue: checksumValue,
-        updatedAt: updatedAt,
-      ),
-    );
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          isTerminalFileTransferState(transfer.state) ||
+          await fetchAssociatedFileTransferMessage(transfer) == null) {
+        return 0;
+      }
+      return (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.messageRowId.equals(transfer.messageRowId) &
+                  item.state.equalsValue(transfer.state) &
+                  item.state.isNotIn(const <String>[
+                    'completed',
+                    'failed',
+                    'canceled',
+                  ]),
+            ))
+          .write(
+        FileTransferCompanion(
+          state: state,
+          committedBytes: committedBytes,
+          lastError: lastError,
+          finalPath: finalPath,
+          tempPath: tempPath,
+          checksumValue: checksumValue,
+          updatedAt: updatedAt,
+        ),
+      );
+    });
+  }
+
+  Future<FileTransferData> completeIncomingFileTransfer({
+    required String transferId,
+    required String finalPath,
+    required int size,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          transfer.direction != FileTransferDirection.incoming ||
+          transfer.state != FileTransferState.verifying ||
+          transfer.messageRowId <= 0 ||
+          transfer.size != size) {
+        throw StateError('invalid incoming transfer completion state');
+      }
+      final associatedMessage =
+          await fetchAssociatedFileTransferMessage(transfer);
+      if (associatedMessage == null) {
+        throw StateError('invalid incoming transfer message association');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final transferUpdates = await (update(fileTransfer)
+            ..where(
+              (item) =>
+                  item.transferId.equals(transferId) &
+                  item.messageRowId.equals(transfer.messageRowId) &
+                  item.direction.equalsValue(FileTransferDirection.incoming) &
+                  item.state.equalsValue(FileTransferState.verifying),
+            ))
+          .write(
+        FileTransferCompanion(
+          state: const Value(FileTransferState.completed),
+          committedBytes: Value(size),
+          finalPath: Value(finalPath),
+          lastError: const Value(''),
+          updatedAt: Value(now),
+        ),
+      );
+      if (transferUpdates != 1) {
+        throw StateError('incoming transfer completion affected no transfer');
+      }
+      final messageUpdates = await (update(message)
+            ..where(
+              (item) =>
+                  item.id.equals(transfer.messageRowId) &
+                  item.uuid.equals(transfer.messageUuid) &
+                  item.type.equalsValue(MessageEnum.File),
+            ))
+          .write(MessageCompanion(path: Value(finalPath)));
+      if (messageUpdates != 1) {
+        throw StateError('incoming transfer completion affected no message');
+      }
+      final completed = await fetchFileTransfer(transferId);
+      if (completed == null) {
+        throw StateError('incoming transfer disappeared during completion');
+      }
+      return completed;
+    });
+  }
+
+  Future<MessageData?> fetchMessageById(int id) {
+    if (id <= 0) {
+      return Future<MessageData?>.value();
+    }
+    return (select(message)..where((item) => item.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  Future<MessageData?> fetchAssociatedFileTransferMessage(
+    FileTransferData transfer,
+  ) async {
+    if (transfer.messageRowId <= 0) {
+      return null;
+    }
+    final associated = await fetchMessageById(transfer.messageRowId);
+    return associated != null &&
+            _isExactFileTransferMessageAssociation(transfer, associated)
+        ? associated
+        : null;
+  }
+
+  bool _isExactFileTransferMessageAssociation(
+    FileTransferData transfer,
+    MessageData message,
+  ) {
+    if (transfer.transferId != message.uuid ||
+        transfer.messageUuid != message.uuid ||
+        message.type != MessageEnum.File ||
+        transfer.size != message.size) {
+      return false;
+    }
+    return switch (transfer.direction) {
+      FileTransferDirection.incoming => message.sender == transfer.peerUid,
+      FileTransferDirection.outgoing => message.receiver == transfer.peerUid,
+    };
   }
 
   Future<FileTransferData?> fetchFileTransfer(String transferId) {

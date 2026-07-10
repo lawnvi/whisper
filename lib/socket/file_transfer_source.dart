@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:whisper/helper/android_document_picker.dart';
 
 import '../helper/file.dart';
+import 'file_transfer_v3.dart';
 
 bool isAndroidContentUri(String value) => value.startsWith('content://');
 
@@ -58,11 +59,19 @@ class AndroidContentUriTransferSource implements FileTransferSource {
 
   @override
   Future<int> length() async {
-    if (expectedSize > 0) {
-      return expectedSize;
-    }
     final metadata = await _picker.metadata(uri);
-    return metadata?.size ?? 0;
+    final size = metadata?.size;
+    if (size == null || size < 0) {
+      throw const FileSystemException(
+        'Transfer source size is unavailable',
+      );
+    }
+    if (size != expectedSize) {
+      throw const FileSystemException(
+        'Transfer source size does not match the declared size',
+      );
+    }
+    return size;
   }
 
   @override
@@ -74,20 +83,29 @@ class AndroidContentUriTransferSource implements FileTransferSource {
 Future<String> checksumForTransferSource(
   FileTransferSource source, {
   required String algorithm,
+  int? expectedLength,
 }) async {
-  if (source is PathFileTransferSource) {
+  if (source is PathFileTransferSource && expectedLength == null) {
     return fileChecksum(source.file, algorithm: algorithm);
   }
 
   final checksum = StreamingChecksum(algorithm: algorithm);
-  final totalLength = await source.length();
+  final actualLength = await source.length();
+  if (expectedLength != null && actualLength != expectedLength) {
+    throw const FileSystemException(
+      'Transfer source size does not match the declared size',
+    );
+  }
+  final totalLength = expectedLength ?? actualLength;
   var offset = 0;
   const readSize = 1024 * 1024;
   while (offset < totalLength) {
     final length = math.min(readSize, totalLength - offset);
     final bytes = await source.readRange(offset, length);
-    if (bytes.isEmpty && length > 0) {
-      break;
+    if (bytes.length != length) {
+      throw const FileSystemException(
+        'Unexpected EOF while hashing transfer source',
+      );
     }
     checksum.add(bytes);
     offset += bytes.length;
@@ -98,26 +116,26 @@ Future<String> checksumForTransferSource(
 Future<String> resumeProofHashForTransferSource(
   FileTransferSource source, {
   required int resumeOffset,
-  required int chunkSize,
 }) async {
-  if (resumeOffset <= 0 || chunkSize <= 0) {
+  if (resumeOffset <= 0) {
     return '';
   }
+  final proofLength =
+      math.min(fileTransferV3ResumeProofWindowSize, resumeOffset);
   final proofEnd = resumeOffset;
-  final proofStart = proofEnd - chunkSize;
-  if (proofStart < 0) {
-    return '';
-  }
+  final proofStart = proofEnd - proofLength;
   if (source is PathFileTransferSource) {
     return resumeProofHash(
       source.file,
       resumeOffset: resumeOffset,
-      chunkSize: chunkSize,
+      chunkSize: proofLength,
     );
   }
-  final bytes = await source.readRange(proofStart, chunkSize);
-  if (bytes.length != chunkSize) {
-    return '';
+  final bytes = await source.readRange(proofStart, proofLength);
+  if (bytes.length != proofLength) {
+    throw const FileSystemException(
+      'Unexpected EOF while hashing resume proof',
+    );
   }
   return bytesChecksum(bytes, algorithm: 'sha256');
 }

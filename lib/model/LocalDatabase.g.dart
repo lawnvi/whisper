@@ -1202,6 +1202,14 @@ class $FileTransferTable extends FileTransfer
   late final GeneratedColumn<String> messageUuid = GeneratedColumn<String>(
       'message_uuid', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _messageRowIdMeta =
+      const VerificationMeta('messageRowId');
+  @override
+  late final GeneratedColumn<int> messageRowId = GeneratedColumn<int>(
+      'message_row_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _peerUidMeta =
       const VerificationMeta('peerUid');
   @override
@@ -1268,6 +1276,14 @@ class $FileTransferTable extends FileTransfer
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _resumeProofResetCountMeta =
+      const VerificationMeta('resumeProofResetCount');
+  @override
+  late final GeneratedColumn<int> resumeProofResetCount = GeneratedColumn<int>(
+      'resume_proof_reset_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _lastErrorMeta =
       const VerificationMeta('lastError');
   @override
@@ -1292,6 +1308,7 @@ class $FileTransferTable extends FileTransfer
   List<GeneratedColumn> get $columns => [
         transferId,
         messageUuid,
+        messageRowId,
         peerUid,
         direction,
         state,
@@ -1302,6 +1319,7 @@ class $FileTransferTable extends FileTransfer
         checksumValue,
         chunkSize,
         committedBytes,
+        resumeProofResetCount,
         lastError,
         createdAt,
         updatedAt
@@ -1331,6 +1349,12 @@ class $FileTransferTable extends FileTransfer
               data['message_uuid']!, _messageUuidMeta));
     } else if (isInserting) {
       context.missing(_messageUuidMeta);
+    }
+    if (data.containsKey('message_row_id')) {
+      context.handle(
+          _messageRowIdMeta,
+          messageRowId.isAcceptableOrUnknown(
+              data['message_row_id']!, _messageRowIdMeta));
     }
     if (data.containsKey('peer_uid')) {
       context.handle(_peerUidMeta,
@@ -1378,6 +1402,12 @@ class $FileTransferTable extends FileTransfer
           committedBytes.isAcceptableOrUnknown(
               data['committed_bytes']!, _committedBytesMeta));
     }
+    if (data.containsKey('resume_proof_reset_count')) {
+      context.handle(
+          _resumeProofResetCountMeta,
+          resumeProofResetCount.isAcceptableOrUnknown(
+              data['resume_proof_reset_count']!, _resumeProofResetCountMeta));
+    }
     if (data.containsKey('last_error')) {
       context.handle(_lastErrorMeta,
           lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
@@ -1407,6 +1437,8 @@ class $FileTransferTable extends FileTransfer
           .read(DriftSqlType.string, data['${effectivePrefix}transfer_id'])!,
       messageUuid: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}message_uuid'])!,
+      messageRowId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}message_row_id'])!,
       peerUid: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}peer_uid'])!,
       direction: $FileTransferTable.$converterdirection.fromSql(attachedDatabase
@@ -1429,6 +1461,8 @@ class $FileTransferTable extends FileTransfer
           .read(DriftSqlType.int, data['${effectivePrefix}chunk_size'])!,
       committedBytes: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}committed_bytes'])!,
+      resumeProofResetCount: attachedDatabase.typeMapping.read(DriftSqlType.int,
+          data['${effectivePrefix}resume_proof_reset_count'])!,
       lastError: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}last_error'])!,
       createdAt: attachedDatabase.typeMapping
@@ -1454,6 +1488,7 @@ class FileTransferData extends DataClass
     implements Insertable<FileTransferData> {
   final String transferId;
   final String messageUuid;
+  final int messageRowId;
   final String peerUid;
   final FileTransferDirection direction;
   final FileTransferState state;
@@ -1464,12 +1499,14 @@ class FileTransferData extends DataClass
   final String checksumValue;
   final int chunkSize;
   final int committedBytes;
+  final int resumeProofResetCount;
   final String lastError;
   final int createdAt;
   final int updatedAt;
   const FileTransferData(
       {required this.transferId,
       required this.messageUuid,
+      required this.messageRowId,
       required this.peerUid,
       required this.direction,
       required this.state,
@@ -1480,6 +1517,7 @@ class FileTransferData extends DataClass
       required this.checksumValue,
       required this.chunkSize,
       required this.committedBytes,
+      required this.resumeProofResetCount,
       required this.lastError,
       required this.createdAt,
       required this.updatedAt});
@@ -1488,6 +1526,7 @@ class FileTransferData extends DataClass
     final map = <String, Expression>{};
     map['transfer_id'] = Variable<String>(transferId);
     map['message_uuid'] = Variable<String>(messageUuid);
+    map['message_row_id'] = Variable<int>(messageRowId);
     map['peer_uid'] = Variable<String>(peerUid);
     {
       map['direction'] = Variable<String>(
@@ -1504,6 +1543,7 @@ class FileTransferData extends DataClass
     map['checksum_value'] = Variable<String>(checksumValue);
     map['chunk_size'] = Variable<int>(chunkSize);
     map['committed_bytes'] = Variable<int>(committedBytes);
+    map['resume_proof_reset_count'] = Variable<int>(resumeProofResetCount);
     map['last_error'] = Variable<String>(lastError);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -1514,6 +1554,7 @@ class FileTransferData extends DataClass
     return FileTransferCompanion(
       transferId: Value(transferId),
       messageUuid: Value(messageUuid),
+      messageRowId: Value(messageRowId),
       peerUid: Value(peerUid),
       direction: Value(direction),
       state: Value(state),
@@ -1524,6 +1565,7 @@ class FileTransferData extends DataClass
       checksumValue: Value(checksumValue),
       chunkSize: Value(chunkSize),
       committedBytes: Value(committedBytes),
+      resumeProofResetCount: Value(resumeProofResetCount),
       lastError: Value(lastError),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -1536,6 +1578,7 @@ class FileTransferData extends DataClass
     return FileTransferData(
       transferId: serializer.fromJson<String>(json['transferId']),
       messageUuid: serializer.fromJson<String>(json['messageUuid']),
+      messageRowId: serializer.fromJson<int>(json['messageRowId']),
       peerUid: serializer.fromJson<String>(json['peerUid']),
       direction: $FileTransferTable.$converterdirection
           .fromJson(serializer.fromJson<String>(json['direction'])),
@@ -1548,6 +1591,8 @@ class FileTransferData extends DataClass
       checksumValue: serializer.fromJson<String>(json['checksumValue']),
       chunkSize: serializer.fromJson<int>(json['chunkSize']),
       committedBytes: serializer.fromJson<int>(json['committedBytes']),
+      resumeProofResetCount:
+          serializer.fromJson<int>(json['resumeProofResetCount']),
       lastError: serializer.fromJson<String>(json['lastError']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
@@ -1559,6 +1604,7 @@ class FileTransferData extends DataClass
     return <String, dynamic>{
       'transferId': serializer.toJson<String>(transferId),
       'messageUuid': serializer.toJson<String>(messageUuid),
+      'messageRowId': serializer.toJson<int>(messageRowId),
       'peerUid': serializer.toJson<String>(peerUid),
       'direction': serializer.toJson<String>(
           $FileTransferTable.$converterdirection.toJson(direction)),
@@ -1571,6 +1617,7 @@ class FileTransferData extends DataClass
       'checksumValue': serializer.toJson<String>(checksumValue),
       'chunkSize': serializer.toJson<int>(chunkSize),
       'committedBytes': serializer.toJson<int>(committedBytes),
+      'resumeProofResetCount': serializer.toJson<int>(resumeProofResetCount),
       'lastError': serializer.toJson<String>(lastError),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
@@ -1580,6 +1627,7 @@ class FileTransferData extends DataClass
   FileTransferData copyWith(
           {String? transferId,
           String? messageUuid,
+          int? messageRowId,
           String? peerUid,
           FileTransferDirection? direction,
           FileTransferState? state,
@@ -1590,12 +1638,14 @@ class FileTransferData extends DataClass
           String? checksumValue,
           int? chunkSize,
           int? committedBytes,
+          int? resumeProofResetCount,
           String? lastError,
           int? createdAt,
           int? updatedAt}) =>
       FileTransferData(
         transferId: transferId ?? this.transferId,
         messageUuid: messageUuid ?? this.messageUuid,
+        messageRowId: messageRowId ?? this.messageRowId,
         peerUid: peerUid ?? this.peerUid,
         direction: direction ?? this.direction,
         state: state ?? this.state,
@@ -1606,6 +1656,8 @@ class FileTransferData extends DataClass
         checksumValue: checksumValue ?? this.checksumValue,
         chunkSize: chunkSize ?? this.chunkSize,
         committedBytes: committedBytes ?? this.committedBytes,
+        resumeProofResetCount:
+            resumeProofResetCount ?? this.resumeProofResetCount,
         lastError: lastError ?? this.lastError,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -1616,6 +1668,9 @@ class FileTransferData extends DataClass
           data.transferId.present ? data.transferId.value : this.transferId,
       messageUuid:
           data.messageUuid.present ? data.messageUuid.value : this.messageUuid,
+      messageRowId: data.messageRowId.present
+          ? data.messageRowId.value
+          : this.messageRowId,
       peerUid: data.peerUid.present ? data.peerUid.value : this.peerUid,
       direction: data.direction.present ? data.direction.value : this.direction,
       state: data.state.present ? data.state.value : this.state,
@@ -1632,6 +1687,9 @@ class FileTransferData extends DataClass
       committedBytes: data.committedBytes.present
           ? data.committedBytes.value
           : this.committedBytes,
+      resumeProofResetCount: data.resumeProofResetCount.present
+          ? data.resumeProofResetCount.value
+          : this.resumeProofResetCount,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1643,6 +1701,7 @@ class FileTransferData extends DataClass
     return (StringBuffer('FileTransferData(')
           ..write('transferId: $transferId, ')
           ..write('messageUuid: $messageUuid, ')
+          ..write('messageRowId: $messageRowId, ')
           ..write('peerUid: $peerUid, ')
           ..write('direction: $direction, ')
           ..write('state: $state, ')
@@ -1653,6 +1712,7 @@ class FileTransferData extends DataClass
           ..write('checksumValue: $checksumValue, ')
           ..write('chunkSize: $chunkSize, ')
           ..write('committedBytes: $committedBytes, ')
+          ..write('resumeProofResetCount: $resumeProofResetCount, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -1664,6 +1724,7 @@ class FileTransferData extends DataClass
   int get hashCode => Object.hash(
       transferId,
       messageUuid,
+      messageRowId,
       peerUid,
       direction,
       state,
@@ -1674,6 +1735,7 @@ class FileTransferData extends DataClass
       checksumValue,
       chunkSize,
       committedBytes,
+      resumeProofResetCount,
       lastError,
       createdAt,
       updatedAt);
@@ -1683,6 +1745,7 @@ class FileTransferData extends DataClass
       (other is FileTransferData &&
           other.transferId == this.transferId &&
           other.messageUuid == this.messageUuid &&
+          other.messageRowId == this.messageRowId &&
           other.peerUid == this.peerUid &&
           other.direction == this.direction &&
           other.state == this.state &&
@@ -1693,6 +1756,7 @@ class FileTransferData extends DataClass
           other.checksumValue == this.checksumValue &&
           other.chunkSize == this.chunkSize &&
           other.committedBytes == this.committedBytes &&
+          other.resumeProofResetCount == this.resumeProofResetCount &&
           other.lastError == this.lastError &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -1701,6 +1765,7 @@ class FileTransferData extends DataClass
 class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   final Value<String> transferId;
   final Value<String> messageUuid;
+  final Value<int> messageRowId;
   final Value<String> peerUid;
   final Value<FileTransferDirection> direction;
   final Value<FileTransferState> state;
@@ -1711,6 +1776,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   final Value<String> checksumValue;
   final Value<int> chunkSize;
   final Value<int> committedBytes;
+  final Value<int> resumeProofResetCount;
   final Value<String> lastError;
   final Value<int> createdAt;
   final Value<int> updatedAt;
@@ -1718,6 +1784,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   const FileTransferCompanion({
     this.transferId = const Value.absent(),
     this.messageUuid = const Value.absent(),
+    this.messageRowId = const Value.absent(),
     this.peerUid = const Value.absent(),
     this.direction = const Value.absent(),
     this.state = const Value.absent(),
@@ -1728,6 +1795,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     this.checksumValue = const Value.absent(),
     this.chunkSize = const Value.absent(),
     this.committedBytes = const Value.absent(),
+    this.resumeProofResetCount = const Value.absent(),
     this.lastError = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1736,6 +1804,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   FileTransferCompanion.insert({
     required String transferId,
     required String messageUuid,
+    this.messageRowId = const Value.absent(),
     required String peerUid,
     required FileTransferDirection direction,
     required FileTransferState state,
@@ -1746,6 +1815,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     this.checksumValue = const Value.absent(),
     required int chunkSize,
     this.committedBytes = const Value.absent(),
+    this.resumeProofResetCount = const Value.absent(),
     this.lastError = const Value.absent(),
     required int createdAt,
     required int updatedAt,
@@ -1763,6 +1833,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   static Insertable<FileTransferData> custom({
     Expression<String>? transferId,
     Expression<String>? messageUuid,
+    Expression<int>? messageRowId,
     Expression<String>? peerUid,
     Expression<String>? direction,
     Expression<String>? state,
@@ -1773,6 +1844,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     Expression<String>? checksumValue,
     Expression<int>? chunkSize,
     Expression<int>? committedBytes,
+    Expression<int>? resumeProofResetCount,
     Expression<String>? lastError,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
@@ -1781,6 +1853,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     return RawValuesInsertable({
       if (transferId != null) 'transfer_id': transferId,
       if (messageUuid != null) 'message_uuid': messageUuid,
+      if (messageRowId != null) 'message_row_id': messageRowId,
       if (peerUid != null) 'peer_uid': peerUid,
       if (direction != null) 'direction': direction,
       if (state != null) 'state': state,
@@ -1791,6 +1864,8 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
       if (checksumValue != null) 'checksum_value': checksumValue,
       if (chunkSize != null) 'chunk_size': chunkSize,
       if (committedBytes != null) 'committed_bytes': committedBytes,
+      if (resumeProofResetCount != null)
+        'resume_proof_reset_count': resumeProofResetCount,
       if (lastError != null) 'last_error': lastError,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1801,6 +1876,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   FileTransferCompanion copyWith(
       {Value<String>? transferId,
       Value<String>? messageUuid,
+      Value<int>? messageRowId,
       Value<String>? peerUid,
       Value<FileTransferDirection>? direction,
       Value<FileTransferState>? state,
@@ -1811,6 +1887,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
       Value<String>? checksumValue,
       Value<int>? chunkSize,
       Value<int>? committedBytes,
+      Value<int>? resumeProofResetCount,
       Value<String>? lastError,
       Value<int>? createdAt,
       Value<int>? updatedAt,
@@ -1818,6 +1895,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     return FileTransferCompanion(
       transferId: transferId ?? this.transferId,
       messageUuid: messageUuid ?? this.messageUuid,
+      messageRowId: messageRowId ?? this.messageRowId,
       peerUid: peerUid ?? this.peerUid,
       direction: direction ?? this.direction,
       state: state ?? this.state,
@@ -1828,6 +1906,8 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
       checksumValue: checksumValue ?? this.checksumValue,
       chunkSize: chunkSize ?? this.chunkSize,
       committedBytes: committedBytes ?? this.committedBytes,
+      resumeProofResetCount:
+          resumeProofResetCount ?? this.resumeProofResetCount,
       lastError: lastError ?? this.lastError,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1843,6 +1923,9 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     }
     if (messageUuid.present) {
       map['message_uuid'] = Variable<String>(messageUuid.value);
+    }
+    if (messageRowId.present) {
+      map['message_row_id'] = Variable<int>(messageRowId.value);
     }
     if (peerUid.present) {
       map['peer_uid'] = Variable<String>(peerUid.value);
@@ -1876,6 +1959,10 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     if (committedBytes.present) {
       map['committed_bytes'] = Variable<int>(committedBytes.value);
     }
+    if (resumeProofResetCount.present) {
+      map['resume_proof_reset_count'] =
+          Variable<int>(resumeProofResetCount.value);
+    }
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
@@ -1896,6 +1983,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     return (StringBuffer('FileTransferCompanion(')
           ..write('transferId: $transferId, ')
           ..write('messageUuid: $messageUuid, ')
+          ..write('messageRowId: $messageRowId, ')
           ..write('peerUid: $peerUid, ')
           ..write('direction: $direction, ')
           ..write('state: $state, ')
@@ -1906,6 +1994,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
           ..write('checksumValue: $checksumValue, ')
           ..write('chunkSize: $chunkSize, ')
           ..write('committedBytes: $committedBytes, ')
+          ..write('resumeProofResetCount: $resumeProofResetCount, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3426,6 +3515,7 @@ typedef $$FileTransferTableCreateCompanionBuilder = FileTransferCompanion
     Function({
   required String transferId,
   required String messageUuid,
+  Value<int> messageRowId,
   required String peerUid,
   required FileTransferDirection direction,
   required FileTransferState state,
@@ -3436,6 +3526,7 @@ typedef $$FileTransferTableCreateCompanionBuilder = FileTransferCompanion
   Value<String> checksumValue,
   required int chunkSize,
   Value<int> committedBytes,
+  Value<int> resumeProofResetCount,
   Value<String> lastError,
   required int createdAt,
   required int updatedAt,
@@ -3445,6 +3536,7 @@ typedef $$FileTransferTableUpdateCompanionBuilder = FileTransferCompanion
     Function({
   Value<String> transferId,
   Value<String> messageUuid,
+  Value<int> messageRowId,
   Value<String> peerUid,
   Value<FileTransferDirection> direction,
   Value<FileTransferState> state,
@@ -3455,6 +3547,7 @@ typedef $$FileTransferTableUpdateCompanionBuilder = FileTransferCompanion
   Value<String> checksumValue,
   Value<int> chunkSize,
   Value<int> committedBytes,
+  Value<int> resumeProofResetCount,
   Value<String> lastError,
   Value<int> createdAt,
   Value<int> updatedAt,
@@ -3475,6 +3568,9 @@ class $$FileTransferTableFilterComposer
 
   ColumnFilters<String> get messageUuid => $composableBuilder(
       column: $table.messageUuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get messageRowId => $composableBuilder(
+      column: $table.messageRowId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get peerUid => $composableBuilder(
       column: $table.peerUid, builder: (column) => ColumnFilters(column));
@@ -3513,6 +3609,10 @@ class $$FileTransferTableFilterComposer
       column: $table.committedBytes,
       builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get resumeProofResetCount => $composableBuilder(
+      column: $table.resumeProofResetCount,
+      builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get lastError => $composableBuilder(
       column: $table.lastError, builder: (column) => ColumnFilters(column));
 
@@ -3537,6 +3637,10 @@ class $$FileTransferTableOrderingComposer
 
   ColumnOrderings<String> get messageUuid => $composableBuilder(
       column: $table.messageUuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get messageRowId => $composableBuilder(
+      column: $table.messageRowId,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get peerUid => $composableBuilder(
       column: $table.peerUid, builder: (column) => ColumnOrderings(column));
@@ -3571,6 +3675,10 @@ class $$FileTransferTableOrderingComposer
       column: $table.committedBytes,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get resumeProofResetCount => $composableBuilder(
+      column: $table.resumeProofResetCount,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get lastError => $composableBuilder(
       column: $table.lastError, builder: (column) => ColumnOrderings(column));
 
@@ -3595,6 +3703,9 @@ class $$FileTransferTableAnnotationComposer
 
   GeneratedColumn<String> get messageUuid => $composableBuilder(
       column: $table.messageUuid, builder: (column) => column);
+
+  GeneratedColumn<int> get messageRowId => $composableBuilder(
+      column: $table.messageRowId, builder: (column) => column);
 
   GeneratedColumn<String> get peerUid =>
       $composableBuilder(column: $table.peerUid, builder: (column) => column);
@@ -3626,6 +3737,9 @@ class $$FileTransferTableAnnotationComposer
 
   GeneratedColumn<int> get committedBytes => $composableBuilder(
       column: $table.committedBytes, builder: (column) => column);
+
+  GeneratedColumn<int> get resumeProofResetCount => $composableBuilder(
+      column: $table.resumeProofResetCount, builder: (column) => column);
 
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
@@ -3665,6 +3779,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<String> transferId = const Value.absent(),
             Value<String> messageUuid = const Value.absent(),
+            Value<int> messageRowId = const Value.absent(),
             Value<String> peerUid = const Value.absent(),
             Value<FileTransferDirection> direction = const Value.absent(),
             Value<FileTransferState> state = const Value.absent(),
@@ -3675,6 +3790,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
             Value<String> checksumValue = const Value.absent(),
             Value<int> chunkSize = const Value.absent(),
             Value<int> committedBytes = const Value.absent(),
+            Value<int> resumeProofResetCount = const Value.absent(),
             Value<String> lastError = const Value.absent(),
             Value<int> createdAt = const Value.absent(),
             Value<int> updatedAt = const Value.absent(),
@@ -3683,6 +3799,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
               FileTransferCompanion(
             transferId: transferId,
             messageUuid: messageUuid,
+            messageRowId: messageRowId,
             peerUid: peerUid,
             direction: direction,
             state: state,
@@ -3693,6 +3810,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
             checksumValue: checksumValue,
             chunkSize: chunkSize,
             committedBytes: committedBytes,
+            resumeProofResetCount: resumeProofResetCount,
             lastError: lastError,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -3701,6 +3819,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             required String transferId,
             required String messageUuid,
+            Value<int> messageRowId = const Value.absent(),
             required String peerUid,
             required FileTransferDirection direction,
             required FileTransferState state,
@@ -3711,6 +3830,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
             Value<String> checksumValue = const Value.absent(),
             required int chunkSize,
             Value<int> committedBytes = const Value.absent(),
+            Value<int> resumeProofResetCount = const Value.absent(),
             Value<String> lastError = const Value.absent(),
             required int createdAt,
             required int updatedAt,
@@ -3719,6 +3839,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
               FileTransferCompanion.insert(
             transferId: transferId,
             messageUuid: messageUuid,
+            messageRowId: messageRowId,
             peerUid: peerUid,
             direction: direction,
             state: state,
@@ -3729,6 +3850,7 @@ class $$FileTransferTableTableManager extends RootTableManager<
             checksumValue: checksumValue,
             chunkSize: chunkSize,
             committedBytes: committedBytes,
+            resumeProofResetCount: resumeProofResetCount,
             lastError: lastError,
             createdAt: createdAt,
             updatedAt: updatedAt,

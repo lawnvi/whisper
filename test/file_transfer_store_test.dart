@@ -19,6 +19,7 @@ void main() {
       final transfer = FileTransferData(
         transferId: 'transfer-1',
         messageUuid: 'message-1',
+        messageRowId: 0,
         peerUid: 'peer-a',
         direction: FileTransferDirection.outgoing,
         state: FileTransferState.negotiating,
@@ -29,6 +30,7 @@ void main() {
         checksumValue: 'abc123',
         chunkSize: 1024,
         committedBytes: 256,
+        resumeProofResetCount: 0,
         lastError: '',
         createdAt: 1,
         updatedAt: 2,
@@ -48,6 +50,7 @@ void main() {
         FileTransferData(
           transferId: 'waiting',
           messageUuid: 'message-1',
+          messageRowId: 0,
           peerUid: 'peer-a',
           direction: FileTransferDirection.outgoing,
           state: FileTransferState.waitingReconnect,
@@ -58,6 +61,7 @@ void main() {
           checksumValue: 'abc123',
           chunkSize: 1024,
           committedBytes: 512,
+          resumeProofResetCount: 0,
           lastError: '',
           createdAt: 1,
           updatedAt: 3,
@@ -67,6 +71,7 @@ void main() {
         FileTransferData(
           transferId: 'done',
           messageUuid: 'message-2',
+          messageRowId: 0,
           peerUid: 'peer-a',
           direction: FileTransferDirection.incoming,
           state: FileTransferState.completed,
@@ -77,6 +82,7 @@ void main() {
           checksumValue: 'def456',
           chunkSize: 1024,
           committedBytes: 1024,
+          resumeProofResetCount: 0,
           lastError: '',
           createdAt: 1,
           updatedAt: 4,
