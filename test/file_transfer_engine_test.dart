@@ -8,6 +8,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
@@ -33,6 +34,7 @@ FileTransferEngine _engine({
   void Function(MessageData)? dispatchOutgoingMessage,
   FileTransferSource Function(String sourcePath, int expectedSize)?
       transferSourceFactory,
+  PrivacyLog? privacyLogger,
 }) {
   return FileTransferEngine(
     currentConnectionBinding: currentConnectionBinding ??
@@ -62,6 +64,7 @@ FileTransferEngine _engine({
     ackMessage: (_) {},
     wireMessageReplayGuard: WireMessageReplayGuard(),
     transferSourceFactory: transferSourceFactory,
+    privacyLogger: privacyLogger,
     database: database == null ? LocalDatabase.new : () => database,
   );
 }
@@ -85,6 +88,35 @@ final class _MemoryTransferSource implements FileTransferSource {
   Future<Uint8List> readRange(int offset, int length) async {
     await onRead?.call();
     return Uint8List.fromList(bytes.sublist(offset, offset + length));
+  }
+}
+
+final class _ThrowingTransferSource implements FileTransferSource {
+  _ThrowingTransferSource(this.error);
+
+  final Object error;
+
+  @override
+  Future<bool> exists() => Future<bool>.error(error);
+
+  @override
+  Future<int> length() => Future<int>.error(error);
+
+  @override
+  Future<Uint8List> readRange(int offset, int length) =>
+      Future<Uint8List>.error(error);
+}
+
+final class _ErrorTextTrap {
+  _ErrorTextTrap(this.secret);
+
+  final String secret;
+  bool toStringCalled = false;
+
+  @override
+  String toString() {
+    toStringCalled = true;
+    return secret;
   }
 }
 
@@ -434,6 +466,36 @@ void main() {
       expect(await database.fetchRecoverableFileTransfers(), isEmpty);
       await database.close();
     }
+  });
+
+  test('local transfer failure emits only a stable reason and error type',
+      () async {
+    const secret =
+        'token=never-log-this content://private.provider/root/secret.txt';
+    final failure = _ErrorTextTrap(secret);
+    final notices = <String>[];
+    final logLines = <String>[];
+    final engine = _engine(
+      supportsV3: true,
+      notify: notices.add,
+      privacyLogger: PrivacyLog(sink: logLines.add),
+      transferSourceFactory: (_, __) => _ThrowingTransferSource(failure),
+    );
+
+    final result = await engine.sendAndroidContentUriTo(
+      'peer-a',
+      uri: 'content://documents/private/item',
+      name: 'document.bin',
+      size: 1,
+      fileTimestamp: 1,
+    );
+
+    expect(result, isFalse);
+    expect(failure.toStringCalled, isFalse);
+    expect(notices, <String>[FileTransferFailureReason.source.wireCode]);
+    expect(logLines, hasLength(1));
+    expect(logLines.single, contains('"errorType":"unknown"'));
+    expect(logLines.single, isNot(contains(secret)));
   });
 
   test('closeAll awaits recoverable transfer persistence', () async {

@@ -566,7 +566,7 @@ void main() {
     try {
       final associated = await database.fetchFileTransfer(_transferId);
       final ambiguous = await database.fetchFileTransfer(_otherTransferId);
-      expect(database.schemaVersion, 8);
+      expect(database.schemaVersion, 9);
       expect(associated?.messageRowId, 1);
       expect(associated?.resumeProofResetCount, 0);
       expect(ambiguous?.messageRowId, 0);
@@ -614,7 +614,7 @@ void main() {
     }
   });
 
-  test('duplicate association repair preserves every terminal state', () async {
+  test('v9 migration sanitizes historical transfer errors', () async {
     final directory = await Directory.systemTemp.createTemp('whisper-v8-dup-');
     final file = File('${directory.path}/conflict.sqlite');
     final raw = sqlite.sqlite3.open(file.path);
@@ -673,10 +673,11 @@ void main() {
       final completed = await database.fetchFileTransfer(_transferId);
       final canceled = await database.fetchFileTransfer(_otherTransferId);
       final active = await database.fetchFileTransfer(_contendedMessageId);
+      expect(database.schemaVersion, 9);
       expect((completed?.messageRowId, completed?.state, completed?.lastError),
-          (0, FileTransferState.completed, 'completed-history'));
+          (0, FileTransferState.completed, 'remote_failure'));
       expect((canceled?.messageRowId, canceled?.state, canceled?.lastError),
-          (0, FileTransferState.canceled, 'canceled-history'));
+          (0, FileTransferState.canceled, 'remote_failure'));
       expect((active?.messageRowId, active?.state, active?.lastError),
           (0, FileTransferState.failed, 'message_association_conflict'));
     } finally {

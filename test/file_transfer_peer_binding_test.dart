@@ -316,8 +316,7 @@ void main() {
       transferId: _transferId,
       durableOffset: 0,
       size: 8,
-      errorCode: '',
-      errorMessage: '',
+      failureReason: FileTransferFailureReason.none,
     );
     final frame = WhisperFrameV3(
       type: WhisperFrameType.fileCancel,
@@ -442,8 +441,7 @@ void main() {
       transferId: _transferId,
       durableOffset: 0,
       size: 8,
-      errorCode: '',
-      errorMessage: '',
+      failureReason: FileTransferFailureReason.none,
     );
     final frame = WhisperFrameV3(
       type: WhisperFrameType.fileCancel,
@@ -612,8 +610,7 @@ void main() {
       transferId: _transferId,
       durableOffset: 0,
       size: 8,
-      errorCode: '',
-      errorMessage: '',
+      failureReason: FileTransferFailureReason.none,
     );
     final cancelFrame = WhisperFrameV3(
       type: WhisperFrameType.fileCancel,

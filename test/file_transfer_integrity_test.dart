@@ -154,8 +154,7 @@ void main() {
         transferId: transferId,
         durableOffset: 4,
         size: bytes.length,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
         resumeProofSha256: bytesChecksum(
           bytes.sublist(0, 4),
           algorithm: 'sha256',
@@ -187,8 +186,7 @@ void main() {
         transferId: transferId,
         durableOffset: 4,
         size: bytes.length,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
         resumeProofSha256: '0' * 64,
         resumeProofLength: 4,
       );
@@ -247,8 +245,7 @@ void main() {
         transferId: transferId,
         durableOffset: 4,
         size: 8,
-        errorCode: 'resume_proof_mismatch',
-        errorMessage: 'resume proof mismatch',
+        failureReason: FileTransferFailureReason.resumeProofMismatch,
       );
 
       await engine.handleFrame(
@@ -400,8 +397,7 @@ void main() {
         transferId: transferId,
         durableOffset: 4,
         size: 8,
-        errorCode: 'resume_proof_mismatch',
-        errorMessage: 'resume proof mismatch',
+        failureReason: FileTransferFailureReason.resumeProofMismatch,
       );
 
       await firstEngine.handleFrame(
@@ -489,8 +485,7 @@ void main() {
         transferId: transferId,
         durableOffset: 4,
         size: 8,
-        errorCode: 'resume_proof_mismatch',
-        errorMessage: 'resume proof mismatch',
+        failureReason: FileTransferFailureReason.resumeProofMismatch,
       );
 
       await firstEngine.handleFrame(
@@ -576,8 +571,7 @@ void main() {
           transferId: transferId,
           durableOffset: item.control,
           size: 8,
-          errorCode: 'resume_proof_mismatch',
-          errorMessage: 'resume proof mismatch',
+          failureReason: FileTransferFailureReason.resumeProofMismatch,
         );
 
         await engine.handleFrame(
@@ -1463,6 +1457,72 @@ void main() {
       expect(await database.fetchMessagesByUuid(transferId), isEmpty);
     });
   });
+
+  group('failure privacy', () {
+    test('remote detail never reaches persistence, snapshots, or notices',
+        () async {
+      const transferId = '81234567-89ab-4cde-8fab-0123456789ab';
+      const secret = 'token=never-log-this /Users/alice/Documents/private.txt';
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final message = await database.insertMessageReturning(_message(
+        transferId: transferId,
+        sender: 'local',
+        receiver: 'peer-a',
+        path: '/local/source.bin',
+        size: 4,
+      ));
+      await database.upsertFileTransfer(_transfer(
+        transferId: transferId,
+        peerUid: 'peer-a',
+        direction: FileTransferDirection.outgoing,
+        state: FileTransferState.transferring,
+        path: '/local/source.bin',
+        size: 4,
+        messageRowId: message.id,
+      ));
+      final notices = <String>[];
+      final snapshots = <TransferSnapshot>[];
+      final engine = _engine(
+        database,
+        <WhisperFrameV3>[],
+        notify: notices.add,
+        emitTransferUpdated: snapshots.add,
+      );
+      final payload = <String, Object?>{
+        'protocolVersion': fileTransferV3ProtocolVersion,
+        'action': FileTransferV3Action.error.name,
+        'transferId': transferId,
+        'durableOffset': 0,
+        'size': 4,
+        'errorCode': 'source',
+        'errorMessage': secret,
+        'resumeProofSha256': '',
+        'resumeProofLength': 0,
+      };
+
+      await engine.handleFrame(
+        _connection('peer-a'),
+        WhisperFrameV3(
+          type: WhisperFrameType.fileError,
+          transferId: transferId,
+          offset: 0,
+          sequence: 0,
+          payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+        ),
+        requireCurrent: () {},
+      );
+
+      final stored = await database.fetchFileTransfer(transferId);
+      expect(stored?.state, FileTransferState.failed);
+      expect(stored?.lastError, FileTransferFailureReason.source.wireCode);
+      expect(notices, <String>[FileTransferFailureReason.source.wireCode]);
+      expect(
+          snapshots.last.lastError, FileTransferFailureReason.source.wireCode);
+      expect(jsonEncode(stored?.toJson()), isNot(contains(secret)));
+      expect(jsonEncode(notices), isNot(contains(secret)));
+    });
+  });
 }
 
 MessageData _message({
@@ -1535,6 +1595,8 @@ FileTransferEngine _engine(
   Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
   FutureOr<void> Function(MessageData message)? ackMessage,
   void Function(MessageData message)? dispatchOutgoingMessage,
+  void Function(String message)? notify,
+  void Function(TransferSnapshot snapshot)? emitTransferUpdated,
 }) =>
     FileTransferEngine(
       currentConnectionBinding: (peerId) =>
@@ -1544,8 +1606,8 @@ FileTransferEngine _engine(
         return true;
       },
       markPeerUnresponsive: (_) => false,
-      emitTransferUpdated: (_) {},
-      notify: (_) {},
+      emitTransferUpdated: emitTransferUpdated ?? (_) {},
+      notify: notify ?? (_) {},
       remoteProfileFor: (_) => null,
       isConnectedTo: (_) => true,
       connectedPeerIds: () => const <String>{'peer-a'},

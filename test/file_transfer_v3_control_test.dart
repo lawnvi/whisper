@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 
@@ -9,8 +11,7 @@ void main() {
         transferId: 'transfer-1',
         durableOffset: 16 * 1024 * 1024,
         size: 64 * 1024 * 1024,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
         resumeProofSha256:
             '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         resumeProofLength: fileTransferV3ResumeProofWindowSize,
@@ -100,6 +101,34 @@ void main() {
           throwsFormatException,
         );
       }
+    });
+
+    test('accepts only closed failure codes and discards remote detail', () {
+      const secret = 'token=never-log-this /Users/alice/Documents/private.txt';
+      final valid = <String, Object?>{
+        'protocolVersion': 3,
+        'action': 'error',
+        'transferId': 'transfer-1',
+        'durableOffset': 0,
+        'size': 1,
+        'errorCode': 'source',
+        'errorMessage': secret,
+        'resumeProofSha256': '',
+        'resumeProofLength': 0,
+      };
+
+      final decoded = FileTransferV3Control.fromJson(valid);
+
+      expect(decoded.failureReason, FileTransferFailureReason.source);
+      expect(decoded.errorCode, 'source');
+      expect(decoded.errorMessage, 'source');
+      expect(jsonEncode(decoded.toJson()), isNot(contains(secret)));
+      expect(
+        () => FileTransferV3Control.fromJson(
+          <String, Object?>{...valid, 'errorCode': 'remote says $secret'},
+        ),
+        throwsFormatException,
+      );
     });
   });
 

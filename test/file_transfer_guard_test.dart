@@ -515,8 +515,7 @@ void main() {
         transferId: _transferId,
         durableOffset: 4,
         size: 12,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
       );
       WhisperFrameV3 frame({
         WhisperFrameType type = WhisperFrameType.fileAck,
@@ -595,8 +594,7 @@ void main() {
             transferId: _transferId,
             durableOffset: 4,
             size: 13,
-            errorCode: '',
-            errorMessage: '',
+            failureReason: FileTransferFailureReason.none,
           ),
           transfer: transfer,
           authenticatedPeerId: 'peer-a',
@@ -617,8 +615,7 @@ void main() {
         transferId: _transferId,
         durableOffset: 4,
         size: 12,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
       );
       expect(
         WireInputPolicy.validateFileControl(
@@ -641,8 +638,7 @@ void main() {
         transferId: _transferId,
         durableOffset: 4,
         size: 13,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
       );
       final wrongSizeFrame = WhisperFrameV3(
         type: WhisperFrameType.fileAck,
@@ -666,8 +662,7 @@ void main() {
         transferId: _transferId,
         durableOffset: 13,
         size: 12,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
       );
       final oversizedOffsetFrame = WhisperFrameV3(
         type: WhisperFrameType.fileAck,

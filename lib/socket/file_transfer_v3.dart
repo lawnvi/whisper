@@ -19,14 +19,106 @@ enum FileTransferV3Action {
   error,
 }
 
+enum FileTransferFailureReason {
+  none,
+  invalidSize,
+  invalidPath,
+  invalidName,
+  invalidMetadata,
+  messageMissing,
+  queueFull,
+  storage,
+  source,
+  receiver,
+  resumeProofMismatch,
+  integrity,
+  messageDeleted,
+  deviceCleared,
+  messageAssociationUnresolved,
+  messageAssociationConflict,
+  staleQueue,
+  remoteFailure,
+}
+
+extension FileTransferFailureReasonWire on FileTransferFailureReason {
+  String get wireCode => switch (this) {
+        FileTransferFailureReason.none => '',
+        FileTransferFailureReason.invalidSize => 'invalid_size',
+        FileTransferFailureReason.invalidPath => 'invalid_path',
+        FileTransferFailureReason.invalidName => 'invalid_name',
+        FileTransferFailureReason.invalidMetadata => 'invalid_metadata',
+        FileTransferFailureReason.messageMissing => 'message_missing',
+        FileTransferFailureReason.queueFull => 'queue_full',
+        FileTransferFailureReason.storage => 'storage',
+        FileTransferFailureReason.source => 'source',
+        FileTransferFailureReason.receiver => 'receiver',
+        FileTransferFailureReason.resumeProofMismatch =>
+          'resume_proof_mismatch',
+        FileTransferFailureReason.integrity => 'integrity',
+        FileTransferFailureReason.messageDeleted => 'message_deleted',
+        FileTransferFailureReason.deviceCleared => 'device_cleared',
+        FileTransferFailureReason.messageAssociationUnresolved =>
+          'message_association_unresolved',
+        FileTransferFailureReason.messageAssociationConflict =>
+          'message_association_conflict',
+        FileTransferFailureReason.staleQueue => 'stale_queue',
+        FileTransferFailureReason.remoteFailure => 'remote_failure',
+      };
+}
+
+const Set<String> fileTransferFailureWireCodes = <String>{
+  '',
+  'invalid_size',
+  'invalid_path',
+  'invalid_name',
+  'invalid_metadata',
+  'message_missing',
+  'queue_full',
+  'storage',
+  'source',
+  'receiver',
+  'resume_proof_mismatch',
+  'integrity',
+  'message_deleted',
+  'device_cleared',
+  'message_association_unresolved',
+  'message_association_conflict',
+  'stale_queue',
+  'remote_failure',
+};
+
+FileTransferFailureReason? fileTransferFailureReasonFromWire(String value) =>
+    switch (value) {
+      '' => FileTransferFailureReason.none,
+      'invalid_size' => FileTransferFailureReason.invalidSize,
+      'invalid_path' => FileTransferFailureReason.invalidPath,
+      'invalid_name' => FileTransferFailureReason.invalidName,
+      'invalid_metadata' => FileTransferFailureReason.invalidMetadata,
+      'message_missing' => FileTransferFailureReason.messageMissing,
+      'queue_full' => FileTransferFailureReason.queueFull,
+      'storage' => FileTransferFailureReason.storage,
+      'source' => FileTransferFailureReason.source,
+      'receiver' => FileTransferFailureReason.receiver,
+      'resume_proof_mismatch' => FileTransferFailureReason.resumeProofMismatch,
+      'integrity' => FileTransferFailureReason.integrity,
+      'message_deleted' => FileTransferFailureReason.messageDeleted,
+      'device_cleared' => FileTransferFailureReason.deviceCleared,
+      'message_association_unresolved' =>
+        FileTransferFailureReason.messageAssociationUnresolved,
+      'message_association_conflict' =>
+        FileTransferFailureReason.messageAssociationConflict,
+      'stale_queue' => FileTransferFailureReason.staleQueue,
+      'remote_failure' => FileTransferFailureReason.remoteFailure,
+      _ => null,
+    };
+
 class FileTransferV3Control {
   const FileTransferV3Control({
     required this.action,
     required this.transferId,
     required this.durableOffset,
     required this.size,
-    required this.errorCode,
-    required this.errorMessage,
+    required this.failureReason,
     this.resumeProofSha256 = '',
     this.resumeProofLength = 0,
     this.protocolVersion = fileTransferV3ProtocolVersion,
@@ -37,10 +129,12 @@ class FileTransferV3Control {
   final String transferId;
   final int durableOffset;
   final int size;
-  final String errorCode;
-  final String errorMessage;
+  final FileTransferFailureReason failureReason;
   final String resumeProofSha256;
   final int resumeProofLength;
+
+  String get errorCode => failureReason.wireCode;
+  String get errorMessage => failureReason.wireCode;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'protocolVersion': protocolVersion,
@@ -48,8 +142,8 @@ class FileTransferV3Control {
         'transferId': transferId,
         'durableOffset': durableOffset,
         'size': size,
-        'errorCode': errorCode,
-        'errorMessage': errorMessage,
+        'errorCode': failureReason.wireCode,
+        'errorMessage': failureReason.wireCode,
         'resumeProofSha256': resumeProofSha256,
         'resumeProofLength': resumeProofLength,
       };
@@ -81,6 +175,12 @@ class FileTransferV3Control {
     } on ArgumentError {
       throw const FormatException('unknown file transfer control action');
     }
+    final failureReason = fileTransferFailureReasonFromWire(errorCode);
+    if (failureReason == null ||
+        (action == FileTransferV3Action.error &&
+            failureReason == FileTransferFailureReason.none)) {
+      throw const FormatException('unknown file transfer failure code');
+    }
     final expectedProofLength = durableOffset <= 0
         ? 0
         : math.min(fileTransferV3ResumeProofWindowSize, durableOffset);
@@ -99,8 +199,7 @@ class FileTransferV3Control {
       transferId: transferId,
       durableOffset: durableOffset,
       size: size,
-      errorCode: errorCode,
-      errorMessage: errorMessage,
+      failureReason: failureReason,
       resumeProofSha256: resumeProofSha256,
       resumeProofLength: resumeProofLength,
     );

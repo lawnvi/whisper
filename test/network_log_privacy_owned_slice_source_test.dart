@@ -10,9 +10,15 @@ void main() {
     'lib/remote_input',
     'lib/helper',
   ];
+  const ownedFiles = <String>[
+    'lib/main.dart',
+    'lib/model/LocalDatabase.dart',
+    'lib/socket/file_transfer_engine.dart',
+    'lib/socket/file_transfer_v3.dart',
+  ];
 
   test('owned network privacy slice contains no forbidden leak patterns', () {
-    final sources = _dartSources(ownedDirectories);
+    final sources = _dartSources(ownedDirectories, ownedFiles);
     final patterns = <String, RegExp>{
       'message or raw frame body': RegExp(
         r'文本消息：|收到消息[^\n]*content|send evt to ui|'
@@ -46,6 +52,10 @@ void main() {
         r'(?:lastError|errorMessage)\s*:\s*'
         r'(?:message|control)\.errorMessage',
       ),
+      'raw local error copied into transfer state': RegExp(
+        r'error\.message|osError\?\.message|'
+        r"return\s+'[^']*\$error'",
+      ),
       'native diagnostic text copied into Dart logs': RegExp(
         r'diagnostic\.message|error\.message',
       ),
@@ -70,7 +80,7 @@ void main() {
   });
 
   test('owned network privacy slice routes logging through PrivacyLog', () {
-    final sources = _dartSources(ownedDirectories);
+    final sources = _dartSources(ownedDirectories, ownedFiles);
     final sinkPatterns = <RegExp>[
       RegExp(
         r'\blogger\s*\.\s*(?:t|d|i|w|e|f|v|wtf)\b',
@@ -146,7 +156,7 @@ void main() {
   });
 }
 
-Map<String, String> _dartSources(List<String> roots) {
+Map<String, String> _dartSources(List<String> roots, List<String> paths) {
   final files = <File>[];
   for (final root in roots) {
     files.addAll(
@@ -156,6 +166,7 @@ Map<String, String> _dartSources(List<String> roots) {
           ),
     );
   }
+  files.addAll(paths.map(File.new).where((file) => file.existsSync()));
   files.sort((left, right) => left.path.compareTo(right.path));
   return <String, String>{
     for (final file in files) file.path: file.readAsStringSync(),

@@ -1127,8 +1127,7 @@ void main() {
       transferId: _firstId,
       durableOffset: 2,
       size: 4,
-      errorCode: '',
-      errorMessage: '',
+      failureReason: FileTransferFailureReason.none,
       resumeProofSha256:
           '96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7',
       resumeProofLength: 2,
@@ -1461,8 +1460,9 @@ FileTransferV3Control _control(
       transferId: id,
       durableOffset: offset,
       size: size,
-      errorCode: '',
-      errorMessage: '',
+      failureReason: action == FileTransferV3Action.error
+          ? FileTransferFailureReason.remoteFailure
+          : FileTransferFailureReason.none,
     );
 
 WhisperFrameV3 _controlFrame(FileTransferV3Control control) => WhisperFrameV3(

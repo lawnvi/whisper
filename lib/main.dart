@@ -7,6 +7,7 @@ import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,8 @@ import 'l10n/app_localizations.dart';
 
 const MethodChannel _windowThemeChannel =
     MethodChannel('com.vireen.whisper/window_theme');
+
+enum AppDiagnosticKind { desktopWindowTheme }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,7 +93,14 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
       });
     }
   } catch (error) {
-    logger.i('Failed to apply desktop window theme: $error');
+    privacyLog.event(
+      PrivacyEvent.localOperation,
+      <PrivacyField, Object>{
+        PrivacyField.kind: AppDiagnosticKind.desktopWindowTheme,
+        PrivacyField.success: false,
+        PrivacyField.errorType: privacyLog.errorType(error),
+      },
+    );
   }
 }
 

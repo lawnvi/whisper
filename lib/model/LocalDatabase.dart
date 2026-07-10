@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/socket/file_transfer_v3.dart';
 
 import '../helper/helper.dart';
 import 'device.dart';
@@ -68,7 +69,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -96,6 +97,9 @@ class LocalDatabase extends _$LocalDatabase {
           if (from < 8) {
             await _migrateFileTransferHardeningSchema(m);
           }
+          if (from < 9) {
+            await _sanitizeFileTransferFailureReasons();
+          }
         },
         beforeOpen: (_) async {
           await _repairRemoteInputLayoutColumns();
@@ -103,6 +107,26 @@ class LocalDatabase extends _$LocalDatabase {
           await _ensureFileTransferMessageRowIndexes();
         },
       );
+
+  Future<void> _sanitizeFileTransferFailureReasons() async {
+    final columns =
+        await customSelect('PRAGMA table_info(file_transfer)').get();
+    if (!columns.any((row) => row.data['name'] == 'last_error')) {
+      return;
+    }
+    final allowed = fileTransferFailureWireCodes.toList(growable: false)
+      ..sort();
+    final placeholders = List<String>.filled(allowed.length, '?').join(', ');
+    await customUpdate(
+      'UPDATE file_transfer SET last_error = ? '
+      'WHERE last_error NOT IN ($placeholders)',
+      variables: <Variable<Object>>[
+        Variable<String>(FileTransferFailureReason.remoteFailure.wireCode),
+        ...allowed.map(Variable<String>.new),
+      ],
+      updates: <TableInfo<Table, Object?>>{fileTransfer},
+    );
+  }
 
   Future<void> _migrateFileTransferHardeningSchema(Migrator migrator) async {
     final columns =
@@ -686,7 +710,6 @@ class LocalDatabase extends _$LocalDatabase {
 
   Future<List<MessageData>> fetchMessageList(String uid,
       {int beforeId = 0, int limit = 8}) {
-    logger.i("device: $uid, msgid: $beforeId");
     if (beforeId > 0) {
       return (select(message)
             ..where((t) =>
@@ -1452,8 +1475,6 @@ LazyDatabase _openConnection() {
     // for your app.
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File('${dbFolder.path}/db.sqlite');
-
-    logger.i('数据库: ${dbFolder.path}/db.sqlite');
 
     // Also work around limitations on old Android versions
     if (Platform.isAndroid) {

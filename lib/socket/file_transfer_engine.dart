@@ -8,7 +8,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/file.dart';
-import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
@@ -57,6 +57,16 @@ enum _IncomingReadyResult {
   unavailable,
 }
 
+enum FileTransferDiagnosticKind {
+  outgoingFailed,
+  incomingFailed,
+  resumeResetDeferred,
+  reservationCleanupFailed,
+  completionDispatchFailed,
+  temporaryFileCleanupFailed,
+  visibilityNotificationFailed,
+}
+
 Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
 }
@@ -92,6 +102,7 @@ class FileTransferEngine {
     Future<int?> Function(String path)? availableBytesForDownloadPath,
     Future<void> Function(String path)? notifyFileVisible,
     Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
+    PrivacyLog? privacyLogger,
     LocalDatabase Function() database = LocalDatabase.new,
   })  : _currentConnectionBinding = currentConnectionBinding,
         _sendBytesToConnection = sendBytesToConnection,
@@ -118,6 +129,7 @@ class FileTransferEngine {
             notifyFileVisible ?? notifyFileVisibleToAndroidPickers,
         _setPublishedFileTimestamp =
             setPublishedFileTimestamp ?? _setFileLastModified,
+        _privacyLogger = privacyLogger ?? privacyLog,
         _database = database;
 
   static const int defaultTransferChunkSize = fileTransferV3FramePayloadSize;
@@ -153,6 +165,7 @@ class FileTransferEngine {
   final Future<void> Function(String path) _notifyFileVisible;
   final Future<void> Function(File file, int timestamp)
       _setPublishedFileTimestamp;
+  final PrivacyLog _privacyLogger;
   final LocalDatabase Function() _database;
 
   final _sendFileLock = Lock();
@@ -181,6 +194,22 @@ class FileTransferEngine {
 
   bool _supportsFileTransferV3For(String peerId) =>
       _remoteProfileFor(peerId)?.capabilities.fileTransferV3 == true;
+
+  void _logFailure(
+    FileTransferDiagnosticKind kind,
+    Object error, {
+    FileTransferDirection? direction,
+  }) {
+    _privacyLogger.event(
+      PrivacyEvent.transferProgress,
+      <PrivacyField, Object>{
+        PrivacyField.kind: kind,
+        if (direction != null) PrivacyField.direction: direction,
+        PrivacyField.success: false,
+        PrivacyField.errorType: _privacyLogger.errorType(error),
+      },
+    );
+  }
 
   Future<void> retryTransfer(String transferId) async {
     final database = _database();
@@ -306,8 +335,7 @@ class FileTransferEngine {
                 transferId: transfer.transferId,
                 durableOffset: transfer.committedBytes,
                 size: transfer.size,
-                errorCode: '',
-                errorMessage: '',
+                failureReason: FileTransferFailureReason.none,
               ),
             );
           }
@@ -382,7 +410,12 @@ class FileTransferEngine {
         throw const FileSystemException('源文件在校验期间发生变化');
       }
     } catch (error) {
-      _notify(_outgoingTransferErrorMessage(error));
+      _logFailure(
+        FileTransferDiagnosticKind.outgoingFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
+      _notify(FileTransferFailureReason.source.wireCode);
       return false;
     }
     final timestamp = (await file.lastModified()).millisecondsSinceEpoch;
@@ -445,7 +478,12 @@ class FileTransferEngine {
         throw const FileSystemException('文件在校验期间发生变化');
       }
     } catch (error) {
-      _notify(_outgoingTransferErrorMessage(error));
+      _logFailure(
+        FileTransferDiagnosticKind.outgoingFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
+      _notify(FileTransferFailureReason.source.wireCode);
       return false;
     }
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -653,16 +691,25 @@ class FileTransferEngine {
         );
         if (!wireValidation.isAccepted &&
             wireValidation.reason == WireInputReason.transferSizeInvalid) {
-          await _sendFileOfferError(message, 'invalid_size');
+          await _sendFileOfferError(
+            message,
+            FileTransferFailureReason.invalidSize,
+          );
           return;
         }
         wireValidation.requireAccepted();
         if (message.path.isNotEmpty) {
-          await _sendFileOfferError(message, 'invalid_path');
+          await _sendFileOfferError(
+            message,
+            FileTransferFailureReason.invalidPath,
+          );
           return;
         }
         if (!validateIncomingFileName(message.name)) {
-          await _sendFileOfferError(message, 'invalid_name');
+          await _sendFileOfferError(
+            message,
+            FileTransferFailureReason.invalidName,
+          );
           return;
         }
         late final FileTransferV3Metadata metadata;
@@ -672,7 +719,11 @@ class FileTransferEngine {
             size: message.size,
           );
         } on FileTransferV3MetadataException catch (error) {
-          await _sendFileOfferError(message, error.reason);
+          await _sendFileOfferError(
+            message,
+            fileTransferFailureReasonFromWire(error.reason) ??
+                FileTransferFailureReason.invalidMetadata,
+          );
           return;
         }
         final existing = await _database().fetchFileTransfer(frame.transferId);
@@ -723,8 +774,8 @@ class FileTransferEngine {
             await _sendFileOfferError(
               message,
               error.decision == FileTransferAdmission.missing
-                  ? 'message_missing'
-                  : 'queue_full',
+                  ? FileTransferFailureReason.messageMissing
+                  : FileTransferFailureReason.queueFull,
             );
           }
           return;
@@ -814,14 +865,13 @@ class FileTransferEngine {
             _receivingTransferSequences[transfer.transferId] =
                 expectedSequence + 1;
           }
-        } catch (error, stackTrace) {
+        } catch (error) {
           if (error is WireInputRejected) {
             rethrow;
           }
           await _handleIncomingFileTransferV3Error(
             frame.transferId,
             error,
-            stackTrace,
           );
         }
         break;
@@ -863,7 +913,7 @@ class FileTransferEngine {
             control,
             requireCurrent: requireCurrent,
           );
-        } catch (error, stackTrace) {
+        } catch (error) {
           if (error is WireInputRejected) {
             rethrow;
           }
@@ -871,13 +921,11 @@ class FileTransferEngine {
             await _handleIncomingFileTransferV3Error(
               control.transferId,
               error,
-              stackTrace,
             );
           } else {
             await _handleOutgoingFileTransferV3Error(
               control.transferId,
               error,
-              stackTrace,
             );
           }
         }
@@ -1126,7 +1174,7 @@ class FileTransferEngine {
 
   Future<void> _sendFileOfferError(
     MessageData message,
-    String errorCode,
+    FileTransferFailureReason failureReason,
   ) async {
     await _sendFileTransferV3ControlTo(
       message.sender,
@@ -1135,8 +1183,7 @@ class FileTransferEngine {
         transferId: message.uuid,
         durableOffset: 0,
         size: math.max(0, message.size),
-        errorCode: errorCode,
-        errorMessage: errorCode,
+        failureReason: failureReason,
       ),
     );
   }
@@ -1182,7 +1229,10 @@ class FileTransferEngine {
           requireCurrent: requireCurrent,
         );
         try {
-          await _sendFileOfferError(message, 'storage');
+          await _sendFileOfferError(
+            message,
+            FileTransferFailureReason.storage,
+          );
         } finally {
           await _releaseIncomingAndStartNext(
             transfer,
@@ -1245,14 +1295,14 @@ class FileTransferEngine {
       FileTransferState.canceled => FileTransferV3Action.cancel,
       _ => FileTransferV3Action.error,
     };
-    final errorCode = transfer.state == FileTransferState.failed
+    final failureReason = transfer.state == FileTransferState.failed
         ? switch (transfer.lastError) {
-            'queue_full' => 'queue_full',
-            'storage' => 'storage',
-            'integrity' => 'integrity',
-            _ => 'receiver',
+            'queue_full' => FileTransferFailureReason.queueFull,
+            'storage' => FileTransferFailureReason.storage,
+            'integrity' => FileTransferFailureReason.integrity,
+            _ => FileTransferFailureReason.receiver,
           }
-        : '';
+        : FileTransferFailureReason.none;
     await _sendFileTransferV3ControlTo(
       transfer.peerUid,
       FileTransferV3Control(
@@ -1262,8 +1312,7 @@ class FileTransferEngine {
             ? transfer.size
             : transfer.committedBytes,
         size: transfer.size,
-        errorCode: errorCode,
-        errorMessage: errorCode,
+        failureReason: failureReason,
       ),
     );
   }
@@ -1384,8 +1433,7 @@ class FileTransferEngine {
         transferId: transfer.transferId,
         durableOffset: durableOffset,
         size: transfer.size,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
         resumeProofSha256: resumeProofSha256,
         resumeProofLength: math.min(
           fileTransferV3ResumeProofWindowSize,
@@ -1488,20 +1536,16 @@ class FileTransferEngine {
     try {
       sourceIsValid =
           await source.exists() && await source.length() == transfer.size;
-    } catch (error, stackTrace) {
+    } catch (error) {
       requireCurrent();
-      await _handleOutgoingTransferError(
-        transfer,
-        error,
-        stackTrace,
-      );
+      await _handleOutgoingTransferError(transfer, error);
       return;
     }
     requireCurrent();
     if (!sourceIsValid) {
       await _failOutgoingFileTransferV3(
         transfer,
-        '源文件不存在或已变化，无法继续传输',
+        FileTransferFailureReason.source,
       );
       return;
     }
@@ -1512,9 +1556,9 @@ class FileTransferEngine {
           source,
           resumeOffset: control.durableOffset,
         );
-      } catch (error, stackTrace) {
+      } catch (error) {
         requireCurrent();
-        await _handleOutgoingTransferError(transfer, error, stackTrace);
+        await _handleOutgoingTransferError(transfer, error);
         return;
       }
       requireCurrent();
@@ -1529,8 +1573,7 @@ class FileTransferEngine {
             transferId: transfer.transferId,
             durableOffset: control.durableOffset,
             size: transfer.size,
-            errorCode: 'resume_proof_mismatch',
-            errorMessage: '续传校验失败，将从头开始传输',
+            failureReason: FileTransferFailureReason.resumeProofMismatch,
           ),
         );
         return;
@@ -1580,12 +1623,12 @@ class FileTransferEngine {
 
   Future<void> _failOutgoingFileTransferV3(
     FileTransferData transfer,
-    String message,
+    FileTransferFailureReason failureReason,
   ) async {
     await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.failed,
-      lastError: message,
+      lastError: failureReason.wireCode,
     );
     final connection = _outgoingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
@@ -1597,8 +1640,7 @@ class FileTransferEngine {
           transferId: transfer.transferId,
           durableOffset: transfer.committedBytes,
           size: transfer.size,
-          errorCode: 'source',
-          errorMessage: message,
+          failureReason: failureReason,
         ),
       );
     } finally {
@@ -1606,14 +1648,13 @@ class FileTransferEngine {
         transfer,
         connection: connection,
       );
-      _notify(message);
+      _notify(failureReason.wireCode);
     }
   }
 
   Future<void> _handleOutgoingFileTransferV3Error(
     String transferId,
     Object error,
-    StackTrace stackTrace,
   ) async {
     final transfer = await _database().fetchFileTransfer(transferId);
     if (transfer == null ||
@@ -1621,25 +1662,15 @@ class FileTransferEngine {
         isTerminalFileTransferState(transfer.state)) {
       return;
     }
-    final message = _outgoingFileTransferV3ErrorMessage(error);
-    logger.i(
-      'file transfer v3 outgoing failed transfer=$transferId '
-      'peer=${transfer.peerUid} type=${error.runtimeType}',
+    _logFailure(
+      FileTransferDiagnosticKind.outgoingFailed,
+      error,
+      direction: FileTransferDirection.outgoing,
     );
     await _failOutgoingFileTransferV3(
       transfer,
-      message,
+      FileTransferFailureReason.source,
     );
-  }
-
-  String _outgoingFileTransferV3ErrorMessage(Object error) {
-    if (error is FileSystemException) {
-      final detail = error.message.isNotEmpty
-          ? error.message
-          : error.osError?.message ?? error.toString();
-      return '发送文件失败：$detail';
-    }
-    return '发送文件失败：$error';
   }
 
   Future<int?> _sendFileTransferV3WindowSafely(
@@ -1656,11 +1687,10 @@ class FileTransferEngine {
           offset: offset,
         ),
       );
-    } catch (error, stackTrace) {
+    } catch (error) {
       await _handleOutgoingFileTransferV3Error(
         transfer.transferId,
         error,
-        stackTrace,
       );
       return null;
     }
@@ -1842,8 +1872,8 @@ class FileTransferEngine {
               armWatchdog: false,
             ),
           );
-        } catch (error, stackTrace) {
-          await _handleOutgoingTransferError(transfer, error, stackTrace);
+        } catch (error) {
+          await _handleOutgoingTransferError(transfer, error);
           return null;
         }
       },
@@ -1998,7 +2028,6 @@ class FileTransferEngine {
   Future<void> _handleIncomingFileTransferV3Error(
     String transferId,
     Object error,
-    StackTrace stackTrace,
   ) async {
     final transfer = _receivingTransfers[transferId] ??
         await _database().fetchFileTransfer(transferId);
@@ -2008,18 +2037,19 @@ class FileTransferEngine {
       return;
     }
 
-    final message = _incomingFileTransferV3ErrorMessage(error);
+    const failureReason = FileTransferFailureReason.receiver;
     final durableOffset =
         _receivingTransferOffsets[transferId] ?? transfer.committedBytes;
-    logger.i(
-      'file transfer v3 incoming failed transfer=$transferId '
-      'peer=${transfer.peerUid} type=${error.runtimeType}',
+    _logFailure(
+      FileTransferDiagnosticKind.incomingFailed,
+      error,
+      direction: FileTransferDirection.incoming,
     );
     await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.failed,
       committedBytes: math.min(durableOffset, transfer.size),
-      lastError: message,
+      lastError: failureReason.wireCode,
     );
     try {
       await _sendFileTransferV3ControlTo(
@@ -2029,8 +2059,7 @@ class FileTransferEngine {
           transferId: transfer.transferId,
           durableOffset: math.min(durableOffset, transfer.size),
           size: transfer.size,
-          errorCode: 'receiver',
-          errorMessage: message,
+          failureReason: failureReason,
         ),
       );
     } finally {
@@ -2039,18 +2068,8 @@ class FileTransferEngine {
         flush: false,
         connection: _operationConnectionBindings[transfer.transferId],
       );
-      _notify(message);
+      _notify(failureReason.wireCode);
     }
-  }
-
-  String _incomingFileTransferV3ErrorMessage(Object error) {
-    if (error is FileSystemException) {
-      final detail = error.message.isNotEmpty
-          ? error.message
-          : error.osError?.message ?? error.toString();
-      return '接收文件失败：$detail';
-    }
-    return '接收文件失败：$error';
   }
 
   void _dispatchTransferProgress(
@@ -2102,8 +2121,7 @@ class FileTransferEngine {
         transferId: transfer.transferId,
         durableOffset: durableOffset,
         size: transfer.size,
-        errorCode: '',
-        errorMessage: '',
+        failureReason: FileTransferFailureReason.none,
       ),
     );
   }
@@ -2277,7 +2295,7 @@ class FileTransferEngine {
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.canceled,
-      lastError: control.errorMessage,
+      lastError: control.failureReason.wireCode,
       requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
@@ -2306,7 +2324,8 @@ class FileTransferEngine {
     requireCurrent();
     if (existing != null &&
         existing.direction == FileTransferDirection.incoming &&
-        control.errorCode == 'resume_proof_mismatch' &&
+        control.failureReason ==
+            FileTransferFailureReason.resumeProofMismatch &&
         control.durableOffset > 0 &&
         control.durableOffset == existing.committedBytes &&
         existing.tempPath.isNotEmpty) {
@@ -2356,7 +2375,7 @@ class FileTransferEngine {
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.failed,
-      lastError: control.errorMessage,
+      lastError: control.failureReason.wireCode,
       requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
@@ -2374,8 +2393,8 @@ class FileTransferEngine {
         );
       }
     }
-    if (control.errorMessage.isNotEmpty) {
-      _notify(control.errorMessage);
+    if (control.failureReason != FileTransferFailureReason.none) {
+      _notify(control.failureReason.wireCode);
     }
   }
 
@@ -2409,10 +2428,7 @@ class FileTransferEngine {
         await writer.close();
       }
     } on FileSystemException catch (error) {
-      logger.i(
-        'resume proof reset filesystem recovery deferred '
-        'transfer=${transfer.transferId} type=${error.runtimeType}',
-      );
+      _logFailure(FileTransferDiagnosticKind.resumeResetDeferred, error);
       _receivingTransfers.remove(transfer.transferId);
       _receivingChecksums.remove(transfer.transferId);
       _receivingTransferOffsets.remove(transfer.transferId);
@@ -2429,10 +2445,7 @@ class FileTransferEngine {
         expectedOffset: transfer.committedBytes,
       );
     } catch (error) {
-      logger.i(
-        'resume proof reset completion deferred '
-        'transfer=${transfer.transferId} type=${error.runtimeType}',
-      );
+      _logFailure(FileTransferDiagnosticKind.resumeResetDeferred, error);
       return null;
     }
   }
@@ -2470,8 +2483,7 @@ class FileTransferEngine {
             transferId: transfer.transferId,
             durableOffset: transfer.size,
             size: transfer.size,
-            errorCode: 'integrity',
-            errorMessage: '文件完整性校验失败',
+            failureReason: FileTransferFailureReason.integrity,
           ),
         );
       } finally {
@@ -2509,11 +2521,10 @@ class FileTransferEngine {
         } catch (_) {
           try {
             await discardDownloadReservation(reservation);
-          } catch (cleanupError, cleanupStackTrace) {
-            logger.i(
-              'file transfer reservation cleanup failed '
-              'transfer=${transfer.transferId} type=${cleanupError.runtimeType}\n'
-              '$cleanupStackTrace',
+          } catch (cleanupError) {
+            _logFailure(
+              FileTransferDiagnosticKind.reservationCleanupFailed,
+              cleanupError,
             );
           }
           rethrow;
@@ -2523,9 +2534,9 @@ class FileTransferEngine {
         try {
           _dispatchTransferData(completed);
         } catch (error) {
-          logger.i(
-            'file transfer completion dispatch failed '
-            'transfer=${transfer.transferId} type=${error.runtimeType}',
+          _logFailure(
+            FileTransferDiagnosticKind.completionDispatchFailed,
+            error,
           );
         }
         try {
@@ -2535,17 +2546,17 @@ class FileTransferEngine {
             await tempFile.delete();
           }
         } catch (error) {
-          logger.i(
-            'file transfer temp cleanup failed '
-            'transfer=${transfer.transferId} type=${error.runtimeType}',
+          _logFailure(
+            FileTransferDiagnosticKind.temporaryFileCleanupFailed,
+            error,
           );
         }
         try {
           await _notifyFileVisible(published.path);
         } catch (error) {
-          logger.i(
-            'file transfer visibility notification failed '
-            'transfer=${transfer.transferId} type=${error.runtimeType}',
+          _logFailure(
+            FileTransferDiagnosticKind.visibilityNotificationFailed,
+            error,
           );
         }
         await _sendFileTransferV3ControlTo(
@@ -2555,8 +2566,7 @@ class FileTransferEngine {
             transferId: transfer.transferId,
             durableOffset: transfer.size,
             size: transfer.size,
-            errorCode: '',
-            errorMessage: '',
+            failureReason: FileTransferFailureReason.none,
           ),
         );
       } finally {
@@ -2608,34 +2618,24 @@ class FileTransferEngine {
   Future<void> _handleOutgoingTransferError(
     FileTransferData transfer,
     Object error,
-    StackTrace stackTrace,
   ) async {
-    final errorMessage = _outgoingTransferErrorMessage(error);
-    logger.i(
-      'outgoing transfer failed transfer=${transfer.transferId} '
-      'peer=${transfer.peerUid} type=${error.runtimeType}',
+    const failureReason = FileTransferFailureReason.source;
+    _logFailure(
+      FileTransferDiagnosticKind.outgoingFailed,
+      error,
+      direction: FileTransferDirection.outgoing,
     );
     await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.failed,
-      lastError: errorMessage,
+      lastError: failureReason.wireCode,
     );
     await _releaseOutgoingAndStartNext(
       transfer,
       connection: _outgoingConnectionBindings[transfer.transferId] ??
           _operationConnectionBindings[transfer.transferId],
     );
-    _notify(errorMessage);
-  }
-
-  String _outgoingTransferErrorMessage(Object error) {
-    if (error is FileSystemException) {
-      final detail = error.message.isNotEmpty
-          ? error.message
-          : error.osError?.message ?? error.toString();
-      return '发送文件失败：$detail';
-    }
-    return '发送文件失败：$error';
+    _notify(failureReason.wireCode);
   }
 
   Future<void> _failStaleIncomingQueueEntry(
