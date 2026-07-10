@@ -9,7 +9,9 @@ void main() {
 
     expect(source, contains('"sampleRate": captured.sampleRate'));
     expect(source, contains('"channels": captured.channels'));
-    expect(source, contains('WhisperAudioCapture frame'));
+    expect(source, isNot(contains('audioCaptureProgress')));
+    expect(source, isNot(contains('frameLogCount')));
+    expect(source, isNot(contains('WhisperAudioCapture frame session=')));
   });
 
   test(

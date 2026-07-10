@@ -12,14 +12,12 @@ import android.media.PlaybackParams
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     companion object {
-        private const val TAG = "WhisperAudioShare"
         private const val PLAYBACK_NORMAL_SPEED = 1.0f
         private const val PLAYBACK_CATCH_UP_SPEED = 1.012f
         private const val PLAYBACK_CATCH_UP_QUEUE_MICROS = 160_000L
@@ -85,12 +83,12 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 if (sessionId == activeSessionId && pcm != null) {
                     if (isStaleFrame(targetPlaybackTimeMicros)) {
                         droppedStaleCount += 1
-                        if (droppedStaleCount <= 3 || droppedStaleCount % 50 == 0) {
-                            Log.w(
-                                TAG,
-                                "writePcm stale drop session=$sessionId " +
-                                    "targetPlaybackTimeMicros=$targetPlaybackTimeMicros " +
-                                    "droppedStale=$droppedStaleCount"
+                        if (NativePrivacyLog.isEnabled &&
+                            (droppedStaleCount <= 3 || droppedStaleCount % 50 == 0)
+                        ) {
+                            NativePrivacyLog.event(
+                                NativeLogEvent.audioFrameDroppedStale,
+                                count = droppedStaleCount.toLong(),
                             )
                         }
                         result.success(null)
@@ -98,7 +96,7 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     }
                     val queuedBeforeMicros = nativeQueuedMicros()
                     if (queuedBeforeMicros > PLAYBACK_RESYNC_QUEUE_MICROS) {
-                        resyncPlaybackQueue("preWrite", queuedBeforeMicros)
+                        resyncPlaybackQueue()
                     }
                     val written = writePcmNonBlocking(pcm)
                     writeCount += 1
@@ -109,38 +107,16 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     val nativeQueuedMicros = nativeQueuedMicros()
                     updatePlaybackSpeed(nativeQueuedMicros)
                     if (written < pcm.size) {
-                        recordShortWrite(
-                            sessionId,
-                            requestedBytes = pcm.size,
-                            writtenBytes = written,
-                            nativeQueuedMicros = nativeQueuedMicros
-                        )
-                    }
-                    if (writeCount <= 3 || writeCount % 100 == 0) {
-                        val peakLeft = pcmPeak(pcm, activeChannels, 0)
-                        val peakRight = if (activeChannels > 1) {
-                            pcmPeak(pcm, activeChannels, 1)
-                        } else {
-                            peakLeft
-                        }
-                        Log.i(
-                            TAG,
-                            "writePcm session=$sessionId bytes=${pcm.size} written=$written " +
-                                "writeCount=$writeCount writeBytes=$writeBytes " +
-                                "targetPlaybackTimeMicros=$targetPlaybackTimeMicros " +
-                                "writtenFrames=$writtenFrames nativeQueuedMicros=$nativeQueuedMicros " +
-                                "peakLeft=$peakLeft peakRight=$peakRight " +
-                                "droppedStale=$droppedStaleCount " +
-                                "shortWrite=$shortWriteCount resync=$resyncCount"
-                        )
+                        recordShortWrite(writtenBytes = written)
                     }
                 } else {
                     droppedWriteCount += 1
-                    if (droppedWriteCount <= 3 || droppedWriteCount % 100 == 0) {
-                        Log.w(
-                            TAG,
-                            "writePcm dropped session=$sessionId active=$activeSessionId " +
-                                "hasPcm=${pcm != null} dropped=$droppedWriteCount"
+                    if (NativePrivacyLog.isEnabled &&
+                        (droppedWriteCount <= 3 || droppedWriteCount % 100 == 0)
+                    ) {
+                        NativePrivacyLog.event(
+                            NativeLogEvent.audioFrameDropped,
+                            count = droppedWriteCount.toLong(),
                         )
                     }
                 }
@@ -196,7 +172,10 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                         error is ForegroundServiceStartNotAllowedException
                     ) {
-                        Log.w(TAG, "media FGS start not allowed", error)
+                        NativePrivacyLog.event(
+                            NativeLogEvent.mediaServiceStartDenied,
+                            reason = NativeLogReason.startDenied,
+                        )
                     } else {
                         throw error
                     }
@@ -299,11 +278,10 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         )
         val targetBufferSize = sampleRate * activeChannels * 2 / 20
         val bufferSize = maxOf(minBufferSize, targetBufferSize)
-        Log.i(
-            TAG,
-            "startPlayback session=$sessionId sampleRate=$sampleRate channels=$activeChannels " +
-                "minBufferSize=$minBufferSize targetBufferSize=$targetBufferSize " +
-                "bufferSize=$bufferSize"
+        NativePrivacyLog.event(
+            NativeLogEvent.audioPlaybackStarted,
+            count = activeChannels.toLong(),
+            bytes = bufferSize.toLong(),
         )
 
         val builder = AudioTrack.Builder()
@@ -335,12 +313,10 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private fun stopPlayback() {
         val sessionId = activeSessionId
         if (sessionId.isNotEmpty()) {
-            Log.i(
-                TAG,
-                "stopPlayback session=$sessionId writeCount=$writeCount " +
-                    "writeBytes=$writeBytes dropped=$droppedWriteCount " +
-                    "droppedStale=$droppedStaleCount " +
-                    "shortWrite=$shortWriteCount resync=$resyncCount"
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackStopped,
+                count = writeCount.toLong(),
+                bytes = writeBytes,
             )
         }
         audioTrack?.let {
@@ -370,19 +346,15 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    private fun recordShortWrite(
-        sessionId: String,
-        requestedBytes: Int,
-        writtenBytes: Int,
-        nativeQueuedMicros: Long
-    ) {
+    private fun recordShortWrite(writtenBytes: Int) {
         shortWriteCount += 1
-        if (shortWriteCount <= 3 || shortWriteCount % 50 == 0) {
-            Log.w(
-                TAG,
-                "writePcm short session=$sessionId requested=$requestedBytes " +
-                    "written=$writtenBytes nativeQueuedMicros=$nativeQueuedMicros " +
-                    "shortWrite=$shortWriteCount"
+        if (NativePrivacyLog.isEnabled &&
+            (shortWriteCount <= 3 || shortWriteCount % 50 == 0)
+        ) {
+            NativePrivacyLog.event(
+                NativeLogEvent.audioShortWrite,
+                count = shortWriteCount.toLong(),
+                bytes = writtenBytes.coerceAtLeast(0).toLong(),
             )
         }
     }
@@ -409,7 +381,7 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         return nowMicros - targetPlaybackTimeMicros > PLAYBACK_STALE_DROP_TOLERANCE_MICROS
     }
 
-    private fun resyncPlaybackQueue(reason: String, nativeQueuedMicros: Long) {
+    private fun resyncPlaybackQueue() {
         val track = audioTrack ?: return
         resyncCount += 1
         try {
@@ -418,16 +390,15 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             writtenFrames = playbackHeadFrames(track)
             updatePlaybackSpeed(0L, force = true)
             track.play()
-            Log.w(
-                TAG,
-                "playbackResync session=$activeSessionId reason=$reason " +
-                    "nativeQueuedMicros=$nativeQueuedMicros resync=$resyncCount"
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackResynced,
+                reason = NativeLogReason.queueBacklog,
+                count = resyncCount.toLong(),
             )
-        } catch (error: IllegalStateException) {
-            Log.w(
-                TAG,
-                "playbackResync failed reason=$reason nativeQueuedMicros=$nativeQueuedMicros",
-                error
+        } catch (_: IllegalStateException) {
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackResyncFailed,
+                reason = NativeLogReason.invalidState,
             )
         }
     }
@@ -450,33 +421,19 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 .allowDefaults()
                 .setSpeed(desiredSpeed)
             currentPlaybackSpeed = desiredSpeed
-            Log.i(
-                TAG,
-                "playbackSpeed session=$activeSessionId speed=$desiredSpeed " +
-                    "nativeQueuedMicros=$nativeQueuedMicros"
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackSpeedChanged,
             )
-        } catch (error: IllegalArgumentException) {
-            Log.w(TAG, "playbackSpeed failed speed=$desiredSpeed", error)
-        } catch (error: IllegalStateException) {
-            Log.w(TAG, "playbackSpeed failed speed=$desiredSpeed", error)
+        } catch (_: IllegalArgumentException) {
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackSpeedFailed,
+                reason = NativeLogReason.invalidState,
+            )
+        } catch (_: IllegalStateException) {
+            NativePrivacyLog.event(
+                NativeLogEvent.audioPlaybackSpeedFailed,
+                reason = NativeLogReason.invalidState,
+            )
         }
-    }
-
-    private fun pcmPeak(pcm: ByteArray, channels: Int, targetChannel: Int): Int {
-        val normalizedChannels = maxOf(1, channels)
-        var peak = 0
-        var index = targetChannel.coerceIn(0, normalizedChannels - 1) * 2
-        val step = normalizedChannels * 2
-        while (index + 1 < pcm.size) {
-            val lo = pcm[index].toInt() and 0xff
-            val hi = pcm[index + 1].toInt() shl 8
-            val sample = (hi or lo).toShort().toInt()
-            val absSample = if (sample < 0) -sample else sample
-            if (absSample > peak) {
-                peak = absSample
-            }
-            index += step
-        }
-        return peak
     }
 }

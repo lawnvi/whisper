@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -22,6 +24,38 @@ namespace {
 
 constexpr char kRemoteInputChannel[] = "com.vireen.whisper/remote_input";
 constexpr int kEdgeThreshold = 6;
+
+enum class RemoteInputDiagnosticEvent {
+  kCaptureActive,
+  kCapturePaused,
+  kCaptureStarted,
+  kEventCaptured,
+  kEventIgnored,
+  kStalePauseIgnored,
+};
+
+const char* RemoteInputDiagnosticEventName(RemoteInputDiagnosticEvent event) {
+  switch (event) {
+    case RemoteInputDiagnosticEvent::kCaptureActive:
+      return "capture_active";
+    case RemoteInputDiagnosticEvent::kCapturePaused:
+      return "capture_paused";
+    case RemoteInputDiagnosticEvent::kCaptureStarted:
+      return "capture_started";
+    case RemoteInputDiagnosticEvent::kEventCaptured:
+      return "event_captured";
+    case RemoteInputDiagnosticEvent::kEventIgnored:
+      return "event_ignored";
+    case RemoteInputDiagnosticEvent::kStalePauseIgnored:
+      return "stale_pause_ignored";
+  }
+  return "unknown";
+}
+
+bool ShouldTraceRemoteInput() {
+  const char* value = std::getenv("WHISPER_REMOTE_INPUT_TRACE");
+  return value != nullptr && std::strcmp(value, "1") == 0;
+}
 
 struct ScreenArea {
   int left = 0;
@@ -890,22 +924,16 @@ class RemoteInputPlugin : public flutter::Plugin {
       POINT point = {};
       const bool has_cursor = GetCursorPos(&point) == TRUE;
       const bool at_edge = has_cursor && IsCursorAtCaptureEdge(point);
-      EmitInactiveKeyboardDiagnostic(
-          virtual_key, down, up, keyboard->flags, point, has_cursor, at_edge);
+      EmitInactiveEventDiagnostic(down, up);
       if (!at_edge) {
         return false;
       }
       ActivateCapture("keyboard");
     }
-    if (keyboard_diagnostic_count_ < 20 && (down || up)) {
-      std::ostringstream diagnostic;
-      diagnostic << "windows keyboard hook vk=" << virtual_key
-                 << " down=" << (down ? 1 : 0)
-                 << " up=" << (up ? 1 : 0)
-                 << " flags=" << keyboard->flags
-                 << " captureActive=1";
-      EmitDiagnostic(diagnostic.str());
-      ++keyboard_diagnostic_count_;
+    if (ShouldTraceRemoteInput() && event_diagnostic_count_ < 20 &&
+        (down || up)) {
+      EmitDiagnostic(RemoteInputDiagnosticEvent::kEventCaptured);
+      ++event_diagnostic_count_;
     }
     if (down || up) {
       EmitInputEvent("key", JsonBytes(KeyPayload(virtual_key, down)));
@@ -1113,8 +1141,8 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_buttons_ = 0;
     last_hook_mouse_point_.reset();
     capture_activation_edge_unit_.reset();
-    keyboard_diagnostic_count_ = 0;
-    inactive_keyboard_diagnostic_count_ = 0;
+    event_diagnostic_count_ = 0;
+    inactive_event_diagnostic_count_ = 0;
     sequence_ = 0;
     const bool raw_input_registered = RegisterRawInput(true);
     std::string hook_error;
@@ -1127,7 +1155,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (!hook_error.empty()) {
       diagnostic << " hookError=" << hook_error;
     }
-    EmitDiagnostic(diagnostic.str());
+    EmitDiagnostic(RemoteInputDiagnosticEvent::kCaptureStarted);
     if (!raw_input_registered || !hooks_installed) {
       const std::string error = diagnostic.str();
       StopCapture();
@@ -1154,7 +1182,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_buttons_ = 0;
     last_hook_mouse_point_.reset();
     capture_activation_edge_unit_.reset();
-    inactive_keyboard_diagnostic_count_ = 0;
+    inactive_event_diagnostic_count_ = 0;
   }
 
   void PauseCapture(const std::string& session_id,
@@ -1169,25 +1197,10 @@ class RemoteInputPlugin : public flutter::Plugin {
       if (release_activation_sequence > 0 &&
           capture_activation_sequence_ >
               static_cast<uint64_t>(release_activation_sequence)) {
-        std::ostringstream diagnostic;
-        diagnostic << "windows remote input ignored stale pause "
-                   << "releaseSequence=" << release_sequence
-                   << " releaseActivationSequence="
-                   << release_activation_sequence
-                   << " nativeSequence=" << sequence_;
-        EmitDiagnostic(diagnostic.str());
+        EmitDiagnostic(RemoteInputDiagnosticEvent::kStalePauseIgnored);
         return;
       }
-      std::ostringstream diagnostic;
-      diagnostic << "windows remote input capture paused edge="
-                 << capture_edge_
-                 << " releaseSequence=" << release_sequence
-                 << " releaseActivationSequence="
-                 << release_activation_sequence
-                 << " nativeSequence=" << sequence_
-                 << " activationSequence=" << capture_activation_sequence_
-                 << " wasActive=" << (capture_active_ ? 1 : 0);
-      EmitDiagnostic(diagnostic.str());
+      EmitDiagnostic(RemoteInputDiagnosticEvent::kCapturePaused);
       ReleaseCommonModifierKeys();
       if (!release_edge.empty()) {
         ApplyCaptureRoute(
@@ -1201,8 +1214,8 @@ class RemoteInputPlugin : public flutter::Plugin {
       capture_buttons_ = 0;
       last_hook_mouse_point_.reset();
       capture_activation_edge_unit_.reset();
-      keyboard_diagnostic_count_ = 0;
-      inactive_keyboard_diagnostic_count_ = 0;
+      event_diagnostic_count_ = 0;
+      inactive_event_diagnostic_count_ = 0;
     }
   }
 
@@ -1741,27 +1754,13 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_segment_ = route.source_segment;
   }
 
-  void EmitInactiveKeyboardDiagnostic(USHORT virtual_key,
-                                      bool down,
-                                      bool up,
-                                      DWORD flags,
-                                      POINT point,
-                                      bool has_cursor,
-                                      bool at_edge) {
-    if (inactive_keyboard_diagnostic_count_ >= 20 || (!down && !up)) {
+  void EmitInactiveEventDiagnostic(bool down, bool up) {
+    if (!ShouldTraceRemoteInput() ||
+        inactive_event_diagnostic_count_ >= 20 || (!down && !up)) {
       return;
     }
-    std::ostringstream diagnostic;
-    diagnostic << "windows keyboard hook inactive vk=" << virtual_key
-               << " down=" << (down ? 1 : 0)
-               << " up=" << (up ? 1 : 0)
-               << " flags=" << flags
-               << " edge=" << capture_edge_
-               << " hasCursor=" << (has_cursor ? 1 : 0)
-               << " cursor=" << point.x << "," << point.y
-               << " atEdge=" << (at_edge ? 1 : 0);
-    EmitDiagnostic(diagnostic.str());
-    ++inactive_keyboard_diagnostic_count_;
+    EmitDiagnostic(RemoteInputDiagnosticEvent::kEventIgnored);
+    ++inactive_event_diagnostic_count_;
   }
 
   void ActivateCapture(const char* source) {
@@ -1772,15 +1771,9 @@ class RemoteInputPlugin : public flutter::Plugin {
     pending_active_start_ = true;
     capture_activation_sequence_ = sequence_ + 1;
     capture_buttons_ = CurrentMouseButtonsMask();
-    keyboard_diagnostic_count_ = 0;
-    std::ostringstream diagnostic;
-    diagnostic << "windows remote input capture active edge="
-               << capture_edge_
-               << " via=" << source
-               << " activationSequence=" << capture_activation_sequence_
-               << " mouseHook=" << (mouse_hook_ != nullptr ? 1 : 0)
-               << " keyboardHook=" << (keyboard_hook_ != nullptr ? 1 : 0);
-    EmitDiagnostic(diagnostic.str());
+    event_diagnostic_count_ = 0;
+    (void)source;
+    EmitDiagnostic(RemoteInputDiagnosticEvent::kCaptureActive);
   }
 
   bool IsReleaseHotkey(USHORT virtual_key) const {
@@ -2566,15 +2559,13 @@ class RemoteInputPlugin : public flutter::Plugin {
         std::make_unique<flutter::EncodableValue>(std::move(arguments)));
   }
 
-  void EmitDiagnostic(const std::string& message) {
-    if (capture_session_id_.empty()) {
+  void EmitDiagnostic(RemoteInputDiagnosticEvent event) {
+    if (!ShouldTraceRemoteInput()) {
       return;
     }
     flutter::EncodableMap arguments;
-    arguments[flutter::EncodableValue("sessionId")] =
-        flutter::EncodableValue(capture_session_id_);
-    arguments[flutter::EncodableValue("message")] =
-        flutter::EncodableValue(message);
+    arguments[flutter::EncodableValue("event")] =
+        flutter::EncodableValue(RemoteInputDiagnosticEventName(event));
 
     std::lock_guard<std::mutex> lock(channel_mutex_);
     channel_->InvokeMethod(
@@ -2602,8 +2593,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   bool capture_active_ = false;
   bool pending_active_start_ = false;
   int capture_buttons_ = 0;
-  int keyboard_diagnostic_count_ = 0;
-  int inactive_keyboard_diagnostic_count_ = 0;
+  int event_diagnostic_count_ = 0;
+  int inactive_event_diagnostic_count_ = 0;
   int injected_buttons_ = 0;
   int pending_injected_buttons_ = 0;
   bool injected_cursor_entered_interior_ = false;

@@ -29,8 +29,8 @@ void main() {
       expect(plugin, contains('"edgeUnit"'));
       expect(plugin, contains('sourcePlatform'));
       expect(plugin, contains('linuxKeyCode'));
-      expect(plugin, contains('"linux remote input capture started'));
-      expect(plugin, contains('"linux remote input injection started'));
+      expect(plugin, contains('RemoteInputTraceEvent::kCaptureStarted'));
+      expect(plugin, contains('RemoteInputTraceEvent::kInjectionStarted'));
     });
 
     test('builds the Wayland portal injection backend as an optional feature',
@@ -67,8 +67,9 @@ void main() {
         plugin.indexOf('TryStartPortalInjection'),
         lessThan(plugin.indexOf('StartX11Injection(')),
       );
-      expect(plugin, contains('linux remote input portal injection started'));
-      expect(plugin, contains('linux remote input x11 injection started'));
+      expect(
+          plugin, contains('RemoteInputTraceEvent::kPortalInjectionStarted'));
+      expect(plugin, contains('RemoteInputTraceEvent::kX11InjectionStarted'));
     });
 
     test('prefers InputCapture portal capture and falls back to X11 capture',
@@ -90,7 +91,8 @@ void main() {
       );
     });
 
-    test('uses persistent InputCapture portal sessions when version 2 is available',
+    test(
+        'uses persistent InputCapture portal sessions when version 2 is available',
         () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 
@@ -162,12 +164,12 @@ void main() {
       );
       expect(plugin, contains('TraceRemoteInput'));
       expect(plugin, contains('g_printerr'));
-      expect(plugin, contains('sourceCursorHidden='));
-      expect(plugin, contains('rawMotionDisabled='));
-      expect(plugin, contains('linux remote input native active'));
-      expect(plugin, contains('linux remote input native mouse raw'));
-      expect(plugin, contains('linux remote input native mouse motion'));
-      expect(plugin, contains('linux remote input native key'));
+      expect(plugin, contains('enum class RemoteInputTraceEvent'));
+      expect(plugin, contains('RemoteInputTraceEvent::kCaptureActive'));
+      expect(plugin, contains('RemoteInputTraceEvent::kEventCaptured'));
+      expect(plugin, isNot(contains('RemoteInputTraceEvent::kRawMotion')));
+      expect(plugin, isNot(contains('RemoteInputTraceEvent::kMouseMotion')));
+      expect(plugin, isNot(contains('RemoteInputTraceEvent::kKeyCaptured')));
       expect(
         plugin,
         contains('show_source_cursor ? None : CreateHiddenCursor'),
@@ -237,18 +239,22 @@ void main() {
       );
     });
 
-    test('traces Linux injection edge decisions for XWayland debugging', () {
+    test('traces Linux injection with allowlisted events only', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 
-      expect(plugin, contains('linux remote input injection started session='));
-      expect(plugin, contains('linux remote input injection move session='));
-      expect(plugin, contains('linux remote input injection release routed session='));
-      expect(plugin, contains('linux remote input injection release legacy session='));
-      expect(plugin, contains('requested='));
-      expect(plugin, contains('actual='));
+      expect(plugin, contains('RemoteInputTraceEvent::kInjectionStarted'));
+      expect(plugin, contains('RemoteInputTraceEvent::kInjectedEvent'));
+      expect(
+          plugin, contains('RemoteInputTraceEvent::kInjectionReleaseRouted'));
+      expect(
+          plugin, contains('RemoteInputTraceEvent::kInjectionReleaseLegacy'));
+      expect(plugin, isNot(contains('injection move session=')));
+      expect(plugin, isNot(contains('requested=')));
+      expect(plugin, isNot(contains('actual=')));
     });
 
-    test('tracks injected cursor position without trusting XWayland queries', () {
+    test('tracks injected cursor position without trusting XWayland queries',
+        () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
 
       expect(plugin, contains('has_injected_cursor_position_'));

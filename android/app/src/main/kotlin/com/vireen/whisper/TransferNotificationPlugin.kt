@@ -3,7 +3,6 @@ package com.vireen.whisper
 import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -86,7 +85,10 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 error is ForegroundServiceStartNotAllowedException
             ) {
-                Log.w("WhisperTransferNotify", "FGS start not allowed, skip update", error)
+                NativePrivacyLog.event(
+                    NativeLogEvent.transferServiceStartDenied,
+                    reason = NativeLogReason.startDenied,
+                )
             } else {
                 throw error
             }

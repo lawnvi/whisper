@@ -10,6 +10,27 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
 
+namespace {
+
+enum class ApplicationLogReason {
+  kRegistrationFailed,
+};
+
+const char* ApplicationLogReasonName(ApplicationLogReason reason) {
+  switch (reason) {
+    case ApplicationLogReason::kRegistrationFailed:
+      return "registration_failed";
+  }
+  return "unknown";
+}
+
+void LogApplicationWarning(ApplicationLogReason reason) {
+  g_warning("event=application_warning reason=%s",
+            ApplicationLogReasonName(reason));
+}
+
+}  // namespace
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -77,9 +98,9 @@ static gboolean my_application_local_command_line(GApplication* application, gch
 
   g_autoptr(GError) error = nullptr;
   if (!g_application_register(application, nullptr, &error)) {
-     g_warning("Failed to register: %s", error->message);
-     *exit_status = 1;
-     return TRUE;
+    LogApplicationWarning(ApplicationLogReason::kRegistrationFailed);
+    *exit_status = 1;
+    return TRUE;
   }
 
   g_application_activate(application);
