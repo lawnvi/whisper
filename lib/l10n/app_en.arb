@@ -105,6 +105,7 @@
   "filePickerOpenFailed": "Unable to open the file picker",
   "clipboardImageSendFailed": "Unable to send clipboard image",
   "clipboardFilesSendFailed": "Unable to send clipboard files",
+  "messageSendFailed": "Unable to send message. Try again",
   "clipboardFilesCount": "{count, plural, =1{1 file} other{{count} files}}",
   "@clipboardFilesCount": {
     "placeholders": {

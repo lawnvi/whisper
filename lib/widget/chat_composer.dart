@@ -48,14 +48,13 @@ final class ChatComposerSendGate {
 
   bool get isInFlight => _isInFlight;
 
-  Future<bool> run(Future<void> Function() action) async {
+  Future<bool> run(Future<bool> Function() action) async {
     if (_isInFlight) {
       return false;
     }
     _isInFlight = true;
     try {
-      await action();
-      return true;
+      return await action();
     } finally {
       _isInFlight = false;
     }
@@ -150,9 +149,9 @@ class ChatComposer extends StatelessWidget {
   final PendingClipboardDraft? pendingClipboardDraft;
   final Future<void> Function() onPickFiles;
   final Future<void> Function() onPreviewClipboard;
-  final Future<void> Function() onSendClipboardDraft;
+  final Future<bool> Function() onSendClipboardDraft;
   final VoidCallback onClearClipboardDraft;
-  final Future<void> Function(String text) onSendText;
+  final Future<bool> Function(String text) onSendText;
   final Future<String?> Function() onPasteClipboard;
 
   @override
@@ -518,7 +517,7 @@ class ChatComposer extends StatelessWidget {
 
   Future<void> _handlePrimaryAction() async {
     if (_hasClipboardDraft) {
-      await onSendClipboardDraft();
+      await _sendClipboardDraftSafely();
       return;
     }
     if (_showsAttachmentAction) {
@@ -526,12 +525,12 @@ class ChatComposer extends StatelessWidget {
       return;
     }
 
-    final nextText = controller.text.trimRight();
+    final snapshot = controller.value;
+    final nextText = snapshot.text.trimRight();
     if (nextText.trim().isEmpty) {
       return;
     }
-    await onSendText(nextText);
-    controller.clear();
+    await _sendTextSnapshot(snapshot, nextText);
   }
 
   KeyEventResult _handleKeyEvent(KeyEvent event) {
@@ -569,17 +568,39 @@ class ChatComposer extends StatelessWidget {
         return KeyEventResult.handled;
       }
       if (_hasClipboardDraft) {
-        unawaited(onSendClipboardDraft());
+        unawaited(_sendClipboardDraftSafely());
         return KeyEventResult.handled;
       }
-      final nextText = controller.text.trimRight();
+      final snapshot = controller.value;
+      final nextText = snapshot.text.trimRight();
       if (nextText.trim().isNotEmpty) {
-        unawaited(onSendText(nextText));
-        controller.clear();
+        unawaited(_sendTextSnapshot(snapshot, nextText));
       }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  Future<void> _sendClipboardDraftSafely() async {
+    try {
+      await onSendClipboardDraft();
+    } catch (_) {
+      // The owner reports send failures; keep unawaited UI actions contained.
+    }
+  }
+
+  Future<void> _sendTextSnapshot(
+    TextEditingValue snapshot,
+    String text,
+  ) async {
+    try {
+      final sent = await onSendText(text);
+      if (sent && controller.text == snapshot.text) {
+        controller.clear();
+      }
+    } catch (_) {
+      // The owner reports send failures; preserving the snapshot allows retry.
+    }
   }
 
   bool _isPasteShortcut(KeyEvent event) {

@@ -361,6 +361,12 @@ abstract class AppLocalizations {
   /// **'剪贴板文件发送失败'**
   String get clipboardFilesSendFailed;
 
+  /// No description provided for @messageSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息发送失败，请重试'**
+  String get messageSendFailed;
+
   /// No description provided for @clipboardFilesCount.
   ///
   /// In zh, this message translates to:

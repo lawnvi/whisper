@@ -158,6 +158,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clipboardFilesSendFailed => 'Unable to send clipboard files';
 
   @override
+  String get messageSendFailed => 'Unable to send message. Try again';
+
+  @override
   String clipboardFilesCount(num count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

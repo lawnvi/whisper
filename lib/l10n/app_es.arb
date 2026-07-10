@@ -114,6 +114,7 @@
   "filePickerOpenFailed": "No se pudo abrir el selector de archivos",
   "clipboardImageSendFailed": "No se pudo enviar la imagen del portapapeles",
   "clipboardFilesSendFailed": "No se pudieron enviar los archivos del portapapeles",
+  "messageSendFailed": "No se pudo enviar el mensaje. Inténtalo de nuevo",
   "clipboardFilesCount": "{count, plural, =1{1 archivo} other{{count} archivos}}",
   "@clipboardFilesCount": {
     "placeholders": {

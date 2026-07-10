@@ -13,25 +13,40 @@ void main() {
   test('send gate rejects overlapping actions and reopens after completion',
       () async {
     final gate = ChatComposerSendGate();
-    final pending = Completer<void>();
+    final pending = Completer<bool>();
     var actions = 0;
 
-    final first = gate.run(() async {
+    final first = gate.run(() {
       actions++;
-      await pending.future;
+      return pending.future;
     });
     expect(gate.isInFlight, isTrue);
 
-    final duplicate = await gate.run(() async => actions++);
+    final duplicate = await gate.run(() async {
+      actions++;
+      return true;
+    });
     expect(duplicate, isFalse);
     expect(actions, 1);
 
-    pending.complete();
+    pending.complete(true);
     expect(await first, isTrue);
     expect(gate.isInFlight, isFalse);
 
-    expect(await gate.run(() async => actions++), isTrue);
+    expect(
+        await gate.run(() async {
+          actions++;
+          return true;
+        }),
+        isTrue);
     expect(actions, 2);
+
+    await expectLater(
+      gate.run(() async => throw StateError('send failed')),
+      throwsStateError,
+    );
+    expect(gate.isInFlight, isFalse);
+    expect(await gate.run(() async => false), isFalse);
   });
 
   testWidgets('clipboard button previews without sending', (tester) async {
@@ -41,7 +56,10 @@ void main() {
     await tester.pumpWidget(
       _composerApp(
         onPreviewClipboard: () async => previews++,
-        onSendClipboardDraft: () async => clipboardSends++,
+        onSendClipboardDraft: () async {
+          clipboardSends++;
+          return true;
+        },
       ),
     );
 
@@ -61,7 +79,10 @@ void main() {
       _composerApp(
         controller: controller,
         isInputEmpty: false,
-        onSendText: (text) async => sentText = text,
+        onSendText: (text) async {
+          sentText = text;
+          return true;
+        },
       ),
     );
 
@@ -70,6 +91,87 @@ void main() {
     await tester.pump();
 
     expect(sentText, 'hello');
+    expect(controller.text, isEmpty);
+  });
+
+  testWidgets('send button keeps ordinary text when sending returns false',
+      (tester) async {
+    final controller = TextEditingController(text: 'retry me');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) async => false,
+      ),
+    );
+
+    await tester.tap(find.byKey(ChatComposer.sendButtonKey));
+    await tester.pump();
+
+    expect(controller.text, 'retry me');
+  });
+
+  testWidgets('send button keeps ordinary text when sending throws',
+      (tester) async {
+    final controller = TextEditingController(text: 'retry after error');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) => Future<bool>.error(StateError('send failed')),
+      ),
+    );
+
+    await tester.tap(find.byKey(ChatComposer.sendButtonKey));
+    await tester.pump();
+
+    expect(controller.text, 'retry after error');
+  });
+
+  testWidgets('send completion does not clear text appended after button tap',
+      (tester) async {
+    final pending = Completer<bool>();
+    final controller = TextEditingController(text: 'snapshot');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) => pending.future,
+      ),
+    );
+
+    await tester.tap(find.byKey(ChatComposer.sendButtonKey));
+    await tester.pump();
+    controller.text = 'snapshot plus new text';
+    pending.complete(true);
+    await tester.pump();
+
+    expect(controller.text, 'snapshot plus new text');
+  });
+
+  testWidgets('send completion clears matching text after selection moves',
+      (tester) async {
+    final pending = Completer<bool>();
+    final controller = TextEditingController(text: 'snapshot');
+    controller.selection = const TextSelection.collapsed(offset: 8);
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) => pending.future,
+      ),
+    );
+
+    await tester.tap(find.byKey(ChatComposer.sendButtonKey));
+    await tester.pump();
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    pending.complete(true);
+    await tester.pump();
+
     expect(controller.text, isEmpty);
   });
 
@@ -160,8 +262,14 @@ void main() {
         isInputEmpty: false,
         pendingClipboardDraft:
             const PendingClipboardTextDraft('clipboard text'),
-        onSendClipboardDraft: () async => draftSends++,
-        onSendText: (_) async => textSends++,
+        onSendClipboardDraft: () async {
+          draftSends++;
+          return true;
+        },
+        onSendText: (_) async {
+          textSends++;
+          return true;
+        },
       ),
     );
 
@@ -187,7 +295,10 @@ void main() {
         isInputEmpty: false,
         pendingClipboardDraft:
             const PendingClipboardTextDraft('clipboard text'),
-        onSendClipboardDraft: () async => draftSends++,
+        onSendClipboardDraft: () async {
+          draftSends++;
+          return true;
+        },
         onClearClipboardDraft: () => clears++,
       ),
     );
@@ -238,7 +349,10 @@ void main() {
         controller: controller,
         focusNode: focusNode,
         isInputEmpty: false,
-        onSendText: (_) async => sends++,
+        onSendText: (_) async {
+          sends++;
+          return true;
+        },
       ),
     );
 
@@ -263,7 +377,10 @@ void main() {
           controller: controller,
           focusNode: focusNode,
           isInputEmpty: initialText.isEmpty,
-          onSendText: (_) async => sends++,
+          onSendText: (_) async {
+            sends++;
+            return true;
+          },
         ),
       );
       final result = _composerKeyboardFocus(tester).onKeyEvent!(
@@ -292,8 +409,14 @@ void main() {
         isLoading: true,
         pendingClipboardDraft:
             const PendingClipboardTextDraft('clipboard text'),
-        onSendText: (_) async => textSends++,
-        onSendClipboardDraft: () async => draftSends++,
+        onSendText: (_) async {
+          textSends++;
+          return true;
+        },
+        onSendClipboardDraft: () async {
+          draftSends++;
+          return true;
+        },
       ),
     );
 
@@ -306,6 +429,66 @@ void main() {
     expect(draftSends, 0);
     expect(result, KeyEventResult.handled);
     expect(controller.text, 'ordinary');
+  });
+
+  testWidgets('Enter clears only a successfully sent matching snapshot',
+      (tester) async {
+    final controller = TextEditingController(text: 'send with enter');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) async => true,
+      ),
+    );
+
+    final result = _composerKeyboardFocus(tester).onKeyEvent!(
+      FocusNode(),
+      _keyDown(LogicalKeyboardKey.enter),
+    );
+    await tester.pump();
+
+    expect(result, KeyEventResult.handled);
+    expect(controller.text, isEmpty);
+  });
+
+  testWidgets('Enter keeps text after failure and newer typing after success',
+      (tester) async {
+    final controller = TextEditingController(text: 'first attempt');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) async => false,
+      ),
+    );
+
+    _composerKeyboardFocus(tester).onKeyEvent!(
+      FocusNode(),
+      _keyDown(LogicalKeyboardKey.enter),
+    );
+    await tester.pump();
+    expect(controller.text, 'first attempt');
+
+    final pending = Completer<bool>();
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (_) => pending.future,
+      ),
+    );
+    _composerKeyboardFocus(tester).onKeyEvent!(
+      FocusNode(),
+      _keyDown(LogicalKeyboardKey.enter),
+    );
+    controller.text = 'first attempt plus new text';
+    pending.complete(true);
+    await tester.pump();
+
+    expect(controller.text, 'first attempt plus new text');
   });
 
   testWidgets('composer buttons keep at least a 44 logical pixel target',
@@ -365,9 +548,9 @@ Widget _composerApp({
   bool isInputEmpty = true,
   bool isLoading = false,
   Future<void> Function()? onPreviewClipboard,
-  Future<void> Function()? onSendClipboardDraft,
+  Future<bool> Function()? onSendClipboardDraft,
   VoidCallback? onClearClipboardDraft,
-  Future<void> Function(String)? onSendText,
+  Future<bool> Function(String)? onSendText,
   Future<String?> Function()? onPasteClipboard,
 }) {
   return MaterialApp(
@@ -388,9 +571,9 @@ Widget _composerApp({
         pendingClipboardDraft: pendingClipboardDraft,
         onPickFiles: () async {},
         onPreviewClipboard: onPreviewClipboard ?? () async {},
-        onSendClipboardDraft: onSendClipboardDraft ?? () async {},
+        onSendClipboardDraft: onSendClipboardDraft ?? () async => true,
         onClearClipboardDraft: onClearClipboardDraft ?? () {},
-        onSendText: onSendText ?? (_) async {},
+        onSendText: onSendText ?? (_) async => true,
         onPasteClipboard: onPasteClipboard ?? () async => null,
       ),
     ),
@@ -471,9 +654,9 @@ class _DraftHarnessState extends State<_DraftHarness> {
           onPreviewClipboard: () async {
             setState(() => draft = widget.replacements.removeAt(0));
           },
-          onSendClipboardDraft: () async {},
+          onSendClipboardDraft: () async => true,
           onClearClipboardDraft: () => setState(() => draft = null),
-          onSendText: (_) async {},
+          onSendText: (_) async => true,
           onPasteClipboard: () async => null,
         ),
       ),

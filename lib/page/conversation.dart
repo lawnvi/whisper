@@ -1163,60 +1163,75 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
   }
 
-  Future<void> _sendComposerText(String text) {
+  Future<bool> _sendComposerText(String text) {
     return _runComposerSend(() => _sendText(text));
   }
 
-  Future<void> _sendPendingClipboardDraft() {
+  Future<bool> _sendPendingClipboardDraft() {
     return _runComposerSend(_sendPendingClipboardDraftOnce);
   }
 
-  Future<void> _runComposerSend(Future<void> Function() action) async {
-    await _composerSendGate.run(() async {
-      if (mounted) {
-        setState(() {});
-      }
-      try {
-        await action();
-      } finally {
+  Future<bool> _runComposerSend(Future<bool> Function() action) async {
+    try {
+      return await _composerSendGate.run(() async {
         if (mounted) {
           setState(() {});
         }
+        try {
+          return await action();
+        } finally {
+          if (mounted) {
+            setState(() {});
+          }
+        }
+      });
+    } catch (error, stackTrace) {
+      logger.e(
+        'send composer content failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        showAppToast(l10n.messageSendFailed);
       }
-    });
+      return false;
+    }
   }
 
-  Future<void> _sendPendingClipboardDraftOnce() async {
+  Future<bool> _sendPendingClipboardDraftOnce() async {
     final pending = _pendingClipboardDraft;
-    if (pending == null || !_canSendCurrentDevice) {
-      return;
+    if (pending == null) {
+      return false;
     }
     _clipboardDraftGeneration.invalidate();
 
     if (pending is PendingClipboardTextDraft) {
-      await _sendText(pending.text, isClipboard: true);
+      final sent = await _sendText(pending.text, isClipboard: true);
+      if (!sent) {
+        return false;
+      }
       if (mounted && identical(_pendingClipboardDraft, pending)) {
         setState(() {
           _pendingClipboardDraft = null;
         });
       }
-      return;
+      return true;
     }
     if (pending is PendingClipboardFilesDraft) {
-      await _sendPendingClipboardFiles(pending);
-      return;
+      return _sendPendingClipboardFiles(pending);
     }
     if (pending is PendingClipboardImageDraft) {
-      await _sendPendingClipboardImage(pending);
+      return _sendPendingClipboardImage(pending);
     }
+    return false;
   }
 
-  Future<void> _sendPendingClipboardFiles(
+  Future<bool> _sendPendingClipboardFiles(
     PendingClipboardFilesDraft pending,
   ) async {
     final drafts = List<ClipboardFileDraft>.of(pending.files);
     if (drafts.isEmpty || _isLocalhost || _isLoading) {
-      return;
+      return false;
     }
     setState(() {
       _isLoading = true;
@@ -1233,7 +1248,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         }
       }
       if (!mounted) {
-        return;
+        return remaining.isEmpty;
       }
       if (identical(_pendingClipboardDraft, pending)) {
         setState(() {
@@ -1244,6 +1259,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (remaining.isNotEmpty) {
         showAppToast(l10n.clipboardFilesSendFailed);
       }
+      return remaining.isEmpty;
     } catch (error, stackTrace) {
       logger.e(
         'send clipboard files failed',
@@ -1258,6 +1274,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         });
         showAppToast(l10n.clipboardFilesSendFailed);
       }
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -1267,11 +1284,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  Future<void> _sendPendingClipboardImage(
+  Future<bool> _sendPendingClipboardImage(
     PendingClipboardImageDraft pending,
   ) async {
     if (_isLocalhost || _isLoading) {
-      return;
+      return false;
     }
     final draft = pending.image;
     setState(() {
@@ -1280,7 +1297,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       final sent = await socketManager.sendFileTo(device.uid, draft.path);
       if (!mounted) {
-        return;
+        return sent;
       }
       if (sent) {
         if (identical(_pendingClipboardDraft, pending)) {
@@ -1291,6 +1308,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       } else {
         showAppToast(l10n.clipboardImageSendFailed);
       }
+      return sent;
     } catch (error, stackTrace) {
       logger.e(
         'send clipboard image failed',
@@ -1300,6 +1318,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted) {
         showAppToast(l10n.clipboardImageSendFailed);
       }
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -1888,38 +1907,62 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return layout;
   }
 
-  Future<void> _sendText(String content, {isClipboard = false}) async {
-    if (isClipboard && content.trim().isEmpty) {
-      var str = await getClipboardText() ?? "";
-      content = str.trimRight();
-    }
-    if (content.trim().isEmpty) {
-      return;
-    }
-    if (_isLocalhost) {
-      var message = MessageData(
-          id: 0,
-          sender: device.uid,
-          receiver: "",
-          name: "",
-          clipboard: isClipboard,
-          size: 0,
-          type: MessageEnum.Text,
-          content: content,
-          message: "",
-          timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          acked: true,
-          uuid: LocalUuid.v4(),
-          path: "",
-          md5: "");
-      LocalDatabase().insertMessage(message);
-      onMessage(message);
-    } else if (socketManager.isConnectedTo(device.uid)) {
-      await socketManager.sendMessageTo(
+  Future<bool> _sendText(String content, {isClipboard = false}) async {
+    try {
+      if (isClipboard && content.trim().isEmpty) {
+        final clipboardText = await getClipboardText() ?? "";
+        content = clipboardText.trimRight();
+      }
+      if (content.trim().isEmpty) {
+        return false;
+      }
+      if (_isLocalhost) {
+        final message = MessageData(
+            id: 0,
+            sender: device.uid,
+            receiver: "",
+            name: "",
+            clipboard: isClipboard,
+            size: 0,
+            type: MessageEnum.Text,
+            content: content,
+            message: "",
+            timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            acked: true,
+            uuid: LocalUuid.v4(),
+            path: "",
+            md5: "");
+        await LocalDatabase().insertMessage(message);
+        if (mounted) {
+          onMessage(message);
+        }
+        return true;
+      }
+      if (!socketManager.isConnectedTo(device.uid)) {
+        if (mounted) {
+          showAppToast(l10n.messageSendFailed);
+        }
+        return false;
+      }
+      final sent = await socketManager.sendMessageTo(
         device.uid,
         content,
         clipboard: isClipboard,
       );
+      if (!sent && mounted) {
+        showAppToast(l10n.messageSendFailed);
+      }
+      return sent;
+    } catch (error, stackTrace) {
+      logger.e(
+        'send text failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        showAppToast(l10n.messageSendFailed);
+      }
+      return false;
     }
   }
 

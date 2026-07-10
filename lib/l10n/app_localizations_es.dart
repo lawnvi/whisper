@@ -160,6 +160,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudieron enviar los archivos del portapapeles';
 
   @override
+  String get messageSendFailed =>
+      'No se pudo enviar el mensaje. Inténtalo de nuevo';
+
+  @override
   String clipboardFilesCount(num count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

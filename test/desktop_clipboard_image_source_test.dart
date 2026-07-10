@@ -64,6 +64,46 @@ void main() {
     expect(conversation, contains('sendFileTo(device.uid, draft.path)'));
   });
 
+  test('conversation consumes text drafts only after a successful send', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final start = source.indexOf(
+      'Future<bool> _sendPendingClipboardDraftOnce()',
+    );
+    final end = source.indexOf(
+      'Future<bool> _sendPendingClipboardFiles(',
+      start,
+    );
+
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final method = source.substring(start, end);
+    final send = method.indexOf(
+      'final sent = await _sendText(pending.text, isClipboard: true);',
+    );
+    final failure = method.indexOf('if (!sent)');
+    final consume = method.indexOf('_pendingClipboardDraft = null');
+    expect(send, greaterThanOrEqualTo(0));
+    expect(failure, greaterThan(send));
+    expect(consume, greaterThan(failure));
+    expect(method.substring(failure, consume), contains('return false;'));
+  });
+
+  test('text sends await persistence and report remote send failures', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final start = source.indexOf('Future<bool> _sendText(');
+    final end = source.indexOf('// 获取设备横向宽度', start);
+
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final method = source.substring(start, end);
+    expect(method, contains('await LocalDatabase().insertMessage(message);'));
+    expect(method, contains('await socketManager.sendMessageTo('));
+    expect(method, contains('return sent;'));
+    expect(method, contains('return false;'));
+    expect(method, contains('catch (error, stackTrace)'));
+    expect(method, contains('l10n.messageSendFailed'));
+  });
+
   test('watcher and tray clipboard sends stay outside composer drafts', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 

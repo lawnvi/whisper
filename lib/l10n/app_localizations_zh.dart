@@ -157,6 +157,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clipboardFilesSendFailed => '剪贴板文件发送失败';
 
   @override
+  String get messageSendFailed => '消息发送失败，请重试';
+
+  @override
   String clipboardFilesCount(num count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
