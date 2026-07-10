@@ -18,26 +18,40 @@ void main() {
     expect(source, contains('Screenshot'));
   });
 
-  test('conversation wires pending clipboard images to file transfer', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
+  test('conversation owns one typed clipboard draft and manual preview path',
+      () {
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+    final composer = File('lib/widget/chat_composer.dart').readAsStringSync();
 
-    expect(source, contains('_pendingClipboardImage'));
-    expect(source, contains('_pendingClipboardFiles'));
-    expect(source, contains('_pasteClipboardFiles'));
-    expect(source, contains('_sendPendingClipboardFiles'));
-    expect(source, contains('_pasteClipboardImage'));
-    expect(source, contains('_sendPendingClipboardImage'));
-    expect(source, contains('sendFileTo(device.uid, draft.path)'));
-    expect(source, contains('pendingClipboardFiles: _pendingClipboardFiles'));
-    expect(source, contains('onPasteClipboardFiles: _pasteClipboardFiles'));
+    expect(conversation,
+        contains('PendingClipboardDraft? _pendingClipboardDraft'));
+    expect(conversation,
+        contains('pendingClipboardDraft: _pendingClipboardDraft'));
+    expect(conversation, contains('onPreviewClipboard: _previewClipboard'));
     expect(
-      source,
-      contains('onSendClipboardFiles: _sendPendingClipboardFiles'),
+      conversation,
+      contains('onSendClipboardDraft: _sendPendingClipboardDraft'),
     );
-    expect(source, contains('pendingClipboardImage: _pendingClipboardImage'));
-    expect(source, contains('onPasteClipboardImage: _pasteClipboardImage'));
     expect(
-        source, contains('onSendClipboardImage: _sendPendingClipboardImage'));
+      conversation,
+      contains('onClearClipboardDraft: _clearPendingClipboardDraft'),
+    );
+    expect(conversation, isNot(contains('onSendClipboard:')));
+    expect(composer, contains('detectPendingClipboardDraft'));
+    expect(composer, contains('PendingClipboardTextDraft'));
+    expect(composer, contains('PendingClipboardImageDraft'));
+    expect(composer, contains('PendingClipboardFilesDraft'));
+    expect(conversation, contains('sendFileTo(device.uid, draft.path)'));
+  });
+
+  test('watcher and tray clipboard sends stay outside composer drafts', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+
+    expect(source, contains('final text = await readClipboardTextForSync();'));
+    expect(
+        source, contains('socketManager.sendMessage(text, clipboard: true)'));
+    expect(source, contains('socketManager.sendMessage("", clipboard: true)'));
+    expect(source, isNot(contains('PendingClipboardDraft')));
   });
 
   test('macOS runner exposes NSPasteboard images as PNG bytes', () {

@@ -28,9 +28,11 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/file_drop_feedback.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
 import '../helper/file.dart';
@@ -106,9 +108,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final bool embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
-  List<ClipboardFileDraft> _pendingClipboardFiles =
-      const <ClipboardFileDraft>[];
-  ClipboardImageDraft? _pendingClipboardImage;
+  PendingClipboardDraft? _pendingClipboardDraft;
+  int _clipboardPreviewRequestId = 0;
+  FileDropFeedbackState _fileDropFeedbackState = FileDropFeedbackState.hidden;
+  String? _fileDropRejectedMessage;
+  int _fileDropFeedbackRevision = 0;
 
   bool get _isCurrentRoute {
     final route = ModalRoute.of(context);
@@ -321,7 +325,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         !isLocal &&
         socketManager.isConnectedTo(currentDevice.uid) &&
         (await LocalSetting().isListenAndroid())) {
-      startAndroidListening();
+      await startAndroidListening();
     }
     await _syncAndroidKeepAliveService();
   }
@@ -587,18 +591,113 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
 
     return DropTarget(
-      onDragDone: (detail) async {
-        if (detail.files.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
-          return;
-        }
-        for (var item in detail.files) {
-          await socketManager.sendFileTo(device.uid, item.path);
-        }
+      onDragDone: (detail) {
+        unawaited(_handleFileDrop(detail.files));
       },
-      onDragEntered: (detail) {},
-      onDragExited: (detail) {},
-      child: base,
+      onDragEntered: (_) => _handleFileDragEntered(),
+      onDragExited: (_) => _hideFileDropFeedback(),
+      child: FileDropFeedback(
+        state: _fileDropFeedbackState,
+        deviceName: device.name,
+        rejectedMessage: _fileDropRejectedMessage,
+        child: base,
+      ),
     );
+  }
+
+  String? get _fileDropSessionRejection {
+    if (_isLocalhost) {
+      return l10n.fileDropRejectedLocalSession;
+    }
+    if (!_isConnectedSession) {
+      return l10n.fileDropRejectedDisconnected;
+    }
+    return null;
+  }
+
+  void _handleFileDragEntered() {
+    final rejection = _fileDropSessionRejection;
+    _showFileDropFeedback(
+      rejection == null
+          ? FileDropFeedbackState.accepted
+          : FileDropFeedbackState.rejected,
+      rejectedMessage: rejection,
+    );
+  }
+
+  int _showFileDropFeedback(
+    FileDropFeedbackState state, {
+    String? rejectedMessage,
+  }) {
+    final revision = ++_fileDropFeedbackRevision;
+    if (mounted) {
+      setState(() {
+        _fileDropFeedbackState = state;
+        _fileDropRejectedMessage = rejectedMessage;
+      });
+    }
+    return revision;
+  }
+
+  void _hideFileDropFeedback() {
+    ++_fileDropFeedbackRevision;
+    if (!mounted || _fileDropFeedbackState == FileDropFeedbackState.hidden) {
+      return;
+    }
+    setState(() {
+      _fileDropFeedbackState = FileDropFeedbackState.hidden;
+      _fileDropRejectedMessage = null;
+    });
+  }
+
+  Future<void> _showTemporaryFileDropRejection(String message) async {
+    final revision = _showFileDropFeedback(
+      FileDropFeedbackState.rejected,
+      rejectedMessage: message,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted || revision != _fileDropFeedbackRevision) {
+      return;
+    }
+    setState(() {
+      _fileDropFeedbackState = FileDropFeedbackState.hidden;
+      _fileDropRejectedMessage = null;
+    });
+  }
+
+  Future<void> _handleFileDrop(List<DropItem> files) async {
+    final rejection = _fileDropSessionRejection;
+    if (rejection != null) {
+      await _showTemporaryFileDropRejection(rejection);
+      return;
+    }
+    if (files.isEmpty) {
+      await _showTemporaryFileDropRejection(l10n.fileDropRejectedNoFiles);
+      return;
+    }
+
+    final revision = _showFileDropFeedback(FileDropFeedbackState.accepted);
+    try {
+      for (final item in files) {
+        await socketManager.sendFileTo(device.uid, item.path);
+      }
+    } catch (error, stackTrace) {
+      logger.e(
+        'send dropped files failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted && revision == _fileDropFeedbackRevision) {
+        showAppToast(l10n.fileDropRejected);
+      }
+    } finally {
+      if (mounted && revision == _fileDropFeedbackRevision) {
+        setState(() {
+          _fileDropFeedbackState = FileDropFeedbackState.hidden;
+          _fileDropRejectedMessage = null;
+        });
+      }
+    }
   }
 
   bool get _canSendCurrentDevice {
@@ -965,39 +1064,68 @@ class _SendMessageScreen extends State<SendMessageScreen>
       keyPressedMap: keyPressedMap,
       controller: _textController,
       focusNode: _composerFocusNode,
-      pendingClipboardFiles: _pendingClipboardFiles,
-      pendingClipboardImage: _pendingClipboardImage,
+      pendingClipboardDraft: _pendingClipboardDraft,
       onPickFiles: _pickFilesAndSend,
-      onSendClipboard: () async {
-        await _sendText("", isClipboard: true);
-      },
+      onPreviewClipboard: _previewClipboard,
+      onSendClipboardDraft: _sendPendingClipboardDraft,
+      onClearClipboardDraft: _clearPendingClipboardDraft,
       onSendText: (text) async {
         await _sendText(text);
       },
       onPasteClipboardFiles: _pasteClipboardFiles,
-      onSendClipboardFiles: _sendPendingClipboardFiles,
-      onClearClipboardFiles: _clearPendingClipboardFiles,
       onPasteClipboardImage: _pasteClipboardImage,
-      onSendClipboardImage: _sendPendingClipboardImage,
-      onClearClipboardImage: _clearPendingClipboardImage,
     );
+  }
+
+  Future<void> _previewClipboard() async {
+    final requestId = ++_clipboardPreviewRequestId;
+    try {
+      final draft = await detectPendingClipboardDraft(
+        readFiles: _isLocalhost
+            ? () async => const <ClipboardFileDraft>[]
+            : _clipboardFileReader.readFileDrafts,
+        readImage: _isLocalhost
+            ? () async => null
+            : _clipboardImageReader.readImageDraft,
+        readText: getClipboardText,
+      );
+      if (!mounted || requestId != _clipboardPreviewRequestId) {
+        return;
+      }
+      if (draft == null) {
+        showAppToast(l10n.clipboardPreviewEmpty);
+        return;
+      }
+      setState(() {
+        _pendingClipboardDraft = draft;
+      });
+    } catch (error, stackTrace) {
+      logger.e(
+        'read clipboard preview failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted && requestId == _clipboardPreviewRequestId) {
+        showAppToast(l10n.clipboardPreviewReadFailed(error.toString()));
+      }
+    }
   }
 
   Future<bool> _pasteClipboardFiles() async {
     if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
       return false;
     }
+    final requestId = ++_clipboardPreviewRequestId;
     try {
       final drafts = await _clipboardFileReader.readFileDrafts();
       if (drafts.isEmpty) {
         return false;
       }
-      if (!mounted) {
+      if (!mounted || requestId != _clipboardPreviewRequestId) {
         return true;
       }
       setState(() {
-        _pendingClipboardFiles = drafts;
-        _pendingClipboardImage = null;
+        _pendingClipboardDraft = PendingClipboardFilesDraft(drafts);
       });
       return true;
     } catch (error, stackTrace) {
@@ -1014,17 +1142,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
       return false;
     }
+    final requestId = ++_clipboardPreviewRequestId;
     try {
       final draft = await _clipboardImageReader.readImageDraft();
       if (draft == null) {
         return false;
       }
-      if (!mounted) {
+      if (!mounted || requestId != _clipboardPreviewRequestId) {
         return true;
       }
       setState(() {
-        _pendingClipboardFiles = const <ClipboardFileDraft>[];
-        _pendingClipboardImage = draft;
+        _pendingClipboardDraft = PendingClipboardImageDraft(draft);
       });
       return true;
     } catch (error, stackTrace) {
@@ -1037,27 +1165,46 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  void _clearPendingClipboardFiles() {
-    if (_pendingClipboardFiles.isEmpty) {
+  void _clearPendingClipboardDraft() {
+    ++_clipboardPreviewRequestId;
+    if (_pendingClipboardDraft == null) {
       return;
     }
     setState(() {
-      _pendingClipboardFiles = const <ClipboardFileDraft>[];
+      _pendingClipboardDraft = null;
     });
   }
 
-  void _clearPendingClipboardImage() {
-    if (_pendingClipboardImage == null) {
+  Future<void> _sendPendingClipboardDraft() async {
+    final pending = _pendingClipboardDraft;
+    if (pending == null || !_canSendCurrentDevice) {
       return;
     }
-    setState(() {
-      _pendingClipboardImage = null;
-    });
+    ++_clipboardPreviewRequestId;
+
+    if (pending is PendingClipboardTextDraft) {
+      await _sendText(pending.text, isClipboard: true);
+      if (mounted && identical(_pendingClipboardDraft, pending)) {
+        setState(() {
+          _pendingClipboardDraft = null;
+        });
+      }
+      return;
+    }
+    if (pending is PendingClipboardFilesDraft) {
+      await _sendPendingClipboardFiles(pending);
+      return;
+    }
+    if (pending is PendingClipboardImageDraft) {
+      await _sendPendingClipboardImage(pending);
+    }
   }
 
-  Future<void> _sendPendingClipboardFiles() async {
-    final drafts = List<ClipboardFileDraft>.of(_pendingClipboardFiles);
-    if (drafts.isEmpty || !_canSendCurrentDevice || _isLocalhost) {
+  Future<void> _sendPendingClipboardFiles(
+    PendingClipboardFilesDraft pending,
+  ) async {
+    final drafts = List<ClipboardFileDraft>.of(pending.files);
+    if (drafts.isEmpty || _isLocalhost || _isLoading) {
       return;
     }
     setState(() {
@@ -1077,9 +1224,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (!mounted) {
         return;
       }
-      setState(() {
-        _pendingClipboardFiles = remaining;
-      });
+      if (identical(_pendingClipboardDraft, pending)) {
+        setState(() {
+          _pendingClipboardDraft =
+              remaining.isEmpty ? null : PendingClipboardFilesDraft(remaining);
+        });
+      }
       if (remaining.isNotEmpty) {
         showAppToast(l10n.clipboardFilesSendFailed);
       }
@@ -1089,9 +1239,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error: error,
         stackTrace: stackTrace,
       );
-      if (mounted) {
+      if (mounted && identical(_pendingClipboardDraft, pending)) {
         setState(() {
-          _pendingClipboardFiles = drafts.skip(currentIndex).toList();
+          _pendingClipboardDraft = PendingClipboardFilesDraft(
+            drafts.skip(currentIndex).toList(),
+          );
         });
         showAppToast(l10n.clipboardFilesSendFailed);
       }
@@ -1104,11 +1256,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  Future<void> _sendPendingClipboardImage() async {
-    final draft = _pendingClipboardImage;
-    if (draft == null || !_canSendCurrentDevice || _isLocalhost) {
+  Future<void> _sendPendingClipboardImage(
+    PendingClipboardImageDraft pending,
+  ) async {
+    if (_isLocalhost || _isLoading) {
       return;
     }
+    final draft = pending.image;
     setState(() {
       _isLoading = true;
     });
@@ -1118,9 +1272,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return;
       }
       if (sent) {
-        setState(() {
-          _pendingClipboardImage = null;
-        });
+        if (identical(_pendingClipboardDraft, pending)) {
+          setState(() {
+            _pendingClipboardDraft = null;
+          });
+        }
       } else {
         showAppToast(l10n.clipboardImageSendFailed);
       }
@@ -1722,7 +1878,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<void> _sendText(String content, {isClipboard = false}) async {
-    if (isClipboard) {
+    if (isClipboard && content.trim().isEmpty) {
       var str = await getClipboardText() ?? "";
       content = str.trimRight();
     }
@@ -2001,17 +2157,38 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context,
-        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+    unawaited(_handleConnectionError(message));
+  }
+
+  Future<void> _handleConnectionError(String message) async {
+    try {
+      if (!mounted) {
+        return;
+      }
+      final confirmed = await confirmAction(
+        context,
+        title: l10n.timeoutTitle,
         description: message,
-        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-        cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
-        onConfirm: () {
-      WsSvrManager().close();
+        confirmButtonText: l10n.disconnect,
+        cancelButtonText: l10n.cancel,
+        isDestructive: true,
+      );
+      if (!confirmed) {
+        return;
+      }
+      await WsSvrManager().close();
+    } catch (error, stackTrace) {
+      logger.e(
+        'close connection after socket error failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        showAppToast(l10n.connectFailed);
+      }
+    } finally {
       _isAlert = false;
-    }, onCancel: () {
-      _isAlert = false;
-    });
+    }
   }
 
   @override

@@ -4,285 +4,166 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 
 void main() {
-  testWidgets('desktop composer shows attachment as primary action when empty',
-      (tester) async {
-    var pickedFiles = 0;
-    var sentClipboard = 0;
-    var sentText = 0;
-    final controller = TextEditingController();
-    final focusNode = FocusNode();
+  testWidgets('clipboard button previews without sending', (tester) async {
+    var previews = 0;
+    var clipboardSends = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
-            controller: controller,
-            focusNode: focusNode,
-            onPickFiles: () async {
-              pickedFiles++;
-            },
-            onSendClipboard: () async {
-              sentClipboard++;
-            },
-            onSendText: (text) async {
-              sentText++;
-            },
-          ),
-        ),
+      _composerApp(
+        onPreviewClipboard: () async => previews++,
+        onSendClipboardDraft: () async => clipboardSends++,
       ),
     );
 
-    expect(find.byKey(ChatComposer.desktopContainerKey), findsOneWidget);
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsOneWidget);
-    expect(find.byKey(ChatComposer.clipboardButtonKey), findsOneWidget);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsNothing);
+    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
+    await tester.pump();
 
-    await tester.tap(find.byKey(ChatComposer.attachmentButtonKey));
-    await tester.pumpAndSettle();
-    expect(pickedFiles, 1);
-    expect(sentClipboard, 0);
-    expect(sentText, 0);
+    expect(previews, 1);
+    expect(clipboardSends, 0);
   });
 
-  testWidgets('desktop composer swaps to send action when text exists',
+  testWidgets('desktop composer sends ordinary text and clears only that text',
       (tester) async {
     String? sentText;
     final controller = TextEditingController(text: 'hello');
-    final focusNode = FocusNode();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: false,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
-            controller: controller,
-            focusNode: focusNode,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {
-              sentText = text;
-            },
-          ),
-        ),
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        onSendText: (text) async => sentText = text,
       ),
     );
 
     expect(find.byKey(ChatComposer.attachmentButtonKey), findsNothing);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsOneWidget);
-
     await tester.tap(find.byKey(ChatComposer.sendButtonKey));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(sentText, 'hello');
-    expect(controller.text, '');
+    expect(controller.text, isEmpty);
   });
 
-  testWidgets('mobile composer also toggles between attachment and send',
+  testWidgets('one typed draft replaces files image and text previews',
       (tester) async {
-    final emptyController = TextEditingController();
-    final focusNode = FocusNode();
+    final controller = TextEditingController(text: 'ordinary text');
+    final drafts = <PendingClipboardDraft>[
+      PendingClipboardImageDraft(_imageDraft()),
+      const PendingClipboardTextDraft('replacement text'),
+      const PendingClipboardFilesDraft(<ClipboardFileDraft>[
+        ClipboardFileDraft(
+          path: '/tmp/final.txt',
+          fileName: 'final.txt',
+          size: 12,
+        ),
+      ]),
+      const PendingClipboardFilesDraft(<ClipboardFileDraft>[
+        ClipboardFileDraft(
+          path: '/tmp/report.pdf',
+          fileName: 'report.pdf',
+          size: 2048,
+        ),
+      ]),
+    ];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: false,
-            keyPressedMap: const <String, bool>{},
-            controller: emptyController,
-            focusNode: focusNode,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-          ),
-        ),
-      ),
+      _DraftHarness(controller: controller, replacements: drafts),
     );
 
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsOneWidget);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsNothing);
+    expect(find.byKey(ChatComposer.clipboardFilesPreviewKey), findsOneWidget);
+    expect(find.byKey(ChatComposer.clipboardImagePreviewKey), findsNothing);
+    expect(find.byKey(ChatComposer.clipboardTextPreviewKey), findsNothing);
 
-    final filledController = TextEditingController(text: 'hello');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: false,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: false,
-            keyPressedMap: const <String, bool>{},
-            controller: filledController,
-            focusNode: FocusNode(),
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-          ),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsNothing);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsOneWidget);
-  });
-
-  testWidgets('desktop composer previews a pasted clipboard image before send',
-      (tester) async {
-    var pickedFiles = 0;
-    var sentImages = 0;
-    var clearedImages = 0;
-    final draft = ClipboardImageDraft(
-      path: '/tmp/Screenshot.png',
-      fileName: 'Screenshot.png',
-      size: _transparentPng.length,
-      bytes: _transparentPng,
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            pendingClipboardImage: draft,
-            onPickFiles: () async {
-              pickedFiles++;
-            },
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-            onPasteClipboardImage: () async => true,
-            onSendClipboardImage: () async {
-              sentImages++;
-            },
-            onClearClipboardImage: () {
-              clearedImages++;
-            },
-          ),
-        ),
-      ),
-    );
-
+    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
+    await tester.pump();
     expect(find.byKey(ChatComposer.clipboardImagePreviewKey), findsOneWidget);
-    expect(find.text('Screenshot.png'), findsOneWidget);
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsNothing);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsOneWidget);
+    expect(find.byKey(ChatComposer.clipboardFilesPreviewKey), findsNothing);
+
+    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
+    await tester.pump();
+    expect(find.byKey(ChatComposer.clipboardTextPreviewKey), findsOneWidget);
+    expect(find.byKey(ChatComposer.clipboardImagePreviewKey), findsNothing);
+
+    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
+    await tester.pump();
+    expect(find.byKey(ChatComposer.clipboardFilesPreviewKey), findsOneWidget);
+    expect(find.byKey(ChatComposer.clipboardTextPreviewKey), findsNothing);
+    expect(controller.text, 'ordinary text');
+  });
+
+  testWidgets('text draft is three lines with count and removable',
+      (tester) async {
+    const text = 'one\ntwo\nthree\nfour';
+    var clears = 0;
+    final controller = TextEditingController(text: 'keep ordinary text');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        pendingClipboardDraft: const PendingClipboardTextDraft(text),
+        onClearClipboardDraft: () => clears++,
+      ),
+    );
+
+    final preview = tester.widget<SelectableText>(
+      find.byKey(ChatComposer.clipboardTextPreviewKey),
+    );
+    expect(preview.maxLines, 3);
+    expect(find.text('${text.runes.length} characters'), findsOneWidget);
+
+    await tester.tap(find.byKey(ChatComposer.clipboardRemoveButtonKey));
+    await tester.pump();
+
+    expect(clears, 1);
+    expect(controller.text, 'keep ordinary text');
+  });
+
+  testWidgets('send button sends draft without sending or clearing typed text',
+      (tester) async {
+    var draftSends = 0;
+    var textSends = 0;
+    final controller = TextEditingController(text: 'keep ordinary text');
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        isInputEmpty: false,
+        pendingClipboardDraft:
+            const PendingClipboardTextDraft('clipboard text'),
+        onSendClipboardDraft: () async => draftSends++,
+        onSendText: (_) async => textSends++,
+      ),
+    );
 
     await tester.tap(find.byKey(ChatComposer.sendButtonKey));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(sentImages, 1);
-    expect(pickedFiles, 0);
-
-    await tester.tap(find.byKey(ChatComposer.clipboardImageRemoveButtonKey));
-    await tester.pumpAndSettle();
-
-    expect(clearedImages, 1);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            onPickFiles: () async {
-              pickedFiles++;
-            },
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-            onPasteClipboardImage: () async => true,
-            onSendClipboardImage: () async {
-              sentImages++;
-            },
-            onClearClipboardImage: () {
-              clearedImages++;
-            },
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(ChatComposer.clipboardImagePreviewKey), findsNothing);
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsOneWidget);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsNothing);
+    expect(draftSends, 1);
+    expect(textSends, 0);
+    expect(controller.text, 'keep ordinary text');
   });
 
-  testWidgets('desktop composer sends a pending clipboard image on Enter',
+  testWidgets('Enter sends and Escape removes a draft without clearing text',
       (tester) async {
-    var sentImages = 0;
-    String? sentText;
-    final controller = TextEditingController(text: 'keep this text');
+    var draftSends = 0;
+    var clears = 0;
+    final controller = TextEditingController(text: 'keep ordinary text');
     final focusNode = FocusNode();
-    final draft = ClipboardImageDraft(
-      path: '/tmp/Screenshot.png',
-      fileName: 'Screenshot.png',
-      size: _transparentPng.length,
-      bytes: _transparentPng,
-    );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: false,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
-            controller: controller,
-            focusNode: focusNode,
-            pendingClipboardImage: draft,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {
-              sentText = text;
-            },
-            onSendClipboardImage: () async {
-              sentImages++;
-            },
-          ),
-        ),
+      _composerApp(
+        controller: controller,
+        focusNode: focusNode,
+        isInputEmpty: false,
+        pendingClipboardDraft:
+            const PendingClipboardTextDraft('clipboard text'),
+        onSendClipboardDraft: () async => draftSends++,
+        onClearClipboardDraft: () => clears++,
       ),
     );
 
@@ -290,82 +171,39 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
+    expect(draftSends, 1);
+    expect(controller.text, 'keep ordinary text');
 
-    expect(sentImages, 1);
-    expect(sentText, isNull);
-    expect(controller.text, 'keep this text');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(clears, 1);
+    expect(controller.text, 'keep ordinary text');
   });
 
-  testWidgets('desktop composer previews pasted clipboard files before send',
+  testWidgets('composer buttons keep at least a 44 logical pixel target',
       (tester) async {
-    var pickedFiles = 0;
-    var sentFiles = 0;
-    var clearedFiles = 0;
-    final drafts = <ClipboardFileDraft>[
-      const ClipboardFileDraft(
-        path: '/tmp/report.pdf',
-        fileName: 'report.pdf',
-        size: 2048,
-      ),
-      const ClipboardFileDraft(
-        path: '/tmp/photo.jpg',
-        fileName: 'photo.jpg',
-        size: 4096,
-      ),
-    ];
+    await tester.pumpWidget(_composerApp());
+
+    _expectMinimumTarget(tester, ChatComposer.clipboardButtonKey);
+    _expectMinimumTarget(tester, ChatComposer.attachmentButtonKey);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            pendingClipboardFiles: drafts,
-            onPickFiles: () async {
-              pickedFiles++;
-            },
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-            onSendClipboardFiles: () async {
-              sentFiles++;
-            },
-            onClearClipboardFiles: () {
-              clearedFiles++;
-            },
-          ),
-        ),
+      _composerApp(
+        pendingClipboardDraft:
+            const PendingClipboardTextDraft('clipboard text'),
       ),
     );
+    await tester.pump();
 
-    expect(find.byKey(ChatComposer.clipboardFilesPreviewKey), findsOneWidget);
-    expect(find.text('report.pdf'), findsOneWidget);
-    expect(find.textContaining('2 files'), findsOneWidget);
-    expect(find.byKey(ChatComposer.attachmentButtonKey), findsNothing);
-    expect(find.byKey(ChatComposer.sendButtonKey), findsOneWidget);
-
-    await tester.tap(find.byKey(ChatComposer.sendButtonKey));
-    await tester.pumpAndSettle();
-
-    expect(sentFiles, 1);
-    expect(pickedFiles, 0);
-
-    await tester.tap(find.byKey(ChatComposer.clipboardFilesRemoveButtonKey));
-    await tester.pumpAndSettle();
-
-    expect(clearedFiles, 1);
+    _expectMinimumTarget(tester, ChatComposer.clipboardButtonKey);
+    _expectMinimumTarget(tester, ChatComposer.clipboardRemoveButtonKey);
+    _expectMinimumTarget(tester, ChatComposer.sendButtonKey);
   });
 
-  testWidgets('desktop paste sends copied files before images or text',
+  testWidgets('desktop paste still prefers files before images and text',
       (tester) async {
-    var filePasteAttempts = 0;
-    var imagePasteAttempts = 0;
+    var fileReads = 0;
+    var imageReads = 0;
     final controller = TextEditingController(text: 'hello ');
     final focusNode = FocusNode();
     final messenger =
@@ -381,31 +219,18 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: false,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: controller,
-            focusNode: focusNode,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-            onPasteClipboardFiles: () async {
-              filePasteAttempts++;
-              return true;
-            },
-            onPasteClipboardImage: () async {
-              imagePasteAttempts++;
-              return false;
-            },
-          ),
-        ),
+      _composerApp(
+        controller: controller,
+        focusNode: focusNode,
+        isInputEmpty: false,
+        onPasteClipboardFiles: () async {
+          fileReads++;
+          return true;
+        },
+        onPasteClipboardImage: () async {
+          imageReads++;
+          return false;
+        },
       ),
     );
 
@@ -416,14 +241,13 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(filePasteAttempts, 1);
-    expect(imagePasteAttempts, 0);
+    expect(fileReads, 1);
+    expect(imageReads, 0);
     expect(controller.text, 'hello ');
   });
 
-  testWidgets('desktop composer falls back to text paste when no image exists',
+  testWidgets('desktop paste falls back to ordinary text insertion',
       (tester) async {
-    var imagePasteAttempts = 0;
     final controller = TextEditingController(text: 'hello ');
     final focusNode = FocusNode();
     final messenger =
@@ -439,28 +263,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: false,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: controller,
-            focusNode: focusNode,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-            onPasteClipboardFiles: () async => false,
-            onPasteClipboardImage: () async {
-              imagePasteAttempts++;
-              return false;
-            },
-          ),
-        ),
+      _composerApp(
+        controller: controller,
+        focusNode: focusNode,
+        isInputEmpty: false,
+        onPasteClipboardFiles: () async => false,
+        onPasteClipboardImage: () async => false,
       ),
     );
 
@@ -471,78 +279,110 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(imagePasteAttempts, 1);
     expect(controller.text, 'hello world');
   });
+}
 
-  testWidgets('mobile composer does not render clipboard file preview',
-      (tester) async {
-    const drafts = <ClipboardFileDraft>[
-      ClipboardFileDraft(
-        path: '/tmp/report.pdf',
-        fileName: 'report.pdf',
-        size: 2048,
+Widget _composerApp({
+  TextEditingController? controller,
+  FocusNode? focusNode,
+  PendingClipboardDraft? pendingClipboardDraft,
+  bool isInputEmpty = true,
+  Future<void> Function()? onPreviewClipboard,
+  Future<void> Function()? onSendClipboardDraft,
+  VoidCallback? onClearClipboardDraft,
+  Future<void> Function(String)? onSendText,
+  Future<bool> Function()? onPasteClipboardFiles,
+  Future<bool> Function()? onPasteClipboardImage,
+}) {
+  return MaterialApp(
+    theme: AppTheme.lightTheme,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(
+      body: ChatComposer(
+        clipboardEnabled: true,
+        canSend: true,
+        isInputEmpty: isInputEmpty,
+        isLoading: false,
+        isLocalhost: false,
+        isDesktopStyle: true,
+        keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
+        controller: controller ?? TextEditingController(),
+        focusNode: focusNode ?? FocusNode(),
+        pendingClipboardDraft: pendingClipboardDraft,
+        onPickFiles: () async {},
+        onPreviewClipboard: onPreviewClipboard ?? () async {},
+        onSendClipboardDraft: onSendClipboardDraft ?? () async {},
+        onClearClipboardDraft: onClearClipboardDraft ?? () {},
+        onSendText: onSendText ?? (_) async {},
+        onPasteClipboardFiles: onPasteClipboardFiles,
+        onPasteClipboardImage: onPasteClipboardImage,
       ),
-    ];
+    ),
+  );
+}
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: false,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            pendingClipboardFiles: drafts,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-          ),
+void _expectMinimumTarget(WidgetTester tester, Key key) {
+  final size = tester.getSize(find.byKey(key));
+  expect(size.width, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+  expect(size.height, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+}
+
+ClipboardImageDraft _imageDraft() {
+  return ClipboardImageDraft(
+    path: '/tmp/Screenshot.png',
+    fileName: 'Screenshot.png',
+    size: _transparentPng.length,
+    bytes: _transparentPng,
+  );
+}
+
+class _DraftHarness extends StatefulWidget {
+  const _DraftHarness({
+    required this.controller,
+    required this.replacements,
+  });
+
+  final TextEditingController controller;
+  final List<PendingClipboardDraft> replacements;
+
+  @override
+  State<_DraftHarness> createState() => _DraftHarnessState();
+}
+
+class _DraftHarnessState extends State<_DraftHarness> {
+  late PendingClipboardDraft? draft = widget.replacements.removeLast();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      theme: AppTheme.lightTheme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: ChatComposer(
+          clipboardEnabled: true,
+          canSend: true,
+          isInputEmpty: false,
+          isLoading: false,
+          isLocalhost: false,
+          isDesktopStyle: true,
+          keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
+          controller: widget.controller,
+          focusNode: FocusNode(),
+          pendingClipboardDraft: draft,
+          onPickFiles: () async {},
+          onPreviewClipboard: () async {
+            setState(() => draft = widget.replacements.removeAt(0));
+          },
+          onSendClipboardDraft: () async {},
+          onClearClipboardDraft: () => setState(() => draft = null),
+          onSendText: (_) async {},
         ),
       ),
     );
-
-    expect(find.byKey(ChatComposer.clipboardFilesPreviewKey), findsNothing);
-  });
-
-  testWidgets('mobile composer does not render clipboard image preview',
-      (tester) async {
-    final draft = ClipboardImageDraft(
-      path: '/tmp/Screenshot.png',
-      fileName: 'Screenshot.png',
-      size: _transparentPng.length,
-      bytes: _transparentPng,
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: false,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            pendingClipboardImage: draft,
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (text) async {},
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byKey(ChatComposer.clipboardImagePreviewKey), findsNothing);
-  });
+  }
 }
 
 final _transparentPng = Uint8List.fromList(<int>[

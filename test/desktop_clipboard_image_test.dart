@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/widget/chat_composer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +140,118 @@ void main() {
       final drafts = await reader.readFileDrafts();
 
       expect(drafts, isEmpty);
+    });
+  });
+
+  group('pending clipboard draft detection', () {
+    test('uses file then image then text priority', () async {
+      final calls = <String>[];
+      const fileDraft = ClipboardFileDraft(
+        path: '/tmp/report.pdf',
+        fileName: 'report.pdf',
+        size: 2048,
+      );
+
+      final files = await detectPendingClipboardDraft(
+        readFiles: () async {
+          calls.add('files');
+          return <ClipboardFileDraft>[fileDraft];
+        },
+        readImage: () async {
+          calls.add('image');
+          return null;
+        },
+        readText: () async {
+          calls.add('text');
+          return 'ignored';
+        },
+      );
+      expect(files, isA<PendingClipboardFilesDraft>());
+      expect(calls, <String>['files']);
+
+      calls.clear();
+      final imageDraft = ClipboardImageDraft(
+        path: '/tmp/Screenshot.png',
+        fileName: 'Screenshot.png',
+        size: 4,
+        bytes: Uint8List.fromList(<int>[1, 2, 3, 4]),
+      );
+      final image = await detectPendingClipboardDraft(
+        readFiles: () async {
+          calls.add('files');
+          return const <ClipboardFileDraft>[];
+        },
+        readImage: () async {
+          calls.add('image');
+          return imageDraft;
+        },
+        readText: () async {
+          calls.add('text');
+          return 'ignored';
+        },
+      );
+      expect(image, isA<PendingClipboardImageDraft>());
+      expect(calls, <String>['files', 'image']);
+
+      calls.clear();
+      final textDraft = await detectPendingClipboardDraft(
+        readFiles: () async {
+          calls.add('files');
+          return const <ClipboardFileDraft>[];
+        },
+        readImage: () async {
+          calls.add('image');
+          return null;
+        },
+        readText: () async {
+          calls.add('text');
+          return 'clipboard text  ';
+        },
+      );
+      expect(textDraft, isA<PendingClipboardTextDraft>());
+      expect(
+        (textDraft as PendingClipboardTextDraft).text,
+        'clipboard text',
+      );
+      expect(calls, <String>['files', 'image', 'text']);
+    });
+
+    test('returns no draft for empty supported content', () async {
+      final draft = await detectPendingClipboardDraft(
+        readFiles: () async => const <ClipboardFileDraft>[],
+        readImage: () async => null,
+        readText: () async => '  \n',
+      );
+
+      expect(draft, isNull);
+    });
+  });
+
+  group('conversation async contracts', () {
+    test('awaits Android notification startup before keep-alive sync', () {
+      final source = File('lib/page/conversation.dart').readAsStringSync();
+      final start = source.indexOf('await startAndroidListening();');
+      final keepAlive = source.indexOf(
+        'await _syncAndroidKeepAliveService();',
+        start,
+      );
+
+      expect(start, greaterThanOrEqualTo(0));
+      expect(keepAlive, greaterThan(start));
+    });
+
+    test('connection error awaits confirmation and close with final cleanup',
+        () {
+      final source = File('lib/page/conversation.dart').readAsStringSync();
+
+      expect(source, contains('unawaited(_handleConnectionError(message));'));
+      expect(source, contains('final confirmed = await confirmAction('));
+      expect(source, contains('await WsSvrManager().close();'));
+      expect(
+        RegExp(r'_handleConnectionError[\s\S]*finally[\s\S]*_isAlert = false')
+            .hasMatch(source),
+        isTrue,
+      );
     });
   });
 }
