@@ -109,7 +109,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
   PendingClipboardDraft? _pendingClipboardDraft;
-  int _clipboardPreviewRequestId = 0;
+  final ClipboardDraftGeneration _clipboardDraftGeneration =
+      ClipboardDraftGeneration();
+  final ChatComposerSendGate _composerSendGate = ChatComposerSendGate();
   FileDropFeedbackState _fileDropFeedbackState = FileDropFeedbackState.hidden;
   String? _fileDropRejectedMessage;
   int _fileDropFeedbackRevision = 0;
@@ -678,8 +680,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
     final revision = _showFileDropFeedback(FileDropFeedbackState.accepted);
     try {
-      for (final item in files) {
-        await socketManager.sendFileTo(device.uid, item.path);
+      final allFilesSent = await sendDroppedFilesSequentially<DropItem>(
+        files,
+        (item) => socketManager.sendFileTo(device.uid, item.path),
+      );
+      if (!allFilesSent) {
+        await _showTemporaryFileDropRejection(l10n.fileDropRejected);
+        return;
       }
     } catch (error, stackTrace) {
       logger.e(
@@ -687,9 +694,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error: error,
         stackTrace: stackTrace,
       );
-      if (mounted && revision == _fileDropFeedbackRevision) {
-        showAppToast(l10n.fileDropRejected);
-      }
+      await _showTemporaryFileDropRejection(l10n.fileDropRejected);
     } finally {
       if (mounted && revision == _fileDropFeedbackRevision) {
         setState(() {
@@ -1058,7 +1063,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       clipboardEnabled: self?.clipboard == true,
       canSend: _canSendCurrentDevice,
       isInputEmpty: isInputEmpty,
-      isLoading: _isLoading,
+      isLoading: _isLoading || _composerSendGate.isInFlight,
       isLocalhost: _isLocalhost,
       isDesktopStyle: isDesktop(),
       keyPressedMap: keyPressedMap,
@@ -1069,16 +1074,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onPreviewClipboard: _previewClipboard,
       onSendClipboardDraft: _sendPendingClipboardDraft,
       onClearClipboardDraft: _clearPendingClipboardDraft,
-      onSendText: (text) async {
-        await _sendText(text);
-      },
-      onPasteClipboardFiles: _pasteClipboardFiles,
-      onPasteClipboardImage: _pasteClipboardImage,
+      onSendText: _sendComposerText,
+      onPasteClipboard: _pasteClipboard,
     );
   }
 
   Future<void> _previewClipboard() async {
-    final requestId = ++_clipboardPreviewRequestId;
+    final generation = _clipboardDraftGeneration.start();
     try {
       final draft = await detectPendingClipboardDraft(
         readFiles: _isLocalhost
@@ -1088,8 +1090,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ? () async => null
             : _clipboardImageReader.readImageDraft,
         readText: getClipboardText,
+        isCurrent: () =>
+            mounted && _clipboardDraftGeneration.isCurrent(generation),
       );
-      if (!mounted || requestId != _clipboardPreviewRequestId) {
+      if (!mounted || !_clipboardDraftGeneration.isCurrent(generation)) {
         return;
       }
       if (draft == null) {
@@ -1105,68 +1109,52 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error: error,
         stackTrace: stackTrace,
       );
-      if (mounted && requestId == _clipboardPreviewRequestId) {
+      if (mounted && _clipboardDraftGeneration.isCurrent(generation)) {
         showAppToast(l10n.clipboardPreviewReadFailed(error.toString()));
       }
     }
   }
 
-  Future<bool> _pasteClipboardFiles() async {
-    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
-      return false;
+  Future<String?> _pasteClipboard() async {
+    if (!isDesktop() || !_canSendCurrentDevice) {
+      return null;
     }
-    final requestId = ++_clipboardPreviewRequestId;
+    final generation = _clipboardDraftGeneration.start();
     try {
-      final drafts = await _clipboardFileReader.readFileDrafts();
-      if (drafts.isEmpty) {
-        return false;
+      final draft = await detectPendingClipboardDraft(
+        readFiles: _isLocalhost
+            ? () async => const <ClipboardFileDraft>[]
+            : _clipboardFileReader.readFileDrafts,
+        readImage: _isLocalhost
+            ? () async => null
+            : _clipboardImageReader.readImageDraft,
+        readText: getClipboardText,
+        isCurrent: () =>
+            mounted && _clipboardDraftGeneration.isCurrent(generation),
+        trimText: false,
+      );
+      if (!mounted ||
+          !_clipboardDraftGeneration.isCurrent(generation) ||
+          draft == null) {
+        return null;
       }
-      if (!mounted || requestId != _clipboardPreviewRequestId) {
-        return true;
+      if (draft is PendingClipboardTextDraft) {
+        return draft.text;
       }
-      setState(() {
-        _pendingClipboardDraft = PendingClipboardFilesDraft(drafts);
-      });
-      return true;
+      setState(() => _pendingClipboardDraft = draft);
+      return null;
     } catch (error, stackTrace) {
       logger.e(
-        'read clipboard files failed',
+        'read clipboard paste failed',
         error: error,
         stackTrace: stackTrace,
       );
-      return false;
-    }
-  }
-
-  Future<bool> _pasteClipboardImage() async {
-    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
-      return false;
-    }
-    final requestId = ++_clipboardPreviewRequestId;
-    try {
-      final draft = await _clipboardImageReader.readImageDraft();
-      if (draft == null) {
-        return false;
-      }
-      if (!mounted || requestId != _clipboardPreviewRequestId) {
-        return true;
-      }
-      setState(() {
-        _pendingClipboardDraft = PendingClipboardImageDraft(draft);
-      });
-      return true;
-    } catch (error, stackTrace) {
-      logger.e(
-        'read clipboard image failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      return false;
+      return null;
     }
   }
 
   void _clearPendingClipboardDraft() {
-    ++_clipboardPreviewRequestId;
+    _clipboardDraftGeneration.invalidate();
     if (_pendingClipboardDraft == null) {
       return;
     }
@@ -1175,12 +1163,35 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
   }
 
-  Future<void> _sendPendingClipboardDraft() async {
+  Future<void> _sendComposerText(String text) {
+    return _runComposerSend(() => _sendText(text));
+  }
+
+  Future<void> _sendPendingClipboardDraft() {
+    return _runComposerSend(_sendPendingClipboardDraftOnce);
+  }
+
+  Future<void> _runComposerSend(Future<void> Function() action) async {
+    await _composerSendGate.run(() async {
+      if (mounted) {
+        setState(() {});
+      }
+      try {
+        await action();
+      } finally {
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
+  }
+
+  Future<void> _sendPendingClipboardDraftOnce() async {
     final pending = _pendingClipboardDraft;
     if (pending == null || !_canSendCurrentDevice) {
       return;
     }
-    ++_clipboardPreviewRequestId;
+    _clipboardDraftGeneration.invalidate();
 
     if (pending is PendingClipboardTextDraft) {
       await _sendText(pending.text, isClipboard: true);
@@ -2171,7 +2182,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         description: message,
         confirmButtonText: l10n.disconnect,
         cancelButtonText: l10n.cancel,
-        isDestructive: true,
       );
       if (!confirmed) {
         return;

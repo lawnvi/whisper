@@ -31,6 +31,37 @@ final class PendingClipboardFilesDraft extends PendingClipboardDraft {
   final List<ClipboardFileDraft> files;
 }
 
+final class ClipboardDraftGeneration {
+  int _current = 0;
+
+  int start() => ++_current;
+
+  void invalidate() {
+    _current++;
+  }
+
+  bool isCurrent(int generation) => generation == _current;
+}
+
+final class ChatComposerSendGate {
+  bool _isInFlight = false;
+
+  bool get isInFlight => _isInFlight;
+
+  Future<bool> run(Future<void> Function() action) async {
+    if (_isInFlight) {
+      return false;
+    }
+    _isInFlight = true;
+    try {
+      await action();
+      return true;
+    } finally {
+      _isInFlight = false;
+    }
+  }
+}
+
 typedef ClipboardFilesReader = Future<List<ClipboardFileDraft>> Function();
 typedef ClipboardImageReader = Future<ClipboardImageDraft?> Function();
 typedef ClipboardTextReader = Future<String?> Function();
@@ -39,22 +70,35 @@ Future<PendingClipboardDraft?> detectPendingClipboardDraft({
   required ClipboardFilesReader readFiles,
   required ClipboardImageReader readImage,
   required ClipboardTextReader readText,
+  bool Function()? isCurrent,
+  bool trimText = true,
 }) async {
+  bool stillCurrent() => isCurrent?.call() ?? true;
+
+  if (!stillCurrent()) {
+    return null;
+  }
   final files = await readFiles();
+  if (!stillCurrent()) {
+    return null;
+  }
   if (files.isNotEmpty) {
     return PendingClipboardFilesDraft(files);
   }
 
   final image = await readImage();
+  if (!stillCurrent()) {
+    return null;
+  }
   if (image != null) {
     return PendingClipboardImageDraft(image);
   }
 
-  final text = (await readText())?.trimRight();
-  if (text == null || text.trim().isEmpty) {
+  final text = await readText();
+  if (!stillCurrent() || text == null || text.trim().isEmpty) {
     return null;
   }
-  return PendingClipboardTextDraft(text);
+  return PendingClipboardTextDraft(trimText ? text.trimRight() : text);
 }
 
 class ChatComposer extends StatelessWidget {
@@ -90,9 +134,8 @@ class ChatComposer extends StatelessWidget {
     required this.onSendClipboardDraft,
     required this.onClearClipboardDraft,
     required this.onSendText,
+    required this.onPasteClipboard,
     this.pendingClipboardDraft,
-    this.onPasteClipboardFiles,
-    this.onPasteClipboardImage,
   });
 
   final bool clipboardEnabled;
@@ -110,8 +153,7 @@ class ChatComposer extends StatelessWidget {
   final Future<void> Function() onSendClipboardDraft;
   final VoidCallback onClearClipboardDraft;
   final Future<void> Function(String text) onSendText;
-  final Future<bool> Function()? onPasteClipboardFiles;
-  final Future<bool> Function()? onPasteClipboardImage;
+  final Future<String?> Function() onPasteClipboard;
 
   @override
   Widget build(BuildContext context) {
@@ -497,10 +539,11 @@ class ChatComposer extends StatelessWidget {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape &&
-        _hasClipboardDraft) {
+        event.logicalKey == LogicalKeyboardKey.escape) {
       onClearClipboardDraft();
-      return KeyEventResult.handled;
+      return _hasClipboardDraft
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     if (_isPasteShortcut(event)) {
       unawaited(_handlePasteShortcut());
@@ -513,20 +556,28 @@ class ChatComposer extends StatelessWidget {
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
       keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is KeyDownEvent;
-      if (event is KeyDownEvent &&
-          (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
-              isMobile())) {
-        if (_hasClipboardDraft) {
-          unawaited(onSendClipboardDraft());
-          return KeyEventResult.handled;
-        }
-        final nextText = controller.text.trimRight();
-        if (nextText.trim().isNotEmpty) {
-          unawaited(onSendText(nextText));
-          controller.clear();
-          return KeyEventResult.handled;
-        }
+      if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+        return KeyEventResult.ignored;
       }
+      final shiftPressed =
+          keyPressedMap[LogicalKeyboardKey.shift.keyLabel] == true ||
+              HardwareKeyboard.instance.isShiftPressed;
+      if (shiftPressed) {
+        return KeyEventResult.ignored;
+      }
+      if (event is KeyRepeatEvent || isLoading) {
+        return KeyEventResult.handled;
+      }
+      if (_hasClipboardDraft) {
+        unawaited(onSendClipboardDraft());
+        return KeyEventResult.handled;
+      }
+      final nextText = controller.text.trimRight();
+      if (nextText.trim().isNotEmpty) {
+        unawaited(onSendText(nextText));
+        controller.clear();
+      }
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -542,18 +593,7 @@ class ChatComposer extends StatelessWidget {
   }
 
   Future<void> _handlePasteShortcut() async {
-    final filesPasted =
-        await (onPasteClipboardFiles?.call() ?? Future<bool>.value(false));
-    if (filesPasted) {
-      return;
-    }
-    final imagePasted =
-        await (onPasteClipboardImage?.call() ?? Future<bool>.value(false));
-    if (imagePasted) {
-      return;
-    }
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text;
+    final text = await onPasteClipboard();
     if (text == null || text.isEmpty) {
       return;
     }

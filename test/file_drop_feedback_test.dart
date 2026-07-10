@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,40 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/file_drop_feedback.dart';
 
 void main() {
+  test('dropped files stop sending on the first false result', () async {
+    final calls = <int>[];
+
+    final allFilesSent = await sendDroppedFilesSequentially<int>(
+      <int>[1, 2, 3],
+      (item) async {
+        calls.add(item);
+        return item != 2;
+      },
+    );
+
+    expect(allFilesSent, isFalse);
+    expect(calls, <int>[1, 2]);
+  });
+
+  test('drop failure uses temporary rejected feedback before final cleanup',
+      () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+
+    expect(
+      source,
+      contains(
+        'final allFilesSent = await sendDroppedFilesSequentially<DropItem>',
+      ),
+    );
+    expect(source, contains('if (!allFilesSent)'));
+    expect(
+      source,
+      contains(
+        'await _showTemporaryFileDropRejection(l10n.fileDropRejected);',
+      ),
+    );
+  });
+
   testWidgets('hidden state omits the overlay', (tester) async {
     await tester.pumpWidget(
       _app(state: FileDropFeedbackState.hidden),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -144,6 +145,82 @@ void main() {
   });
 
   group('pending clipboard draft detection', () {
+    test('generation invalidates an older clipboard transaction', () {
+      final generation = ClipboardDraftGeneration();
+
+      final first = generation.start();
+      expect(generation.isCurrent(first), isTrue);
+
+      generation.invalidate();
+      expect(generation.isCurrent(first), isFalse);
+
+      final second = generation.start();
+      expect(generation.isCurrent(second), isTrue);
+      expect(generation.isCurrent(first), isFalse);
+    });
+
+    test('stale generation stops after each clipboard await', () async {
+      var current = true;
+      var imageReads = 0;
+      var textReads = 0;
+      final files = Completer<List<ClipboardFileDraft>>();
+      final staleAfterFiles = detectPendingClipboardDraft(
+        readFiles: () => files.future,
+        readImage: () async {
+          imageReads++;
+          return null;
+        },
+        readText: () async {
+          textReads++;
+          return 'late text';
+        },
+        isCurrent: () => current,
+      );
+      current = false;
+      files.complete(const <ClipboardFileDraft>[]);
+      expect(await staleAfterFiles, isNull);
+      expect(imageReads, 0);
+      expect(textReads, 0);
+
+      current = true;
+      final image = Completer<ClipboardImageDraft?>();
+      final staleAfterImage = detectPendingClipboardDraft(
+        readFiles: () async => const <ClipboardFileDraft>[],
+        readImage: () {
+          imageReads++;
+          return image.future;
+        },
+        readText: () async {
+          textReads++;
+          return 'late text';
+        },
+        isCurrent: () => current,
+      );
+      await Future<void>.delayed(Duration.zero);
+      current = false;
+      image.complete(null);
+      expect(await staleAfterImage, isNull);
+      expect(imageReads, 1);
+      expect(textReads, 0);
+
+      current = true;
+      final text = Completer<String?>();
+      final staleAfterText = detectPendingClipboardDraft(
+        readFiles: () async => const <ClipboardFileDraft>[],
+        readImage: () async => null,
+        readText: () {
+          textReads++;
+          return text.future;
+        },
+        isCurrent: () => current,
+      );
+      await Future<void>.delayed(Duration.zero);
+      current = false;
+      text.complete('late text');
+      expect(await staleAfterText, isNull);
+      expect(textReads, 1);
+    });
+
     test('uses file then image then text priority', () async {
       final calls = <String>[];
       const fileDraft = ClipboardFileDraft(
@@ -247,6 +324,14 @@ void main() {
       expect(source, contains('unawaited(_handleConnectionError(message));'));
       expect(source, contains('final confirmed = await confirmAction('));
       expect(source, contains('await WsSvrManager().close();'));
+      final handlerStart = source.indexOf(
+        'Future<void> _handleConnectionError(String message)',
+      );
+      final handlerEnd = source.indexOf('\n  @override', handlerStart);
+      expect(
+        source.substring(handlerStart, handlerEnd),
+        isNot(contains('isDestructive')),
+      );
       expect(
         RegExp(r'_handleConnectionError[\s\S]*finally[\s\S]*_isAlert = false')
             .hasMatch(source),

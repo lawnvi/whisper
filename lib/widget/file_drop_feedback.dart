@@ -4,6 +4,18 @@ import 'package:whisper/theme/app_theme.dart';
 
 enum FileDropFeedbackState { hidden, accepted, rejected }
 
+Future<bool> sendDroppedFilesSequentially<T>(
+  Iterable<T> files,
+  Future<bool> Function(T file) send,
+) async {
+  for (final file in files) {
+    if (!await send(file)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class FileDropFeedback extends StatelessWidget {
   static const overlayKey = ValueKey('file-drop-feedback-overlay');
 

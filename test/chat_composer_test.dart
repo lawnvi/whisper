@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,30 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 
 void main() {
+  test('send gate rejects overlapping actions and reopens after completion',
+      () async {
+    final gate = ChatComposerSendGate();
+    final pending = Completer<void>();
+    var actions = 0;
+
+    final first = gate.run(() async {
+      actions++;
+      await pending.future;
+    });
+    expect(gate.isInFlight, isTrue);
+
+    final duplicate = await gate.run(() async => actions++);
+    expect(duplicate, isFalse);
+    expect(actions, 1);
+
+    pending.complete();
+    expect(await first, isTrue);
+    expect(gate.isInFlight, isFalse);
+
+    expect(await gate.run(() async => actions++), isTrue);
+    expect(actions, 2);
+  });
+
   testWidgets('clipboard button previews without sending', (tester) async {
     var previews = 0;
     var clipboardSends = 0;
@@ -180,6 +205,109 @@ void main() {
     expect(controller.text, 'keep ordinary text');
   });
 
+  testWidgets('Escape invalidates a pending clipboard read without a draft',
+      (tester) async {
+    var invalidations = 0;
+    final focusNode = FocusNode();
+
+    await tester.pumpWidget(
+      _composerApp(
+        focusNode: focusNode,
+        onClearClipboardDraft: () => invalidations++,
+      ),
+    );
+
+    focusNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+    expect(invalidations, 1);
+  });
+
+  testWidgets('Shift Enter is delegated to the text field without sending',
+      (tester) async {
+    var sends = 0;
+    final controller = TextEditingController(text: 'first line');
+    controller.selection = TextSelection.collapsed(
+      offset: controller.text.length,
+    );
+    final focusNode = FocusNode();
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        focusNode: focusNode,
+        isInputEmpty: false,
+        onSendText: (_) async => sends++,
+      ),
+    );
+
+    final focus = _composerKeyboardFocus(tester);
+    final node = FocusNode();
+    focus.onKeyEvent!(node, _keyDown(LogicalKeyboardKey.shiftLeft));
+    final result = focus.onKeyEvent!(node, _keyDown(LogicalKeyboardKey.enter));
+
+    expect(sends, 0);
+    expect(result, KeyEventResult.ignored);
+    expect(controller.text, 'first line');
+  });
+
+  testWidgets('Enter handles empty and whitespace-only input', (tester) async {
+    for (final initialText in <String>['', '   ']) {
+      var sends = 0;
+      final controller = TextEditingController(text: initialText);
+      final focusNode = FocusNode();
+
+      await tester.pumpWidget(
+        _composerApp(
+          controller: controller,
+          focusNode: focusNode,
+          isInputEmpty: initialText.isEmpty,
+          onSendText: (_) async => sends++,
+        ),
+      );
+      final result = _composerKeyboardFocus(tester).onKeyEvent!(
+        FocusNode(),
+        _keyDown(LogicalKeyboardKey.enter),
+      );
+
+      expect(sends, 0);
+      expect(result, KeyEventResult.handled);
+      expect(controller.text, initialText);
+    }
+  });
+
+  testWidgets('Enter does not send text or drafts while loading',
+      (tester) async {
+    var textSends = 0;
+    var draftSends = 0;
+    final controller = TextEditingController(text: 'ordinary');
+    final focusNode = FocusNode();
+
+    await tester.pumpWidget(
+      _composerApp(
+        controller: controller,
+        focusNode: focusNode,
+        isInputEmpty: false,
+        isLoading: true,
+        pendingClipboardDraft:
+            const PendingClipboardTextDraft('clipboard text'),
+        onSendText: (_) async => textSends++,
+        onSendClipboardDraft: () async => draftSends++,
+      ),
+    );
+
+    final result = _composerKeyboardFocus(tester).onKeyEvent!(
+      FocusNode(),
+      _keyDown(LogicalKeyboardKey.enter),
+    );
+
+    expect(textSends, 0);
+    expect(draftSends, 0);
+    expect(result, KeyEventResult.handled);
+    expect(controller.text, 'ordinary');
+  });
+
   testWidgets('composer buttons keep at least a 44 logical pixel target',
       (tester) async {
     await tester.pumpWidget(_composerApp());
@@ -200,36 +328,20 @@ void main() {
     _expectMinimumTarget(tester, ChatComposer.sendButtonKey);
   });
 
-  testWidgets('desktop paste still prefers files before images and text',
+  testWidgets('desktop paste starts one top-level clipboard transaction',
       (tester) async {
-    var fileReads = 0;
-    var imageReads = 0;
+    var transactions = 0;
     final controller = TextEditingController(text: 'hello ');
     final focusNode = FocusNode();
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.getData') {
-        return <String, dynamic>{'text': 'world'};
-      }
-      return null;
-    });
-    addTearDown(
-      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
-    );
 
     await tester.pumpWidget(
       _composerApp(
         controller: controller,
         focusNode: focusNode,
         isInputEmpty: false,
-        onPasteClipboardFiles: () async {
-          fileReads++;
-          return true;
-        },
-        onPasteClipboardImage: () async {
-          imageReads++;
-          return false;
+        onPasteClipboard: () async {
+          transactions++;
+          return 'world';
         },
       ),
     );
@@ -241,44 +353,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(fileReads, 1);
-    expect(imageReads, 0);
-    expect(controller.text, 'hello ');
-  });
-
-  testWidgets('desktop paste falls back to ordinary text insertion',
-      (tester) async {
-    final controller = TextEditingController(text: 'hello ');
-    final focusNode = FocusNode();
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.getData') {
-        return <String, dynamic>{'text': 'world'};
-      }
-      return null;
-    });
-    addTearDown(
-      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
-    );
-
-    await tester.pumpWidget(
-      _composerApp(
-        controller: controller,
-        focusNode: focusNode,
-        isInputEmpty: false,
-        onPasteClipboardFiles: () async => false,
-        onPasteClipboardImage: () async => false,
-      ),
-    );
-
-    focusNode.requestFocus();
-    await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pump(const Duration(milliseconds: 100));
-
+    expect(transactions, 1);
     expect(controller.text, 'hello world');
   });
 }
@@ -288,12 +363,12 @@ Widget _composerApp({
   FocusNode? focusNode,
   PendingClipboardDraft? pendingClipboardDraft,
   bool isInputEmpty = true,
+  bool isLoading = false,
   Future<void> Function()? onPreviewClipboard,
   Future<void> Function()? onSendClipboardDraft,
   VoidCallback? onClearClipboardDraft,
   Future<void> Function(String)? onSendText,
-  Future<bool> Function()? onPasteClipboardFiles,
-  Future<bool> Function()? onPasteClipboardImage,
+  Future<String?> Function()? onPasteClipboard,
 }) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
@@ -304,7 +379,7 @@ Widget _composerApp({
         clipboardEnabled: true,
         canSend: true,
         isInputEmpty: isInputEmpty,
-        isLoading: false,
+        isLoading: isLoading,
         isLocalhost: false,
         isDesktopStyle: true,
         keyPressedMap: Map<String, bool>.of(const <String, bool>{}),
@@ -316,8 +391,7 @@ Widget _composerApp({
         onSendClipboardDraft: onSendClipboardDraft ?? () async {},
         onClearClipboardDraft: onClearClipboardDraft ?? () {},
         onSendText: onSendText ?? (_) async {},
-        onPasteClipboardFiles: onPasteClipboardFiles,
-        onPasteClipboardImage: onPasteClipboardImage,
+        onPasteClipboard: onPasteClipboard ?? () async => null,
       ),
     ),
   );
@@ -327,6 +401,27 @@ void _expectMinimumTarget(WidgetTester tester, Key key) {
   final size = tester.getSize(find.byKey(key));
   expect(size.width, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
   expect(size.height, greaterThanOrEqualTo(WhisperUi.minInteractiveSize));
+}
+
+Focus _composerKeyboardFocus(WidgetTester tester) {
+  return tester.widget<Focus>(
+    find
+        .ancestor(
+          of: find.byKey(const ValueKey('chat-composer-textfield')),
+          matching: find.byType(Focus),
+        )
+        .first,
+  );
+}
+
+KeyDownEvent _keyDown(LogicalKeyboardKey key) {
+  return KeyDownEvent(
+    physicalKey: key == LogicalKeyboardKey.enter
+        ? PhysicalKeyboardKey.enter
+        : PhysicalKeyboardKey.shiftLeft,
+    logicalKey: key,
+    timeStamp: Duration.zero,
+  );
 }
 
 ClipboardImageDraft _imageDraft() {
@@ -379,6 +474,7 @@ class _DraftHarnessState extends State<_DraftHarness> {
           onSendClipboardDraft: () async {},
           onClearClipboardDraft: () => setState(() => draft = null),
           onSendText: (_) async {},
+          onPasteClipboard: () async => null,
         ),
       ),
     );

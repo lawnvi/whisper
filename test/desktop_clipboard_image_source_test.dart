@@ -36,6 +36,26 @@ void main() {
       conversation,
       contains('onClearClipboardDraft: _clearPendingClipboardDraft'),
     );
+    expect(conversation, contains('onPasteClipboard: _pasteClipboard'));
+    expect(conversation, isNot(contains('onPasteClipboardFiles:')));
+    expect(conversation, isNot(contains('onPasteClipboardImage:')));
+    expect(
+      conversation,
+      contains('final ChatComposerSendGate _composerSendGate'),
+    );
+    expect(conversation, contains('onSendText: _sendComposerText'));
+    expect(conversation, contains('_composerSendGate.run('));
+    expect(composer, isNot(contains('isMobile()')));
+    final pasteStart =
+        conversation.indexOf('Future<String?> _pasteClipboard()');
+    final pasteEnd = conversation.indexOf(
+      'void _clearPendingClipboardDraft()',
+      pasteStart,
+    );
+    final pasteSource = conversation.substring(pasteStart, pasteEnd);
+    expect(pasteSource, isNot(contains('|| _isLocalhost')));
+    expect(pasteSource, contains('readFiles: _isLocalhost'));
+    expect(pasteSource, contains('readImage: _isLocalhost'));
     expect(conversation, isNot(contains('onSendClipboard:')));
     expect(composer, contains('detectPendingClipboardDraft'));
     expect(composer, contains('PendingClipboardTextDraft'));
