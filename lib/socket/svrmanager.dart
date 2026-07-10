@@ -36,6 +36,7 @@ import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+import 'package:whisper/socket/transport_close_guard.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
@@ -143,19 +144,21 @@ final class _PendingOutgoingConnection {
     required this.globalPolicyEpoch,
     required this.peerPolicyEpoch,
     required this.startedPolicyRevision,
+    required this.socketCloseTimeout,
   }) : httpClient = HttpClient();
 
   final ConnectionAttemptRequest request;
   final int globalPolicyEpoch;
   int peerPolicyEpoch;
   int startedPolicyRevision;
+  final Duration socketCloseTimeout;
   final HttpClient httpClient;
   WebSocketChannel? channel;
   HttpClientRequest? transportRequest;
   PeerSocketSession? session;
   String verifiedPeerId = '';
   Future<ConnectionAttemptResult>? completion;
-  Future<void>? _sinkCloseFuture;
+  TransportCloseGuard? _sinkCloseGuard;
   bool isCancelled = false;
   bool isReady = false;
   bool allowsDeviceRepair = false;
@@ -174,13 +177,18 @@ final class _PendingOutgoingConnection {
     httpClient.close(force: true);
     final sink = channel?.sink;
     if (sink != null) {
-      _sinkCloseFuture ??= sink.close().then<void>((_) {});
+      _sinkCloseGuard ??= TransportCloseGuard(
+        close: () async {
+          await sink.close();
+        },
+        timeout: socketCloseTimeout,
+      );
       unawaited(
-        _sinkCloseFuture!.catchError((Object _, StackTrace __) {}),
+        _sinkCloseGuard!.close().catchError((Object _, StackTrace __) {}),
       );
     }
-    if (isReady && _sinkCloseFuture != null) {
-      return _sinkCloseFuture!;
+    if (isReady && _sinkCloseGuard != null) {
+      return _sinkCloseGuard!.close();
     }
     return Future<void>.value();
   }
@@ -231,6 +239,7 @@ class WsSvrManager {
     LocalPeerProfileLoader? localPeerProfileLoader,
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
+    Duration socketCloseTimeout = const Duration(seconds: 2),
   })  : _admission = admission ?? SocketAdmissionController(),
         _audioManager = audioManager ?? AudioShareManager.shared,
         _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -249,7 +258,8 @@ class WsSvrManager {
         _identityStore = identityStore ?? DeviceIdentityStore(),
         _localPeerProfileLoader = localPeerProfileLoader,
         _manageSharedCoordinators = manageSharedCoordinators,
-        _authCommitBarrier = authCommitBarrier;
+        _authCommitBarrier = authCommitBarrier,
+        _socketCloseTimeout = socketCloseTimeout;
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -268,6 +278,7 @@ class WsSvrManager {
     LocalPeerProfileLoader? localPeerProfileLoader,
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
+    Duration socketCloseTimeout = const Duration(seconds: 2),
   }) : this._internal(
           admission: admission,
           audioManager: audioManager,
@@ -284,6 +295,7 @@ class WsSvrManager {
           localPeerProfileLoader: localPeerProfileLoader,
           manageSharedCoordinators: manageSharedCoordinators,
           authCommitBarrier: authCommitBarrier,
+          socketCloseTimeout: socketCloseTimeout,
         );
 
   // 工厂构造函数，返回单例实例
@@ -320,6 +332,8 @@ class WsSvrManager {
       <WebSocketSink, Timer>{};
   final Map<WebSocketSink, Future<void>> _socketCleanups =
       <WebSocketSink, Future<void>>{};
+  final Map<WebSocketSink, TransportCloseGuard> _socketCloseGuards =
+      <WebSocketSink, TransportCloseGuard>{};
   final Map<WebSocketSink, PeerDisconnectCause> _terminalDisconnectCauses =
       <WebSocketSink, PeerDisconnectCause>{};
   final Set<Future<void>> _pendingSocketAttachments = <Future<void>>{};
@@ -352,6 +366,7 @@ class WsSvrManager {
   final LocalPeerProfileLoader? _localPeerProfileLoader;
   final bool _manageSharedCoordinators;
   final ConnectionAuthCommitBarrier? _authCommitBarrier;
+  final Duration _socketCloseTimeout;
   final Map<String, PeerReconnectController> _reconnectControllers =
       <String, PeerReconnectController>{};
   final Map<String, int> _peerPolicyEpochs = <String, int>{};
@@ -711,6 +726,19 @@ class WsSvrManager {
     }));
   }
 
+  Future<void> _closeSocketSink(WebSocketSink sink) {
+    final guard = _socketCloseGuards.putIfAbsent(
+      sink,
+      () => TransportCloseGuard(
+        close: () async {
+          await sink.close();
+        },
+        timeout: _socketCloseTimeout,
+      ),
+    );
+    return guard.close();
+  }
+
   Future<void> debugRegisterPeerConnection(
     String peerId,
     PeerConnection connection,
@@ -777,7 +805,7 @@ class WsSvrManager {
         close: () async {
           _peerIdsBySink.remove(sink);
           session.close();
-          await sink.close();
+          await _closeSocketSink(sink);
         },
       ),
       afterRemove: (binding) => _afterPeerRemoved(
@@ -822,6 +850,7 @@ class WsSvrManager {
         if (identical(_socketCleanups[sink], cleanup)) {
           _socketCleanups.remove(sink);
         }
+        _socketCloseGuards.remove(sink);
       }
     }();
     _socketCleanups[sink] = cleanup;
@@ -887,7 +916,10 @@ class WsSvrManager {
           return;
         }
         _completeSocketAuth(sink, false, 'pairing_expired');
-        _ignoreFuture(sink.close(), context: 'close expired pairing socket');
+        _ignoreFuture(
+          _closeSocketSink(sink),
+          context: 'close expired pairing socket',
+        );
       },
     );
     _sessionStartedPolicyRevisions[session] = _policyRevision;
@@ -940,12 +972,19 @@ class WsSvrManager {
       addStream: sink.addStream,
       admissionLease: admissionLease,
       onOverflow: () {
+        session.close();
+        _ignoreFuture(
+          _closeSocketSink(sink),
+          context: 'close failed outbound websocket',
+        );
         if (!identical(_sessionsBySink[sink], session)) {
           return;
         }
-        session.close();
         _completeSocketAuth(sink, false, 'queue_overflow');
-        _ignoreFuture(sink.close(), context: 'close overflowing websocket');
+        _ignoreFuture(
+          _handlePeerSocketDoneQueued(sink),
+          context: 'cleanup failed outbound websocket',
+        );
       },
     );
   }
@@ -969,7 +1008,7 @@ class WsSvrManager {
     } catch (_) {
       admissionLease.close();
       _completeSocketAuth(sink, false, 'session_setup_failed');
-      await sink.close();
+      await _closeSocketSink(sink);
     }
   }
 
@@ -1010,7 +1049,7 @@ class WsSvrManager {
     _releaseOutgoingAuthForSink(sink);
     _releaseIncomingAuthForSink(sink);
     try {
-      await sink.close();
+      await _closeSocketSink(sink);
     } catch (error, stackTrace) {
       logger.i('关闭失败的 websocket 失败: $error\n$stackTrace');
     }
@@ -1791,6 +1830,7 @@ class WsSvrManager {
       globalPolicyEpoch: _globalPolicyEpoch,
       peerPolicyEpoch: _peerPolicyEpochs[request.expectedPeerId] ?? 0,
       startedPolicyRevision: _policyRevision,
+      socketCloseTimeout: _socketCloseTimeout,
     );
     if (request.mode == ConnectionAttemptMode.interactive &&
         request.expectedPeerId.isNotEmpty) {
@@ -1980,7 +2020,7 @@ class WsSvrManager {
         throw const _OutgoingConnectionCancelled();
       }
       if (!authResult.allow) {
-        await channelSink.close();
+        await _closeSocketSink(channelSink);
         return _connectionFailureResult(request, authResult.message);
       }
       final peerId = session.remotePeerId;
@@ -2318,7 +2358,7 @@ class WsSvrManager {
     await Future.wait(pendingSinks.map((sink) async {
       try {
         await Future.wait(<Future<void>>[
-          sink.close(),
+          _closeSocketSink(sink),
           if (_sessionsBySink[sink] case final session?)
             session.stopReceivingAndDrain(),
         ]);
@@ -2617,21 +2657,21 @@ class WsSvrManager {
     final session = _sessionsBySink[sink];
     final bytes = _outgoingBytes(message);
     if (session == null || bytes == null) {
-      await sink.close();
+      await _closeSocketSink(sink);
       return false;
     }
     final maxBytes =
         rawAuth ? _maxPreAuthMessageBytes : _maxAuthenticatedMessageBytes;
     if (bytes.length > maxBytes) {
       session.close();
-      await sink.close();
+      await _closeSocketSink(sink);
       return false;
     }
     if (rawAuth) {
       return session.enqueueOutgoing(bytes, byteLength: bytes.length);
     }
     if (!session.isAuthenticated) {
-      await sink.close();
+      await _closeSocketSink(sink);
       return false;
     }
     return session.enqueueAuthenticatedOutgoing(
@@ -2727,7 +2767,7 @@ class WsSvrManager {
     if (session == null ||
         (asServer && session.role != PeerSocketRole.server) ||
         (!asServer && session.role != PeerSocketRole.client)) {
-      await sink.close();
+      await _closeSocketSink(sink);
       return;
     }
     final byteLength = _incomingByteLength(message);
@@ -2782,7 +2822,7 @@ class WsSvrManager {
             cause: cause,
           );
         } else {
-          await sink.close();
+          await _closeSocketSink(sink);
         }
       }
     });
@@ -2914,7 +2954,7 @@ class WsSvrManager {
       }
       if (!allow) {
         _completeSocketAuth(sink, false, 'rejected');
-        await sink.close();
+        await _closeSocketSink(sink);
         return;
       }
       if (!_isCurrentSession(session, sink, generation)) {
@@ -2933,7 +2973,7 @@ class WsSvrManager {
     } else if (attempt.request.isAutomatic) {
       _completeSocketAuth(sink, false, 'automatic_pairing_required');
       session.close();
-      await sink.close();
+      await _closeSocketSink(sink);
     } else {
       await _requestPairingDecision(
         session,
@@ -2988,13 +3028,13 @@ class WsSvrManager {
       );
       if (decision == SimultaneousDialDecision.keepOutgoing) {
         session.close();
-        await sink.close();
+        await _closeSocketSink(sink);
         return;
       }
     }
     if (!_authRequestGate.tryClaimIncoming(peerId)) {
       session.close();
-      await sink.close();
+      await _closeSocketSink(sink);
       return;
     }
     _incomingAuthPeerIdsBySink[sink] = peerId;
@@ -3020,7 +3060,7 @@ class WsSvrManager {
         await _sendAuthEnvelope(sink, result);
         _releaseIncomingAuthForSink(sink);
         _dispatchToAll((event) => event.afterAuth(false, null));
-        await sink.close();
+        await _closeSocketSink(sink);
         return;
       }
       if (!_isCurrentSession(session, sink, generation)) {
@@ -3077,7 +3117,7 @@ class WsSvrManager {
     if (!await session.receiveResult(result)) {
       _identityPinPlansBySink.remove(sink);
       _completeSocketAuth(sink, false, result.reason ?? 'rejected');
-      await sink.close();
+      await _closeSocketSink(sink);
       return;
     }
     final pinPlan = _identityPinPlansBySink.remove(sink);

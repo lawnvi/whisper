@@ -286,6 +286,56 @@ void main() {
     );
   });
 
+  test('closing a session aborts active and queued outbound writes', () async {
+    final pair = await _authenticatedPair();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    final incoming = StreamController<Object>();
+    addTearDown(incoming.close);
+    final subscription = incoming.stream.listen((_) {});
+    final firstWriteStarted = Completer<void>();
+    final releaseWriter = Completer<void>();
+    var writes = 0;
+    pair.client.attachTransport(
+      subscription: subscription,
+      addStream: (stream) async {
+        writes += 1;
+        await stream.single;
+        firstWriteStarted.complete();
+        await releaseWriter.future;
+      },
+      onOverflow: () => fail('outbound queue overflowed'),
+    );
+
+    final active = pair.client.enqueueOutgoing(
+      Uint8List.fromList(<int>[1]),
+      byteLength: 1,
+    );
+    await firstWriteStarted.future;
+    final waiting = pair.client.enqueueOutgoing(
+      Uint8List.fromList(<int>[2]),
+      byteLength: 1,
+    );
+
+    pair.client.close();
+
+    expect(
+      await active.timeout(const Duration(milliseconds: 100)),
+      isFalse,
+    );
+    expect(await waiting, isFalse);
+    await pair.client
+        .drainOutbound()
+        .timeout(const Duration(milliseconds: 100));
+    expect(pair.client.pendingOutboundItems, 0);
+    expect(writes, 1);
+
+    releaseWriter.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(writes, 1);
+    expect(pair.client.pendingOutboundItems, 0);
+  });
+
   test('concurrent receive stops share and await subscription cancellation',
       () async {
     final session = await _session(

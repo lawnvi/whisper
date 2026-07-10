@@ -304,8 +304,9 @@ void main() {
     );
     expect(await flow.client.receiveResult(denial), isFalse);
     expect(flow.client.phase, PeerSocketPhase.closing);
-    expect(flow.server.phase, PeerSocketPhase.closing);
     expect(flow.client.isClosed, isTrue);
+    expect(flow.server.isClosed, isFalse);
+    flow.server.close();
     expect(flow.server.isClosed, isTrue);
   });
 

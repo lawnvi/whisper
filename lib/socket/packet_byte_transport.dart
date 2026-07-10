@@ -7,6 +7,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+import 'package:whisper/socket/transport_close_guard.dart';
 
 enum PacketSendResult { sent, dropped, closed, transportFailure }
 
@@ -42,8 +43,12 @@ class PacketByteTransport {
     this.onPacketSent,
     this.onPacketDropped,
     this.packetEncoder,
+    Duration closeTimeout = const Duration(seconds: 2),
   })  : _sendBytes = sendBytes,
-        _closeSink = closeSink,
+        _closeGuard = TransportCloseGuard(
+          close: closeSink,
+          timeout: closeTimeout,
+        ),
         _queue = null;
 
   PacketByteTransport.audio({
@@ -54,13 +59,19 @@ class PacketByteTransport {
     this.onPacketDropped,
     int maxItems = 32,
     int maxBytes = 512 * 1024,
+    Duration writerTimeout = const Duration(seconds: 2),
+    Duration closeTimeout = const Duration(seconds: 2),
     this.packetEncoder,
   })  : _sendBytes = null,
-        _closeSink = closeSink,
+        _closeGuard = TransportCloseGuard(
+          close: closeSink,
+          timeout: closeTimeout,
+        ),
         _queue = BoundedOutboundQueue.audio(
           addStream: addStream,
           maxItems: maxItems,
           maxBytes: maxBytes,
+          writerTimeout: writerTimeout,
         ) {
     _observeIncoming(incoming);
   }
@@ -73,18 +84,24 @@ class PacketByteTransport {
     void Function()? onOverflow,
     int maxItems = 128,
     int maxBytes = 256 * 1024,
+    Duration writerTimeout = const Duration(seconds: 2),
+    Duration closeTimeout = const Duration(seconds: 2),
     this.packetEncoder,
   })  : _sendBytes = null,
-        _closeSink = closeSink,
+        _closeGuard = TransportCloseGuard(
+          close: closeSink,
+          timeout: closeTimeout,
+        ),
         _queue = BoundedOutboundQueue.remoteInput(
           addStream: addStream,
           maxItems: maxItems,
           maxBytes: maxBytes,
+          writerTimeout: writerTimeout,
           onOverflow: onOverflow,
         );
 
   final void Function(Object bytes)? _sendBytes;
-  final Future<void> Function() _closeSink;
+  final TransportCloseGuard _closeGuard;
   final BoundedOutboundQueue? _queue;
   final void Function()? onPacketSent;
   final void Function()? onPacketDropped;
@@ -142,6 +159,12 @@ class PacketByteTransport {
           PacketTransportTermination(
             PacketTransportTerminationReason.writerFailure,
             error: StateError('packet transport writer failed'),
+          ),
+        );
+      } else if (result == OutboundQueueResult.dropped && queue.isClosed) {
+        _terminateUnexpected(
+          const PacketTransportTermination(
+            PacketTransportTerminationReason.writerFailure,
           ),
         );
       }
@@ -211,13 +234,11 @@ class PacketByteTransport {
     unawaited(() async {
       await subscription?.cancel();
       if (termination.isUnexpected) {
-        await Future.wait(<Future<void>>[
-          _closeSink(),
-          if (_queue case final queue?) queue.closeAndDrain(),
-        ]);
+        _queue?.abort();
+        await _closeGuard.close();
       } else {
         await _queue?.closeAndDrain();
-        await _closeSink();
+        await _closeGuard.close();
       }
     }()
         .then<void>(
@@ -557,9 +578,6 @@ Future<PacketByteTransport> connectPacketWebSocket(
       maxItems: remoteInputMaxItems,
       maxBytes: remoteInputMaxBytes,
       packetEncoder: packetEncoder,
-      onOverflow: () {
-        unawaited(connection.closeSink().catchError((Object _) {}));
-      },
     );
   }
   return PacketByteTransport.audio(

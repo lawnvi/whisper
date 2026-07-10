@@ -131,4 +131,80 @@ void main() {
     expect(overflows, 1);
     await queue.closeAndDrain();
   });
+
+  test('writer deadline fails active send and closes queued sends once',
+      () async {
+    final releaseWriter = Completer<void>();
+    final firstWriteStarted = Completer<void>();
+    var writes = 0;
+    var failures = 0;
+    final queue = BoundedOutboundQueue.chat(
+      addStream: (stream) async {
+        writes += 1;
+        await stream.single;
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+        }
+        await releaseWriter.future;
+      },
+      writerTimeout: const Duration(milliseconds: 20),
+      onOverflow: () => failures += 1,
+    );
+
+    final active = queue.addWithResult('active', byteLength: 6);
+    await firstWriteStarted.future;
+    final waiting = queue.addWithResult('waiting', byteLength: 7);
+    final draining = queue.closeAndDrain();
+
+    expect(
+      await active.timeout(const Duration(seconds: 1)),
+      OutboundQueueResult.writerFailure,
+    );
+    expect(await waiting, OutboundQueueResult.closed);
+    await draining.timeout(const Duration(seconds: 1));
+    expect(failures, 1);
+    expect(writes, 1);
+    expect(queue.pendingItems, 0);
+    expect(queue.pendingBytes, 0);
+
+    releaseWriter.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(failures, 1);
+    expect(writes, 1);
+    expect(queue.pendingItems, 0);
+  });
+
+  test('abort releases active and queued sends without waiting for writer',
+      () async {
+    final releaseWriter = Completer<void>();
+    final firstWriteStarted = Completer<void>();
+    var writes = 0;
+    final queue = BoundedOutboundQueue.chat(
+      addStream: (stream) async {
+        writes += 1;
+        await stream.single;
+        firstWriteStarted.complete();
+        await releaseWriter.future;
+      },
+      writerTimeout: const Duration(seconds: 1),
+    );
+
+    final active = queue.addWithResult('active', byteLength: 6);
+    await firstWriteStarted.future;
+    final waiting = queue.addWithResult('waiting', byteLength: 7);
+
+    queue.abort();
+
+    expect(await active, OutboundQueueResult.closed);
+    expect(await waiting, OutboundQueueResult.closed);
+    await queue.closeAndDrain().timeout(const Duration(milliseconds: 100));
+    expect(queue.pendingItems, 0);
+    expect(queue.pendingBytes, 0);
+    expect(writes, 1);
+
+    releaseWriter.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(queue.pendingItems, 0);
+    expect(writes, 1);
+  });
 }

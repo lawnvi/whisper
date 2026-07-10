@@ -43,7 +43,7 @@ void main() {
       'Future<void> _handleServerProof(',
       'Future<void> _handleClientResult(',
     );
-    expect(proof, contains('await sink.close()'));
+    expect(proof, contains('await _closeSocketSink(sink)'));
     expect(proof, isNot(contains('closeGracefully(')));
     expect(proof, isNot(contains('close(closeServer')));
   });
@@ -58,7 +58,7 @@ void main() {
     expect(create, contains('identical(_sessionsBySink[sink], session)'));
     expect(create,
         contains("_completeSocketAuth(sink, false, 'pairing_expired')"));
-    expect(create, contains('sink.close()'));
+    expect(create, contains('_closeSocketSink(sink)'));
   });
 
   test('authenticated frames are verified before business parsing', () {
@@ -190,6 +190,34 @@ void main() {
       'Future<void> closeGracefully(',
     );
     expect(connect, contains('_attachSocketTransport('));
+  });
+
+  test('outbound failure closes and cleans only the captured socket', () {
+    final attach = section(
+      'void _attachSocketTransport(',
+      'Future<void> _attachIncomingSocket(',
+    );
+    final register = section(
+      'Future<void> _registerPeerConnection(',
+      'Future<void> _handlePeerSocketDoneQueued(',
+    );
+
+    expect(attach, contains('_closeSocketSink(sink)'));
+    expect(attach, contains('identical(_sessionsBySink[sink], session)'));
+    expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
+    expect(register, contains('await _closeSocketSink(sink)'));
+    expect(register, isNot(contains('await sink.close()')));
+  });
+
+  test('cancelling a ready outgoing attempt bounds its socket close', () {
+    final pendingAttempt = section(
+      'final class _PendingOutgoingConnection',
+      'class WsSvrManager',
+    );
+
+    expect(pendingAttempt, contains('TransportCloseGuard'));
+    expect(pendingAttempt, contains('return _sinkCloseGuard!.close()'));
+    expect(pendingAttempt, isNot(contains('return _sinkCloseFuture!')));
   });
 
   test('outbound auth outcomes are returned only to the awaiting caller', () {

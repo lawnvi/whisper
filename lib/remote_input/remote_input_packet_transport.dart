@@ -110,7 +110,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
         packetEncoder: packetEncoder,
         onOverflow: () {
           transport._notifyDone();
-          unawaited(closeSink().catchError((Object _) {}));
+          unawaited(transport.close().catchError((Object _) {}));
         },
       ),
     );

@@ -577,8 +577,6 @@ final class PeerSocketSession {
     );
     if (allow) {
       _authenticationApproved = true;
-    } else {
-      close();
     }
     return result;
   }
@@ -665,6 +663,7 @@ final class PeerSocketSession {
     _closed = true;
     phase = PeerSocketPhase.closing;
     _handshakeTimer.cancel();
+    _outboundQueue?.abort();
     _clearMediaKeys();
   }
 

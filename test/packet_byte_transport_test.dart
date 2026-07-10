@@ -307,6 +307,81 @@ void main() {
     expect(sinkCloses, 1);
   });
 
+  test('writer deadline bounds send and sink close exactly once', () async {
+    final writerStarted = Completer<void>();
+    final releaseWriter = Completer<void>();
+    final releaseClose = Completer<void>();
+    var sinkCloses = 0;
+    final transport = PacketByteTransport.audio(
+      addStream: (stream) async {
+        await stream.single;
+        writerStarted.complete();
+        await releaseWriter.future;
+      },
+      closeSink: () async {
+        sinkCloses += 1;
+        await releaseClose.future;
+      },
+      writerTimeout: const Duration(milliseconds: 20),
+      closeTimeout: const Duration(milliseconds: 20),
+    );
+
+    final sending = transport.send(Uint8List.fromList(<int>[1]));
+    await writerStarted.future;
+
+    expect(
+      await sending.timeout(const Duration(seconds: 1)),
+      PacketSendResult.transportFailure,
+    );
+    final termination = await transport.done;
+    expect(termination.reason, PacketTransportTerminationReason.writerFailure);
+    await transport.close().timeout(const Duration(seconds: 1));
+    expect(sinkCloses, 1);
+
+    releaseWriter.complete();
+    releaseClose.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(await transport.done, same(termination));
+    expect(sinkCloses, 1);
+  });
+
+  test('remote close aborts an active writer without waiting for its deadline',
+      () async {
+    final incoming = StreamController<dynamic>();
+    final writerStarted = Completer<void>();
+    final releaseWriter = Completer<void>();
+    var sinkCloses = 0;
+    final transport = PacketByteTransport.audio(
+      incoming: incoming.stream,
+      addStream: (stream) async {
+        await stream.single;
+        writerStarted.complete();
+        await releaseWriter.future;
+      },
+      closeSink: () async => sinkCloses += 1,
+      writerTimeout: const Duration(seconds: 1),
+    );
+
+    final sending = transport.send(Uint8List.fromList(<int>[1]));
+    await writerStarted.future;
+    await incoming.close();
+
+    expect(
+      (await transport.done).reason,
+      PacketTransportTerminationReason.remoteClosed,
+    );
+    expect(
+      await sending.timeout(const Duration(milliseconds: 100)),
+      PacketSendResult.closed,
+    );
+    await transport.close().timeout(const Duration(milliseconds: 100));
+    expect(sinkCloses, 1);
+
+    releaseWriter.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(sinkCloses, 1);
+  });
+
   test('intentional queued audio close reports local closure only', () async {
     final incoming = StreamController<dynamic>();
     final transport = PacketByteTransport.audio(
