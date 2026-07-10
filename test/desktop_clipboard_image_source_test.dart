@@ -96,7 +96,8 @@ void main() {
     expect(start, greaterThanOrEqualTo(0));
     expect(end, greaterThan(start));
     final method = source.substring(start, end);
-    expect(method, contains('await LocalDatabase().insertMessage(message);'));
+    expect(method, contains('insertMessageReturning(message)'));
+    expect(method, contains('onMessage(persisted)'));
     expect(method, contains('await socketManager.sendMessageTo('));
     expect(method, contains('return sent;'));
     expect(method, contains('return false;'));
