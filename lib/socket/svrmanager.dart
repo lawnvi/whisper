@@ -1615,6 +1615,7 @@ class WsSvrManager {
       ),
       whenCancelled: context.whenCancelled,
     );
+    context.reportResultReason(result.reason);
     if (context.isCurrent && result.isAuthenticated) {
       final storedDevice = await _database.fetchDevice(result.peerId);
       if (context.isCurrent &&
@@ -1981,9 +1982,10 @@ class WsSvrManager {
     }
     // 同 peer 已有在途尝试(手动或自动)时直接跳过新的自动拨号:
     // 不建 attempt、不建 socket,也避免自动尝试在手动抢占期间
-    // 重新占用出站鉴权门。
+    // 重新占用出站鉴权门。只统计未被取消的尝试:被 cancel/invalidate
+    // 但异步清理尚未 untrack 的垂死 attempt 不得挡下加速重拨。
     if (request.isAutomatic &&
-        hasPendingConnectionAttemptForPeer(request.expectedPeerId)) {
+        _hasUncancelledPendingAttemptForPeer(request.expectedPeerId)) {
       return Future<ConnectionAttemptResult>.value(
         ConnectionAttemptResult.rejected(
           requestId: request.requestId,
@@ -2041,6 +2043,11 @@ class WsSvrManager {
 
   bool hasPendingConnectionAttemptForPeer(String peerId) =>
       _pendingOutgoingByPeerId[peerId]?.isNotEmpty == true;
+
+  bool _hasUncancelledPendingAttemptForPeer(String peerId) =>
+      _pendingOutgoingByPeerId[peerId]
+              ?.any((attempt) => !attempt.isCancelled) ==
+          true;
 
   @visibleForTesting
   bool debugBindPendingConnectionPeer(String requestId, String peerId) {
@@ -2124,6 +2131,9 @@ class WsSvrManager {
     }
   }
 
+  static bool _isAutomaticAttempt(_PendingOutgoingConnection attempt) =>
+      attempt.request.isAutomatic;
+
   /// 手动连接优先:先取消同 peer 的在途自动尝试,并有界等待其清理完成
   /// (含释放出站鉴权门),再真正拨号;否则手动尝试会同步撞门,
   /// 直接得到 duplicateRequest 而无任何网络活动。
@@ -2131,15 +2141,14 @@ class WsSvrManager {
     _PendingOutgoingConnection attempt,
   ) async {
     final peerId = attempt.request.expectedPeerId;
-    final hasAutomaticInFlight = _pendingOutgoingByPeerId[peerId]
-            ?.any((pending) => pending.request.isAutomatic) ==
-        true;
+    final hasAutomaticInFlight =
+        _pendingOutgoingByPeerId[peerId]?.any(_isAutomaticAttempt) == true;
     if (hasAutomaticInFlight) {
       try {
         await _cancelPendingAttemptsForPeer(
           peerId,
           ConnectionAttemptReason.superseded,
-          where: (pending) => pending.request.isAutomatic,
+          where: _isAutomaticAttempt,
         ).timeout(_manualPreemptWaitTimeout);
       } catch (_) {
         // 有界等待:超时或清理异常都不阻断手动拨号;若鉴权门尚未
@@ -2760,14 +2769,15 @@ class WsSvrManager {
       }
     }
     if (_removedBindingOwnsPeerState(binding)) {
+      // 会话生命周期终点:不论断因都结算稳定性复位,
+      // 稳定连接挣得的退避复位不因手动断开等断因而丢失。
+      _reconnectControllers[peerId]?.sessionClosed();
       _dispatchToAll((event) => event.onClose());
     }
     if (_removedBindingOwnsPeerState(binding) &&
         (cause == PeerDisconnectCause.network ||
             cause == PeerDisconnectCause.watchdog) &&
-        _pendingOutgoingByPeerId[peerId]
-                ?.any((attempt) => !attempt.isCancelled) !=
-            true) {
+        !_hasUncancelledPendingAttemptForPeer(peerId)) {
       final target = _reconnectControllers[peerId]?.target;
       if (target != null) {
         _reconnectControllers[peerId]?.scheduleReconnect(target);

@@ -137,6 +137,71 @@ void main() {
     expect(automaticResult.status, ConnectionAttemptStatus.cancelled);
   });
 
+  test('a cancelled attempt awaiting cleanup does not dedupe the next '
+      'automatic dial', () async {
+    final staleServer = await _HangingServer.start();
+    final freshServer = await _HangingServer.start();
+    addTearDown(() => staleServer.server.close(force: true));
+    addTearDown(() => freshServer.server.close(force: true));
+    final manager = WsSvrManager.forTesting();
+    addTearDown(() => manager.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+
+    final stale = manager.connectToServer(
+      _automatic(
+        requestId: 'auto-stale',
+        port: staleServer.port,
+        peerId: 'peer-x',
+      ),
+    );
+    await staleServer.firstReceived.future;
+
+    // 同步启动取消:isCancelled 立即置位,但异步清理(transport abort、
+    // 释放鉴权门、untrack)尚未跑完,旧 attempt 仍在 per-peer 索引里。
+    final cancelling = manager.cancelConnectionAttempt('auto-stale');
+    expect(manager.hasPendingConnectionAttemptForPeer('peer-x'), isTrue);
+
+    final fresh = manager.connectToServer(
+      _automatic(
+        requestId: 'auto-fresh',
+        port: freshServer.port,
+        peerId: 'peer-x',
+      ),
+    );
+
+    // 加速重拨不得被垂死的旧尝试在自动去重预检里挡下:
+    // 必须真实建立 attempt,而不是不建 attempt 直接拒绝。
+    expect(manager.hasPendingConnectionAttempt('auto-fresh'), isTrue);
+
+    // 这个同步窗口里旧尝试仍占着 peer 级出站鉴权门,新拨号得到的
+    // duplicateRequest 是暂态拒绝(由重连控制器按当前退避短延迟重试)。
+    final freshResult = await fresh.timeout(const Duration(seconds: 5));
+    expect(freshResult.status, ConnectionAttemptStatus.rejected);
+    expect(freshResult.reason, ConnectionAttemptReason.duplicateRequest);
+
+    await cancelling;
+    final staleResult = await stale.timeout(const Duration(seconds: 5));
+    expect(staleResult.status, ConnectionAttemptStatus.cancelled);
+
+    // 旧尝试清理完成后,重试拨号必须畅通并真实到达新端点。
+    final retry = manager.connectToServer(
+      _automatic(
+        requestId: 'auto-retry',
+        port: freshServer.port,
+        peerId: 'peer-x',
+      ),
+    );
+    expect(manager.hasPendingConnectionAttempt('auto-retry'), isTrue);
+    await freshServer.firstReceived.future.timeout(const Duration(seconds: 5));
+
+    await manager.cancelConnectionAttempt('auto-retry');
+    final retryResult = await retry.timeout(const Duration(seconds: 5));
+    expect(retryResult.status, ConnectionAttemptStatus.cancelled);
+    expect(retryResult.reason, isNot(ConnectionAttemptReason.duplicateRequest));
+  });
+
   test('in-flight interactive attempt skips a new automatic dial', () async {
     final hanging = await _HangingServer.start();
     addTearDown(() => hanging.server.close(force: true));

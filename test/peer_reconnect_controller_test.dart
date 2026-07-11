@@ -79,6 +79,7 @@ void main() {
 
       expect(scheduler.activeTimerCount, 0);
       scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
       expect(controller.attemptCount, 0);
@@ -107,6 +108,7 @@ void main() {
         PeerReconnectController.stableConnectionThreshold -
             const Duration(seconds: 1),
       );
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
       expect(controller.attemptCount, 2);
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 4));
@@ -122,10 +124,13 @@ void main() {
 
       controller.scheduleReconnect(_target);
       await scheduler.runNext();
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
       await scheduler.runNext();
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
       await scheduler.runNext();
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
 
       expect(controller.attemptCount, 3);
@@ -697,6 +702,7 @@ void main() {
       expect(controller.attemptCount, 1);
       expect(controller.hasPendingAttempt, isFalse);
       scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
       controller.scheduleReconnect(_target);
       expect(controller.attemptCount, 0);
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
@@ -869,6 +875,155 @@ void main() {
       );
       controller.scheduleReconnect(manualTarget);
       expect(scheduler.activeTimerCount, 0);
+    });
+  });
+
+  group('session settlement', () {
+    test('sessionClosed resets the backoff after a stable session regardless '
+        'of disconnect cause', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.attemptCount, 1);
+      controller.authenticated();
+
+      // 结算绑定会话生命周期:任何断因(含手动断开)都在断开通知处结算,
+      // 不再依赖只有 network/watchdog 才会触发的 scheduleReconnect。
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+
+      expect(controller.attemptCount, 0);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+    });
+
+    test('sessionClosed keeps escalating the backoff after a short-lived '
+        'session', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.authenticated();
+
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.sessionClosed();
+
+      expect(controller.attemptCount, 2);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 4));
+    });
+
+    test('sessionClosed settles at most once per authenticated session', () {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.authenticated();
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.sessionClosed();
+      expect(controller.attemptCount, 1);
+
+      // 重复的断开通知不得再次结算。
+      controller.sessionClosed();
+      expect(controller.attemptCount, 1);
+    });
+
+    test('scheduleReconnect during a live session neither settles it as a '
+        'failure nor schedules a redundant dial', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.attemptCount, 1);
+      controller.authenticated();
+
+      // 自动连接重开/信任恢复会在连接仍存活时调用 scheduleReconnect:
+      // 活着的会话不得被误结算为短命失败,也不得排冗余拨号。
+      controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 1);
+      expect(scheduler.activeTimerCount, 0);
+
+      // 稳定存活挣得的复位在真正断开时仍然有效。
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+      expect(controller.attemptCount, 0);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+    });
+  });
+
+  group('duplicate-request rejection', () {
+    test('an automatic duplicate-request rejection reschedules at the current '
+        'backoff instead of going dormant', () async {
+      final scheduler = _FakeScheduler();
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptCalls += 1;
+          if (attemptCalls == 1) {
+            attempt.reportResultReason(
+              ConnectionAttemptReason.duplicateRequest,
+            );
+            return ConnectionAttemptStatus.rejected;
+          }
+          return ConnectionAttemptStatus.cancelled;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      // 去重拒绝说明同 peer 仍有在途/清理中的尝试,不是终态:
+      // 按当前退避重排(计数不升档),避免自动重连从此休眠。
+      expect(controller.attemptCount, 0);
+      expect(scheduler.activeTimerCount, 1);
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[Duration(seconds: 1), Duration(seconds: 1)],
+      );
+
+      await scheduler.runNext();
+      expect(attemptCalls, 2);
+    });
+
+    test('a rejected result with a non-duplicate reason stays terminal',
+        () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attempt.reportResultReason(ConnectionAttemptReason.peerRejected);
+          return ConnectionAttemptStatus.rejected;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      expect(scheduler.activeTimerCount, 0);
+      expect(scheduler.scheduledDelays, const [Duration(seconds: 1)]);
     });
   });
 }

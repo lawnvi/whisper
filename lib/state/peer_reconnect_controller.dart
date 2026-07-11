@@ -78,10 +78,18 @@ final class ReconnectAttemptContext {
   final Completer<void> _cancelled = Completer<void>();
   bool _active = true;
   bool _wasCancelled = false;
+  ConnectionAttemptReason _resultReason = ConnectionAttemptReason.none;
 
   bool get isCurrent => _active && !_wasCancelled;
   bool get isCancelled => _wasCancelled;
   Future<void> get whenCancelled => _cancelled.future;
+  ConnectionAttemptReason get resultReason => _resultReason;
+
+  /// 拨号方回报底层结果原因,让控制器区分可短延迟重试的去重拒绝
+  /// (duplicateRequest,同 peer 旧尝试仍在异步清理)与真正的终态拒绝。
+  void reportResultReason(ConnectionAttemptReason reason) {
+    _resultReason = reason;
+  }
 
   void _cancel() {
     if (!_active) {
@@ -165,11 +173,25 @@ final class PeerReconnectController {
     if (_closed || isSuppressed) {
       return;
     }
-    _settleAuthenticatedSession();
+    if (_authenticatedAt != null) {
+      // 会话仍存活(自动连接重开、信任恢复等场景会走到这里):
+      // 不得把活会话结算成短命失败,也不排冗余拨号;
+      // 断开时由 sessionClosed 统一结算稳定性。
+      return;
+    }
     _replaceScheduledAttempt(_retryDelay());
   }
 
-  /// 断开重连时结算上一段 authenticated 会话:存活满
+  /// 会话生命周期终点:不论断因,在断开通知处结算稳定性复位。
+  /// 存活满 [stableConnectionThreshold] 复位退避,短命会话按连续失败升档。
+  void sessionClosed() {
+    if (_closed) {
+      return;
+    }
+    _settleAuthenticatedSession();
+  }
+
+  /// 结算上一段 authenticated 会话:存活满
   /// [stableConnectionThreshold] 才复位退避,短命连接视为一次连续失败。
   void _settleAuthenticatedSession() {
     final authenticatedAt = _authenticatedAt;
@@ -367,8 +389,17 @@ final class PeerReconnectController {
         _attemptCount += 1;
         scheduleReconnect(scheduledTarget);
         break;
-      case ConnectionAttemptStatus.cancelled:
       case ConnectionAttemptStatus.rejected:
+        if (attemptContext.resultReason ==
+            ConnectionAttemptReason.duplicateRequest) {
+          // 去重拒绝说明同 peer 仍有在途/清理中的尝试,不是终态:
+          // 按当前退避重排(计数不升档),避免自动重连从此休眠。
+          scheduleReconnect(scheduledTarget);
+          break;
+        }
+        _invalidate();
+        break;
+      case ConnectionAttemptStatus.cancelled:
         _invalidate();
         break;
     }

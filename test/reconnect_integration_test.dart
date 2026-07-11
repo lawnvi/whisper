@@ -136,6 +136,65 @@ void main() {
     expect(manager.hasPendingConnectionAttemptForPeer('peer-a'), isFalse);
   });
 
+  test('accelerated endpoint refresh does not go dormant while the stale '
+      'attempt is still cleaning up', () async {
+    final scheduler = _FakeScheduler();
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _trustPeer(database, 'peer-a');
+    final manager = _manager(
+      scheduler: scheduler,
+      database: database,
+      autoConnectEnabled: () async => true,
+    );
+    addTearDown(() => manager.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+    final staleServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final freshServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => staleServer.close(force: true));
+    addTearDown(() => freshServer.close(force: true));
+    final staleReceived = Completer<void>();
+    var freshRequests = 0;
+    staleServer.listen((_) {
+      if (!staleReceived.isCompleted) staleReceived.complete();
+    });
+    freshServer.listen((_) {
+      freshRequests += 1;
+    });
+
+    manager.scheduleReconnectTarget(
+      ReconnectTarget.endpoint(
+        peerId: 'peer-a',
+        endpoint: PeerEndpoint.loopbackForTesting(port: staleServer.port),
+      ),
+    );
+    await scheduler.runNext();
+    await staleReceived.future;
+
+    // 端点刷新触发加速重拨(updateTarget accelerate):旧 attempt 被
+    // invalidate 后其异步清理可能尚未 untrack,零延迟的新自动拨号
+    // 不得因此永久休眠。
+    manager.scheduleReconnectTarget(
+      ReconnectTarget.endpoint(
+        peerId: 'peer-a',
+        endpoint: PeerEndpoint.loopbackForTesting(port: freshServer.port),
+      ),
+    );
+    await scheduler.runNext();
+
+    // 若加速拨号撞上尚未清理完的旧尝试(duplicateRequest),控制器应
+    // 已按当前退避重排而不是休眠;驱动假计时器直到新端点真的收到拨号。
+    for (var round = 0; round < 10 && freshRequests == 0; round += 1) {
+      if (scheduler.activeTimerCount > 0) {
+        await scheduler.runNext();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    await _waitUntil(() => freshRequests > 0);
+  });
+
   test('protocol rejection stops instead of retrying', () async {
     final scheduler = _FakeScheduler();
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
