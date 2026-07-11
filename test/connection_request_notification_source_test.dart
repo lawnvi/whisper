@@ -78,7 +78,10 @@ void main() {
     expect(native, contains('"actionId"'));
     expect(native, contains('"payload"'));
     expect(native, isNot(contains('setFullScreenIntent')));
+    expect(native, contains('CHANNEL_ID = "whisper.connect_request"'));
+    expect(notifier, contains('deleteNotificationChannel(obsoleteChannelId)'));
     expect(notifier, contains("'whisper.connect_request.alerts.v2'"));
+    expect(notifier, contains("'whisper.connect_request.calls'"));
     expect(notifier, contains("icon: 'ic_stat_whisper'"));
     expect(
       activity,

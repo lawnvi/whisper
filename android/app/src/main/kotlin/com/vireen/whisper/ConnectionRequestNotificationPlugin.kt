@@ -197,7 +197,7 @@ class ConnectionRequestNotificationPlugin :
     }
 
     companion object {
-        const val CHANNEL_ID = "whisper.connect_request.calls"
+        const val CHANNEL_ID = "whisper.connect_request"
         private const val TIMEOUT_MILLIS = 30_000L
         private const val SELECT_NOTIFICATION = "SELECT_NOTIFICATION"
         private const val SELECT_FOREGROUND_NOTIFICATION_ACTION =

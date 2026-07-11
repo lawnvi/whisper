@@ -143,9 +143,11 @@ class ConnectionRequestNotifier {
 
   ConnectionRequestNotifier._internal();
 
-  static const String legacyChannelId = 'whisper.connect_request';
-  static const String channelId = 'whisper.connect_request.alerts.v2';
-  static const String callChannelId = 'whisper.connect_request.calls';
+  static const String channelId = 'whisper.connect_request';
+  static const List<String> _obsoleteChannelIds = <String>[
+    'whisper.connect_request.alerts.v2',
+    'whisper.connect_request.calls',
+  ];
   static const MethodChannel _nativeChannel =
       MethodChannel('com.vireen.whisper/connection_request_notifications');
   static const Uuid _uuid = Uuid();
@@ -171,6 +173,9 @@ class ConnectionRequestNotifier {
       final l10n = resolveNotificationL10n();
       final android = plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
+      for (final obsoleteChannelId in _obsoleteChannelIds) {
+        await android?.deleteNotificationChannel(obsoleteChannelId);
+      }
       await android?.createNotificationChannel(
         AndroidNotificationChannel(
           channelId,
@@ -184,10 +189,7 @@ class ConnectionRequestNotifier {
       try {
         final active = await plugin.getActiveNotifications();
         for (final notification in active) {
-          if ((notification.channelId == legacyChannelId ||
-                  notification.channelId == channelId ||
-                  notification.channelId == callChannelId) &&
-              notification.id != null) {
+          if (notification.channelId == channelId && notification.id != null) {
             await plugin.cancel(notification.id!);
           }
         }
