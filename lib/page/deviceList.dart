@@ -2257,8 +2257,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
       final localizations = AppLocalizations.of(context);
       if (result.reason == ConnectionAttemptReason.duplicateRequest) {
-        // 同 peer 已有连接尝试在途:不标记断开、不弹失败对话框,
-        // 仅轻提示并等待在途尝试的结果。
+        // 同 peer 已有连接尝试在途:复位方法开头预置的 connecting 状态——
+        // 挡路的在途尝试若以 cancelled/networkFailure 收场,不会有任何
+        // 路径清理该状态,设备行会永久转圈。随后仅轻提示,不弹失败对话框;
+        // 在途尝试成功时 markConnected 会自行恢复状态。
+        if (peerId != null) {
+          ConnectionCoordinator().markDisconnected(peerId: peerId);
+        }
+        if (_pendingAutoConnectPeerId == peerId) {
+          _pendingAutoConnectPeerId = null;
+        }
         if (manual) {
           showAppToast(
             localizations?.connectAlreadyInProgress ??
