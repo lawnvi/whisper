@@ -375,7 +375,7 @@ Future<Directory> downloadDir() async {
     if (dir == null) {
       return await getApplicationDocumentsDirectory();
     }
-    dir = Directory("${dir.path}/whisper");
+    dir = Directory(p.join(dir.path, 'whisper'));
   }
   if (!dir.existsSync()) {
     dir.createSync();
