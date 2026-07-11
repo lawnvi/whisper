@@ -39,11 +39,15 @@ void main() {
     final dispatchIndex =
         persistAndOffer.indexOf('_dispatchOutgoingMessage(message)');
     final sendIndex =
-        persistAndOffer.indexOf('_sendFileTransferV3OfferTo(peerId, message)');
+        persistAndOffer.indexOf('return _sendFileTransferV3OfferTo(');
 
     expect(admissionIndex, isNonNegative);
     expect(dispatchIndex, greaterThan(admissionIndex));
     expect(sendIndex, greaterThan(dispatchIndex));
+    expect(
+      persistAndOffer.substring(sendIndex),
+      contains('connection: connection'),
+    );
   });
 
   test('conversation updates an existing message with the same uuid', () {

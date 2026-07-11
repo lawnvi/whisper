@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('device list awaits confirmation and socket close errors', () {
+  test('device list awaits confirmation and localizes socket close errors', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
     final start = source.indexOf('void onError(String message)');
     final end = source.indexOf('void onNotice(String message)', start);
@@ -21,7 +21,17 @@ void main() {
     expect(section, contains('await WsSvrManager().close();'));
     expect(section, contains('catch (error)'));
     expect(section, contains('if (mounted) {'));
-    expect(section, contains('showAppToast(error.toString());'));
+    expect(
+      section,
+      contains(
+        '_logDeviceListFailure(DeviceListOperationKind.socketDialog, error);',
+      ),
+    );
+    expect(
+      section,
+      contains("showAppToast(l10n?.connectFailed ?? 'Connection Failed');"),
+    );
+    expect(section, isNot(contains('error.toString()')));
     expect(section, isNot(contains('showConfirmationDialog(')));
     expect(section, isNot(contains('isDestructive: true')));
   });

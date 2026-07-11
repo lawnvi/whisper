@@ -222,7 +222,7 @@ void main() {
     final incomingError = methodBody(
       source,
       'Future<void> _handleIncomingFileTransferV3Error',
-      'String _incomingFileTransferV3ErrorMessage',
+      'void _dispatchTransferProgress(',
     );
     final failOutgoing = methodBody(
       source,
@@ -232,7 +232,7 @@ void main() {
     final outgoingError = methodBody(
       source,
       'Future<void> _handleOutgoingFileTransferV3Error',
-      'String _outgoingFileTransferV3ErrorMessage',
+      'Future<int?> _sendFileTransferV3WindowSafely(',
     );
 
     expect(frameHandler, contains('_handleIncomingFileTransferV3Error'));
@@ -241,6 +241,7 @@ void main() {
     expect(incomingError, contains('FileTransferV3Action.error'));
     expect(failOutgoing, contains('FileTransferState.failed'));
     expect(failOutgoing, contains('FileTransferV3Action.error'));
+    expect(outgoingError, contains('_failOutgoingFileTransferV3('));
     expect(incomingError, isNot(contains('onError(')));
     expect(failOutgoing, isNot(contains('onError(')));
     expect(outgoingError, isNot(contains('onError(')));

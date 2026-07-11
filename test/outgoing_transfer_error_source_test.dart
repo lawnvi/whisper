@@ -12,7 +12,8 @@ void main() {
   }
 
   test('outgoing file source errors fail only the transfer', () {
-    final source = File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source =
+        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
     final handleReady = methodBody(
       source,
       'Future<void> _handleFileTransferV3Ready(',
@@ -21,12 +22,12 @@ void main() {
     final failHelper = methodBody(
       source,
       'Future<void> _handleOutgoingTransferError(',
-      'String _outgoingTransferErrorMessage(',
+      'Future<void> _failStaleIncomingQueueEntry(',
     );
 
     expect(handleReady, contains('_handleOutgoingTransferError'));
     expect(failHelper, contains('FileTransferState.failed'));
-    expect(failHelper, contains('_transferRuntime.complete'));
+    expect(failHelper, contains('_releaseOutgoingAndStartNext('));
     expect(failHelper, isNot(contains('onError(')));
   });
 }
