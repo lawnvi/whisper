@@ -259,9 +259,10 @@ void main() {
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
 
     expect(harness.clientReconnects.activeTimerCount, 1);
+    // 连接在 30s 稳定阈值内即断:视为一次连续失败,首个重连延迟升档到 2s。
     expect(
       harness.clientReconnects.scheduledDelays,
-      const <Duration>[Duration(seconds: 1)],
+      const <Duration>[Duration(seconds: 2)],
     );
   });
 
@@ -308,9 +309,10 @@ void main() {
     );
 
     expect(harness.clientReconnects.activeTimerCount, 1);
+    // 短命连接不复位退避:watchdog 摘除同样按连续失败升档到 2s。
     expect(
       harness.clientReconnects.scheduledDelays,
-      const <Duration>[Duration(seconds: 1)],
+      const <Duration>[Duration(seconds: 2)],
     );
   });
 

@@ -61,7 +61,8 @@ void main() {
       );
     });
 
-    test('authenticated success stops retries and resets the delay', () async {
+    test('authenticated success stops retries; a stable connection resets '
+        'the delay', () async {
       final scheduler = _FakeScheduler();
       final results = <ConnectionAttemptStatus>[
         ConnectionAttemptStatus.networkFailure,
@@ -77,8 +78,66 @@ void main() {
       await scheduler.runNext();
 
       expect(scheduler.activeTimerCount, 0);
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
       controller.scheduleReconnect(_target);
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+      expect(controller.attemptCount, 0);
+    });
+
+    test('a short-lived authenticated connection keeps escalating backoff',
+        () async {
+      final scheduler = _FakeScheduler();
+      final results = <ConnectionAttemptStatus>[
+        ConnectionAttemptStatus.networkFailure,
+        ConnectionAttemptStatus.authenticated,
+      ];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => results.removeAt(0),
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      await scheduler.runNext();
+      expect(scheduler.activeTimerCount, 0);
+
+      // 握手成功但连接 30s 内即断:视为连续失败,退避继续升档,
+      // 不允许「断联-秒级重连-再断」的死循环。
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 2);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 4));
+    });
+
+    test('consecutive short-lived connections keep raising the delay',
+        () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.scheduleReconnect(_target);
+
+      expect(controller.attemptCount, 3);
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[
+          Duration(seconds: 1),
+          Duration(seconds: 2),
+          Duration(seconds: 4),
+          Duration(seconds: 8),
+        ],
+      );
     });
 
     for (final result in <ConnectionAttemptStatus>[
@@ -621,8 +680,8 @@ void main() {
       expect(scheduler.activeTimerCount, 0);
     });
 
-    test('external authenticated signal cancels pending retry and resets count',
-        () async {
+    test('external authenticated signal cancels pending retry and resets '
+        'count only after a stable lifetime', () async {
       final scheduler = _FakeScheduler();
       final controller = _controller(
         scheduler: scheduler,
@@ -634,9 +693,12 @@ void main() {
       expect(controller.attemptCount, 1);
       controller.authenticated();
 
-      expect(controller.attemptCount, 0);
+      // 计数不再立即清零:等断开时按存活时长结算。
+      expect(controller.attemptCount, 1);
       expect(controller.hasPendingAttempt, isFalse);
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
       controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 0);
       expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
     });
 

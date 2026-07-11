@@ -112,6 +112,10 @@ typedef ReconnectAttempt = FutureOr<ConnectionAttemptStatus> Function(
 
 /// A reconnect state machine owned by exactly one peer.
 final class PeerReconnectController {
+  /// 认证成功的连接必须存活满该时长,断开时才复位重连退避;
+  /// 更短命的连接视为连续失败继续升档,避免「断联-秒级重连-再断」死循环。
+  static const Duration stableConnectionThreshold = Duration(seconds: 30);
+
   PeerReconnectController({
     required ReconnectAttempt attempt,
     required ReconnectEligibility eligibility,
@@ -133,6 +137,7 @@ final class PeerReconnectController {
   ReconnectTarget? _target;
   Timer? _timer;
   DateTime? _nextAttemptAt;
+  DateTime? _authenticatedAt;
   int _attemptCount = 0;
   int _generation = 0;
   final Set<ReconnectAttemptContext> _activeAttempts =
@@ -160,7 +165,24 @@ final class PeerReconnectController {
     if (_closed || isSuppressed) {
       return;
     }
+    _settleAuthenticatedSession();
     _replaceScheduledAttempt(_retryDelay());
+  }
+
+  /// 断开重连时结算上一段 authenticated 会话:存活满
+  /// [stableConnectionThreshold] 才复位退避,短命连接视为一次连续失败。
+  void _settleAuthenticatedSession() {
+    final authenticatedAt = _authenticatedAt;
+    if (authenticatedAt == null) {
+      return;
+    }
+    _authenticatedAt = null;
+    final lifetime = _clock().difference(authenticatedAt);
+    if (lifetime >= stableConnectionThreshold) {
+      _attemptCount = 0;
+    } else {
+      _attemptCount += 1;
+    }
   }
 
   void updateTarget(ReconnectTarget target, {bool accelerate = true}) {
@@ -183,7 +205,10 @@ final class PeerReconnectController {
     if (_closed) {
       return;
     }
-    _attemptCount = 0;
+    // 不立即清零 _attemptCount:每轮重连握手都会成功,若在此复位,
+    // 断联-重连循环的退避将永远停留在 ~1s。记录时刻,断开时按
+    // 存活时长在 _settleAuthenticatedSession 里结算。
+    _authenticatedAt = _clock();
     _invalidate();
   }
 
