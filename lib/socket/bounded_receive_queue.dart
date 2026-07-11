@@ -4,34 +4,41 @@ import 'dart:async';
 ///
 /// 水位语义:
 /// - 加入后 `pendingBytes >= pauseBytes`(低水位,默认 `maxBytes ~/ 2`)或
-///   `pendingItems >= maxItems` 时触发 [onPause],要求上游暂停投递。
+///   `pendingItems >= pauseItems`(默认 `maxItems ~/ 2`)时触发 [onPause],
+///   要求上游暂停投递。
 /// - [onOverflow] 只在两种情况下触发:单项自身超过 [maxBytes],或对端无视
-///   pause 继续灌入、积压越过 `2 × maxBytes` / `2 × maxItems` 硬上限。
-///   pause 生效前已在事件队列中的在途项因此不会被误判为溢出。
+///   pause 继续灌入、积压越过 `1 × maxBytes` / `1 × maxItems` 硬上限。
+///   pause 水位只占预算的一半,生效前已在事件队列中的在途项仍有半个预算
+///   的余量吸收(默认 4MiB / 32 项,远大于典型 TCP 窗口),不会被误判为
+///   溢出;不配合 pause 的对端最多只能钉住一份预算的内存。
 /// - 排空到 [resumeBytes] / [resumeItems](默认低水位的一半)以下时触发
 ///   [onResume]。
 ///
-/// 这保证配合背压的对端(发送窗口不超过 [maxBytes])永远不会被 overflow
+/// 这保证配合背压的对端(发送窗口不超过 [pauseBytes])永远不会被 overflow
 /// 断联,只会经历 pause/resume。
 final class BoundedReceiveQueue {
   BoundedReceiveQueue({
     this.maxItems = 64,
     this.maxBytes = 8 * 1024 * 1024,
+    int? pauseItems,
     int? pauseBytes,
     int? resumeItems,
     int? resumeBytes,
     this.onPause,
     this.onResume,
     this.onOverflow,
-  })  : pauseBytes = pauseBytes ?? maxBytes ~/ 2,
-        resumeItems = resumeItems ?? maxItems ~/ 2,
+  })  : pauseItems = pauseItems ?? maxItems ~/ 2,
+        pauseBytes = pauseBytes ?? maxBytes ~/ 2,
+        resumeItems = resumeItems ?? (pauseItems ?? maxItems ~/ 2) ~/ 2,
         resumeBytes = resumeBytes ?? (pauseBytes ?? maxBytes ~/ 2) ~/ 2 {
     if (maxItems <= 0 ||
         maxBytes <= 0 ||
+        this.pauseItems <= 0 ||
+        this.pauseItems > maxItems ||
         this.pauseBytes <= 0 ||
         this.pauseBytes > maxBytes ||
         this.resumeItems < 0 ||
-        this.resumeItems >= maxItems ||
+        this.resumeItems >= this.pauseItems ||
         this.resumeBytes < 0 ||
         this.resumeBytes >= this.pauseBytes) {
       throw ArgumentError('invalid receive queue watermarks');
@@ -40,6 +47,7 @@ final class BoundedReceiveQueue {
 
   final int maxItems;
   final int maxBytes;
+  final int pauseItems;
   final int pauseBytes;
   final int resumeItems;
   final int resumeBytes;
@@ -48,8 +56,9 @@ final class BoundedReceiveQueue {
   final void Function()? onOverflow;
 
   /// 对不配合背压的对端的硬上限:越过才判溢出。
-  int get hardMaxItems => maxItems * 2;
-  int get hardMaxBytes => maxBytes * 2;
+  /// 收敛为 1×预算——pause 水位在半预算处,余下一半吸收在途项。
+  int get hardMaxItems => maxItems;
+  int get hardMaxBytes => maxBytes;
 
   Future<void> _tail = Future<void>.value();
   Future<void>? _drainFuture;
@@ -83,7 +92,7 @@ final class BoundedReceiveQueue {
     _pendingItems += 1;
     _pendingBytes += byteLength;
     if (!_paused &&
-        (_pendingItems >= maxItems || _pendingBytes >= pauseBytes)) {
+        (_pendingItems >= pauseItems || _pendingBytes >= pauseBytes)) {
       _paused = true;
       onPause?.call();
     }
