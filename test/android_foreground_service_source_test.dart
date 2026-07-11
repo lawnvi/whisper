@@ -71,6 +71,45 @@ void main() {
         reason: 'onStartCommand 收到本地化文案时需持久化');
   });
 
+  test('dataSync foreground services stop themselves on Android 15+ timeout',
+      () {
+    final manifest =
+        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    expect(
+      manifest,
+      contains('android:foregroundServiceType="dataSync"'),
+      reason: 'dataSync 前台服务受 Android 15+ 的 6 小时预算约束',
+    );
+
+    for (final path in <String>[
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+          'TransferForegroundService.kt',
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+          'KeepAliveForegroundService.kt',
+    ]) {
+      final service = File(path).readAsStringSync();
+      // Android 15 起 dataSync FGS 预算耗尽会回调 onTimeout(int, int);
+      // 不在回调里退出前台并停止服务,系统会抛
+      // ForegroundServiceDidNotStopInTimeException 直接杀进程。
+      expect(
+        service,
+        contains('override fun onTimeout(startId: Int, fgsType: Int)'),
+        reason: '$path 缺少 dataSync onTimeout 兜底',
+      );
+      expect(
+        service,
+        matches(
+          RegExp(
+            r'override fun onTimeout\(startId: Int, fgsType: Int\)'
+            r'[\s\S]{0,600}?stopForeground\(STOP_FOREGROUND_REMOVE\)'
+            r'[\s\S]{0,300}?stopSelf\(\)',
+          ),
+        ),
+        reason: '$path 的 onTimeout 必须 stopForeground(REMOVE) 后 stopSelf',
+      );
+    }
+  });
+
   test('notification listener service is declared for Android settings grant',
       () {
     final manifest =

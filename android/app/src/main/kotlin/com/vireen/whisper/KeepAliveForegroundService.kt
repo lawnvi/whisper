@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
@@ -61,6 +62,16 @@ class KeepAliveForegroundService : Service() {
             buildNotification(title, description, progress, indeterminateProgress)
         )
         return START_STICKY
+    }
+
+    // Android 15+ dataSync 前台服务超时兜底:预算(默认 6 小时)耗尽时系统
+    // 回调 onTimeout,必须立即退出前台并停止,否则会抛
+    // ForegroundServiceDidNotStopInTimeException 直接杀进程。
+    // stopSelf 后走既有 onDestroy 收尾。
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
