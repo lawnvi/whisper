@@ -39,12 +39,14 @@ void main() {
   });
 
   test('rejecting pairing closes only that socket', () {
-    final proof = section(
-      'Future<void> _handleServerProof(',
+    final completion = section(
+      'Future<void> _tryCompleteServerPairing(',
       'Future<void> _handleClientResult(',
     );
-    expect(proof, contains('await _closeSocketSink(sink)'));
-    final denial = proof.substring(proof.indexOf('if (!allow)'));
+    expect(completion, contains('await _closeSocketSink(sink)'));
+    final denial = completion.substring(
+      completion.indexOf('if (session.hasPairingRejection)'),
+    );
     expect(
       denial.indexOf('await _sendAuthEnvelope(sink, result)'),
       lessThan(denial.indexOf('session.close()')),
@@ -53,8 +55,8 @@ void main() {
       denial.indexOf('session.close()'),
       lessThan(denial.indexOf('await _closeSocketSink(sink)')),
     );
-    expect(proof, isNot(contains('closeGracefully(')));
-    expect(proof, isNot(contains('close(closeServer')));
+    expect(completion, isNot(contains('closeGracefully(')));
+    expect(completion, isNot(contains('close(closeServer')));
   });
 
   test('session timeout invalidates its generation and closes only its sink',
@@ -163,6 +165,8 @@ void main() {
     );
     expect(proof, contains('_completeAuthenticatedSession('));
     expect(proof, contains('_sendAuthEnvelope(sink, result)'));
+    expect(proof, contains('session.isMutuallyApproved'));
+    expect(proof, contains('session.tryClaimPairingCompletion()'));
     expect(
       proof.indexOf('_completeAuthenticatedSession('),
       lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),

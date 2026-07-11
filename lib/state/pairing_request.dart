@@ -12,12 +12,14 @@ final class PairingRequest {
     required this.pairingCode,
     required this.reason,
     required this.canApprove,
+    this.cancellation,
   }) : assert(pairingCode.length == 6);
 
   final DeviceData device;
   final String pairingCode;
   final PairingReason reason;
   final bool canApprove;
+  final Future<void>? cancellation;
 }
 
 PairingReason? pairingReasonForIdentity(

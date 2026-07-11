@@ -63,7 +63,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 5;
+  static const int protocolVersion = 6;
 
   final PeerSocketRole role;
   final int connectionGeneration;
@@ -86,9 +86,13 @@ final class PeerSocketSession {
   Uint8List? _mediaReceiveKey;
   bool _approvalResolved = false;
   bool _approvalAllowed = false;
+  bool _remoteApprovalResolved = false;
+  bool _remoteApprovalAllowed = false;
+  bool _pairingCompletionClaimed = false;
   bool _authenticationApproved = false;
   bool _authenticationCommitted = false;
   bool _closed = false;
+  final Completer<void> _closedCompleter = Completer<void>();
   Future<void> _sendChain = Future<void>.value();
   BoundedReceiveQueue? _inboundQueue;
   BoundedOutboundQueue? _outboundQueue;
@@ -158,6 +162,28 @@ final class PeerSocketSession {
   }
 
   bool get isClosed => _closed;
+  Future<void> get closed => _closedCompleter.future;
+  bool get isMutuallyApproved =>
+      role == PeerSocketRole.server &&
+      _approvalResolved &&
+      _approvalAllowed &&
+      _remoteApprovalResolved &&
+      _remoteApprovalAllowed;
+  bool get hasPairingRejection =>
+      (_approvalResolved && !_approvalAllowed) ||
+      (_remoteApprovalResolved && !_remoteApprovalAllowed);
+
+  bool tryClaimPairingCompletion() {
+    if (role != PeerSocketRole.server ||
+        isClosed ||
+        phase != PeerSocketPhase.awaitingLocalApproval ||
+        _pairingCompletionClaimed ||
+        (!isMutuallyApproved && !hasPairingRejection)) {
+      return false;
+    }
+    _pairingCompletionClaimed = true;
+    return true;
+  }
 
   int get pendingReceiveItems => _inboundQueue?.pendingItems ?? 0;
   int get pendingOutboundItems => _outboundQueue?.pendingItems ?? 0;
@@ -451,13 +477,13 @@ final class PeerSocketSession {
   }
 
   Future<AuthEnvelope> createProof() async {
-    _require(PeerSocketRole.client, PeerSocketPhase.awaitingResult);
-    if (!_approvalResolved || !_approvalAllowed || _transcript == null) {
-      return _fail('approval_required');
+    _require(PeerSocketRole.client, PeerSocketPhase.awaitingLocalApproval);
+    if (_transcript == null) {
+      return _fail('transcript_missing');
     }
     final signature = await _continueAfter(
       localIdentity.sign(_transcript!.proofBytes()),
-      PeerSocketPhase.awaitingResult,
+      PeerSocketPhase.awaitingLocalApproval,
     );
     return AuthEnvelope.proof(
       protocolVersion: protocolVersion,
@@ -510,6 +536,83 @@ final class PeerSocketSession {
     }
   }
 
+  Future<AuthEnvelope> createApproval({
+    required bool allow,
+    required String reason,
+  }) async {
+    final expectedPhase = allow
+        ? PeerSocketPhase.awaitingResult
+        : PeerSocketPhase.awaitingLocalApproval;
+    _require(PeerSocketRole.client, expectedPhase);
+    if (!_approvalResolved ||
+        _approvalAllowed != allow ||
+        _transcript == null) {
+      return _fail('approval_required');
+    }
+    final signature = await _continueAfter(
+      localIdentity.sign(
+        _transcript!.approvalBytes(allow: allow, reason: reason),
+      ),
+      expectedPhase,
+    );
+    return AuthEnvelope.approval(
+      protocolVersion: protocolVersion,
+      peerId: localProfile.uid,
+      nonce: encodeAuthBase64Url(_localNonce),
+      peerNonce: encodeAuthBase64Url(_remoteNonce!),
+      profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
+      signature: signature,
+      allow: allow,
+      reason: reason,
+    );
+  }
+
+  Future<bool> receiveApproval(AuthEnvelope approval) async {
+    _require(PeerSocketRole.server, PeerSocketPhase.awaitingLocalApproval);
+    try {
+      _requireEnvelope(approval, AuthAction.approval);
+      if (_remoteApprovalResolved) {
+        return _fail('duplicate_approval');
+      }
+      if (approval.peerId != remotePeerId ||
+          !_sameBytes(
+            decodeAuthBase64Url(approval.nonce, expectedLength: 32),
+            _remoteNonce!,
+          ) ||
+          !_sameBytes(
+            decodeAuthBase64Url(approval.peerNonce!, expectedLength: 32),
+            _localNonce,
+          ) ||
+          !_sameBytes(
+            decodeAuthBase64Url(approval.profileDigest, expectedLength: 32),
+            _remoteProfile!.canonicalDigest(),
+          )) {
+        return _fail('approval_mismatch');
+      }
+      final valid = await _continueAfter(
+        verifyDeviceSignature(
+          publicKeyBase64Url: remoteIdentityPublicKey,
+          message: _transcript!.approvalBytes(
+            allow: approval.allow!,
+            reason: approval.reason!,
+          ),
+          signatureBase64Url: approval.signature!,
+        ),
+        PeerSocketPhase.awaitingLocalApproval,
+      );
+      if (!valid) {
+        return _fail('invalid_approval_signature');
+      }
+      _remoteApprovalResolved = true;
+      _remoteApprovalAllowed = approval.allow!;
+      return approval.allow!;
+    } on AuthHandshakeException {
+      rethrow;
+    } catch (_) {
+      return _fail('invalid_approval');
+    }
+  }
+
   bool resolveLocalApproval({
     required int generation,
     required bool allow,
@@ -521,15 +624,11 @@ final class PeerSocketSession {
     }
     _approvalResolved = true;
     _approvalAllowed = allow;
-    if (role == PeerSocketRole.client) {
-      if (allow) {
-        _transition(
-          PeerSocketPhase.awaitingLocalApproval,
-          PeerSocketPhase.awaitingResult,
-        );
-      } else {
-        close();
-      }
+    if (role == PeerSocketRole.client && allow) {
+      _transition(
+        PeerSocketPhase.awaitingLocalApproval,
+        PeerSocketPhase.awaitingResult,
+      );
     }
     return true;
   }
@@ -554,9 +653,8 @@ final class PeerSocketSession {
     required String reason,
   }) async {
     _require(PeerSocketRole.server, PeerSocketPhase.awaitingLocalApproval);
-    if (!_approvalResolved ||
-        _approvalAllowed != allow ||
-        _transcript == null) {
+    final decisionMatches = allow ? isMutuallyApproved : hasPairingRejection;
+    if (!decisionMatches || _transcript == null) {
       return _fail('approval_result_mismatch');
     }
     final signature = await _continueAfter(
@@ -582,7 +680,13 @@ final class PeerSocketSession {
   }
 
   Future<bool> receiveResult(AuthEnvelope result) async {
-    _require(PeerSocketRole.client, PeerSocketPhase.awaitingResult);
+    if (role != PeerSocketRole.client ||
+        isClosed ||
+        (phase != PeerSocketPhase.awaitingLocalApproval &&
+            phase != PeerSocketPhase.awaitingResult)) {
+      return _fail('unexpected_phase');
+    }
+    final expectedPhase = phase;
     try {
       _requireEnvelope(result, AuthAction.result);
       if (result.peerId != remotePeerId ||
@@ -609,7 +713,7 @@ final class PeerSocketSession {
           ),
           signatureBase64Url: result.signature!,
         ),
-        PeerSocketPhase.awaitingResult,
+        expectedPhase,
       );
       if (!valid) {
         return _fail('invalid_result_signature');
@@ -617,6 +721,11 @@ final class PeerSocketSession {
       if (!result.allow!) {
         close();
         return false;
+      }
+      if (expectedPhase != PeerSocketPhase.awaitingResult ||
+          !_approvalResolved ||
+          !_approvalAllowed) {
+        return _fail('approval_required');
       }
       _authenticationApproved = true;
       return true;
@@ -665,6 +774,7 @@ final class PeerSocketSession {
     _handshakeTimer.cancel();
     _outboundQueue?.abort();
     _clearMediaKeys();
+    _closedCompleter.complete();
   }
 
   Future<void> _enableCodec(PeerSocketPhase expectedPhase) async {

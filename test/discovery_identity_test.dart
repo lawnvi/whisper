@@ -16,6 +16,7 @@ void main() {
         DiscoveryIdentity.fromPublicKey(identity.publicKeyBase64Url);
 
     final expectedPkh = identityPublicKeyHash(identity.publicKeyBase64Url);
+    expect(DiscoveryIdentity.protocolVersion, '6');
     expect(discovery.publicKeyHash, expectedPkh);
     expect(discovery.pkh, expectedPkh);
     expect(discovery.publicKeyHash, hasLength(43));
@@ -23,7 +24,7 @@ void main() {
         'whisper-${expectedPkh.substring(0, 8)}');
     expect(discovery.instanceName, discovery.serviceInstanceName);
     expect(discovery.txt, <String, String>{
-      'v': '5',
+      'v': DiscoveryIdentity.protocolVersion,
       'pkh': expectedPkh,
     });
   });

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-enum AuthAction { hello, challenge, proof, result }
+enum AuthAction { hello, challenge, proof, approval, result }
 
 const int _maxPeerIdBytes = 256;
 const int _maxProfileBytes = 64 * 1024;
@@ -91,6 +91,29 @@ final class AuthEnvelope {
       peerNonce: peerNonce,
       profileDigest: profileDigest,
       signature: signature,
+    );
+  }
+
+  factory AuthEnvelope.approval({
+    required int protocolVersion,
+    required String peerId,
+    required String nonce,
+    required String peerNonce,
+    required String profileDigest,
+    required String signature,
+    required bool allow,
+    required String reason,
+  }) {
+    return _validated(
+      action: AuthAction.approval,
+      protocolVersion: protocolVersion,
+      peerId: peerId,
+      nonce: nonce,
+      peerNonce: peerNonce,
+      profileDigest: profileDigest,
+      signature: signature,
+      allow: allow,
+      reason: reason,
     );
   }
 
@@ -205,6 +228,17 @@ final class AuthEnvelope {
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
+        );
+      case AuthAction.approval:
+        return AuthEnvelope.approval(
+          protocolVersion: common.protocolVersion,
+          peerId: common.peerId,
+          nonce: common.nonce,
+          peerNonce: _requiredString(json, 'peerNonce'),
+          profileDigest: common.profileDigest,
+          signature: _requiredString(json, 'signature'),
+          allow: _requiredBool(json, 'allow'),
+          reason: _requiredString(json, 'reason', allowEmpty: true),
         );
       case AuthAction.result:
         return AuthEnvelope.result(
@@ -406,6 +440,17 @@ const Map<AuthAction, Set<String>> _allowedKeys = <AuthAction, Set<String>>{
     'peerNonce',
     'profileDigest',
     'signature',
+  },
+  AuthAction.approval: <String>{
+    'action',
+    'version',
+    'peerId',
+    'nonce',
+    'peerNonce',
+    'profileDigest',
+    'signature',
+    'allow',
+    'reason',
   },
   AuthAction.result: <String>{
     'action',

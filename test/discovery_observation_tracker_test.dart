@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/state/discovery_identity.dart';
 import 'package:whisper/state/discovery_observation_tracker.dart';
 
 String _pkh(int seed) =>
     base64Url.encode(Uint8List(32)..fillRange(0, 32, seed)).replaceAll('=', '');
 
 Map<String, String> _txt(String pkh) => <String, String>{
-      'v': '5',
+      'v': DiscoveryIdentity.protocolVersion,
       'pkh': pkh,
     };
 
@@ -24,6 +25,15 @@ void main() {
       tracker.resolve(
         handle,
         attributes: <String, String>{..._txt(_pkh(1)), 'uid': 'leak'},
+        host: 'peer.local',
+        port: 10002,
+      ),
+      isFalse,
+    );
+    expect(
+      tracker.resolve(
+        handle,
+        attributes: <String, String>{..._txt(_pkh(1)), 'v': '5'},
         host: 'peer.local',
         port: 10002,
       ),

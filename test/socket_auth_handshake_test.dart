@@ -25,7 +25,7 @@ Future<PeerSocketSession> _makeSession(
       uid: role == PeerSocketRole.client ? 'client' : 'server',
       name: role == PeerSocketRole.client ? 'Client' : 'Server',
       platform: 'test',
-      protocolVersion: 5,
+      protocolVersion: 6,
       capabilities: const PeerCapabilities(
         fileTransferV3: true,
         remoteInputSourceV1: true,
@@ -58,11 +58,14 @@ Future<
   );
   final challenge = await server.receiveHello(await client.createHello());
   await client.receiveChallenge(challenge);
+  await server.receiveProof(await client.createProof());
   client.resolveLocalApproval(
     generation: client.connectionGeneration,
     allow: true,
   );
-  await server.receiveProof(await client.createProof());
+  await server.receiveApproval(
+    await client.createApproval(allow: true, reason: 'approved'),
+  );
   server.resolveLocalApproval(
     generation: server.connectionGeneration,
     allow: true,
@@ -78,11 +81,14 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
   await client.receiveChallenge(
     await server.receiveHello(await client.createHello()),
   );
+  await server.receiveProof(await client.createProof());
   client.resolveLocalApproval(
     generation: client.connectionGeneration,
     allow: true,
   );
-  await server.receiveProof(await client.createProof());
+  await server.receiveApproval(
+    await client.createApproval(allow: true, reason: 'approved'),
+  );
   return (client: client, server: server);
 }
 
@@ -218,6 +224,53 @@ void main() {
     expect(registrations, 0);
   });
 
+  test('tampered client approval cannot authorize server persistence',
+      () async {
+    final server = await _makeSession(PeerSocketRole.server, 32);
+    final client = await _makeSession(PeerSocketRole.client, 1);
+    addTearDown(server.close);
+    addTearDown(client.close);
+    await client.receiveChallenge(
+      await server.receiveHello(await client.createHello()),
+    );
+    await server.receiveProof(await client.createProof());
+    client.resolveLocalApproval(
+      generation: client.connectionGeneration,
+      allow: true,
+    );
+    final approval =
+        await client.createApproval(allow: true, reason: 'approved');
+    final signatureBytes = decodeAuthBase64Url(
+      approval.signature!,
+      expectedLength: 64,
+    )..[0] ^= 1;
+    final tampered = AuthEnvelope.approval(
+      protocolVersion: approval.protocolVersion,
+      peerId: approval.peerId,
+      nonce: approval.nonce,
+      peerNonce: approval.peerNonce!,
+      profileDigest: approval.profileDigest,
+      signature: encodeAuthBase64Url(signatureBytes),
+      allow: approval.allow!,
+      reason: approval.reason!,
+    );
+
+    await expectLater(
+      server.receiveApproval(tampered),
+      throwsA(isA<AuthHandshakeException>()),
+    );
+    var persisted = false;
+    expect(
+      await server.commitAuthentication(
+        generation: server.connectionGeneration,
+        persistIdentity: () async => persisted = true,
+        registerPeer: () async {},
+      ),
+      isFalse,
+    );
+    expect(persisted, isFalse);
+  });
+
   test('verified result permits one generation-bound pin and registration',
       () async {
     final flow = await _completedServerHandshake();
@@ -281,6 +334,7 @@ void main() {
     await client.receiveChallenge(
       await server.receiveHello(await client.createHello()),
     );
+    await server.receiveProof(await client.createProof());
     expect(
       client.resolveLocalApproval(
         generation: client.connectionGeneration,
@@ -288,6 +342,12 @@ void main() {
       ),
       isTrue,
     );
+    final clientDenial = await client.createApproval(
+      allow: false,
+      reason: 'rejected',
+    );
+    expect(await server.receiveApproval(clientDenial), isFalse);
+    client.close();
     expect(client.phase, PeerSocketPhase.closing);
     expect(client.isClosed, isTrue);
 
@@ -315,7 +375,7 @@ void main() {
       uid: 'peer-a',
       name: 'Peer A',
       platform: 'macos',
-      protocolVersion: 5,
+      protocolVersion: 6,
       capabilities: PeerCapabilities(fileTransferV3: true),
     );
     final json = profile.toJson();

@@ -6,7 +6,7 @@ Whisper 的产品边界是可信设备之间的局域网协作。现有 Shelf We
 
 当前主要风险不是 WebSocket 本身，而是连接身份、路由授权、输入限额和恢复语义不完整：任意客户端可以声明任意 `uid`，鉴权前帧能触达业务分支，消息和传输主要相信载荷里的 `sender`/`transferId`；`/audio` 与 `/input` 可匿名升级；文件默认无校验且最终落盘会删除同名文件；单一全局 receive queue 会让一个慢 peer 阻塞所有 peer；mDNS TXT 暴露设备及信任关系；匿名读写 FTP 绕过主协议全部信任边界。
 
-本设计采用保守演进：先建立可证明的设备身份与每 socket 授权上下文，再让消息、文件、媒体通道全部依赖该上下文；同时补齐背压、超时、重连、路径安全和平台权限。协议硬切到 v5，低版本对端显示“需要升级”，不提供不安全降级。
+本设计采用保守演进：先建立可证明的设备身份与每 socket 授权上下文，再让消息、文件、媒体通道全部依赖该上下文；同时补齐背压、超时、重连、路径安全和平台权限。双端并行确认配对的协议修订硬切到 v6，低版本对端显示“需要升级”，不提供不安全降级。
 
 ## 目标与非目标
 
@@ -37,7 +37,7 @@ Whisper 的产品边界是可信设备之间的局域网协作。现有 Shelf We
 
 防护对象包括同一 LAN 内主动扫描端口、伪造 uid、重放旧鉴权消息、在途篡改、跨 peer 注入 transferId、浏览器跨站 WebSocket、匿名连接媒体通道、恶意文件名/路径、超大输入和资源耗尽。长期 pin 建立后，攻击者无法仅靠复制 uid 冒充已配对设备；在途攻击者只能转发或丢弃已认证包，不能改写或重放。被动监听者仍能读取明文 payload，但看不到可复用私钥或会话 MAC key。
 
-首次配对通过双方公钥与双方 nonce 派生同一个 6 位配对码。接收端必须显示并由用户确认，发起端同时显示只读等待页，用户需要在两台设备上比对数字。它提供主动 MITM 的人工检测，但不是加密信道；用户跳过比对仍会接受风险。已信任但没有 pinned key 的旧数据库记录不得自动放行，必须重新确认。已 pin 公钥发生变化时显示明确的身份变更警告，并再次确认后才替换 pin。
+首次配对通过双方公钥与双方 nonce 派生同一个 6 位配对码。发起端与接收端必须并行显示并分别由用户确认，用户需要在两台设备上比对数字。它提供主动 MITM 的人工检测，但不是加密信道；用户跳过比对仍会接受风险。已信任但没有 pinned key 的旧数据库记录不得自动放行，必须重新确认。已 pin 公钥发生变化时显示明确的身份变更警告，并再次确认后才替换 pin。
 
 ## 协议与组件
 
@@ -48,8 +48,8 @@ Whisper 的产品边界是可信设备之间的局域网协作。现有 Shelf We
 - 首次运行生成 Ed25519 key pair，私钥 seed 保存在现有应用偏好存储，公钥用无 padding base64url 表示。
 - `Device` 增加 `identity_public_key`；`uid` 增加唯一索引。公钥只在明确允许配对或验证既有 pin 后写入。
 - 签名输入不是临时 Map 的 JSON 字符串，而是带 `whisper-auth-v1` domain separator 的长度前缀字段序列，字段固定为协议版本、双方 uid、双方 Ed25519/X25519 公钥、发现 `pkh`、双方 32-byte nonce、白名单 profile digest 和消息阶段，杜绝字段重排、能力篡改与分隔符歧义。
-- client 发送 `hello(profile, publicKey, ephemeralKey, clientNonce, intendedPeerId?, intendedPkh?)`；未知 mDNS 候选允许 `intendedPeerId` 为空，但必须核对 challenge 的 Ed25519 fingerprint 等于发现 `pkh`。server 回签名的 `challenge(serverPublicKey, serverEphemeralKey, serverNonce, clientNonce)`；client 验签、完成本地 pin/配对确认后发送 `proof(clientSignature)`；server 验签并完成自己的 pin/配对确认；server 最后发送覆盖完整 transcript、allow/reason 的 signed result。
-- challenge、proof、result 分别有不同 domain，nonce 只使用一次，握手 30 秒超时。result 验签成功之前，client 不进入 authenticated。
+- client 发送 `hello(profile, publicKey, ephemeralKey, clientNonce, intendedPeerId?, intendedPkh?)`；未知 mDNS 候选允许 `intendedPeerId` 为空，但必须核对 challenge 的 Ed25519 fingerprint 等于发现 `pkh`。server 回签名的 `challenge(serverPublicKey, serverEphemeralKey, serverNonce, clientNonce)`；client 验签后立即发送 `proof(clientSignature)` 并显示配对码；server 验 proof 后同步显示配对码。client 的本地决定通过独立签名的 `approval(allow, reason)` 发送给 server；server 只有在本地决定与 client approval 都允许后才提交 pin，并发送覆盖完整 transcript、allow/reason 的 signed result。任一方拒绝都关闭连接且不提交 pin。
+- challenge、proof、approval、result 分别有不同 domain，nonce 只使用一次，握手 30 秒超时。result 验签成功之前，client 不进入 authenticated。
 - 配对码为 `SHA-256(canonical transcript)` 映射到 `000000..999999` 的零填充十进制值。日志和通知不得记录该值。
 - `PeerProfile` 改为白名单 wire DTO，只传 uid/name/platform/capabilities/topology，不传 Drift 的 id/password/auth/clipboard/host/lastTime/around；其 canonical digest 纳入 proof/result。远程输入信任判断改为“socket 已验签且双方 pin 已建立”。
 
@@ -125,7 +125,7 @@ router 在 WebSocket upgrade 前消费 token，返回含 peerId/sessionId/route/
 
 ### 8. mDNS 与平台权限
 
-mDNS service 必须等待 server bind 完成后发布，SRV port 直接等于实际端口；连接 host 使用非空 `ResolvedBonsoirService.host`，lost event 按稳定 instance key 清缓存，不再从 TXT 读取自报 IP。instance name 使用 `whisper-<public-key-fingerprint 前 8 位>`，TXT 仅保留 `v=5` 与稳定但可关联的 `pkh`；移除 uid、name、platform、host、port、trustedPeers、autoConnect。已知设备通过 pinned public key fingerprint 关联，未知设备先显示通用附近设备，鉴权后才显示 signed profile。
+mDNS service 必须等待 server bind 完成后发布，SRV port 直接等于实际端口；连接 host 使用非空 `ResolvedBonsoirService.host`，lost event 按稳定 instance key 清缓存，不再从 TXT 读取自报 IP。instance name 使用 `whisper-<public-key-fingerprint 前 8 位>`，TXT 仅保留 `v=6` 与稳定但可关联的 `pkh`；移除 uid、name、platform、host、port、trustedPeers、autoConnect。已知设备通过 pinned public key fingerprint 关联，未知设备先显示通用附近设备，鉴权后才显示 signed profile。
 
 新增统一 `PeerEndpoint(host,port)`，chat/media URI 必须用 `Uri(scheme:'ws', host: host, port: port, path: ...)` 构造。地址选择支持 RFC1918 10/8、172.16/12、192.168/16、IPv6 ULA/global 与 scoped link-local，不再回退广播 `127.0.0.1`；media 复用已验证 peer endpoint，不从 profile 自报 host 连接。多网卡按已解析 service endpoint 保存，并在网络切换时刷新。
 
@@ -144,7 +144,7 @@ Android manifest 增加 `ACCESS_NETWORK_STATE`、`ACCESS_WIFI_STATE`、`CHANGE_W
 - schema 5 -> 6：新增 `identity_public_key`，删除空 uid 行；同 uid 重复行按 `auth desc, last_time desc, id desc` 选 keeper，合并 `auth`/`clipboard` 后删除其余，再创建 uid unique index。
 - `upsertDevice` 使用 uid 冲突目标，发现更新不得清空 `auth` 或 pinned key。
 - `auth=true` 但 pin 为空的旧记录视为 legacy trust，只能触发重新配对，不能自动连接或自动批准。
-- 协议 v5 无 legacy auth、匿名 media 或 checksum=none fallback。旧版本得到明确 upgrade_required 后关闭。
+- 协议 v6 无 legacy auth、匿名 media 或 checksum=none fallback。旧版本得到明确 upgrade_required 后关闭。
 
 ## 测试与发布门
 

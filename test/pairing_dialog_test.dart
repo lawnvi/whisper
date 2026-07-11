@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -132,6 +134,51 @@ void main() {
     await shown;
 
     expect(decisions, <bool>[false]);
+    expect(find.text('underlying page'), findsOneWidget);
+  });
+
+  testWidgets('session cancellation dismisses only the pairing route',
+      (tester) async {
+    final cancellation = Completer<void>();
+    final decisions = <bool>[];
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      canApprove: true,
+      cancellation: cancellation.future,
+    );
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: decisions.add,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(pairingCodeKey), findsOneWidget);
+
+    cancellation.complete();
+    await tester.pumpAndSettle();
+    await shown;
+
+    expect(decisions, <bool>[false]);
+    expect(find.byKey(pairingCodeKey), findsNothing);
     expect(find.text('underlying page'), findsOneWidget);
   });
 

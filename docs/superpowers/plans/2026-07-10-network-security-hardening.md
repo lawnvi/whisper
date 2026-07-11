@@ -112,7 +112,7 @@ Expected: FAIL，状态类、事件与 UI 不存在。
 
 - [ ] **Step 3: 实现握手并移除旧 trust 泄露**
 
-把 `MessageEnum.Auth` content 改为严格 `AuthEnvelope`。server proof/client signed result 验证前不得注册。允许后双方 pin 并启用 MAC codec。新增白名单 `WirePeerProfile`，只含 uid/name/platform/capabilities/topology，其 canonical digest 纳入签名；删除 Drift profile 的 password/auth/clipboard/host/id/lastTime/around 及 trust/auto 设置。协议版本设 5，低版本回复 `upgrade_required` 后关闭。
+把 `MessageEnum.Auth` content 改为严格 `AuthEnvelope`。server proof/client signed result 验证前不得注册。允许后双方 pin 并启用 MAC codec。新增白名单 `WirePeerProfile`，只含 uid/name/platform/capabilities/topology，其 canonical digest 纳入签名；删除 Drift profile 的 password/auth/clipboard/host/id/lastTime/around 及 trust/auto 设置。双端配对确认修订后的协议版本设 6，低版本回复 `upgrade_required` 后关闭。
 
 - [ ] **Step 4: 接入配对 UI 与本地化**
 

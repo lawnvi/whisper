@@ -23,10 +23,11 @@ final class DiscoveryIdentity {
 
   String get pkh => publicKeyHash;
   String get instanceName => serviceInstanceName;
+  static String get protocolVersion => '${PeerSocketSession.protocolVersion}';
 
   Map<String, String> get txt => UnmodifiableMapView<String, String>(
         <String, String>{
-          'v': '${PeerSocketSession.protocolVersion}',
+          'v': protocolVersion,
           'pkh': publicKeyHash,
         },
       );

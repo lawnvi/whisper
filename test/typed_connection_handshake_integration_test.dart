@@ -44,6 +44,77 @@ void main() {
     expect(harness.client.receiver, 'server-peer');
   });
 
+  test('both endpoints await pairing before either identity is persisted',
+      () async {
+    final clientEvents = _BlockingPairingEvents();
+    final serverEvents = _BlockingPairingEvents();
+    final harness = await _HandshakeHarness.start(
+      clientEvents: clientEvents,
+      serverEvents: serverEvents,
+    );
+    var completed = false;
+    final connecting = harness.connect('concurrent-pairing').whenComplete(() {
+      completed = true;
+    });
+
+    await Future.wait(<Future<void>>[
+      clientEvents.pairingStarted.future,
+      serverEvents.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
+
+    expect(clientEvents.hasPendingDecision, isTrue);
+    expect(serverEvents.hasPendingDecision, isTrue);
+    expect(
+        clientEvents.request?.pairingCode, serverEvents.request?.pairingCode);
+    expect(await harness.database.fetchDevice('server-peer'), isNull);
+    expect(await harness.database.fetchDevice('client-peer'), isNull);
+
+    serverEvents.resolve(true);
+    await pumpEventQueue();
+    expect(completed, isFalse);
+    expect(await harness.database.fetchDevice('server-peer'), isNull);
+    expect(await harness.database.fetchDevice('client-peer'), isNull);
+
+    clientEvents.resolve(true);
+    final result = await connecting;
+    expect(result.status, ConnectionAttemptStatus.authenticated);
+    expect((await harness.database.fetchDevice('server-peer'))?.auth, isTrue);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
+  });
+
+  for (final rejectingSide in <String>['client', 'server']) {
+    test('$rejectingSide pairing rejection persists neither identity',
+        () async {
+      final clientEvents = _BlockingPairingEvents();
+      final serverEvents = _BlockingPairingEvents();
+      final harness = await _HandshakeHarness.start(
+        clientEvents: clientEvents,
+        serverEvents: serverEvents,
+      );
+      final connecting = harness.connect('$rejectingSide-rejects');
+      await Future.wait(<Future<void>>[
+        clientEvents.pairingStarted.future,
+        serverEvents.pairingStarted.future,
+      ]).timeout(const Duration(seconds: 2));
+
+      if (rejectingSide == 'client') {
+        clientEvents.resolve(false);
+      } else {
+        serverEvents.resolve(false);
+      }
+
+      final result = await connecting;
+      final pendingEvents =
+          rejectingSide == 'client' ? serverEvents : clientEvents;
+      await pendingEvents.pairingCancelled.future
+          .timeout(const Duration(seconds: 2));
+      expect(result.isAuthenticated, isFalse);
+      expect(pendingEvents.hasPendingDecision, isFalse);
+      expect(await harness.database.fetchDevice('server-peer'), isNull);
+      expect(await harness.database.fetchDevice('client-peer'), isNull);
+    });
+  }
+
   test('cancellation while pairing cannot persist or register the peer',
       () async {
     final clientEvents = _BlockingPairingEvents();
@@ -505,12 +576,13 @@ final class _HandshakeHarness {
 
   static Future<_HandshakeHarness> start({
     _ApprovingEvents? clientEvents,
+    _ApprovingEvents? serverEvents,
     ConnectionAuthCommitBarrier? clientBarrier,
     ConnectionAuthCommitBarrier? serverBarrier,
   }) async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
-    final resolvedServerEvents = _ApprovingEvents();
+    final resolvedServerEvents = serverEvents ?? _ApprovingEvents();
     final resolvedClientEvents = clientEvents ?? _ApprovingEvents();
     final clientReconnects = _ReconnectRecorder();
     final serverReconnects = _ReconnectRecorder();
@@ -610,7 +682,7 @@ PeerProfile _profile(String uid) => PeerProfile(
       trustedPeerIds: const <String>[],
       autoApproveNewDevices: false,
       autoConnectEnabled: true,
-      protocolVersion: 5,
+      protocolVersion: 6,
       capabilities: const PeerCapabilities(
         fileTransferV3: true,
         systemAudioSourceV1: false,
@@ -675,12 +747,24 @@ class _ApprovingEvents implements ISocketEvent {
 
 final class _BlockingPairingEvents extends _ApprovingEvents {
   final Completer<void> pairingStarted = Completer<void>();
+  final Completer<void> pairingCancelled = Completer<void>();
   void Function(bool)? _pendingResolve;
+  PairingRequest? request;
+
+  bool get hasPendingDecision => _pendingResolve != null;
 
   @override
   void onPairing(PairingRequest request, void Function(bool) resolve) {
     pairingCount += 1;
+    this.request = request;
     _pendingResolve = resolve;
+    final cancellation = request.cancellation;
+    if (cancellation != null) {
+      unawaited(cancellation.then((_) {
+        _pendingResolve = null;
+        if (!pairingCancelled.isCompleted) pairingCancelled.complete();
+      }));
+    }
     if (!pairingStarted.isCompleted) pairingStarted.complete();
   }
 

@@ -12,7 +12,7 @@ String _b64(int length, int start) => base64Url
 
 AuthTranscript _transcript() {
   return AuthTranscript(
-    protocolVersion: 5,
+    protocolVersion: 6,
     clientPeerId: 'client-a',
     serverPeerId: 'server-b',
     clientIdentityPublicKey:
@@ -38,12 +38,21 @@ AuthTranscript _transcript() {
 
 void main() {
   group('AuthTranscript', () {
-    test('uses separate domains for challenge, proof, and result', () {
+    test('uses separate domains for challenge, proof, approval, and result',
+        () {
       final transcript = _transcript();
 
       expect(transcript.challengeBytes(), isNot(transcript.proofBytes()));
       expect(
         transcript.proofBytes(),
+        isNot(transcript.approvalBytes(allow: true, reason: 'approved')),
+      );
+      expect(
+        transcript.proofBytes(),
+        isNot(transcript.resultBytes(allow: true, reason: 'approved')),
+      );
+      expect(
+        transcript.approvalBytes(allow: true, reason: 'approved'),
         isNot(transcript.resultBytes(allow: true, reason: 'approved')),
       );
       expect(
@@ -85,7 +94,7 @@ void main() {
     });
 
     test('pairing code has a stable six-digit golden value', () {
-      expect(_transcript().pairingCode(), '028218');
+      expect(_transcript().pairingCode(), '149629');
     });
 
     test('both peers get the same pairing code from the canonical transcript',
@@ -177,7 +186,7 @@ void main() {
   group('AuthEnvelope', () {
     test('round-trips every auth action with canonical base64url fields', () {
       final hello = AuthEnvelope.hello(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         identityPublicKey: _b64(32, 0),
         ephemeralPublicKey: _b64(32, 32),
@@ -187,7 +196,7 @@ void main() {
         intendedPublicKeyHash: _b64(32, 128),
       );
       final challenge = AuthEnvelope.challenge(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'server-b',
         identityPublicKey: _b64(32, 1),
         ephemeralPublicKey: _b64(32, 33),
@@ -197,20 +206,30 @@ void main() {
         signature: _b64(64, 2),
       );
       final proof = AuthEnvelope.proof(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         nonce: _b64(32, 64),
         peerNonce: _b64(32, 65),
         profileDigest: _b64(32, 96),
         signature: _b64(64, 3),
       );
+      final approval = AuthEnvelope.approval(
+        protocolVersion: 6,
+        peerId: 'client-a',
+        nonce: _b64(32, 64),
+        peerNonce: _b64(32, 65),
+        profileDigest: _b64(32, 96),
+        signature: _b64(64, 4),
+        allow: true,
+        reason: 'approved',
+      );
       final result = AuthEnvelope.result(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'server-b',
         nonce: _b64(32, 65),
         peerNonce: _b64(32, 64),
         profileDigest: _b64(32, 97),
-        signature: _b64(64, 4),
+        signature: _b64(64, 5),
         allow: true,
         reason: 'approved',
       );
@@ -219,6 +238,7 @@ void main() {
         hello,
         challenge,
         proof,
+        approval,
         result,
       ]) {
         expect(AuthEnvelope.fromJson(envelope.toJson()), envelope);
@@ -231,7 +251,7 @@ void main() {
 
     test('rejects unknown actions, missing fields, and unexpected fields', () {
       final valid = AuthEnvelope.hello(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         identityPublicKey: _b64(32, 0),
         ephemeralPublicKey: _b64(32, 32),
@@ -260,7 +280,7 @@ void main() {
 
     test('rejects non-canonical base64 and incorrect binary lengths', () {
       final valid = AuthEnvelope.hello(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         identityPublicKey: _b64(32, 0),
         ephemeralPublicKey: _b64(32, 32),
@@ -301,7 +321,7 @@ void main() {
 
     test('validates intended peer id and public key hash bounds', () {
       final valid = AuthEnvelope.hello(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         identityPublicKey: _b64(32, 0),
         ephemeralPublicKey: _b64(32, 32),
@@ -345,7 +365,7 @@ void main() {
       final nested = <String, Object?>{'name': 'before'};
       final values = <Object?>[nested];
       final envelope = AuthEnvelope.hello(
-        protocolVersion: 5,
+        protocolVersion: 6,
         peerId: 'client-a',
         identityPublicKey: _b64(32, 0),
         ephemeralPublicKey: _b64(32, 32),
@@ -376,7 +396,7 @@ void main() {
 
       AuthEnvelope helloWithProfile(Map<String, Object?> profile) {
         return AuthEnvelope.hello(
-          protocolVersion: 5,
+          protocolVersion: 6,
           peerId: 'client-a',
           identityPublicKey: _b64(32, 0),
           ephemeralPublicKey: _b64(32, 32),

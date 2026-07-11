@@ -32,7 +32,7 @@ Future<PeerSocketSession> _session({
       uid: role == PeerSocketRole.client ? 'client-a' : 'server-b',
       name: role == PeerSocketRole.client ? 'Client A' : 'Server B',
       platform: role == PeerSocketRole.client ? 'macos' : 'windows',
-      protocolVersion: 5,
+      protocolVersion: 6,
       capabilities: const PeerCapabilities(fileTransferV3: true),
     ),
     localEphemeralKeyPair: await X25519().newKeyPairFromSeed(ephemeralSeed),
@@ -75,11 +75,14 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
 Future<({PeerSocketSession client, PeerSocketSession server})>
     _authenticatedPair() async {
   final pair = await _reachClientApproval();
+  await pair.server.receiveProof(await pair.client.createProof());
   pair.client.resolveLocalApproval(
     generation: pair.client.connectionGeneration,
     allow: true,
   );
-  await pair.server.receiveProof(await pair.client.createProof());
+  await pair.server.receiveApproval(
+    await pair.client.createApproval(allow: true, reason: 'approved'),
+  );
   pair.server.resolveLocalApproval(
     generation: pair.server.connectionGeneration,
     allow: true,
@@ -121,6 +124,45 @@ void main() {
     expect(server.phase, PeerSocketPhase.awaitingHello);
   });
 
+  test('previous auth protocol versions fail before pairing starts', () async {
+    final client = await _session(
+      role: PeerSocketRole.client,
+      generation: 1,
+      seedStart: 0,
+    );
+    final server = await _session(
+      role: PeerSocketRole.server,
+      generation: 2,
+      seedStart: 32,
+    );
+    addTearDown(client.close);
+    addTearDown(server.close);
+    final hello = await client.createHello();
+    final oldHello = AuthEnvelope.hello(
+      protocolVersion: 5,
+      peerId: hello.peerId,
+      identityPublicKey: hello.identityPublicKey!,
+      ephemeralPublicKey: hello.ephemeralPublicKey!,
+      nonce: hello.nonce,
+      profileDigest: hello.profileDigest,
+      intendedPeerId: hello.intendedPeerId,
+      intendedPublicKeyHash: hello.intendedPublicKeyHash,
+      profile: hello.profile,
+    );
+
+    await expectLater(
+      server.receiveHello(oldHello),
+      throwsA(
+        isA<AuthHandshakeException>().having(
+          (error) => error.code,
+          'code',
+          'upgrade_required',
+        ),
+      ),
+    );
+    expect(server.isClosed, isTrue);
+  });
+
   test('full handshake enables inverse directional MAC codecs', () async {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
@@ -131,6 +173,10 @@ void main() {
     expect(pair.client.pairingCode, pair.server.pairingCode);
     expect(pair.client.pairingCode, matches(RegExp(r'^\d{6}$')));
 
+    final proof = await pair.client.createProof();
+    await pair.server.receiveProof(proof);
+    expect(pair.client.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
     expect(
       pair.client.resolveLocalApproval(
         generation: pair.client.connectionGeneration,
@@ -138,9 +184,12 @@ void main() {
       ),
       isTrue,
     );
-    final proof = await pair.client.createProof();
-    await pair.server.receiveProof(proof);
-    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(
+      await pair.server.receiveApproval(
+        await pair.client.createApproval(allow: true, reason: 'approved'),
+      ),
+      isTrue,
+    );
     expect(
       pair.server.resolveLocalApproval(
         generation: pair.server.connectionGeneration,
@@ -202,6 +251,32 @@ void main() {
       await pair.server.codec!.decode(encoded),
       orderedEquals(<int>[1, 2, 3]),
     );
+  });
+
+  test('server cannot commit after only its local pairing approval', () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    await pair.server.receiveProof(await pair.client.createProof());
+    expect(
+      pair.server.resolveLocalApproval(
+        generation: pair.server.connectionGeneration,
+        allow: true,
+      ),
+      isTrue,
+    );
+    var persisted = false;
+
+    expect(pair.server.isMutuallyApproved, isFalse);
+    expect(
+      await pair.server.commitAuthentication(
+        generation: pair.server.connectionGeneration,
+        persistIdentity: () async => persisted = true,
+        registerPeer: () async {},
+      ),
+      isFalse,
+    );
+    expect(persisted, isFalse);
   });
 
   test('authenticated sessions expose inverse media keys as defensive copies',
@@ -445,11 +520,14 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
+    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
+    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,
@@ -475,11 +553,14 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
+    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
+    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,
@@ -508,11 +589,14 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
+    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
+    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,

@@ -3033,6 +3033,8 @@ class WsSvrManager {
           await _handleServerHello(session, sink, envelope);
         case (PeerSocketRole.server, AuthAction.proof):
           await _handleServerProof(session, sink, envelope);
+        case (PeerSocketRole.server, AuthAction.approval):
+          await _handleServerApproval(session, sink, envelope);
         case (PeerSocketRole.client, AuthAction.challenge):
           await _handleClientChallenge(session, sink, envelope);
         case (PeerSocketRole.client, AuthAction.result):
@@ -3082,7 +3084,20 @@ class WsSvrManager {
       throw const AuthHandshakeException('identity_pin_conflict');
     }
     final pinPlan = await _pairingReason(session);
+    if (pinPlan.reason != null && attempt.request.isAutomatic) {
+      _completeSocketAuth(sink, false, 'automatic_pairing_required');
+      session.close();
+      await _closeSocketSink(sink);
+      return;
+    }
     final generation = session.connectionGeneration;
+    _identityPinPlansBySink[sink] = pinPlan;
+    final proof = await session.createProof();
+    if (!_isCurrentSession(session, sink, generation)) {
+      return;
+    }
+    final proofSend = _sendAuthEnvelope(sink, proof);
+
     Future<void> resolve(bool allow) async {
       final accepted = session.resolveLocalApproval(
         generation: generation,
@@ -3091,35 +3106,35 @@ class WsSvrManager {
       if (!accepted || !_isSameSession(session, sink, generation)) {
         return;
       }
+      final approval = await session.createApproval(
+        allow: allow,
+        reason: allow ? 'approved' : 'rejected',
+      );
+      if (!_isSameSession(session, sink, generation)) {
+        return;
+      }
+      await _sendAuthEnvelope(sink, approval);
       if (!allow) {
+        _identityPinPlansBySink.remove(sink);
         _completeSocketAuth(sink, false, 'rejected');
+        session.close();
         await _closeSocketSink(sink);
-        return;
       }
-      if (!_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      final proof = await session.createProof();
-      if (!_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      _identityPinPlansBySink[sink] = pinPlan;
-      await _sendAuthEnvelope(sink, proof);
     }
 
     if (pinPlan.reason == null) {
+      await proofSend;
       await resolve(true);
-    } else if (attempt.request.isAutomatic) {
-      _completeSocketAuth(sink, false, 'automatic_pairing_required');
-      session.close();
-      await _closeSocketSink(sink);
     } else {
-      await _requestPairingDecision(
-        session,
-        sink,
-        pinPlan.reason!,
-        resolve,
-      );
+      await Future.wait(<Future<void>>[
+        proofSend,
+        _requestPairingDecision(
+          session,
+          sink,
+          pinPlan.reason!,
+          resolve,
+        ),
+      ]);
     }
   }
 
@@ -3179,6 +3194,7 @@ class WsSvrManager {
     _incomingAuthPeerIdsBySink[sink] = peerId;
 
     final pinPlan = await _pairingReason(session);
+    _identityPinPlansBySink[sink] = pinPlan;
     final generation = session.connectionGeneration;
     Future<void> resolve(bool allow) async {
       final accepted = session.resolveLocalApproval(
@@ -3188,53 +3204,7 @@ class WsSvrManager {
       if (!accepted || !_isCurrentSession(session, sink, generation)) {
         return;
       }
-      final result = await session.createResult(
-        allow: allow,
-        reason: allow ? 'approved' : 'rejected',
-      );
-      if (!_isSameSession(session, sink, generation)) {
-        return;
-      }
-      if (!allow) {
-        await _sendAuthEnvelope(sink, result);
-        session.close();
-        _releaseIncomingAuthForSink(sink);
-        _dispatchToAll((event) => event.afterAuth(false, null));
-        await _closeSocketSink(sink);
-        return;
-      }
-      if (!_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      await AuthHandshakeLifecycle.completeServerAllow<DeviceData>(
-        commit: () => _completeAuthenticatedSession(
-          session,
-          sink,
-          pinPlan: pinPlan,
-        ),
-        sendAllow: (storedDevice) async {
-          _requireCurrentAuthenticatedSession(session, sink, generation);
-          await _sendAuthEnvelope(sink, result);
-        },
-        onAuthenticated: (storedDevice) {
-          _announceAuthenticatedSession(session, sink, storedDevice);
-        },
-        onFailure: (error, stackTrace) async {
-          logger.i('完成服务端配对失败: $error\n$stackTrace');
-          if (_isSameSession(session, sink, generation)) {
-            await _failSocketSession(
-              session,
-              sink,
-              error is AuthHandshakeException
-                  ? error.code
-                  : 'authentication_failed',
-              cause: error is AuthHandshakeException
-                  ? PeerDisconnectCause.protocolFailure
-                  : PeerDisconnectCause.localFailure,
-            );
-          }
-        },
-      );
+      await _tryCompleteServerPairing(session, sink);
     }
 
     if (pinPlan.reason == null) {
@@ -3247,6 +3217,87 @@ class WsSvrManager {
         resolve,
       );
     }
+  }
+
+  Future<void> _handleServerApproval(
+    PeerSocketSession session,
+    WebSocketSink sink,
+    AuthEnvelope approval,
+  ) async {
+    await session.receiveApproval(approval);
+    await _tryCompleteServerPairing(session, sink);
+  }
+
+  Future<void> _tryCompleteServerPairing(
+    PeerSocketSession session,
+    WebSocketSink sink,
+  ) async {
+    final generation = session.connectionGeneration;
+    if (!_isCurrentSession(session, sink, generation)) {
+      return;
+    }
+    if (!session.isMutuallyApproved && !session.hasPairingRejection) {
+      return;
+    }
+    if (!session.tryClaimPairingCompletion()) {
+      return;
+    }
+    if (session.hasPairingRejection) {
+      _identityPinPlansBySink.remove(sink);
+      final result = await session.createResult(
+        allow: false,
+        reason: 'rejected',
+      );
+      if (!_isSameSession(session, sink, generation)) {
+        return;
+      }
+      await _sendAuthEnvelope(sink, result);
+      session.close();
+      _releaseIncomingAuthForSink(sink);
+      _dispatchToAll((event) => event.afterAuth(false, null));
+      await _closeSocketSink(sink);
+      return;
+    }
+    final pinPlan = _identityPinPlansBySink.remove(sink);
+    if (pinPlan == null) {
+      throw const AuthHandshakeException('identity_pin_state_missing');
+    }
+    final result = await session.createResult(
+      allow: true,
+      reason: 'approved',
+    );
+    if (!_isCurrentSession(session, sink, generation)) {
+      return;
+    }
+    await AuthHandshakeLifecycle.completeServerAllow<DeviceData>(
+      commit: () => _completeAuthenticatedSession(
+        session,
+        sink,
+        pinPlan: pinPlan,
+      ),
+      sendAllow: (storedDevice) async {
+        _requireCurrentAuthenticatedSession(session, sink, generation);
+        await _sendAuthEnvelope(sink, result);
+      },
+      onAuthenticated: (storedDevice) {
+        _announceAuthenticatedSession(session, sink, storedDevice);
+      },
+      onFailure: (error, stackTrace) async {
+        logger.i('完成服务端配对失败: $error\n$stackTrace');
+        if (_isSameSession(session, sink, generation)) {
+          await _failSocketSession(
+            session,
+            sink,
+            error is AuthHandshakeException
+                ? error.code
+                : 'authentication_failed',
+            cause: error is AuthHandshakeException
+                ? PeerDisconnectCause.protocolFailure
+                : PeerDisconnectCause.localFailure,
+          );
+        }
+      },
+    );
   }
 
   Future<void> _handleClientResult(
@@ -3318,6 +3369,7 @@ class WsSvrManager {
           pairingCode: session.pairingCode,
           reason: reason,
           canApprove: true,
+          cancellation: session.closed,
         ),
         guarded,
       ),

@@ -182,7 +182,7 @@ final class DiscoveryObservationTracker {
     if (attributes.length != 2 ||
         !attributes.containsKey('v') ||
         !attributes.containsKey('pkh') ||
-        attributes['v'] != '5') {
+        attributes['v'] != DiscoveryIdentity.protocolVersion) {
       return false;
     }
     final publicKeyHash = attributes['pkh'];

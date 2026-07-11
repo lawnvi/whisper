@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Key, Theme;
 import 'package:whisper/l10n/app_localizations.dart';
@@ -12,14 +14,41 @@ Future<void> showPairingDialog(
   required PairingRequest request,
   required void Function(bool) resolve,
 }) async {
+  BuildContext? dialogContext;
+  var routeOpen = true;
+  var cancelled = false;
+
+  void dismiss([bool? decision]) {
+    final activeContext = dialogContext;
+    if (!routeOpen || activeContext == null || !activeContext.mounted) {
+      return;
+    }
+    routeOpen = false;
+    Navigator.of(activeContext).pop(decision);
+  }
+
+  final cancellation = request.cancellation;
+  if (cancellation != null) {
+    unawaited(cancellation.then((_) {
+      cancelled = true;
+      dismiss();
+    }));
+  }
   final decision = await showCupertinoDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => PairingDialog(
-      request: request,
-      onResolved: (allow) => Navigator.of(context).pop(allow),
-    ),
+    builder: (context) {
+      dialogContext = context;
+      if (cancelled) {
+        scheduleMicrotask(dismiss);
+      }
+      return PairingDialog(
+        request: request,
+        onResolved: dismiss,
+      );
+    },
   );
+  routeOpen = false;
   resolve(decision ?? false);
 }
 
