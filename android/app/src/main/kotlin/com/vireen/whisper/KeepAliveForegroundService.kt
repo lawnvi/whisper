@@ -9,12 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
     // channel 名/描述由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
-    // 文案同时持久化:START_STICKY 空 intent 重建与首启 onCreate 抢跑时,
+    // 文案同时持久化:onCreate 早于 onStartCommand 运行时,
     // ensureChannel 不至于用英文缺省名把系统设置里已本地化的渠道名改回去。
     private var channelName: String = DEFAULT_CHANNEL_NAME
     private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
@@ -61,17 +60,9 @@ class KeepAliveForegroundService : Service() {
             NOTIFICATION_ID,
             buildNotification(title, description, progress, indeterminateProgress)
         )
-        return START_STICKY
-    }
-
-    // Android 15+ dataSync 前台服务超时兜底:预算(默认 6 小时)耗尽时系统
-    // 回调 onTimeout,必须立即退出前台并停止,否则会抛
-    // ForegroundServiceDidNotStopInTimeException 直接杀进程。
-    // stopSelf 后走既有 onDestroy 收尾。
-    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
-    override fun onTimeout(startId: Int, fgsType: Int) {
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        // Restarting only this native service cannot recreate Flutter's Dart
+        // socket server, so avoid presenting a misleading listening state.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

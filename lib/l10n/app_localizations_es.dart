@@ -350,15 +350,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidBackgroundKeepAliveDesc =>
-      'Usa un servicio en primer plano durante sesiones activas para reducir desconexiones al elegir archivos o cambiar de app';
+      'Mantiene activa la recepcion por LAN para recibir solicitudes de conexion en segundo plano o con la pantalla bloqueada';
 
   @override
   String get androidBackgroundKeepAliveActiveTitle =>
-      'Whisper mantiene la conexion activa';
+      'Whisper escucha conexiones LAN';
 
   @override
   String get androidBackgroundKeepAliveActiveDesc =>
-      'Activo mientras haya una sesion conectada';
+      'Puede recibir solicitudes de dispositivos cercanos en segundo plano';
 
   @override
   String get androidBatteryOptimization => 'Optimizacion de bateria';

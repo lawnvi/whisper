@@ -8,7 +8,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
@@ -157,23 +156,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final enabled = await LocalSetting().androidBackgroundKeepAlive();
-    if (!enabled || !_isConnectedSession) {
-      await stopAndroidBackgroundKeepAlive();
-      return;
-    }
-    final notificationPermission = await Permission.notification.status;
-    if (notificationPermission.isDenied) {
-      await Permission.notification.request();
-    }
+    final coordinator = AndroidBackgroundKeepAliveCoordinator.shared;
+    await coordinator.setEnabled(enabled);
     if (!mounted) {
       return;
     }
     final notification = _buildAndroidKeepAliveNotification();
-    await startAndroidBackgroundKeepAlive(
-      title: notification.title,
-      description: notification.description,
-      progress: notification.progress,
-      indeterminateProgress: notification.indeterminateProgress,
+    await coordinator.setReason(
+      AndroidKeepAliveReason.activeSession,
+      enabled && _isConnectedSession,
+      notification: notification,
     );
   }
 
@@ -2065,7 +2057,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onClose() {
     percent = 0;
     _speed = "";
-    stopAndroidBackgroundKeepAlive();
+    unawaited(
+      AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+        AndroidKeepAliveReason.activeSession,
+        false,
+      ),
+    );
     _refreshCurrentDeviceState();
     if (mounted) {
       setState(() {});

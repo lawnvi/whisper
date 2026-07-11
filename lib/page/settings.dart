@@ -574,18 +574,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               setState(() {
                                 _androidBackgroundKeepAlive = value;
                               });
-                              if (WsSvrManager().isConnected) {
-                                if (value) {
-                                  await startAndroidBackgroundKeepAlive(
-                                    title: l10n
-                                        .androidBackgroundKeepAliveActiveTitle,
-                                    description: l10n
-                                        .androidBackgroundKeepAliveActiveDesc,
-                                  );
-                                } else {
-                                  await stopAndroidBackgroundKeepAlive();
-                                }
-                              }
+                              await AndroidBackgroundKeepAliveCoordinator.shared
+                                  .setEnabled(
+                                value,
+                                notification: AndroidKeepAliveNotification(
+                                  title: l10n
+                                      .androidBackgroundKeepAliveActiveTitle,
+                                  description:
+                                      l10n.androidBackgroundKeepAliveActiveDesc,
+                                ),
+                              );
                             },
                           ),
                         ),

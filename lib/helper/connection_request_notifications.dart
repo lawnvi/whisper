@@ -160,6 +160,19 @@ class ConnectionRequestNotifier {
   Future<void> initialize(FlutterLocalNotificationsPlugin plugin) async {
     if (Platform.isAndroid) {
       _plugin = plugin;
+      final l10n = resolveNotificationL10n();
+      final android = plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(
+        AndroidNotificationChannel(
+          channelId,
+          l10n.connectRequest,
+          description: l10n.connectRequest,
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
       try {
         final active = await plugin.getActiveNotifications();
         for (final notification in active) {

@@ -694,19 +694,19 @@ abstract class AppLocalizations {
   /// No description provided for @androidBackgroundKeepAliveDesc.
   ///
   /// In zh, this message translates to:
-  /// **'连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率'**
+  /// **'保持局域网接收服务运行，便于在后台或锁屏时收到连接请求'**
   String get androidBackgroundKeepAliveDesc;
 
   /// No description provided for @androidBackgroundKeepAliveActiveTitle.
   ///
   /// In zh, this message translates to:
-  /// **'Whisper 正在保持连接'**
+  /// **'Whisper 正在监听局域网连接'**
   String get androidBackgroundKeepAliveActiveTitle;
 
   /// No description provided for @androidBackgroundKeepAliveActiveDesc.
   ///
   /// In zh, this message translates to:
-  /// **'有活动会话时保持前台服务运行'**
+  /// **'可在后台接收附近设备的连接请求'**
   String get androidBackgroundKeepAliveActiveDesc;
 
   /// No description provided for @androidBatteryOptimization.

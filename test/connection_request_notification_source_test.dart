@@ -48,6 +48,9 @@ void main() {
     expect(notifier, contains('pairingRejectNotificationAction'));
     expect(notifier, contains('request.pairingCode'));
     expect(notifier, contains('NotificationVisibility.private'));
+    expect(notifier, contains('createNotificationChannel'));
+    expect(notifier, contains('importance: Importance.max'));
+    expect(notifier, contains('enableVibration: true'));
     expect(notifier, contains("'version': 1, 'token': token"));
     expect(notifier, isNot(contains("'peerId': peerId")));
     expect(notifier, isNot(contains("'pairingCode':")));

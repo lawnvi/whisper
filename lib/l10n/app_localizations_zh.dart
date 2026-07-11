@@ -338,14 +338,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidBackgroundKeepAlive => '后台保活连接';
 
   @override
-  String get androidBackgroundKeepAliveDesc =>
-      '连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率';
+  String get androidBackgroundKeepAliveDesc => '保持局域网接收服务运行，便于在后台或锁屏时收到连接请求';
 
   @override
-  String get androidBackgroundKeepAliveActiveTitle => 'Whisper 正在保持连接';
+  String get androidBackgroundKeepAliveActiveTitle => 'Whisper 正在监听局域网连接';
 
   @override
-  String get androidBackgroundKeepAliveActiveDesc => '有活动会话时保持前台服务运行';
+  String get androidBackgroundKeepAliveActiveDesc => '可在后台接收附近设备的连接请求';
 
   @override
   String get androidBatteryOptimization => '电池优化白名单';

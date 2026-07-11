@@ -10,6 +10,7 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
+import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -216,11 +217,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     if (Platform.isAndroid) {
-      if (await Permission.manageExternalStorage.isDenied) {
-        await Permission.manageExternalStorage.request();
-      }
+      // Pairing alerts and the LAN listener foreground service both depend on
+      // notification permission. Ask before opening external storage settings.
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
+      }
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
       }
       initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
@@ -453,8 +456,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return _resolveLimiter.shouldResolve(_serviceResolveKey(service));
   }
 
-  Future<void> _stopSocketServer() {
-    return socketManager.closeGracefully(
+  Future<void> _stopSocketServer() async {
+    await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+      AndroidKeepAliveReason.lanServer,
+      false,
+    );
+    await socketManager.closeGracefully(
       closeServer: true,
       forceServerClose: true,
     );
@@ -2339,8 +2346,34 @@ class _DeviceListScreen extends State<DeviceListScreen>
       socketManager.started = result.isSuccess;
     });
     if (result.isSuccess) {
+      if (Platform.isAndroid) {
+        final keepAliveEnabled =
+            await LocalSetting().androidBackgroundKeepAlive();
+        if (!mounted) {
+          return;
+        }
+        final l10n = AppLocalizations.of(context);
+        final notification = AndroidKeepAliveNotification(
+          title: l10n?.androidBackgroundKeepAliveActiveTitle ?? 'Whisper',
+          description: l10n?.androidBackgroundKeepAliveActiveDesc ??
+              'Listening for nearby connection requests',
+        );
+        await AndroidBackgroundKeepAliveCoordinator.shared.setEnabled(
+          keepAliveEnabled,
+          notification: notification,
+        );
+        await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+          AndroidKeepAliveReason.lanServer,
+          true,
+          notification: notification,
+        );
+      }
       return;
     }
+    await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+      AndroidKeepAliveReason.lanServer,
+      false,
+    );
     final error = result.error;
     privacyLog.event(
       PrivacyEvent.localOperation,

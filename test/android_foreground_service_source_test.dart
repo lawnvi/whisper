@@ -41,7 +41,7 @@ void main() {
     expect(dartHelper, contains("'indeterminateProgress':"));
   });
 
-  test('keep-alive channel l10n survives sticky restarts', () {
+  test('keep-alive channel l10n survives service creation ordering', () {
     final service = File(
       'android/app/src/main/kotlin/com/vireen/whisper/'
       'KeepAliveForegroundService.kt',
@@ -55,11 +55,10 @@ void main() {
       return service.substring(start, end);
     }
 
-    // START_STICKY 空 intent 重建时 onCreate 先于任何 onStartCommand 调
-    // ensureChannel;本地化渠道文案只活在 Intent extra 的话,重建会用英文
+    // onCreate 先于任何 onStartCommand 调 ensureChannel;本地化渠道
+    // 文案只活在 Intent extra 的话,首次创建会用英文
     // 缺省名 createNotificationChannel,把系统设置里已本地化的渠道名改回
     // 英文。文案必须持久化并在 onCreate 读回。
-    expect(service, contains('START_STICKY'));
     final onCreate =
         section('override fun onCreate()', 'override fun onStartCommand');
     expect(onCreate, contains('PREF_CHANNEL_NAME'),
@@ -71,43 +70,61 @@ void main() {
         reason: 'onStartCommand 收到本地化文案时需持久化');
   });
 
-  test('dataSync foreground services stop themselves on Android 15+ timeout',
-      () {
+  test('foreground service types match their Android workloads', () {
     final manifest =
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     expect(
       manifest,
       contains('android:foregroundServiceType="dataSync"'),
-      reason: 'dataSync 前台服务受 Android 15+ 的 6 小时预算约束',
+      reason: '文件传输仍使用 dataSync',
+    );
+    expect(
+      manifest,
+      contains('android:foregroundServiceType="connectedDevice"'),
+      reason: '局域网设备监听不应消耗 Android 15 dataSync 预算',
+    );
+    expect(
+      manifest,
+      contains('android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE'),
+    );
+    expect(manifest, contains('android:stopWithTask="true"'));
+
+    final transferService = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'TransferForegroundService.kt',
+    ).readAsStringSync();
+    expect(
+      transferService,
+      contains('override fun onTimeout(startId: Int, fgsType: Int)'),
+      reason: 'dataSync 文件传输服务仍需要 Android 15 超时兜底',
     );
 
-    for (final path in <String>[
+    final keepAliveService = File(
       'android/app/src/main/kotlin/com/vireen/whisper/'
-          'TransferForegroundService.kt',
-      'android/app/src/main/kotlin/com/vireen/whisper/'
-          'KeepAliveForegroundService.kt',
-    ]) {
-      final service = File(path).readAsStringSync();
-      // Android 15 起 dataSync FGS 预算耗尽会回调 onTimeout(int, int);
-      // 不在回调里退出前台并停止服务,系统会抛
-      // ForegroundServiceDidNotStopInTimeException 直接杀进程。
-      expect(
-        service,
-        contains('override fun onTimeout(startId: Int, fgsType: Int)'),
-        reason: '$path 缺少 dataSync onTimeout 兜底',
-      );
-      expect(
-        service,
-        matches(
-          RegExp(
-            r'override fun onTimeout\(startId: Int, fgsType: Int\)'
-            r'[\s\S]{0,600}?stopForeground\(STOP_FOREGROUND_REMOVE\)'
-            r'[\s\S]{0,300}?stopSelf\(\)',
-          ),
+      'KeepAliveForegroundService.kt',
+    ).readAsStringSync();
+    expect(keepAliveService, contains('START_NOT_STICKY'));
+  });
+
+  test('LAN server owns Android keep alive before the first pairing', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final notificationPermission =
+        deviceList.indexOf('Permission.notification.isDenied');
+    final storagePermission =
+        deviceList.indexOf('Permission.manageExternalStorage.isDenied');
+
+    expect(deviceList, contains('AndroidKeepAliveReason.lanServer'));
+    expect(
+      deviceList,
+      matches(
+        RegExp(
+          r'if \(result\.isSuccess\)[\s\S]{0,1800}?'
+          r'AndroidKeepAliveReason\.lanServer,[\s\S]{0,100}?true',
         ),
-        reason: '$path 的 onTimeout 必须 stopForeground(REMOVE) 后 stopSelf',
-      );
-    }
+      ),
+    );
+    expect(notificationPermission, greaterThanOrEqualTo(0));
+    expect(notificationPermission, lessThan(storagePermission));
   });
 
   test('notification listener service is declared for Android settings grant',

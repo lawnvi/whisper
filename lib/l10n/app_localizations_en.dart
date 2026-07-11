@@ -347,15 +347,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidBackgroundKeepAliveDesc =>
-      'Use an Android foreground service during active sessions to reduce disconnects when picking files or switching apps';
+      'Keep LAN receiving active so connection requests can arrive while the app is in the background or the screen is locked';
 
   @override
   String get androidBackgroundKeepAliveActiveTitle =>
-      'Whisper is keeping the connection alive';
+      'Whisper is listening for LAN connections';
 
   @override
   String get androidBackgroundKeepAliveActiveDesc =>
-      'Active while a device session is connected';
+      'Nearby connection requests can arrive while the app is in the background';
 
   @override
   String get androidBatteryOptimization => 'Battery optimization';
