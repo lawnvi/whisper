@@ -250,6 +250,175 @@ void main() {
       expect(publish(2048, 4096).attempt, 1);
     });
 
+    test('a no-progress rearm inherits the remaining deadline', () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm(int durableOffset) => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: durableOffset,
+            sentEnd: durableOffset + 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      final first = arm(0);
+      expect(scheduler.delays, const <Duration>[Duration(seconds: 15)]);
+
+      // 及时但无 durable 进度的 ACK 不得重置 15s 截止时间:
+      // 重挂只继承剩余时间,否则持续原地 ACK 的对端可以无限续命。
+      clock.advance(const Duration(seconds: 10));
+      expect(watchdog.acknowledge(first), isTrue);
+      final rearmed = arm(0);
+      expect(rearmed.attempt, 1);
+      expect(scheduler.delays.last, const Duration(seconds: 5));
+
+      clock.advance(const Duration(seconds: 4));
+      expect(watchdog.acknowledge(rearmed), isTrue);
+      arm(0);
+      expect(scheduler.delays.last, const Duration(seconds: 1));
+    });
+
+    test('durable progress restores the full timeout on rearm', () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm(int durableOffset) => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: durableOffset,
+            sentEnd: durableOffset + 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      final first = arm(0);
+      clock.advance(const Duration(seconds: 10));
+      expect(watchdog.acknowledge(first), isTrue);
+
+      final progressed = arm(2048);
+      expect(progressed.attempt, 1);
+      expect(scheduler.delays.last, const Duration(seconds: 15));
+    });
+
+    test('a stalled peer acking in place is unresponsive after three windows',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final unresponsive = <TransferAckWindow>[];
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm() => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: 1024,
+            sentEnd: 5120,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: unresponsive.add,
+          );
+
+      // 磁盘卡死的接收端持续回同 durableOffset 的 ACK:
+      // t0 挂窗,t10 原地 ACK 重挂(剩 5s),t15 第一次超时。
+      final first = arm();
+      clock.advance(const Duration(seconds: 10));
+      expect(watchdog.acknowledge(first), isTrue);
+      expect(arm().attempt, 1);
+      expect(scheduler.delays.last, const Duration(seconds: 5));
+      clock.advance(const Duration(seconds: 5));
+      await scheduler.fireNext();
+
+      // t20 原地 ACK(重传后截止 t30,剩 10s),t30 第二次超时。
+      clock.advance(const Duration(seconds: 5));
+      final second = watchdog.currentWindow('transfer-1')!;
+      expect(second.attempt, 2);
+      expect(watchdog.acknowledge(second), isTrue);
+      expect(arm().attempt, 2);
+      expect(scheduler.delays.last, const Duration(seconds: 10));
+      clock.advance(const Duration(seconds: 10));
+      await scheduler.fireNext();
+
+      // t40 原地 ACK(截止 t45,剩 5s),t45 第三次超时 → 判失活。
+      clock.advance(const Duration(seconds: 10));
+      final third = watchdog.currentWindow('transfer-1')!;
+      expect(third.attempt, 3);
+      expect(watchdog.acknowledge(third), isTrue);
+      expect(arm().attempt, 3);
+      expect(scheduler.delays.last, const Duration(seconds: 5));
+      clock.advance(const Duration(seconds: 5));
+      await scheduler.fireNext();
+
+      // 3 次无进度超时(t=15/30/45)后判失活,期间的原地 ACK 无法续命。
+      expect(unresponsive.map((timeout) => timeout.attempt), <int>[3]);
+      expect(watchdog.currentWindow('transfer-1'), isNull);
+    });
+
+    test('a timeout retransmission renews the deadline for the next attempt',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm() => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: 0,
+            sentEnd: 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      arm();
+      clock.advance(const Duration(seconds: 15));
+      await scheduler.fireNext();
+      expect(watchdog.currentWindow('transfer-1')!.attempt, 2);
+      expect(scheduler.delays.last, const Duration(seconds: 15));
+
+      // 重传后的新一轮计时从重传时刻起算:10s 后的原地 ACK 只剩 5s。
+      clock.advance(const Duration(seconds: 10));
+      final retry = watchdog.currentWindow('transfer-1')!;
+      expect(watchdog.acknowledge(retry), isTrue);
+      final rearmed = arm();
+      expect(rearmed.attempt, 2);
+      expect(scheduler.delays.last, const Duration(seconds: 5));
+    });
+
+    test('cancel clears the inherited deadline with the remembered attempts',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm() => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: 0,
+            sentEnd: 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      final first = arm();
+      clock.advance(const Duration(seconds: 10));
+      expect(watchdog.acknowledge(first), isTrue);
+      watchdog.cancel('transfer-1');
+
+      arm();
+      expect(scheduler.delays.last, const Duration(seconds: 15));
+    });
+
     test('cancel clears remembered attempts so a fresh session starts at one',
         () async {
       final scheduler = _FakeTimerScheduler();
@@ -404,6 +573,16 @@ void main() {
       });
     }
   });
+}
+
+final class _FakeClock {
+  DateTime _now = DateTime(2026, 1, 1);
+
+  DateTime now() => _now;
+
+  void advance(Duration duration) {
+    _now = _now.add(duration);
+  }
 }
 
 final class _FakeTimerScheduler {

@@ -55,10 +55,13 @@ final class TransferAckWatchdog {
   TransferAckWatchdog({
     TransferAckTimerFactory? timerFactory,
     this.timeout = const Duration(seconds: 15),
-  }) : _timerFactory = timerFactory ?? Timer.new;
+    DateTime Function()? now,
+  })  : _timerFactory = timerFactory ?? Timer.new,
+        _now = now ?? DateTime.now;
 
   final TransferAckTimerFactory _timerFactory;
   final Duration timeout;
+  final DateTime Function() _now;
   final Map<String, _TransferAckEntry> _entries = <String, _TransferAckEntry>{};
 
   /// 最近一次被 acknowledge 的窗口(按 transferId)。
@@ -68,6 +71,15 @@ final class TransferAckWatchdog {
   /// 对端无限续命——连续 3 次无任何 durable 进度才判失活。
   final Map<String, TransferAckWindow> _acknowledgedWindows =
       <String, TransferAckWindow>{};
+
+  /// 当前"无 durable 进度"回合的截止时间(按 transferId)。
+  ///
+  /// 无进度的 ACK 重挂窗口时不得重置截止时间,只继承剩余时间,
+  /// 否则接收端磁盘卡死但网络栈持续回同 durableOffset ACK 时,
+  /// 每个 ACK 都换来一个全新的完整计时,markUnresponsive 永远不会
+  /// 触发。只有 durable 进度推进或超时重传才重新起算完整超时。
+  final Map<String, ({int durableOffset, DateTime deadline})> _deadlines =
+      <String, ({int durableOffset, DateTime deadline})>{};
   bool _closed = false;
 
   TransferAckWindow armWindow({
@@ -96,6 +108,7 @@ final class TransferAckWatchdog {
       retransmit: retransmit,
       markUnresponsive: markUnresponsive,
       armTimer: true,
+      delay: _claimDeadline(transferId, durableOffset),
     );
     return window;
   }
@@ -140,6 +153,22 @@ final class TransferAckWatchdog {
     return prior.attempt;
   }
 
+  /// durable 进度推进(或首次挂窗)→ 全新完整超时并记录新截止时间;
+  /// 原地重挂(无进度 ACK)→ 只继承本回合剩余时间,截止时间不变。
+  Duration _claimDeadline(String transferId, int durableOffset) {
+    final now = _now();
+    final current = _deadlines[transferId];
+    if (current == null || current.durableOffset != durableOffset) {
+      _deadlines[transferId] = (
+        durableOffset: durableOffset,
+        deadline: now.add(timeout),
+      );
+      return timeout;
+    }
+    final remaining = current.deadline.difference(now);
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
   TransferAckWindow? currentWindow(String transferId) =>
       _entries[transferId]?.window;
 
@@ -156,6 +185,7 @@ final class TransferAckWatchdog {
 
   void cancel(String transferId) {
     _acknowledgedWindows.remove(transferId);
+    _deadlines.remove(transferId);
     _entries.remove(transferId)?.timer?.cancel();
   }
 
@@ -165,6 +195,7 @@ final class TransferAckWatchdog {
     }
     _closed = true;
     _acknowledgedWindows.clear();
+    _deadlines.clear();
     final entries = _entries.values.toList(growable: false);
     _entries.clear();
     for (final entry in entries) {
@@ -177,6 +208,7 @@ final class TransferAckWatchdog {
     required TransferAckRetransmit retransmit,
     required TransferAckUnresponsive markUnresponsive,
     required bool armTimer,
+    Duration? delay,
   }) {
     _entries.remove(window.transferId)?.timer?.cancel();
     final entry = _TransferAckEntry(
@@ -186,7 +218,7 @@ final class TransferAckWatchdog {
     );
     _entries[window.transferId] = entry;
     if (armTimer) {
-      entry.timer = _timerFactory(timeout, () {
+      entry.timer = _timerFactory(delay ?? timeout, () {
         unawaited(_handleTimeout(entry));
       });
     }
@@ -201,6 +233,7 @@ final class TransferAckWatchdog {
     if (window.attempt == 3) {
       _entries.remove(window.transferId);
       _acknowledgedWindows.remove(window.transferId);
+      _deadlines.remove(window.transferId);
       try {
         await entry.markUnresponsive(window);
       } catch (_) {
@@ -216,6 +249,7 @@ final class TransferAckWatchdog {
       if (_isCurrent(entry)) {
         _entries.remove(window.transferId);
         _acknowledgedWindows.remove(window.transferId);
+        _deadlines.remove(window.transferId);
       }
       return;
     }
@@ -225,6 +259,7 @@ final class TransferAckWatchdog {
     if (resentEnd == null) {
       _entries.remove(window.transferId);
       _acknowledgedWindows.remove(window.transferId);
+      _deadlines.remove(window.transferId);
       return;
     }
     final next = TransferAckWindow(
@@ -233,6 +268,12 @@ final class TransferAckWatchdog {
       durableOffset: window.durableOffset,
       sentEnd: resentEnd,
       attempt: window.attempt + 1,
+    );
+    // 超时重传开启新一轮完整计时:截止时间从重传时刻重新起算,
+    // 之后无进度的 ACK 只能继承这一轮的剩余时间。
+    _deadlines[next.transferId] = (
+      durableOffset: next.durableOffset,
+      deadline: _now().add(timeout),
     );
     _replaceEntry(
       window: next,
