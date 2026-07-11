@@ -66,6 +66,7 @@ private let remoteInputCaptureEventMask: CGEventMask = [
 
 class MainFlutterWindow: NSWindow {
   private var windowThemeChannel: FlutterMethodChannel?
+  private var fileManagerChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -81,6 +82,7 @@ class MainFlutterWindow: NSWindow {
     DesktopClipboardImagePlugin.register(
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
     registerWindowThemeChannel(with: flutterViewController)
+    registerFileManagerChannel(with: flutterViewController)
 
     super.awakeFromNib()
   }
@@ -108,6 +110,28 @@ class MainFlutterWindow: NSWindow {
       result(nil)
     }
     windowThemeChannel = channel
+  }
+
+  private func registerFileManagerChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/file_manager",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "revealFile" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let arguments = call.arguments as? [String: Any],
+            let path = arguments["path"] as? String,
+            !path.isEmpty,
+            FileManager.default.fileExists(atPath: path) else {
+        result(false)
+        return
+      }
+      NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+      result(true)
+    }
+    fileManagerChannel = channel
   }
 
   private func applyWindowTheme(brightness: String) {

@@ -21,8 +21,24 @@ enum FileOperationKind {
 
 enum FileOperationState { failed }
 
+enum DesktopFileManagerPlatform { macOS, windows, linux }
+
+typedef FileManagerProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
+
+class FileManagerCommand {
+  const FileManagerCommand(this.executable, this.arguments);
+
+  final String executable;
+  final List<String> arguments;
+}
+
 const _androidDirChannel = MethodChannel("com.vireen.whisper/android_dir");
 const _iosDirChannel = MethodChannel("com.vireen.whisper/ios_dir");
+const _desktopFileManagerChannel =
+    MethodChannel('com.vireen.whisper/file_manager');
 
 bool hasEnoughStorageForFile({
   required int fileSize,
@@ -134,20 +150,20 @@ void openFile(String path) async {
   OpenFilex.open(path);
 }
 
-void openDir(String path, {parent = false}) async {
+Future<void> openDir(String path, {bool parent = false}) async {
   var file = File(path);
   if (!file.existsSync()) {
     var dir = await downloadDir();
     path = dir.path;
   } else if (parent) {
-    if (await _revealFileInFileManager(path)) {
+    if (await revealFileInFileManager(path)) {
       return;
     }
     path = file.parent.path;
   }
 
   if (Platform.isMacOS) {
-    openFinder(path);
+    await openFinder(path);
   } else if (Platform.isAndroid) {
     // openFolderInFileManager();
     // openFileExplorer(path);
@@ -161,7 +177,7 @@ void openDir(String path, {parent = false}) async {
   }
 }
 
-void openFinder(String path) async {
+Future<void> openFinder(String path) async {
   // 使用系统命令打开 Finder 并显示特定文件夹
   ProcessResult result = await Process.run('open', [path]);
 
@@ -174,14 +190,94 @@ void openFinder(String path) async {
   }
 }
 
-Future<bool> _revealFileInFileManager(String path) async {
-  if (!File(path).existsSync()) {
+DesktopFileManagerPlatform? _currentDesktopFileManagerPlatform() {
+  if (Platform.isMacOS) {
+    return DesktopFileManagerPlatform.macOS;
+  }
+  if (Platform.isWindows) {
+    return DesktopFileManagerPlatform.windows;
+  }
+  if (Platform.isLinux) {
+    return DesktopFileManagerPlatform.linux;
+  }
+  return null;
+}
+
+List<FileManagerCommand> fileManagerRevealCommands(
+  DesktopFileManagerPlatform platform,
+  String path,
+) {
+  switch (platform) {
+    case DesktopFileManagerPlatform.macOS:
+      return <FileManagerCommand>[
+        FileManagerCommand('open', <String>['-R', path]),
+      ];
+    case DesktopFileManagerPlatform.windows:
+      return <FileManagerCommand>[
+        FileManagerCommand('explorer.exe', <String>['/select,', path]),
+      ];
+    case DesktopFileManagerPlatform.linux:
+      final fileUri = Uri.file(path).toString().replaceAll("'", '%27');
+      return <FileManagerCommand>[
+        // FileManager1 works with the user's default file manager on GNOME,
+        // KDE and other freedesktop-compatible desktops.
+        FileManagerCommand('gdbus', <String>[
+          'call',
+          '--session',
+          '--dest',
+          'org.freedesktop.FileManager1',
+          '--object-path',
+          '/org/freedesktop/FileManager1',
+          '--method',
+          'org.freedesktop.FileManager1.ShowItems',
+          "['$fileUri']",
+          '',
+        ]),
+        FileManagerCommand('nautilus', <String>['--select', path]),
+        FileManagerCommand('dolphin', <String>['--select', path]),
+      ];
+  }
+}
+
+Future<bool> revealFileInFileManager(
+  String path, {
+  DesktopFileManagerPlatform? platform,
+  FileManagerProcessRunner processRunner = Process.run,
+}) async {
+  final file = File(path);
+  if (!file.existsSync()) {
+    return false;
+  }
+  final targetPath = file.absolute.path;
+
+  final resolvedPlatform = platform ?? _currentDesktopFileManagerPlatform();
+  if (resolvedPlatform == null) {
     return false;
   }
 
-  try {
-    if (Platform.isMacOS) {
-      final result = await Process.run('open', ['-R', path]);
+  if (platform == null &&
+      resolvedPlatform == DesktopFileManagerPlatform.macOS) {
+    try {
+      final revealed = await _desktopFileManagerChannel.invokeMethod<bool>(
+        'revealFile',
+        <String, String>{'path': targetPath},
+      );
+      if (revealed == true) {
+        return true;
+      }
+    } catch (error) {
+      // Older builds do not have the native channel; keep the command fallback.
+      _logFileOperation(
+        FileOperationKind.platformChannel,
+        error: error,
+      );
+    }
+  }
+
+  for (final command
+      in fileManagerRevealCommands(resolvedPlatform, targetPath)) {
+    try {
+      final result = await processRunner(command.executable, command.arguments);
       if (result.exitCode == 0) {
         return true;
       }
@@ -189,43 +285,12 @@ Future<bool> _revealFileInFileManager(String path) async {
         FileOperationKind.fileManagerReveal,
         exitCode: result.exitCode,
       );
-      return false;
-    }
-
-    if (Platform.isWindows) {
-      final result = await Process.run('explorer', ['/select,', path]);
-      if (result.exitCode == 0) {
-        return true;
-      }
+    } catch (error) {
       _logFileOperation(
         FileOperationKind.fileManagerReveal,
-        exitCode: result.exitCode,
+        error: error,
       );
-      return false;
     }
-
-    if (Platform.isLinux) {
-      final revealCommands = <List<String>>[
-        ['nautilus', '--select', path],
-        ['dolphin', '--select', path],
-      ];
-
-      for (final command in revealCommands) {
-        try {
-          final result = await Process.run(command.first, command.sublist(1));
-          if (result.exitCode == 0) {
-            return true;
-          }
-        } catch (_) {
-          // Try the next file manager command.
-        }
-      }
-    }
-  } catch (error) {
-    _logFileOperation(
-      FileOperationKind.fileManagerReveal,
-      error: error,
-    );
   }
 
   return false;
