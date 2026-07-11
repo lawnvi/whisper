@@ -1688,25 +1688,35 @@ class WsSvrManager {
         () => <_PeerAuthSuppressionReason>{},
       );
 
-  bool _isPeerSuppressedOnlyFor(
-    String peerId,
-    _PeerAuthSuppressionReason reason,
-  ) {
+  PairingReason? _incomingPolicyRepairReason(String peerId) {
     final suppressions = _peerAuthSuppressions[peerId];
-    return suppressions != null &&
-        suppressions.length == 1 &&
-        suppressions.contains(reason);
+    if (suppressions == null || suppressions.isEmpty) {
+      return null;
+    }
+    if (suppressions.contains(_PeerAuthSuppressionReason.deviceDeleted)) {
+      return null;
+    }
+    return suppressions.every(
+      (reason) =>
+          reason == _PeerAuthSuppressionReason.trustRevoked ||
+          reason == _PeerAuthSuppressionReason.manualDisconnect,
+    )
+        ? PairingReason.newDevice
+        : null;
   }
 
-  void _requirePairingForTrustRepair(
+  void _requirePairingForPolicyRepair(
     String peerId,
     PairingReason? pairingReason,
   ) {
-    if (_isPeerSuppressedOnlyFor(
-          peerId,
-          _PeerAuthSuppressionReason.trustRevoked,
-        ) &&
-        pairingReason == null) {
+    final suppressions = _peerAuthSuppressions[peerId];
+    final requiresConfirmation = suppressions?.any(
+          (reason) =>
+              reason == _PeerAuthSuppressionReason.trustRevoked ||
+              reason == _PeerAuthSuppressionReason.manualDisconnect,
+        ) ==
+        true;
+    if (requiresConfirmation && pairingReason == null) {
       throw const AuthHandshakeException('session_expired');
     }
   }
@@ -1750,16 +1760,17 @@ class WsSvrManager {
     if (suppressions == null || suppressions.isEmpty) {
       return true;
     }
-    if (suppressions.length != 1) {
-      return false;
+    if (suppressions.contains(_PeerAuthSuppressionReason.deviceDeleted)) {
+      return suppressions.length == 1 && attempt?.allowsDeviceRepair == true;
     }
-    return switch (suppressions.single) {
-      _PeerAuthSuppressionReason.deviceDeleted =>
-        attempt?.allowsDeviceRepair == true,
-      _PeerAuthSuppressionReason.trustRevoked =>
-        allowTrustRepair || attempt?.allowsTrustRepair == true,
-      _PeerAuthSuppressionReason.manualDisconnect => false,
-    };
+    final repairAllowed =
+        allowTrustRepair || attempt?.allowsTrustRepair == true;
+    return repairAllowed &&
+        suppressions.every(
+          (reason) =>
+              reason == _PeerAuthSuppressionReason.trustRevoked ||
+              reason == _PeerAuthSuppressionReason.manualDisconnect,
+        );
   }
 
   void _authorizeInteractiveAttemptForPeer(
@@ -3188,9 +3199,10 @@ class WsSvrManager {
     final presentedDevice = await _database.fetchDevice(hello.peerId);
     final pinPlan = (
       reason: pairingReasonForIdentity(
-        presentedDevice,
-        hello.identityPublicKey!,
-      ),
+            presentedDevice,
+            hello.identityPublicKey!,
+          ) ??
+          _incomingPolicyRepairReason(hello.peerId),
       expectedPublicKey: presentedDevice?.identityPublicKey ?? '',
     );
     final challenge = await session.receiveHello(
@@ -3208,7 +3220,7 @@ class WsSvrManager {
     }
     _incomingAuthPeerIdsBySink[sink] = peerId;
 
-    _requirePairingForTrustRepair(session.remotePeerId, pinPlan.reason);
+    _requirePairingForPolicyRepair(session.remotePeerId, pinPlan.reason);
     _identityPinPlansBySink[sink] = pinPlan;
     final generation = session.connectionGeneration;
     await _sendAuthEnvelope(sink, challenge);
@@ -3236,8 +3248,10 @@ class WsSvrManager {
       throw const AuthHandshakeException('identity_pin_conflict');
     }
     final pinPlan = await _pairingReason(session);
-    _requirePairingForTrustRepair(session.remotePeerId, pinPlan.reason);
-    if (pinPlan.reason != null && attempt.request.isAutomatic) {
+    final pairingReason = pinPlan.reason ??
+        (session.serverPairingRequired ? PairingReason.newDevice : null);
+    _requirePairingForPolicyRepair(session.remotePeerId, pairingReason);
+    if (pairingReason != null && attempt.request.isAutomatic) {
       _completeSocketAuth(sink, false, 'automatic_pairing_required');
       session.close();
       await _closeSocketSink(sink);
@@ -3267,8 +3281,6 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
-    final pairingReason = pinPlan.reason ??
-        (session.serverPairingRequired ? PairingReason.newDevice : null);
     final approval = await session.createApproval(
       allow: true,
       reason: _approvalReasonForPairing(pairingReason),
@@ -3716,6 +3728,10 @@ class WsSvrManager {
       _removePeerAuthSuppression(
         session.remotePeerId,
         _PeerAuthSuppressionReason.trustRevoked,
+      );
+      _removePeerAuthSuppression(
+        session.remotePeerId,
+        _PeerAuthSuppressionReason.manualDisconnect,
       );
       published = true;
       return device;

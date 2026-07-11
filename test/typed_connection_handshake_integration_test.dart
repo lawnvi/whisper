@@ -419,7 +419,8 @@ void main() {
     );
   });
 
-  test('manual disconnect policy blocks a new inbound signed redial', () async {
+  test('manual disconnect requires confirmation for a new inbound redial',
+      () async {
     final harness = await _HandshakeHarness.start();
     final connected = await harness.connect('manual-policy-seed');
     expect(connected.isAuthenticated, isTrue);
@@ -427,11 +428,51 @@ void main() {
     await harness.server.disconnectPeer('client-peer');
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
 
-    final redial = await harness.connect('manual-policy-redial');
+    final clientPairing = _BlockingPairingEvents();
+    final serverPairing = _BlockingPairingEvents();
+    harness.client.setEvent(clientPairing);
+    harness.server.setEvent(serverPairing);
+    final redial = harness.connect('manual-policy-redial');
+    await Future.wait(<Future<void>>[
+      clientPairing.pairingStarted.future,
+      serverPairing.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
 
-    expect(redial.isAuthenticated, isFalse);
-    expect(harness.server.isConnectedTo('client-peer'), isFalse);
-    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
+    expect(clientPairing.request?.reason, PairingReason.newDevice);
+    expect(serverPairing.request?.reason, PairingReason.newDevice);
+    expect(
+        clientPairing.request?.pairingCode, serverPairing.request?.pairingCode);
+    serverPairing.resolve(true);
+    expect((await redial).isAuthenticated, isTrue);
+    expect(harness.server.isConnectedTo('client-peer'), isTrue);
+  });
+
+  test('automatic redial cannot bypass manual disconnect confirmation',
+      () async {
+    final harness = await _HandshakeHarness.start();
+    expect((await harness.connect('manual-auto-seed')).isAuthenticated, isTrue);
+    final clientDevice = await harness.database.fetchDevice('client-peer');
+    expect(clientDevice, isNotNull);
+    await harness.server.disconnectPeer('client-peer');
+    await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
+
+    final result = await harness.client.connectToServer(
+      ConnectionAttemptRequest(
+        requestId: 'manual-auto-redial',
+        endpoint: PeerEndpoint.loopbackForTesting(port: harness.port),
+        expectedPeerId: 'server-peer',
+        expectedPublicKeyHash: identityPublicKeyHash(
+          (await harness.database.fetchDevice('server-peer'))!
+              .identityPublicKey,
+        ),
+        mode: ConnectionAttemptMode.automatic,
+      ),
+    );
+
+    expect(result.status, ConnectionAttemptStatus.rejected);
+    expect(result.reason, ConnectionAttemptReason.automaticPairingRequired);
+    expect(harness.clientEvents.pairingCount, 1);
+    expect(harness.serverEvents.pairingCount, 1);
   });
 
   test('deleted peer can initiate a fresh signed re-pair', () async {
