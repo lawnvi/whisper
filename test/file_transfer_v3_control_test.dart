@@ -133,10 +133,17 @@ void main() {
   });
 
   group('FileTransferV3Parameters', () {
-    test('uses 512KiB frames, 2MiB acks, and a 16MiB send window', () {
+    test('uses 512KiB frames, 2MiB acks, and a 4MiB send window', () {
       expect(fileTransferV3FramePayloadSize, 512 * 1024);
       expect(fileTransferV3AckIntervalSize, 2 * 1024 * 1024);
-      expect(fileTransferV3WindowSize, 16 * 1024 * 1024);
+      // 发送窗口必须不超过接收端 BoundedReceiveQueue 的 8MiB 预算,
+      // 否则整窗在途帧会直接触发接收侧 overflow 断联。
+      expect(fileTransferV3WindowSize, 4 * 1024 * 1024);
+      expect(fileTransferV3WindowSize, lessThan(8 * 1024 * 1024));
+      expect(
+        fileTransferV3AckIntervalSize,
+        lessThanOrEqualTo(fileTransferV3WindowSize),
+      );
     });
   });
 }

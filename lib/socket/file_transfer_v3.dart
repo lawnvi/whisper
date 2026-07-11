@@ -4,7 +4,9 @@ import 'dart:math' as math;
 const int fileTransferV3ProtocolVersion = 3;
 const int fileTransferV3FramePayloadSize = 512 * 1024;
 const int fileTransferV3AckIntervalSize = 2 * 1024 * 1024;
-const int fileTransferV3WindowSize = 16 * 1024 * 1024;
+// 发送窗口必须小于接收端 BoundedReceiveQueue 的 8MiB 预算:整窗未确认帧
+// 全部在途时也只应触发接收侧 pause/resume,绝不能触发 overflow 断联。
+const int fileTransferV3WindowSize = 4 * 1024 * 1024;
 const int fileTransferV3ResumeProofWindowSize = 1024 * 1024;
 const int fileTransferV3MaxFileSize = 100 * 1024 * 1024 * 1024;
 const String fileTransferV3ChecksumAlgorithm = 'sha256';
