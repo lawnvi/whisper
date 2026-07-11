@@ -50,6 +50,48 @@ void main() {
       }
     });
 
+    test('accepts bounded rhythm values from other protocol generations', () {
+      // 节奏字段(chunkSize/windowSize)做有界区间校验,不与本端当前常量
+      // 精确相等绑定:升级把 16MiB 窗口降到 4MiB 后,DB 里旧 offer 原样
+      // 重发仍必须可续传,接收侧背压是优雅 pause,可容忍更大窗口。
+      final cases = <({int chunkSize, int windowSize})>[
+        // 升级前的 16MiB 发送窗口。
+        (
+          chunkSize: fileTransferV3FramePayloadSize,
+          windowSize: 16 * 1024 * 1024,
+        ),
+        // 半帧 chunk 与当前窗口。
+        (
+          chunkSize: fileTransferV3FramePayloadSize ~/ 2,
+          windowSize: fileTransferV3WindowSize,
+        ),
+        // 下界:窗口恰好一帧。
+        (
+          chunkSize: fileTransferV3FramePayloadSize,
+          windowSize: fileTransferV3FramePayloadSize,
+        ),
+        // 上界:32MiB 窗口。
+        (
+          chunkSize: fileTransferV3FramePayloadSize,
+          windowSize: fileTransferV3MaxOfferWindowSize,
+        ),
+      ];
+
+      for (final item in cases) {
+        final metadata = FileTransferV3Metadata.parseOffer(
+          jsonEncode(<String, Object>{
+            ...validJson(),
+            'chunkSize': item.chunkSize,
+            'windowSize': item.windowSize,
+          }),
+          size: 1,
+        );
+        expect(metadata.checksumValue, _emptySha256);
+        expect(metadata.chunkSize, item.chunkSize);
+        expect(metadata.windowSize, item.windowSize);
+      }
+    });
+
     test('rejects invalid size, digest, algorithm, chunk, and window', () {
       final cases = <({int size, Map<String, Object> json, String reason})>[
         (size: -1, json: validJson(), reason: 'invalid_size'),
@@ -82,11 +124,12 @@ void main() {
           },
           reason: 'invalid_metadata',
         ),
+        // chunk 必须为正且不超过窗口。
         (
           size: 1,
           json: <String, Object>{
             ...validJson(),
-            'chunkSize': fileTransferV3FramePayloadSize ~/ 2,
+            'chunkSize': 0,
           },
           reason: 'invalid_metadata',
         ),
@@ -94,7 +137,49 @@ void main() {
           size: 1,
           json: <String, Object>{
             ...validJson(),
-            'windowSize': fileTransferV3WindowSize ~/ 2,
+            'chunkSize': fileTransferV3WindowSize + 1,
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'chunkSize': '$fileTransferV3FramePayloadSize',
+          },
+          reason: 'invalid_metadata',
+        ),
+        // 窗口必须落在 [一帧, 32MiB] 且为帧长整数倍。
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'windowSize': fileTransferV3FramePayloadSize - 1,
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'windowSize':
+                fileTransferV3MaxOfferWindowSize + fileTransferV3FramePayloadSize,
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'windowSize': fileTransferV3WindowSize + 1,
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'windowSize': '$fileTransferV3WindowSize',
           },
           reason: 'invalid_metadata',
         ),

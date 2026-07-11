@@ -1079,6 +1079,11 @@ class FileTransferEngine {
     _ackWatchdog.cancel(message.uuid);
     _outgoingTransferSequences[message.uuid] = 0;
     _outgoingWindowEndOffsets.remove(message.uuid);
+    // DB 里的 offer content 是创建时序列化的:重发/续传前把节奏字段
+    // (chunkSize/windowSize)刷新为当前常量,身份字段(校验和)保持,
+    // 否则升级前中断的传输会被对端以 invalid_metadata 永久拒绝。
+    final refreshedContent =
+        FileTransferV3Metadata.refreshOfferContent(message.content);
     return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
@@ -1087,7 +1092,12 @@ class FileTransferEngine {
         offset: 0,
         sequence: 0,
         payload: Uint8List.fromList(
-          utf8.encode(encodeWireMessage(message.copyWith(path: ''))),
+          utf8.encode(encodeWireMessage(message.copyWith(
+            path: '',
+            content: refreshedContent == null
+                ? const Value.absent()
+                : Value<String?>(refreshedContent),
+          ))),
         ),
       ),
       connection: connection,

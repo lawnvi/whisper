@@ -1141,6 +1141,84 @@ void main() {
     expect(_dataFrames(sent, _firstId).first.offset, 2);
   });
 
+  test('re-sent offer refreshes legacy rhythm metadata to current constants',
+      () async {
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final checksum = 'ab' * 32;
+    // 升级前(16MiB 发送窗口)创建并中断的传输:DB 里的 offer content
+    // 仍是旧节奏常量;续传重发时必须用当前常量重建节奏字段,
+    // 身份字段(校验和)保持不变,否则对端 parseOffer 永久拒绝。
+    final legacyContent = jsonEncode(<String, Object>{
+      'protocolVersion': fileTransferV3ProtocolVersion,
+      'checksumAlgorithm': fileTransferV3ChecksumAlgorithm,
+      'checksumValue': checksum,
+      'chunkSize': fileTransferV3FramePayloadSize,
+      'windowSize': 16 * 1024 * 1024,
+    });
+    final message = await database.insertMessageReturning(
+      _outgoingMessage(_firstId, size: 4)
+          .copyWith(content: Value<String?>(legacyContent)),
+    );
+    await database.upsertFileTransfer(
+      _outgoingTransfer(_firstId, size: 4, messageRowId: message.id)
+          .copyWith(state: FileTransferState.waitingReconnect),
+    );
+    final sent = <WhisperFrameV3>[];
+    final engine = _engine(
+      database,
+      sent,
+      sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+    );
+
+    await engine.resumeRecoverableOutgoing();
+
+    final offer = sent.singleWhere(
+      (frame) => frame.type == WhisperFrameType.fileOffer,
+    );
+    final wire = decodeWireMessage(
+      jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
+    );
+    final refreshed =
+        jsonDecode(wire.content ?? '') as Map<String, dynamic>;
+    expect(refreshed['checksumValue'], checksum);
+    expect(refreshed['chunkSize'], fileTransferV3FramePayloadSize);
+    expect(refreshed['windowSize'], fileTransferV3WindowSize);
+    final metadata = FileTransferV3Metadata.parseOffer(
+      wire.content,
+      size: wire.size,
+    );
+    expect(metadata.checksumValue, checksum);
+  });
+
+  test('retry offer without parsable metadata keeps the stored content',
+      () async {
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    // 内容不可解析(测试夹具的 '{}')时按原样重发,不得丢帧或抛错。
+    await _persistOutgoing(database, _firstId, size: 4);
+    await database.updateFileTransfer(
+      _firstId,
+      state: const Value(FileTransferState.waitingReconnect),
+    );
+    final sent = <WhisperFrameV3>[];
+    final engine = _engine(
+      database,
+      sent,
+      sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+    );
+
+    await engine.resumeRecoverableOutgoing();
+
+    final offer = sent.singleWhere(
+      (frame) => frame.type == WhisperFrameType.fileOffer,
+    );
+    final wire = decodeWireMessage(
+      jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
+    );
+    expect(wire.content, '{}');
+  });
+
   test('engine close cancels every outstanding ACK timer', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);

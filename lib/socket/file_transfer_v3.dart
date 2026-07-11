@@ -7,6 +7,11 @@ const int fileTransferV3AckIntervalSize = 2 * 1024 * 1024;
 // 发送窗口必须小于接收端 BoundedReceiveQueue 的 8MiB 预算:整窗未确认帧
 // 全部在途时也只应触发接收侧 pause/resume,绝不能触发 overflow 断联。
 const int fileTransferV3WindowSize = 4 * 1024 * 1024;
+// 接收端对 offer 声明的发送窗口做有界区间校验(而非与本端常量精确相等):
+// 升级改变本端窗口常量后,旧版本对端或本端 DB 里升级前创建的 offer 仍可
+// 续传。上界容忍历史最大的 16MiB 窗口并留出余量;接收侧背压是优雅
+// pause,更大的声明窗口只会更早触发 pause/resume,不会 overflow 断联。
+const int fileTransferV3MaxOfferWindowSize = 32 * 1024 * 1024;
 const int fileTransferV3ResumeProofWindowSize = 1024 * 1024;
 const int fileTransferV3MaxFileSize = 100 * 1024 * 1024 * 1024;
 const String fileTransferV3ChecksumAlgorithm = 'sha256';
@@ -254,19 +259,59 @@ final class FileTransferV3Metadata {
       final checksumValue = decoded['checksumValue'];
       final chunkSize = decoded['chunkSize'];
       final windowSize = decoded['windowSize'];
+      // 身份字段(协议版本、校验算法/值)精确校验;节奏字段
+      // (chunkSize/windowSize)只做安全区间校验:窗口落在
+      // [一帧, fileTransferV3MaxOfferWindowSize] 且为帧长整数倍,
+      // chunk 为正且不超过窗口。避免升级改动节奏常量后,
+      // 升级前中断的传输被 invalid_metadata 永久拒绝。
       if (protocolVersion != fileTransferV3ProtocolVersion ||
           checksumAlgorithm != fileTransferV3ChecksumAlgorithm ||
           checksumValue is! String ||
           !_sha256Hex.hasMatch(checksumValue) ||
-          chunkSize != fileTransferV3FramePayloadSize ||
-          windowSize != fileTransferV3WindowSize) {
+          chunkSize is! int ||
+          windowSize is! int ||
+          windowSize < fileTransferV3FramePayloadSize ||
+          windowSize > fileTransferV3MaxOfferWindowSize ||
+          windowSize % fileTransferV3FramePayloadSize != 0 ||
+          chunkSize < 1 ||
+          chunkSize > windowSize) {
         throw const FileTransferV3MetadataException('invalid_metadata');
       }
-      return FileTransferV3Metadata(checksumValue: checksumValue);
+      return FileTransferV3Metadata(
+        checksumValue: checksumValue,
+        chunkSize: chunkSize,
+        windowSize: windowSize,
+      );
     } on FileTransferV3MetadataException {
       rethrow;
     } catch (_) {
       throw const FileTransferV3MetadataException('invalid_metadata');
+    }
+  }
+
+  /// 发送端续传/重发 offer 时,用当前协议节奏常量重建 offer 元数据:
+  /// 身份字段(校验算法与校验值)原样保留,chunkSize/windowSize 等节奏
+  /// 字段刷新为本端当前常量。DB 里存的 offer content 是创建时序列化的,
+  /// 升级改动节奏常量后原样重发会被旧校验规则的对端拒绝。
+  ///
+  /// content 不可解析或缺少身份字段时返回 null,调用方应原样重发。
+  static String? refreshOfferContent(String? content) {
+    try {
+      final decoded = jsonDecode(content ?? '');
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+      final checksumValue = decoded['checksumValue'];
+      if (decoded['checksumAlgorithm'] != fileTransferV3ChecksumAlgorithm ||
+          checksumValue is! String ||
+          !_sha256Hex.hasMatch(checksumValue)) {
+        return null;
+      }
+      return jsonEncode(
+        FileTransferV3Metadata(checksumValue: checksumValue).toJson(),
+      );
+    } catch (_) {
+      return null;
     }
   }
 }
