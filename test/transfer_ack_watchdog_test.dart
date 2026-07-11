@@ -183,6 +183,96 @@ void main() {
       expect(attempts, <int>[1, 1]);
     });
 
+    test('an acknowledged window without durable progress keeps attempts',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final unresponsive = <TransferAckWindow>[];
+      final watchdog = TransferAckWatchdog(timerFactory: scheduler.createTimer);
+      TransferAckWindow arm(int durableOffset) => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: durableOffset,
+            sentEnd: durableOffset + 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: unresponsive.add,
+          );
+
+      arm(0);
+      await scheduler.fireNext();
+      final retry = watchdog.currentWindow('transfer-1')!;
+      expect(retry.attempt, 2);
+      expect(watchdog.acknowledge(retry), isTrue);
+
+      // 无进度 ACK(durableOffset 原地)后的重挂不得把尝试计数清回 1,
+      // 否则停滞的对端可以无限续命。
+      final rearmed = arm(0);
+      expect(rearmed.attempt, 2);
+
+      await scheduler.fireNext();
+      expect(watchdog.currentWindow('transfer-1')!.attempt, 3);
+      expect(unresponsive, isEmpty);
+      await scheduler.fireNext();
+      expect(unresponsive.map((window) => window.attempt), <int>[3]);
+      expect(watchdog.currentWindow('transfer-1'), isNull);
+    });
+
+    test('published windows inherit attempts and reset only on progress',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final watchdog = TransferAckWatchdog(timerFactory: scheduler.createTimer);
+      TransferAckWindow publish(int durableOffset, int sentEnd) =>
+          watchdog.publishWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: durableOffset,
+            sentEnd: sentEnd,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      watchdog.armWindow(
+        transferId: 'transfer-1',
+        connection: binding,
+        durableOffset: 0,
+        sentEnd: 4096,
+        retransmit: (timeout) => timeout.sentEnd,
+        markUnresponsive: (_) {},
+      );
+      await scheduler.fireNext();
+      final retry = watchdog.currentWindow('transfer-1')!;
+      expect(retry.attempt, 2);
+      expect(watchdog.acknowledge(retry), isTrue);
+
+      // 无进度重发过程中的逐帧发布继承尝试计数。
+      expect(publish(0, 512).attempt, 2);
+      expect(publish(0, 1024).attempt, 2);
+      // durable 进度推进后立即复位到 1。
+      expect(publish(2048, 4096).attempt, 1);
+    });
+
+    test('cancel clears remembered attempts so a fresh session starts at one',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final watchdog = TransferAckWatchdog(timerFactory: scheduler.createTimer);
+      TransferAckWindow arm() => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: 0,
+            sentEnd: 4096,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: (_) {},
+          );
+
+      arm();
+      await scheduler.fireNext();
+      final retry = watchdog.currentWindow('transfer-1')!;
+      expect(retry.attempt, 2);
+      expect(watchdog.acknowledge(retry), isTrue);
+      watchdog.cancel('transfer-1');
+
+      expect(arm().attempt, 1);
+    });
+
     test('independent transfers cancel independently', () {
       final scheduler = _FakeTimerScheduler();
       final watchdog = TransferAckWatchdog(timerFactory: scheduler.createTimer);

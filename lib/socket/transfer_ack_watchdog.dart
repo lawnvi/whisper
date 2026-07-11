@@ -60,6 +60,14 @@ final class TransferAckWatchdog {
   final TransferAckTimerFactory _timerFactory;
   final Duration timeout;
   final Map<String, _TransferAckEntry> _entries = <String, _TransferAckEntry>{};
+
+  /// 最近一次被 acknowledge 的窗口(按 transferId)。
+  ///
+  /// 引擎收到 ACK 后总是先 acknowledge 再重挂窗口;只有 durableOffset
+  /// 真正推进的重挂才把尝试计数复位到 1,无进度的 ACK 不能给停滞的
+  /// 对端无限续命——连续 3 次无任何 durable 进度才判失活。
+  final Map<String, TransferAckWindow> _acknowledgedWindows =
+      <String, TransferAckWindow>{};
   bool _closed = false;
 
   TransferAckWindow armWindow({
@@ -81,7 +89,7 @@ final class TransferAckWatchdog {
       connection: connection,
       durableOffset: durableOffset,
       sentEnd: sentEnd,
-      attempt: 1,
+      attempt: _initialAttemptFor(transferId, durableOffset),
     );
     _replaceEntry(
       window: window,
@@ -111,7 +119,7 @@ final class TransferAckWatchdog {
       connection: connection,
       durableOffset: durableOffset,
       sentEnd: sentEnd,
-      attempt: 1,
+      attempt: _initialAttemptFor(transferId, durableOffset),
     );
     _replaceEntry(
       window: window,
@@ -120,6 +128,16 @@ final class TransferAckWatchdog {
       armTimer: false,
     );
     return window;
+  }
+
+  /// durable 进度推进 → 复位到 1;原地重挂(无进度)→ 继承尝试计数。
+  int _initialAttemptFor(String transferId, int durableOffset) {
+    final prior =
+        _entries[transferId]?.window ?? _acknowledgedWindows[transferId];
+    if (prior == null || durableOffset > prior.durableOffset) {
+      return 1;
+    }
+    return prior.attempt;
   }
 
   TransferAckWindow? currentWindow(String transferId) =>
@@ -131,11 +149,13 @@ final class TransferAckWatchdog {
       return false;
     }
     _entries.remove(expected.transferId);
+    _acknowledgedWindows[expected.transferId] = expected;
     entry.timer?.cancel();
     return true;
   }
 
   void cancel(String transferId) {
+    _acknowledgedWindows.remove(transferId);
     _entries.remove(transferId)?.timer?.cancel();
   }
 
@@ -144,6 +164,7 @@ final class TransferAckWatchdog {
       return;
     }
     _closed = true;
+    _acknowledgedWindows.clear();
     final entries = _entries.values.toList(growable: false);
     _entries.clear();
     for (final entry in entries) {
@@ -179,6 +200,7 @@ final class TransferAckWatchdog {
     final window = entry.window;
     if (window.attempt == 3) {
       _entries.remove(window.transferId);
+      _acknowledgedWindows.remove(window.transferId);
       try {
         await entry.markUnresponsive(window);
       } catch (_) {
@@ -193,6 +215,7 @@ final class TransferAckWatchdog {
     } catch (_) {
       if (_isCurrent(entry)) {
         _entries.remove(window.transferId);
+        _acknowledgedWindows.remove(window.transferId);
       }
       return;
     }
@@ -201,6 +224,7 @@ final class TransferAckWatchdog {
     }
     if (resentEnd == null) {
       _entries.remove(window.transferId);
+      _acknowledgedWindows.remove(window.transferId);
       return;
     }
     final next = TransferAckWindow(
