@@ -6,6 +6,7 @@ import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/helper/connection_request_notification_dismissal.dart';
 import 'package:whisper/helper/notification_l10n.dart';
@@ -46,6 +47,9 @@ bool? pairingNotificationDecisionForAction(String actionId) =>
 
 String formatPairingNotificationCode(String code) =>
     code.length == 6 ? '${code.substring(0, 3)} ${code.substring(3)}' : code;
+
+bool pairingNotificationUsesIncomingCallStyle(PairingRequest request) =>
+    !request.isInitiator && request.reason != PairingReason.identityChanged;
 
 final class ConnectionRequestNotificationActionRouter {
   final Map<String, _PendingPairingNotification> _pendingByToken =
@@ -140,6 +144,9 @@ class ConnectionRequestNotifier {
   ConnectionRequestNotifier._internal();
 
   static const String channelId = 'whisper.connect_request';
+  static const String callChannelId = 'whisper.connect_request.calls';
+  static const MethodChannel _nativeChannel =
+      MethodChannel('com.vireen.whisper/connection_request_notifications');
   static const Uuid _uuid = Uuid();
 
   final ConnectionRequestNotificationDismissal _dismissal =
@@ -176,7 +183,9 @@ class ConnectionRequestNotifier {
       try {
         final active = await plugin.getActiveNotifications();
         for (final notification in active) {
-          if (notification.channelId == channelId && notification.id != null) {
+          if ((notification.channelId == channelId ||
+                  notification.channelId == callChannelId) &&
+              notification.id != null) {
             await plugin.cancel(notification.id!);
           }
         }
@@ -257,41 +266,94 @@ class ConnectionRequestNotifier {
     }
 
     try {
-      await plugin.show(
-        notificationId,
-        title,
-        body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            channelId,
-            l10n.connectRequest,
-            channelDescription: l10n.connectRequest,
-            importance: Importance.max,
-            priority: Priority.high,
-            category: AndroidNotificationCategory.message,
-            autoCancel: true,
-            onlyAlertOnce: true,
-            visibility: NotificationVisibility.private,
-            timeoutAfter: 30000,
-            styleInformation: BigTextStyleInformation(body),
-            actions: actionIds
-                .map(
-                  (actionId) => _androidAction(
-                    actionId,
-                    l10n: l10n,
-                  ),
-                )
-                .toList(growable: false),
+      final useIncomingCallStyle =
+          pairingNotificationUsesIncomingCallStyle(request);
+      final shownAsIncomingCall = useIncomingCallStyle &&
+          await _showIncomingCallStyle(
+            notificationId: notificationId,
+            request: request,
+            title: title,
+            body: body,
+            formattedCode: code,
+            payload: payload,
+            l10n: l10n,
+          );
+      if (!shownAsIncomingCall) {
+        await plugin.show(
+          notificationId,
+          title,
+          body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              channelId,
+              l10n.connectRequest,
+              channelDescription: l10n.connectRequest,
+              importance: Importance.max,
+              priority: Priority.max,
+              category: request.isInitiator
+                  ? AndroidNotificationCategory.status
+                  : AndroidNotificationCategory.call,
+              autoCancel: false,
+              ongoing: true,
+              onlyAlertOnce: true,
+              visibility: NotificationVisibility.private,
+              timeoutAfter: 30000,
+              styleInformation: BigTextStyleInformation(body),
+              actions: actionIds
+                  .map(
+                    (actionId) => _androidAction(
+                      actionId,
+                      l10n: l10n,
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
           ),
-        ),
-        payload: payload,
-      );
+          payload: payload,
+        );
+      }
       if (requestCancelled) {
         await plugin.cancel(notificationId);
       }
     } on Object {
       _actionRouter.removeToken(token);
       rethrow;
+    }
+  }
+
+  Future<bool> _showIncomingCallStyle({
+    required int notificationId,
+    required PairingRequest request,
+    required String title,
+    required String body,
+    required String formattedCode,
+    required String payload,
+    required AppLocalizations l10n,
+  }) async {
+    try {
+      return await _nativeChannel.invokeMethod<bool>(
+            'showIncoming',
+            <String, Object>{
+              'notificationId': notificationId,
+              'peerId': request.device.uid,
+              'deviceName': request.device.name,
+              'pairingCode': formattedCode,
+              'verificationText': l10n.pairingCodeSemantics(formattedCode),
+              'title': title,
+              'body': body,
+              'payload': payload,
+              'rejectActionId': pairingRejectNotificationAction,
+              'answerActionId': pairingApproveNotificationAction,
+              'answerShowsUserInterface': false,
+              'channelName': l10n.connectRequest,
+              'channelDescription': l10n.connectRequest,
+            },
+          ) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
     }
   }
 

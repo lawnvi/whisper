@@ -12,6 +12,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(AudioSharePlugin())
         flutterEngine.plugins.add(AndroidDocumentPickerPlugin())
         flutterEngine.plugins.add(TransferNotificationPlugin())
+        flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())
         flutterEngine.plugins.add(LocalNetworkPermissionPlugin())
     }
 }

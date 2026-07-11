@@ -36,6 +36,13 @@ void main() {
     final helper = File('lib/helper/notification.dart').readAsStringSync();
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
     final main = File('lib/main.dart').readAsStringSync();
+    final native = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'ConnectionRequestNotificationPlugin.kt',
+    ).readAsStringSync();
+    final activity = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/MainActivity.kt',
+    ).readAsStringSync();
 
     // notifier 核心要素
     expect(notifier, contains("'whisper.connect_request'"));
@@ -52,8 +59,28 @@ void main() {
     expect(notifier, contains('importance: Importance.max'));
     expect(notifier, contains('enableVibration: true'));
     expect(notifier, contains("'version': 1, 'token': token"));
-    expect(notifier, isNot(contains("'peerId': peerId")));
-    expect(notifier, isNot(contains("'pairingCode':")));
+    final payloadBuilder = RegExp(
+      r'final payload = jsonEncode\(([\s\S]*?)\);',
+    ).firstMatch(notifier)!.group(1)!;
+    expect(payloadBuilder, isNot(contains("'peerId'")));
+    expect(payloadBuilder, isNot(contains("'pairingCode'")));
+
+    // Incoming first-time pairing uses the system call layout without a
+    // full-screen intent. Native actions still enter the guarded Dart router.
+    expect(native, contains('NotificationCompat.CallStyle.forIncomingCall'));
+    expect(native, contains('.setVerificationText(verificationText)'));
+    expect(native, contains('NotificationCompat.CATEGORY_CALL'));
+    expect(native, contains('NotificationCompat.PRIORITY_MAX'));
+    expect(native, contains('ActionBroadcastReceiver.ACTION_TAPPED'));
+    expect(native, contains('"notificationId"'));
+    expect(native, contains('"actionId"'));
+    expect(native, contains('"payload"'));
+    expect(native, isNot(contains('setFullScreenIntent')));
+    expect(
+      activity,
+      contains(
+          'flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())'),
+    );
 
     // Foreground and background actions converge on the main-isolate router.
     expect(helper, contains('onDidReceiveNotificationResponse'));
@@ -89,34 +116,40 @@ void main() {
           pairingApproveNotificationAction,
         ],
       );
+      expect(
+        pairingNotificationUsesIncomingCallStyle(
+          _request(reason: reason, mode: PairingPromptMode.responder),
+        ),
+        isTrue,
+      );
     }
   });
 
   test('identity changes require opening details before approval', () {
+    final request = _request(
+      reason: PairingReason.identityChanged,
+      mode: PairingPromptMode.responder,
+    );
     expect(
-      pairingNotificationActionIds(
-        _request(
-          reason: PairingReason.identityChanged,
-          mode: PairingPromptMode.responder,
-        ),
-      ),
+      pairingNotificationActionIds(request),
       <String>[
         pairingRejectNotificationAction,
         pairingViewNotificationAction,
       ],
     );
+    expect(pairingNotificationUsesIncomingCallStyle(request), isFalse);
   });
 
   test('initiator can cancel but cannot approve from its notification', () {
+    final request = _request(
+      reason: PairingReason.newDevice,
+      mode: PairingPromptMode.initiator,
+    );
     expect(
-      pairingNotificationActionIds(
-        _request(
-          reason: PairingReason.newDevice,
-          mode: PairingPromptMode.initiator,
-        ),
-      ),
+      pairingNotificationActionIds(request),
       <String>[pairingCancelNotificationAction],
     );
+    expect(pairingNotificationUsesIncomingCallStyle(request), isFalse);
   });
 
   test('notification decisions and code formatting are deterministic', () {
