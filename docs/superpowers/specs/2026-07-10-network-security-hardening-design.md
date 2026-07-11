@@ -116,7 +116,7 @@ router 在 WebSocket upgrade 前消费 token，返回含 peerId/sessionId/route/
 - 每个 outgoing window 在最后一帧发送后启动 15 秒 ACK timer；前两次超时从最后 durable offset 重发，第三次把传输置为 waitingReconnect 并通知 socket manager 将该 peer 判为失活。ACK 必须单调、不超过已发送 window、size 匹配，并绑定 connection generation；旧 timer/onDone 只能 `removeIfCurrent(connectionId)`，不得关闭替换后的新连接。
 - ACK、complete、cancel、error、disconnect 与 close 都取消对应 timer/retry state。
 - active outgoing 的本地取消、源读取失败、远端 error 和异常路径统一调用一个 async release helper，并立即启动返回的 next transfer；queued 取消只移除自己，不重启当前 active。incoming 对称推进。
-- `PeerReconnectController` 对已 pin 且允许自动连接的 peer 使用 `1,2,4,8,16,30,60` 秒上限 60 秒、20% jitter 的退避；成功清零，手动断开/应用关闭/撤销信任永久取消。新 mDNS resolve 可刷新 endpoint 并提前下一次尝试。
+- `PeerReconnectController` 对已 pin 且允许自动连接的 peer 使用 `1,2,4,8,16,30,60` 秒上限 60 秒、20% jitter 的退避；成功清零，手动断开/应用关闭/撤销信任永久取消。`auth=false` 只抑制自动接入，后续手动出站或入站请求必须重新走完整配对确认，成功后恢复 `auth=true`。新 mDNS resolve 可刷新 endpoint 并提前下一次尝试。
 - `connectToServer` 直到 signed result 验证并注册 peer 后才返回成功，不能把 TCP/WebSocket ready 当作鉴权成功。
 
 ### 7. Server 生命周期
