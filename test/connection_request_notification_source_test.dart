@@ -95,8 +95,10 @@ void main() {
     expect(notifier, contains('IsolateNameServer.lookupPortByName'));
 
     expect(manager, contains('session.guardApprovalCallback('));
+    expect(manager, contains('PairingPresentationBinding('));
+    expect(manager, contains('cancellation: presentation.cancellation'));
     expect(manager, contains('request: request'));
-    expect(manager, contains('resolve: guarded'));
+    expect(manager, contains('resolve: presentation.resolve'));
     expect(manager, contains('event.onPairing('));
     expect(manager, contains('maybeShowForPairing'));
     expect(

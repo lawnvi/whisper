@@ -41,6 +41,27 @@ Widget _app(PairingRequest request, ValueChanged<bool> onResolved) {
 }
 
 void main() {
+  test('external decision dismisses the presentation before resolving',
+      () async {
+    final sessionCancellation = Completer<void>();
+    var dismissedBeforeResolve = false;
+    final decisions = <bool>[];
+    late PairingPresentationBinding presentation;
+    presentation = PairingPresentationBinding(
+      sessionCancellation: sessionCancellation.future,
+      onResolve: (allow) {
+        dismissedBeforeResolve = presentation.isDismissed;
+        decisions.add(allow);
+      },
+    );
+
+    presentation.resolve(true);
+
+    await expectLater(presentation.cancellation, completes);
+    expect(dismissedBeforeResolve, isTrue);
+    expect(decisions, <bool>[true]);
+  });
+
   test('resolved dialogs detach their pending session cancellation listener',
       () {
     final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
@@ -233,6 +254,56 @@ void main() {
     await shown;
 
     expect(decisions, isEmpty);
+    expect(find.byKey(pairingCodeKey), findsNothing);
+    expect(find.text('underlying page'), findsOneWidget);
+  });
+
+  testWidgets('notification decision dismisses a background pairing route',
+      (tester) async {
+    final sessionCancellation = Completer<void>();
+    final decisions = <bool>[];
+    late PairingPresentationBinding presentation;
+    presentation = PairingPresentationBinding(
+      sessionCancellation: sessionCancellation.future,
+      onResolve: decisions.add,
+    );
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      mode: PairingPromptMode.responder,
+      cancellation: presentation.cancellation,
+    );
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: presentation.resolve,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(pairingCodeKey), findsOneWidget);
+
+    presentation.resolve(true);
+    await tester.pumpAndSettle();
+    await shown;
+
+    expect(decisions, <bool>[true]);
     expect(find.byKey(pairingCodeKey), findsNothing);
     expect(find.text('underlying page'), findsOneWidget);
   });

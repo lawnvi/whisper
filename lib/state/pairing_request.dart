@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:whisper/model/LocalDatabase.dart';
 
 enum PairingReason {
@@ -7,6 +9,34 @@ enum PairingReason {
 }
 
 enum PairingPromptMode { initiator, responder }
+
+/// Couples every pairing decision to the lifetime of its visible prompt.
+/// Notification actions dismiss the prompt before the handshake continues.
+final class PairingPresentationBinding {
+  PairingPresentationBinding({
+    required Future<void> sessionCancellation,
+    required void Function(bool) onResolve,
+  }) : _onResolve = onResolve {
+    unawaited(sessionCancellation.then<void>((_) => dismiss()));
+  }
+
+  final void Function(bool) _onResolve;
+  final Completer<void> _dismissed = Completer<void>();
+
+  Future<void> get cancellation => _dismissed.future;
+  bool get isDismissed => _dismissed.isCompleted;
+
+  void dismiss() {
+    if (!_dismissed.isCompleted) {
+      _dismissed.complete();
+    }
+  }
+
+  void resolve(bool allow) {
+    dismiss();
+    _onResolve(allow);
+  }
+}
 
 final class PairingRequest {
   const PairingRequest({

@@ -2081,8 +2081,8 @@ class WsSvrManager {
 
   bool _hasUncancelledPendingAttemptForPeer(String peerId) =>
       _pendingOutgoingByPeerId[peerId]
-              ?.any((attempt) => !attempt.isCancelled) ==
-          true;
+          ?.any((attempt) => !attempt.isCancelled) ==
+      true;
 
   @visibleForTesting
   bool debugBindPendingConnectionPeer(String requestId, String peerId) {
@@ -3482,7 +3482,7 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
-    final guarded = session.guardApprovalCallback((allow) {
+    final sessionGuarded = session.guardApprovalCallback((allow) {
       _runGuardedApproval(
         session: session,
         sink: sink,
@@ -3490,17 +3490,21 @@ class WsSvrManager {
         resolve: () => resolve(allow),
       );
     });
+    final presentation = PairingPresentationBinding(
+      sessionCancellation: session.pairingResolved,
+      onResolve: sessionGuarded,
+    );
     final request = PairingRequest(
       device: device,
       pairingCode: session.pairingCode,
       reason: reason,
       mode: mode,
-      cancellation: session.pairingResolved,
+      cancellation: presentation.cancellation,
     );
     _ignoreFuture(
       ConnectionRequestNotifier().maybeShowForPairing(
         request: request,
-        resolve: guarded,
+        resolve: presentation.resolve,
       ),
       context: 'show pairing notification',
     );
@@ -3508,7 +3512,7 @@ class WsSvrManager {
       listener,
       (event) => event.onPairing(
         request,
-        guarded,
+        presentation.resolve,
       ),
     );
   }
