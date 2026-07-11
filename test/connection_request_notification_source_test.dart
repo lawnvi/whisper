@@ -71,11 +71,15 @@ void main() {
     expect(native, contains('.setVerificationText(verificationText)'));
     expect(native, contains('NotificationCompat.CATEGORY_CALL'));
     expect(native, contains('NotificationCompat.PRIORITY_MAX'));
+    expect(native, contains('R.drawable.ic_stat_whisper'));
+    expect(native, isNot(contains('areNotificationsEnabled')));
     expect(native, contains('ActionBroadcastReceiver.ACTION_TAPPED'));
     expect(native, contains('"notificationId"'));
     expect(native, contains('"actionId"'));
     expect(native, contains('"payload"'));
     expect(native, isNot(contains('setFullScreenIntent')));
+    expect(notifier, contains("'whisper.connect_request.alerts.v2'"));
+    expect(notifier, contains("icon: 'ic_stat_whisper'"));
     expect(
       activity,
       contains(

@@ -143,7 +143,8 @@ class ConnectionRequestNotifier {
 
   ConnectionRequestNotifier._internal();
 
-  static const String channelId = 'whisper.connect_request';
+  static const String legacyChannelId = 'whisper.connect_request';
+  static const String channelId = 'whisper.connect_request.alerts.v2';
   static const String callChannelId = 'whisper.connect_request.calls';
   static const MethodChannel _nativeChannel =
       MethodChannel('com.vireen.whisper/connection_request_notifications');
@@ -183,7 +184,8 @@ class ConnectionRequestNotifier {
       try {
         final active = await plugin.getActiveNotifications();
         for (final notification in active) {
-          if ((notification.channelId == channelId ||
+          if ((notification.channelId == legacyChannelId ||
+                  notification.channelId == channelId ||
                   notification.channelId == callChannelId) &&
               notification.id != null) {
             await plugin.cancel(notification.id!);
@@ -237,6 +239,14 @@ class ConnectionRequestNotifier {
                 code,
               )
             : l10n.pairingNotificationBody(request.device.name, code);
+    final fallbackTitle =
+        request.isInitiator || request.reason == PairingReason.identityChanged
+            ? title
+            : request.device.name;
+    final fallbackBody =
+        !request.isInitiator && request.reason != PairingReason.identityChanged
+            ? l10n.pairingCodeSemantics(code)
+            : body;
     final actionIds = pairingNotificationActionIds(request);
     final token = _uuid.v4();
     final notificationId = notificationIdForToken(token);
@@ -281,13 +291,14 @@ class ConnectionRequestNotifier {
       if (!shownAsIncomingCall) {
         await plugin.show(
           notificationId,
-          title,
-          body,
+          fallbackTitle,
+          fallbackBody,
           NotificationDetails(
             android: AndroidNotificationDetails(
               channelId,
               l10n.connectRequest,
               channelDescription: l10n.connectRequest,
+              icon: 'ic_stat_whisper',
               importance: Importance.max,
               priority: Priority.max,
               category: request.isInitiator
@@ -298,7 +309,7 @@ class ConnectionRequestNotifier {
               onlyAlertOnce: true,
               visibility: NotificationVisibility.private,
               timeoutAfter: 30000,
-              styleInformation: BigTextStyleInformation(body),
+              styleInformation: BigTextStyleInformation(fallbackBody),
               actions: actionIds
                   .map(
                     (actionId) => _androidAction(

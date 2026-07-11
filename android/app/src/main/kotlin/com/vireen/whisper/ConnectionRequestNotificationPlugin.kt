@@ -1,20 +1,17 @@
 package com.vireen.whisper
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
-import androidx.core.content.ContextCompat
 import com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -47,9 +44,6 @@ class ConnectionRequestNotificationPlugin :
     }
 
     private fun showIncoming(call: MethodCall): Boolean {
-        if (!notificationsAvailable()) {
-            return false
-        }
         val notificationId = call.argument<Int>("notificationId") ?: return false
         val deviceName = call.argument<String>("deviceName")?.takeIf { it.isNotBlank() }
             ?: return false
@@ -57,7 +51,6 @@ class ConnectionRequestNotificationPlugin :
             ?: return false
         val verificationText = call.argument<String>("verificationText") ?: pairingCode
         val title = call.argument<String>("title") ?: deviceName
-        val body = call.argument<String>("body") ?: pairingCode
         val payload = call.argument<String>("payload") ?: return false
         val rejectActionId = call.argument<String>("rejectActionId") ?: return false
         val answerActionId = call.argument<String>("answerActionId") ?: return false
@@ -94,37 +87,27 @@ class ConnectionRequestNotificationPlugin :
             .setVerificationText(verificationText)
             .setDeclineButtonColorHint(Color.rgb(220, 38, 38))
             .setAnswerButtonColorHint(Color.rgb(22, 163, 74))
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_whisper)
             .setContentTitle(deviceName)
-            .setContentText(body)
-            .setSubText(title)
+            .setContentText(verificationText)
             .setContentIntent(contentPendingIntent(notificationId, payload))
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setColor(Color.rgb(22, 163, 74))
-            .setColorized(true)
             .setDefaults(Notification.DEFAULT_ALL)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setTimeoutAfter(TIMEOUT_MILLIS)
-            .build()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            builder.setColorized(true)
+        }
+        val notification = builder.build()
 
         NotificationManagerCompat.from(context).notify(notificationId, notification)
         return true
-    }
-
-    private fun notificationsAvailable(): Boolean {
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            return false
-        }
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun ensureChannel(name: String, description: String) {
