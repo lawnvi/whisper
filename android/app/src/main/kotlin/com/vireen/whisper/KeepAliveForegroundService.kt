@@ -7,8 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
@@ -17,6 +19,8 @@ class KeepAliveForegroundService : Service() {
     // ensureChannel 不至于用英文缺省名把系统设置里已本地化的渠道名改回去。
     private var channelName: String = DEFAULT_CHANNEL_NAME
     private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -60,15 +64,77 @@ class KeepAliveForegroundService : Service() {
             NOTIFICATION_ID,
             buildNotification(title, description, progress, indeterminateProgress)
         )
+        acquireResourceLocks()
         // Restarting only this native service cannot recreate Flutter's Dart
         // socket server, so avoid presenting a misleading listening state.
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        releaseResourceLocks()
         @Suppress("DEPRECATION")
         stopForeground(true)
         super.onDestroy()
+    }
+
+    /**
+     * The service only runs while background keep-alive is enabled. These
+     * non-reference-counted locks therefore follow the same lifecycle and do
+     * not outlive the user's setting. A vendor may reject either lock, so each
+     * resource is acquired independently and the foreground service continues.
+    */
+    @Suppress("DEPRECATION")
+    private fun acquireResourceLocks() {
+        try {
+            if (wakeLock?.isHeld != true) {
+                val manager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                val lock = wakeLock ?: manager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "$packageName:$WAKE_LOCK_TAG"
+                ).apply { setReferenceCounted(false) }
+                lock.acquire()
+                wakeLock = lock
+            }
+            } catch (_: RuntimeException) {
+                // The foreground service remains useful if this vendor rejects the lock.
+            }
+
+        try {
+            if (wifiLock?.isHeld != true) {
+                val manager = applicationContext.getSystemService(Context.WIFI_SERVICE)
+                    as WifiManager
+                val lock = wifiLock ?: manager.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    "$packageName:$WIFI_LOCK_TAG"
+                ).apply { setReferenceCounted(false) }
+                lock.acquire()
+                wifiLock = lock
+            }
+            } catch (_: RuntimeException) {
+                // The CPU lock can still preserve the Dart server independently.
+            }
+    }
+
+    private fun releaseResourceLocks() {
+        val heldWifiLock = wifiLock
+        wifiLock = null
+        try {
+            if (heldWifiLock?.isHeld == true) {
+                heldWifiLock.release()
+            }
+        } catch (_: RuntimeException) {
+            // The service is already ending; never prevent the remaining cleanup.
+        }
+
+        val heldWakeLock = wakeLock
+        wakeLock = null
+        try {
+            if (heldWakeLock?.isHeld == true) {
+                heldWakeLock.release()
+            }
+        } catch (_: RuntimeException) {
+            // The service is already ending; never prevent the remaining cleanup.
+        }
     }
 
     private fun buildNotification(
@@ -129,6 +195,8 @@ class KeepAliveForegroundService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "whisper.keep_alive"
+        private const val WAKE_LOCK_TAG = "lan-server"
+        private const val WIFI_LOCK_TAG = "lan-wifi"
         private const val NOTIFICATION_ID = 10021
         private const val NO_PROGRESS = -1
         private const val DEFAULT_TITLE = "Whisper"

@@ -106,6 +106,46 @@ void main() {
     expect(keepAliveService, contains('START_NOT_STICKY'));
   });
 
+  test('keep-alive service owns CPU and Wi-Fi locks for its lifetime', () {
+    final manifest =
+        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    final service = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'KeepAliveForegroundService.kt',
+    ).readAsStringSync();
+
+    expect(manifest, contains('android.permission.WAKE_LOCK'));
+    expect(manifest, contains('android.permission.CHANGE_WIFI_STATE'));
+    expect(service, contains('PowerManager.PARTIAL_WAKE_LOCK'));
+    expect(service, contains('WifiManager.WIFI_MODE_FULL_HIGH_PERF'));
+    expect(service, contains('setReferenceCounted(false)'));
+
+    final onStart = service.indexOf('override fun onStartCommand');
+    final acquire = service.indexOf('acquireResourceLocks()', onStart);
+    final onDestroy = service.indexOf('override fun onDestroy');
+    final release = service.indexOf('releaseResourceLocks()', onDestroy);
+    final stopForeground = service.indexOf('stopForeground(true)', onDestroy);
+    expect(acquire, greaterThan(onStart), reason: '服务实际启动后才可持锁，重复启动必须幂等');
+    expect(release, greaterThan(onDestroy));
+    expect(release, lessThan(stopForeground), reason: '服务销毁时应先释放系统资源，再退出前台状态');
+
+    expect(
+      service,
+      matches(
+          RegExp(r'if \(wakeLock\?\.isHeld != true\)[\s\S]*lock\.acquire\(\)')),
+      reason: '重复 startKeepAlive 不应重复持有 WakeLock',
+    );
+    expect(
+      service,
+      matches(
+          RegExp(r'if \(wifiLock\?\.isHeld != true\)[\s\S]*lock\.acquire\(\)')),
+      reason: '重复 startKeepAlive 不应重复持有 WifiLock',
+    );
+    expect(service, contains('catch (_: RuntimeException)'));
+    expect(service, contains('heldWifiLock.release()'));
+    expect(service, contains('heldWakeLock.release()'));
+  });
+
   test('LAN server owns Android keep alive before the first pairing', () {
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
     final notificationPermission =
