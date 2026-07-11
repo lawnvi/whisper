@@ -380,7 +380,7 @@ void main() {
     );
   });
 
-  for (final mutation in <String>['manual', 'revoke', 'delete']) {
+  for (final mutation in <String>['manual', 'delete']) {
     test('$mutation disconnect suppresses reconnect', () async {
       final harness = await _HandshakeHarness.start();
       final connected = await harness.connect('$mutation-disconnect');
@@ -402,6 +402,22 @@ void main() {
       expect(harness.clientReconnects.activeTimerCount, 0);
     });
   }
+
+  test('disabling automatic admission keeps the active connection', () async {
+    final harness = await _HandshakeHarness.start();
+    expect(
+        (await harness.connect('disable-admission')).isAuthenticated, isTrue);
+
+    expect(await harness.client.setPeerTrust('server-peer', false), isTrue);
+
+    expect(harness.client.isConnectedTo('server-peer'), isTrue);
+    expect((await harness.database.fetchDevice('server-peer'))?.auth, isFalse);
+    expect(harness.clientReconnects.activeTimerCount, 0);
+    expect(
+      harness.client.reconnectSuppressionsFor('server-peer'),
+      contains(ReconnectSuppressionReason.trustRevoked),
+    );
+  });
 
   for (final mutation in <String>['manual', 'delete']) {
     test('$mutation policy blocks a new inbound signed redial', () async {
@@ -464,16 +480,16 @@ void main() {
     expect(harness.server.isConnectedTo('client-peer'), isTrue);
   });
 
-  test('interactive dial after trust revoke re-pairs and restores both peers',
-      () async {
+  test('client-only trust revoke shows matching codes on both peers', () async {
     final harness = await _HandshakeHarness.start();
     expect(
         (await harness.connect('trust-repair-seed')).isAuthenticated, isTrue);
     await harness.client.setPeerTrust('server-peer', false);
-    await harness.server.setPeerTrust('client-peer', false);
+    expect(harness.client.isConnectedTo('server-peer'), isTrue);
+    expect(await harness.server.debugDropPeerTransport('client-peer'), isTrue);
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isFalse);
-    expect((await harness.database.fetchDevice('client-peer'))?.auth, isFalse);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
     expect(harness.clientReconnects.activeTimerCount, 0);
     expect(harness.serverReconnects.activeTimerCount, 0);
     expect(
@@ -502,7 +518,7 @@ void main() {
       serverPairing.request?.pairingCode,
     );
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isFalse);
-    expect((await harness.database.fetchDevice('client-peer'))?.auth, isFalse);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
     await pumpEventQueue();
     expect(repairCompleted, isFalse);
 
@@ -525,18 +541,30 @@ void main() {
     expect(
         (await harness.connect('trust-inbound-seed')).isAuthenticated, isTrue);
     await harness.server.setPeerTrust('client-peer', false);
+    expect(harness.server.isConnectedTo('client-peer'), isTrue);
+    expect(await harness.server.debugDropPeerTransport('client-peer'), isTrue);
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
 
+    final clientPairing = _BlockingPairingEvents();
     final serverPairing = _BlockingPairingEvents();
+    harness.client.setEvent(clientPairing);
     harness.server.setEvent(serverPairing);
     final redial = harness.connect('trust-inbound-explicit');
     var redialCompleted = false;
     unawaited(redial.then<void>((_) => redialCompleted = true));
-    await serverPairing.pairingStarted.future
-        .timeout(const Duration(seconds: 2));
+    await Future.wait(<Future<void>>[
+      clientPairing.pairingStarted.future,
+      serverPairing.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
 
+    expect(clientPairing.request?.reason, PairingReason.newDevice);
+    expect(clientPairing.request?.mode, PairingPromptMode.initiator);
     expect(serverPairing.request?.reason, PairingReason.newDevice);
     expect(serverPairing.request?.mode, PairingPromptMode.responder);
+    expect(
+      clientPairing.request?.pairingCode,
+      serverPairing.request?.pairingCode,
+    );
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isFalse);
     await pumpEventQueue();
     expect(redialCompleted, isFalse);
@@ -819,7 +847,7 @@ PeerProfile _profile(String uid) => PeerProfile(
       trustedPeerIds: const <String>[],
       autoApproveNewDevices: false,
       autoConnectEnabled: true,
-      protocolVersion: 6,
+      protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: const PeerCapabilities(
         fileTransferV3: true,
         systemAudioSourceV1: false,

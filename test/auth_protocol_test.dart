@@ -94,7 +94,7 @@ void main() {
     });
 
     test('pairing code has a stable six-digit golden value', () {
-      expect(_transcript().pairingCode(), '149629');
+      expect(_transcript().pairingCode(), '886773');
     });
 
     test('both peers get the same pairing code from the canonical transcript',
@@ -204,6 +204,7 @@ void main() {
         peerNonce: _b64(32, 64),
         profileDigest: _b64(32, 97),
         signature: _b64(64, 2),
+        pairingRequired: true,
       );
       final proof = AuthEnvelope.proof(
         protocolVersion: 6,
@@ -247,6 +248,7 @@ void main() {
           envelope,
         );
       }
+      expect(challenge.pairingRequired, isTrue);
     });
 
     test('rejects unknown actions, missing fields, and unexpected fields', () {

@@ -21,6 +21,7 @@ final class AuthEnvelope {
     this.intendedPeerId,
     this.intendedPublicKeyHash,
     this.profile,
+    this.pairingRequired,
     this.allow,
     this.reason,
   });
@@ -59,6 +60,7 @@ final class AuthEnvelope {
     required String peerNonce,
     required String profileDigest,
     required String signature,
+    bool pairingRequired = false,
     Map<String, Object?>? profile,
   }) {
     return _validated(
@@ -71,6 +73,7 @@ final class AuthEnvelope {
       peerNonce: peerNonce,
       profileDigest: profileDigest,
       signature: signature,
+      pairingRequired: pairingRequired,
       profile: profile,
     );
   }
@@ -152,6 +155,7 @@ final class AuthEnvelope {
   final String? intendedPeerId;
   final String? intendedPublicKeyHash;
   final Map<String, Object?>? profile;
+  final bool? pairingRequired;
   final bool? allow;
   final String? reason;
 
@@ -218,6 +222,7 @@ final class AuthEnvelope {
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
+          pairingRequired: _requiredBool(json, 'pairingRequired'),
           profile: _optionalProfile(json, 'profile'),
         );
       case AuthAction.proof:
@@ -268,6 +273,7 @@ final class AuthEnvelope {
       if (intendedPeerId != null) 'intendedPeerId': intendedPeerId,
       if (intendedPublicKeyHash != null) 'intendedPkh': intendedPublicKeyHash,
       if (profile != null) 'profile': profile,
+      if (pairingRequired != null) 'pairingRequired': pairingRequired,
       if (allow != null) 'allow': allow,
       if (reason != null) 'reason': reason,
     };
@@ -290,6 +296,7 @@ final class AuthEnvelope {
         other.intendedPeerId == intendedPeerId &&
         other.intendedPublicKeyHash == intendedPublicKeyHash &&
         jsonEncode(other.profile) == jsonEncode(profile) &&
+        other.pairingRequired == pairingRequired &&
         other.allow == allow &&
         other.reason == reason;
   }
@@ -308,6 +315,7 @@ final class AuthEnvelope {
         intendedPeerId,
         intendedPublicKeyHash,
         jsonEncode(profile),
+        pairingRequired,
         allow,
         reason,
       );
@@ -326,6 +334,7 @@ AuthEnvelope _validated({
   String? intendedPeerId,
   String? intendedPublicKeyHash,
   Map<String, Object?>? profile,
+  bool? pairingRequired,
   bool? allow,
   String? reason,
 }) {
@@ -373,6 +382,7 @@ AuthEnvelope _validated({
     intendedPeerId: intendedPeerId,
     intendedPublicKeyHash: intendedPublicKeyHash,
     profile: profile == null ? null : _freezeProfile(profile),
+    pairingRequired: pairingRequired,
     allow: allow,
     reason: reason,
   );
@@ -430,6 +440,7 @@ const Map<AuthAction, Set<String>> _allowedKeys = <AuthAction, Set<String>>{
     'peerNonce',
     'profileDigest',
     'signature',
+    'pairingRequired',
     'profile',
   },
   AuthAction.proof: <String>{

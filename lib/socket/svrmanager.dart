@@ -1944,7 +1944,6 @@ class WsSvrManager {
         ConnectionAttemptReason.trustRevoked,
       );
       await _waitForPeerAuthentication(peerId);
-      await _removePeerConnection(peerId, PeerDisconnectCause.trustRevoked);
       await _database.authDevice(peerId, false);
       return true;
     }
@@ -3177,7 +3176,18 @@ class WsSvrManager {
     WebSocketSink sink,
     AuthEnvelope hello,
   ) async {
-    final challenge = await session.receiveHello(hello);
+    final presentedDevice = await _database.fetchDevice(hello.peerId);
+    final pinPlan = (
+      reason: pairingReasonForIdentity(
+        presentedDevice,
+        hello.identityPublicKey!,
+      ),
+      expectedPublicKey: presentedDevice?.identityPublicKey ?? '',
+    );
+    final challenge = await session.receiveHello(
+      hello,
+      pairingRequired: pinPlan.reason != null,
+    );
     final peerId = session.remotePeerId;
     if (!_isSessionPeerPolicyCurrent(session)) {
       throw const AuthHandshakeException('session_expired');
@@ -3189,36 +3199,12 @@ class WsSvrManager {
     }
     _incomingAuthPeerIdsBySink[sink] = peerId;
 
-    final pinPlan = await _pairingReason(session);
     _requirePairingForTrustRepair(session.remotePeerId, pinPlan.reason);
     _identityPinPlansBySink[sink] = pinPlan;
     final generation = session.connectionGeneration;
     await _sendAuthEnvelope(sink, challenge);
     if (!_isCurrentSession(session, sink, generation)) {
       return;
-    }
-
-    Future<void> resolve(bool allow) async {
-      final accepted = session.resolveLocalApproval(
-        generation: generation,
-        allow: allow,
-      );
-      if (!accepted || !_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      await _tryCompleteServerPairing(session, sink);
-    }
-
-    if (pinPlan.reason == null) {
-      await resolve(true);
-    } else {
-      await _requestPairingDecision(
-        session,
-        sink,
-        pinPlan.reason!,
-        PairingPromptMode.responder,
-        resolve,
-      );
     }
   }
 
@@ -3272,9 +3258,11 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
+    final pairingReason = pinPlan.reason ??
+        (session.serverPairingRequired ? PairingReason.newDevice : null);
     final approval = await session.createApproval(
       allow: true,
-      reason: 'approved',
+      reason: _approvalReasonForPairing(pairingReason),
     );
     if (!_isSameSession(session, sink, generation)) {
       return;
@@ -3287,7 +3275,7 @@ class WsSvrManager {
       await _sendAuthEnvelope(sink, approval);
     }();
 
-    if (pinPlan.reason == null) {
+    if (pairingReason == null) {
       await credentialSend;
     } else {
       await Future.wait(<Future<void>>[
@@ -3295,7 +3283,7 @@ class WsSvrManager {
         _requestPairingDecision(
           session,
           sink,
-          pinPlan.reason!,
+          pairingReason,
           PairingPromptMode.initiator,
           resolve,
         ),
@@ -3363,8 +3351,63 @@ class WsSvrManager {
     AuthEnvelope approval,
   ) async {
     await session.receiveApproval(approval);
+    await _ensureServerPairingDecision(session, sink);
     await _tryCompleteServerPairing(session, sink);
   }
+
+  Future<void> _ensureServerPairingDecision(
+    PeerSocketSession session,
+    WebSocketSink sink,
+  ) async {
+    final generation = session.connectionGeneration;
+    if (!_isCurrentSession(session, sink, generation) ||
+        session.isLocalApprovalResolved) {
+      return;
+    }
+    final pinPlan = _identityPinPlansBySink[sink];
+    if (pinPlan == null) {
+      throw const AuthHandshakeException('identity_pin_state_missing');
+    }
+    final pairingReason = pinPlan.reason ??
+        _pairingReasonFromApproval(session.remoteApprovalReason);
+
+    Future<void> resolve(bool allow) async {
+      final accepted = session.resolveLocalApproval(
+        generation: generation,
+        allow: allow,
+      );
+      if (!accepted || !_isCurrentSession(session, sink, generation)) {
+        return;
+      }
+      await _tryCompleteServerPairing(session, sink);
+    }
+
+    if (pairingReason == null) {
+      await resolve(true);
+      return;
+    }
+    await _requestPairingDecision(
+      session,
+      sink,
+      pairingReason,
+      PairingPromptMode.responder,
+      resolve,
+    );
+  }
+
+  String _approvalReasonForPairing(PairingReason? reason) => switch (reason) {
+        null => 'approved',
+        PairingReason.newDevice => 'pairing_new_device',
+        PairingReason.identityChanged => 'pairing_identity_changed',
+        PairingReason.legacyTrustWithoutPin => 'pairing_legacy_trust',
+      };
+
+  PairingReason? _pairingReasonFromApproval(String reason) => switch (reason) {
+        'pairing_identity_changed' => PairingReason.identityChanged,
+        'pairing_legacy_trust' => PairingReason.legacyTrustWithoutPin,
+        'pairing_new_device' => PairingReason.newDevice,
+        _ => null,
+      };
 
   Future<void> _tryCompleteServerPairing(
     PeerSocketSession session,
@@ -3500,6 +3543,7 @@ class WsSvrManager {
       reason: reason,
       mode: mode,
       cancellation: presentation.cancellation,
+      presentation: presentation,
     );
     _ignoreFuture(
       ConnectionRequestNotifier().maybeShowForPairing(

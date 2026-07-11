@@ -10,7 +10,7 @@ class WirePeerProfile {
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 6,
+    this.protocolVersion = 7,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -127,7 +127,7 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 6,
+    this.protocolVersion = 7,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });

@@ -13,6 +13,7 @@ final class AuthTranscript {
     required Uint8List clientEphemeralPublicKey,
     required Uint8List serverEphemeralPublicKey,
     required this.intendedPublicKeyHash,
+    this.serverPairingRequired = false,
     required Uint8List clientNonce,
     required Uint8List serverNonce,
     required Uint8List clientProfileDigest,
@@ -55,6 +56,7 @@ final class AuthTranscript {
   final Uint8List _clientEphemeralPublicKey;
   final Uint8List _serverEphemeralPublicKey;
   final String intendedPublicKeyHash;
+  final bool serverPairingRequired;
   final Uint8List _clientNonce;
   final Uint8List _serverNonce;
   final Uint8List _clientProfileDigest;
@@ -123,6 +125,7 @@ final class AuthTranscript {
       _clientEphemeralPublicKey,
       _serverEphemeralPublicKey,
       utf8.encode(intendedPublicKeyHash),
+      <int>[serverPairingRequired ? 1 : 0],
       _clientNonce,
       _serverNonce,
       _clientProfileDigest,

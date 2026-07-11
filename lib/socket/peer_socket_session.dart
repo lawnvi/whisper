@@ -63,7 +63,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 6;
+  static const int protocolVersion = 7;
 
   final PeerSocketRole role;
   final int connectionGeneration;
@@ -88,6 +88,7 @@ final class PeerSocketSession {
   bool _approvalAllowed = false;
   bool _remoteApprovalResolved = false;
   bool _remoteApprovalAllowed = false;
+  String _remoteApprovalReason = '';
   bool _pairingCompletionClaimed = false;
   bool _authenticationApproved = false;
   bool _authenticationCommitted = false;
@@ -174,6 +175,9 @@ final class PeerSocketSession {
   bool get hasPairingRejection =>
       (_approvalResolved && !_approvalAllowed) ||
       (_remoteApprovalResolved && !_remoteApprovalAllowed);
+  bool get isLocalApprovalResolved => _approvalResolved;
+  String get remoteApprovalReason => _remoteApprovalReason;
+  bool get serverPairingRequired => _transcript?.serverPairingRequired ?? false;
   bool get _canResolveLocalApproval => switch (role) {
         PeerSocketRole.client => phase == PeerSocketPhase.awaitingLocalApproval,
         PeerSocketRole.server => phase == PeerSocketPhase.awaitingProof ||
@@ -340,7 +344,10 @@ final class PeerSocketSession {
     );
   }
 
-  Future<AuthEnvelope> receiveHello(AuthEnvelope hello) async {
+  Future<AuthEnvelope> receiveHello(
+    AuthEnvelope hello, {
+    bool pairingRequired = false,
+  }) async {
     _require(PeerSocketRole.server, PeerSocketPhase.awaitingHello);
     try {
       _requireEnvelope(hello, AuthAction.hello);
@@ -382,6 +389,7 @@ final class PeerSocketSession {
           clientNonce: remoteNonce,
           serverNonce: _localNonce,
           intendedPkh: hello.intendedPublicKeyHash ?? '',
+          serverPairingRequired: pairingRequired,
         ),
         PeerSocketPhase.awaitingHello,
       );
@@ -407,6 +415,7 @@ final class PeerSocketSession {
         peerNonce: hello.nonce,
         profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
         signature: signature,
+        pairingRequired: pairingRequired,
         profile: localProfile.toJson(),
       );
     } on AuthHandshakeException {
@@ -461,6 +470,7 @@ final class PeerSocketSession {
           clientNonce: _localNonce,
           serverNonce: remoteNonce,
           intendedPkh: intendedPublicKeyHash,
+          serverPairingRequired: challenge.pairingRequired!,
         ),
         PeerSocketPhase.awaitingChallenge,
       );
@@ -625,6 +635,7 @@ final class PeerSocketSession {
       }
       _remoteApprovalResolved = true;
       _remoteApprovalAllowed = approval.allow!;
+      _remoteApprovalReason = approval.reason!;
       return approval.allow!;
     } on AuthHandshakeException {
       rethrow;
@@ -876,6 +887,7 @@ final class PeerSocketSession {
     required Uint8List clientNonce,
     required Uint8List serverNonce,
     required String intendedPkh,
+    required bool serverPairingRequired,
   }) async {
     return AuthTranscript(
       protocolVersion: protocolVersion,
@@ -898,6 +910,7 @@ final class PeerSocketSession {
         expectedLength: 32,
       ),
       intendedPublicKeyHash: intendedPkh,
+      serverPairingRequired: serverPairingRequired,
       clientNonce: clientNonce,
       serverNonce: serverNonce,
       clientProfileDigest: clientProfile.canonicalDigest(),

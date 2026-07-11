@@ -16,7 +16,7 @@ void main() {
         DiscoveryIdentity.fromPublicKey(identity.publicKeyBase64Url);
 
     final expectedPkh = identityPublicKeyHash(identity.publicKeyBase64Url);
-    expect(DiscoveryIdentity.protocolVersion, '6');
+    expect(DiscoveryIdentity.protocolVersion, '7');
     expect(discovery.publicKeyHash, expectedPkh);
     expect(discovery.pkh, expectedPkh);
     expect(discovery.publicKeyHash, hasLength(43));

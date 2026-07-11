@@ -62,6 +62,20 @@ void main() {
     expect(decisions, <bool>[true]);
   });
 
+  test('presentation accepts only one decision', () {
+    final sessionCancellation = Completer<void>();
+    final decisions = <bool>[];
+    final presentation = PairingPresentationBinding(
+      sessionCancellation: sessionCancellation.future,
+      onResolve: decisions.add,
+    );
+
+    presentation.resolve(true);
+    presentation.resolve(false);
+
+    expect(decisions, <bool>[true]);
+  });
+
   test('resolved dialogs detach their pending session cancellation listener',
       () {
     final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
@@ -273,6 +287,7 @@ void main() {
       reason: PairingReason.newDevice,
       mode: PairingPromptMode.responder,
       cancellation: presentation.cancellation,
+      presentation: presentation,
     );
     late BuildContext pageContext;
     await tester.pumpWidget(
@@ -302,6 +317,119 @@ void main() {
     presentation.resolve(true);
     await tester.pumpAndSettle();
     await shown;
+
+    expect(decisions, <bool>[true]);
+    expect(find.byKey(pairingCodeKey), findsNothing);
+    expect(find.text('underlying page'), findsOneWidget);
+  });
+
+  testWidgets('notification decision removes only the pairing route',
+      (tester) async {
+    final sessionCancellation = Completer<void>();
+    late BuildContext pageContext;
+    late PairingPresentationBinding presentation;
+    presentation = PairingPresentationBinding(
+      sessionCancellation: sessionCancellation.future,
+      onResolve: (_) {
+        unawaited(
+          Navigator.of(pageContext).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: Text('connected page')),
+            ),
+          ),
+        );
+      },
+    );
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      mode: PairingPromptMode.responder,
+      cancellation: presentation.cancellation,
+      presentation: presentation,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: presentation.resolve,
+    );
+    await tester.pumpAndSettle();
+
+    presentation.resolve(true);
+    await tester.pumpAndSettle();
+    await shown;
+
+    expect(find.byKey(pairingCodeKey), findsNothing);
+    expect(find.text('connected page'), findsOneWidget);
+  });
+
+  testWidgets('background notification decision never creates a stale dialog',
+      (tester) async {
+    final sessionCancellation = Completer<void>();
+    final decisions = <bool>[];
+    final presentation = PairingPresentationBinding(
+      sessionCancellation: sessionCancellation.future,
+      onResolve: decisions.add,
+    );
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      mode: PairingPromptMode.responder,
+      cancellation: presentation.cancellation,
+      presentation: presentation,
+    );
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    addTearDown(() {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
+
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: presentation.resolve,
+    );
+    await tester.pump();
+    expect(find.byKey(pairingCodeKey), findsNothing);
+
+    presentation.resolve(true);
+    await tester.pump();
+    await shown;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
 
     expect(decisions, <bool>[true]);
     expect(find.byKey(pairingCodeKey), findsNothing);

@@ -10,13 +10,29 @@ const pairingCancelKey = Key('pairing-cancel');
 const pairingRejectKey = Key('pairing-reject');
 const pairingApproveKey = Key('pairing-approve');
 
+final class _PairingLifecycleObserver with WidgetsBindingObserver {
+  _PairingLifecycleObserver(this.onResumed);
+
+  final void Function() onResumed;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResumed();
+    }
+  }
+}
+
 Future<void> showPairingDialog(
   BuildContext context, {
   required PairingRequest request,
   required void Function(bool) resolve,
 }) async {
   BuildContext? dialogContext;
+  Route<bool?>? dialogRoute;
   StreamSubscription<void>? cancellationSubscription;
+  void Function()? removeDismissListener;
+  Completer<void>? lifecycleWake;
   var routeOpen = true;
   var cancelled = false;
 
@@ -26,15 +42,58 @@ Future<void> showPairingDialog(
       return;
     }
     routeOpen = false;
-    Navigator.of(activeContext).pop(decision);
+    final route = dialogRoute;
+    if (route != null && route.isActive) {
+      Navigator.of(activeContext).removeRoute(route, decision);
+    }
   }
 
-  final cancellation = request.cancellation;
-  if (cancellation != null) {
+  void cancelPresentation() {
+    cancelled = true;
+    dismiss();
+    final wake = lifecycleWake;
+    if (wake != null && !wake.isCompleted) {
+      wake.complete();
+    }
+  }
+
+  final presentation = request.presentation;
+  if (presentation != null) {
+    removeDismissListener = presentation.addDismissListener(
+      cancelPresentation,
+    );
+  } else if (request.cancellation case final cancellation?) {
     cancellationSubscription = cancellation.asStream().listen((_) {
-      cancelled = true;
-      scheduleMicrotask(dismiss);
+      cancelPresentation();
     });
+  }
+  if (cancelled) {
+    removeDismissListener?.call();
+    unawaited(cancellationSubscription?.cancel());
+    return;
+  }
+  final binding = WidgetsBinding.instance;
+  if (binding.lifecycleState case final state?
+      when state != AppLifecycleState.resumed) {
+    final wake = lifecycleWake = Completer<void>();
+    final observer = _PairingLifecycleObserver(() {
+      if (!wake.isCompleted) {
+        wake.complete();
+      }
+    });
+    binding.addObserver(observer);
+    if (binding.lifecycleState == AppLifecycleState.resumed &&
+        !wake.isCompleted) {
+      wake.complete();
+    }
+    await wake.future;
+    binding.removeObserver(observer);
+    lifecycleWake = null;
+    if (cancelled) {
+      removeDismissListener?.call();
+      unawaited(cancellationSubscription?.cancel());
+      return;
+    }
   }
   bool? decision;
   try {
@@ -43,6 +102,7 @@ Future<void> showPairingDialog(
       barrierDismissible: false,
       builder: (context) {
         dialogContext = context;
+        dialogRoute = ModalRoute.of(context);
         if (cancelled) {
           scheduleMicrotask(dismiss);
         }
@@ -54,8 +114,10 @@ Future<void> showPairingDialog(
     );
   } finally {
     routeOpen = false;
+    removeDismissListener?.call();
     unawaited(cancellationSubscription?.cancel());
     dialogContext = null;
+    dialogRoute = null;
   }
   if (!cancelled) {
     resolve(decision ?? false);

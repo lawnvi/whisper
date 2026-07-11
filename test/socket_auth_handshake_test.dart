@@ -25,7 +25,7 @@ Future<PeerSocketSession> _makeSession(
       uid: role == PeerSocketRole.client ? 'client' : 'server',
       name: role == PeerSocketRole.client ? 'Client' : 'Server',
       platform: 'test',
-      protocolVersion: 6,
+      protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: const PeerCapabilities(
         fileTransferV3: true,
         remoteInputSourceV1: true,
@@ -184,6 +184,35 @@ void main() {
       throwsA(isA<AuthHandshakeException>()),
     );
     expect(client.phase, PeerSocketPhase.closing);
+    expect(client.isClosed, isTrue);
+  });
+
+  test('client rejects a tampered pairing requirement', () async {
+    final server = await _makeSession(PeerSocketRole.server, 32);
+    final client = await _makeSession(PeerSocketRole.client, 1);
+    addTearDown(server.close);
+    addTearDown(client.close);
+    final challenge = await server.receiveHello(
+      await client.createHello(),
+      pairingRequired: true,
+    );
+    final tampered = AuthEnvelope.challenge(
+      protocolVersion: challenge.protocolVersion,
+      peerId: challenge.peerId,
+      identityPublicKey: challenge.identityPublicKey!,
+      ephemeralPublicKey: challenge.ephemeralPublicKey!,
+      nonce: challenge.nonce,
+      peerNonce: challenge.peerNonce!,
+      profileDigest: challenge.profileDigest,
+      signature: challenge.signature!,
+      pairingRequired: false,
+      profile: challenge.profile,
+    );
+
+    await expectLater(
+      client.receiveChallenge(tampered),
+      throwsA(isA<AuthHandshakeException>()),
+    );
     expect(client.isClosed, isTrue);
   });
 
@@ -373,7 +402,7 @@ void main() {
       uid: 'peer-a',
       name: 'Peer A',
       platform: 'macos',
-      protocolVersion: 6,
+      protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: PeerCapabilities(fileTransferV3: true),
     );
     final json = profile.toJson();

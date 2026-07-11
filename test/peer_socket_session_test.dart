@@ -32,7 +32,7 @@ Future<PeerSocketSession> _session({
       uid: role == PeerSocketRole.client ? 'client-a' : 'server-b',
       name: role == PeerSocketRole.client ? 'Client A' : 'Server B',
       platform: role == PeerSocketRole.client ? 'macos' : 'windows',
-      protocolVersion: 6,
+      protocolVersion: PeerSocketSession.protocolVersion,
       capabilities: const PeerCapabilities(fileTransferV3: true),
     ),
     localEphemeralKeyPair: await X25519().newKeyPairFromSeed(ephemeralSeed),
