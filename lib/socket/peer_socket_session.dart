@@ -693,6 +693,7 @@ final class PeerSocketSession {
       allow: allow,
       reason: reason,
     );
+    _completePairingResolution();
     if (allow) {
       _authenticationApproved = true;
     }

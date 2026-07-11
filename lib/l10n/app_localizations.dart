@@ -1700,8 +1700,20 @@ abstract class AppLocalizations {
   /// No description provided for @pairingNotificationBody.
   ///
   /// In zh, this message translates to:
-  /// **'打开 Whisper，在 App 内比对 6 位配对码'**
-  String get pairingNotificationBody;
+  /// **'配对码 {code} · 请与 {device} 核对'**
+  String pairingNotificationBody(String device, String code);
+
+  /// No description provided for @pairingInitiatorNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code} · 等待 {device} 确认'**
+  String pairingInitiatorNotificationBody(String device, String code);
+
+  /// No description provided for @pairingIdentityChangedNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code} · {device} 的身份已变化，请打开 App 查看'**
+  String pairingIdentityChangedNotificationBody(String device, String code);
 
   /// No description provided for @pairingCodeSemantics.
   ///
@@ -1720,6 +1732,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'数字一致'**
   String get pairingApprove;
+
+  /// No description provided for @pairingViewDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看详情'**
+  String get pairingViewDetails;
 
   /// No description provided for @pairingUpgradeRequired.
   ///

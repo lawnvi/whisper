@@ -46,6 +46,8 @@ class NotificationHelper {
       onDidReceiveNotificationResponse: (response) {
         ConnectionRequestNotifier().handleNotificationResponse(response);
       },
+      onDidReceiveBackgroundNotificationResponse:
+          connectionRequestNotificationTapBackground,
     );
   }
 

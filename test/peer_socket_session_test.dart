@@ -324,6 +324,29 @@ void main() {
     expect(pair.server.tryClaimPairingCompletion(), isTrue);
   });
 
+  test('server result completes external pairing presentation cancellation',
+      () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    pair.client.resolveLocalApproval(
+      generation: pair.client.connectionGeneration,
+      allow: true,
+    );
+    pair.server.resolveLocalApproval(
+      generation: pair.server.connectionGeneration,
+      allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
+    );
+
+    await pair.server.createResult(allow: true, reason: 'approved');
+
+    await expectLater(pair.server.pairingResolved, completes);
+  });
+
   test('authenticated sessions expose inverse media keys as defensive copies',
       () async {
     final pair = await _authenticatedPair();

@@ -425,7 +425,39 @@
     }
   },
   "pairingCompareCode": "Confirma que ambos dispositivos muestran el mismo código de seis dígitos",
-  "pairingNotificationBody": "Abre Whisper para comparar en la app el código de emparejamiento de seis dígitos",
+  "pairingNotificationBody": "Código {code} · Compáralo con {device}",
+  "@pairingNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingInitiatorNotificationBody": "Código {code} · Esperando a {device}",
+  "@pairingInitiatorNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingIdentityChangedNotificationBody": "Código {code} · La identidad de {device} cambió; abre Whisper para ver los detalles",
+  "@pairingIdentityChangedNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "pairingCodeSemantics": "Código de emparejamiento {code}",
   "@pairingCodeSemantics": {
     "placeholders": {
@@ -436,6 +468,7 @@
   },
   "pairingReject": "Rechazar",
   "pairingApprove": "Los códigos coinciden",
+  "pairingViewDetails": "Ver detalles",
   "pairingUpgradeRequired": "El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo",
   "pairingExpired": "La solicitud de emparejamiento ha caducado",
   "pairingRejectedByPeer": "El otro dispositivo rechazó la solicitud de conexión"

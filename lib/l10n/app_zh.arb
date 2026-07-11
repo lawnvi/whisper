@@ -495,7 +495,39 @@
     }
   },
   "pairingCompareCode": "请确认两台设备显示相同的 6 位数字",
-  "pairingNotificationBody": "打开 Whisper，在 App 内比对 6 位配对码",
+  "pairingNotificationBody": "配对码 {code} · 请与 {device} 核对",
+  "@pairingNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingInitiatorNotificationBody": "配对码 {code} · 等待 {device} 确认",
+  "@pairingInitiatorNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingIdentityChangedNotificationBody": "配对码 {code} · {device} 的身份已变化，请打开 App 查看",
+  "@pairingIdentityChangedNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "pairingCodeSemantics": "配对码 {code}",
   "@pairingCodeSemantics": {
     "placeholders": {
@@ -506,6 +538,7 @@
   },
   "pairingReject": "拒绝",
   "pairingApprove": "数字一致",
+  "pairingViewDetails": "查看详情",
   "pairingUpgradeRequired": "对方版本过低，请升级 Whisper 后重试",
   "pairingExpired": "配对请求已过期",
   "pairingRejectedByPeer": "对方拒绝了连接请求"

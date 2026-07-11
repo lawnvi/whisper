@@ -398,7 +398,39 @@
     }
   },
   "pairingCompareCode": "Confirm that both devices show the same six-digit code",
-  "pairingNotificationBody": "Open Whisper to compare the six-digit pairing code in the app",
+  "pairingNotificationBody": "Pairing code {code} · Compare with {device}",
+  "@pairingNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingInitiatorNotificationBody": "Pairing code {code} · Waiting for {device}",
+  "@pairingInitiatorNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingIdentityChangedNotificationBody": "Pairing code {code} · {device}'s identity changed; open Whisper for details",
+  "@pairingIdentityChangedNotificationBody": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "pairingCodeSemantics": "Pairing code {code}",
   "@pairingCodeSemantics": {
     "placeholders": {
@@ -409,6 +441,7 @@
   },
   "pairingReject": "Reject",
   "pairingApprove": "Codes match",
+  "pairingViewDetails": "View details",
   "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",
   "pairingExpired": "The pairing request expired",
   "pairingRejectedByPeer": "The other device declined the connection request"

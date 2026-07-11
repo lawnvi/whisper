@@ -944,8 +944,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Confirm that both devices show the same six-digit code';
 
   @override
-  String get pairingNotificationBody =>
-      'Open Whisper to compare the six-digit pairing code in the app';
+  String pairingNotificationBody(String device, String code) {
+    return 'Pairing code $code · Compare with $device';
+  }
+
+  @override
+  String pairingInitiatorNotificationBody(String device, String code) {
+    return 'Pairing code $code · Waiting for $device';
+  }
+
+  @override
+  String pairingIdentityChangedNotificationBody(String device, String code) {
+    return 'Pairing code $code · $device\'s identity changed; open Whisper for details';
+  }
 
   @override
   String pairingCodeSemantics(String code) {
@@ -957,6 +968,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pairingApprove => 'Codes match';
+
+  @override
+  String get pairingViewDetails => 'View details';
 
   @override
   String get pairingUpgradeRequired =>

@@ -3482,12 +3482,6 @@ class WsSvrManager {
     if (!_isCurrentSession(session, sink, generation)) {
       return;
     }
-    _ignoreFuture(
-      ConnectionRequestNotifier().maybeShowForPairing(
-        peerId: session.remotePeerId,
-      ),
-      context: 'show pairing notification',
-    );
     final guarded = session.guardApprovalCallback((allow) {
       _runGuardedApproval(
         session: session,
@@ -3496,16 +3490,24 @@ class WsSvrManager {
         resolve: () => resolve(allow),
       );
     });
+    final request = PairingRequest(
+      device: device,
+      pairingCode: session.pairingCode,
+      reason: reason,
+      mode: mode,
+      cancellation: session.pairingResolved,
+    );
+    _ignoreFuture(
+      ConnectionRequestNotifier().maybeShowForPairing(
+        request: request,
+        resolve: guarded,
+      ),
+      context: 'show pairing notification',
+    );
     _dispatchGuarded(
       listener,
       (event) => event.onPairing(
-        PairingRequest(
-          device: device,
-          pairingCode: session.pairingCode,
-          reason: reason,
-          mode: mode,
-          cancellation: session.pairingResolved,
-        ),
+        request,
         guarded,
       ),
     );

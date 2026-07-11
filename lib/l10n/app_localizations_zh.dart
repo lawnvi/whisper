@@ -891,7 +891,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingCompareCode => '请确认两台设备显示相同的 6 位数字';
 
   @override
-  String get pairingNotificationBody => '打开 Whisper，在 App 内比对 6 位配对码';
+  String pairingNotificationBody(String device, String code) {
+    return '配对码 $code · 请与 $device 核对';
+  }
+
+  @override
+  String pairingInitiatorNotificationBody(String device, String code) {
+    return '配对码 $code · 等待 $device 确认';
+  }
+
+  @override
+  String pairingIdentityChangedNotificationBody(String device, String code) {
+    return '配对码 $code · $device 的身份已变化，请打开 App 查看';
+  }
 
   @override
   String pairingCodeSemantics(String code) {
@@ -903,6 +915,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pairingApprove => '数字一致';
+
+  @override
+  String get pairingViewDetails => '查看详情';
 
   @override
   String get pairingUpgradeRequired => '对方版本过低，请升级 Whisper 后重试';
