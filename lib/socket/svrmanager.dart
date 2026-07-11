@@ -1468,7 +1468,9 @@ class WsSvrManager {
         group.sourcePeerId == claim.peerId &&
         packet.groupId == group.groupId &&
         packet.streamId == group.streamId &&
-        packet.sessionId == claim.sessionId &&
+        // 组播包原样 fanout 给全部 sink,sessionId 即共享 streamId;
+        // claim 与每-sink sessionId 的绑定已在媒体通道 attach 时完成。
+        packet.sessionId == group.streamId &&
         packet.sourcePeerId == claim.peerId;
   }
 

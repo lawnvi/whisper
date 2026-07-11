@@ -352,8 +352,10 @@ class AudioShareManager {
       return;
     }
     final packet = AudioGroupPacketFrame.decode(bytes);
-    if (packet.sessionId != claim.sessionId ||
-        packet.sourcePeerId != claim.peerId ||
+    // 组播协议约定:同一帧原样 fanout 给全部 sink,packet.sessionId 是共享
+    // streamId 而非 claim 绑定的每-sink sessionId,由 groupPacketValidator
+    // 按组会话校验。
+    if (packet.sourcePeerId != claim.peerId ||
         groupPacketValidator?.call(claim, packet) != true) {
       throw const FormatException('audio group packet claim mismatch');
     }
