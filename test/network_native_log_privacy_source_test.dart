@@ -114,10 +114,9 @@ void main() {
       expect(windows, contains('enum class RemoteInputDiagnosticEvent'));
       expect(
         windows,
-        contains(
-          'return value != nullptr && std::strcmp(value, "1") == 0;',
-        ),
+        contains('GetEnvironmentVariableA('),
       );
+      expect(windows, isNot(contains('std::getenv(')));
       expect(
         windows,
         contains('EmitDiagnostic(RemoteInputDiagnosticEvent event)'),

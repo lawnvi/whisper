@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -53,8 +51,10 @@ const char* RemoteInputDiagnosticEventName(RemoteInputDiagnosticEvent event) {
 }
 
 bool ShouldTraceRemoteInput() {
-  const char* value = std::getenv("WHISPER_REMOTE_INPUT_TRACE");
-  return value != nullptr && std::strcmp(value, "1") == 0;
+  char value[2] = {};
+  const DWORD length = GetEnvironmentVariableA(
+      "WHISPER_REMOTE_INPUT_TRACE", value, static_cast<DWORD>(sizeof(value)));
+  return length == 1 && value[0] == '1';
 }
 
 struct ScreenArea {
