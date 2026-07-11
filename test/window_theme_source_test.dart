@@ -12,11 +12,30 @@ void main() {
       expect(mainSource, contains('Future<void> _applyDesktopWindowTheme'));
       expect(mainSource, contains('windowManager.setBrightness(brightness)'));
       expect(mainSource, contains('Platform.isWindows'));
+      expect(mainSource, contains('Platform.isMacOS'));
       expect(mainSource,
           contains("_windowThemeChannel.invokeMethod<void>('setBrightness'"));
       expect(mainSource, contains('didChangePlatformBrightness'));
       expect(
           mainSource, contains('unawaited(_applyDesktopWindowTheme(mode));'));
+    });
+
+    test('keeps the macOS native title bar on the Flutter page surface', () {
+      final mainSource = File('lib/main.dart').readAsStringSync();
+      final runner =
+          File('macos/Runner/MainFlutterWindow.swift').readAsStringSync();
+
+      expect(mainSource, contains('brightness == Brightness.dark'));
+      expect(mainSource, contains('? Colors.black : Colors.white'));
+      expect(runner, contains('com.vireen.whisper/window_theme'));
+      expect(runner, contains('titlebarAppearsTransparent = true'));
+      expect(runner, contains('titleVisibility = .visible'));
+      expect(runner, contains('styleMask.remove(.fullSizeContentView)'));
+      expect(
+        runner,
+        contains('backgroundColor = brightness == "dark" ? .black : .white'),
+      );
+      expect(runner, contains('forInfoDictionaryKey: "CFBundleDisplayName"'));
     });
 
     test('adds a Windows runner channel that ignores the system theme gate',

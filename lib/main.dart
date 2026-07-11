@@ -41,16 +41,20 @@ void main() async {
     var width = await LocalSetting().windowWidth();
     var height = await LocalSetting().windowHeight();
     final themeMode = await LocalSetting().themeMode();
+    final brightness = _brightnessForThemeMode(themeMode);
     await _applyDesktopWindowTheme(themeMode);
 
     WindowOptions windowOptions = WindowOptions(
       size: Size(width, height),
       center: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
+      // WindowOptions applies native frame values after the first theme sync.
+      await _applyDesktopWindowTheme(themeMode);
       await windowManager.show();
       await windowManager.focus();
     });
@@ -87,7 +91,7 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
   final brightness = _brightnessForThemeMode(mode);
   try {
     await windowManager.setBrightness(brightness);
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       await _windowThemeChannel.invokeMethod<void>('setBrightness', {
         'brightness': brightness.name,
       });

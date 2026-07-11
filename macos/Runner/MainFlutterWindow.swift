@@ -65,6 +65,8 @@ private let remoteInputCaptureEventMask: CGEventMask = [
 }
 
 class MainFlutterWindow: NSWindow {
+  private var windowThemeChannel: FlutterMethodChannel?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -78,8 +80,48 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "RemoteInputPlugin"))
     DesktopClipboardImagePlugin.register(
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
+    registerWindowThemeChannel(with: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func registerWindowThemeChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/window_theme",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "setBrightness" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let arguments = call.arguments as? [String: Any],
+            let brightness = arguments["brightness"] as? String,
+            brightness == "light" || brightness == "dark" else {
+        result(
+          FlutterError(
+            code: "invalid_brightness",
+            message: "Expected light or dark brightness",
+            details: nil))
+        return
+      }
+      self?.applyWindowTheme(brightness: brightness)
+      result(nil)
+    }
+    windowThemeChannel = channel
+  }
+
+  private func applyWindowTheme(brightness: String) {
+    titlebarAppearsTransparent = true
+    titleVisibility = .visible
+    styleMask.remove(.fullSizeContentView)
+    backgroundColor = brightness == "dark" ? .black : .white
+    isOpaque = true
+
+    if let displayName = Bundle.main.object(
+      forInfoDictionaryKey: "CFBundleDisplayName") as? String,
+      !displayName.isEmpty {
+      title = displayName
+    }
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
