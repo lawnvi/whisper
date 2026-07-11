@@ -38,6 +38,7 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
+import 'package:whisper/state/discovery_service_presence.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -159,6 +160,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
     minimumInterval: const Duration(seconds: 5),
   );
+  final DiscoveryServicePresenceTracker _discoveryPresence =
+      DiscoveryServicePresenceTracker();
   static var listenApps = {};
   var _clipboardText = "";
   final TextEditingController _desktopSearchController =
@@ -571,16 +574,39 @@ class _DeviceListScreen extends State<DeviceListScreen>
           case BonsoirDiscoveryEventType.discoveryServiceResolved ||
                 BonsoirDiscoveryEventType.discoveryServiceLost:
             final svr = service;
-            if (!svr.attributes.containsKey('uid')) {
-              _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
-              return;
-            }
-            var isLost =
+            final isLost =
                 event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+            final serviceKey = _serviceResolveKey(svr);
+            final advertisedUid = svr.attributes['uid'];
+            final String uid;
+            if (isLost) {
+              _resolveLimiter.clear(serviceKey);
+              final loss = _discoveryPresence.lost(
+                serviceKey: serviceKey,
+                peerIdHint: advertisedUid,
+              );
+              if (loss == null) {
+                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
+                return;
+              }
+              if (loss.stillDiscovered) {
+                return;
+              }
+              uid = loss.peerId;
+            } else {
+              if (advertisedUid == null || advertisedUid.isEmpty) {
+                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
+                return;
+              }
+              uid = advertisedUid;
+              _discoveryPresence.resolved(
+                serviceKey: serviceKey,
+                peerId: uid,
+              );
+            }
             final host = svr.attributes["host"];
             final port =
                 int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
-            final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
             _logDiscovery(
@@ -588,19 +614,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
                   ? DiscoveryDiagnosticKind.serviceLost
                   : DiscoveryDiagnosticKind.serviceResolved,
             );
-            if (uid == null || uid == device?.uid) {
+            if (uid == device?.uid) {
               return;
             }
-            if (isLost) {
-              _resolveLimiter.clear(_serviceResolveKey(svr));
+            final temp = await db.fetchDevice(uid);
+            if (isLost && temp == null) {
+              return;
             }
-            var temp = await LocalDatabase().fetchDevice(uid);
             final resolvedDevice = buildDevice(
               uid: uid,
-              name: temp?.name ?? name,
+              name: temp?.name ?? name ?? '',
               port: port,
-              host: host,
-              platform: platform,
+              host: host ?? temp?.host ?? '',
+              platform: platform ?? temp?.platform ?? '',
               around: !isLost,
             );
             final visibleDevice = _mergeStoredDeviceWithDiscovery(
@@ -610,6 +636,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             if (!isLost) {
               await db.upsertDevice(visibleDevice);
             }
+            await db.setDeviceDiscoveryPresence(uid, !isLost);
             await ConnectionCoordinator().updateDiscovery(
               visibleDevice,
               discovered: !isLost,
@@ -621,23 +648,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 // Invalid discovery endpoints are never promoted to retries.
               }
             }
-            for (var item in devices) {
-              if (item.uid == uid) {
-                break;
-              }
-            }
             setState(() {
-              var index = -1;
-              for (var i = devices.length - 1; i >= 0; i--) {
-                if (devices[i].uid == uid) {
-                  index = i;
-                  devices.removeAt(i);
-                  break;
-                }
-              }
-              if (isLost && temp != null) {
-                devices.insert(index, temp);
-              } else if (!isLost) {
+              devices.removeWhere((item) => item.uid == uid);
+              if (!isLost) {
                 devices.insert(0, visibleDevice);
               }
             });
@@ -666,6 +679,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _discoverySubscription = null;
     await _discovery?.stop();
     _discovery = null;
+    _discoveryPresence.clear();
     _isDiscovering = false;
   }
 
@@ -720,6 +734,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _refreshDevice({isFirst = false}) async {
     var temp = await LocalSetting().instance();
+    if (isFirst) {
+      await db.clearDeviceDiscoveryPresence();
+    }
     var arr = await db.fetchAllDevice();
     final storedDevicesByUid = <String, DeviceData>{
       for (final item in arr) item.uid: item,

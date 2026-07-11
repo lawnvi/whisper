@@ -469,6 +469,21 @@ class LocalDatabase extends _$LocalDatabase {
     );
   }
 
+  Future<void> setDeviceDiscoveryPresence(String uid, bool around) async {
+    if (uid.isEmpty) {
+      return;
+    }
+    await (update(device)..where((item) => item.uid.equals(uid))).write(
+      DeviceCompanion(around: Value(around)),
+    );
+  }
+
+  Future<void> clearDeviceDiscoveryPresence() async {
+    await update(device).write(
+      const DeviceCompanion(around: Value(false)),
+    );
+  }
+
   Future<void> authDevice(String uid, bool auth) async {
     if (uid.isEmpty) {
       return;

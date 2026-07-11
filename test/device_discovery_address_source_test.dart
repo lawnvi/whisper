@@ -45,4 +45,29 @@ void main() {
     expect(merge, contains('auth: stored.auth'));
     expect(merge, contains('clipboard: stored.clipboard'));
   });
+
+  test('lost services clear persisted nearby state without TXT attributes', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+    final discovery = source.substring(
+      source.indexOf(
+        'case BonsoirDiscoveryEventType.discoveryServiceResolved',
+      ),
+      source.indexOf(
+        'case BonsoirDiscoveryEventType.discoveryServiceResolveFailed',
+      ),
+    );
+    final refresh = source.substring(
+      source.indexOf('Future<void> _refreshDevice'),
+      source.indexOf('ChatSessionPreviewStrings _sessionPreviewStrings'),
+    );
+
+    expect(discovery, contains('_discoveryPresence.lost('));
+    expect(discovery, contains('peerIdHint: advertisedUid'));
+    expect(
+      discovery,
+      contains('await db.setDeviceDiscoveryPresence(uid, !isLost)'),
+    );
+    expect(discovery, isNot(contains('devices.insert(index, temp)')));
+    expect(refresh, contains('await db.clearDeviceDiscoveryPresence()'));
+  });
 }

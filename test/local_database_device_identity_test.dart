@@ -22,6 +22,7 @@ DeviceData _device(
   int port = 10002,
   bool auth = false,
   bool clipboard = true,
+  bool around = true,
   String identityPublicKey = '',
 }) {
   return DeviceData(
@@ -37,7 +38,7 @@ DeviceData _device(
     clipboard: clipboard,
     auth: auth,
     lastTime: 1,
-    around: true,
+    around: around,
     identityPublicKey: identityPublicKey,
   );
 }
@@ -168,6 +169,21 @@ void main() {
       final stored = await database.fetchDevice('peer-a');
       expect(stored!.auth, isTrue);
       expect(stored.identityPublicKey, 'pinned-key');
+    });
+
+    test('discovery presence can be cleared without removing device history',
+        () async {
+      await database.upsertDevice(_device('peer-a'));
+      await database.upsertDevice(_device('peer-b'));
+
+      await database.setDeviceDiscoveryPresence('peer-a', false);
+      expect((await database.fetchDevice('peer-a'))?.around, isFalse);
+      expect((await database.fetchDevice('peer-b'))?.around, isTrue);
+
+      await database.clearDeviceDiscoveryPresence();
+      final rows = await database.fetchAllDevice();
+      expect(rows, hasLength(2));
+      expect(rows.every((row) => row.around == false), isTrue);
     });
 
     test('DeviceData retains generated Drift row contracts', () async {

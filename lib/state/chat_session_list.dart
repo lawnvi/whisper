@@ -68,6 +68,13 @@ class ChatSessionListBuilder {
       if (activePeerId?.isNotEmpty ?? false) activePeerId!,
     };
     final sessions = devices
+        .where(
+          (device) =>
+              connected.contains(device.uid) ||
+              device.around == true ||
+              device.auth ||
+              latestMessages.containsKey(device.uid),
+        )
         .map(
           (device) => _buildItem(
             device: device,
