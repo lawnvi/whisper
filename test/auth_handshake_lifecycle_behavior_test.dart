@@ -60,17 +60,17 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
   await client.receiveChallenge(
     await server.receiveHello(await client.createHello()),
   );
-  await server.receiveProof(await client.createProof());
   client.resolveLocalApproval(
     generation: client.connectionGeneration,
     allow: true,
   );
-  await server.receiveApproval(
-    await client.createApproval(allow: true, reason: 'approved'),
-  );
   server.resolveLocalApproval(
     generation: server.connectionGeneration,
     allow: true,
+  );
+  await server.receiveProof(await client.createProof());
+  await server.receiveApproval(
+    await client.createApproval(allow: true, reason: 'approved'),
   );
   await server.createResult(allow: true, reason: 'approved');
   return (client: client, server: server);

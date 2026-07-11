@@ -58,17 +58,17 @@ Future<
   );
   final challenge = await server.receiveHello(await client.createHello());
   await client.receiveChallenge(challenge);
-  await server.receiveProof(await client.createProof());
   client.resolveLocalApproval(
     generation: client.connectionGeneration,
     allow: true,
   );
-  await server.receiveApproval(
-    await client.createApproval(allow: true, reason: 'approved'),
-  );
   server.resolveLocalApproval(
     generation: server.connectionGeneration,
     allow: true,
+  );
+  await server.receiveProof(await client.createProof());
+  await server.receiveApproval(
+    await client.createApproval(allow: true, reason: 'approved'),
   );
   final result = await server.createResult(allow: true, reason: 'approved');
   return (client: client, server: server, result: result);
@@ -81,11 +81,11 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
   await client.receiveChallenge(
     await server.receiveHello(await client.createHello()),
   );
-  await server.receiveProof(await client.createProof());
   client.resolveLocalApproval(
     generation: client.connectionGeneration,
     allow: true,
   );
+  await server.receiveProof(await client.createProof());
   await server.receiveApproval(
     await client.createApproval(allow: true, reason: 'approved'),
   );
@@ -233,11 +233,11 @@ void main() {
     await client.receiveChallenge(
       await server.receiveHello(await client.createHello()),
     );
-    await server.receiveProof(await client.createProof());
     client.resolveLocalApproval(
       generation: client.connectionGeneration,
       allow: true,
     );
+    await server.receiveProof(await client.createProof());
     final approval =
         await client.createApproval(allow: true, reason: 'approved');
     final signatureBytes = decodeAuthBase64Url(
@@ -334,7 +334,6 @@ void main() {
     await client.receiveChallenge(
       await server.receiveHello(await client.createHello()),
     );
-    await server.receiveProof(await client.createProof());
     expect(
       client.resolveLocalApproval(
         generation: client.connectionGeneration,
@@ -342,11 +341,10 @@ void main() {
       ),
       isTrue,
     );
-    final clientDenial = await client.createApproval(
-      allow: false,
-      reason: 'rejected',
+    await expectLater(
+      client.createProof(),
+      throwsA(isA<AuthHandshakeException>()),
     );
-    expect(await server.receiveApproval(clientDenial), isFalse);
     client.close();
     expect(client.phase, PeerSocketPhase.closing);
     expect(client.isClosed, isTrue);

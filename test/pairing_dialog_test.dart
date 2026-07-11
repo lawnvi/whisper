@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,15 @@ Widget _app(PairingRequest request, ValueChanged<bool> onResolved) {
 }
 
 void main() {
+  test('resolved dialogs detach their pending session cancellation listener',
+      () {
+    final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
+
+    expect(source, contains('cancellation.asStream().listen'));
+    expect(source, contains('cancellationSubscription?.cancel()'));
+    expect(source, isNot(contains('unawaited(cancellation.then')));
+  });
+
   testWidgets('shows grouped code with an ungrouped semantic label',
       (tester) async {
     final request = PairingRequest(
@@ -134,6 +144,51 @@ void main() {
     await shown;
 
     expect(decisions, <bool>[false]);
+    expect(find.text('underlying page'), findsOneWidget);
+  });
+
+  testWidgets('user decision detaches a pending session cancellation',
+      (tester) async {
+    final cancellation = Completer<void>();
+    final decisions = <bool>[];
+    final request = PairingRequest(
+      device: _device(),
+      pairingCode: '123456',
+      reason: PairingReason.newDevice,
+      canApprove: true,
+      cancellation: cancellation.future,
+    );
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('underlying page'));
+        }),
+      ),
+    );
+    final shown = showPairingDialog(
+      pageContext,
+      request: request,
+      resolve: decisions.add,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(pairingApproveKey));
+    await tester.pumpAndSettle();
+    await shown.timeout(const Duration(seconds: 1));
+    cancellation.complete();
+    await tester.pump();
+
+    expect(decisions, <bool>[true]);
     expect(find.text('underlying page'), findsOneWidget);
   });
 

@@ -165,8 +165,14 @@ void main() {
     );
     expect(proof, contains('_completeAuthenticatedSession('));
     expect(proof, contains('_sendAuthEnvelope(sink, result)'));
-    expect(proof, contains('session.isMutuallyApproved'));
     expect(proof, contains('session.tryClaimPairingCompletion()'));
+    expect(proof, isNot(contains('session.isMutuallyApproved')));
+    final sessionSource =
+        File('lib/socket/peer_socket_session.dart').readAsStringSync();
+    expect(
+      sessionSource,
+      contains('(!isMutuallyApproved && !hasPairingRejection)'),
+    );
     expect(
       proof.indexOf('_completeAuthenticatedSession('),
       lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),

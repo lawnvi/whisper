@@ -172,6 +172,11 @@ final class PeerSocketSession {
   bool get hasPairingRejection =>
       (_approvalResolved && !_approvalAllowed) ||
       (_remoteApprovalResolved && !_remoteApprovalAllowed);
+  bool get _canResolveLocalApproval => switch (role) {
+        PeerSocketRole.client => phase == PeerSocketPhase.awaitingLocalApproval,
+        PeerSocketRole.server => phase == PeerSocketPhase.awaitingProof ||
+            phase == PeerSocketPhase.awaitingLocalApproval,
+      };
 
   bool tryClaimPairingCompletion() {
     if (role != PeerSocketRole.server ||
@@ -477,13 +482,18 @@ final class PeerSocketSession {
   }
 
   Future<AuthEnvelope> createProof() async {
-    _require(PeerSocketRole.client, PeerSocketPhase.awaitingLocalApproval);
-    if (_transcript == null) {
-      return _fail('transcript_missing');
+    if (role != PeerSocketRole.client || isClosed) {
+      return _fail('unexpected_phase');
+    }
+    if (phase != PeerSocketPhase.awaitingResult ||
+        !_approvalResolved ||
+        !_approvalAllowed ||
+        _transcript == null) {
+      return _fail('approval_required');
     }
     final signature = await _continueAfter(
       localIdentity.sign(_transcript!.proofBytes()),
-      PeerSocketPhase.awaitingLocalApproval,
+      PeerSocketPhase.awaitingResult,
     );
     return AuthEnvelope.proof(
       protocolVersion: protocolVersion,
@@ -618,7 +628,7 @@ final class PeerSocketSession {
     required bool allow,
   }) {
     if (generation != connectionGeneration ||
-        phase != PeerSocketPhase.awaitingLocalApproval ||
+        !_canResolveLocalApproval ||
         _approvalResolved) {
       return false;
     }
@@ -639,7 +649,7 @@ final class PeerSocketSession {
     return (allow) {
       if (delivered ||
           generation != connectionGeneration ||
-          phase != PeerSocketPhase.awaitingLocalApproval ||
+          !_canResolveLocalApproval ||
           isClosed) {
         return;
       }

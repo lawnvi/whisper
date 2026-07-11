@@ -15,6 +15,7 @@ Future<void> showPairingDialog(
   required void Function(bool) resolve,
 }) async {
   BuildContext? dialogContext;
+  StreamSubscription<void>? cancellationSubscription;
   var routeOpen = true;
   var cancelled = false;
 
@@ -29,26 +30,32 @@ Future<void> showPairingDialog(
 
   final cancellation = request.cancellation;
   if (cancellation != null) {
-    unawaited(cancellation.then((_) {
+    cancellationSubscription = cancellation.asStream().listen((_) {
       cancelled = true;
-      dismiss();
-    }));
+      scheduleMicrotask(dismiss);
+    });
   }
-  final decision = await showCupertinoDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      dialogContext = context;
-      if (cancelled) {
-        scheduleMicrotask(dismiss);
-      }
-      return PairingDialog(
-        request: request,
-        onResolved: dismiss,
-      );
-    },
-  );
-  routeOpen = false;
+  bool? decision;
+  try {
+    decision = await showCupertinoDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        dialogContext = context;
+        if (cancelled) {
+          scheduleMicrotask(dismiss);
+        }
+        return PairingDialog(
+          request: request,
+          onResolved: dismiss,
+        );
+      },
+    );
+  } finally {
+    routeOpen = false;
+    unawaited(cancellationSubscription?.cancel());
+    dialogContext = null;
+  }
   resolve(decision ?? false);
 }
 

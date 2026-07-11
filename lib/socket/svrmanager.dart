@@ -113,6 +113,11 @@ typedef ConnectionAuthCommitBarrier = Future<void> Function(
   String peerId,
 );
 
+typedef AuthEnvelopeObserver = void Function(
+  PeerSocketRole role,
+  AuthEnvelope envelope,
+);
+
 enum PeerDisconnectCause {
   network,
   watchdog,
@@ -263,6 +268,7 @@ class WsSvrManager {
     LocalPeerProfileLoader? localPeerProfileLoader,
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
+    AuthEnvelopeObserver? authEnvelopeObserver,
     Duration socketCloseTimeout = const Duration(seconds: 2),
     Duration mediaProofTimeout = const Duration(seconds: 3),
     int maxProvisionalMediaSockets = 32,
@@ -286,6 +292,7 @@ class WsSvrManager {
         _localPeerProfileLoader = localPeerProfileLoader,
         _manageSharedCoordinators = manageSharedCoordinators,
         _authCommitBarrier = authCommitBarrier,
+        _authEnvelopeObserver = authEnvelopeObserver,
         _socketCloseTimeout = socketCloseTimeout,
         _mediaProofTimeout = _validateMediaProofTimeout(mediaProofTimeout),
         _maxProvisionalMediaSockets =
@@ -310,6 +317,7 @@ class WsSvrManager {
     LocalPeerProfileLoader? localPeerProfileLoader,
     bool manageSharedCoordinators = true,
     ConnectionAuthCommitBarrier? authCommitBarrier,
+    AuthEnvelopeObserver? authEnvelopeObserver,
     Duration socketCloseTimeout = const Duration(seconds: 2),
     Duration mediaProofTimeout = const Duration(seconds: 3),
     int maxProvisionalMediaSockets = 32,
@@ -330,6 +338,7 @@ class WsSvrManager {
           localPeerProfileLoader: localPeerProfileLoader,
           manageSharedCoordinators: manageSharedCoordinators,
           authCommitBarrier: authCommitBarrier,
+          authEnvelopeObserver: authEnvelopeObserver,
           socketCloseTimeout: socketCloseTimeout,
           mediaProofTimeout: mediaProofTimeout,
           maxProvisionalMediaSockets: maxProvisionalMediaSockets,
@@ -356,6 +365,7 @@ class WsSvrManager {
   final Map<WebSocketSink, ({String host, int port})> _endpointsBySink =
       <WebSocketSink, ({String host, int port})>{};
   final DeviceIdentityStore _identityStore;
+  final AuthEnvelopeObserver? _authEnvelopeObserver;
   int _nextConnectionGeneration = 0;
   final AuthRequestGate _authRequestGate = AuthRequestGate();
   final Map<WebSocketSink, String> _outgoingAuthKeysBySink =
@@ -3088,6 +3098,7 @@ class WsSvrManager {
       if (message.sender.isNotEmpty && message.sender != envelope.peerId) {
         throw const AuthHandshakeException('sender_mismatch');
       }
+      _authEnvelopeObserver?.call(session.role, envelope);
       switch ((session.role, envelope.action)) {
         case (PeerSocketRole.server, AuthAction.hello):
           await _handleServerHello(session, sink, envelope);
@@ -3122,7 +3133,54 @@ class WsSvrManager {
     AuthEnvelope hello,
   ) async {
     final challenge = await session.receiveHello(hello);
+    final peerId = session.remotePeerId;
+    if (!_isSessionPeerPolicyCurrent(session)) {
+      throw const AuthHandshakeException('session_expired');
+    }
+    if (!_authRequestGate.tryClaimIncoming(peerId)) {
+      session.close();
+      await _closeSocketSink(sink);
+      return;
+    }
+    _incomingAuthPeerIdsBySink[sink] = peerId;
+
+    final pinPlan = await _pairingReason(session);
+    _identityPinPlansBySink[sink] = pinPlan;
+    final generation = session.connectionGeneration;
     await _sendAuthEnvelope(sink, challenge);
+    if (!_isCurrentSession(session, sink, generation)) {
+      return;
+    }
+
+    Future<void> resolve(bool allow) async {
+      final accepted = session.resolveLocalApproval(
+        generation: generation,
+        allow: allow,
+      );
+      if (!accepted || !_isCurrentSession(session, sink, generation)) {
+        return;
+      }
+      if (!allow) {
+        _identityPinPlansBySink.remove(sink);
+        session.close();
+        _releaseIncomingAuthForSink(sink);
+        _dispatchToAll((event) => event.afterAuth(false, null));
+        await _closeSocketSink(sink);
+        return;
+      }
+      await _tryCompleteServerPairing(session, sink);
+    }
+
+    if (pinPlan.reason == null) {
+      await resolve(true);
+    } else {
+      await _requestPairingDecision(
+        session,
+        sink,
+        pinPlan.reason!,
+        resolve,
+      );
+    }
   }
 
   Future<void> _handleClientChallenge(
@@ -3152,11 +3210,6 @@ class WsSvrManager {
     }
     final generation = session.connectionGeneration;
     _identityPinPlansBySink[sink] = pinPlan;
-    final proof = await session.createProof();
-    if (!_isCurrentSession(session, sink, generation)) {
-      return;
-    }
-    final proofSend = _sendAuthEnvelope(sink, proof);
 
     Future<void> resolve(bool allow) async {
       final accepted = session.resolveLocalApproval(
@@ -3166,35 +3219,40 @@ class WsSvrManager {
       if (!accepted || !_isSameSession(session, sink, generation)) {
         return;
       }
-      final approval = await session.createApproval(
-        allow: allow,
-        reason: allow ? 'approved' : 'rejected',
-      );
-      if (!_isSameSession(session, sink, generation)) {
-        return;
-      }
-      await _sendAuthEnvelope(sink, approval);
       if (!allow) {
         _identityPinPlansBySink.remove(sink);
         _completeSocketAuth(sink, false, 'rejected');
         session.close();
         await _closeSocketSink(sink);
+        return;
       }
+      final proof = await session.createProof();
+      if (!_isCurrentSession(session, sink, generation)) {
+        return;
+      }
+      final approval = await session.createApproval(
+        allow: true,
+        reason: 'approved',
+      );
+      if (!_isSameSession(session, sink, generation)) {
+        return;
+      }
+      await _sendAuthEnvelope(sink, proof);
+      if (!_isSameSession(session, sink, generation)) {
+        return;
+      }
+      await _sendAuthEnvelope(sink, approval);
     }
 
     if (pinPlan.reason == null) {
-      await proofSend;
       await resolve(true);
     } else {
-      await Future.wait(<Future<void>>[
-        proofSend,
-        _requestPairingDecision(
-          session,
-          sink,
-          pinPlan.reason!,
-          resolve,
-        ),
-      ]);
+      await _requestPairingDecision(
+        session,
+        sink,
+        pinPlan.reason!,
+        resolve,
+      );
     }
   }
 
@@ -3230,15 +3288,18 @@ class WsSvrManager {
     AuthEnvelope proof,
   ) async {
     await session.receiveProof(proof);
-    final peerId = session.remotePeerId;
     if (!_isSessionPeerPolicyCurrent(session)) {
       throw const AuthHandshakeException('session_expired');
     }
-    final outgoingKey = _authRequestKey(peerId: peerId, host: '', port: 0);
+    final outgoingKey = _authRequestKey(
+      peerId: session.remotePeerId,
+      host: '',
+      port: 0,
+    );
     if (_authRequestGate.hasOutgoing(outgoingKey)) {
       final decision = resolveSimultaneousDial(
         localUid: session.localProfile.uid,
-        remoteUid: peerId,
+        remoteUid: session.remotePeerId,
       );
       if (decision == SimultaneousDialDecision.keepOutgoing) {
         session.close();
@@ -3246,37 +3307,7 @@ class WsSvrManager {
         return;
       }
     }
-    if (!_authRequestGate.tryClaimIncoming(peerId)) {
-      session.close();
-      await _closeSocketSink(sink);
-      return;
-    }
-    _incomingAuthPeerIdsBySink[sink] = peerId;
-
-    final pinPlan = await _pairingReason(session);
-    _identityPinPlansBySink[sink] = pinPlan;
-    final generation = session.connectionGeneration;
-    Future<void> resolve(bool allow) async {
-      final accepted = session.resolveLocalApproval(
-        generation: generation,
-        allow: allow,
-      );
-      if (!accepted || !_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      await _tryCompleteServerPairing(session, sink);
-    }
-
-    if (pinPlan.reason == null) {
-      await resolve(true);
-    } else {
-      await _requestPairingDecision(
-        session,
-        sink,
-        pinPlan.reason!,
-        resolve,
-      );
-    }
+    await _tryCompleteServerPairing(session, sink);
   }
 
   Future<void> _handleServerApproval(
@@ -3294,9 +3325,6 @@ class WsSvrManager {
   ) async {
     final generation = session.connectionGeneration;
     if (!_isCurrentSession(session, sink, generation)) {
-      return;
-    }
-    if (!session.isMutuallyApproved && !session.hasPairingRejection) {
       return;
     }
     if (!session.tryClaimPairingCompletion()) {

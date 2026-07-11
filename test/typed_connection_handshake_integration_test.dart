@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -80,6 +81,56 @@ void main() {
     expect(result.status, ConnectionAttemptStatus.authenticated);
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isTrue);
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
+  });
+
+  test('both pairing prompts exist before the server receives any proof',
+      () async {
+    final receivedActions = <AuthAction>[];
+    final clientEvents = _BlockingPairingEvents();
+    final serverEvents = _BlockingPairingEvents();
+    final harness = await _HandshakeHarness.start(
+      clientEvents: clientEvents,
+      serverEvents: serverEvents,
+      serverAuthObserver: (_, envelope) => receivedActions.add(envelope.action),
+    );
+    final connecting = harness.connect('prompts-before-proof');
+    addTearDown(() async {
+      clientEvents.resolve(false);
+      serverEvents.resolve(false);
+      await connecting;
+    });
+
+    await Future.wait(<Future<void>>[
+      clientEvents.pairingStarted.future,
+      serverEvents.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
+
+    expect(clientEvents.hasPendingDecision, isTrue);
+    expect(serverEvents.hasPendingDecision, isTrue);
+    expect(receivedActions, isNot(contains(AuthAction.proof)));
+  });
+
+  test('client rejection never discloses a signed proof to the server',
+      () async {
+    final receivedActions = <AuthAction>[];
+    final clientEvents = _BlockingPairingEvents();
+    final serverEvents = _BlockingPairingEvents();
+    final harness = await _HandshakeHarness.start(
+      clientEvents: clientEvents,
+      serverEvents: serverEvents,
+      serverAuthObserver: (_, envelope) => receivedActions.add(envelope.action),
+    );
+    final connecting = harness.connect('reject-before-proof');
+
+    await Future.wait(<Future<void>>[
+      clientEvents.pairingStarted.future,
+      serverEvents.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
+    clientEvents.resolve(false);
+
+    final result = await connecting;
+    expect(result.isAuthenticated, isFalse);
+    expect(receivedActions, isNot(contains(AuthAction.proof)));
   });
 
   for (final rejectingSide in <String>['client', 'server']) {
@@ -581,6 +632,7 @@ final class _HandshakeHarness {
     _ApprovingEvents? serverEvents,
     ConnectionAuthCommitBarrier? clientBarrier,
     ConnectionAuthCommitBarrier? serverBarrier,
+    AuthEnvelopeObserver? serverAuthObserver,
   }) async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -596,6 +648,7 @@ final class _HandshakeHarness {
       reconnectControllerFactory: serverReconnects.create,
       manageSharedCoordinators: false,
       authCommitBarrier: serverBarrier,
+      authEnvelopeObserver: serverAuthObserver,
     );
     final client = WsSvrManager.forTesting(
       database: database,

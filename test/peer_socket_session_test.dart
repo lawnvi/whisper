@@ -75,17 +75,17 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
 Future<({PeerSocketSession client, PeerSocketSession server})>
     _authenticatedPair() async {
   final pair = await _reachClientApproval();
-  await pair.server.receiveProof(await pair.client.createProof());
   pair.client.resolveLocalApproval(
     generation: pair.client.connectionGeneration,
     allow: true,
   );
-  await pair.server.receiveApproval(
-    await pair.client.createApproval(allow: true, reason: 'approved'),
-  );
   pair.server.resolveLocalApproval(
     generation: pair.server.connectionGeneration,
     allow: true,
+  );
+  await pair.server.receiveProof(await pair.client.createProof());
+  await pair.server.receiveApproval(
+    await pair.client.createApproval(allow: true, reason: 'approved'),
   );
   final result = await pair.server.createResult(
     allow: true,
@@ -173,10 +173,13 @@ void main() {
     expect(pair.client.pairingCode, pair.server.pairingCode);
     expect(pair.client.pairingCode, matches(RegExp(r'^\d{6}$')));
 
-    final proof = await pair.client.createProof();
-    await pair.server.receiveProof(proof);
-    expect(pair.client.phase, PeerSocketPhase.awaitingLocalApproval);
-    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(
+      pair.server.resolveLocalApproval(
+        generation: pair.server.connectionGeneration,
+        allow: true,
+      ),
+      isTrue,
+    );
     expect(
       pair.client.resolveLocalApproval(
         generation: pair.client.connectionGeneration,
@@ -184,16 +187,13 @@ void main() {
       ),
       isTrue,
     );
+    final proof = await pair.client.createProof();
+    await pair.server.receiveProof(proof);
+    expect(pair.client.phase, PeerSocketPhase.awaitingResult);
+    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
     expect(
       await pair.server.receiveApproval(
         await pair.client.createApproval(allow: true, reason: 'approved'),
-      ),
-      isTrue,
-    );
-    expect(
-      pair.server.resolveLocalApproval(
-        generation: pair.server.connectionGeneration,
-        allow: true,
       ),
       isTrue,
     );
@@ -253,11 +253,27 @@ void main() {
     );
   });
 
+  test('client proof requires local approval', () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+
+    await expectLater(
+      pair.client.createProof(),
+      throwsA(
+        isA<AuthHandshakeException>().having(
+          (error) => error.code,
+          'code',
+          'approval_required',
+        ),
+      ),
+    );
+  });
+
   test('server cannot commit after only its local pairing approval', () async {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
-    await pair.server.receiveProof(await pair.client.createProof());
     expect(
       pair.server.resolveLocalApproval(
         generation: pair.server.connectionGeneration,
@@ -520,17 +536,17 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
-    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
     );
     await pair.server.createResult(allow: true, reason: 'approved');
     var registered = false;
@@ -553,17 +569,17 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
-    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
     );
     await pair.server.createResult(allow: true, reason: 'approved');
 
@@ -589,17 +605,17 @@ void main() {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
-    await pair.server.receiveProof(await pair.client.createProof());
     pair.client.resolveLocalApproval(
       generation: pair.client.connectionGeneration,
       allow: true,
     );
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
     pair.server.resolveLocalApproval(
       generation: pair.server.connectionGeneration,
       allow: true,
+    );
+    await pair.server.receiveProof(await pair.client.createProof());
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
     );
     await pair.server.createResult(allow: true, reason: 'approved');
     final persistence = Completer<void>();
