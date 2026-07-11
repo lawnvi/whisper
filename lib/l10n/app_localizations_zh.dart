@@ -208,6 +208,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectFailed => '连接失败';
 
   @override
+  String get connectAlreadyInProgress => '连接正在进行中';
+
+  @override
   String get deviceBusy => '服务占线';
 
   @override

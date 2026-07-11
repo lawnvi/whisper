@@ -152,6 +152,7 @@
     }
   },
   "connectFailed": "Error de conexión",
+  "connectAlreadyInProgress": "La conexión ya está en curso",
   "deviceBusy": "Dispositivo ocupado",
   "startServerFailed": "No se pudo iniciar el servidor",
   "deleteMessageTitle": "Eliminar mensaje",

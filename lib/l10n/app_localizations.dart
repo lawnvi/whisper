@@ -439,6 +439,12 @@ abstract class AppLocalizations {
   /// **'连接失败'**
   String get connectFailed;
 
+  /// No description provided for @connectAlreadyInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正在进行中'**
+  String get connectAlreadyInProgress;
+
   /// No description provided for @deviceBusy.
   ///
   /// In zh, this message translates to:

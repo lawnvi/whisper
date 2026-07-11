@@ -2256,6 +2256,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
         return;
       }
       final localizations = AppLocalizations.of(context);
+      if (result.reason == ConnectionAttemptReason.duplicateRequest) {
+        // 同 peer 已有连接尝试在途:不标记断开、不弹失败对话框,
+        // 仅轻提示并等待在途尝试的结果。
+        if (manual) {
+          showAppToast(
+            localizations?.connectAlreadyInProgress ??
+                'Connection already in progress',
+          );
+        }
+        return;
+      }
       final displayMessage =
           result.reason == ConnectionAttemptReason.protocolMismatch
               ? localizations?.pairingUpgradeRequired ?? 'Connection Failed'

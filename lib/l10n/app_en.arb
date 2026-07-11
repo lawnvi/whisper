@@ -125,6 +125,7 @@
   "brokeConnectTitle": "Disconnect",
   "brokeConnectDesc": "Disconnect {device}",
   "connectFailed": "Connection Failed",
+  "connectAlreadyInProgress": "Connection already in progress",
   "deviceBusy": "Device Busy",
   "startServerFailed": "Failed to Start Server",
   "deleteMessageTitle": "Delete Message",

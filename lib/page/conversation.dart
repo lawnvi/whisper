@@ -1313,6 +1313,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return true;
       }
       if (result.status != ConnectionAttemptStatus.cancelled) {
+        if (result.reason == ConnectionAttemptReason.duplicateRequest) {
+          // 同 peer 已有连接尝试在途:轻提示即可,不弹失败对话框。
+          showAppToast(l10n.connectAlreadyInProgress);
+          return false;
+        }
         final displayMessage =
             result.reason == ConnectionAttemptReason.protocolMismatch
                 ? l10n.pairingUpgradeRequired

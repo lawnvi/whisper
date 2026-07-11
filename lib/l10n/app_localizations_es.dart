@@ -214,6 +214,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get connectFailed => 'Error de conexión';
 
   @override
+  String get connectAlreadyInProgress => 'La conexión ya está en curso';
+
+  @override
   String get deviceBusy => 'Dispositivo ocupado';
 
   @override

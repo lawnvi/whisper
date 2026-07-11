@@ -152,6 +152,7 @@
     }
   },
   "connectFailed": "连接失败",
+  "connectAlreadyInProgress": "连接正在进行中",
   "deviceBusy": "服务占线",
   "startServerFailed": "服务启动失败",
   "deleteMessageTitle": "删除消息",

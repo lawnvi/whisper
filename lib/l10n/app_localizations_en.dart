@@ -211,6 +211,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectFailed => 'Connection Failed';
 
   @override
+  String get connectAlreadyInProgress => 'Connection already in progress';
+
+  @override
   String get deviceBusy => 'Device Busy';
 
   @override

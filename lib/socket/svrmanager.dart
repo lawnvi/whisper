@@ -210,6 +210,7 @@ final class _OutgoingConnectionCancelled implements Exception {
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
+  static const Duration _manualPreemptWaitTimeout = Duration(seconds: 3);
   static const int _maxPreAuthMessageBytes = 256 * 1024;
   static const int _maxAuthenticatedMessageBytes = 1024 * 1024;
   static const int _authenticatedFrameOverhead = 48;
@@ -1766,11 +1767,13 @@ class WsSvrManager {
 
   Future<void> _cancelPendingAttemptsForPeer(
     String peerId,
-    ConnectionAttemptReason reason,
-  ) async {
-    final attempts =
-        _pendingOutgoingByPeerId[peerId]?.toList(growable: false) ??
-            const <_PendingOutgoingConnection>[];
+    ConnectionAttemptReason reason, {
+    bool Function(_PendingOutgoingConnection attempt)? where,
+  }) async {
+    final attempts = _pendingOutgoingByPeerId[peerId]
+            ?.where((attempt) => where?.call(attempt) ?? true)
+            .toList(growable: false) ??
+        const <_PendingOutgoingConnection>[];
     final cancellations = attempts
         .map((attempt) => attempt.cancel(reason: reason))
         .toList(growable: false);
@@ -1964,6 +1967,18 @@ class WsSvrManager {
         ),
       );
     }
+    // 同 peer 已有在途尝试(手动或自动)时直接跳过新的自动拨号:
+    // 不建 attempt、不建 socket,也避免自动尝试在手动抢占期间
+    // 重新占用出站鉴权门。
+    if (request.isAutomatic &&
+        hasPendingConnectionAttemptForPeer(request.expectedPeerId)) {
+      return Future<ConnectionAttemptResult>.value(
+        ConnectionAttemptResult.rejected(
+          requestId: request.requestId,
+          reason: ConnectionAttemptReason.duplicateRequest,
+        ),
+      );
+    }
     final attempt = _PendingOutgoingConnection(
       request,
       globalPolicyEpoch: _globalPolicyEpoch,
@@ -1985,7 +2000,10 @@ class WsSvrManager {
         }
       }));
     }
-    final operation = _connectToServer(attempt);
+    final operation = request.mode == ConnectionAttemptMode.interactive &&
+            request.expectedPeerId.isNotEmpty
+        ? _preemptAutomaticAttemptsThenConnect(attempt)
+        : _connectToServer(attempt);
     unawaited(operation.then<void>((result) {
       _untrackPendingOutgoing(attempt);
       attempt.httpClient.close();
@@ -2092,6 +2110,37 @@ class WsSvrManager {
     if (sink != null && identical(_pendingOutgoingBySink[sink], attempt)) {
       _pendingOutgoingBySink.remove(sink);
     }
+  }
+
+  /// 手动连接优先:先取消同 peer 的在途自动尝试,并有界等待其清理完成
+  /// (含释放出站鉴权门),再真正拨号;否则手动尝试会同步撞门,
+  /// 直接得到 duplicateRequest 而无任何网络活动。
+  Future<ConnectionAttemptResult> _preemptAutomaticAttemptsThenConnect(
+    _PendingOutgoingConnection attempt,
+  ) async {
+    final peerId = attempt.request.expectedPeerId;
+    final hasAutomaticInFlight = _pendingOutgoingByPeerId[peerId]
+            ?.any((pending) => pending.request.isAutomatic) ==
+        true;
+    if (hasAutomaticInFlight) {
+      try {
+        await _cancelPendingAttemptsForPeer(
+          peerId,
+          ConnectionAttemptReason.superseded,
+          where: (pending) => pending.request.isAutomatic,
+        ).timeout(_manualPreemptWaitTimeout);
+      } catch (_) {
+        // 有界等待:超时或清理异常都不阻断手动拨号;若鉴权门尚未
+        // 释放,后续 claim 会自然返回 duplicateRequest,绝不死等。
+      }
+    }
+    if (attempt.isCancelled) {
+      return ConnectionAttemptResult.cancelled(
+        requestId: attempt.request.requestId,
+        reason: attempt.cancellationReason,
+      );
+    }
+    return _connectToServer(attempt);
   }
 
   Future<ConnectionAttemptResult> _connectToServer(
