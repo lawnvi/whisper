@@ -1318,12 +1318,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
           showAppToast(l10n.connectAlreadyInProgress);
           return false;
         }
-        final displayMessage =
-            result.reason == ConnectionAttemptReason.protocolMismatch
-                ? l10n.pairingUpgradeRequired
-                : result.reason == ConnectionAttemptReason.pairingExpired
-                    ? l10n.pairingExpired
-                    : l10n.connectFailed;
+        final displayMessage = switch (result.reason) {
+          ConnectionAttemptReason.protocolMismatch =>
+            l10n.pairingUpgradeRequired,
+          ConnectionAttemptReason.pairingExpired => l10n.pairingExpired,
+          ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
+          _ => l10n.connectFailed,
+        };
         showLoadingDialog(
           context,
           title: AppLocalizations.of(context)?.connectFailed ??

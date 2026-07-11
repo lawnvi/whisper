@@ -410,5 +410,6 @@
   "pairingReject": "Reject",
   "pairingApprove": "Codes match",
   "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",
-  "pairingExpired": "The pairing request expired"
+  "pairingExpired": "The pairing request expired",
+  "pairingRejectedByPeer": "The other device declined the connection request"
 }

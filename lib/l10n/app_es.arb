@@ -437,5 +437,6 @@
   "pairingReject": "Rechazar",
   "pairingApprove": "Los códigos coinciden",
   "pairingUpgradeRequired": "El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo",
-  "pairingExpired": "La solicitud de emparejamiento ha caducado"
+  "pairingExpired": "La solicitud de emparejamiento ha caducado",
+  "pairingRejectedByPeer": "El otro dispositivo rechazó la solicitud de conexión"
 }

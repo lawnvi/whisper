@@ -507,5 +507,6 @@
   "pairingReject": "拒绝",
   "pairingApprove": "数字一致",
   "pairingUpgradeRequired": "对方版本过低，请升级 Whisper 后重试",
-  "pairingExpired": "配对请求已过期"
+  "pairingExpired": "配对请求已过期",
+  "pairingRejectedByPeer": "对方拒绝了连接请求"
 }

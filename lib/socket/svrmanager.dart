@@ -2332,7 +2332,7 @@ class WsSvrManager {
         ConnectionAttemptReason.identityMismatch,
       'automatic_pairing_required' =>
         ConnectionAttemptReason.automaticPairingRequired,
-      'rejected' => ConnectionAttemptReason.peerRejected,
+      'rejected' || 'pairing_rejected' => ConnectionAttemptReason.peerRejected,
       'socket_error' => ConnectionAttemptReason.socketError,
       'connection_closed' ||
       'connection_failed' =>
@@ -3170,14 +3170,6 @@ class WsSvrManager {
       if (!accepted || !_isCurrentSession(session, sink, generation)) {
         return;
       }
-      if (!allow) {
-        _identityPinPlansBySink.remove(sink);
-        session.close();
-        _releaseIncomingAuthForSink(sink);
-        _dispatchToAll((event) => event.afterAuth(false, null));
-        await _closeSocketSink(sink);
-        return;
-      }
       await _tryCompleteServerPairing(session, sink);
     }
 
@@ -3188,6 +3180,7 @@ class WsSvrManager {
         session,
         sink,
         pinPlan.reason!,
+        PairingPromptMode.responder,
         resolve,
       );
     }
@@ -3220,49 +3213,56 @@ class WsSvrManager {
     }
     final generation = session.connectionGeneration;
     _identityPinPlansBySink[sink] = pinPlan;
+    final approved = session.resolveLocalApproval(
+      generation: generation,
+      allow: true,
+    );
+    if (!approved || !_isSameSession(session, sink, generation)) {
+      return;
+    }
 
-    Future<void> resolve(bool allow) async {
-      final accepted = session.resolveLocalApproval(
-        generation: generation,
-        allow: allow,
-      );
-      if (!accepted || !_isSameSession(session, sink, generation)) {
+    Future<void> resolve(bool keepConnecting) async {
+      if (keepConnecting || !_isSameSession(session, sink, generation)) {
         return;
       }
-      if (!allow) {
-        _identityPinPlansBySink.remove(sink);
-        _completeSocketAuth(sink, false, 'rejected');
-        session.close();
-        await _closeSocketSink(sink);
-        return;
-      }
-      final proof = await session.createProof();
-      if (!_isCurrentSession(session, sink, generation)) {
-        return;
-      }
-      final approval = await session.createApproval(
-        allow: true,
-        reason: 'approved',
-      );
-      if (!_isSameSession(session, sink, generation)) {
-        return;
-      }
+      _identityPinPlansBySink.remove(sink);
+      _completeSocketAuth(sink, false, 'request_cancelled');
+      await attempt.cancel(reason: ConnectionAttemptReason.requestCancelled);
+      await _closeSocketSink(sink);
+    }
+
+    final proof = await session.createProof();
+    if (!_isCurrentSession(session, sink, generation)) {
+      return;
+    }
+    final approval = await session.createApproval(
+      allow: true,
+      reason: 'approved',
+    );
+    if (!_isSameSession(session, sink, generation)) {
+      return;
+    }
+    final credentialSend = () async {
       await _sendAuthEnvelope(sink, proof);
       if (!_isSameSession(session, sink, generation)) {
         return;
       }
       await _sendAuthEnvelope(sink, approval);
-    }
+    }();
 
     if (pinPlan.reason == null) {
-      await resolve(true);
+      await credentialSend;
     } else {
-      await _requestPairingDecision(
-        session,
-        sink,
-        pinPlan.reason!,
-        resolve,
-      );
+      await Future.wait(<Future<void>>[
+        credentialSend,
+        _requestPairingDecision(
+          session,
+          sink,
+          pinPlan.reason!,
+          PairingPromptMode.initiator,
+          resolve,
+        ),
+      ]);
     }
   }
 
@@ -3344,16 +3344,15 @@ class WsSvrManager {
       _identityPinPlansBySink.remove(sink);
       final result = await session.createResult(
         allow: false,
-        reason: 'rejected',
+        reason: 'pairing_rejected',
       );
       if (!_isSameSession(session, sink, generation)) {
         return;
       }
       await _sendAuthEnvelope(sink, result);
-      session.close();
+      // 由 client 消费签名拒绝后关连接，避免 onDone 抢先关闭其待处理会话。
       _releaseIncomingAuthForSink(sink);
       _dispatchToAll((event) => event.afterAuth(false, null));
-      await _closeSocketSink(sink);
       return;
     }
     final pinPlan = _identityPinPlansBySink.remove(sink);
@@ -3433,6 +3432,7 @@ class WsSvrManager {
     PeerSocketSession session,
     WebSocketSink sink,
     PairingReason reason,
+    PairingPromptMode mode,
     Future<void> Function(bool) resolve,
   ) async {
     final listener = _primaryEvent;
@@ -3466,8 +3466,8 @@ class WsSvrManager {
           device: device,
           pairingCode: session.pairingCode,
           reason: reason,
-          canApprove: true,
-          cancellation: session.closed,
+          mode: mode,
+          cancellation: session.pairingResolved,
         ),
         guarded,
       ),

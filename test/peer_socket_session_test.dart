@@ -295,6 +295,35 @@ void main() {
     expect(persisted, isFalse);
   });
 
+  test('server rejection waits for signed remote intent before completion',
+      () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    expect(
+      pair.server.resolveLocalApproval(
+        generation: pair.server.connectionGeneration,
+        allow: false,
+      ),
+      isTrue,
+    );
+    expect(
+      pair.client.resolveLocalApproval(
+        generation: pair.client.connectionGeneration,
+        allow: true,
+      ),
+      isTrue,
+    );
+
+    await pair.server.receiveProof(await pair.client.createProof());
+    expect(pair.server.tryClaimPairingCompletion(), isFalse);
+
+    await pair.server.receiveApproval(
+      await pair.client.createApproval(allow: true, reason: 'approved'),
+    );
+    expect(pair.server.tryClaimPairingCompletion(), isTrue);
+  });
+
   test('authenticated sessions expose inverse media keys as defensive copies',
       () async {
     final pair = await _authenticatedPair();

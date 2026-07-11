@@ -964,4 +964,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pairingExpired => 'The pairing request expired';
+
+  @override
+  String get pairingRejectedByPeer =>
+      'The other device declined the connection request';
 }

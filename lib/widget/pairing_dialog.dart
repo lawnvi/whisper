@@ -6,6 +6,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_request.dart';
 
 const pairingCodeKey = Key('pairing-code');
+const pairingCancelKey = Key('pairing-cancel');
 const pairingRejectKey = Key('pairing-reject');
 const pairingApproveKey = Key('pairing-approve');
 
@@ -56,7 +57,9 @@ Future<void> showPairingDialog(
     unawaited(cancellationSubscription?.cancel());
     dialogContext = null;
   }
-  resolve(decision ?? false);
+  if (!cancelled) {
+    resolve(decision ?? false);
+  }
 }
 
 class PairingDialog extends StatefulWidget {
@@ -143,18 +146,25 @@ class _PairingDialogState extends State<PairingDialog> {
         ),
       ),
       actions: <Widget>[
-        CupertinoDialogAction(
-          key: pairingRejectKey,
-          isDestructiveAction: true,
-          onPressed: _resolved ? null : () => _resolve(false),
-          child: Text(l10n.pairingReject),
-        ),
-        if (widget.request.canApprove)
+        if (widget.request.isInitiator)
+          CupertinoDialogAction(
+            key: pairingCancelKey,
+            onPressed: _resolved ? null : () => _resolve(false),
+            child: Text(l10n.cancel),
+          )
+        else ...<Widget>[
+          CupertinoDialogAction(
+            key: pairingRejectKey,
+            isDestructiveAction: true,
+            onPressed: _resolved ? null : () => _resolve(false),
+            child: Text(l10n.pairingReject),
+          ),
           CupertinoDialogAction(
             key: pairingApproveKey,
             onPressed: _resolved ? null : () => _resolve(true),
             child: Text(l10n.pairingApprove),
           ),
+        ],
       ],
     );
   }

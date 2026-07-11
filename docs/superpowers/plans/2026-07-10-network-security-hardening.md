@@ -96,13 +96,13 @@ git commit -m "feat(auth): 增加设备签名身份与公钥绑定"
 
 **Interfaces:**
 - `PeerSocketSession` 按 role 暴露 server phases `awaitingHello/awaitingProof/awaitingLocalApproval/authenticated/closing` 与 client phases `awaitingChallenge/awaitingLocalApproval/awaitingResult/authenticated/closing`，并持有 connection generation、候选 Ed25519/X25519 key、MAC codec 与 30 秒 timer。
-- `PairingRequest` 包含 `device`, `pairingCode`, `reason { newDevice, identityChanged, legacyTrustWithoutPin }`, `canApprove`。
-- `ISocketEvent.onPairing(PairingRequest, void Function(bool) resolve)`：未知/变更/legacy pin 时两端都必须明确确认；callback 绑定 generation，超时/关闭后无效。
+- `PairingRequest` 包含 `device`, `pairingCode`, `reason { newDevice, identityChanged, legacyTrustWithoutPin }`, `mode { initiator, responder }`。
+- `ISocketEvent.onPairing(PairingRequest, void Function(bool) resolve)`：未知/变更/legacy pin 时两端同时显示配对码；发起端只可取消，接收端负责确认或拒绝；callback 绑定 generation，超时/关闭后无效。
 - `connectToServer` 在本任务暂保 callback 外形，但只能在 signed result 验签并注册连接后 callback success。
 
 - [ ] **Step 1: 写失败测试**
 
-用两套确定性 Ed25519/X25519 test keys 驱动 hello -> challenge -> 两端确认 -> proof -> signed result。未知候选允许 intendedPeerId 为空但 intendedPkh 必须匹配 challenge key。断言 nonce 重放、乱序、profile digest 不一致、错 key、篡改 result、超时和迟到 callback 均不 pin/注册；legacy、未知与任一侧 key change 都触发正确 reason，两端各有确认/拒绝且显示同一 6 位码。
+用两套确定性 Ed25519/X25519 test keys 驱动 hello -> challenge -> client proof/approval -> server 确认 -> signed result。未知候选允许 intendedPeerId 为空但 intendedPkh 必须匹配 challenge key。断言 nonce 重放、乱序、profile digest 不一致、错 key、篡改 result、超时和迟到 callback 均不 pin/注册；legacy、未知与任一侧 key change 都触发正确 reason，两端显示同一 6 位码，发起端取消与接收端拒绝均不 pin/注册。
 
 - [ ] **Step 2: 确认红灯**
 
@@ -116,7 +116,7 @@ Expected: FAIL，状态类、事件与 UI 不存在。
 
 - [ ] **Step 4: 接入配对 UI 与本地化**
 
-`pairing_dialog.dart` 统一 device list/conversation 两处提示；两端均有拒绝/确认，显示分组数字但语义值仍为 6 位码。增加新设备、身份变化、旧信任重配、比对两台设备、版本过低文案并运行 `flutter gen-l10n`。同步更新旧 `connect_prompt_device_list_source_test.dart`，不再钉住 `onAuth/showCupertinoDialog` 结构。
+`pairing_dialog.dart` 统一 device list/conversation 两处提示；发起端仅显示取消，接收端显示拒绝/确认，分组数字的语义值仍为 6 位码。增加新设备、身份变化、旧信任重配、比对两台设备、版本过低与对端拒绝文案并运行 `flutter gen-l10n`。同步更新旧 `connect_prompt_device_list_source_test.dart`，不再钉住 `onAuth/showCupertinoDialog` 结构。
 
 - [ ] **Step 5: 转绿与回归**
 

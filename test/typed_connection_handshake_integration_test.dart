@@ -45,7 +45,7 @@ void main() {
     expect(harness.client.receiver, 'server-peer');
   });
 
-  test('both endpoints await pairing before either identity is persisted',
+  test('server confirmation completes while the initiator remains read-only',
       () async {
     final clientEvents = _BlockingPairingEvents();
     final serverEvents = _BlockingPairingEvents();
@@ -65,25 +65,25 @@ void main() {
 
     expect(clientEvents.hasPendingDecision, isTrue);
     expect(serverEvents.hasPendingDecision, isTrue);
+    expect(clientEvents.request?.mode, PairingPromptMode.initiator);
+    expect(serverEvents.request?.mode, PairingPromptMode.responder);
     expect(
         clientEvents.request?.pairingCode, serverEvents.request?.pairingCode);
     expect(await harness.database.fetchDevice('server-peer'), isNull);
     expect(await harness.database.fetchDevice('client-peer'), isNull);
 
     serverEvents.resolve(true);
-    await pumpEventQueue();
-    expect(completed, isFalse);
-    expect(await harness.database.fetchDevice('server-peer'), isNull);
-    expect(await harness.database.fetchDevice('client-peer'), isNull);
-
-    clientEvents.resolve(true);
     final result = await connecting;
+    await clientEvents.pairingDismissed.future
+        .timeout(const Duration(seconds: 2));
+    expect(completed, isTrue);
+    expect(clientEvents.hasPendingDecision, isFalse);
     expect(result.status, ConnectionAttemptStatus.authenticated);
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isTrue);
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
   });
 
-  test('both pairing prompts exist before the server receives any proof',
+  test('initiator sends proof and approval without a dialog decision',
       () async {
     final receivedActions = <AuthAction>[];
     final clientEvents = _BlockingPairingEvents();
@@ -107,10 +107,16 @@ void main() {
 
     expect(clientEvents.hasPendingDecision, isTrue);
     expect(serverEvents.hasPendingDecision, isTrue);
-    expect(receivedActions, isNot(contains(AuthAction.proof)));
+    expect(clientEvents.request?.mode, PairingPromptMode.initiator);
+    expect(serverEvents.request?.mode, PairingPromptMode.responder);
+    await _waitUntil(
+      () =>
+          receivedActions.contains(AuthAction.proof) &&
+          receivedActions.contains(AuthAction.approval),
+    );
   });
 
-  test('client rejection never discloses a signed proof to the server',
+  test('client cancellation retracts the server prompt and persists no trust',
       () async {
     final receivedActions = <AuthAction>[];
     final clientEvents = _BlockingPairingEvents();
@@ -126,45 +132,52 @@ void main() {
       clientEvents.pairingStarted.future,
       serverEvents.pairingStarted.future,
     ]).timeout(const Duration(seconds: 2));
+    await _waitUntil(() => receivedActions.contains(AuthAction.proof));
     clientEvents.resolve(false);
 
     final result = await connecting;
-    expect(result.isAuthenticated, isFalse);
-    expect(receivedActions, isNot(contains(AuthAction.proof)));
+    await serverEvents.pairingDismissed.future
+        .timeout(const Duration(seconds: 2));
+    expect(result.status, ConnectionAttemptStatus.cancelled);
+    expect(result.reason, ConnectionAttemptReason.requestCancelled);
+    expect(serverEvents.hasPendingDecision, isFalse);
+    expect(receivedActions, contains(AuthAction.proof));
+    expect(await harness.database.fetchDevice('server-peer'), isNull);
+    expect(await harness.database.fetchDevice('client-peer'), isNull);
   });
 
-  for (final rejectingSide in <String>['client', 'server']) {
-    test('$rejectingSide pairing rejection persists neither identity',
-        () async {
-      final clientEvents = _BlockingPairingEvents();
-      final serverEvents = _BlockingPairingEvents();
-      final harness = await _HandshakeHarness.start(
-        clientEvents: clientEvents,
-        serverEvents: serverEvents,
-      );
-      final connecting = harness.connect('$rejectingSide-rejects');
-      await Future.wait(<Future<void>>[
-        clientEvents.pairingStarted.future,
-        serverEvents.pairingStarted.future,
-      ]).timeout(const Duration(seconds: 2));
+  test('server rejection returns an explicit peer-rejected reason', () async {
+    final clientResults = <AuthEnvelope>[];
+    final clientEvents = _BlockingPairingEvents();
+    final serverEvents = _BlockingPairingEvents();
+    final harness = await _HandshakeHarness.start(
+      clientEvents: clientEvents,
+      serverEvents: serverEvents,
+      clientAuthObserver: (_, envelope) {
+        if (envelope.action == AuthAction.result) {
+          clientResults.add(envelope);
+        }
+      },
+    );
+    final connecting = harness.connect('server-rejects');
+    await Future.wait(<Future<void>>[
+      clientEvents.pairingStarted.future,
+      serverEvents.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
 
-      if (rejectingSide == 'client') {
-        clientEvents.resolve(false);
-      } else {
-        serverEvents.resolve(false);
-      }
+    serverEvents.resolve(false);
 
-      final result = await connecting;
-      final pendingEvents =
-          rejectingSide == 'client' ? serverEvents : clientEvents;
-      await pendingEvents.pairingCancelled.future
-          .timeout(const Duration(seconds: 2));
-      expect(result.isAuthenticated, isFalse);
-      expect(pendingEvents.hasPendingDecision, isFalse);
-      expect(await harness.database.fetchDevice('server-peer'), isNull);
-      expect(await harness.database.fetchDevice('client-peer'), isNull);
-    });
-  }
+    final result = await connecting;
+    await clientEvents.pairingDismissed.future
+        .timeout(const Duration(seconds: 2));
+    expect(clientResults, hasLength(1));
+    expect(clientResults.single.reason, 'pairing_rejected');
+    expect(result.status, ConnectionAttemptStatus.rejected);
+    expect(result.reason, ConnectionAttemptReason.peerRejected);
+    expect(clientEvents.hasPendingDecision, isFalse);
+    expect(await harness.database.fetchDevice('server-peer'), isNull);
+    expect(await harness.database.fetchDevice('client-peer'), isNull);
+  });
 
   test('cancellation while pairing cannot persist or register the peer',
       () async {
@@ -632,6 +645,7 @@ final class _HandshakeHarness {
     _ApprovingEvents? serverEvents,
     ConnectionAuthCommitBarrier? clientBarrier,
     ConnectionAuthCommitBarrier? serverBarrier,
+    AuthEnvelopeObserver? clientAuthObserver,
     AuthEnvelopeObserver? serverAuthObserver,
   }) async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -658,6 +672,7 @@ final class _HandshakeHarness {
       reconnectControllerFactory: clientReconnects.create,
       manageSharedCoordinators: false,
       authCommitBarrier: clientBarrier,
+      authEnvelopeObserver: clientAuthObserver,
     );
     server.setEvent(resolvedServerEvents);
     client.setEvent(resolvedClientEvents);
@@ -802,7 +817,7 @@ class _ApprovingEvents implements ISocketEvent {
 
 final class _BlockingPairingEvents extends _ApprovingEvents {
   final Completer<void> pairingStarted = Completer<void>();
-  final Completer<void> pairingCancelled = Completer<void>();
+  final Completer<void> pairingDismissed = Completer<void>();
   void Function(bool)? _pendingResolve;
   PairingRequest? request;
 
@@ -817,7 +832,7 @@ final class _BlockingPairingEvents extends _ApprovingEvents {
     if (cancellation != null) {
       unawaited(cancellation.then((_) {
         _pendingResolve = null;
-        if (!pairingCancelled.isCompleted) pairingCancelled.complete();
+        if (!pairingDismissed.isCompleted) pairingDismissed.complete();
       }));
     }
     if (!pairingStarted.isCompleted) pairingStarted.complete();

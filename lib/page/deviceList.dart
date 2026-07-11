@@ -2275,12 +2275,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
         }
         return;
       }
-      final displayMessage =
-          result.reason == ConnectionAttemptReason.protocolMismatch
-              ? localizations?.pairingUpgradeRequired ?? 'Connection Failed'
-              : result.reason == ConnectionAttemptReason.pairingExpired
-                  ? localizations?.pairingExpired ?? 'Connection Failed'
-                  : localizations?.connectFailed ?? 'Connection Failed';
+      final displayMessage = switch (result.reason) {
+        ConnectionAttemptReason.protocolMismatch =>
+          localizations?.pairingUpgradeRequired ?? 'Connection Failed',
+        ConnectionAttemptReason.pairingExpired =>
+          localizations?.pairingExpired ?? 'Connection Failed',
+        ConnectionAttemptReason.peerRejected =>
+          localizations?.pairingRejectedByPeer ??
+              'The other device declined the connection request',
+        _ => localizations?.connectFailed ?? 'Connection Failed',
+      };
       ConnectionCoordinator()
           .markDisconnected(peerId: peerId, error: displayMessage);
       if (_pendingAutoConnectPeerId == peerId) {

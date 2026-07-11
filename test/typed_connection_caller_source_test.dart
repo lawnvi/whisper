@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,44 @@ void main() {
     expect(connect, isNot(contains('Completer<bool>')));
     expect(restore, isNot(contains('Future.delayed')));
     expect(restore, isNot(contains('for (var i = 0; i < 20')));
+  });
+
+  test('connection callers show a dedicated peer rejection message', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+    final deviceConnect = _section(
+      deviceList,
+      'Future<void> _connectServerInternal(',
+      'Future<void> _attemptAutoConnect()',
+    );
+    final conversationConnect = _section(
+      conversation,
+      'Future<bool> _connectServer(',
+      'Future<bool> _restoreConnectionIfNeeded()',
+    );
+
+    for (final connect in <String>[deviceConnect, conversationConnect]) {
+      expect(
+        connect,
+        contains('ConnectionAttemptReason.peerRejected'),
+      );
+      expect(connect, contains('pairingRejectedByPeer'));
+    }
+  });
+
+  test('peer rejection message is localized in every supported language', () {
+    const expected = <String, String>{
+      'zh': '对方拒绝了连接请求',
+      'en': 'The other device declined the connection request',
+      'es': 'El otro dispositivo rechazó la solicitud de conexión',
+    };
+
+    for (final entry in expected.entries) {
+      final arb = jsonDecode(
+        File('lib/l10n/app_${entry.key}.arb').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      expect(arb['pairingRejectedByPeer'], entry.value);
+    }
   });
 
   test('settings policy mutations pass through the socket manager', () {

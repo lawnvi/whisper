@@ -6,20 +6,24 @@ enum PairingReason {
   legacyTrustWithoutPin,
 }
 
+enum PairingPromptMode { initiator, responder }
+
 final class PairingRequest {
   const PairingRequest({
     required this.device,
     required this.pairingCode,
     required this.reason,
-    required this.canApprove,
+    required this.mode,
     this.cancellation,
   }) : assert(pairingCode.length == 6);
 
   final DeviceData device;
   final String pairingCode;
   final PairingReason reason;
-  final bool canApprove;
+  final PairingPromptMode mode;
   final Future<void>? cancellation;
+
+  bool get isInitiator => mode == PairingPromptMode.initiator;
 }
 
 PairingReason? pairingReasonForIdentity(

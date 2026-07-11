@@ -93,6 +93,7 @@ final class PeerSocketSession {
   bool _authenticationCommitted = false;
   bool _closed = false;
   final Completer<void> _closedCompleter = Completer<void>();
+  final Completer<void> _pairingResolvedCompleter = Completer<void>();
   Future<void> _sendChain = Future<void>.value();
   BoundedReceiveQueue? _inboundQueue;
   BoundedOutboundQueue? _outboundQueue;
@@ -163,6 +164,7 @@ final class PeerSocketSession {
 
   bool get isClosed => _closed;
   Future<void> get closed => _closedCompleter.future;
+  Future<void> get pairingResolved => _pairingResolvedCompleter.future;
   bool get isMutuallyApproved =>
       role == PeerSocketRole.server &&
       _approvalResolved &&
@@ -177,13 +179,21 @@ final class PeerSocketSession {
         PeerSocketRole.server => phase == PeerSocketPhase.awaitingProof ||
             phase == PeerSocketPhase.awaitingLocalApproval,
       };
+  bool get _canDeliverPairingDecision => switch (role) {
+        PeerSocketRole.client =>
+          phase == PeerSocketPhase.awaitingLocalApproval ||
+              phase == PeerSocketPhase.awaitingResult,
+        PeerSocketRole.server => _canResolveLocalApproval,
+      };
 
   bool tryClaimPairingCompletion() {
+    final hasFinalDecision =
+        isMutuallyApproved || (hasPairingRejection && _remoteApprovalResolved);
     if (role != PeerSocketRole.server ||
         isClosed ||
         phase != PeerSocketPhase.awaitingLocalApproval ||
         _pairingCompletionClaimed ||
-        (!isMutuallyApproved && !hasPairingRejection)) {
+        !hasFinalDecision) {
       return false;
     }
     _pairingCompletionClaimed = true;
@@ -649,7 +659,7 @@ final class PeerSocketSession {
     return (allow) {
       if (delivered ||
           generation != connectionGeneration ||
-          !_canResolveLocalApproval ||
+          !_canDeliverPairingDecision ||
           isClosed) {
         return;
       }
@@ -728,6 +738,7 @@ final class PeerSocketSession {
       if (!valid) {
         return _fail('invalid_result_signature');
       }
+      _completePairingResolution();
       if (!result.allow!) {
         close();
         return false;
@@ -784,7 +795,14 @@ final class PeerSocketSession {
     _handshakeTimer.cancel();
     _outboundQueue?.abort();
     _clearMediaKeys();
+    _completePairingResolution();
     _closedCompleter.complete();
+  }
+
+  void _completePairingResolution() {
+    if (!_pairingResolvedCompleter.isCompleted) {
+      _pairingResolvedCompleter.complete();
+    }
   }
 
   Future<void> _enableCodec(PeerSocketPhase expectedPhase) async {

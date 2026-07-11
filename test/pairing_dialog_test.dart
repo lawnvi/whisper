@@ -56,7 +56,7 @@ void main() {
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.newDevice,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
     );
     await tester.pumpWidget(_app(request, (_) {}));
 
@@ -73,7 +73,7 @@ void main() {
       device: _device(),
       pairingCode: '654321',
       reason: PairingReason.identityChanged,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
     );
     await tester.pumpWidget(_app(request, decisions.add));
 
@@ -97,7 +97,7 @@ void main() {
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.newDevice,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
     );
     await tester.pumpWidget(_app(request, (_) {}));
     final reject =
@@ -112,7 +112,7 @@ void main() {
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.newDevice,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
     );
     late BuildContext pageContext;
     await tester.pumpWidget(
@@ -155,7 +155,7 @@ void main() {
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.newDevice,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
       cancellation: cancellation.future,
     );
     late BuildContext pageContext;
@@ -200,7 +200,7 @@ void main() {
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.newDevice,
-      canApprove: true,
+      mode: PairingPromptMode.responder,
       cancellation: cancellation.future,
     );
     late BuildContext pageContext;
@@ -232,22 +232,27 @@ void main() {
     await tester.pumpAndSettle();
     await shown;
 
-    expect(decisions, <bool>[false]);
+    expect(decisions, isEmpty);
     expect(find.byKey(pairingCodeKey), findsNothing);
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('read-only request does not expose an approve action',
-      (tester) async {
+  testWidgets('initiator sees only a cancel action', (tester) async {
+    final decisions = <bool>[];
     final request = PairingRequest(
       device: _device(),
       pairingCode: '123456',
       reason: PairingReason.legacyTrustWithoutPin,
-      canApprove: false,
+      mode: PairingPromptMode.initiator,
     );
-    await tester.pumpWidget(_app(request, (_) {}));
+    await tester.pumpWidget(_app(request, decisions.add));
 
     expect(find.byKey(pairingApproveKey), findsNothing);
-    expect(find.byKey(pairingRejectKey), findsOneWidget);
+    expect(find.byKey(pairingRejectKey), findsNothing);
+    expect(find.byKey(pairingCancelKey), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+
+    await tester.tap(find.byKey(pairingCancelKey));
+    expect(decisions, <bool>[false]);
   });
 }

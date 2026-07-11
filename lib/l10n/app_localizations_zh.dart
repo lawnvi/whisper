@@ -909,4 +909,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pairingExpired => '配对请求已过期';
+
+  @override
+  String get pairingRejectedByPeer => '对方拒绝了连接请求';
 }

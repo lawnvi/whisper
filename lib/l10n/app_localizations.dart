@@ -1732,6 +1732,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'配对请求已过期'**
   String get pairingExpired;
+
+  /// No description provided for @pairingRejectedByPeer.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方拒绝了连接请求'**
+  String get pairingRejectedByPeer;
 }
 
 class _AppLocalizationsDelegate

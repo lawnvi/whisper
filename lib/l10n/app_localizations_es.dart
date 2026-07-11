@@ -977,4 +977,8 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pairingExpired => 'La solicitud de emparejamiento ha caducado';
+
+  @override
+  String get pairingRejectedByPeer =>
+      'El otro dispositivo rechazó la solicitud de conexión';
 }

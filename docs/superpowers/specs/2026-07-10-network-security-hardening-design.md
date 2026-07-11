@@ -37,7 +37,7 @@ Whisper 的产品边界是可信设备之间的局域网协作。现有 Shelf We
 
 防护对象包括同一 LAN 内主动扫描端口、伪造 uid、重放旧鉴权消息、在途篡改、跨 peer 注入 transferId、浏览器跨站 WebSocket、匿名连接媒体通道、恶意文件名/路径、超大输入和资源耗尽。长期 pin 建立后，攻击者无法仅靠复制 uid 冒充已配对设备；在途攻击者只能转发或丢弃已认证包，不能改写或重放。被动监听者仍能读取明文 payload，但看不到可复用私钥或会话 MAC key。
 
-首次配对通过双方公钥与双方 nonce 派生同一个 6 位配对码。发起端与接收端必须并行显示并分别由用户确认，用户需要在两台设备上比对数字。它提供主动 MITM 的人工检测，但不是加密信道；用户跳过比对仍会接受风险。已信任但没有 pinned key 的旧数据库记录不得自动放行，必须重新确认。已 pin 公钥发生变化时显示明确的身份变更警告，并再次确认后才替换 pin。
+首次配对通过双方公钥与双方 nonce 派生同一个 6 位配对码。发起端与接收端必须并行显示：主动拨号本身代表发起端的连接意图，发起端只可取消；接收端负责比对数字并明确确认或拒绝。它提供主动 MITM 的人工检测，但不是加密信道；接收端跳过比对仍会接受风险。已信任但没有 pinned key 的旧数据库记录不得自动放行，必须重新确认。已 pin 公钥发生变化时显示明确的身份变更警告，并再次确认后才替换 pin。
 
 ## 协议与组件
 
@@ -48,7 +48,7 @@ Whisper 的产品边界是可信设备之间的局域网协作。现有 Shelf We
 - 首次运行生成 Ed25519 key pair，私钥 seed 保存在现有应用偏好存储，公钥用无 padding base64url 表示。
 - `Device` 增加 `identity_public_key`；`uid` 增加唯一索引。公钥只在明确允许配对或验证既有 pin 后写入。
 - 签名输入不是临时 Map 的 JSON 字符串，而是带 `whisper-auth-v1` domain separator 的长度前缀字段序列，字段固定为协议版本、双方 uid、双方 Ed25519/X25519 公钥、发现 `pkh`、双方 32-byte nonce、白名单 profile digest 和消息阶段，杜绝字段重排、能力篡改与分隔符歧义。
-- client 发送 `hello(profile, publicKey, ephemeralKey, clientNonce, intendedPeerId?, intendedPkh?)`；未知 mDNS 候选允许 `intendedPeerId` 为空，但必须核对 challenge 的 Ed25519 fingerprint 等于发现 `pkh`。server 构造完整 transcript，回签名的 `challenge(serverPublicKey, serverEphemeralKey, serverNonce, clientNonce)` 并立即显示配对码；client 验签后也显示配对码。client 在本地允许前不得生成或发送 `proof(clientSignature)`；允许后依次发送 proof 与独立签名的 `approval(allow=true, reason)`。server 只有在本地允许、proof 验证通过且 client approval 允许后才提交 pin，并发送覆盖完整 transcript、allow/reason 的 signed result。任一方拒绝都直接关闭连接且不提交 pin。
+- client 发送 `hello(profile, publicKey, ephemeralKey, clientNonce, intendedPeerId?, intendedPkh?)`；未知 mDNS 候选允许 `intendedPeerId` 为空，但必须核对 challenge 的 Ed25519 fingerprint 等于发现 `pkh`。server 构造完整 transcript，回签名的 `challenge(serverPublicKey, serverEphemeralKey, serverNonce, clientNonce)` 并立即显示配对码；client 验签后也显示只带取消操作的配对码。主动拨号视为 client 默认允许，client 立即发送 `proof(clientSignature)` 与独立签名的 `approval(allow=true, reason)`；取消会终止握手且不提交 pin。server 只有在本地允许、proof 验证通过且 client approval 允许后才提交 pin，并发送覆盖完整 transcript、allow/reason 的 signed result。server 拒绝时发送 reason 为 `pairing_rejected` 的签名 result，由 client 消费后关闭连接；任一拒绝或取消都不提交 pin。
 - challenge、proof、approval、result 分别有不同 domain，nonce 只使用一次，握手 30 秒超时。result 验签成功之前，client 不进入 authenticated。
 - 配对码为 `SHA-256(canonical transcript)` 映射到 `000000..999999` 的零填充十进制值。日志和通知不得记录该值。
 - `PeerProfile` 改为白名单 wire DTO，只传 uid/name/platform/capabilities/topology，不传 Drift 的 id/password/auth/clipboard/host/lastTime/around；其 canonical digest 纳入 proof/result。远程输入信任判断改为“socket 已验签且双方 pin 已建立”。

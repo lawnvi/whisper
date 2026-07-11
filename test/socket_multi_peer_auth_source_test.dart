@@ -38,23 +38,22 @@ void main() {
     );
   });
 
-  test('rejecting pairing closes only that socket', () {
+  test('signed pairing rejection lets the client close only its socket', () {
     final completion = section(
       'Future<void> _tryCompleteServerPairing(',
       'Future<void> _handleClientResult(',
     );
-    expect(completion, contains('await _closeSocketSink(sink)'));
     final denial = completion.substring(
       completion.indexOf('if (session.hasPairingRejection)'),
     );
-    expect(
-      denial.indexOf('await _sendAuthEnvelope(sink, result)'),
-      lessThan(denial.indexOf('session.close()')),
+    expect(denial, contains('await _sendAuthEnvelope(sink, result)'));
+    expect(denial, isNot(contains('session.close()')));
+    expect(denial, isNot(contains('await _closeSocketSink(sink)')));
+    final clientResult = section(
+      'Future<void> _handleClientResult(',
+      'Future<_IdentityPinPlan> _pairingReason(',
     );
-    expect(
-      denial.indexOf('session.close()'),
-      lessThan(denial.indexOf('await _closeSocketSink(sink)')),
-    );
+    expect(clientResult, contains('await _closeSocketSink(sink)'));
     expect(completion, isNot(contains('closeGracefully(')));
     expect(completion, isNot(contains('close(closeServer')));
   });
@@ -169,10 +168,10 @@ void main() {
     expect(proof, isNot(contains('session.isMutuallyApproved')));
     final sessionSource =
         File('lib/socket/peer_socket_session.dart').readAsStringSync();
-    expect(
-      sessionSource,
-      contains('(!isMutuallyApproved && !hasPairingRejection)'),
-    );
+    expect(sessionSource, contains('final hasFinalDecision'));
+    expect(sessionSource, contains('isMutuallyApproved ||'));
+    expect(sessionSource,
+        contains('(hasPairingRejection && _remoteApprovalResolved)'));
     expect(
       proof.indexOf('_completeAuthenticatedSession('),
       lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),
