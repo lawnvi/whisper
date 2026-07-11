@@ -1985,6 +1985,12 @@ class WsSvrManager {
     await _waitForPeerAuthentication(peerId);
     await _removePeerConnection(peerId, PeerDisconnectCause.deviceDeleted);
     await _database.clearDevices(<String>[peerId], localPeerId: '');
+    // 删除抑制只保护删除事务本身。数据库清理完成后，新拨入应作为
+    // 新设备重新配对；解除时推进策略版本，同时淘汰删除期间抢入的会话。
+    _removePeerAuthSuppression(
+      peerId,
+      _PeerAuthSuppressionReason.deviceDeleted,
+    );
   }
 
   Future<ConnectionAttemptResult> connectToServer(
@@ -2330,19 +2336,22 @@ class WsSvrManager {
     final isNetworkFailure = error is SocketException ||
         error is HttpException ||
         error is TimeoutException ||
-        (error is WebSocketChannelException && error.inner is SocketException);
+        error is WebSocketException ||
+        error is WebSocketChannelException;
     if (isNetworkFailure) {
       return ConnectionAttemptResult.networkFailure(
         requestId: request.requestId,
+        reason:
+            error is WebSocketException || error is WebSocketChannelException
+                ? ConnectionAttemptReason.transportClosed
+                : ConnectionAttemptReason.networkUnavailable,
       );
     }
     return ConnectionAttemptResult.rejected(
       requestId: request.requestId,
       reason: error is AuthHandshakeException
           ? ConnectionAttemptReason.authenticationFailed
-          : error is WebSocketException || error is WebSocketChannelException
-              ? ConnectionAttemptReason.protocolMismatch
-              : ConnectionAttemptReason.localStateFailure,
+          : ConnectionAttemptReason.localStateFailure,
     );
   }
 

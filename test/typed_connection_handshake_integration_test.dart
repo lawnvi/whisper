@@ -419,37 +419,35 @@ void main() {
     );
   });
 
-  for (final mutation in <String>['manual', 'delete']) {
-    test('$mutation policy blocks a new inbound signed redial', () async {
-      final harness = await _HandshakeHarness.start();
-      final connected = await harness.connect('$mutation-policy-seed');
-      expect(connected.isAuthenticated, isTrue);
+  test('manual disconnect policy blocks a new inbound signed redial', () async {
+    final harness = await _HandshakeHarness.start();
+    final connected = await harness.connect('manual-policy-seed');
+    expect(connected.isAuthenticated, isTrue);
 
-      switch (mutation) {
-        case 'manual':
-          await harness.server.disconnectPeer('client-peer');
-          break;
-        case 'delete':
-          await harness.server.deletePeer('client-peer');
-          break;
-      }
-      await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
+    await harness.server.disconnectPeer('client-peer');
+    await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
 
-      final redial = await harness.connect('$mutation-policy-redial');
+    final redial = await harness.connect('manual-policy-redial');
 
-      expect(redial.isAuthenticated, isFalse);
-      expect(harness.server.isConnectedTo('client-peer'), isFalse);
-      final stored = await harness.database.fetchDevice('client-peer');
-      switch (mutation) {
-        case 'manual':
-          expect(stored?.auth, isTrue);
-          break;
-        case 'delete':
-          expect(stored, isNull);
-          break;
-      }
-    });
-  }
+    expect(redial.isAuthenticated, isFalse);
+    expect(harness.server.isConnectedTo('client-peer'), isFalse);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
+  });
+
+  test('deleted peer can initiate a fresh signed re-pair', () async {
+    final harness = await _HandshakeHarness.start();
+    final connected = await harness.connect('delete-policy-seed');
+    expect(connected.isAuthenticated, isTrue);
+
+    await harness.server.deletePeer('client-peer');
+    await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
+
+    final redial = await harness.connect('delete-policy-redial');
+
+    expect(redial.isAuthenticated, isTrue);
+    expect(harness.server.isConnectedTo('client-peer'), isTrue);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
+  });
 
   test('authenticated malformed transport closure does not schedule retry',
       () async {
@@ -594,7 +592,8 @@ void main() {
     expect(redial.isAuthenticated, isTrue);
   });
 
-  test('failed explicit re-pair keeps deleted inbound suppression', () async {
+  test('failed explicit re-pair does not permanently suppress inbound pairing',
+      () async {
     final harness = await _HandshakeHarness.start();
     expect(
         (await harness.connect('delete-failed-seed')).isAuthenticated, isTrue);
@@ -612,8 +611,8 @@ void main() {
     expect(failedRepair.isAuthenticated, isFalse);
 
     final redial = await harness.connect('delete-failed-redial');
-    expect(redial.isAuthenticated, isFalse);
-    expect(await harness.database.fetchDevice('client-peer'), isNull);
+    expect(redial.isAuthenticated, isTrue);
+    expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
   });
 
   test('superseded connection does not schedule reconnect', () async {

@@ -112,8 +112,17 @@ void main() {
             request,
             const WebSocketException('invalid negotiation'),
           )
+          .status,
+      ConnectionAttemptStatus.networkFailure,
+    );
+    expect(
+      manager
+          .debugClassifyConnectionException(
+            request,
+            const WebSocketException('invalid negotiation'),
+          )
           .reason,
-      ConnectionAttemptReason.protocolMismatch,
+      ConnectionAttemptReason.transportClosed,
     );
   });
 
