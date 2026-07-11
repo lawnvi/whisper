@@ -44,6 +44,46 @@ void main() {
     expect(result.reason, isNot(ConnectionAttemptReason.none));
   });
 
+  test('pre-ready dial failure releases the outgoing auth gate for retries',
+      () async {
+    final unavailable =
+        await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = unavailable.port;
+    await unavailable.close();
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final manager = WsSvrManager.forTesting(database: database);
+    addTearDown(() => manager.closeGracefully(
+          closeServer: true,
+          forceServerClose: true,
+        ));
+
+    final first = await manager.connectToServer(
+      _request(requestId: 'preready-1', port: port, peerId: 'peer-retry'),
+    );
+    expect(first.status, ConnectionAttemptStatus.networkFailure);
+
+    final second = await manager.connectToServer(
+      _request(requestId: 'preready-2', port: port, peerId: 'peer-retry'),
+    );
+    expect(second.reason, isNot(ConnectionAttemptReason.duplicateRequest));
+    expect(second.status, ConnectionAttemptStatus.networkFailure);
+
+    final endpointOnlyFirst = await manager.connectToServer(
+      _request(requestId: 'preready-endpoint-1', port: port),
+    );
+    expect(endpointOnlyFirst.status, ConnectionAttemptStatus.networkFailure);
+
+    final endpointOnlySecond = await manager.connectToServer(
+      _request(requestId: 'preready-endpoint-2', port: port),
+    );
+    expect(
+      endpointOnlySecond.reason,
+      isNot(ConnectionAttemptReason.duplicateRequest),
+    );
+    expect(endpointOnlySecond.status, ConnectionAttemptStatus.networkFailure);
+  });
+
   test('only transport exceptions are retryable network failures', () {
     final manager = WsSvrManager.forTesting();
     final request = _request(requestId: 'classification', port: 10002);

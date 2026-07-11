@@ -2117,6 +2117,9 @@ class WsSvrManager {
       );
     }
     WebSocketChannel? channel;
+    // claim 的所有权在写入 _outgoingAuthKeysBySink 时移交给 sink 映射;
+    // 在此之前失败必须直接释放,否则该 key 会永久占用鉴权门。
+    var authKeyBoundToSink = false;
     try {
       channel = IOWebSocketChannel(
         _connectOutgoingWebSocket(endpoint.chatUri, attempt),
@@ -2131,6 +2134,7 @@ class WsSvrManager {
       final channelSink = connectedChannel.sink;
       _pendingOutgoingBySink[channelSink] = attempt;
       _outgoingAuthKeysBySink[channelSink] = authRequestKey;
+      authKeyBoundToSink = true;
       _endpointsBySink[channelSink] = (
         host: endpoint.host,
         port: endpoint.port,
@@ -2197,7 +2201,12 @@ class WsSvrManager {
         _completeSocketAuth(channel.sink, false, 'connection_failed');
         _releaseOutgoingAuthForSink(channel.sink);
         await _handlePeerSocketDoneQueued(channel.sink);
-      } else {
+      }
+      if (!authKeyBoundToSink) {
+        // pre-ready 失败(或 channel 构造失败)时映射尚未写入,
+        // 按 sink 查找释放不到,需直接释放本次 claim;
+        // 绑定之后统一走幂等的 _releaseOutgoingAuthForSink,
+        // 避免误释放新一轮 attempt 重新 claim 的同名 key。
         _authRequestGate.releaseOutgoing(authRequestKey);
       }
       if (wasCancelled) {
