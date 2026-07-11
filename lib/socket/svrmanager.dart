@@ -213,6 +213,13 @@ final class _OutgoingConnectionCancelled implements Exception {
   const _OutgoingConnectionCancelled();
 }
 
+final class _WebSocketUpgradeRejected implements Exception {
+  const _WebSocketUpgradeRejected(this.reason, this.statusCode);
+
+  final String reason;
+  final int statusCode;
+}
+
 class WsSvrManager {
   static const Duration _serverPingInterval = Duration(seconds: 45);
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
@@ -2344,6 +2351,15 @@ class WsSvrManager {
     ConnectionAttemptRequest request,
     Object error,
   ) {
+    final upgradeRejected = error is _WebSocketUpgradeRejected ||
+        (error is WebSocketChannelException &&
+            error.inner is _WebSocketUpgradeRejected);
+    if (upgradeRejected) {
+      return ConnectionAttemptResult.rejected(
+        requestId: request.requestId,
+        reason: ConnectionAttemptReason.authenticationFailed,
+      );
+    }
     final isNetworkFailure = error is SocketException ||
         error is HttpException ||
         error is TimeoutException ||
@@ -2446,7 +2462,7 @@ class WsSvrManager {
     Future<Never> rejectResponse(String reason) async {
       final socket = await response.detachSocket();
       socket.destroy();
-      throw WebSocketException(reason, response.statusCode);
+      throw _WebSocketUpgradeRejected(reason, response.statusCode);
     }
 
     if (response.statusCode != HttpStatus.switchingProtocols ||
