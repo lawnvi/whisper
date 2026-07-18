@@ -105,17 +105,6 @@ jobs:
             build/ios/iphoneos/whisper-*-ios-unsigned.ipa
           retention-days: 7
 
-      - name: Publish macOS and iOS release assets
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: |
-            whisper-*-macos-x86_64.dmg
-            build/ios/iphoneos/whisper-*-ios-unsigned.ipa
-
   build-on-windows:
     name: Windows
     needs: verify-release-version
@@ -180,15 +169,6 @@ jobs:
           name: whisper-windows-${{ github.run_id }}
           path: windows/whisper-*-windows-x86_64.exe
           retention-days: 7
-
-      - name: Publish Windows release asset
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: windows/whisper-*-windows-x86_64.exe
 
   build-on-linux:
     name: Linux + Android
@@ -309,15 +289,28 @@ jobs:
             build/app/outputs/flutter-apk/whisper-*-android-*.apk
           retention-days: 7
 
-      - name: Publish Linux and Android release assets
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+  publish-release:
+    name: Publish release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs:
+      - build-on-macos
+      - build-on-windows
+      - build-on-linux
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-*-${{ github.run_id }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: |
-            whisper-*-linux-x86_64.rpm
-            build/linux/deb/whisper-*-linux-amd64.deb
-            build/linux/appimage/whisper-*-linux-x86_64.AppImage
-            build/app/outputs/flutter-apk/whisper-*-android-*.apk
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release-assets/**/*
