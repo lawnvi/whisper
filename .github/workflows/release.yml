@@ -216,7 +216,7 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev alien
+          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libmpv-dev mpv alien
           sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
           sudo apt-get install -y desktop-file-utils libfuse2
 

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Linux builds require PulseAudio development libraries', () {
+  test('Linux builds install native audio and media libraries', () {
     final cmake = File('linux/CMakeLists.txt').readAsStringSync();
     final releaseWorkflow =
         File('.github/workflows/release.yml').readAsStringSync();
@@ -16,7 +16,9 @@ void main() {
     expect(releaseWorkflow, contains('lld'));
     expect(releaseWorkflow, contains('pkg-config'));
     expect(releaseWorkflow, contains('libpulse-dev'));
+    expect(releaseWorkflow, contains('libmpv-dev mpv'));
     expect(debScript, contains('Depends: libpulse0'));
+    expect(debScript, contains(', mpv'));
     expect(debScript, contains('--root-owner-group'));
   });
 
