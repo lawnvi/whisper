@@ -2048,7 +2048,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         width: screenWidth,
         cardColor: cardColor,
         borderColor: cardBorderColor,
-        incoming: isOpponent,
         contentAvailable: contentAvailable,
         failed: failed || showRetry,
         showRetry: showRetry,
@@ -2178,7 +2177,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     required double width,
     required Color cardColor,
     required Color borderColor,
-    required bool incoming,
     required bool contentAvailable,
     required bool failed,
     required bool showRetry,
@@ -2186,15 +2184,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }) {
     final showProgress =
         transfer != null && !_isTransferTerminal(transfer.state);
-    final audioBorder = incoming
-        ? BorderSide(color: borderColor)
-        : BorderSide.none;
     Widget buildPreview(double? progress) => MediaMessagePreview(
       kind: kind,
       path: path,
       name: message.name,
       status: _fileStatusText(message, transfer, progressOverride: progress),
-      incoming: incoming,
       contentAvailable: contentAvailable,
       progress: showProgress ? progress ?? transfer.progress : null,
       verifying: transfer?.state == FileTransferState.verifying,
@@ -2210,19 +2204,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
       child: Container(
         constraints: BoxConstraints(maxWidth: width),
         clipBehavior: Clip.antiAlias,
-        decoration: kind == MediaFileKind.audio
-            ? ShapeDecoration(
-                color: cardColor,
-                shape: VoiceMessageBubbleBorder(
-                  incoming: incoming,
-                  side: audioBorder,
-                ),
-              )
-            : BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: borderColor),
-              ),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
         child: showProgress && transfer.state != FileTransferState.verifying
             ? _buildAnimatedTransferProgress(
                 value: transfer.progress,

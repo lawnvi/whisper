@@ -70,82 +70,6 @@ MediaFileKind mediaFileKindFor({required String name, required String path}) {
   return MediaFileKind.other;
 }
 
-class VoiceMessageBubbleBorder extends ShapeBorder {
-  const VoiceMessageBubbleBorder({
-    required this.incoming,
-    this.side = BorderSide.none,
-  });
-
-  final bool incoming;
-  final BorderSide side;
-
-  static const double _tailWidth = 6;
-  static const double _radius = 7;
-
-  @override
-  EdgeInsetsGeometry get dimensions => EdgeInsets.fromLTRB(
-    side.width + (incoming ? _tailWidth : 0),
-    side.width,
-    side.width + (incoming ? 0 : _tailWidth),
-    side.width,
-  );
-
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return getOuterPath(rect.deflate(side.width), textDirection: textDirection);
-  }
-
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    final body = incoming
-        ? Rect.fromLTRB(
-            rect.left + _tailWidth,
-            rect.top,
-            rect.right,
-            rect.bottom,
-          )
-        : Rect.fromLTRB(
-            rect.left,
-            rect.top,
-            rect.right - _tailWidth,
-            rect.bottom,
-          );
-    final bodyPath = Path()
-      ..addRRect(RRect.fromRectAndRadius(body, const Radius.circular(_radius)));
-    final tailCenter = rect.top + rect.height * 0.46;
-    final tail = Path();
-    if (incoming) {
-      tail
-        ..moveTo(body.left, tailCenter - 5.5)
-        ..lineTo(rect.left, tailCenter)
-        ..lineTo(body.left, tailCenter + 5.5);
-    } else {
-      tail
-        ..moveTo(body.right, tailCenter - 5.5)
-        ..lineTo(rect.right, tailCenter)
-        ..lineTo(body.right, tailCenter + 5.5);
-    }
-    tail.close();
-    return Path.combine(PathOperation.union, bodyPath, tail);
-  }
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    if (side.style == BorderStyle.none || side.width == 0) {
-      return;
-    }
-    canvas.drawPath(
-      getOuterPath(rect, textDirection: textDirection),
-      side.toPaint()..style = PaintingStyle.stroke,
-    );
-  }
-
-  @override
-  ShapeBorder scale(double t) {
-    return VoiceMessageBubbleBorder(incoming: incoming, side: side.scale(t));
-  }
-}
-
 class MediaMessagePreview extends StatelessWidget {
   const MediaMessagePreview({
     super.key,
@@ -157,7 +81,6 @@ class MediaMessagePreview extends StatelessWidget {
     this.progress,
     this.verifying = false,
     this.failed = false,
-    this.incoming = false,
     this.onRetry,
     this.onCancel,
   });
@@ -170,7 +93,6 @@ class MediaMessagePreview extends StatelessWidget {
   final double? progress;
   final bool verifying;
   final bool failed;
-  final bool incoming;
   final VoidCallback? onRetry;
   final VoidCallback? onCancel;
 
@@ -197,19 +119,13 @@ class MediaMessagePreview extends StatelessWidget {
         child: KeyedSubtree(
           key: ValueKey<String>('audio:$phase'),
           child: playable
-              ? AudioMessagePlayer(
-                  path: path,
-                  name: name,
-                  status: status,
-                  incoming: incoming,
-                )
+              ? AudioMessagePlayer(path: path, name: name, status: status)
               : _AudioTransferPreview(
                   name: name,
                   status: status,
                   progress: progress,
                   verifying: verifying,
                   failed: failed,
-                  incoming: incoming,
                   onRetry: onRetry,
                   onCancel: onCancel,
                 ),
@@ -893,7 +809,6 @@ class _AudioTransferPreview extends StatelessWidget {
     required this.progress,
     required this.verifying,
     required this.failed,
-    required this.incoming,
     required this.onRetry,
     required this.onCancel,
   });
@@ -903,7 +818,6 @@ class _AudioTransferPreview extends StatelessWidget {
   final double? progress;
   final bool verifying;
   final bool failed;
-  final bool incoming;
   final VoidCallback? onRetry;
   final VoidCallback? onCancel;
 
@@ -914,98 +828,107 @@ class _AudioTransferPreview extends StatelessWidget {
     final unavailable =
         progress == null && !verifying && !failed && onCancel == null;
     final indicator = SizedBox.square(
-      dimension: 30,
-      child: failed
-          ? IconButton(
-              padding: EdgeInsets.zero,
-              tooltip: AppLocalizations.of(context)?.retry ?? '重试',
-              onPressed: onRetry,
-              icon: Icon(
-                Icons.refresh_rounded,
-                color: palette.danger,
-                size: 22,
-              ),
-            )
-          : unavailable
-          ? _VoiceWaveGlyph(
-              key: const ValueKey<String>('voice-message-glyph'),
-              playing: false,
-              incoming: incoming,
-              color: colorScheme.onSurfaceVariant,
-            )
-          : Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: verifying ? 1 : progress?.clamp(0, 1),
-                  strokeWidth: 2.5,
-                  color: colorScheme.primary,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.14),
-                ),
-                Icon(
-                  Icons.graphic_eq_rounded,
-                  color: colorScheme.onSurfaceVariant,
-                  size: 16,
-                ),
-              ],
-            ),
-    );
-    final statusText = Flexible(
-      child: Text(
-        status,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: failed ? palette.danger : colorScheme.onSurfaceVariant,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          fontFeatures: const [FontFeature.tabularFigures()],
+      key: const ValueKey<String>('audio-message-action'),
+      dimension: 42,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.primary.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
         ),
-      ),
-    );
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 168, maxWidth: 230),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              name,
-              key: const ValueKey<String>('voice-message-name'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (incoming) indicator,
-                if (incoming) const SizedBox(width: 10),
-                statusText,
-                if (!incoming) const SizedBox(width: 10),
-                if (!incoming) indicator,
-                if (onCancel != null) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    constraints: const BoxConstraints.tightFor(
-                      width: 28,
-                      height: 28,
+        child: failed
+            ? IconButton(
+                padding: EdgeInsets.zero,
+                tooltip: AppLocalizations.of(context)?.retry ?? '重试',
+                onPressed: onRetry,
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  color: palette.danger,
+                  size: 22,
+                ),
+              )
+            : unavailable
+            ? Icon(
+                Icons.play_arrow_rounded,
+                color: colorScheme.onSurfaceVariant,
+                size: 25,
+              )
+            : Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox.square(
+                    dimension: 28,
+                    child: CircularProgressIndicator(
+                      value: verifying ? null : progress?.clamp(0, 1),
+                      strokeWidth: 2.5,
+                      color: colorScheme.primary,
+                      backgroundColor: colorScheme.primary.withValues(
+                        alpha: 0.14,
+                      ),
                     ),
-                    padding: EdgeInsets.zero,
-                    tooltip: AppLocalizations.of(context)?.cancel ?? '取消',
-                    onPressed: onCancel,
-                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                  Icon(
+                    Icons.music_note_rounded,
+                    color: colorScheme.primary,
+                    size: 16,
                   ),
                 ],
-              ],
+              ),
+      ),
+    );
+    return SizedBox(
+      key: const ValueKey<String>('audio-message-card'),
+      width: 240,
+      height: 72,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Row(
+          children: [
+            indicator,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    key: const ValueKey<String>('audio-message-name'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    status,
+                    key: const ValueKey<String>('audio-message-meta'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: failed
+                          ? palette.danger
+                          : colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
             ),
+            if (onCancel != null)
+              IconButton(
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                padding: EdgeInsets.zero,
+                tooltip: AppLocalizations.of(context)?.cancel ?? '取消',
+                onPressed: onCancel,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
           ],
         ),
       ),
@@ -1013,25 +936,15 @@ class _AudioTransferPreview extends StatelessWidget {
   }
 }
 
-double voiceMessageBubbleWidthFor(Duration duration) {
-  if (duration <= Duration.zero) {
-    return 116;
-  }
-  final seconds = math.max(1, duration.inSeconds).clamp(1, 60);
-  if (seconds <= 12) {
-    return 100 + (seconds - 1) * (40 / 11);
-  }
-  return 140 + ((seconds - 12) / 48) * 88;
-}
-
-String _voiceMessageDurationLabel(Duration duration) {
-  if (duration <= Duration.zero) {
-    return '';
-  }
-  if (duration < const Duration(minutes: 1)) {
-    return '${math.max(1, duration.inSeconds)}"';
-  }
-  return _formatDuration(duration);
+String audioMessageMetaFor({
+  required String status,
+  required Duration duration,
+}) {
+  final values = <String>[
+    if (status.trim().isNotEmpty) status.trim(),
+    if (duration > Duration.zero) _formatDuration(duration),
+  ];
+  return values.join(' · ');
 }
 
 final LinkedHashMap<String, Future<Duration>> _audioDurationCache =
@@ -1114,14 +1027,12 @@ class AudioMessagePlayer extends StatefulWidget {
     required this.name,
     this.status = '',
     this.compact = true,
-    this.incoming = false,
   });
 
   final String path;
   final String name;
   final String status;
   final bool compact;
-  final bool incoming;
 
   @override
   State<AudioMessagePlayer> createState() => _AudioMessagePlayerState();
@@ -1230,7 +1141,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
   @override
   Widget build(BuildContext context) {
     if (widget.compact) {
-      return _buildCompactVoiceMessage(context);
+      return _buildCompactAudioCard(context);
     }
     return _buildDetailedPlayer(context);
   }
@@ -1244,109 +1155,101 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
         : (l10n?.mediaActionPlay ?? '播放');
   }
 
-  Widget _buildCompactVoiceMessage(BuildContext context) {
+  Widget _buildCompactAudioCard(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final foregroundColor = colorScheme.onSurface;
-    final durationLabel = _voiceMessageDurationLabel(_duration);
-    final displayLabel = durationLabel.isNotEmpty
-        ? durationLabel
-        : widget.status;
-    final glyph = _loading
+    final metadata = audioMessageMetaFor(
+      status: widget.status,
+      duration: _duration,
+    );
+    final action = _loading
         ? const SizedBox.square(
-            key: ValueKey<String>('voice-message-loading'),
+            key: ValueKey<String>('audio-message-loading'),
             dimension: 20,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         : _failed
         ? Icon(
             Icons.refresh_rounded,
-            key: const ValueKey<String>('voice-message-retry'),
+            key: const ValueKey<String>('audio-message-retry'),
             color: colorScheme.error,
             size: 24,
           )
-        : _VoiceWaveGlyph(
-            key: const ValueKey<String>('voice-message-glyph'),
-            playing: _playing,
-            incoming: widget.incoming,
-            color: foregroundColor,
+        : Icon(
+            _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            key: const ValueKey<String>('audio-message-playback-icon'),
+            color: colorScheme.primary,
+            size: 26,
           );
-    final label = Text(
-      displayLabel,
-      key: const ValueKey<String>('voice-message-label'),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: foregroundColor,
-        fontSize: 18,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0,
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
-    );
-    final targetWidth = math.max(168.0, voiceMessageBubbleWidthFor(_duration));
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.hasBoundedWidth
-            ? math.min(targetWidth, constraints.maxWidth)
-            : targetWidth;
-        return SizedBox(
-          key: const ValueKey<String>('voice-message-bubble'),
-          width: width,
-          height: 64,
-          child: Tooltip(
-            message: _playbackTooltip(context),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: _togglePlayback,
-                child: Semantics(
-                  button: true,
-                  label: '${widget.name}, $displayLabel',
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 7, 18, 7),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          widget.name,
-                          key: const ValueKey<String>('voice-message-name'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: foregroundColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+    return SizedBox(
+      key: const ValueKey<String>('audio-message-card'),
+      width: 240,
+      height: 72,
+      child: Tooltip(
+        message: _playbackTooltip(context),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _togglePlayback,
+            child: Semantics(
+              button: true,
+              label: '${widget.name}, $metadata',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    SizedBox.square(
+                      key: const ValueKey<String>('audio-message-action'),
+                      dimension: 42,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
                         ),
-                        const SizedBox(height: 3),
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: widget.incoming
-                                ? MainAxisAlignment.start
-                                : MainAxisAlignment.end,
-                            children: widget.incoming
-                                ? [
-                                    glyph,
-                                    const SizedBox(width: 10),
-                                    Flexible(child: label),
-                                  ]
-                                : [
-                                    Flexible(child: label),
-                                    const SizedBox(width: 10),
-                                    glyph,
-                                  ],
-                          ),
-                        ),
-                      ],
+                        child: Center(child: action),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.name,
+                            key: const ValueKey<String>('audio-message-name'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            metadata,
+                            key: const ValueKey<String>('audio-message-meta'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1436,118 +1339,6 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
         ],
       ),
     );
-  }
-}
-
-class _VoiceWaveGlyph extends StatefulWidget {
-  const _VoiceWaveGlyph({
-    super.key,
-    required this.playing,
-    required this.incoming,
-    required this.color,
-  });
-
-  final bool playing;
-  final bool incoming;
-  final Color color;
-
-  @override
-  State<_VoiceWaveGlyph> createState() => _VoiceWaveGlyphState();
-}
-
-class _VoiceWaveGlyphState extends State<_VoiceWaveGlyph>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncAnimation();
-  }
-
-  @override
-  void didUpdateWidget(covariant _VoiceWaveGlyph oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.playing != widget.playing) {
-      _syncAnimation();
-    }
-  }
-
-  void _syncAnimation() {
-    final animate = widget.playing && !MediaQuery.disableAnimationsOf(context);
-    if (animate) {
-      unawaited(_controller.repeat());
-    } else {
-      _controller.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.flip(
-      flipX: !widget.incoming,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) => CustomPaint(
-          size: const Size(20, 24),
-          painter: _VoiceWavePainter(
-            phase: _controller.value,
-            playing: widget.playing,
-            color: widget.color,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoiceWavePainter extends CustomPainter {
-  const _VoiceWavePainter({
-    required this.phase,
-    required this.playing,
-    required this.color,
-  });
-
-  final double phase;
-  final bool playing;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(1.5, size.height / 2);
-    final stage = math.min(2, (phase * 3).floor());
-    for (var index = 0; index < 3; index++) {
-      final opacity = !playing || index <= stage ? 1.0 : 0.16;
-      final paint = Paint()
-        ..color = color.withValues(alpha: opacity)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round;
-      final radius = 3.2 + index * 4.2;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -math.pi * 0.34,
-        math.pi * 0.68,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _VoiceWavePainter oldDelegate) {
-    return phase != oldDelegate.phase ||
-        playing != oldDelegate.playing ||
-        color != oldDelegate.color;
   }
 }
 

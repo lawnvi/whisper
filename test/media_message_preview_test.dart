@@ -54,7 +54,7 @@ void main() {
     });
   }
 
-  testWidgets('completed audio uses a compact voice message bubble', (
+  testWidgets('completed audio uses a compact music attachment card', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -78,32 +78,35 @@ void main() {
     expect(find.text('0:00 / 0:00'), findsNothing);
     expect(find.text('2.4 MB'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('voice-message-bubble')),
+      find.byKey(const ValueKey<String>('audio-message-card')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('voice-message-glyph')),
+      find.byKey(const ValueKey<String>('audio-message-playback-icon')),
       findsOneWidget,
     );
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  test('voice message bubble grows with duration and stays bounded', () {
+  test('audio metadata combines file size and duration', () {
     expect(
-      voiceMessageBubbleWidthFor(const Duration(seconds: 1)),
-      closeTo(100, 0.01),
+      audioMessageMetaFor(
+        status: '2.4 MB',
+        duration: const Duration(seconds: 12),
+      ),
+      '2.4 MB · 0:12',
     );
     expect(
-      voiceMessageBubbleWidthFor(const Duration(seconds: 30)),
-      greaterThan(170),
-    );
-    expect(
-      voiceMessageBubbleWidthFor(const Duration(minutes: 5)),
-      closeTo(228, 0.01),
+      audioMessageMetaFor(
+        status: '',
+        duration: const Duration(minutes: 1, seconds: 2),
+      ),
+      '1:02',
     );
   });
 
-  testWidgets('outgoing voice content stays grouped by the trailing edge', (
+  testWidgets('audio card keeps playback action left of its details', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -117,62 +120,8 @@ void main() {
                 kind: MediaFileKind.audio,
                 path: '/tmp/example.mp3',
                 name: 'voice-note.mp3',
-                status: '3"',
-                contentAvailable: true,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final bubble = find.byKey(const ValueKey<String>('voice-message-bubble'));
-    final label = find.byKey(const ValueKey<String>('voice-message-label'));
-    final glyph = find.byKey(const ValueKey<String>('voice-message-glyph'));
-    expect(tester.getSize(bubble).height, 64);
-    expect(tester.getTopLeft(label).dx, lessThan(tester.getTopLeft(glyph).dx));
-    expect(
-      tester.getTopLeft(glyph).dx - tester.getTopRight(label).dx,
-      closeTo(10, 0.01),
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  test('voice message bubble tail follows the message direction', () {
-    const rect = Rect.fromLTWH(0, 0, 160, 48);
-    const incomingBorder = VoiceMessageBubbleBorder(incoming: true);
-    const outgoingBorder = VoiceMessageBubbleBorder(incoming: false);
-    final incoming = incomingBorder.getOuterPath(rect);
-    final outgoing = outgoingBorder.getOuterPath(rect);
-    expect(incoming.contains(const Offset(1, 22)), isTrue);
-    expect(outgoing.contains(const Offset(159, 22)), isTrue);
-    final incomingPadding = incomingBorder.dimensions.resolve(
-      TextDirection.ltr,
-    );
-    final outgoingPadding = outgoingBorder.dimensions.resolve(
-      TextDirection.ltr,
-    );
-    expect(incomingPadding.left, greaterThan(incomingPadding.right));
-    expect(outgoingPadding.right, greaterThan(outgoingPadding.left));
-  });
-
-  testWidgets('incoming voice message points from the leading edge', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 240,
-              child: MediaMessagePreview(
-                kind: MediaFileKind.audio,
-                path: '/tmp/example.mp3',
-                name: 'voice-note.mp3',
                 status: '2.4 MB',
                 contentAvailable: true,
-                incoming: true,
               ),
             ),
           ),
@@ -180,9 +129,13 @@ void main() {
       ),
     );
 
-    final glyph = find.byKey(const ValueKey<String>('voice-message-glyph'));
-    final label = find.byKey(const ValueKey<String>('voice-message-label'));
-    expect(tester.getTopLeft(glyph).dx, lessThan(tester.getTopLeft(label).dx));
+    final card = find.byKey(const ValueKey<String>('audio-message-card'));
+    final action = find.byKey(const ValueKey<String>('audio-message-action'));
+    final name = find.byKey(const ValueKey<String>('audio-message-name'));
+    final meta = find.byKey(const ValueKey<String>('audio-message-meta'));
+    expect(tester.getSize(card).height, 72);
+    expect(tester.getTopLeft(action).dx, lessThan(tester.getTopLeft(name).dx));
+    expect(tester.getTopLeft(name).dy, lessThan(tester.getTopLeft(meta).dy));
     expect(tester.takeException(), isNull);
   });
 
@@ -225,9 +178,10 @@ void main() {
     );
 
     expect(
-      find.byKey(const ValueKey<String>('voice-message-glyph')),
+      find.byKey(const ValueKey<String>('audio-message-action')),
       findsOneWidget,
     );
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('2.4 MB'), findsOneWidget);
     expect(tester.takeException(), isNull);
