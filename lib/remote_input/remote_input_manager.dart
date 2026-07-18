@@ -10,16 +10,10 @@ import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
-typedef RemoteInputPacketCallback = FutureOr<void> Function(
-  RemoteInputPacketFrame packet,
-);
+typedef RemoteInputPacketCallback =
+    FutureOr<void> Function(RemoteInputPacketFrame packet);
 
-enum RemoteInputSessionState {
-  offering,
-  connected,
-  stopped,
-  failed,
-}
+enum RemoteInputSessionState { offering, connected, stopped, failed }
 
 class RemoteInputSession {
   const RemoteInputSession({
@@ -38,9 +32,7 @@ class RemoteInputSession {
   final String releaseHotkey;
   final RemoteInputSessionState state;
 
-  RemoteInputSession copyWith({
-    RemoteInputSessionState? state,
-  }) {
+  RemoteInputSession copyWith({RemoteInputSessionState? state}) {
     return RemoteInputSession(
       sessionId: sessionId,
       sourcePeerId: sourcePeerId,
@@ -57,10 +49,8 @@ class RemoteInputManager {
   static const int maxChannelMessageBytes =
       maxPacketPayloadBytes + AuthenticatedMediaPacketEnvelope.overheadBytes;
 
-  RemoteInputManager({
-    this.onPacket,
-    Uuid? uuid,
-  }) : _uuid = uuid ?? const Uuid();
+  RemoteInputManager({this.onPacket, Uuid? uuid})
+    : _uuid = uuid ?? const Uuid();
 
   static final RemoteInputManager shared = RemoteInputManager();
 
@@ -260,8 +250,7 @@ class RemoteInputManager {
   }) {
     return _closeMatchingChannels(
       (claim) =>
-          claim.peerId == peerId &&
-          !constantTimeBytesEqual(claim.mediaMacKey, mediaMacKey),
+          claim.peerId == peerId && !claim.matchesMediaMacKey(mediaMacKey),
     );
   }
 
@@ -324,27 +313,39 @@ class RemoteInputManager {
       unawaited(channel.sink.close().catchError((Object _) {}));
       return false;
     }
-    final packetDecoder = AuthenticatedMediaPacketDecoder(
-      route: claim.route,
-      sessionId: claim.sessionId,
-      mediaMacKey: claim.mediaMacKey,
-      maxPayloadBytes: maxPacketPayloadBytes,
-    );
-    late final BoundedBinaryWebSocketSession binding;
-    binding = BoundedBinaryWebSocketSession(
-      channel: channel,
-      maxMessageBytes: maxChannelMessageBytes,
-      onMessage: (bytes) => handlePacketBytes(
-        packetDecoder.decode(bytes),
-        expectedSessionId: claim.sessionId,
+    final packetDecoder = claim.withMediaPacketContext(
+      (mediaMacKey, channelBinding) => AuthenticatedMediaPacketDecoder(
+        route: claim.route,
+        namespace: claim.namespace,
+        sessionId: claim.sessionId,
+        mediaMacKey: mediaMacKey,
+        channelBinding: channelBinding,
+        maxPayloadBytes: maxPacketPayloadBytes,
       ),
-      onClosed: () => _channels.remove(binding),
     );
-    _channels[binding] = claim;
-    if (_closingChannels) {
-      unawaited(_trackChannelClose(binding));
+    try {
+      late final BoundedBinaryWebSocketSession binding;
+      binding = BoundedBinaryWebSocketSession(
+        channel: channel,
+        maxMessageBytes: maxChannelMessageBytes,
+        onMessage: (bytes) => handlePacketBytes(
+          packetDecoder.decode(bytes),
+          expectedSessionId: claim.sessionId,
+        ),
+        onClosed: () {
+          packetDecoder.destroy();
+          _channels.remove(binding)?.destroy();
+        },
+      );
+      _channels[binding] = claim;
+      if (_closingChannels) {
+        unawaited(_trackChannelClose(binding));
+      }
+      return true;
+    } catch (_) {
+      packetDecoder.destroy();
+      rethrow;
     }
-    return true;
   }
 
   Future<void> _trackChannelClose(BoundedBinaryWebSocketSession channel) {
@@ -353,15 +354,20 @@ class RemoteInputManager {
       return existing;
     }
     late final Future<void> tracked;
-    tracked = channel.close().then<void>((_) {},
-        onError: (Object error, StackTrace stackTrace) {
-      _channelCloseError ??= error;
-      _channelCloseStackTrace ??= stackTrace;
-    }).whenComplete(() {
-      if (identical(_channelCloses[channel], tracked)) {
-        _channelCloses.remove(channel);
-      }
-    });
+    tracked = channel
+        .close()
+        .then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            _channelCloseError ??= error;
+            _channelCloseStackTrace ??= stackTrace;
+          },
+        )
+        .whenComplete(() {
+          if (identical(_channelCloses[channel], tracked)) {
+            _channelCloses.remove(channel);
+          }
+        });
     _channelCloses[channel] = tracked;
     return tracked;
   }
@@ -377,32 +383,36 @@ class RemoteInputManager {
     _closeChannelsFuture = closeFuture;
     _channelCloseError = null;
     _channelCloseStackTrace = null;
-    unawaited(() async {
-      try {
-        while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
-          for (final channel in _channels.keys.toList(growable: false)) {
-            _trackChannelClose(channel);
+    unawaited(
+      () async {
+        try {
+          while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
+            for (final channel in _channels.keys.toList(growable: false)) {
+              _trackChannelClose(channel);
+            }
+            final closes = _channelCloses.values.toList(growable: false);
+            if (closes.isNotEmpty) {
+              await Future.wait(closes);
+            }
           }
-          final closes = _channelCloses.values.toList(growable: false);
-          if (closes.isNotEmpty) {
-            await Future.wait(closes);
+          if (_channelCloseError case final error?) {
+            Error.throwWithStackTrace(error, _channelCloseStackTrace!);
+          }
+        } finally {
+          _closingChannels = false;
+          if (identical(_closeChannelsFuture, closeFuture)) {
+            _closeChannelsFuture = null;
           }
         }
-        if (_channelCloseError case final error?) {
-          Error.throwWithStackTrace(error, _channelCloseStackTrace!);
-        }
-      } finally {
-        _closingChannels = false;
-        if (identical(_closeChannelsFuture, closeFuture)) {
-          _closeChannelsFuture = null;
-        }
-      }
-    }()
-        .then<void>((_) {
-      completer.complete();
-    }, onError: (Object error, StackTrace stackTrace) {
-      completer.completeError(error, stackTrace);
-    }));
+      }().then<void>(
+        (_) {
+          completer.complete();
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          completer.completeError(error, stackTrace);
+        },
+      ),
+    );
     return closeFuture;
   }
 
@@ -412,19 +422,12 @@ class RemoteInputManager {
     Duration pingInterval = const Duration(seconds: 15),
     void Function()? onAttachmentComplete,
   }) {
-    return shelf_ws.webSocketHandler(
-      (WebSocketChannel channel) {
-        try {
-          attachChannel(
-            channel,
-            claim: claim,
-            claimValidator: claimValidator,
-          );
-        } finally {
-          onAttachmentComplete?.call();
-        }
-      },
-      pingInterval: pingInterval,
-    );
+    return shelf_ws.webSocketHandler((WebSocketChannel channel) {
+      try {
+        attachChannel(channel, claim: claim, claimValidator: claimValidator);
+      } finally {
+        onAttachmentComplete?.call();
+      }
+    }, pingInterval: pingInterval);
   }
 }

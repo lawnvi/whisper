@@ -19,8 +19,9 @@ Future<PeerSocketSession> _session({
   Duration timeout = const Duration(seconds: 30),
   void Function()? onTimeout,
 }) async {
-  final identitySeed =
-      Uint8List.fromList(List<int>.generate(32, (i) => seedStart + i));
+  final identitySeed = Uint8List.fromList(
+    List<int>.generate(32, (i) => seedStart + i),
+  );
   final ephemeralSeed = Uint8List.fromList(
     List<int>.generate(32, (i) => seedStart + 64 + i),
   );
@@ -47,7 +48,7 @@ Future<PeerSocketSession> _session({
 }
 
 Future<({PeerSocketSession client, PeerSocketSession server})>
-    _reachClientApproval({
+_reachClientApproval({
   String intendedPeerId = 'server-b',
   String intendedPkh = '',
 }) async {
@@ -73,7 +74,7 @@ Future<({PeerSocketSession client, PeerSocketSession server})>
 }
 
 Future<({PeerSocketSession client, PeerSocketSession server})>
-    _authenticatedPair() async {
+_authenticatedPair() async {
   final pair = await _reachClientApproval();
   pair.client.resolveLocalApproval(
     generation: pair.client.connectionGeneration,
@@ -163,7 +164,7 @@ void main() {
     expect(server.isClosed, isTrue);
   });
 
-  test('full handshake enables inverse directional MAC codecs', () async {
+  test('full handshake enables inverse directional AEAD codecs', () async {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
@@ -253,21 +254,18 @@ void main() {
     );
   });
 
-  test('client proof requires local approval', () async {
+  test('client proof does not grant local approval', () async {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
 
-    await expectLater(
-      pair.client.createProof(),
-      throwsA(
-        isA<AuthHandshakeException>().having(
-          (error) => error.code,
-          'code',
-          'approval_required',
-        ),
-      ),
-    );
+    final proof = await pair.client.createProof();
+    await pair.server.receiveProof(proof);
+
+    expect(pair.client.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(pair.client.isLocalApprovalResolved, isFalse);
+    expect(pair.server.phase, PeerSocketPhase.awaitingLocalApproval);
+    expect(pair.server.isMutuallyApproved, isFalse);
   });
 
   test('server cannot commit after only its local pairing approval', () async {
@@ -295,80 +293,89 @@ void main() {
     expect(persisted, isFalse);
   });
 
-  test('server rejection waits for signed remote intent before completion',
-      () async {
-    final pair = await _reachClientApproval();
-    addTearDown(pair.client.close);
-    addTearDown(pair.server.close);
-    expect(
-      pair.server.resolveLocalApproval(
-        generation: pair.server.connectionGeneration,
-        allow: false,
-      ),
-      isTrue,
-    );
-    expect(
+  test(
+    'server rejection completes without waiting for remote approval',
+    () async {
+      final pair = await _reachClientApproval();
+      addTearDown(pair.client.close);
+      addTearDown(pair.server.close);
+      expect(
+        pair.server.resolveLocalApproval(
+          generation: pair.server.connectionGeneration,
+          allow: false,
+        ),
+        isTrue,
+      );
+      await pair.server.receiveProof(await pair.client.createProof());
+      expect(pair.server.tryClaimPairingCompletion(), isTrue);
+    },
+  );
+
+  test(
+    'server result completes external pairing presentation cancellation',
+    () async {
+      final pair = await _reachClientApproval();
+      addTearDown(pair.client.close);
+      addTearDown(pair.server.close);
       pair.client.resolveLocalApproval(
         generation: pair.client.connectionGeneration,
         allow: true,
-      ),
-      isTrue,
-    );
+      );
+      pair.server.resolveLocalApproval(
+        generation: pair.server.connectionGeneration,
+        allow: true,
+      );
+      await pair.server.receiveProof(await pair.client.createProof());
+      await pair.server.receiveApproval(
+        await pair.client.createApproval(allow: true, reason: 'approved'),
+      );
 
-    await pair.server.receiveProof(await pair.client.createProof());
-    expect(pair.server.tryClaimPairingCompletion(), isFalse);
+      await pair.server.createResult(allow: true, reason: 'approved');
 
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
-    expect(pair.server.tryClaimPairingCompletion(), isTrue);
-  });
+      await expectLater(pair.server.pairingResolved, completes);
+    },
+  );
 
-  test('server result completes external pairing presentation cancellation',
-      () async {
-    final pair = await _reachClientApproval();
-    addTearDown(pair.client.close);
-    addTearDown(pair.server.close);
-    pair.client.resolveLocalApproval(
-      generation: pair.client.connectionGeneration,
-      allow: true,
-    );
-    pair.server.resolveLocalApproval(
-      generation: pair.server.connectionGeneration,
-      allow: true,
-    );
-    await pair.server.receiveProof(await pair.client.createProof());
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
-
-    await pair.server.createResult(allow: true, reason: 'approved');
-
-    await expectLater(pair.server.pairingResolved, completes);
-  });
-
-  test('authenticated sessions expose inverse media keys as defensive copies',
-      () async {
+  test('authenticated sessions scope and wipe inverse media keys', () async {
     final pair = await _authenticatedPair();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
 
-    expect(
-      pair.client.mediaSendKey,
-      orderedEquals(pair.server.mediaReceiveKey!),
-    );
-    expect(
-      pair.client.mediaReceiveKey,
-      orderedEquals(pair.server.mediaSendKey!),
-    );
-    final exposed = pair.client.mediaSendKey!;
-    final originalFirstByte = exposed.first;
-    exposed[0] ^= 0xff;
-    expect(pair.client.mediaSendKey!.first, originalFirstByte);
+    late Uint8List scopedSendKey;
+    late int originalFirstByte;
+    pair.client.withMediaSendKey((clientSendKey) {
+      scopedSendKey = clientSendKey;
+      originalFirstByte = clientSendKey.first;
+      pair.server.withMediaReceiveKey((serverReceiveKey) {
+        expect(clientSendKey, orderedEquals(serverReceiveKey));
+      });
+      clientSendKey[0] ^= 0xff;
+    });
+    expect(scopedSendKey, everyElement(0));
+    pair.client.withMediaSendKey((clientSendKey) {
+      expect(clientSendKey.first, originalFirstByte);
+    });
+
+    late Uint8List scopedReceiveKey;
+    await pair.client.withMediaReceiveKeyAsync((clientReceiveKey) async {
+      scopedReceiveKey = clientReceiveKey;
+      pair.server.withMediaSendKey((serverSendKey) {
+        expect(clientReceiveKey, orderedEquals(serverSendKey));
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(clientReceiveKey, isNot(everyElement(0)));
+    });
+    expect(scopedReceiveKey, everyElement(0));
 
     pair.client.close();
-    expect(pair.client.mediaSendKey, isNull);
-    expect(pair.client.mediaReceiveKey, isNull);
+    expect(
+      () => pair.client.withMediaSendKey<void>((_) {}),
+      throwsA(isA<AuthHandshakeException>()),
+    );
+    expect(
+      () => pair.client.withMediaReceiveKey<void>((_) {}),
+      throwsA(isA<AuthHandshakeException>()),
+    );
   });
 
   test('shutdown drains queued authenticated frames before closing', () async {
@@ -462,14 +469,11 @@ void main() {
 
     pair.client.close();
 
-    expect(
-      await active.timeout(const Duration(milliseconds: 100)),
-      isFalse,
-    );
+    expect(await active.timeout(const Duration(milliseconds: 100)), isFalse);
     expect(await waiting, isFalse);
-    await pair.client
-        .drainOutbound()
-        .timeout(const Duration(milliseconds: 100));
+    await pair.client.drainOutbound().timeout(
+      const Duration(milliseconds: 100),
+    );
     expect(pair.client.pendingOutboundItems, 0);
     expect(writes, 1);
 
@@ -479,45 +483,49 @@ void main() {
     expect(pair.client.pendingOutboundItems, 0);
   });
 
-  test('concurrent receive stops share and await subscription cancellation',
-      () async {
-    final session = await _session(
-      role: PeerSocketRole.server,
-      generation: 1,
-      seedStart: 32,
-    );
-    addTearDown(session.close);
-    final cancelStarted = Completer<void>();
-    final releaseCancel = Completer<void>();
-    var cancelCount = 0;
-    final incoming = StreamController<Object>(onCancel: () async {
-      cancelCount += 1;
-      cancelStarted.complete();
-      await releaseCancel.future;
-    });
-    addTearDown(incoming.close);
-    final subscription = incoming.stream.listen((_) {});
-    session.attachTransport(
-      subscription: subscription,
-      addStream: (_) async {},
-      onOverflow: () => fail('queue overflowed'),
-    );
+  test(
+    'concurrent receive stops share and await subscription cancellation',
+    () async {
+      final session = await _session(
+        role: PeerSocketRole.server,
+        generation: 1,
+        seedStart: 32,
+      );
+      addTearDown(session.close);
+      final cancelStarted = Completer<void>();
+      final releaseCancel = Completer<void>();
+      var cancelCount = 0;
+      final incoming = StreamController<Object>(
+        onCancel: () async {
+          cancelCount += 1;
+          cancelStarted.complete();
+          await releaseCancel.future;
+        },
+      );
+      addTearDown(incoming.close);
+      final subscription = incoming.stream.listen((_) {});
+      session.attachTransport(
+        subscription: subscription,
+        addStream: (_) async {},
+        onOverflow: () => fail('queue overflowed'),
+      );
 
-    final firstStop = session.stopReceivingAndDrain();
-    await cancelStarted.future;
-    var secondCompleted = false;
-    final secondStop = session.stopReceivingAndDrain().whenComplete(() {
-      secondCompleted = true;
-    });
-    await Future<void>.delayed(Duration.zero);
+      final firstStop = session.stopReceivingAndDrain();
+      await cancelStarted.future;
+      var secondCompleted = false;
+      final secondStop = session.stopReceivingAndDrain().whenComplete(() {
+        secondCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
 
-    expect(cancelCount, 1);
-    expect(secondCompleted, isFalse);
+      expect(cancelCount, 1);
+      expect(secondCompleted, isFalse);
 
-    releaseCancel.complete();
-    await Future.wait(<Future<void>>[firstStop, secondStop]);
-    expect(cancelCount, 1);
-  });
+      releaseCancel.complete();
+      await Future.wait(<Future<void>>[firstStop, secondStop]);
+      expect(cancelCount, 1);
+    },
+  );
 
   test('real websocket shutdown drains an action and outbound frame', () async {
     final pair = await _authenticatedPair();
@@ -546,10 +554,12 @@ void main() {
     late final StreamSubscription<dynamic> subscription;
     subscription = client.listen((message) {
       final bytes = message as List<int>;
-      unawaited(pair.client.enqueueIncoming(bytes.length, () async {
-        actionStarted.complete();
-        await releaseAction.future;
-      }));
+      unawaited(
+        pair.client.enqueueIncoming(bytes.length, () async {
+          actionStarted.complete();
+          await releaseAction.future;
+        }),
+      );
     });
     pair.client.attachTransport(
       subscription: subscription,
@@ -583,41 +593,43 @@ void main() {
     expect(shutdownCompleted, isTrue);
   });
 
-  test('persistence failure closes an approved session before registration',
-      () async {
-    final pair = await _reachClientApproval();
-    addTearDown(pair.client.close);
-    addTearDown(pair.server.close);
-    pair.client.resolveLocalApproval(
-      generation: pair.client.connectionGeneration,
-      allow: true,
-    );
-    pair.server.resolveLocalApproval(
-      generation: pair.server.connectionGeneration,
-      allow: true,
-    );
-    await pair.server.receiveProof(await pair.client.createProof());
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
-    await pair.server.createResult(allow: true, reason: 'approved');
-    var registered = false;
-
-    await expectLater(
-      pair.server.commitAuthentication(
+  test(
+    'persistence failure closes an approved session before registration',
+    () async {
+      final pair = await _reachClientApproval();
+      addTearDown(pair.client.close);
+      addTearDown(pair.server.close);
+      pair.client.resolveLocalApproval(
+        generation: pair.client.connectionGeneration,
+        allow: true,
+      );
+      pair.server.resolveLocalApproval(
         generation: pair.server.connectionGeneration,
-        persistIdentity: () async => throw StateError('database failed'),
-        registerPeer: () async => registered = true,
-      ),
-      throwsStateError,
-    );
+        allow: true,
+      );
+      await pair.server.receiveProof(await pair.client.createProof());
+      await pair.server.receiveApproval(
+        await pair.client.createApproval(allow: true, reason: 'approved'),
+      );
+      await pair.server.createResult(allow: true, reason: 'approved');
+      var registered = false;
 
-    expect(registered, isFalse);
-    expect(pair.server.phase, PeerSocketPhase.closing);
-    expect(pair.server.isAuthenticated, isFalse);
-  });
+      await expectLater(
+        pair.server.commitAuthentication(
+          generation: pair.server.connectionGeneration,
+          persistIdentity: () async => throw StateError('database failed'),
+          registerPeer: () async => registered = true,
+        ),
+        throwsStateError,
+      );
 
-  test('registration failure closes a MAC-activated session', () async {
+      expect(registered, isFalse);
+      expect(pair.server.phase, PeerSocketPhase.closing);
+      expect(pair.server.isAuthenticated, isFalse);
+    },
+  );
+
+  test('registration failure closes an AEAD-activated session', () async {
     final pair = await _reachClientApproval();
     addTearDown(pair.client.close);
     addTearDown(pair.server.close);
@@ -652,66 +664,70 @@ void main() {
     expect(pair.server.isAuthenticated, isFalse);
   });
 
-  test('closing during persistence is terminal and cannot resume auth',
-      () async {
-    final pair = await _reachClientApproval();
-    addTearDown(pair.client.close);
-    addTearDown(pair.server.close);
-    pair.client.resolveLocalApproval(
-      generation: pair.client.connectionGeneration,
-      allow: true,
-    );
-    pair.server.resolveLocalApproval(
-      generation: pair.server.connectionGeneration,
-      allow: true,
-    );
-    await pair.server.receiveProof(await pair.client.createProof());
-    await pair.server.receiveApproval(
-      await pair.client.createApproval(allow: true, reason: 'approved'),
-    );
-    await pair.server.createResult(allow: true, reason: 'approved');
-    final persistence = Completer<void>();
-    var registered = false;
-    final commit = pair.server.commitAuthentication(
-      generation: pair.server.connectionGeneration,
-      persistIdentity: () => persistence.future,
-      registerPeer: () async => registered = true,
-    );
+  test(
+    'closing during persistence is terminal and cannot resume auth',
+    () async {
+      final pair = await _reachClientApproval();
+      addTearDown(pair.client.close);
+      addTearDown(pair.server.close);
+      pair.client.resolveLocalApproval(
+        generation: pair.client.connectionGeneration,
+        allow: true,
+      );
+      pair.server.resolveLocalApproval(
+        generation: pair.server.connectionGeneration,
+        allow: true,
+      );
+      await pair.server.receiveProof(await pair.client.createProof());
+      await pair.server.receiveApproval(
+        await pair.client.createApproval(allow: true, reason: 'approved'),
+      );
+      await pair.server.createResult(allow: true, reason: 'approved');
+      final persistence = Completer<void>();
+      var registered = false;
+      final commit = pair.server.commitAuthentication(
+        generation: pair.server.connectionGeneration,
+        persistIdentity: () => persistence.future,
+        registerPeer: () async => registered = true,
+      );
 
-    pair.server.close();
-    persistence.complete();
+      pair.server.close();
+      persistence.complete();
 
-    await expectLater(commit, throwsA(isA<AuthHandshakeException>()));
-    expect(pair.server.phase, PeerSocketPhase.closing);
-    expect(registered, isFalse);
-  });
+      await expectLater(commit, throwsA(isA<AuthHandshakeException>()));
+      expect(pair.server.phase, PeerSocketPhase.closing);
+      expect(registered, isFalse);
+    },
+  );
 
-  test('unknown target can omit peer id but must match discovered pkh',
-      () async {
-    final accepted = await _reachClientApproval(intendedPeerId: '');
-    addTearDown(accepted.client.close);
-    addTearDown(accepted.server.close);
-    expect(accepted.client.remotePeerId, 'server-b');
+  test(
+    'unknown target can omit peer id but must match discovered pkh',
+    () async {
+      final accepted = await _reachClientApproval(intendedPeerId: '');
+      addTearDown(accepted.client.close);
+      addTearDown(accepted.server.close);
+      expect(accepted.client.remotePeerId, 'server-b');
 
-    final server = await _session(
-      role: PeerSocketRole.server,
-      generation: 3,
-      seedStart: 32,
-    );
-    final client = await _session(
-      role: PeerSocketRole.client,
-      generation: 4,
-      seedStart: 0,
-      intendedPkh: encodeAuthBase64Url(List<int>.filled(32, 0)),
-    );
-    addTearDown(client.close);
-    addTearDown(server.close);
-    await expectLater(
-      server.receiveHello(await client.createHello()),
-      throwsA(isA<AuthHandshakeException>()),
-    );
-    expect(server.phase, PeerSocketPhase.closing);
-  });
+      final server = await _session(
+        role: PeerSocketRole.server,
+        generation: 3,
+        seedStart: 32,
+      );
+      final client = await _session(
+        role: PeerSocketRole.client,
+        generation: 4,
+        seedStart: 0,
+        intendedPkh: encodeAuthBase64Url(List<int>.filled(32, 0)),
+      );
+      addTearDown(client.close);
+      addTearDown(server.close);
+      await expectLater(
+        server.receiveHello(await client.createHello()),
+        throwsA(isA<AuthHandshakeException>()),
+      );
+      expect(server.phase, PeerSocketPhase.closing);
+    },
+  );
 
   test('wrong order and replay close only the affected session', () async {
     final server = await _session(

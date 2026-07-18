@@ -9,6 +9,8 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
+enum _AttachmentSelection { files, folder }
+
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey =
       ValueKey('chat-composer-desktop-container');
@@ -36,6 +38,7 @@ class ChatComposer extends StatelessWidget {
   final ClipboardImageDraft? pendingClipboardImage;
   final List<ClipboardFileDraft> pendingClipboardFiles;
   final Future<void> Function() onPickFiles;
+  final Future<void> Function()? onPickFolder;
   final Future<void> Function() onSendClipboard;
   final Future<bool> Function(String text) onSendText;
   final Future<String?> Function()? onPasteClipboard;
@@ -58,6 +61,7 @@ class ChatComposer extends StatelessWidget {
     this.pendingClipboardImage,
     this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
+    this.onPickFolder,
     required this.onSendClipboard,
     required this.onSendText,
     this.onPasteClipboard,
@@ -519,7 +523,7 @@ class ChatComposer extends StatelessWidget {
         : (enabled ? Colors.white : colorScheme.outline);
     return IconButton(
       key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
-      onPressed: enabled ? _handlePrimaryAction : null,
+      onPressed: enabled ? () => _handlePrimaryAction(context) : null,
       style: IconButton.styleFrom(
         minimumSize: Size(buttonSize, buttonSize),
         maximumSize: Size(buttonSize, buttonSize),
@@ -575,7 +579,7 @@ class ChatComposer extends StatelessWidget {
       !_showsClipboardFilesPreview &&
       !_showsClipboardImagePreview;
 
-  Future<void> _handlePrimaryAction() async {
+  Future<void> _handlePrimaryAction(BuildContext context) async {
     if (_canSendPendingClipboardFiles) {
       await onSendClipboardFiles!();
       return;
@@ -585,7 +589,7 @@ class ChatComposer extends StatelessWidget {
       return;
     }
     if (_showsAttachmentAction) {
-      await onPickFiles();
+      await _showAttachmentMenu(context);
       return;
     }
 
@@ -595,6 +599,47 @@ class ChatComposer extends StatelessWidget {
       return;
     }
     await _sendTextSnapshot(snapshot, nextText);
+  }
+
+  Future<void> _showAttachmentMenu(BuildContext context) async {
+    final folderPicker = onPickFolder;
+    if (folderPicker == null) {
+      await onPickFiles();
+      return;
+    }
+    final selection = await showModalBottomSheet<_AttachmentSelection>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context);
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: Text(l10n?.sendFiles ?? 'Send files'),
+                onTap: () => Navigator.pop(context, _AttachmentSelection.files),
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_zip_outlined),
+                title: Text(l10n?.sendFolder ?? 'Send folder'),
+                onTap: () =>
+                    Navigator.pop(context, _AttachmentSelection.folder),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    switch (selection) {
+      case _AttachmentSelection.files:
+        await onPickFiles();
+      case _AttachmentSelection.folder:
+        await folderPicker();
+      case null:
+        return;
+    }
   }
 
   KeyEventResult _handleKeyEvent(KeyEvent event) {

@@ -24,9 +24,9 @@ class AudioGroupPacketByteTransport
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
   }) : _inner = PacketByteTransport(
-          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-          closeSink: closeSink ?? () async {},
-        );
+         sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+         closeSink: closeSink ?? () async {},
+       );
 
   AudioGroupPacketByteTransport.withTransport(this._inner);
 
@@ -49,7 +49,7 @@ class AudioGroupPacketByteTransport
 
 class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
   AudioGroupWebSocketPacketTransport._(PacketByteTransport channelTransport)
-      : super.withTransport(channelTransport);
+    : super.withTransport(channelTransport);
 
   static Future<AudioGroupWebSocketPacketTransport> connect(
     Uri uri, {
@@ -67,8 +67,10 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
       ),
       packetEncoder: AuthenticatedMediaPacketEncoder(
         route: '/audio',
+        namespace: 'audio-group',
         sessionId: sessionId,
         mediaMacKey: mediaMacKey,
+        channelBinding: mediaPacketChannelBindingFromUri(uri),
         maxPayloadBytes: 256 * 1024,
       ),
     );
@@ -77,9 +79,8 @@ class AudioGroupWebSocketPacketTransport extends AudioGroupPacketByteTransport {
 }
 
 class AudioFanoutTransport {
-  AudioFanoutTransport({
-    required AudioGroupSinkFailure onSinkFailure,
-  }) : _onSinkFailure = onSinkFailure;
+  AudioFanoutTransport({required AudioGroupSinkFailure onSinkFailure})
+    : _onSinkFailure = onSinkFailure;
 
   final AudioGroupSinkFailure _onSinkFailure;
   final Map<String, AudioGroupPacketTransport> _transports =
@@ -93,16 +94,18 @@ class AudioFanoutTransport {
     }
     _transports[sinkPeerId] = transport;
     if (transport is AudioGroupObservablePacketTransport) {
-      unawaited(transport.done.then((termination) {
-        if (termination.isUnexpected) {
-          _failSink(
-            sinkPeerId,
-            transport,
-            termination.error ??
-                StateError('audio group packet transport closed'),
-          );
-        }
-      }));
+      unawaited(
+        transport.done.then((termination) {
+          if (termination.isUnexpected) {
+            _failSink(
+              sinkPeerId,
+              transport,
+              termination.error ??
+                  StateError('audio group packet transport closed'),
+            );
+          }
+        }),
+      );
     }
   }
 
@@ -120,18 +123,23 @@ class AudioFanoutTransport {
     for (final entry in entries) {
       try {
         final delivery = entry.value.send(packet);
-        unawaited(delivery.then((result) {
-          if (result != PacketSendResult.transportFailure) {
-            return;
-          }
-          _failSink(
-            entry.key,
-            entry.value,
-            StateError('audio group packet transport failed'),
-          );
-        }, onError: (Object error, StackTrace _) {
-          _failSink(entry.key, entry.value, error);
-        }));
+        unawaited(
+          delivery.then(
+            (result) {
+              if (result != PacketSendResult.transportFailure) {
+                return;
+              }
+              _failSink(
+                entry.key,
+                entry.value,
+                StateError('audio group packet transport failed'),
+              );
+            },
+            onError: (Object error, StackTrace _) {
+              _failSink(entry.key, entry.value, error);
+            },
+          ),
+        );
       } catch (error) {
         _failSink(entry.key, entry.value, error);
       }

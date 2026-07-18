@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/device_identity.dart';
 
+const _seedA = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const _seedB = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE';
+
 class _MemorySeedStorage implements DeviceIdentitySeedStorage {
   String? seed;
   int writes = 0;
@@ -20,7 +23,97 @@ class _MemorySeedStorage implements DeviceIdentitySeedStorage {
   }
 }
 
+class _MemorySeedVault implements SecureIdentitySeedVault {
+  _MemorySeedVault({this.seed, this.ignoreWrites = false});
+
+  String? seed;
+  final bool ignoreWrites;
+
+  @override
+  Future<String?> readSeed() async => seed;
+
+  @override
+  Future<void> writeSeed(String value) async {
+    if (!ignoreWrites) {
+      seed = value;
+    }
+  }
+}
+
+class _MemoryLegacySeedStorage implements LegacyIdentitySeedStorage {
+  _MemoryLegacySeedStorage(this.seed);
+
+  String? seed;
+  int deletes = 0;
+
+  @override
+  Future<String?> readSeed() async => seed;
+
+  @override
+  Future<void> deleteSeed() async {
+    deletes += 1;
+    seed = null;
+  }
+}
+
 void main() {
+  group('SecureDeviceIdentitySeedStorage', () {
+    test('migrates and verifies a legacy seed before removing plaintext',
+        () async {
+      final vault = _MemorySeedVault();
+      final legacy = _MemoryLegacySeedStorage(_seedA);
+      final storage = SecureDeviceIdentitySeedStorage(
+        vault: vault,
+        legacyStorage: legacy,
+      );
+
+      expect(await storage.readSeed(), _seedA);
+      expect(vault.seed, _seedA);
+      expect(legacy.seed, isNull);
+      expect(legacy.deletes, 1);
+    });
+
+    test('never deletes the legacy seed when secure persistence fails',
+        () async {
+      final vault = _MemorySeedVault(ignoreWrites: true);
+      final legacy = _MemoryLegacySeedStorage(_seedA);
+      final storage = SecureDeviceIdentitySeedStorage(
+        vault: vault,
+        legacyStorage: legacy,
+      );
+
+      await expectLater(storage.readSeed(), throwsStateError);
+      expect(legacy.seed, _seedA);
+      expect(legacy.deletes, 0);
+    });
+
+    test('rejects conflicting secure and legacy identities', () async {
+      final legacy = _MemoryLegacySeedStorage(_seedA);
+      final storage = SecureDeviceIdentitySeedStorage(
+        vault: _MemorySeedVault(seed: _seedB),
+        legacyStorage: legacy,
+      );
+
+      await expectLater(storage.readSeed(), throwsStateError);
+      expect(legacy.seed, _seedA);
+      expect(legacy.deletes, 0);
+    });
+
+    test('does not migrate or delete a malformed legacy seed', () async {
+      final vault = _MemorySeedVault();
+      final legacy = _MemoryLegacySeedStorage('malformed');
+      final storage = SecureDeviceIdentitySeedStorage(
+        vault: vault,
+        legacyStorage: legacy,
+      );
+
+      await expectLater(storage.readSeed(), throwsFormatException);
+      expect(vault.seed, isNull);
+      expect(legacy.seed, 'malformed');
+      expect(legacy.deletes, 0);
+    });
+  });
+
   group('DeviceIdentityStore', () {
     test('concurrent loadOrCreate calls persist exactly one identity',
         () async {

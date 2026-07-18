@@ -436,7 +436,8 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('initiator sees only a cancel action', (tester) async {
+  testWidgets('initiator must explicitly confirm matching codes',
+      (tester) async {
     final decisions = <bool>[];
     final request = PairingRequest(
       device: _device(),
@@ -446,12 +447,14 @@ void main() {
     );
     await tester.pumpWidget(_app(request, decisions.add));
 
-    expect(find.byKey(pairingApproveKey), findsNothing);
+    expect(find.byKey(pairingApproveKey), findsOneWidget);
     expect(find.byKey(pairingRejectKey), findsNothing);
     expect(find.byKey(pairingCancelKey), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
 
-    await tester.tap(find.byKey(pairingCancelKey));
-    expect(decisions, <bool>[false]);
+    tester
+        .widget<CupertinoDialogAction>(find.byKey(pairingApproveKey))
+        .onPressed!();
+    expect(decisions, <bool>[true]);
   });
 }

@@ -40,19 +40,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String transferNotificationBodySending(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Sending $percent% · $speed · $remaining left';
   }
 
   @override
   String transferNotificationBodyReceiving(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Receiving $percent% · $speed · $remaining left';
   }
 
   @override
   String transferNotificationBodyMixed(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Syncing $percent% · $speed · $remaining left';
   }
 
@@ -90,6 +99,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendTips => 'Type something...';
 
   @override
+  String get sendFiles => 'Send files';
+
+  @override
+  String get sendFolder => 'Send folder (ZIP)';
+
+  @override
+  String get folderSendFailed => 'Unable to package or send the folder';
+
+  @override
   String get trust => 'Trust Device';
 
   @override
@@ -108,6 +126,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accessClipboard => 'Access Clipboard';
+
+  @override
+  String get clipboardAutoSync => 'Automatically Sync Clipboard';
+
+  @override
+  String get clipboardAutoSyncDesc =>
+      'When off, send manually; when on, sync only to the current trusted device';
 
   @override
   String get doubleClickRmMessage => 'Delete Message on Double Click';
@@ -520,27 +545,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String audioGroupSyncEvidence(
-      Object quality,
-      Object clockOffsetLabel,
-      Object offset,
-      Object rtt,
-      Object jitter,
-      Object buffer,
-      Object latePackets) {
+    Object quality,
+    Object clockOffsetLabel,
+    Object offset,
+    Object rtt,
+    Object jitter,
+    Object buffer,
+    Object latePackets,
+  ) {
     return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · jitter ${jitter}ms · buffer ${buffer}ms · late $latePackets';
   }
 
   @override
   String audioGroupSyncEvidenceCompact(
-      Object quality,
-      Object latencyLabel,
-      Object rtt,
-      Object jitterLabel,
-      Object jitter,
-      Object bufferLabel,
-      Object buffer,
-      Object latePacketLabel,
-      Object latePackets) {
+    Object quality,
+    Object latencyLabel,
+    Object rtt,
+    Object jitterLabel,
+    Object jitter,
+    Object bufferLabel,
+    Object buffer,
+    Object latePacketLabel,
+    Object latePackets,
+  ) {
     return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
   }
 
@@ -982,4 +1009,290 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pairingRejectedByPeer =>
       'The other device declined the connection request';
+
+  @override
+  String get pairingEncryptionNotice =>
+      'After pairing, text, files, clipboard, and control data are end-to-end encrypted';
+
+  @override
+  String get e2eeTrustedConnection => 'End-to-end encrypted · Trusted device';
+
+  @override
+  String get e2eeEncryptedConnection => 'End-to-end encrypted connection';
+
+  @override
+  String get transferAssistantTitle => 'Transfer Assistant';
+
+  @override
+  String get transferAssistantSearchHint => 'Search text messages';
+
+  @override
+  String get transferAssistantClearSearch => 'Clear search';
+
+  @override
+  String get transferAssistantSearchResults => 'Search results';
+
+  @override
+  String get transferAssistantFavorites => 'Favorite texts';
+
+  @override
+  String get transferAssistantRecent => 'Recent texts';
+
+  @override
+  String get transferAssistantNoResults => 'No matching text found';
+
+  @override
+  String get transferAssistantNoFavorites => 'No favorite texts yet';
+
+  @override
+  String get transferAssistantNoRecent => 'No text messages yet';
+
+  @override
+  String get transferAssistantIncoming => 'Received';
+
+  @override
+  String get transferAssistantOutgoing => 'Sent';
+
+  @override
+  String get transferAssistantCopy => 'Copy text';
+
+  @override
+  String get transferAssistantFavorite => 'Favorite text';
+
+  @override
+  String get transferAssistantUnfavorite => 'Remove from favorites';
+
+  @override
+  String get transferAssistantLoadFailed => 'Couldn\'t load text messages';
+
+  @override
+  String get transferAssistantCopied => 'Text copied';
+
+  @override
+  String get transferAssistantCopyFailed => 'Couldn\'t copy text';
+
+  @override
+  String get transferAssistantFavoriteFailed =>
+      'Couldn\'t update favorites. Try again';
+
+  @override
+  String get qrPairingTitle => 'Connect with QR code';
+
+  @override
+  String get qrMyCode => 'My QR code';
+
+  @override
+  String get qrScanCode => 'Scan to connect';
+
+  @override
+  String get qrShowCodeHint =>
+      'Let the other device scan this code to verify both the address and device identity';
+
+  @override
+  String qrFingerprint(String fingerprint) {
+    return 'Identity fingerprint $fingerprint';
+  }
+
+  @override
+  String get qrWifiUnavailable =>
+      'No usable LAN address was found. Connect to Wi-Fi, then refresh this code';
+
+  @override
+  String get qrCopyLink => 'Copy connection details';
+
+  @override
+  String get qrLinkCopied => 'Connection details copied';
+
+  @override
+  String get qrScanHint => 'Scan the code shown in Whisper on the other device';
+
+  @override
+  String get qrCameraUnavailable =>
+      'The camera is unavailable. Allow camera access for Whisper in system settings';
+
+  @override
+  String get qrToggleTorch => 'Toggle torch';
+
+  @override
+  String get qrSwitchCamera => 'Switch camera';
+
+  @override
+  String get qrCannotPairSelf =>
+      'This is the current device. Scan a code from another device';
+
+  @override
+  String get qrInvalidCode =>
+      'This is not a valid Whisper code. Ask the other device to show a new code';
+
+  @override
+  String get connectionDiagnosticTitle => 'Connection diagnosis';
+
+  @override
+  String get connectionDiagnosticWifi =>
+      'The device cannot be reached. Confirm both devices use the same Wi-Fi and disable guest-network or AP isolation, then retry.';
+
+  @override
+  String get connectionDiagnosticAddress =>
+      'The LAN address in the QR code is invalid or has changed. Ask the other device to reopen its code, then scan it again.';
+
+  @override
+  String get connectionDiagnosticService =>
+      'The address was found, but Whisper did not respond. Open Whisper on the other device and confirm its LAN service is running.';
+
+  @override
+  String get connectionDiagnosticFirewall =>
+      'The connection timed out. Allow Whisper through the system firewall on both devices, then retry.';
+
+  @override
+  String get connectionDiagnosticIdentity =>
+      'The device identity does not match the QR code, so Whisper stopped the connection. Ask the other device to show a new code; do not bypass this check.';
+
+  @override
+  String get connectionDiagnosticVersion =>
+      'The devices use incompatible protocol versions. Update Whisper to the same recent version, then retry.';
+
+  @override
+  String get connectionDiagnosticPairing =>
+      'Pairing did not finish. Keep Whisper open on both devices and compare the pairing code again.';
+
+  @override
+  String get androidSystemShareTitle => 'Send shared content';
+
+  @override
+  String get androidSystemShareChooseTrustedDevice =>
+      'Choose a trusted device. Nothing is sent until you confirm';
+
+  @override
+  String get androidSystemShareOnline => 'Online';
+
+  @override
+  String get androidSystemShareOffline => 'Offline';
+
+  @override
+  String get androidSystemShareNoTrustedDevices =>
+      'No trusted devices are available. Pair a device and confirm its identity first';
+
+  @override
+  String get androidSystemShareConfirmTarget => 'Confirm destination';
+
+  @override
+  String androidSystemShareWaitingForDevice(String device) {
+    return 'Waiting for $device; sending will start when it connects';
+  }
+
+  @override
+  String androidSystemShareSendingTo(String device) {
+    return 'Sending to $device';
+  }
+
+  @override
+  String androidSystemShareSentTo(String device) {
+    return 'Sent to $device';
+  }
+
+  @override
+  String get androidSystemShareFailedRetained =>
+      'Sending failed. The shared content was kept';
+
+  @override
+  String get androidSystemShareStillPending =>
+      'Shared content is still waiting for a device';
+
+  @override
+  String get androidSystemShareQueueFull =>
+      'The share queue is full. Process existing shares before adding more';
+
+  @override
+  String get androidSystemShareRejected =>
+      'The shared content exceeded a limit or could not be read completely, so it was not added';
+
+  @override
+  String get androidSystemShareTargetNeedsReselection =>
+      'The target device\'s identity changed or is no longer trusted. Choose it again';
+
+  @override
+  String get androidSystemShareChooseAction => 'Choose device';
+
+  @override
+  String androidSystemShareMoreFiles(int count) {
+    return '$count more files';
+  }
+
+  @override
+  String get desktopQuickSendTitle => 'System quick send';
+
+  @override
+  String desktopQuickSendSummary(int textCount, int fileCount) {
+    return '$textCount text items · $fileCount files';
+  }
+
+  @override
+  String desktopQuickSendMore(int count) {
+    return '$count more items';
+  }
+
+  @override
+  String desktopQuickSendFiles(int count) {
+    return '$count files';
+  }
+
+  @override
+  String get desktopQuickSendChooseDevice => 'Send to a trusted device';
+
+  @override
+  String get desktopQuickSendNoTrustedDevices =>
+      'No trusted devices. Pair a device first.';
+
+  @override
+  String get desktopQuickSendDeviceOffline =>
+      'Offline; the content will remain pending';
+
+  @override
+  String get desktopQuickSendLater => 'Later';
+
+  @override
+  String get desktopQuickSendSend => 'Send';
+
+  @override
+  String get desktopQuickSendSent => 'Added to the encrypted transfer queue';
+
+  @override
+  String get desktopQuickSendFailedRetained =>
+      'Sending did not finish; the content was retained';
+
+  @override
+  String get desktopQuickSendEmptyClipboard =>
+      'The clipboard has no supported content';
+
+  @override
+  String get desktopQuickSendShortcutUnavailable =>
+      'The global send shortcut is already in use';
+
+  @override
+  String get desktopQuickSendDraftLimit =>
+      'Quick send is full. Process existing content before adding more';
+
+  @override
+  String get desktopQuickSendFileLimit =>
+      'Too many files were selected, so the new content was not added';
+
+  @override
+  String get desktopQuickSendTextLimit =>
+      'The text is too long, so it was not added';
+
+  @override
+  String get desktopQuickSendInvalidPath =>
+      'A file path is invalid or too long, so the new content was not added';
+
+  @override
+  String get desktopQuickSendClipboardSnapshotUnavailable =>
+      'The clipboard could not be read immediately, so potentially changed content was not added';
+
+  @override
+  String get desktopQuickSendTargetConflict =>
+      'Some content was already sent to another device. Select the original device to continue';
+
+  @override
+  String get desktopQuickSendTargetNeedsReselection =>
+      'The target identity changed or is no longer trusted. The content was retained; select a device again';
 }

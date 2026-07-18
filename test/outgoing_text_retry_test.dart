@@ -41,6 +41,76 @@ MessageData _message({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('quick-send acknowledgement', () {
+    test('derives one canonical message id per source intent and peer', () {
+      final first = stableQuickSendMessageId(
+        source: 'desktop',
+        intentId: 'draft-1',
+        peerId: 'peer-a',
+      );
+      final repeated = stableQuickSendMessageId(
+        source: 'desktop',
+        intentId: 'draft-1',
+        peerId: 'peer-a',
+      );
+      final otherPeer = stableQuickSendMessageId(
+        source: 'desktop',
+        intentId: 'draft-1',
+        peerId: 'peer-b',
+      );
+
+      expect(first, repeated);
+      expect(first, isNot(otherPeer));
+      expect(
+        first,
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      );
+    });
+
+    test('completes only the exact peer and message acknowledgement', () async {
+      final tracker = OutgoingTextAcknowledgementTracker();
+      final ticket = tracker.waitFor(
+        peerId: 'peer-a',
+        messageId: 'message-a',
+        timeout: const Duration(seconds: 1),
+      );
+
+      tracker.acknowledge('peer-a', 'message-b');
+      expect(tracker.pendingCount, 1);
+      tracker.acknowledge('peer-a', 'message-a');
+
+      expect(await ticket.future, isTrue);
+      expect(tracker.pendingCount, 0);
+    });
+
+    test(
+      'disconnect and timeout fail waiters without leaking tickets',
+      () async {
+        final tracker = OutgoingTextAcknowledgementTracker();
+        final disconnected = tracker.waitFor(
+          peerId: 'peer-a',
+          messageId: 'message-a',
+          timeout: const Duration(seconds: 1),
+        );
+        final timedOut = tracker.waitFor(
+          peerId: 'peer-b',
+          messageId: 'message-b',
+          timeout: const Duration(milliseconds: 10),
+        );
+
+        tracker.disconnectPeer('peer-a');
+
+        expect(await disconnected.future, isFalse);
+        expect(await timedOut.future, isFalse);
+        expect(tracker.pendingCount, 0);
+      },
+    );
+  });
+
   group('prepareOutgoingTextWithRetryIdentity', () {
     test('reuses one persisted UUID only for an explicit retry', () async {
       MessageData? pending;
@@ -84,22 +154,24 @@ void main() {
   });
 
   group('OutgoingTextRetryRegistry', () {
-    test('short-circuits a retry whose original UUID was acknowledged',
-        () async {
-      final registry = OutgoingTextRetryRegistry();
-      final failed = _message(uuid: 'stable-uuid');
-      registry.rememberFailure(failed);
-      final acknowledged = failed.copyWith(acked: true, id: 9);
+    test(
+      'short-circuits a retry whose original UUID was acknowledged',
+      () async {
+        final registry = OutgoingTextRetryRegistry();
+        final failed = _message(uuid: 'stable-uuid');
+        registry.rememberFailure(failed);
+        final acknowledged = failed.copyWith(acked: true, id: 9);
 
-      final resolution = await registry.resolve(
-        _message(uuid: 'new-uuid'),
-        fetchByUuid: (_) async => <MessageData>[acknowledged],
-      );
+        final resolution = await registry.resolve(
+          _message(uuid: 'new-uuid'),
+          fetchByUuid: (_) async => <MessageData>[acknowledged],
+        );
 
-      expect(resolution.message?.uuid, failed.uuid);
-      expect(resolution.alreadyAcknowledged, isTrue);
-      expect(registry.hasRetryForPeer(failed.receiver), isFalse);
-    });
+        expect(resolution.message?.uuid, failed.uuid);
+        expect(resolution.alreadyAcknowledged, isTrue);
+        expect(registry.hasRetryForPeer(failed.receiver), isFalse);
+      },
+    );
 
     test('keeps independent failed intents for the same peer', () async {
       final registry = OutgoingTextRetryRegistry();
@@ -124,23 +196,38 @@ void main() {
       expect(registry.hasRetryForPeer(failedA.receiver), isTrue);
     });
 
-    test('selects the exact historical wire identity for a cached retry',
-        () async {
+    test('clears only retries owned by the invalidated peer', () {
       final registry = OutgoingTextRetryRegistry();
-      final failed = _message(uuid: 'shared', timestamp: 1);
-      registry.rememberFailure(failed);
-
-      final resolution = await registry.resolve(
-        _message(uuid: 'draft'),
-        fetchByUuid: (_) async => <MessageData>[
-          _message(uuid: 'shared', timestamp: 2, id: 9),
-          failed.copyWith(id: 8),
-        ],
+      registry.rememberFailure(_message(uuid: 'peer-a-retry'));
+      registry.rememberFailure(
+        _message(uuid: 'peer-b-retry', receiver: 'peer-b', content: 'peer b'),
       );
 
-      expect(resolution.message?.id, 8);
-      expect(resolution.message?.timestamp, 1);
+      registry.clearPeer('peer-a');
+
+      expect(registry.hasRetryForPeer('peer-a'), isFalse);
+      expect(registry.hasRetryForPeer('peer-b'), isTrue);
     });
+
+    test(
+      'selects the exact historical wire identity for a cached retry',
+      () async {
+        final registry = OutgoingTextRetryRegistry();
+        final failed = _message(uuid: 'shared', timestamp: 1);
+        registry.rememberFailure(failed);
+
+        final resolution = await registry.resolve(
+          _message(uuid: 'draft'),
+          fetchByUuid: (_) async => <MessageData>[
+            _message(uuid: 'shared', timestamp: 2, id: 9),
+            failed.copyWith(id: 8),
+          ],
+        );
+
+        expect(resolution.message?.id, 8);
+        expect(resolution.message?.timestamp, 1);
+      },
+    );
   });
 
   group('OutgoingTextSendLocks', () {
@@ -217,86 +304,87 @@ void main() {
       await send(_message(uuid: 'first-intent'));
       await send(_message(uuid: 'second-intent'));
 
-      expect(
-        prepared.map((result) => result.message.uuid),
-        <String>['first-intent', 'second-intent'],
-      );
+      expect(prepared.map((result) => result.message.uuid), <String>[
+        'first-intent',
+        'second-intent',
+      ]);
       expect(prepared.every((result) => result.isNew), isTrue);
       expect(prepared.every((result) => result.message.id > 0), isTrue);
       expect(
-        (await database.fetchMessageList('peer'))
-            .map((message) => message.uuid),
+        (await database.fetchMessageList(
+          'peer',
+        )).map((message) => message.uuid),
         containsAll(<String>['first-intent', 'second-intent']),
       );
     });
 
-    test('acknowledges historical duplicate UUID rows without throwing',
-        () async {
-      final duplicate = _message(uuid: 'legacy-duplicate');
-      await database.insertMessage(duplicate);
-      await database.insertMessage(duplicate.copyWith(timestamp: 2));
+    test(
+      'acknowledges historical duplicate UUID rows without throwing',
+      () async {
+        final duplicate = _message(uuid: 'legacy-duplicate');
+        await database.insertMessage(duplicate);
+        await database.insertMessage(duplicate.copyWith(timestamp: 2));
 
-      final acknowledged = await database.ackMessage(duplicate);
+        final acknowledged = await database.ackMessage(duplicate);
 
-      expect(acknowledged?.uuid, duplicate.uuid);
-      expect(acknowledged?.timestamp, 1);
-      expect(acknowledged?.acked, isTrue);
-      expect(
-        await database.fetchMessagesByUuid(duplicate.uuid),
-        hasLength(2),
-      );
-      expect(
-        (await database.fetchMessageByUuid(duplicate.uuid))?.acked,
-        isTrue,
-      );
-    });
+        expect(acknowledged?.uuid, duplicate.uuid);
+        expect(acknowledged?.timestamp, 1);
+        expect(acknowledged?.acked, isTrue);
+        expect(
+          await database.fetchMessagesByUuid(duplicate.uuid),
+          hasLength(2),
+        );
+        expect(
+          (await database.fetchMessageByUuid(duplicate.uuid))?.acked,
+          isTrue,
+        );
+      },
+    );
 
     test('returning insert preserves explicit local acknowledgement', () async {
-      final local = _message(
-        uuid: 'local-message',
-        receiver: '',
-        acked: true,
-      );
+      final local = _message(uuid: 'local-message', receiver: '', acked: true);
 
       final persisted = await database.insertMessageReturning(local);
 
       expect(persisted.id, greaterThan(0));
       expect(persisted.acked, isTrue);
-      expect(
-        (await database.fetchMessageByUuid(local.uuid))?.acked,
-        isTrue,
-      );
+      expect((await database.fetchMessageByUuid(local.uuid))?.acked, isTrue);
 
       await database.deleteMessage(persisted.id);
       expect(await database.fetchMessageByUuid(local.uuid), isNull);
     });
 
-    test('legacy insert keeps untrusted wire acknowledgement pending',
-        () async {
-      final remote = _message(uuid: 'remote-message', acked: true);
+    test(
+      'legacy insert keeps untrusted wire acknowledgement pending',
+      () async {
+        final remote = _message(uuid: 'remote-message', acked: true);
 
-      await database.insertMessage(remote);
+        await database.insertMessage(remote);
 
-      expect(
-        (await database.fetchMessageByUuid(remote.uuid))?.acked,
-        isFalse,
-      );
-    });
+        expect(
+          (await database.fetchMessageByUuid(remote.uuid))?.acked,
+          isFalse,
+        );
+      },
+    );
 
     test('UUID replay lookups use the message index', () async {
-      final indexes =
-          await database.customSelect('PRAGMA index_list(message)').get();
+      final indexes = await database
+          .customSelect('PRAGMA index_list(message)')
+          .get();
       expect(
         indexes.map((row) => row.read<String>('name')),
         contains('message_uuid_lookup'),
       );
 
-      final plan = await database.customSelect(
-        'EXPLAIN QUERY PLAN SELECT * FROM message WHERE uuid = ?',
-        variables: <Variable<Object>>[
-          const Variable<String>('indexed-uuid'),
-        ],
-      ).get();
+      final plan = await database
+          .customSelect(
+            'EXPLAIN QUERY PLAN SELECT * FROM message WHERE uuid = ?',
+            variables: <Variable<Object>>[
+              const Variable<String>('indexed-uuid'),
+            ],
+          )
+          .get();
       expect(
         plan.map((row) => row.read<String>('detail')).join('\n'),
         contains('message_uuid_lookup'),
@@ -321,10 +409,7 @@ void main() {
 
     test('rejects an empty UUID before persistence', () {
       expect(
-        classifyWireMessageReplay(
-          existing: null,
-          incoming: _message(uuid: ''),
-        ),
+        classifyWireMessageReplay(existing: null, incoming: _message(uuid: '')),
         WireMessageReplayDecision.conflict,
       );
     });
@@ -338,29 +423,28 @@ void main() {
         _message(uuid: 'collision', timestamp: 2),
       ]) {
         expect(
-          classifyWireMessageReplay(
-            existing: existing,
-            incoming: conflicting,
-          ),
+          classifyWireMessageReplay(existing: existing, incoming: conflicting),
           WireMessageReplayDecision.conflict,
         );
       }
     });
 
-    test('matches any exact historical candidate before declaring conflict',
-        () {
-      final incoming = _message(uuid: 'history', timestamp: 1);
-      expect(
-        classifyWireMessageReplayCandidates(
-          existing: <MessageData>[
-            incoming.copyWith(timestamp: 2, id: 2),
-            incoming.copyWith(id: 1),
-          ],
-          incoming: incoming,
-        ),
-        WireMessageReplayDecision.duplicate,
-      );
-    });
+    test(
+      'matches any exact historical candidate before declaring conflict',
+      () {
+        final incoming = _message(uuid: 'history', timestamp: 1);
+        expect(
+          classifyWireMessageReplayCandidates(
+            existing: <MessageData>[
+              incoming.copyWith(timestamp: 2, id: 2),
+              incoming.copyWith(id: 1),
+            ],
+            incoming: incoming,
+          ),
+          WireMessageReplayDecision.duplicate,
+        );
+      },
+    );
   });
 
   group('WireMessageReplayGuard', () {
@@ -372,33 +456,35 @@ void main() {
 
     tearDown(() => database.close());
 
-    test('atomically persists one of two concurrent identical claims',
-        () async {
-      final guard = WireMessageReplayGuard();
-      final incoming = _message(uuid: 'concurrent');
+    test(
+      'atomically persists one of two concurrent identical claims',
+      () async {
+        final guard = WireMessageReplayGuard();
+        final incoming = _message(uuid: 'concurrent');
 
-      final claims = await Future.wait(
-        List<Future<WireMessageReplayClaim>>.generate(
-          2,
-          (_) => guard.claim(
-            incoming,
-            fetchExisting: database.fetchMessagesByUuid,
-            persist: database.insertMessageReturning,
+        final claims = await Future.wait(
+          List<Future<WireMessageReplayClaim>>.generate(
+            2,
+            (_) => guard.claim(
+              incoming,
+              fetchExisting: database.fetchMessagesByUuid,
+              persist: database.insertMessageReturning,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(
-        claims.map((claim) => claim.decision),
-        contains(WireMessageReplayDecision.accept),
-      );
-      expect(
-        claims.map((claim) => claim.decision),
-        contains(WireMessageReplayDecision.duplicate),
-      );
-      expect(claims.every((claim) => claim.message!.id > 0), isTrue);
-      expect(await database.fetchMessagesByUuid(incoming.uuid), hasLength(1));
-    });
+        expect(
+          claims.map((claim) => claim.decision),
+          contains(WireMessageReplayDecision.accept),
+        );
+        expect(
+          claims.map((claim) => claim.decision),
+          contains(WireMessageReplayDecision.duplicate),
+        );
+        expect(claims.every((claim) => claim.message!.id > 0), isTrue);
+        expect(await database.fetchMessagesByUuid(incoming.uuid), hasLength(1));
+      },
+    );
 
     test('does not persist an empty UUID', () async {
       var persists = 0;
@@ -415,35 +501,36 @@ void main() {
       expect(persists, 0);
     });
 
-    test('file claims can ignore receiver-local path when matching replay',
-        () async {
-      final guard = WireMessageReplayGuard();
-      final incoming = _message(uuid: 'shared').copyWith(
-        type: MessageEnum.File,
-        path: '',
-      );
-      final persisted = incoming.copyWith(id: 7, path: '/downloads/file.bin');
+    test(
+      'file claims can ignore receiver-local path when matching replay',
+      () async {
+        final guard = WireMessageReplayGuard();
+        final incoming = _message(
+          uuid: 'shared',
+        ).copyWith(type: MessageEnum.File, path: '');
+        final persisted = incoming.copyWith(id: 7, path: '/downloads/file.bin');
 
-      var persists = 0;
-      final claim = await guard.claim(
-        incoming,
-        fetchExisting: (_) async => <MessageData>[persisted],
-        isDuplicate: (existing, message) =>
-            existing.uuid == message.uuid &&
-            existing.sender == message.sender &&
-            existing.receiver == message.receiver &&
-            existing.type == message.type &&
-            existing.content == message.content,
-        persist: (message) async {
-          persists++;
-          return message;
-        },
-      );
+        var persists = 0;
+        final claim = await guard.claim(
+          incoming,
+          fetchExisting: (_) async => <MessageData>[persisted],
+          isDuplicate: (existing, message) =>
+              existing.uuid == message.uuid &&
+              existing.sender == message.sender &&
+              existing.receiver == message.receiver &&
+              existing.type == message.type &&
+              existing.content == message.content,
+          persist: (message) async {
+            persists++;
+            return message;
+          },
+        );
 
-      expect(claim.decision, WireMessageReplayDecision.duplicate);
-      expect(claim.message?.id, 7);
-      expect(persists, 0);
-    });
+        expect(claim.decision, WireMessageReplayDecision.duplicate);
+        expect(claim.message?.id, 7);
+        expect(persists, 0);
+      },
+    );
 
     test('durable non-message UUID claims reject text persistence', () async {
       var persists = 0;
@@ -462,17 +549,19 @@ void main() {
     });
   });
 
-  test('acknowledgement failures are contained for local side effects',
-      () async {
-    Object? captured;
-    final sent = await sendAcknowledgementBestEffort(
-      send: () => Future<bool>.error(StateError('socket closed')),
-      onError: (error, _) => captured = error,
-    );
+  test(
+    'acknowledgement failures are contained for local side effects',
+    () async {
+      Object? captured;
+      final sent = await sendAcknowledgementBestEffort(
+        send: () => Future<bool>.error(StateError('socket closed')),
+        onError: (error, _) => captured = error,
+      );
 
-    expect(sent, isFalse);
-    expect(captured, isA<StateError>());
-  });
+      expect(sent, isFalse);
+      expect(captured, isA<StateError>());
+    },
+  );
 
   test('socket manager wires persistent retry identity and replay guard', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
@@ -513,8 +602,9 @@ void main() {
     );
     expect(textCase, isNot(contains('insertMessage(message)')));
 
-    final transferSource =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final transferSource = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     expect(transferSource, contains('await _ackMessage(message);'));
     expect(
       RegExp(r'\.admitFileTransfer\(').allMatches(transferSource),

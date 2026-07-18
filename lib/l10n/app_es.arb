@@ -92,12 +92,17 @@
   "retry": "Reintentar",
   "setting": "Ajustes",
   "sendTips": "Escribe algo...",
+  "sendFiles": "Enviar archivos",
+  "sendFolder": "Enviar carpeta (ZIP)",
+  "folderSendFailed": "No se pudo empaquetar o enviar la carpeta",
   "trust": "Confiar en este dispositivo",
   "writeClipboard": "Permitir escribir en el portapapeles",
   "deleteDevice": "Eliminar dispositivo",
   "serverPortTitle": "Puerto del servidor",
   "serverPort": "Puerto del servidor {port}",
   "accessClipboard": "Permitir acceso al portapapeles",
+  "clipboardAutoSync": "Sincronizar el portapapeles automáticamente",
+  "clipboardAutoSyncDesc": "Desactivado: envío manual; activado: solo se sincroniza con el dispositivo de confianza actual",
   "doubleClickRmMessage": "Eliminar mensaje al hacer doble clic",
   "close2tray": "Ocultar en la bandeja al cerrar",
   "nickname": "Apodo",
@@ -471,5 +476,131 @@
   "pairingViewDetails": "Ver detalles",
   "pairingUpgradeRequired": "El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo",
   "pairingExpired": "La solicitud de emparejamiento ha caducado",
-  "pairingRejectedByPeer": "El otro dispositivo rechazó la solicitud de conexión"
+  "pairingRejectedByPeer": "El otro dispositivo rechazó la solicitud de conexión",
+  "pairingEncryptionNotice": "Tras emparejar, el texto, los archivos, el portapapeles y los datos de control se cifran de extremo a extremo",
+  "e2eeTrustedConnection": "Cifrado de extremo a extremo · Dispositivo de confianza",
+  "e2eeEncryptedConnection": "Conexión cifrada de extremo a extremo",
+  "transferAssistantTitle": "Asistente de transferencias",
+  "transferAssistantSearchHint": "Buscar mensajes de texto",
+  "transferAssistantClearSearch": "Borrar búsqueda",
+  "transferAssistantSearchResults": "Resultados de búsqueda",
+  "transferAssistantFavorites": "Textos favoritos",
+  "transferAssistantRecent": "Textos recientes",
+  "transferAssistantNoResults": "No se encontró ningún texto coincidente",
+  "transferAssistantNoFavorites": "Aún no hay textos favoritos",
+  "transferAssistantNoRecent": "Aún no hay mensajes de texto",
+  "transferAssistantIncoming": "Recibido",
+  "transferAssistantOutgoing": "Enviado",
+  "transferAssistantCopy": "Copiar texto",
+  "transferAssistantFavorite": "Añadir a favoritos",
+  "transferAssistantUnfavorite": "Quitar de favoritos",
+  "transferAssistantLoadFailed": "No se pudieron cargar los mensajes de texto",
+  "transferAssistantCopied": "Texto copiado",
+  "transferAssistantCopyFailed": "No se pudo copiar el texto",
+  "transferAssistantFavoriteFailed": "No se pudieron actualizar los favoritos. Inténtalo de nuevo",
+  "qrPairingTitle": "Conectar con código QR",
+  "qrMyCode": "Mi código QR",
+  "qrScanCode": "Escanear para conectar",
+  "qrShowCodeHint": "Haz que el otro dispositivo escanee este código para verificar la dirección y la identidad",
+  "qrFingerprint": "Huella de identidad {fingerprint}",
+  "@qrFingerprint": {
+    "placeholders": {
+      "fingerprint": {
+        "type": "String"
+      }
+    }
+  },
+  "qrWifiUnavailable": "No se encontró una dirección LAN válida. Conéctate a Wi-Fi y actualiza el código",
+  "qrCopyLink": "Copiar datos de conexión",
+  "qrLinkCopied": "Datos de conexión copiados",
+  "qrScanHint": "Escanea el código que muestra Whisper en el otro dispositivo",
+  "qrCameraUnavailable": "La cámara no está disponible. Permite que Whisper use la cámara en los ajustes del sistema",
+  "qrToggleTorch": "Alternar linterna",
+  "qrSwitchCamera": "Cambiar cámara",
+  "qrCannotPairSelf": "Este es el dispositivo actual. Escanea el código de otro dispositivo",
+  "qrInvalidCode": "No es un código válido de Whisper. Pide al otro dispositivo que muestre uno nuevo",
+  "connectionDiagnosticTitle": "Diagnóstico de conexión",
+  "connectionDiagnosticWifi": "No se puede alcanzar el dispositivo. Confirma que ambos usan la misma red Wi-Fi y desactiva el aislamiento de invitados o AP.",
+  "connectionDiagnosticAddress": "La dirección LAN del código QR no es válida o cambió. Pide al otro dispositivo que vuelva a abrir el código y escanéalo de nuevo.",
+  "connectionDiagnosticService": "Se encontró la dirección, pero Whisper no respondió. Abre Whisper en el otro dispositivo y confirma que su servicio LAN esté activo.",
+  "connectionDiagnosticFirewall": "La conexión agotó el tiempo. Permite Whisper en el cortafuegos del sistema de ambos dispositivos y vuelve a intentarlo.",
+  "connectionDiagnosticIdentity": "La identidad no coincide con el código QR y Whisper detuvo la conexión. Pide un código nuevo; no omitas esta comprobación.",
+  "connectionDiagnosticVersion": "Los dispositivos usan versiones de protocolo incompatibles. Actualiza Whisper a la misma versión reciente y vuelve a intentarlo.",
+  "connectionDiagnosticPairing": "El emparejamiento no terminó. Mantén Whisper abierto en ambos dispositivos y compara de nuevo el código.",
+  "androidSystemShareTitle": "Enviar contenido compartido",
+  "androidSystemShareChooseTrustedDevice": "Elige un dispositivo de confianza. No se enviará nada hasta que confirmes",
+  "androidSystemShareOnline": "En línea",
+  "androidSystemShareOffline": "Sin conexión",
+  "androidSystemShareNoTrustedDevices": "No hay dispositivos de confianza disponibles. Empareja uno y confirma primero su identidad",
+  "androidSystemShareConfirmTarget": "Confirmar destino",
+  "androidSystemShareWaitingForDevice": "Esperando a {device}; el envío comenzará cuando se conecte",
+  "@androidSystemShareWaitingForDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSendingTo": "Enviando a {device}",
+  "@androidSystemShareSendingTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSentTo": "Enviado a {device}",
+  "@androidSystemShareSentTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareFailedRetained": "El envío falló. El contenido compartido se conservó",
+  "androidSystemShareStillPending": "El contenido compartido sigue esperando un dispositivo",
+  "androidSystemShareQueueFull": "La cola está llena. Procesa los elementos existentes antes de añadir más",
+  "androidSystemShareRejected": "El contenido superó un límite o no se pudo leer por completo, por lo que no se añadió",
+  "androidSystemShareTargetNeedsReselection": "La identidad del dispositivo cambió o ya no es de confianza. Vuelve a elegirlo",
+  "androidSystemShareChooseAction": "Elegir dispositivo",
+  "androidSystemShareMoreFiles": "{count} archivos más",
+  "@androidSystemShareMoreFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopQuickSendTitle": "Envío rápido del sistema",
+  "desktopQuickSendSummary": "{textCount} textos · {fileCount} archivos",
+  "@desktopQuickSendSummary": {
+    "placeholders": {
+      "textCount": { "type": "int" },
+      "fileCount": { "type": "int" }
+    }
+  },
+  "desktopQuickSendMore": "{count} elementos más",
+  "@desktopQuickSendMore": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendFiles": "{count} archivos",
+  "@desktopQuickSendFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendChooseDevice": "Enviar a un dispositivo de confianza",
+  "desktopQuickSendNoTrustedDevices": "No hay dispositivos de confianza. Empareja uno primero.",
+  "desktopQuickSendDeviceOffline": "Sin conexión; el contenido seguirá pendiente",
+  "desktopQuickSendLater": "Más tarde",
+  "desktopQuickSendSend": "Enviar",
+  "desktopQuickSendSent": "Añadido a la cola de transferencia cifrada",
+  "desktopQuickSendFailedRetained": "El envío no terminó; el contenido se ha conservado",
+  "desktopQuickSendEmptyClipboard": "El portapapeles no tiene contenido compatible",
+  "desktopQuickSendShortcutUnavailable": "El atajo global de envío ya está en uso",
+  "desktopQuickSendDraftLimit": "El envío rápido está lleno. Procesa el contenido existente antes de añadir más",
+  "desktopQuickSendFileLimit": "Se seleccionaron demasiados archivos, por lo que no se añadió el contenido nuevo",
+  "desktopQuickSendTextLimit": "El texto es demasiado largo, por lo que no se añadió",
+  "desktopQuickSendInvalidPath": "Una ruta no es válida o es demasiado larga, por lo que no se añadió el contenido nuevo",
+  "desktopQuickSendClipboardSnapshotUnavailable": "No se pudo leer el portapapeles de inmediato, por lo que no se añadió contenido que pudiera haber cambiado",
+  "desktopQuickSendTargetConflict": "Parte del contenido ya se envió a otro dispositivo. Selecciona el dispositivo original para continuar",
+  "desktopQuickSendTargetNeedsReselection": "La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo"
 }

@@ -11,7 +11,7 @@ typedef AuthLifecycleFailure = Future<void> Function(
 final class AuthHandshakeLifecycle {
   const AuthHandshakeLifecycle._();
 
-  /// Keeps a signed allow result local until persistence, MAC activation, and
+  /// Keeps a signed allow result local until persistence, AEAD activation, and
   /// peer registration represented by [commit] have all completed.
   static Future<bool> completeServerAllow<T>({
     required Future<T> Function() commit,

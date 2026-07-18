@@ -2,16 +2,19 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include "desktop_quick_send_plugin.h"
 #include "flutter_window.h"
 #include "single_instance.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  std::vector<std::string> command_line_arguments =
+      GetCommandLineArguments();
   SingleInstanceLock single_instance_lock;
   if (!single_instance_lock.IsPrimary()) {
-    NotifyExistingInstance();
-    return EXIT_SUCCESS;
+    return NotifyExistingInstance(command_line_arguments) ? EXIT_SUCCESS
+                                                           : EXIT_FAILURE;
   }
 
   // Attach to console when present (e.g., 'flutter run') or create a
@@ -24,10 +27,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  flutter::DartProject project(L"data");
+  const DesktopQuickSendEnqueueOutcome quick_send_outcome =
+      DesktopQuickSendPluginEmitArguments(command_line_arguments);
+  if (quick_send_outcome != DesktopQuickSendEnqueueOutcome::kIgnored) {
+    command_line_arguments.clear();
+  }
 
-  std::vector<std::string> command_line_arguments =
-      GetCommandLineArguments();
+  flutter::DartProject project(L"data");
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 

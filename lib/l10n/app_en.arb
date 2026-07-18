@@ -83,12 +83,17 @@
   "retry": "Retry",
   "setting": "Settings",
   "sendTips": "Type something...",
+  "sendFiles": "Send files",
+  "sendFolder": "Send folder (ZIP)",
+  "folderSendFailed": "Unable to package or send the folder",
   "trust": "Trust Device",
   "writeClipboard": "Write to Clipboard",
   "deleteDevice": "Delete Device",
   "serverPortTitle": "Server Port",
   "serverPort": "Server Port {port}",
   "accessClipboard": "Access Clipboard",
+  "clipboardAutoSync": "Automatically Sync Clipboard",
+  "clipboardAutoSyncDesc": "When off, send manually; when on, sync only to the current trusted device",
   "doubleClickRmMessage": "Delete Message on Double Click",
   "close2tray": "Hide to Tray When Closing",
   "nickname": "Nickname",
@@ -444,5 +449,131 @@
   "pairingViewDetails": "View details",
   "pairingUpgradeRequired": "The other device is out of date. Update Whisper and try again",
   "pairingExpired": "The pairing request expired",
-  "pairingRejectedByPeer": "The other device declined the connection request"
+  "pairingRejectedByPeer": "The other device declined the connection request",
+  "pairingEncryptionNotice": "After pairing, text, files, clipboard, and control data are end-to-end encrypted",
+  "e2eeTrustedConnection": "End-to-end encrypted · Trusted device",
+  "e2eeEncryptedConnection": "End-to-end encrypted connection",
+  "transferAssistantTitle": "Transfer Assistant",
+  "transferAssistantSearchHint": "Search text messages",
+  "transferAssistantClearSearch": "Clear search",
+  "transferAssistantSearchResults": "Search results",
+  "transferAssistantFavorites": "Favorite texts",
+  "transferAssistantRecent": "Recent texts",
+  "transferAssistantNoResults": "No matching text found",
+  "transferAssistantNoFavorites": "No favorite texts yet",
+  "transferAssistantNoRecent": "No text messages yet",
+  "transferAssistantIncoming": "Received",
+  "transferAssistantOutgoing": "Sent",
+  "transferAssistantCopy": "Copy text",
+  "transferAssistantFavorite": "Favorite text",
+  "transferAssistantUnfavorite": "Remove from favorites",
+  "transferAssistantLoadFailed": "Couldn't load text messages",
+  "transferAssistantCopied": "Text copied",
+  "transferAssistantCopyFailed": "Couldn't copy text",
+  "transferAssistantFavoriteFailed": "Couldn't update favorites. Try again",
+  "qrPairingTitle": "Connect with QR code",
+  "qrMyCode": "My QR code",
+  "qrScanCode": "Scan to connect",
+  "qrShowCodeHint": "Let the other device scan this code to verify both the address and device identity",
+  "qrFingerprint": "Identity fingerprint {fingerprint}",
+  "@qrFingerprint": {
+    "placeholders": {
+      "fingerprint": {
+        "type": "String"
+      }
+    }
+  },
+  "qrWifiUnavailable": "No usable LAN address was found. Connect to Wi-Fi, then refresh this code",
+  "qrCopyLink": "Copy connection details",
+  "qrLinkCopied": "Connection details copied",
+  "qrScanHint": "Scan the code shown in Whisper on the other device",
+  "qrCameraUnavailable": "The camera is unavailable. Allow camera access for Whisper in system settings",
+  "qrToggleTorch": "Toggle torch",
+  "qrSwitchCamera": "Switch camera",
+  "qrCannotPairSelf": "This is the current device. Scan a code from another device",
+  "qrInvalidCode": "This is not a valid Whisper code. Ask the other device to show a new code",
+  "connectionDiagnosticTitle": "Connection diagnosis",
+  "connectionDiagnosticWifi": "The device cannot be reached. Confirm both devices use the same Wi-Fi and disable guest-network or AP isolation, then retry.",
+  "connectionDiagnosticAddress": "The LAN address in the QR code is invalid or has changed. Ask the other device to reopen its code, then scan it again.",
+  "connectionDiagnosticService": "The address was found, but Whisper did not respond. Open Whisper on the other device and confirm its LAN service is running.",
+  "connectionDiagnosticFirewall": "The connection timed out. Allow Whisper through the system firewall on both devices, then retry.",
+  "connectionDiagnosticIdentity": "The device identity does not match the QR code, so Whisper stopped the connection. Ask the other device to show a new code; do not bypass this check.",
+  "connectionDiagnosticVersion": "The devices use incompatible protocol versions. Update Whisper to the same recent version, then retry.",
+  "connectionDiagnosticPairing": "Pairing did not finish. Keep Whisper open on both devices and compare the pairing code again.",
+  "androidSystemShareTitle": "Send shared content",
+  "androidSystemShareChooseTrustedDevice": "Choose a trusted device. Nothing is sent until you confirm",
+  "androidSystemShareOnline": "Online",
+  "androidSystemShareOffline": "Offline",
+  "androidSystemShareNoTrustedDevices": "No trusted devices are available. Pair a device and confirm its identity first",
+  "androidSystemShareConfirmTarget": "Confirm destination",
+  "androidSystemShareWaitingForDevice": "Waiting for {device}; sending will start when it connects",
+  "@androidSystemShareWaitingForDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSendingTo": "Sending to {device}",
+  "@androidSystemShareSendingTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSentTo": "Sent to {device}",
+  "@androidSystemShareSentTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareFailedRetained": "Sending failed. The shared content was kept",
+  "androidSystemShareStillPending": "Shared content is still waiting for a device",
+  "androidSystemShareQueueFull": "The share queue is full. Process existing shares before adding more",
+  "androidSystemShareRejected": "The shared content exceeded a limit or could not be read completely, so it was not added",
+  "androidSystemShareTargetNeedsReselection": "The target device's identity changed or is no longer trusted. Choose it again",
+  "androidSystemShareChooseAction": "Choose device",
+  "androidSystemShareMoreFiles": "{count} more files",
+  "@androidSystemShareMoreFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopQuickSendTitle": "System quick send",
+  "desktopQuickSendSummary": "{textCount} text items · {fileCount} files",
+  "@desktopQuickSendSummary": {
+    "placeholders": {
+      "textCount": { "type": "int" },
+      "fileCount": { "type": "int" }
+    }
+  },
+  "desktopQuickSendMore": "{count} more items",
+  "@desktopQuickSendMore": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendFiles": "{count} files",
+  "@desktopQuickSendFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendChooseDevice": "Send to a trusted device",
+  "desktopQuickSendNoTrustedDevices": "No trusted devices. Pair a device first.",
+  "desktopQuickSendDeviceOffline": "Offline; the content will remain pending",
+  "desktopQuickSendLater": "Later",
+  "desktopQuickSendSend": "Send",
+  "desktopQuickSendSent": "Added to the encrypted transfer queue",
+  "desktopQuickSendFailedRetained": "Sending did not finish; the content was retained",
+  "desktopQuickSendEmptyClipboard": "The clipboard has no supported content",
+  "desktopQuickSendShortcutUnavailable": "The global send shortcut is already in use",
+  "desktopQuickSendDraftLimit": "Quick send is full. Process existing content before adding more",
+  "desktopQuickSendFileLimit": "Too many files were selected, so the new content was not added",
+  "desktopQuickSendTextLimit": "The text is too long, so it was not added",
+  "desktopQuickSendInvalidPath": "A file path is invalid or too long, so the new content was not added",
+  "desktopQuickSendClipboardSnapshotUnavailable": "The clipboard could not be read immediately, so potentially changed content was not added",
+  "desktopQuickSendTargetConflict": "Some content was already sent to another device. Select the original device to continue",
+  "desktopQuickSendTargetNeedsReselection": "The target identity changed or is no longer trusted. The content was retained; select a device again"
 }

@@ -1,17 +1,151 @@
+import 'dart:async';
+
+import 'package:uuid/uuid.dart';
 import 'package:whisper/model/LocalDatabase.dart' show MessageData;
 import 'package:whisper/socket/wire_message_replay.dart'
     show hasSameWireMessageIdentity;
 import 'package:synchronized/synchronized.dart';
 
-typedef OutgoingTextPersist = Future<MessageData> Function(
-  MessageData message,
-);
+String stableQuickSendMessageId({
+  required String source,
+  required String intentId,
+  required String peerId,
+}) {
+  if (source.trim().isEmpty ||
+      intentId.trim().isEmpty ||
+      peerId.trim().isEmpty) {
+    throw ArgumentError('quick-send identity fields must not be empty');
+  }
+  return const Uuid().v5(
+    Namespace.url.value,
+    'https://whisper.local/quick-send/$source/$intentId/$peerId',
+  );
+}
+
+final class OutgoingTextAcknowledgementTracker {
+  final Map<
+    _OutgoingTextAcknowledgementKey,
+    Set<OutgoingTextAcknowledgementTicket>
+  >
+  _tickets =
+      <
+        _OutgoingTextAcknowledgementKey,
+        Set<OutgoingTextAcknowledgementTicket>
+      >{};
+
+  int get pendingCount =>
+      _tickets.values.fold(0, (total, values) => total + values.length);
+
+  OutgoingTextAcknowledgementTicket waitFor({
+    required String peerId,
+    required String messageId,
+    required Duration timeout,
+  }) {
+    if (peerId.isEmpty || messageId.isEmpty || timeout <= Duration.zero) {
+      throw ArgumentError('invalid acknowledgement waiter');
+    }
+    final key = _OutgoingTextAcknowledgementKey(peerId, messageId);
+    late final OutgoingTextAcknowledgementTicket ticket;
+    ticket = OutgoingTextAcknowledgementTicket._(
+      onCancel: () => _complete(key, ticket, false),
+    );
+    _tickets
+        .putIfAbsent(key, () => <OutgoingTextAcknowledgementTicket>{})
+        .add(ticket);
+    ticket._timer = Timer(timeout, () => _complete(key, ticket, false));
+    return ticket;
+  }
+
+  void acknowledge(String peerId, String messageId) {
+    final key = _OutgoingTextAcknowledgementKey(peerId, messageId);
+    for (final ticket in List<OutgoingTextAcknowledgementTicket>.of(
+      _tickets[key] ?? const <OutgoingTextAcknowledgementTicket>{},
+    )) {
+      _complete(key, ticket, true);
+    }
+  }
+
+  void disconnectPeer(String peerId) {
+    final keys = _tickets.keys
+        .where((key) => key.peerId == peerId)
+        .toList(growable: false);
+    for (final key in keys) {
+      for (final ticket in List<OutgoingTextAcknowledgementTicket>.of(
+        _tickets[key] ?? const <OutgoingTextAcknowledgementTicket>{},
+      )) {
+        _complete(key, ticket, false);
+      }
+    }
+  }
+
+  void clear() {
+    final entries = _tickets.entries.toList(growable: false);
+    for (final entry in entries) {
+      for (final ticket in List<OutgoingTextAcknowledgementTicket>.of(
+        entry.value,
+      )) {
+        _complete(entry.key, ticket, false);
+      }
+    }
+  }
+
+  void _complete(
+    _OutgoingTextAcknowledgementKey key,
+    OutgoingTextAcknowledgementTicket ticket,
+    bool acknowledged,
+  ) {
+    final values = _tickets[key];
+    if (values == null || !values.remove(ticket)) {
+      return;
+    }
+    if (values.isEmpty) {
+      _tickets.remove(key);
+    }
+    ticket._complete(acknowledged);
+  }
+}
+
+final class OutgoingTextAcknowledgementTicket {
+  OutgoingTextAcknowledgementTicket._({required void Function() onCancel})
+    : _onCancel = onCancel;
+
+  final Completer<bool> _completer = Completer<bool>();
+  final void Function() _onCancel;
+  Timer? _timer;
+
+  Future<bool> get future => _completer.future;
+
+  void cancel() => _onCancel();
+
+  void _complete(bool acknowledged) {
+    _timer?.cancel();
+    _timer = null;
+    if (!_completer.isCompleted) {
+      _completer.complete(acknowledged);
+    }
+  }
+}
+
+final class _OutgoingTextAcknowledgementKey {
+  const _OutgoingTextAcknowledgementKey(this.peerId, this.messageId);
+
+  final String peerId;
+  final String messageId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _OutgoingTextAcknowledgementKey &&
+      other.peerId == peerId &&
+      other.messageId == messageId;
+
+  @override
+  int get hashCode => Object.hash(peerId, messageId);
+}
+
+typedef OutgoingTextPersist = Future<MessageData> Function(MessageData message);
 
 final class PreparedOutgoingText {
-  const PreparedOutgoingText({
-    required this.message,
-    required this.isNew,
-  });
+  const PreparedOutgoingText({required this.message, required this.isNew});
 
   final MessageData message;
   final bool isNew;
@@ -22,10 +156,7 @@ final class OutgoingTextSendLocks {
       <String, _OutgoingTextSendLockEntry>{};
 
   Future<T> synchronized<T>(String peerId, Future<T> Function() action) async {
-    final entry = _entries.putIfAbsent(
-      peerId,
-      _OutgoingTextSendLockEntry.new,
-    );
+    final entry = _entries.putIfAbsent(peerId, _OutgoingTextSendLockEntry.new);
     entry.users++;
     try {
       return await entry.lock.synchronized(action);
@@ -50,8 +181,8 @@ final class OutgoingTextRetryResolution {
   });
 
   const OutgoingTextRetryResolution.none()
-      : message = null,
-        alreadyAcknowledged = false;
+    : message = null,
+      alreadyAcknowledged = false;
 
   final MessageData? message;
   final bool alreadyAcknowledged;
@@ -66,6 +197,13 @@ final class OutgoingTextRetryRegistry {
 
   bool hasRetryForPeer(String peerId) {
     return _entriesByIntent.keys.any((intent) => intent.receiver == peerId);
+  }
+
+  void clearPeer(String peerId) {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _entriesByIntent.removeWhere((intent, _) => intent.receiver == peerId);
   }
 
   void rememberFailure(MessageData message) {
@@ -177,8 +315,5 @@ Future<PreparedOutgoingText> prepareOutgoingTextWithRetryIdentity({
   if (retry != null) {
     return PreparedOutgoingText(message: retry, isNew: false);
   }
-  return PreparedOutgoingText(
-    message: await persist(draft),
-    isNew: true,
-  );
+  return PreparedOutgoingText(message: await persist(draft), isNew: true);
 }

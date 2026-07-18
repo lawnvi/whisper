@@ -16,6 +16,13 @@ final class AuthSessionKeys {
   final SecretKey clientToServerMedia;
   final SecretKey serverToClientMedia;
 
+  void destroy() {
+    clientToServerChat.destroy();
+    serverToClientChat.destroy();
+    clientToServerMedia.destroy();
+    serverToClientMedia.destroy();
+  }
+
   static Future<AuthSessionKeys> derive({
     required KeyPair localEphemeralKeyPair,
     required PublicKey remoteEphemeralPublicKey,
@@ -32,36 +39,66 @@ final class AuthSessionKeys {
       keyPair: localEphemeralKeyPair,
       remotePublicKey: remoteEphemeralPublicKey,
     );
-    final sharedSecretBytes = await sharedSecret.extractBytes();
-    var nonZero = 0;
-    for (final byte in sharedSecretBytes) {
-      nonZero |= byte;
-    }
-    if (nonZero == 0) {
-      throw const FormatException('Invalid X25519 shared secret');
-    }
-    final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
-
-    Future<SecretKey> derive(String label) {
-      return hkdf.deriveKey(
-        secretKey: sharedSecret,
-        nonce: transcriptHash,
-        info: utf8.encode('whisper-auth-v1/$label'),
+    try {
+      final sharedSecretBytes = Uint8List.fromList(
+        await sharedSecret.extractBytes(),
       );
-    }
+      try {
+        var nonZero = 0;
+        for (final byte in sharedSecretBytes) {
+          nonZero |= byte;
+        }
+        if (nonZero == 0) {
+          throw const FormatException('Invalid X25519 shared secret');
+        }
+      } finally {
+        sharedSecretBytes.fillRange(0, sharedSecretBytes.length, 0);
+      }
+      final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
 
-    final keys = await Future.wait(<Future<SecretKey>>[
-      derive('client-to-server/chat'),
-      derive('server-to-client/chat'),
-      derive('client-to-server/media'),
-      derive('server-to-client/media'),
-    ]);
-    return AuthSessionKeys._(
-      clientToServerChat: keys[0],
-      serverToClientChat: keys[1],
-      clientToServerMedia: keys[2],
-      serverToClientMedia: keys[3],
-    );
+      Future<SecretKey> derive(String label) {
+        return () async {
+          final derived = await hkdf.deriveKey(
+            secretKey: sharedSecret,
+            nonce: transcriptHash,
+            info: utf8.encode('whisper-e2ee-v1/$label'),
+          );
+          try {
+            return SecretKeyData(
+              Uint8List.fromList(await derived.extractBytes()),
+              overwriteWhenDestroyed: true,
+            );
+          } finally {
+            derived.destroy();
+          }
+        }();
+      }
+
+      SecretKey? clientToServerChat;
+      SecretKey? serverToClientChat;
+      SecretKey? clientToServerMedia;
+      SecretKey? serverToClientMedia;
+      try {
+        clientToServerChat = await derive('client-to-server/chat');
+        serverToClientChat = await derive('server-to-client/chat');
+        clientToServerMedia = await derive('client-to-server/media');
+        serverToClientMedia = await derive('server-to-client/media');
+        return AuthSessionKeys._(
+          clientToServerChat: clientToServerChat,
+          serverToClientChat: serverToClientChat,
+          clientToServerMedia: clientToServerMedia,
+          serverToClientMedia: serverToClientMedia,
+        );
+      } catch (_) {
+        clientToServerChat?.destroy();
+        serverToClientChat?.destroy();
+        clientToServerMedia?.destroy();
+        serverToClientMedia?.destroy();
+        rethrow;
+      }
+    } finally {
+      sharedSecret.destroy();
+    }
   }
 
   static Future<SimpleKeyPair> generateEphemeralKeyPair() =>
@@ -81,10 +118,7 @@ final class AuthSessionKeys {
         !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
       throw const FormatException('Invalid X25519 public key');
     }
-    final padding = List<String>.filled(
-      (4 - value.length % 4) % 4,
-      '=',
-    ).join();
+    final padding = List<String>.filled((4 - value.length % 4) % 4, '=').join();
     final Uint8List bytes;
     try {
       bytes = Uint8List.fromList(base64Url.decode('$value$padding'));

@@ -24,6 +24,7 @@ class LocalSetting {
   final String _port = "_port";
   final String _isServer = "_is_server";
   final String _clipboard = "_clipboard";
+  final String _clipboardAutoSync = "_clipboard_auto_sync";
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
   final String _close2tray = "_close_to_tray";
@@ -115,6 +116,11 @@ class LocalSetting {
     await _setSP(_deviceIdentitySeed, seed);
   }
 
+  Future<void> deleteDeviceIdentitySeed() async {
+    final SharedPreferences sp = await _preferences();
+    await sp.remove(_deviceIdentitySeed);
+  }
+
   Future<void> updateNickname(String nickname) async {
     await _setSP(_name, nickname);
   }
@@ -129,6 +135,14 @@ class LocalSetting {
 
   Future<void> updateClipboard(bool allow) async {
     await _setSP(_clipboard, allow);
+  }
+
+  Future<bool> clipboardAutoSync() async {
+    return getSPDefault(_clipboardAutoSync, false);
+  }
+
+  Future<void> updateClipboardAutoSync(bool enabled) async {
+    await _setSP(_clipboardAutoSync, enabled);
   }
 
   Future<void> updatePassword(String password) async {
@@ -148,7 +162,7 @@ class LocalSetting {
   }
 
   Future<bool> isClose2Tray() async {
-    return await getSPDefault(_close2tray, false);
+    return await getSPDefault(_close2tray, true);
   }
 
   Future<double> windowHeight() async {

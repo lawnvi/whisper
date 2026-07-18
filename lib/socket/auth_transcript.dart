@@ -77,7 +77,10 @@ final class AuthTranscript {
 
   Uint8List challengeBytes() => _canonical('challenge');
 
-  Uint8List proofBytes() => _canonical('proof');
+  Uint8List proofBytes({String reason = 'approved'}) => _canonical(
+        'proof',
+        extraFields: <List<int>>[utf8.encode(reason)],
+      );
 
   Uint8List approvalBytes({required bool allow, required String reason}) =>
       _canonical(

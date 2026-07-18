@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ import 'package:whisper/socket/file_transfer_engine.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 import 'package:whisper/socket/peer_connection.dart';
+import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/state/peer_profile.dart';
@@ -24,8 +26,10 @@ import 'package:whisper/socket/wire_message_replay.dart';
 FileTransferEngine _engine({
   FutureOr<bool> Function(String, Object)? sendBytesToPeer,
   TransferConnectionBinding? Function(String)? currentConnectionBinding,
+  String? Function(TransferConnectionBinding)?
+  authenticatedIdentityHashForConnection,
   FutureOr<bool> Function(TransferConnectionBinding, Object)?
-      sendBytesToConnection,
+  sendBytesToConnection,
   void Function(String)? notify,
   LocalDatabase? database,
   Set<String> connectedPeerIds = const <String>{},
@@ -33,12 +37,15 @@ FileTransferEngine _engine({
   TransferMessageBuilder? buildMessage,
   void Function(MessageData)? dispatchOutgoingMessage,
   FileTransferSource Function(String sourcePath, int expectedSize)?
-      transferSourceFactory,
+  transferSourceFactory,
   PrivacyLog? privacyLogger,
 }) {
   return FileTransferEngine(
-    currentConnectionBinding: currentConnectionBinding ??
+    currentConnectionBinding:
+        currentConnectionBinding ??
         (peerId) => TransferConnectionBinding(peerId: peerId, generation: 1),
+    authenticatedIdentityHashForConnection:
+        authenticatedIdentityHashForConnection ?? (_) => null,
     sendBytesToConnection: (binding, bytes) =>
         sendBytesToConnection?.call(binding, bytes) ??
         sendBytesToPeer?.call(binding.peerId, bytes) ??
@@ -52,14 +59,21 @@ FileTransferEngine _engine({
     defaultPeerId: () => '',
     hasLegacySinkFor: (_) => false,
     localPeerIdFor: (_) => 'local',
-    buildMessage: buildMessage ??
-        (type, content, msg, fileName, size, clipboard,
-                {md5 = '',
-                path = '',
-                uid,
-                fileTimestamp = 0,
-                receiverOverride}) =>
-            throw UnimplementedError('buildMessage 不应被本测试触达'),
+    buildMessage:
+        buildMessage ??
+        (
+          type,
+          content,
+          msg,
+          fileName,
+          size,
+          clipboard, {
+          md5 = '',
+          path = '',
+          uid,
+          fileTimestamp = 0,
+          receiverOverride,
+        }) => throw UnimplementedError('buildMessage 不应被本测试触达'),
     dispatchOutgoingMessage: dispatchOutgoingMessage ?? (_) {},
     ackMessage: (_) {},
     wireMessageReplayGuard: WireMessageReplayGuard(),
@@ -70,10 +84,7 @@ FileTransferEngine _engine({
 }
 
 final class _MemoryTransferSource implements FileTransferSource {
-  _MemoryTransferSource(
-    this.bytes, {
-    this.onRead,
-  });
+  _MemoryTransferSource(this.bytes, {this.onRead});
 
   final Uint8List bytes;
   final Future<void> Function()? onRead;
@@ -121,31 +132,42 @@ final class _ErrorTextTrap {
 }
 
 PeerProfile _capablePeer() => PeerProfile(
-      device: const DeviceData(
-        id: 0,
-        uid: 'peer-a',
-        name: 'Peer A',
-        host: '192.168.1.2',
-        port: 10002,
-        password: '',
-        platform: 'linux',
-        isServer: false,
-        online: true,
-        clipboard: false,
-        auth: true,
-        lastTime: 1,
-        around: true,
-      ),
-      trustedPeerIds: const <String>[],
-      autoApproveNewDevices: false,
-      autoConnectEnabled: true,
-      capabilities: const PeerCapabilities(fileTransferV3: true),
-    );
+  device: const DeviceData(
+    id: 0,
+    uid: 'peer-a',
+    name: 'Peer A',
+    host: '192.168.1.2',
+    port: 10002,
+    password: '',
+    platform: 'linux',
+    isServer: false,
+    online: true,
+    clipboard: false,
+    auth: true,
+    lastTime: 1,
+    around: true,
+  ),
+  trustedPeerIds: const <String>[],
+  autoApproveNewDevices: false,
+  autoConnectEnabled: true,
+  capabilities: const PeerCapabilities(fileTransferV3: true),
+);
 
 TransferMessageBuilder _messageBuilder() {
   var sequence = 0;
-  return (type, content, msg, fileName, size, clipboard,
-      {md5 = '', path = '', uid, fileTimestamp = 0, receiverOverride}) {
+  return (
+    type,
+    content,
+    msg,
+    fileName,
+    size,
+    clipboard, {
+    md5 = '',
+    path = '',
+    uid,
+    fileTimestamp = 0,
+    receiverOverride,
+  }) {
     sequence += 1;
     final suffix = sequence.toRadixString(16).padLeft(12, '0');
     return MessageData(
@@ -159,7 +181,7 @@ TransferMessageBuilder _messageBuilder() {
       content: content,
       message: msg as String,
       timestamp: 1,
-      uuid: '01234567-89ab-4cde-8fab-$suffix',
+      uuid: uid as String? ?? '01234567-89ab-4cde-8fab-$suffix',
       acked: false,
       path: path as String,
       md5: md5,
@@ -169,47 +191,141 @@ TransferMessageBuilder _messageBuilder() {
 }
 
 MessageData _fileMessage(String id, {String peerId = 'peer-a'}) => MessageData(
-      id: 0,
-      sender: 'local',
-      receiver: peerId,
-      name: '$id.bin',
-      clipboard: false,
-      size: 1,
-      type: MessageEnum.File,
-      content: '{}',
-      message: '',
-      timestamp: 1,
-      uuid: id,
-      acked: false,
-      path: '/local/$id.bin',
-      md5: '',
-    );
+  id: 0,
+  sender: 'local',
+  receiver: peerId,
+  name: '$id.bin',
+  clipboard: false,
+  size: 1,
+  type: MessageEnum.File,
+  content: '{}',
+  message: '',
+  timestamp: 1,
+  uuid: id,
+  acked: false,
+  path: '/local/$id.bin',
+  md5: '',
+);
 
 FileTransferData _outgoingTransfer(
   String id, {
   String peerId = 'peer-a',
   FileTransferState state = FileTransferState.queued,
-}) =>
+}) => FileTransferData(
+  transferId: id,
+  messageUuid: id,
+  messageRowId: 0,
+  peerUid: peerId,
+  direction: FileTransferDirection.outgoing,
+  state: state,
+  finalPath: '/local/$id.bin',
+  tempPath: '',
+  size: 1,
+  checksumAlgorithm: 'sha256',
+  checksumValue:
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  chunkSize: 512 * 1024,
+  committedBytes: 0,
+  resumeProofResetCount: 0,
+  lastError: '',
+  createdAt: 1,
+  updatedAt: 1,
+);
+
+Future<void> _storeStableOutgoingTransfer({
+  required LocalDatabase database,
+  required String transferId,
+  required String path,
+  required int size,
+  required String checksumValue,
+  FileTransferState state = FileTransferState.waitingReconnect,
+  String peerId = 'peer-a',
+  String lastError = '',
+}) async {
+  final metadata = FileTransferV3Metadata(checksumValue: checksumValue);
+  final message = await database.insertMessageReturning(
+    MessageData(
+      id: 0,
+      sender: 'local',
+      receiver: peerId,
+      name: path.split(Platform.pathSeparator).last,
+      clipboard: false,
+      size: size,
+      type: MessageEnum.File,
+      content: jsonEncode(metadata.toJson()),
+      message: '',
+      timestamp: 1,
+      uuid: transferId,
+      acked: false,
+      path: path,
+      md5: '',
+      fileTimestamp: 1,
+    ),
+  );
+  await database.upsertFileTransfer(
     FileTransferData(
-      transferId: id,
-      messageUuid: id,
-      messageRowId: 0,
+      transferId: transferId,
+      messageUuid: transferId,
+      messageRowId: message.id,
       peerUid: peerId,
       direction: FileTransferDirection.outgoing,
       state: state,
-      finalPath: '/local/$id.bin',
+      finalPath: path,
       tempPath: '',
-      size: 1,
-      checksumAlgorithm: 'sha256',
-      checksumValue:
-          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-      chunkSize: 512 * 1024,
-      committedBytes: 0,
+      size: size,
+      checksumAlgorithm: metadata.checksumAlgorithm,
+      checksumValue: checksumValue,
+      chunkSize: metadata.chunkSize,
+      committedBytes: state == FileTransferState.completed ? size : 0,
       resumeProofResetCount: 0,
-      lastError: '',
+      lastError: lastError,
       createdAt: 1,
       updatedAt: 1,
-    );
+    ),
+  );
+}
+
+Future<String> _trustPeerIdentity(
+  LocalDatabase database, {
+  String peerId = 'peer-a',
+  int seed = 1,
+}) async {
+  final publicKey = base64Url
+      .encode(Uint8List.fromList(List<int>.filled(32, seed)))
+      .replaceAll('=', '');
+  await database.upsertDevice(
+    DeviceData(
+      id: 0,
+      uid: peerId,
+      name: 'Peer',
+      host: '127.0.0.1',
+      port: 1,
+      password: '',
+      platform: 'test',
+      isServer: false,
+      online: true,
+      clipboard: false,
+      auth: false,
+      lastTime: 1,
+      around: true,
+      identityPublicKey: '',
+    ),
+  );
+  final pinned = await database.fetchPinnedIdentityKey(peerId);
+  if (pinned != publicKey) {
+    if (pinned == null) {
+      await database.pinDeviceIdentity(peerId, publicKey);
+    } else {
+      await database.replaceDeviceIdentity(
+        peerId,
+        expectedPublicKey: pinned,
+        newPublicKey: publicKey,
+      );
+    }
+  }
+  await database.authDevice(peerId, true);
+  return identityPublicKeyHash(publicKey);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -229,56 +345,495 @@ void main() {
       notify: notices.add,
     );
 
-    final ok =
-        await engine.sendFileTo('peer-x', '/tmp/whisper-test-nonexistent.bin');
+    final ok = await engine.sendFileTo(
+      'peer-x',
+      '/tmp/whisper-test-nonexistent.bin',
+    );
 
     expect(ok, isFalse);
     expect(sent, isFalse, reason: '能力不满足时不得发出任何字节');
     expect(notices, isNotEmpty, reason: '拒发必须通过 notify 告知');
   });
 
-  test('outgoing offer hashes source while keeping its local path off wire',
-      () async {
+  test(
+    'outgoing offer hashes source while keeping its local path off wire',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-send-');
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin');
+      await source.writeAsBytes(const <int>[1, 2, 3, 4]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final frames = <WhisperFrameV3>[];
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        sendBytesToPeer: (_, bytes) {
+          frames.add(WhisperFrameV3.decode(bytes as Uint8List));
+          return true;
+        },
+      );
+
+      expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+
+      final offer = frames.single;
+      expect(offer.type, WhisperFrameType.fileOffer);
+      final wireMessage = decodeWireMessage(
+        jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
+      );
+      expect(wireMessage.path, isEmpty);
+      expect(utf8.decode(offer.payload), isNot(contains(source.path)));
+      final metadata = FileTransferV3Metadata.parseOffer(
+        wireMessage.content,
+        size: wireMessage.size,
+      );
+      expect(
+        metadata.checksumValue,
+        await fileChecksum(source, algorithm: 'sha256'),
+      );
+      final localMessage = await database.fetchMessageByUuid(wireMessage.uuid);
+      expect(localMessage?.path, source.path);
+      expect(
+        (await database.fetchFileTransfer(wireMessage.uuid))?.checksumValue,
+        metadata.checksumValue,
+      );
+    },
+  );
+
+  test('durable admission survives an initial offer send failure', () async {
     final directory = await Directory.systemTemp.createTemp('whisper-send-');
     addTearDown(() => directory.delete(recursive: true));
     final source = File('${directory.path}/payload.bin');
     await source.writeAsBytes(const <int>[1, 2, 3, 4]);
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
-    final frames = <WhisperFrameV3>[];
     final engine = _engine(
       database: database,
       supportsV3: true,
       buildMessage: _messageBuilder(),
-      sendBytesToPeer: (_, bytes) {
-        frames.add(WhisperFrameV3.decode(bytes as Uint8List));
-        return true;
-      },
+      sendBytesToPeer: (_, __) => false,
     );
 
     expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+    final transfer = await database.fetchFileTransfer(
+      '01234567-89ab-4cde-8fab-000000000001',
+    );
+    expect(transfer?.state, FileTransferState.waitingReconnect);
+    expect(transfer?.finalPath, source.path);
+  });
 
-    final offer = frames.single;
-    expect(offer.type, WhisperFrameType.fileOffer);
-    final wireMessage = decodeWireMessage(
-      jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
+  test(
+    'stable id reuses an exact durable transfer without duplicating rows',
+    () async {
+      const transferId = 'a1234567-89ab-4cde-8fab-0123456789ab';
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-stable-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin');
+      await source.writeAsBytes(const <int>[1, 2, 3, 4]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      var offerAccepted = false;
+      var offers = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        sendBytesToPeer: (_, __) {
+          offers++;
+          return offerAccepted;
+        },
+      );
+
+      expect(
+        await engine.sendFileTo('peer-a', source.path, messageId: transferId),
+        isTrue,
+      );
+      offerAccepted = true;
+      expect(
+        await engine.sendFileTo('peer-a', source.path, messageId: transferId),
+        isTrue,
+      );
+
+      expect(offers, 2);
+      expect(await database.fetchMessagesByUuid(transferId), hasLength(1));
+      expect(await database.fetchFileTransfer(transferId), isNotNull);
+    },
+  );
+
+  test('stable id rejects a different source without another offer', () async {
+    const transferId = 'b1234567-89ab-4cde-8fab-0123456789ab';
+    final directory = await Directory.systemTemp.createTemp('whisper-stable-');
+    addTearDown(() => directory.delete(recursive: true));
+    final first = File('${directory.path}/first.bin')
+      ..writeAsBytesSync(const <int>[1]);
+    final second = File('${directory.path}/second.bin')
+      ..writeAsBytesSync(const <int>[1]);
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    var offers = 0;
+    final engine = _engine(
+      database: database,
+      supportsV3: true,
+      buildMessage: _messageBuilder(),
+      sendBytesToPeer: (_, __) {
+        offers++;
+        return false;
+      },
     );
-    expect(wireMessage.path, isEmpty);
-    expect(utf8.decode(offer.payload), isNot(contains(source.path)));
-    final metadata = FileTransferV3Metadata.parseOffer(
-      wireMessage.content,
-      size: wireMessage.size,
+
+    expect(
+      await engine.sendFileTo('peer-a', first.path, messageId: transferId),
+      isTrue,
     );
     expect(
-      metadata.checksumValue,
-      await fileChecksum(source, algorithm: 'sha256'),
+      await engine.sendFileTo('peer-a', second.path, messageId: transferId),
+      isFalse,
     );
-    final localMessage = await database.fetchMessageByUuid(wireMessage.uuid);
-    expect(localMessage?.path, source.path);
-    expect(
-      (await database.fetchFileTransfer(wireMessage.uuid))?.checksumValue,
-      metadata.checksumValue,
+    expect(offers, 1);
+    expect(await database.fetchMessagesByUuid(transferId), hasLength(1));
+  });
+
+  test(
+    'stable terminal transfer is accepted after its source was cleaned',
+    () async {
+      const checksum =
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      for (final entry in <({String id, FileTransferState state})>[
+        (
+          id: 'c1234567-89ab-4cde-8fab-0123456789ab',
+          state: FileTransferState.completed,
+        ),
+        (
+          id: 'd1234567-89ab-4cde-8fab-0123456789ab',
+          state: FileTransferState.canceled,
+        ),
+      ]) {
+        final database = LocalDatabase.forTesting(NativeDatabase.memory());
+        final path = '/missing/staged-${entry.state.name}.zip';
+        await _storeStableOutgoingTransfer(
+          database: database,
+          transferId: entry.id,
+          path: path,
+          size: 4,
+          checksumValue: checksum,
+          state: entry.state,
+        );
+        final engine = _engine(
+          database: database,
+          currentConnectionBinding: (_) => null,
+        );
+
+        expect(
+          await engine.sendFileTo('peer-a', path, messageId: entry.id),
+          isTrue,
+        );
+        await database.close();
+      }
+    },
+  );
+
+  test(
+    'explicit stable replay reacquires only identity-invalidated cancellation',
+    () async {
+      const retryId = 'd2234567-89ab-4cde-8fab-0123456789ab';
+      const userCanceledId = 'd3234567-89ab-4cde-8fab-0123456789ab';
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-retrust-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/retained.bin')
+        ..writeAsBytesSync(const <int>[1, 2, 3]);
+      final checksum = sha256.convert(source.readAsBytesSync()).toString();
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final expectedHash = await _trustPeerIdentity(database);
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: retryId,
+        path: source.path,
+        size: 3,
+        checksumValue: checksum,
+        state: FileTransferState.canceled,
+        lastError: 'trust_revoked',
+      );
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: userCanceledId,
+        path: source.path,
+        size: 3,
+        checksumValue: checksum,
+        state: FileTransferState.canceled,
+        lastError: 'user_canceled',
+      );
+      var offers = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        connectedPeerIds: const <String>{'peer-a'},
+        buildMessage: _messageBuilder(),
+        authenticatedIdentityHashForConnection: (_) => expectedHash,
+        sendBytesToPeer: (_, __) {
+          offers++;
+          return true;
+        },
+      );
+
+      await engine.resumeRecoverableOutgoing();
+      expect(offers, 0);
+      expect(
+        (await database.fetchFileTransfer(retryId))?.state,
+        FileTransferState.canceled,
+      );
+
+      expect(
+        await engine.sendFileTo(
+          'peer-a',
+          source.path,
+          messageId: retryId,
+          expectedPublicKeyHash: expectedHash,
+        ),
+        isTrue,
+      );
+      expect(offers, 1);
+      expect(
+        (await database.fetchFileTransfer(retryId))?.state,
+        isNot(FileTransferState.canceled),
+      );
+      expect((await database.fetchFileTransfer(retryId))?.lastError, isEmpty);
+
+      expect(
+        await engine.sendFileTo(
+          'peer-a',
+          source.path,
+          messageId: userCanceledId,
+          expectedPublicKeyHash: expectedHash,
+        ),
+        isTrue,
+      );
+      expect(offers, 1);
+      expect(
+        (await database.fetchFileTransfer(userCanceledId))?.state,
+        FileTransferState.canceled,
+      );
+    },
+  );
+
+  test(
+    'identity-invalidated stable replay requires the original source',
+    () async {
+      const transferId = 'd4234567-89ab-4cde-8fab-0123456789ab';
+      const path = '/missing/identity-invalidated.zip';
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final expectedHash = await _trustPeerIdentity(database);
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: transferId,
+        path: path,
+        size: 3,
+        checksumValue:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        state: FileTransferState.canceled,
+        lastError: 'identity_replaced',
+      );
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        authenticatedIdentityHashForConnection: (_) => expectedHash,
+      );
+
+      expect(
+        await engine.sendFileTo(
+          'peer-a',
+          path,
+          messageId: transferId,
+          expectedPublicKeyHash: expectedHash,
+        ),
+        isFalse,
+      );
+      expect(
+        (await database.fetchFileTransfer(transferId))?.state,
+        FileTransferState.canceled,
+      );
+    },
+  );
+
+  test(
+    'device-deleted stable replay repairs its cleared message association',
+    () async {
+      const transferId = 'd5234567-89ab-4cde-8fab-0123456789ab';
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-repaired-delete-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/retained.bin')
+        ..writeAsBytesSync(const <int>[4, 5, 6]);
+      final checksum = sha256.convert(source.readAsBytesSync()).toString();
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final expectedHash = await _trustPeerIdentity(database);
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: transferId,
+        path: source.path,
+        size: 3,
+        checksumValue: checksum,
+        state: FileTransferState.canceled,
+        lastError: 'device_deleted',
+      );
+      await database.clearDevices(<String>['peer-a'], localPeerId: 'local');
+      expect(await _trustPeerIdentity(database), expectedHash);
+      expect((await database.fetchFileTransfer(transferId))?.messageRowId, 0);
+      var offers = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        authenticatedIdentityHashForConnection: (_) => expectedHash,
+        sendBytesToPeer: (_, __) {
+          offers++;
+          return true;
+        },
+      );
+
+      expect(
+        await engine.sendFileTo(
+          'peer-a',
+          source.path,
+          messageId: transferId,
+          expectedPublicKeyHash: expectedHash,
+        ),
+        isTrue,
+      );
+      expect(offers, 1);
+      final repaired = await database.fetchFileTransfer(transferId);
+      expect(repaired?.state, isNot(FileTransferState.canceled));
+      expect(repaired?.messageRowId, greaterThan(0));
+      expect(
+        await database.fetchAssociatedFileTransferMessage(repaired!),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'identity invalidation prevents old outgoing work reaching generation 2',
+    () async {
+      const waitingId = 'e1234567-89ab-4cde-8fab-0123456789ab';
+      const failedId = 'f1234567-89ab-4cde-8fab-0123456789ab';
+      const checksum =
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-identity-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/retained.bin')
+        ..writeAsBytesSync(const <int>[1]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: waitingId,
+        path: source.path,
+        size: 1,
+        checksumValue: checksum,
+      );
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: failedId,
+        path: source.path,
+        size: 1,
+        checksumValue: checksum,
+        state: FileTransferState.failed,
+      );
+      var current = const TransferConnectionBinding(
+        peerId: 'peer-a',
+        generation: 1,
+      );
+      var sends = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        connectedPeerIds: const <String>{'peer-a'},
+        currentConnectionBinding: (_) => current,
+        sendBytesToPeer: (_, __) {
+          sends++;
+          return true;
+        },
+      );
+
+      await engine.invalidateOutgoingTransfersForPeer(
+        'peer-a',
+        reason: 'identity_replaced',
+      );
+      current = const TransferConnectionBinding(
+        peerId: 'peer-a',
+        generation: 2,
+      );
+      await engine.resumeRecoverableOutgoing();
+
+      expect(sends, 0);
+      expect(source.existsSync(), isTrue);
+      expect(
+        (await database.fetchFileTransfer(waitingId))?.state,
+        FileTransferState.canceled,
+      );
+      expect(
+        (await database.fetchFileTransfer(failedId))?.state,
+        FileTransferState.canceled,
+      );
+    },
+  );
+
+  test('trust revoke stays atomic with disconnect recovery cleanup', () async {
+    const transferId = 'e2234567-89ab-4cde-8fab-0123456789ab';
+    const checksum =
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.upsertDevice(
+      DeviceData(
+        id: 0,
+        uid: 'peer-a',
+        name: 'Peer',
+        host: '127.0.0.1',
+        port: 1,
+        password: '',
+        platform: 'test',
+        isServer: false,
+        online: true,
+        clipboard: false,
+        auth: true,
+        lastTime: 1,
+        around: true,
+        identityPublicKey: 'old-key',
+      ),
     );
+    await _storeStableOutgoingTransfer(
+      database: database,
+      transferId: transferId,
+      path: '/retained/archive.zip',
+      size: 1,
+      checksumValue: checksum,
+    );
+    final engine = _engine(database: database);
+
+    await Future.wait(<Future<void>>[
+      engine.invalidateOutgoingTransfersForPeer(
+        'peer-a',
+        reason: 'trust_revoked',
+        revokeDeviceTrust: true,
+      ),
+      engine.handlePeerDisconnected('peer-a'),
+    ]);
+
+    expect((await database.fetchDevice('peer-a'))?.auth, isFalse);
+    final transfer = await database.fetchFileTransfer(transferId);
+    expect(transfer?.state, FileTransferState.canceled);
+    expect(transfer?.lastError, 'trust_revoked');
   });
 
   test('slow source hashing does not hold the global send lock', () async {
@@ -322,47 +877,248 @@ void main() {
     expect(await slowSend, isTrue);
   });
 
-  test('delayed local offer stays bound to its captured generation', () async {
-    final directory = await Directory.systemTemp.createTemp('whisper-gen-');
-    addTearDown(() => directory.delete(recursive: true));
-    final source = File('${directory.path}/payload.bin');
-    await source.writeAsBytes(const <int>[1]);
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    var current =
-        const TransferConnectionBinding(peerId: 'peer-a', generation: 1);
-    final readStarted = Completer<void>();
-    final releaseRead = Completer<void>();
-    final sentBindings = <TransferConnectionBinding>[];
-    final engine = _engine(
-      database: database,
-      supportsV3: true,
-      buildMessage: _messageBuilder(),
-      currentConnectionBinding: (_) => current,
-      sendBytesToConnection: (binding, _) {
-        sentBindings.add(binding);
-        return true;
-      },
-      transferSourceFactory: (_, __) => _MemoryTransferSource(
-        Uint8List.fromList(const <int>[1]),
-        onRead: () async {
-          if (!readStarted.isCompleted) {
-            readStarted.complete();
-          }
-          await releaseRead.future;
+  test(
+    'delayed admission uses the current generation after recovery already ran',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-gen-');
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin');
+      await source.writeAsBytes(const <int>[1]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      var current = const TransferConnectionBinding(
+        peerId: 'peer-a',
+        generation: 1,
+      );
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      final sentBindings = <TransferConnectionBinding>[];
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        connectedPeerIds: const <String>{'peer-a'},
+        buildMessage: _messageBuilder(),
+        currentConnectionBinding: (_) => current,
+        sendBytesToConnection: (binding, _) {
+          sentBindings.add(binding);
+          return true;
         },
-      ),
-    );
+        transferSourceFactory: (_, __) => _MemoryTransferSource(
+          Uint8List.fromList(const <int>[1]),
+          onRead: () async {
+            if (!readStarted.isCompleted) {
+              readStarted.complete();
+            }
+            await releaseRead.future;
+          },
+        ),
+      );
 
-    final send = engine.sendFileTo('peer-a', source.path);
-    await readStarted.future;
-    current = const TransferConnectionBinding(peerId: 'peer-a', generation: 2);
-    releaseRead.complete();
+      final send = engine.sendFileTo('peer-a', source.path);
+      await readStarted.future;
+      current = const TransferConnectionBinding(
+        peerId: 'peer-a',
+        generation: 2,
+      );
+      await engine.resumeRecoverableOutgoing();
+      expect(sentBindings, isEmpty, reason: '哈希尚未完成时还没有可恢复记录');
+      releaseRead.complete();
 
-    expect(await send, isTrue);
-    expect(sentBindings, hasLength(1));
-    expect(sentBindings.single.generation, 1);
-  });
+      expect(await send, isTrue);
+      expect(sentBindings, hasLength(1));
+      expect(sentBindings.single.generation, 2);
+    },
+  );
+
+  test(
+    'disconnect during hashing is durably retained without an offer',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-gen-');
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin');
+      await source.writeAsBytes(const <int>[1]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      TransferConnectionBinding? current = const TransferConnectionBinding(
+        peerId: 'peer-a',
+        generation: 1,
+      );
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var offers = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        currentConnectionBinding: (_) => current,
+        sendBytesToPeer: (_, __) {
+          offers++;
+          return true;
+        },
+        transferSourceFactory: (_, __) => _MemoryTransferSource(
+          Uint8List.fromList(const <int>[1]),
+          onRead: () async {
+            if (!readStarted.isCompleted) {
+              readStarted.complete();
+            }
+            await releaseRead.future;
+          },
+        ),
+      );
+
+      final send = engine.sendFileTo('peer-a', source.path);
+      await readStarted.future;
+      current = null;
+      releaseRead.complete();
+
+      expect(await send, isTrue);
+      expect(offers, 0);
+      final retained = await database.fetchRecoverableFileTransfers();
+      expect(retained, hasLength(1));
+      expect(retained.single.state, FileTransferState.waitingReconnect);
+      expect(retained.single.finalPath, source.path);
+    },
+  );
+
+  test(
+    'identity invalidation rejects an old in-flight hashing intent',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-identity-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin')
+        ..writeAsBytesSync(const <int>[1]);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var sends = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        sendBytesToPeer: (_, __) {
+          sends++;
+          return true;
+        },
+        transferSourceFactory: (_, __) => _MemoryTransferSource(
+          Uint8List.fromList(const <int>[1]),
+          onRead: () async {
+            if (!readStarted.isCompleted) {
+              readStarted.complete();
+            }
+            await releaseRead.future;
+          },
+        ),
+      );
+
+      final send = engine.sendFileTo('peer-a', source.path);
+      await readStarted.future;
+      await engine.invalidateOutgoingTransfersForPeer(
+        'peer-a',
+        reason: 'identity_replaced',
+      );
+      engine.allowOutgoingTransfersForPeer('peer-a');
+      releaseRead.complete();
+
+      expect(await send, isFalse);
+      expect(sends, 0);
+      expect(await database.fetchRecoverableFileTransfers(), isEmpty);
+    },
+  );
+
+  test(
+    'identity commit blocks canceled reacquisition before runtime invalidation',
+    () async {
+      const transferId = 'f2234567-89ab-4cde-8fab-0123456789ab';
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-identity-db-gate-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin')
+        ..writeAsBytesSync(const <int>[7]);
+      final checksum = sha256.convert(source.readAsBytesSync()).toString();
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final expectedHash = await _trustPeerIdentity(database, seed: 7);
+      final oldPublicKey = base64Url
+          .encode(Uint8List.fromList(List<int>.filled(32, 7)))
+          .replaceAll('=', '');
+      final newPublicKey = base64Url
+          .encode(Uint8List.fromList(List<int>.filled(32, 8)))
+          .replaceAll('=', '');
+      await _storeStableOutgoingTransfer(
+        database: database,
+        transferId: transferId,
+        path: source.path,
+        size: 1,
+        checksumValue: checksum,
+        state: FileTransferState.canceled,
+        lastError: 'identity_replaced',
+      );
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var offers = 0;
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        authenticatedIdentityHashForConnection: (_) => expectedHash,
+        sendBytesToPeer: (_, __) {
+          offers++;
+          return true;
+        },
+        transferSourceFactory: (_, __) => _MemoryTransferSource(
+          Uint8List.fromList(const <int>[7]),
+          onRead: () async {
+            if (!readStarted.isCompleted) {
+              readStarted.complete();
+            }
+            await releaseRead.future;
+          },
+        ),
+      );
+
+      final send = engine.sendFileTo(
+        'peer-a',
+        source.path,
+        messageId: transferId,
+        expectedPublicKeyHash: expectedHash,
+      );
+      await readStarted.future;
+      await database.commitAuthenticatedDevice(
+        candidate: DeviceData(
+          id: 0,
+          uid: 'peer-a',
+          name: 'Replacement',
+          host: '127.0.0.1',
+          port: 1,
+          password: '',
+          platform: 'test',
+          isServer: false,
+          online: true,
+          clipboard: false,
+          auth: false,
+          lastTime: 1,
+          around: true,
+          identityPublicKey: '',
+        ),
+        publicKey: newPublicKey,
+        replaceIdentity: true,
+        expectedPublicKey: oldPublicKey,
+        requireCurrent: () {},
+      );
+      releaseRead.complete();
+
+      expect(await send, isFalse);
+      expect(offers, 0);
+      expect(
+        (await database.fetchFileTransfer(transferId))?.state,
+        FileTransferState.canceled,
+      );
+    },
+  );
 
   test('content uri stays local while its SHA-256 is sent', () async {
     const uri = 'content://documents/private/item';
@@ -373,9 +1129,8 @@ void main() {
       database: database,
       supportsV3: true,
       buildMessage: _messageBuilder(),
-      transferSourceFactory: (_, __) => _MemoryTransferSource(
-        Uint8List.fromList(const <int>[4, 3, 2, 1]),
-      ),
+      transferSourceFactory: (_, __) =>
+          _MemoryTransferSource(Uint8List.fromList(const <int>[4, 3, 2, 1])),
       sendBytesToPeer: (_, bytes) {
         frames.add(WhisperFrameV3.decode(bytes as Uint8List));
         return true;
@@ -400,10 +1155,7 @@ void main() {
     );
     expect(wireMessage.path, isEmpty);
     expect(payload, isNot(contains(uri)));
-    expect(
-      (await database.fetchMessageByUuid(wireMessage.uuid))?.path,
-      uri,
-    );
+    expect((await database.fetchMessageByUuid(wireMessage.uuid))?.path, uri);
     expect(
       FileTransferV3Metadata.parseOffer(
         wireMessage.content,
@@ -425,26 +1177,37 @@ void main() {
       final engine = _engine(
         database: database,
         supportsV3: true,
-        buildMessage: (type, content, msg, fileName, size, clipboard,
-            {md5 = '', path = '', uid, fileTimestamp = 0, receiverOverride}) {
-          builds += 1;
-          return _messageBuilder()(
-            type,
-            content,
-            msg,
-            fileName,
-            size,
-            clipboard,
-            md5: md5,
-            path: path,
-            uid: uid,
-            fileTimestamp: fileTimestamp,
-            receiverOverride: receiverOverride,
-          );
-        },
-        transferSourceFactory: (_, __) => _MemoryTransferSource(
-          Uint8List(mismatch.actual),
-        ),
+        buildMessage:
+            (
+              type,
+              content,
+              msg,
+              fileName,
+              size,
+              clipboard, {
+              md5 = '',
+              path = '',
+              uid,
+              fileTimestamp = 0,
+              receiverOverride,
+            }) {
+              builds += 1;
+              return _messageBuilder()(
+                type,
+                content,
+                msg,
+                fileName,
+                size,
+                clipboard,
+                md5: md5,
+                path: path,
+                uid: uid,
+                fileTimestamp: fileTimestamp,
+                receiverOverride: receiverOverride,
+              );
+            },
+        transferSourceFactory: (_, __) =>
+            _MemoryTransferSource(Uint8List(mismatch.actual)),
         sendBytesToPeer: (_, bytes) {
           frames.add(WhisperFrameV3.decode(bytes as Uint8List));
           return true;
@@ -468,45 +1231,44 @@ void main() {
     }
   });
 
-  test('local transfer failure emits only a stable reason and error type',
-      () async {
-    const secret =
-        'token=never-log-this content://private.provider/root/secret.txt';
-    final failure = _ErrorTextTrap(secret);
-    final notices = <String>[];
-    final logLines = <String>[];
-    final engine = _engine(
-      supportsV3: true,
-      notify: notices.add,
-      privacyLogger: PrivacyLog(sink: logLines.add),
-      transferSourceFactory: (_, __) => _ThrowingTransferSource(failure),
-    );
+  test(
+    'local transfer failure emits only a stable reason and error type',
+    () async {
+      const secret =
+          'token=never-log-this content://private.provider/root/secret.txt';
+      final failure = _ErrorTextTrap(secret);
+      final notices = <String>[];
+      final logLines = <String>[];
+      final engine = _engine(
+        supportsV3: true,
+        notify: notices.add,
+        privacyLogger: PrivacyLog(sink: logLines.add),
+        transferSourceFactory: (_, __) => _ThrowingTransferSource(failure),
+      );
 
-    final result = await engine.sendAndroidContentUriTo(
-      'peer-a',
-      uri: 'content://documents/private/item',
-      name: 'document.bin',
-      size: 1,
-      fileTimestamp: 1,
-    );
+      final result = await engine.sendAndroidContentUriTo(
+        'peer-a',
+        uri: 'content://documents/private/item',
+        name: 'document.bin',
+        size: 1,
+        fileTimestamp: 1,
+      );
 
-    expect(result, isFalse);
-    expect(failure.toStringCalled, isFalse);
-    expect(notices, <String>[FileTransferFailureReason.source.wireCode]);
-    expect(logLines, hasLength(1));
-    expect(logLines.single, contains('"errorType":"unknown"'));
-    expect(logLines.single, isNot(contains(secret)));
-  });
+      expect(result, isFalse);
+      expect(failure.toStringCalled, isFalse);
+      expect(notices, <String>[FileTransferFailureReason.source.wireCode]);
+      expect(logLines, hasLength(1));
+      expect(logLines.single, contains('"errorType":"unknown"'));
+      expect(logLines.single, isNot(contains(secret)));
+    },
+  );
 
   test('closeAll awaits recoverable transfer persistence', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     const transferId = '91234567-89ab-4cde-8fab-0123456789ab';
     final message = await database.insertMessageReturning(
-      _fileMessage(transferId).copyWith(
-        size: 1024,
-        path: '/tmp/archive.zip',
-      ),
+      _fileMessage(transferId).copyWith(size: 1024, path: '/tmp/archive.zip'),
     );
     await database.upsertFileTransfer(
       FileTransferData(
@@ -529,9 +1291,7 @@ void main() {
         updatedAt: 1,
       ),
     );
-    final engine = _engine(
-      database: database,
-    );
+    final engine = _engine(database: database);
 
     await engine.closeAll();
 
@@ -541,43 +1301,47 @@ void main() {
     );
   });
 
-  test('atomic admission allows only one concurrent contender for last slot',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
+  test(
+    'atomic admission allows only one concurrent contender for last slot',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
 
-    final results = await Future.wait(<Future<FileTransferAdmissionResult>>[
-      database.admitFileTransfer(
-        message: _fileMessage('transfer-a'),
-        transfer: _outgoingTransfer('transfer-a'),
-        perPeerLimit: 1,
-        globalLimit: 1,
-      ),
-      database.admitFileTransfer(
-        message: _fileMessage('transfer-b', peerId: 'peer-b'),
-        transfer: _outgoingTransfer('transfer-b', peerId: 'peer-b'),
-        perPeerLimit: 1,
-        globalLimit: 1,
-      ),
-    ]);
+      final results = await Future.wait(<Future<FileTransferAdmissionResult>>[
+        database.admitFileTransfer(
+          message: _fileMessage('transfer-a'),
+          transfer: _outgoingTransfer('transfer-a'),
+          perPeerLimit: 1,
+          globalLimit: 1,
+        ),
+        database.admitFileTransfer(
+          message: _fileMessage('transfer-b', peerId: 'peer-b'),
+          transfer: _outgoingTransfer('transfer-b', peerId: 'peer-b'),
+          perPeerLimit: 1,
+          globalLimit: 1,
+        ),
+      ]);
 
-    expect(
-      results.where((item) => item.decision == FileTransferAdmission.admitted),
-      hasLength(1),
-    );
-    expect(
-      results.where(
-        (item) => item.decision == FileTransferAdmission.globalLimit,
-      ),
-      hasLength(1),
-    );
-    expect(await database.fetchRecoverableFileTransfers(), hasLength(1));
-    final persistedMessages = <MessageData>[
-      ...await database.fetchMessagesByUuid('transfer-a'),
-      ...await database.fetchMessagesByUuid('transfer-b'),
-    ];
-    expect(persistedMessages, hasLength(1));
-  });
+      expect(
+        results.where(
+          (item) => item.decision == FileTransferAdmission.admitted,
+        ),
+        hasLength(1),
+      );
+      expect(
+        results.where(
+          (item) => item.decision == FileTransferAdmission.globalLimit,
+        ),
+        hasLength(1),
+      );
+      expect(await database.fetchRecoverableFileTransfers(), hasLength(1));
+      final persistedMessages = <MessageData>[
+        ...await database.fetchMessagesByUuid('transfer-a'),
+        ...await database.fetchMessagesByUuid('transfer-b'),
+      ];
+      expect(persistedMessages, hasLength(1));
+    },
+  );
 
   test('retry from a terminal state reacquires capacity atomically', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -589,13 +1353,16 @@ void main() {
       _fileMessage('active'),
     );
     await database.upsertFileTransfer(
-      _outgoingTransfer('active', state: FileTransferState.transferring)
-          .copyWith(messageRowId: activeMessage.id),
+      _outgoingTransfer(
+        'active',
+        state: FileTransferState.transferring,
+      ).copyWith(messageRowId: activeMessage.id),
     );
     await database.upsertFileTransfer(
-      _outgoingTransfer('retry', state: FileTransferState.failed).copyWith(
-        messageRowId: retryMessage.id,
-      ),
+      _outgoingTransfer(
+        'retry',
+        state: FileTransferState.failed,
+      ).copyWith(messageRowId: retryMessage.id),
     );
 
     final blocked = await database.reacquireFileTransferCapacity(
@@ -627,64 +1394,71 @@ void main() {
     );
   });
 
-  test('production transfer limits are fixed at 32 per peer and 128 global',
-      () {
-    expect(maxNonterminalTransfersPerPeer, 32);
-    expect(maxNonterminalTransfersGlobal, 128);
-  });
+  test(
+    'production transfer limits are fixed at 32 per peer and 128 global',
+    () {
+      expect(maxNonterminalTransfersPerPeer, 32);
+      expect(maxNonterminalTransfersGlobal, 128);
+    },
+  );
 
-  test('engine retry cannot revive a failed transfer beyond peer capacity',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    const retryId = '61234567-89ab-4cde-8fab-0123456789ab';
-    final retryMessage = await database.insertMessageReturning(
-      _fileMessage(retryId),
-    );
-    await database.upsertFileTransfer(
-      _outgoingTransfer(retryId, state: FileTransferState.failed).copyWith(
-        messageRowId: retryMessage.id,
-      ),
-    );
-    for (var index = 0; index < maxNonterminalTransfersPerPeer; index += 1) {
-      final id =
-          '60000000-0000-4000-8000-${index.toRadixString(16).padLeft(12, '0')}';
-      await database.upsertFileTransfer(
-        _outgoingTransfer(id, state: FileTransferState.queued),
+  test(
+    'engine retry cannot revive a failed transfer beyond peer capacity',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const retryId = '61234567-89ab-4cde-8fab-0123456789ab';
+      final retryMessage = await database.insertMessageReturning(
+        _fileMessage(retryId),
       );
-    }
-    var sends = 0;
-    final notices = <String>[];
-    final engine = _engine(
-      database: database,
-      supportsV3: true,
-      sendBytesToPeer: (_, __) {
-        sends += 1;
-        return true;
-      },
-      notify: notices.add,
-    );
+      await database.upsertFileTransfer(
+        _outgoingTransfer(
+          retryId,
+          state: FileTransferState.failed,
+        ).copyWith(messageRowId: retryMessage.id),
+      );
+      for (var index = 0; index < maxNonterminalTransfersPerPeer; index += 1) {
+        final id =
+            '60000000-0000-4000-8000-${index.toRadixString(16).padLeft(12, '0')}';
+        await database.upsertFileTransfer(
+          _outgoingTransfer(id, state: FileTransferState.queued),
+        );
+      }
+      var sends = 0;
+      final notices = <String>[];
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        sendBytesToPeer: (_, __) {
+          sends += 1;
+          return true;
+        },
+        notify: notices.add,
+      );
 
-    await engine.retryTransfer(retryId);
+      await engine.retryTransfer(retryId);
 
-    expect(
-      (await database.fetchFileTransfer(retryId))?.state,
-      FileTransferState.failed,
-    );
-    expect(sends, 0);
-    expect(notices, isNotEmpty);
-  });
+      expect(
+        (await database.fetchFileTransfer(retryId))?.state,
+        FileTransferState.failed,
+      );
+      expect(sends, 0);
+      expect(notices, isNotEmpty);
+    },
+  );
 
   test('message deletion wins a race with an in-flight retry offer', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     const retryId = '71234567-89ab-4cde-8fab-0123456789ab';
-    final message =
-        await database.insertMessageReturning(_fileMessage(retryId));
+    final message = await database.insertMessageReturning(
+      _fileMessage(retryId),
+    );
     await database.upsertFileTransfer(
-      _outgoingTransfer(retryId, state: FileTransferState.failed).copyWith(
-        messageRowId: message.id,
-      ),
+      _outgoingTransfer(
+        retryId,
+        state: FileTransferState.failed,
+      ).copyWith(messageRowId: message.id),
     );
     final sendStarted = Completer<void>();
     final releaseSend = Completer<void>();
@@ -710,39 +1484,44 @@ void main() {
     expect(transfer?.lastError, 'message_deleted');
   });
 
-  test('device clearing wins a race with recoverable offer reconciliation',
-      () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{'_uuid': 'local'});
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    const transferId = '81234567-89ab-4cde-8fab-0123456789ab';
-    final message =
-        await database.insertMessageReturning(_fileMessage(transferId));
-    await database.upsertFileTransfer(
-      _outgoingTransfer(transferId).copyWith(messageRowId: message.id),
-    );
-    final sendStarted = Completer<void>();
-    final releaseSend = Completer<void>();
-    final engine = _engine(
-      database: database,
-      supportsV3: true,
-      connectedPeerIds: const <String>{'peer-a'},
-      sendBytesToPeer: (_, __) async {
-        sendStarted.complete();
-        await releaseSend.future;
-        return true;
-      },
-    );
+  test(
+    'device clearing wins a race with recoverable offer reconciliation',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        '_uuid': 'local',
+      });
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const transferId = '81234567-89ab-4cde-8fab-0123456789ab';
+      final message = await database.insertMessageReturning(
+        _fileMessage(transferId),
+      );
+      await database.upsertFileTransfer(
+        _outgoingTransfer(transferId).copyWith(messageRowId: message.id),
+      );
+      final sendStarted = Completer<void>();
+      final releaseSend = Completer<void>();
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        connectedPeerIds: const <String>{'peer-a'},
+        sendBytesToPeer: (_, __) async {
+          sendStarted.complete();
+          await releaseSend.future;
+          return true;
+        },
+      );
 
-    final resume = engine.resumeRecoverableOutgoing();
-    await sendStarted.future;
-    await database.clearDevices(const <String>['peer-a']);
-    releaseSend.complete();
-    await resume;
+      final resume = engine.resumeRecoverableOutgoing();
+      await sendStarted.future;
+      await database.clearDevices(const <String>['peer-a']);
+      releaseSend.complete();
+      await resume;
 
-    final transfer = await database.fetchFileTransfer(transferId);
-    expect(transfer?.messageRowId, 0);
-    expect(transfer?.state, FileTransferState.canceled);
-    expect(transfer?.lastError, 'device_cleared');
-  });
+      final transfer = await database.fetchFileTransfer(transferId);
+      expect(transfer?.messageRowId, 0);
+      expect(transfer?.state, FileTransferState.canceled);
+      expect(transfer?.lastError, 'device_cleared');
+    },
+  );
 }

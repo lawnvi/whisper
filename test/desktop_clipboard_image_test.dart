@@ -15,8 +15,9 @@ void main() {
     late List<MethodCall> calls;
 
     setUp(() async {
-      tempDir =
-          await Directory.systemTemp.createTemp('whisper_clipboard_test_');
+      tempDir = await Directory.systemTemp.createTemp(
+        'whisper_clipboard_test_',
+      );
       channel = const MethodChannel('test_desktop_clipboard_image');
       calls = <MethodCall>[];
     });
@@ -29,30 +30,32 @@ void main() {
       }
     });
 
-    test('reads clipboard PNG bytes and writes a temp screenshot file',
-        () async {
-      final pngBytes = Uint8List.fromList(<int>[137, 80, 78, 71, 1, 2, 3]);
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return pngBytes;
-      });
-      final reader = DesktopClipboardImageReader(
-        channel: channel,
-        tempDirectoryProvider: () async => tempDir,
-        nowProvider: () => DateTime(2026, 6, 27, 14, 30, 12),
-      );
+    test(
+      'reads clipboard PNG bytes and writes a temp screenshot file',
+      () async {
+        final pngBytes = Uint8List.fromList(<int>[137, 80, 78, 71, 1, 2, 3]);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              return pngBytes;
+            });
+        final reader = DesktopClipboardImageReader(
+          channel: channel,
+          tempDirectoryProvider: () async => tempDir,
+          nowProvider: () => DateTime(2026, 6, 27, 14, 30, 12),
+        );
 
-      final draft = await reader.readImageDraft();
+        final draft = await reader.readImageDraft();
 
-      expect(calls.map((call) => call.method), <String>['readImagePng']);
-      expect(draft, isNotNull);
-      expect(draft!.fileName, 'Screenshot 2026-06-27 14.30.12.png');
-      expect(draft.size, pngBytes.length);
-      expect(draft.bytes, pngBytes);
-      expect(p.basename(draft.path), draft.fileName);
-      expect(await File(draft.path).readAsBytes(), pngBytes);
-    });
+        expect(calls.map((call) => call.method), <String>['readImagePng']);
+        expect(draft, isNotNull);
+        expect(draft!.fileName, 'Screenshot 2026-06-27 14.30.12.png');
+        expect(draft.size, pngBytes.length);
+        expect(draft.bytes, pngBytes);
+        expect(p.basename(draft.path), draft.fileName);
+        expect(await File(draft.path).readAsBytes(), pngBytes);
+      },
+    );
 
     test('returns null when the desktop platform has no image', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -85,8 +88,9 @@ void main() {
     late List<MethodCall> calls;
 
     setUp(() async {
-      tempDir =
-          await Directory.systemTemp.createTemp('whisper_clipboard_file_test_');
+      tempDir = await Directory.systemTemp.createTemp(
+        'whisper_clipboard_file_test_',
+      );
       channel = const MethodChannel('test_desktop_clipboard_files');
       calls = <MethodCall>[];
     });
@@ -108,14 +112,14 @@ void main() {
       await directory.create();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return <String>[
-          first.path,
-          directory.path,
-          p.join(tempDir.path, 'missing.txt'),
-          second.path,
-        ];
-      });
+            calls.add(call);
+            return <String>[
+              first.path,
+              directory.path,
+              p.join(tempDir.path, 'missing.txt'),
+              second.path,
+            ];
+          });
       final reader = DesktopClipboardFileReader(channel: channel);
 
       final drafts = await reader.readFileDrafts();
@@ -132,13 +136,32 @@ void main() {
       expect(drafts.map((draft) => draft.size), <int>[5, 4]);
     });
 
-    test('returns an empty list when the platform channel is unavailable',
-        () async {
+    test(
+      'returns an empty list when the platform channel is unavailable',
+      () async {
+        final reader = DesktopClipboardFileReader(channel: channel);
+
+        final drafts = await reader.readFileDrafts();
+
+        expect(drafts, isEmpty);
+      },
+    );
+
+    test('optionally keeps copied folders for the quick-send inbox', () async {
+      final directory = Directory(p.join(tempDir.path, 'folder'));
+      await directory.create();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            channel,
+            (_) async => <String>[directory.path],
+          );
       final reader = DesktopClipboardFileReader(channel: channel);
 
-      final drafts = await reader.readFileDrafts();
+      final drafts = await reader.readFileDrafts(includeDirectories: true);
 
-      expect(drafts, isEmpty);
+      expect(drafts.single.path, directory.path);
+      expect(drafts.single.fileName, 'folder');
+      expect(drafts.single.size, 0);
     });
   });
 }

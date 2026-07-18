@@ -78,6 +78,7 @@ FileTransferEngine _engine(
   return FileTransferEngine(
     currentConnectionBinding: (peerId) =>
         TransferConnectionBinding(peerId: peerId, generation: 1),
+    authenticatedIdentityHashForConnection: (_) => null,
     sendBytesToConnection: (binding, bytes) {
       onSend?.call();
       return sendBytesToPeer?.call(binding.peerId, bytes) ?? true;
@@ -91,9 +92,20 @@ FileTransferEngine _engine(
     defaultPeerId: () => '',
     hasLegacySinkFor: (_) => false,
     localPeerIdFor: (_) => 'local',
-    buildMessage: (type, content, msg, fileName, size, clipboard,
-            {md5 = '', path = '', uid, fileTimestamp = 0, receiverOverride}) =>
-        throw UnimplementedError(),
+    buildMessage:
+        (
+          type,
+          content,
+          msg,
+          fileName,
+          size,
+          clipboard, {
+          md5 = '',
+          path = '',
+          uid,
+          fileTimestamp = 0,
+          receiverOverride,
+        }) => throw UnimplementedError(),
     dispatchOutgoingMessage: (_) => onDispatch?.call(),
     ackMessage: (_) => onAck?.call(),
     wireMessageReplayGuard: replayGuard ?? WireMessageReplayGuard(),
@@ -102,11 +114,11 @@ FileTransferEngine _engine(
 }
 
 String _validMetadata() => jsonEncode(<String, Object>{
-      ...const FileTransferV3Metadata(
-        checksumValue:
-            'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      ).toJson(),
-    });
+  ...const FileTransferV3Metadata(
+    checksumValue:
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  ).toJson(),
+});
 
 MessageData _offer({
   String sender = 'peer-a',
@@ -192,8 +204,9 @@ FileTransferData _transfer({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final testDownloadDir =
-      Directory.systemTemp.createTempSync('whisper-peer-binding-');
+  final testDownloadDir = Directory.systemTemp.createTempSync(
+    'whisper-peer-binding-',
+  );
   SharedPreferences.setMockInitialValues(<String, Object>{
     '_savePath': testDownloadDir.path,
   });
@@ -203,339 +216,353 @@ void main() {
     }
   });
 
-  test('file data from another authenticated peer is rejected before effects',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    await database.upsertFileTransfer(_transfer());
-    var sends = 0;
-    var updates = 0;
-    final engine = _engine(
-      database,
-      onSend: () => sends++,
-      onTransferUpdated: () => updates++,
-    );
-    final frame = WhisperFrameV3(
-      type: WhisperFrameType.fileData,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(const <int>[1]),
-    );
+  test(
+    'file data from another authenticated peer is rejected before effects',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.upsertFileTransfer(_transfer());
+      var sends = 0;
+      var updates = 0;
+      final engine = _engine(
+        database,
+        onSend: () => sends++,
+        onTransferUpdated: () => updates++,
+      );
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileData,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(const <int>[1]),
+      );
 
-    await expectLater(
-      engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.transferPeerMismatch,
+      await expectLater(
+        engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
+        throwsA(
+          isA<WireInputRejected>().having(
+            (error) => error.reason,
+            'reason',
+            WireInputReason.transferPeerMismatch,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(sends, 0);
-    expect(updates, 0);
-    expect(
-      (await database.fetchFileTransfer(_transferId))?.committedBytes,
-      0,
-    );
-  });
+      expect(sends, 0);
+      expect(updates, 0);
+      expect(
+        (await database.fetchFileTransfer(_transferId))?.committedBytes,
+        0,
+      );
+    },
+  );
 
-  test('file offer sender substitution is rejected before persistence or ACK',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    var sends = 0;
-    var updates = 0;
-    var acknowledgements = 0;
-    var dispatches = 0;
-    final engine = _engine(
-      database,
-      onSend: () => sends++,
-      onTransferUpdated: () => updates++,
-      onAck: () => acknowledgements++,
-      onDispatch: () => dispatches++,
-    );
-    final offer = MessageData(
-      id: 0,
-      sender: 'peer-b',
-      receiver: 'local',
-      name: 'payload.bin',
-      clipboard: false,
-      size: 8,
-      type: MessageEnum.File,
-      content: _validMetadata(),
-      message: '',
-      timestamp: 1,
-      uuid: _transferId,
-      acked: false,
-      path: '',
-      md5: '',
-    );
-    final frame = WhisperFrameV3(
-      type: WhisperFrameType.fileOffer,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(encodeWireMessage(offer))),
-    );
-
-    await expectLater(
-      engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.messageSenderMismatch,
-        ),
-      ),
-    );
-
-    expect(await database.fetchFileTransfer(_transferId), isNull);
-    expect(await database.fetchMessageByUuid(_transferId), isNull);
-    expect((sends, updates, acknowledgements, dispatches), (0, 0, 0, 0));
-  });
-
-  test('file control from another peer cannot mutate an outgoing transfer',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    await database.upsertFileTransfer(
-      _transfer(direction: FileTransferDirection.outgoing),
-    );
-    var sends = 0;
-    var updates = 0;
-    final engine = _engine(
-      database,
-      onSend: () => sends++,
-      onTransferUpdated: () => updates++,
-    );
-    const control = FileTransferV3Control(
-      action: FileTransferV3Action.cancel,
-      transferId: _transferId,
-      durableOffset: 0,
-      size: 8,
-      failureReason: FileTransferFailureReason.none,
-    );
-    final frame = WhisperFrameV3(
-      type: WhisperFrameType.fileCancel,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
-    );
-
-    await expectLater(
-      engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.transferPeerMismatch,
-        ),
-      ),
-    );
-
-    final stored = await database.fetchFileTransfer(_transferId);
-    expect(stored?.state, FileTransferState.transferring);
-    expect((sends, updates), (0, 0));
-  });
-
-  test('file offer cannot reuse an existing non-transfer message UUID',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    await database.insertMessage(
-      MessageData(
+  test(
+    'file offer sender substitution is rejected before persistence or ACK',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      var sends = 0;
+      var updates = 0;
+      var acknowledgements = 0;
+      var dispatches = 0;
+      final engine = _engine(
+        database,
+        onSend: () => sends++,
+        onTransferUpdated: () => updates++,
+        onAck: () => acknowledgements++,
+        onDispatch: () => dispatches++,
+      );
+      final offer = MessageData(
         id: 0,
-        sender: 'peer-a',
+        sender: 'peer-b',
         receiver: 'local',
-        name: '',
+        name: 'payload.bin',
         clipboard: false,
-        size: 0,
-        type: MessageEnum.Text,
-        content: 'already used',
+        size: 8,
+        type: MessageEnum.File,
+        content: _validMetadata(),
         message: '',
         timestamp: 1,
         uuid: _transferId,
         acked: false,
         path: '',
         md5: '',
-      ),
-    );
-    var sends = 0;
-    var acknowledgements = 0;
-    final engine = _engine(
-      database,
-      onSend: () => sends++,
-      onAck: () => acknowledgements++,
-    );
-    final offer = MessageData(
-      id: 0,
-      sender: 'peer-a',
-      receiver: 'local',
-      name: 'payload.bin',
-      clipboard: false,
-      size: 8,
-      type: MessageEnum.File,
-      content: _validMetadata(),
-      message: '',
-      timestamp: 2,
-      uuid: _transferId,
-      acked: false,
-      path: '',
-      md5: '',
-    );
-    final frame = WhisperFrameV3(
-      type: WhisperFrameType.fileOffer,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(encodeWireMessage(offer))),
-    );
+      );
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileOffer,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(utf8.encode(encodeWireMessage(offer))),
+      );
 
-    await expectLater(
-      engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.messageIdConflict,
+      await expectLater(
+        engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
+        throwsA(
+          isA<WireInputRejected>().having(
+            (error) => error.reason,
+            'reason',
+            WireInputReason.messageSenderMismatch,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(await database.fetchFileTransfer(_transferId), isNull);
-    expect((sends, acknowledgements), (0, 0));
-  });
+      expect(await database.fetchFileTransfer(_transferId), isNull);
+      expect(await database.fetchMessageByUuid(_transferId), isNull);
+      expect((sends, updates, acknowledgements, dispatches), (0, 0, 0, 0));
+    },
+  );
 
-  test('malformed file metadata returns an error before claiming its UUID',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    var sends = 0;
-    final engine = _engine(database, onSend: () => sends++);
+  test(
+    'file control from another peer cannot mutate an outgoing transfer',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.upsertFileTransfer(
+        _transfer(direction: FileTransferDirection.outgoing),
+      );
+      var sends = 0;
+      var updates = 0;
+      final engine = _engine(
+        database,
+        onSend: () => sends++,
+        onTransferUpdated: () => updates++,
+      );
+      const control = FileTransferV3Control(
+        action: FileTransferV3Action.cancel,
+        transferId: _transferId,
+        durableOffset: 0,
+        size: 8,
+        failureReason: FileTransferFailureReason.none,
+      );
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileCancel,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
+      );
 
-    await engine.handleFrame(
-      _connection('peer-a'),
-      _offerFrame(_offer(content: '{}')),
-      requireCurrent: () {},
-    );
+      await expectLater(
+        engine.handleFrame(_connection('peer-b'), frame, requireCurrent: () {}),
+        throwsA(
+          isA<WireInputRejected>().having(
+            (error) => error.reason,
+            'reason',
+            WireInputReason.transferPeerMismatch,
+          ),
+        ),
+      );
 
-    expect(await database.fetchMessageByUuid(_transferId), isNull);
-    expect(await database.fetchFileTransfer(_transferId), isNull);
-    expect(sends, 1);
-  });
+      final stored = await database.fetchFileTransfer(_transferId);
+      expect(stored?.state, FileTransferState.transferring);
+      expect((sends, updates), (0, 0));
+    },
+  );
 
-  test('stale generation inside control handling is normalized before mutation',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    await database.upsertFileTransfer(
-      _transfer(direction: FileTransferDirection.outgoing),
-    );
-    final engine = _engine(database);
-    const control = FileTransferV3Control(
-      action: FileTransferV3Action.cancel,
-      transferId: _transferId,
-      durableOffset: 0,
-      size: 8,
-      failureReason: FileTransferFailureReason.none,
-    );
-    final frame = WhisperFrameV3(
-      type: WhisperFrameType.fileCancel,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
-    );
-    var checks = 0;
+  test(
+    'file offer cannot reuse an existing non-transfer message UUID',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.insertMessage(
+        MessageData(
+          id: 0,
+          sender: 'peer-a',
+          receiver: 'local',
+          name: '',
+          clipboard: false,
+          size: 0,
+          type: MessageEnum.Text,
+          content: 'already used',
+          message: '',
+          timestamp: 1,
+          uuid: _transferId,
+          acked: false,
+          path: '',
+          md5: '',
+        ),
+      );
+      var sends = 0;
+      var acknowledgements = 0;
+      final engine = _engine(
+        database,
+        onSend: () => sends++,
+        onAck: () => acknowledgements++,
+      );
+      final offer = MessageData(
+        id: 0,
+        sender: 'peer-a',
+        receiver: 'local',
+        name: 'payload.bin',
+        clipboard: false,
+        size: 8,
+        type: MessageEnum.File,
+        content: _validMetadata(),
+        message: '',
+        timestamp: 2,
+        uuid: _transferId,
+        acked: false,
+        path: '',
+        md5: '',
+      );
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileOffer,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(utf8.encode(encodeWireMessage(offer))),
+      );
 
-    await expectLater(
-      engine.handleFrame(
+      await expectLater(
+        engine.handleFrame(_connection('peer-a'), frame, requireCurrent: () {}),
+        throwsA(
+          isA<WireInputRejected>().having(
+            (error) => error.reason,
+            'reason',
+            WireInputReason.messageIdConflict,
+          ),
+        ),
+      );
+
+      expect(await database.fetchFileTransfer(_transferId), isNull);
+      expect((sends, acknowledgements), (0, 0));
+    },
+  );
+
+  test(
+    'malformed file metadata returns an error before claiming its UUID',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      var sends = 0;
+      final engine = _engine(database, onSend: () => sends++);
+
+      await engine.handleFrame(
         _connection('peer-a'),
-        frame,
-        requireCurrent: () {
-          checks++;
-          if (checks > 3) {
-            throw StateError('session_expired');
-          }
-        },
-      ),
-      throwsA(
-        isA<WireInputRejected>().having(
-          (error) => error.reason,
-          'reason',
-          WireInputReason.sessionNotCurrent,
+        _offerFrame(_offer(content: '{}')),
+        requireCurrent: () {},
+      );
+
+      expect(await database.fetchMessageByUuid(_transferId), isNull);
+      expect(await database.fetchFileTransfer(_transferId), isNull);
+      expect(sends, 1);
+    },
+  );
+
+  test(
+    'stale generation inside control handling is normalized before mutation',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.upsertFileTransfer(
+        _transfer(direction: FileTransferDirection.outgoing),
+      );
+      final engine = _engine(database);
+      const control = FileTransferV3Control(
+        action: FileTransferV3Action.cancel,
+        transferId: _transferId,
+        durableOffset: 0,
+        size: 8,
+        failureReason: FileTransferFailureReason.none,
+      );
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileCancel,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
+      );
+      var checks = 0;
+
+      await expectLater(
+        engine.handleFrame(
+          _connection('peer-a'),
+          frame,
+          requireCurrent: () {
+            checks++;
+            if (checks > 3) {
+              throw StateError('session_expired');
+            }
+          },
         ),
-      ),
-    );
+        throwsA(
+          isA<WireInputRejected>().having(
+            (error) => error.reason,
+            'reason',
+            WireInputReason.sessionNotCurrent,
+          ),
+        ),
+      );
 
-    expect(checks, greaterThan(3));
-    expect(
-      (await database.fetchFileTransfer(_transferId))?.state,
-      FileTransferState.transferring,
-    );
-  });
+      expect(checks, greaterThan(3));
+      expect(
+        (await database.fetchFileTransfer(_transferId))?.state,
+        FileTransferState.transferring,
+      );
+    },
+  );
 
-  test('slow file post-processing does not hold the global message claim lock',
-      () async {
-    final database = LocalDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    _cleanTransferFiles(database);
-    final replayGuard = WireMessageReplayGuard();
-    final sendStarted = Completer<void>();
-    final finishSend = Completer<bool>();
-    final engine = _engine(
-      database,
-      replayGuard: replayGuard,
-      sendBytesToPeer: (_, __) {
-        if (!sendStarted.isCompleted) {
-          sendStarted.complete();
+  test(
+    'slow file post-processing does not hold the global message claim lock',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      _cleanTransferFiles(database);
+      final replayGuard = WireMessageReplayGuard();
+      final sendStarted = Completer<void>();
+      final finishSend = Completer<bool>();
+      final engine = _engine(
+        database,
+        replayGuard: replayGuard,
+        sendBytesToPeer: (_, __) {
+          if (!sendStarted.isCompleted) {
+            sendStarted.complete();
+          }
+          return finishSend.future;
+        },
+      );
+      final offerFuture = engine.handleFrame(
+        _connection('peer-a'),
+        _offerFrame(_offer()),
+        requireCurrent: () {},
+      );
+
+      await sendStarted.future.timeout(const Duration(seconds: 2));
+      try {
+        final textClaim = await replayGuard
+            .claim(
+              MessageData(
+                id: 0,
+                sender: 'peer-b',
+                receiver: 'local',
+                name: '',
+                clipboard: false,
+                size: 0,
+                type: MessageEnum.Text,
+                content: 'independent',
+                message: '',
+                timestamp: 2,
+                uuid: '11234567-89ab-4cde-8fab-0123456789ab',
+                acked: false,
+                path: '',
+                md5: '',
+              ),
+              fetchExisting: (_) async => const <MessageData>[],
+              persist: (message) async => message.copyWith(id: 99),
+            )
+            .timeout(const Duration(milliseconds: 300));
+
+        expect(textClaim.decision, WireMessageReplayDecision.accept);
+      } finally {
+        if (!finishSend.isCompleted) {
+          finishSend.complete(true);
         }
-        return finishSend.future;
-      },
-    );
-    final offerFuture = engine.handleFrame(
-      _connection('peer-a'),
-      _offerFrame(_offer()),
-      requireCurrent: () {},
-    );
-
-    await sendStarted.future.timeout(const Duration(seconds: 2));
-    try {
-      final textClaim = await replayGuard
-          .claim(
-            MessageData(
-              id: 0,
-              sender: 'peer-b',
-              receiver: 'local',
-              name: '',
-              clipboard: false,
-              size: 0,
-              type: MessageEnum.Text,
-              content: 'independent',
-              message: '',
-              timestamp: 2,
-              uuid: '11234567-89ab-4cde-8fab-0123456789ab',
-              acked: false,
-              path: '',
-              md5: '',
-            ),
-            fetchExisting: (_) async => const <MessageData>[],
-            persist: (message) async => message.copyWith(id: 99),
-          )
-          .timeout(const Duration(milliseconds: 300));
-
-      expect(textClaim.decision, WireMessageReplayDecision.accept);
-    } finally {
-      if (!finishSend.isCompleted) {
-        finishSend.complete(true);
+        await offerFuture;
       }
-      await offerFuture;
-    }
-  });
+    },
+  );
 
   test('concurrent peer offers cannot share one transfer UUID', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -578,72 +605,74 @@ void main() {
     expect((acknowledgements, dispatches), (1, 1));
   });
 
-  test('terminal transition finishes runtime cleanup after generation changes',
-      () async {
-    final database = _DelayedUpdateDatabase();
-    addTearDown(database.close);
-    _cleanTransferFiles(
-      database,
-      transferIds: const <String>[_transferId, _secondTransferId],
-    );
-    var sends = 0;
-    final engine = _engine(database, onSend: () => sends++);
-    await engine.handleFrame(
-      _connection('peer-a'),
-      _offerFrame(_offer()),
-      requireCurrent: () {},
-    );
-    await engine.handleFrame(
-      _connection('peer-a'),
-      _offerFrame(_offer(uuid: _secondTransferId)),
-      requireCurrent: () {},
-    );
-    expect(
-      (await database.fetchFileTransfer(_secondTransferId))?.state,
-      FileTransferState.queued,
-    );
-    final sendsBeforeCancel = sends;
-    database.delayNextUpdate();
-    var isCurrent = true;
-    const cancel = FileTransferV3Control(
-      action: FileTransferV3Action.cancel,
-      transferId: _transferId,
-      durableOffset: 0,
-      size: 8,
-      failureReason: FileTransferFailureReason.none,
-    );
-    final cancelFrame = WhisperFrameV3(
-      type: WhisperFrameType.fileCancel,
-      transferId: _transferId,
-      offset: 0,
-      sequence: 0,
-      payload: Uint8List.fromList(utf8.encode(jsonEncode(cancel.toJson()))),
-    );
-    final cancelFuture = engine.handleFrame(
-      _connection('peer-a'),
-      cancelFrame,
-      requireCurrent: () {
-        if (!isCurrent) {
-          throw StateError('session_expired');
-        }
-      },
-    );
+  test(
+    'terminal transition finishes runtime cleanup after generation changes',
+    () async {
+      final database = _DelayedUpdateDatabase();
+      addTearDown(database.close);
+      _cleanTransferFiles(
+        database,
+        transferIds: const <String>[_transferId, _secondTransferId],
+      );
+      var sends = 0;
+      final engine = _engine(database, onSend: () => sends++);
+      await engine.handleFrame(
+        _connection('peer-a'),
+        _offerFrame(_offer()),
+        requireCurrent: () {},
+      );
+      await engine.handleFrame(
+        _connection('peer-a'),
+        _offerFrame(_offer(uuid: _secondTransferId)),
+        requireCurrent: () {},
+      );
+      expect(
+        (await database.fetchFileTransfer(_secondTransferId))?.state,
+        FileTransferState.queued,
+      );
+      final sendsBeforeCancel = sends;
+      database.delayNextUpdate();
+      var isCurrent = true;
+      const cancel = FileTransferV3Control(
+        action: FileTransferV3Action.cancel,
+        transferId: _transferId,
+        durableOffset: 0,
+        size: 8,
+        failureReason: FileTransferFailureReason.none,
+      );
+      final cancelFrame = WhisperFrameV3(
+        type: WhisperFrameType.fileCancel,
+        transferId: _transferId,
+        offset: 0,
+        sequence: 0,
+        payload: Uint8List.fromList(utf8.encode(jsonEncode(cancel.toJson()))),
+      );
+      final cancelFuture = engine.handleFrame(
+        _connection('peer-a'),
+        cancelFrame,
+        requireCurrent: () {
+          if (!isCurrent) {
+            throw StateError('session_expired');
+          }
+        },
+      );
 
-    await database.updateStarted.future.timeout(const Duration(seconds: 2));
-    isCurrent = false;
-    database.resumeUpdate.complete();
-    await cancelFuture;
+      await database.updateStarted.future.timeout(const Duration(seconds: 2));
+      isCurrent = false;
+      database.resumeUpdate.complete();
+      await cancelFuture;
 
-    expect(
-      (await database.fetchFileTransfer(_transferId))?.state,
-      FileTransferState.canceled,
-    );
-    expect(
-      (await database.fetchFileTransfer(_secondTransferId))?.state,
-      FileTransferState.negotiating,
-    );
-    expect(sends, greaterThan(sendsBeforeCancel));
-  });
+      expect(
+        (await database.fetchFileTransfer(_transferId))?.state,
+        FileTransferState.canceled,
+      );
+      expect(
+        (await database.fetchFileTransfer(_secondTransferId))?.state,
+        FileTransferState.negotiating,
+      );
+      expect(sends, greaterThan(sendsBeforeCancel));
+    },
+  );
 
   test('in-flight data after cancellation is safely ignored', () async {
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -666,8 +695,11 @@ void main() {
       payload: Uint8List.fromList(const <int>[1]),
     );
 
-    await engine.handleFrame(_connection('peer-a'), frame,
-        requireCurrent: () {});
+    await engine.handleFrame(
+      _connection('peer-a'),
+      frame,
+      requireCurrent: () {},
+    );
 
     expect((sends, updates), (0, 0));
     expect(

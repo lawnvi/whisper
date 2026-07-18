@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/local.dart';
 
@@ -12,10 +13,16 @@ abstract interface class DeviceIdentitySeedStorage {
   Future<void> writeSeed(String value);
 }
 
+abstract interface class LegacyIdentitySeedStorage {
+  Future<String?> readSeed();
+
+  Future<void> deleteSeed();
+}
+
 final class LocalDeviceIdentitySeedStorage
-    implements DeviceIdentitySeedStorage {
+    implements DeviceIdentitySeedStorage, LegacyIdentitySeedStorage {
   LocalDeviceIdentitySeedStorage([LocalSetting? settings])
-      : _settings = settings ?? LocalSetting();
+    : _settings = settings ?? LocalSetting();
 
   final LocalSetting _settings;
 
@@ -25,11 +32,111 @@ final class LocalDeviceIdentitySeedStorage
   @override
   Future<void> writeSeed(String value) =>
       _settings.setDeviceIdentitySeed(value);
+
+  @override
+  Future<void> deleteSeed() => _settings.deleteDeviceIdentitySeed();
+}
+
+abstract interface class SecureIdentitySeedVault {
+  Future<String?> readSeed();
+
+  Future<void> writeSeed(String value);
+}
+
+final class FlutterSecureIdentitySeedVault implements SecureIdentitySeedVault {
+  FlutterSecureIdentitySeedVault([FlutterSecureStorage? storage])
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(
+              resetOnError: false,
+              migrateWithBackup: true,
+              storageNamespace: 'whisper_identity',
+            ),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+              synchronizable: false,
+            ),
+            mOptions: MacOsOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+              synchronizable: false,
+            ),
+          );
+
+  static const String _seedKey = 'device_identity_seed_v1';
+
+  final FlutterSecureStorage _storage;
+
+  @override
+  Future<String?> readSeed() => _storage.read(key: _seedKey);
+
+  @override
+  Future<void> writeSeed(String value) =>
+      _storage.write(key: _seedKey, value: value);
+}
+
+final class SecureDeviceIdentitySeedStorage
+    implements DeviceIdentitySeedStorage {
+  SecureDeviceIdentitySeedStorage({
+    SecureIdentitySeedVault? vault,
+    LegacyIdentitySeedStorage? legacyStorage,
+  }) : _vault = vault ?? FlutterSecureIdentitySeedVault(),
+       _legacyStorage = legacyStorage ?? LocalDeviceIdentitySeedStorage();
+
+  final SecureIdentitySeedVault _vault;
+  final LegacyIdentitySeedStorage _legacyStorage;
+
+  @override
+  Future<String?> readSeed() async {
+    final secureSeed = await _vault.readSeed();
+    final legacySeed = await _legacyStorage.readSeed();
+    if (secureSeed != null) {
+      _requireCanonicalSeed(secureSeed);
+    }
+    if (legacySeed != null) {
+      _requireCanonicalSeed(legacySeed);
+    }
+    if (secureSeed != null) {
+      if (legacySeed != null && legacySeed != secureSeed) {
+        throw StateError('Conflicting device identity seeds');
+      }
+      if (legacySeed != null) {
+        await _deleteAndVerifyLegacySeed();
+      }
+      return secureSeed;
+    }
+    if (legacySeed == null) {
+      return null;
+    }
+    await _persistAndVerify(legacySeed);
+    await _deleteAndVerifyLegacySeed();
+    return legacySeed;
+  }
+
+  @override
+  Future<void> writeSeed(String value) {
+    _requireCanonicalSeed(value);
+    return _persistAndVerify(value);
+  }
+
+  Future<void> _persistAndVerify(String seed) async {
+    await _vault.writeSeed(seed);
+    if (await _vault.readSeed() != seed) {
+      throw StateError('Device identity seed was not persisted');
+    }
+  }
+
+  Future<void> _deleteAndVerifyLegacySeed() async {
+    await _legacyStorage.deleteSeed();
+    if (await _legacyStorage.readSeed() != null) {
+      throw StateError('Legacy device identity seed was not removed');
+    }
+  }
 }
 
 final class DeviceIdentity {
   DeviceIdentity._(this._keyPair, Uint8List publicKeyBytes)
-      : _publicKeyBytes = Uint8List.fromList(publicKeyBytes);
+    : _publicKeyBytes = Uint8List.fromList(publicKeyBytes);
 
   final SimpleKeyPair _keyPair;
   final Uint8List _publicKeyBytes;
@@ -55,7 +162,7 @@ final class DeviceIdentity {
 
 final class DeviceIdentityStore {
   DeviceIdentityStore({DeviceIdentitySeedStorage? storage})
-      : _storage = storage ?? LocalDeviceIdentitySeedStorage();
+    : _storage = storage ?? SecureDeviceIdentitySeedStorage();
 
   static final Lock _creationLock = Lock();
 
@@ -83,9 +190,13 @@ final class DeviceIdentityStore {
         seed = _decodeBase64Url(stored, expectedLength: 32);
       }
 
-      final identity = await DeviceIdentity.fromSeed(seed);
-      _cachedIdentity = identity;
-      return identity;
+      try {
+        final identity = await DeviceIdentity.fromSeed(seed);
+        _cachedIdentity = identity;
+        return identity;
+      } finally {
+        seed.fillRange(0, seed.length, 0);
+      }
     });
   }
 }
@@ -108,10 +219,7 @@ Future<bool> verifyDeviceSignature({
       message,
       signature: Signature(
         signatureBytes,
-        publicKey: SimplePublicKey(
-          publicKeyBytes,
-          type: KeyPairType.ed25519,
-        ),
+        publicKey: SimplePublicKey(publicKeyBytes, type: KeyPairType.ed25519),
       ),
     );
   } on FormatException {
@@ -125,9 +233,12 @@ Future<bool> verifyDeviceSignature({
 
 Uint8List _randomSeed() {
   final random = Random.secure();
-  return Uint8List.fromList(
-    List<int>.generate(32, (_) => random.nextInt(256)),
-  );
+  return Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
+}
+
+void _requireCanonicalSeed(String value) {
+  final decoded = _decodeBase64Url(value, expectedLength: 32);
+  decoded.fillRange(0, decoded.length, 0);
 }
 
 String _encodeBase64Url(List<int> bytes) =>
@@ -139,10 +250,7 @@ Uint8List _decodeBase64Url(String value, {required int expectedLength}) {
       !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
     throw const FormatException('Invalid base64url value');
   }
-  final padding = List<String>.filled(
-    (4 - value.length % 4) % 4,
-    '=',
-  ).join();
+  final padding = List<String>.filled((4 - value.length % 4) % 4, '=').join();
   final Uint8List decoded;
   try {
     decoded = Uint8List.fromList(base64Url.decode('$value$padding'));
@@ -150,6 +258,7 @@ Uint8List _decodeBase64Url(String value, {required int expectedLength}) {
     throw const FormatException('Invalid base64url value');
   }
   if (decoded.length != expectedLength || _encodeBase64Url(decoded) != value) {
+    decoded.fillRange(0, decoded.length, 0);
     throw const FormatException('Invalid base64url length');
   }
   return decoded;

@@ -15,6 +15,8 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import java.io.ByteArrayOutputStream
+import java.io.FileInputStream
+import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
 class AndroidDocumentPickerPlugin :
@@ -180,6 +182,31 @@ class AndroidDocumentPickerPlugin :
     private fun readDocumentRange(uri: Uri, offset: Long, length: Int): ByteArray {
         if (length == 0) {
             return ByteArray(0)
+        }
+        try {
+            context.contentResolver.openFileDescriptor(uri, "r").use { descriptor ->
+                if (descriptor != null) {
+                    FileInputStream(descriptor.fileDescriptor).use { input ->
+                        val channel = input.channel
+                        channel.position(offset)
+                        val output = ByteArray(length)
+                        val buffer = ByteBuffer.wrap(output)
+                        while (buffer.hasRemaining()) {
+                            if (channel.read(buffer) == -1) {
+                                break
+                            }
+                        }
+                        return if (buffer.position() == output.size) {
+                            output
+                        } else {
+                            output.copyOf(buffer.position())
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Pipes and virtual documents may not support seek. Retain a
+            // streaming fallback for those providers.
         }
         context.contentResolver.openInputStream(uri).use { input ->
             if (input == null) {

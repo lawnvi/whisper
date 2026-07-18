@@ -305,9 +305,8 @@ std::string WideToUtf8(const std::wstring& value) {
   return result;
 }
 
-std::vector<std::string> ReadClipboardFilePaths(HWND window) {
-  ScopedClipboard clipboard(window);
-  if (!clipboard.opened() || !IsClipboardFormatAvailable(CF_HDROP)) {
+std::vector<std::string> ReadClipboardFilePathsFromOpenClipboard() {
+  if (!IsClipboardFormatAvailable(CF_HDROP)) {
     return {};
   }
   HANDLE handle = GetClipboardData(CF_HDROP);
@@ -336,6 +335,67 @@ std::vector<std::string> ReadClipboardFilePaths(HWND window) {
     }
   }
   return paths;
+}
+
+std::vector<std::string> ReadClipboardFilePaths(HWND window) {
+  ScopedClipboard clipboard(window);
+  if (!clipboard.opened()) {
+    return {};
+  }
+  return ReadClipboardFilePathsFromOpenClipboard();
+}
+
+std::optional<std::string> ReadClipboardUnicodeTextFromOpenClipboard() {
+  if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+    return std::nullopt;
+  }
+  HANDLE handle = GetClipboardData(CF_UNICODETEXT);
+  if (handle == nullptr) {
+    return std::nullopt;
+  }
+  HGLOBAL global = static_cast<HGLOBAL>(handle);
+  const SIZE_T size = GlobalSize(global);
+  if (size < sizeof(wchar_t)) {
+    return std::nullopt;
+  }
+  ScopedGlobalLock lock(global);
+  if (lock.data() == nullptr) {
+    return std::nullopt;
+  }
+  const auto* text = static_cast<const wchar_t*>(lock.data());
+  const size_t capacity = size / sizeof(wchar_t);
+  const auto* terminator = std::find(text, text + capacity, L'\0');
+  if (terminator == text + capacity || terminator == text) {
+    return std::nullopt;
+  }
+  const std::string utf8 = WideToUtf8(std::wstring(text, terminator));
+  return utf8.empty() ? std::nullopt
+                      : std::optional<std::string>(utf8);
+}
+
+std::optional<std::vector<std::string>>
+ReadClipboardQuickSendArguments(HWND window) {
+  ScopedClipboard clipboard(window);
+  if (!clipboard.opened()) {
+    return std::nullopt;
+  }
+
+  const auto paths = ReadClipboardFilePathsFromOpenClipboard();
+  if (!paths.empty()) {
+    std::vector<std::string> arguments;
+    arguments.reserve(paths.size() * 2);
+    for (const auto& path : paths) {
+      arguments.emplace_back("--quick-send-file");
+      arguments.emplace_back(path);
+    }
+    return arguments;
+  }
+
+  const auto text = ReadClipboardUnicodeTextFromOpenClipboard();
+  if (!text.has_value()) {
+    return std::nullopt;
+  }
+  return std::vector<std::string>{"--quick-send-text", *text};
 }
 
 class DesktopClipboardImagePlugin : public flutter::Plugin {
@@ -391,4 +451,9 @@ void DesktopClipboardImagePluginRegisterWithRegistrar(
   auto plugin =
       std::make_unique<DesktopClipboardImagePlugin>(plugin_registrar, window);
   plugin_registrar->AddPlugin(std::move(plugin));
+}
+
+std::optional<std::vector<std::string>>
+DesktopClipboardSnapshotQuickSendArguments() {
+  return ReadClipboardQuickSendArguments(nullptr);
 }

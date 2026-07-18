@@ -5,11 +5,15 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_media_session.dart';
 import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sodium/sodium.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
+import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
+import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/socket/aead_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:toastification/toastification.dart';
@@ -21,18 +25,31 @@ import 'helper/notification.dart';
 import 'helper/toast.dart';
 import 'l10n/app_localizations.dart';
 
-const MethodChannel _windowThemeChannel =
-    MethodChannel('com.vireen.whisper/window_theme');
+const MethodChannel _windowThemeChannel = MethodChannel(
+  'com.vireen.whisper/window_theme',
+);
 
 enum AppDiagnosticKind { desktopWindowTheme }
 
-void main() async {
+void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  WhisperAead.installNativeAcceleration(await SodiumInit.init());
+
+  if (!isMobile()) {
+    await DesktopQuickSendInbox.shared.initialize(initialArguments: arguments);
+  }
+
+  try {
+    await const FolderTransferStager(
+      activeTransferPathsProvider:
+          recoverableFolderTransferAndDesktopDraftPaths,
+    ).cleanup();
+  } catch (_) {
+    // Staging cleanup is best-effort and must not prevent app startup.
+  }
 
   if (isMobile()) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-    ]);
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
   if (!isMobile()) {
@@ -47,8 +64,9 @@ void main() async {
     WindowOptions windowOptions = WindowOptions(
       size: Size(width, height),
       center: true,
-      backgroundColor:
-          brightness == Brightness.dark ? Colors.black : Colors.white,
+      backgroundColor: brightness == Brightness.dark
+          ? Colors.black
+          : Colors.white,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
     );
@@ -97,14 +115,11 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
       });
     }
   } catch (error) {
-    privacyLog.event(
-      PrivacyEvent.localOperation,
-      <PrivacyField, Object>{
-        PrivacyField.kind: AppDiagnosticKind.desktopWindowTheme,
-        PrivacyField.success: false,
-        PrivacyField.errorType: privacyLog.errorType(error),
-      },
-    );
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: AppDiagnosticKind.desktopWindowTheme,
+      PrivacyField.success: false,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    });
   }
 }
 

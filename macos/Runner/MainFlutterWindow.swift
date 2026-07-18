@@ -67,6 +67,7 @@ private let remoteInputCaptureEventMask: CGEventMask = [
 class MainFlutterWindow: NSWindow {
   private var windowThemeChannel: FlutterMethodChannel?
   private var fileManagerChannel: FlutterMethodChannel?
+  private var desktopQuickSendChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -83,8 +84,17 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
     registerWindowThemeChannel(with: flutterViewController)
     registerFileManagerChannel(with: flutterViewController)
+    registerDesktopQuickSendChannel(with: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func registerDesktopQuickSendChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/desktop_quick_send",
+      binaryMessenger: controller.engine.binaryMessenger)
+    DesktopQuickSendBridge.shared.attach(channel: channel)
+    desktopQuickSendChannel = channel
   }
 
   private func registerWindowThemeChannel(with controller: FlutterViewController) {

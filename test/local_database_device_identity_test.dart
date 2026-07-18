@@ -14,6 +14,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
 
 DeviceData _device(
   String uid, {
@@ -43,15 +44,44 @@ DeviceData _device(
   );
 }
 
+FileTransferData _outgoingTransfer(
+  String transferId,
+  String peerUid, {
+  FileTransferState state = FileTransferState.waitingReconnect,
+}) {
+  return FileTransferData(
+    transferId: transferId,
+    messageUuid: transferId,
+    messageRowId: 0,
+    peerUid: peerUid,
+    direction: FileTransferDirection.outgoing,
+    state: state,
+    finalPath: '/retained/$transferId.bin',
+    tempPath: '',
+    size: 1,
+    checksumAlgorithm: 'sha256',
+    checksumValue:
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    chunkSize: 512 * 1024,
+    committedBytes: 0,
+    resumeProofResetCount: 0,
+    lastError: '',
+    createdAt: 1,
+    updatedAt: 1,
+  );
+}
+
 Future<bool> _hasUniqueUidIndex(LocalDatabase database) async {
-  final indexes =
-      await database.customSelect('PRAGMA index_list(device)').get();
+  final indexes = await database
+      .customSelect('PRAGMA index_list(device)')
+      .get();
   return indexes.any((row) => row.read<int>('unique') == 1);
 }
 
 Future<bool> _hasMessageUuidIndex(LocalDatabase database) async {
-  final indexes =
-      await database.customSelect('PRAGMA index_list(message)').get();
+  final indexes = await database
+      .customSelect('PRAGMA index_list(message)')
+      .get();
   return indexes.any(
     (row) => row.read<String>('name') == 'message_uuid_lookup',
   );
@@ -79,9 +109,7 @@ class _BlockingIdentityUpdate extends QueryInterceptor {
   ) async {
     final result = await executor.runUpdate(statement, args);
     if (_argumentCount == args.length &&
-        statement.startsWith(
-          'UPDATE device SET identity_public_key = ?',
-        )) {
+        statement.startsWith('UPDATE device SET identity_public_key = ?')) {
       _argumentCount = null;
       _blocked!.complete();
       await _release!.future;
@@ -114,7 +142,9 @@ void main() {
       expect(row!.identityPublicKey, isEmpty);
       expect(await _hasUniqueUidIndex(database), isTrue);
       expect(
-        () => database.into(database.device).insert(
+        () => database
+            .into(database.device)
+            .insert(
               DeviceCompanion.insert(
                 uid: const Value('peer-a'),
                 host: '192.168.1.3',
@@ -152,17 +182,19 @@ void main() {
         DeviceIdentityPinResult.pinned,
       );
 
-      await Future.wait(List<Future<void>>.generate(
-        20,
-        (index) => database.upsertDevice(
-          _device(
-            'peer-a',
-            name: 'Peer $index',
-            host: '192.168.1.${index + 10}',
-            port: 11000 + index,
+      await Future.wait(
+        List<Future<void>>.generate(
+          20,
+          (index) => database.upsertDevice(
+            _device(
+              'peer-a',
+              name: 'Peer $index',
+              host: '192.168.1.${index + 10}',
+              port: 11000 + index,
+            ),
           ),
         ),
-      ));
+      );
 
       final rows = await database.fetchAllDevice();
       expect(rows.where((row) => row.uid == 'peer-a'), hasLength(1));
@@ -171,37 +203,31 @@ void main() {
       expect(stored.identityPublicKey, 'pinned-key');
     });
 
-    test('discovery presence can be cleared without removing device history',
-        () async {
-      await database.upsertDevice(_device('peer-a'));
-      await database.upsertDevice(_device('peer-b'));
+    test(
+      'discovery presence can be cleared without removing device history',
+      () async {
+        await database.upsertDevice(_device('peer-a'));
+        await database.upsertDevice(_device('peer-b'));
 
-      await database.setDeviceDiscoveryPresence('peer-a', false);
-      expect((await database.fetchDevice('peer-a'))?.around, isFalse);
-      expect((await database.fetchDevice('peer-b'))?.around, isTrue);
+        await database.setDeviceDiscoveryPresence('peer-a', false);
+        expect((await database.fetchDevice('peer-a'))?.around, isFalse);
+        expect((await database.fetchDevice('peer-b'))?.around, isTrue);
 
-      await database.clearDeviceDiscoveryPresence();
-      final rows = await database.fetchAllDevice();
-      expect(rows, hasLength(2));
-      expect(rows.every((row) => row.around == false), isTrue);
-    });
+        await database.clearDeviceDiscoveryPresence();
+        final rows = await database.fetchAllDevice();
+        expect(rows, hasLength(2));
+        expect(rows.every((row) => row.around == false), isTrue);
+      },
+    );
 
     test('DeviceData retains generated Drift row contracts', () async {
-      final row = _device(
-        'row-contract',
-        identityPublicKey: 'identity-key',
-      );
+      final row = _device('row-contract', identityPublicKey: 'identity-key');
 
       expect(row, isA<DataClass>());
       expect(row, isA<Insertable<DeviceData>>());
       expect(
         (row as Insertable<DeviceData>).toColumns(true).keys,
-        containsAll(<String>[
-          'uid',
-          'identity_public_key',
-          'host',
-          'port',
-        ]),
+        containsAll(<String>['uid', 'identity_public_key', 'host', 'port']),
       );
       final companion = row.toCompanion(true);
       expect(companion.identityPublicKey.value, 'identity-key');
@@ -221,14 +247,8 @@ void main() {
       expect(nullable.toColumns(true), isNot(contains('password')));
       expect(nullable.toColumns(true), isNot(contains('around')));
       final explicitNulls = nullable.toColumns(false);
-      expect(
-        (explicitNulls['password']! as Variable<String>).value,
-        isNull,
-      );
-      expect(
-        (explicitNulls['around']! as Variable<bool>).value,
-        isNull,
-      );
+      expect((explicitNulls['password']! as Variable<String>).value, isNull);
+      expect((explicitNulls['around']! as Variable<bool>).value, isNull);
       final nullableCompanion = nullable.toCompanion(false);
       expect(nullableCompanion.password.present, isTrue);
       expect(nullableCompanion.password.value, isNull);
@@ -287,119 +307,255 @@ void main() {
       );
     });
 
-    test('authDeviceIfPinned authenticates only the matching identity',
-        () async {
-      await database.upsertDevice(_device('peer-conditional'));
-      await database.pinDeviceIdentity('peer-conditional', 'trusted-key');
+    test(
+      'authDeviceIfPinned authenticates only the matching identity',
+      () async {
+        await database.upsertDevice(_device('peer-conditional'));
+        await database.pinDeviceIdentity('peer-conditional', 'trusted-key');
 
-      expect(
-        await database.authDeviceIfPinned(
-          'peer-conditional',
-          'attacker-key',
-        ),
-        isFalse,
-      );
-      expect((await database.fetchDevice('peer-conditional'))!.auth, isFalse);
+        expect(
+          await database.authDeviceIfPinned('peer-conditional', 'attacker-key'),
+          isFalse,
+        );
+        expect((await database.fetchDevice('peer-conditional'))!.auth, isFalse);
 
-      expect(
-        await database.authDeviceIfPinned(
-          'peer-conditional',
-          'trusted-key',
-        ),
-        isTrue,
-      );
-      expect((await database.fetchDevice('peer-conditional'))!.auth, isTrue);
-    });
+        expect(
+          await database.authDeviceIfPinned('peer-conditional', 'trusted-key'),
+          isTrue,
+        );
+        expect((await database.fetchDevice('peer-conditional'))!.auth, isTrue);
+      },
+    );
 
-    test('authenticated identity commit is atomic and returns the pinned row',
-        () async {
-      final stored = await database.commitAuthenticatedDevice(
-        candidate: _device('peer-atomic', name: 'Updated peer'),
-        publicKey: 'trusted-key',
-        replaceIdentity: false,
-        expectedPublicKey: '',
-        requireCurrent: () {},
-      );
+    test(
+      'authenticated identity commit is atomic and returns the pinned row',
+      () async {
+        final stored = await database.commitAuthenticatedDevice(
+          candidate: _device('peer-atomic', name: 'Updated peer'),
+          publicKey: 'trusted-key',
+          replaceIdentity: false,
+          expectedPublicKey: '',
+          requireCurrent: () {},
+        );
 
-      expect(stored.name, 'Updated peer');
-      expect(stored.identityPublicKey, 'trusted-key');
-      expect(stored.auth, isTrue);
-    });
+        expect(stored.name, 'Updated peer');
+        expect(stored.identityPublicKey, 'trusted-key');
+        expect(stored.auth, isTrue);
+      },
+    );
 
-    test('closing after a legacy pin rolls back the whole identity commit',
-        () async {
-      await database.upsertDevice(_device('legacy-rollback'));
-      await database.authDevice('legacy-rollback', true);
-      var sessionCurrent = true;
-      final blocked = blocker.blockNext(argumentCount: 2);
-
-      final commit = database.commitAuthenticatedDevice(
-        candidate: _device('legacy-rollback', name: 'Changed'),
-        publicKey: 'new-key',
-        replaceIdentity: false,
-        expectedPublicKey: '',
-        requireCurrent: () {
-          if (!sessionCurrent) {
-            throw StateError('socket closed');
+    test(
+      'identity-changing commit atomically cancels old outgoing transfers',
+      () async {
+        for (final oldKey in <String>['', 'old-key']) {
+          final suffix = oldKey.isEmpty ? 'legacy' : 'pinned';
+          final peerId = 'peer-$suffix';
+          final transferId = oldKey.isEmpty
+              ? 'a1234567-89ab-4cde-8fab-0123456789ab'
+              : 'b1234567-89ab-4cde-8fab-0123456789ab';
+          await database.upsertDevice(_device(peerId));
+          if (oldKey.isNotEmpty) {
+            await database.pinDeviceIdentity(peerId, oldKey);
           }
-        },
-      );
-      await blocked;
-      sessionCurrent = false;
-      blocker.release();
+          await database.authDevice(peerId, true);
+          await database.upsertFileTransfer(
+            _outgoingTransfer(transferId, peerId),
+          );
 
-      await expectLater(
-        commit,
-        throwsStateError,
-      );
+          final stored = await database.commitAuthenticatedDevice(
+            candidate: _device(peerId, name: 'Changed'),
+            publicKey: 'new-key-$suffix',
+            replaceIdentity: oldKey.isNotEmpty,
+            expectedPublicKey: oldKey,
+            requireCurrent: () {},
+          );
 
-      final stored = await database.fetchDevice('legacy-rollback');
-      expect(stored!.name, 'Peer');
-      expect(stored.identityPublicKey, isEmpty);
-      expect(stored.auth, isTrue);
-    });
+          expect(stored.identityPublicKey, 'new-key-$suffix');
+          expect(stored.auth, isTrue);
+          final transfer = await database.fetchFileTransfer(transferId);
+          expect(transfer?.state, FileTransferState.canceled);
+          expect(transfer?.lastError, 'identity_replaced');
+        }
+      },
+    );
 
-    test('closing after identity replacement restores the old trusted key',
-        () async {
-      await database.upsertDevice(_device('changed-rollback'));
-      await database.pinDeviceIdentity('changed-rollback', 'old-key');
-      await database.authDevice('changed-rollback', true);
-      var sessionCurrent = true;
-      final blocked = blocker.blockNext(argumentCount: 3);
+    test(
+      'same pinned identity commit leaves outgoing transfers recoverable',
+      () async {
+        const peerId = 'peer-same-key';
+        const transferId = 'c1234567-89ab-4cde-8fab-0123456789ab';
+        await database.upsertDevice(_device(peerId));
+        await database.pinDeviceIdentity(peerId, 'same-key');
+        await database.authDevice(peerId, true);
+        await database.upsertFileTransfer(
+          _outgoingTransfer(transferId, peerId),
+        );
 
-      final commit = database.commitAuthenticatedDevice(
-        candidate: _device('changed-rollback', name: 'Changed'),
-        publicKey: 'new-key',
-        replaceIdentity: true,
-        expectedPublicKey: 'old-key',
-        requireCurrent: () {
-          if (!sessionCurrent) {
-            throw StateError('socket closed');
-          }
-        },
-      );
-      await blocked;
-      sessionCurrent = false;
-      blocker.release();
+        await database.commitAuthenticatedDevice(
+          candidate: _device(peerId),
+          publicKey: 'same-key',
+          replaceIdentity: false,
+          expectedPublicKey: '',
+          requireCurrent: () {},
+        );
 
-      await expectLater(
-        commit,
-        throwsStateError,
-      );
+        expect(
+          (await database.fetchFileTransfer(transferId))?.state,
+          FileTransferState.waitingReconnect,
+        );
+      },
+    );
 
-      final stored = await database.fetchDevice('changed-rollback');
-      expect(stored!.name, 'Peer');
-      expect(stored.identityPublicKey, 'old-key');
-      expect(stored.auth, isTrue);
-    });
+    test(
+      'identity cancellation rolls back with a stale authentication commit',
+      () async {
+        const peerId = 'peer-cancel-rollback';
+        const transferId = 'd1234567-89ab-4cde-8fab-0123456789ab';
+        await database.upsertDevice(_device(peerId));
+        await database.pinDeviceIdentity(peerId, 'old-key');
+        await database.authDevice(peerId, true);
+        await database.upsertFileTransfer(
+          _outgoingTransfer(transferId, peerId),
+        );
+        var currentChecks = 0;
+
+        await expectLater(
+          database.commitAuthenticatedDevice(
+            candidate: _device(peerId, name: 'Changed'),
+            publicKey: 'new-key',
+            replaceIdentity: true,
+            expectedPublicKey: 'old-key',
+            requireCurrent: () {
+              currentChecks++;
+              if (currentChecks == 5) {
+                throw StateError('socket closed');
+              }
+            },
+          ),
+          throwsStateError,
+        );
+
+        final stored = await database.fetchDevice(peerId);
+        expect(stored?.identityPublicKey, 'old-key');
+        expect(stored?.auth, isTrue);
+        expect(
+          (await database.fetchFileTransfer(transferId))?.state,
+          FileTransferState.waitingReconnect,
+        );
+      },
+    );
+
+    test(
+      'trust revoke and queue cancellation roll back together on failure',
+      () async {
+        const peerId = 'peer-revoke-rollback';
+        const transferId = 'e1234567-89ab-4cde-8fab-0123456789ab';
+        await database.upsertDevice(_device(peerId));
+        await database.authDevice(peerId, true);
+        await database.upsertFileTransfer(
+          _outgoingTransfer(transferId, peerId),
+        );
+        await database.customStatement('''
+        CREATE TRIGGER abort_revoke_cancel
+        BEFORE UPDATE OF state ON file_transfer
+        WHEN OLD.transfer_id = '$transferId'
+        BEGIN
+          SELECT RAISE(ABORT, 'cancel failed');
+        END
+      ''');
+
+        await expectLater(
+          database.cancelOutgoingTransfersForPeer(
+            peerId,
+            reason: 'trust_revoked',
+            revokeDeviceTrust: true,
+          ),
+          throwsA(anything),
+        );
+
+        expect((await database.fetchDevice(peerId))?.auth, isTrue);
+        expect(
+          (await database.fetchFileTransfer(transferId))?.state,
+          FileTransferState.waitingReconnect,
+        );
+      },
+    );
+
+    test(
+      'closing after a legacy pin rolls back the whole identity commit',
+      () async {
+        await database.upsertDevice(_device('legacy-rollback'));
+        await database.authDevice('legacy-rollback', true);
+        var sessionCurrent = true;
+        final blocked = blocker.blockNext(argumentCount: 2);
+
+        final commit = database.commitAuthenticatedDevice(
+          candidate: _device('legacy-rollback', name: 'Changed'),
+          publicKey: 'new-key',
+          replaceIdentity: false,
+          expectedPublicKey: '',
+          requireCurrent: () {
+            if (!sessionCurrent) {
+              throw StateError('socket closed');
+            }
+          },
+        );
+        await blocked;
+        sessionCurrent = false;
+        blocker.release();
+
+        await expectLater(commit, throwsStateError);
+
+        final stored = await database.fetchDevice('legacy-rollback');
+        expect(stored!.name, 'Peer');
+        expect(stored.identityPublicKey, isEmpty);
+        expect(stored.auth, isTrue);
+      },
+    );
+
+    test(
+      'closing after identity replacement restores the old trusted key',
+      () async {
+        await database.upsertDevice(_device('changed-rollback'));
+        await database.pinDeviceIdentity('changed-rollback', 'old-key');
+        await database.authDevice('changed-rollback', true);
+        var sessionCurrent = true;
+        final blocked = blocker.blockNext(argumentCount: 3);
+
+        final commit = database.commitAuthenticatedDevice(
+          candidate: _device('changed-rollback', name: 'Changed'),
+          publicKey: 'new-key',
+          replaceIdentity: true,
+          expectedPublicKey: 'old-key',
+          requireCurrent: () {
+            if (!sessionCurrent) {
+              throw StateError('socket closed');
+            }
+          },
+        );
+        await blocked;
+        sessionCurrent = false;
+        blocker.release();
+
+        await expectLater(commit, throwsStateError);
+
+        final stored = await database.fetchDevice('changed-rollback');
+        expect(stored!.name, 'Peer');
+        expect(stored.identityPublicKey, 'old-key');
+        expect(stored.auth, isTrue);
+      },
+    );
   });
 
-  test('schema 5 upgrade deduplicates identities and is reopen-idempotent',
-      () async {
-    final directory = await Directory.systemTemp.createTemp('whisper-db-test-');
-    final file = File('${directory.path}/legacy.sqlite');
-    final raw = sqlite.sqlite3.open(file.path);
-    raw.execute('''
+  test(
+    'schema 5 upgrade deduplicates identities and is reopen-idempotent',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'whisper-db-test-',
+      );
+      final file = File('${directory.path}/legacy.sqlite');
+      final raw = sqlite.sqlite3.open(file.path);
+      raw.execute('''
       CREATE TABLE device (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         uid TEXT NOT NULL DEFAULT '',
@@ -416,7 +572,7 @@ void main() {
         around INTEGER DEFAULT 0
       )
     ''');
-    raw.execute('''
+      raw.execute('''
       INSERT INTO device
         (uid, name, host, port, auth, clipboard, last_time)
       VALUES
@@ -425,52 +581,53 @@ void main() {
         ('peer-a', 'trusted', '192.168.1.3', 10003, 1, 0, 4),
         ('peer-a', 'latest', '192.168.1.4', 10004, 0, 0, 9)
     ''');
-    raw.execute('''
+      raw.execute('''
       CREATE TABLE message (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         device_id INTEGER REFERENCES device(id),
         uuid TEXT NOT NULL DEFAULT ''
       )
     ''');
-    raw.execute('''
+      raw.execute('''
       INSERT INTO message (device_id) VALUES (2), (3), (4)
     ''');
-    raw.execute('PRAGMA user_version = 5');
-    raw.dispose();
+      raw.execute('PRAGMA user_version = 5');
+      raw.dispose();
 
-    var database = LocalDatabase.forTesting(NativeDatabase(file));
-    try {
-      final rows = await database.fetchAllDevice();
-      expect(rows, hasLength(1));
-      expect(rows.single.uid, 'peer-a');
-      expect(rows.single.name, 'latest');
-      expect(rows.single.host, '192.168.1.4');
-      expect(rows.single.port, 10004);
-      expect(rows.single.auth, isTrue);
-      expect(rows.single.clipboard, isTrue);
-      expect(rows.single.identityPublicKey, isEmpty);
-      final messageRows = await database
-          .customSelect('SELECT device_id FROM message ORDER BY id')
-          .get();
-      expect(
-        messageRows.map((row) => row.read<int>('device_id')),
-        everyElement(rows.single.id),
-      );
-      expect(await _hasUniqueUidIndex(database), isTrue);
-      expect(await _hasMessageUuidIndex(database), isTrue);
-      expect(database.schemaVersion, 9);
-    } finally {
-      await database.close();
-    }
+      var database = LocalDatabase.forTesting(NativeDatabase(file));
+      try {
+        final rows = await database.fetchAllDevice();
+        expect(rows, hasLength(1));
+        expect(rows.single.uid, 'peer-a');
+        expect(rows.single.name, 'latest');
+        expect(rows.single.host, '192.168.1.4');
+        expect(rows.single.port, 10004);
+        expect(rows.single.auth, isTrue);
+        expect(rows.single.clipboard, isTrue);
+        expect(rows.single.identityPublicKey, isEmpty);
+        final messageRows = await database
+            .customSelect('SELECT device_id FROM message ORDER BY id')
+            .get();
+        expect(
+          messageRows.map((row) => row.read<int>('device_id')),
+          everyElement(rows.single.id),
+        );
+        expect(await _hasUniqueUidIndex(database), isTrue);
+        expect(await _hasMessageUuidIndex(database), isTrue);
+        expect(database.schemaVersion, 10);
+      } finally {
+        await database.close();
+      }
 
-    database = LocalDatabase.forTesting(NativeDatabase(file));
-    try {
-      expect(await database.fetchAllDevice(), hasLength(1));
-      expect(await _hasUniqueUidIndex(database), isTrue);
-      expect(await _hasMessageUuidIndex(database), isTrue);
-    } finally {
-      await database.close();
-      await directory.delete(recursive: true);
-    }
-  });
+      database = LocalDatabase.forTesting(NativeDatabase(file));
+      try {
+        expect(await database.fetchAllDevice(), hasLength(1));
+        expect(await _hasUniqueUidIndex(database), isTrue);
+        expect(await _hasMessageUuidIndex(database), isTrue);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

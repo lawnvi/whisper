@@ -34,32 +34,38 @@ void main() {
     expect(sendMessageData, contains('.encode()'));
   });
 
-  test('incoming websocket bytes dispatch WhisperFrameV3 before legacy parsing',
-      () {
-    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
-    final listen = methodBody(
-      source,
-      'Future<void> _listen(',
-      'MessageData _buildMessage',
-    );
+  test(
+    'incoming websocket bytes dispatch WhisperFrameV3 before legacy parsing',
+    () {
+      final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+      final listen = methodBody(
+        source,
+        'Future<void> _listen(',
+        'MessageData _buildMessage',
+      );
 
-    expect(listen, contains('WhisperFrameV3.looksLikeFrame(data)'));
-    expect(listen, contains('_handleWhisperFrameV3('));
-    expect(listen, isNot(contains('TransferChunkFrame.looksLikeFrame(data)')));
-  });
+      expect(listen, contains('WhisperFrameV3.looksLikeFrame(data)'));
+      expect(listen, contains('_handleWhisperFrameV3('));
+      expect(
+        listen,
+        isNot(contains('TransferChunkFrame.looksLikeFrame(data)')),
+      );
+    },
+  );
 
   test('sendFileTo requires v3 and sends a file offer frame', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendFileTo = methodBody(
       source,
-      'Future<bool> sendFileTo(String peerId, String path)',
+      'Future<bool> sendFileTo(',
       'Future<bool> sendAndroidContentUriTo(',
     );
     final persistAndOffer = methodBody(
       source,
       'Future<bool> _persistAndOfferOutgoingTransfer(',
-      '/// fileOffer/fileData/fileReady/fileAck/fileComplete/fileCancel/fileError',
+      'bool _matchesStableOutgoingTransfer(',
     );
 
     expect(sendFileTo, contains('_supportsFileTransferV3For(peerId)'));
@@ -67,18 +73,22 @@ void main() {
     expect(
       persistAndOffer,
       allOf(
-        contains('_sendFileTransferV3OfferTo('),
-        contains('connection: connection'),
+        contains('_offerOnCurrentConnection('),
+        contains('expectedPublicKeyHash: expectedPublicKeyHash'),
+        contains('return true;'),
       ),
     );
-    expect(sendFileTo,
-        isNot(contains('_sendMessageData(message, peerId: peerId)')));
+    expect(
+      sendFileTo,
+      isNot(contains('_sendMessageData(message, peerId: peerId)')),
+    );
     expect(sendFileTo, isNot(contains('protocolVersion: 2')));
   });
 
   test('v3 file data path does not use raw payload continuation frames', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<int?> _sendFileTransferV3Window(',
@@ -92,8 +102,9 @@ void main() {
   });
 
   test('v3 outgoing send uses sliding window credit from durable acks', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<int?> _sendFileTransferV3Window(',
@@ -105,24 +116,19 @@ void main() {
       'Future<void> _releaseOutgoingAndStartNext',
     );
 
-    expect(
-      sendWindow,
-      contains('durableOffset + fileTransferV3WindowSize'),
-    );
+    expect(sendWindow, contains('durableOffset + fileTransferV3WindowSize'));
     expect(
       sendWindow,
       contains('_outgoingWindowEndOffsets[transfer.transferId] ??'),
     );
     expect(handleAck, contains('_sendFileTransferV3WindowSafely('));
-    expect(
-      handleAck,
-      isNot(contains('durableOffset < windowEnd')),
-    );
+    expect(handleAck, isNot(contains('durableOffset < windowEnd')));
   });
 
   test('v3 outgoing file sender yields between data frames', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendWindow = methodBody(
       source,
       'Future<int?> _sendFileTransferV3Window(',
@@ -138,8 +144,9 @@ void main() {
   });
 
   test('v3 incoming file data acks before the full send window', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final handleData = methodBody(
       source,
       'Future<void> _handleFileTransferV3Data',
@@ -151,55 +158,54 @@ void main() {
       handleData.indexOf('fileTransferV3AckIntervalSize'),
       lessThan(handleData.lastIndexOf('_sendFileTransferV3Ack(')),
     );
-    expect(
-      handleData,
-      isNot(contains('>= fileTransferV3WindowSize')),
-    );
+    expect(handleData, isNot(contains('>= fileTransferV3WindowSize')));
   });
 
-  test('queued incoming transfers always resume via v3 (WSP2 stack removed)',
-      () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
-    final startNext = methodBody(
-      source,
-      'Future<void> _startNextQueuedIncomingTransfer',
-      'Future<void> _markRecoverableTransfersWaitingReconnect',
-    );
+  test(
+    'queued incoming transfers always resume via v3 (WSP2 stack removed)',
+    () {
+      final source = File(
+        'lib/socket/file_transfer_engine.dart',
+      ).readAsStringSync();
+      final startNext = methodBody(
+        source,
+        'Future<void> _startNextQueuedIncomingTransfer',
+        'Future<void> _markRecoverableTransfersWaitingReconnect',
+      );
 
-    expect(
-      startNext,
-      allOf(
-        contains('_sendFileTransferV3Ready('),
-        contains('item.transferId'),
-        contains('connection: itemConnection'),
-      ),
-    );
-    expect(startNext, isNot(contains('_fileTransferUsesV3')));
-    expect(
-      startNext,
-      isNot(contains('_supportsFileTransferV3For(item.peerUid)')),
-    );
-  });
+      expect(
+        startNext,
+        allOf(
+          contains('_sendFileTransferV3Ready('),
+          contains('item.transferId'),
+          contains('connection: itemConnection'),
+        ),
+      );
+      expect(startNext, isNot(contains('_fileTransferUsesV3')));
+      expect(
+        startNext,
+        isNot(contains('_supportsFileTransferV3For(item.peerUid)')),
+      );
+    },
+  );
 
   test('v3 complete starts the next queued outgoing transfer', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final handleComplete = methodBody(
       source,
       'Future<void> _handleFileTransferV3Complete',
       'Future<void> _handleFileTransferV3Cancel',
     );
 
-    expect(
-      handleComplete,
-      contains('await _releaseOutgoingAndStartNext('),
-    );
+    expect(handleComplete, contains('await _releaseOutgoingAndStartNext('));
   });
 
   test('v3 incoming file data uses awaited random access writes', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final handleData = methodBody(
       source,
       'Future<void> _handleFileTransferV3Data',
@@ -212,8 +218,9 @@ void main() {
   });
 
   test('v3 transfer failures do not bubble into connection errors', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final frameHandler = methodBody(
       source,
       'Future<void> handleFrame(',
@@ -269,10 +276,14 @@ void main() {
     expect(queuedDone, contains('await _handlePeerSocketDone(sink)'));
     expect(attachIncomingSocket, contains('_attachSocketTransport('));
     expect(connectToServer, contains('_attachSocketTransport('));
-    expect(attachIncomingSocket,
-        isNot(contains('_handlePeerSocketDone(webSocket.sink)')));
-    expect(connectToServer,
-        isNot(contains('_handlePeerSocketDone(channel.sink)')));
+    expect(
+      attachIncomingSocket,
+      isNot(contains('_handlePeerSocketDone(webSocket.sink)')),
+    );
+    expect(
+      connectToServer,
+      isNot(contains('_handlePeerSocketDone(channel.sink)')),
+    );
     expect(source, isNot(contains('Future<void> _receiveQueue')));
   });
 }

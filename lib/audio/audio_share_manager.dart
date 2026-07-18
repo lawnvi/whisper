@@ -13,13 +13,10 @@ import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 typedef AudioPacketCallback = void Function(AudioPacketFrame packet);
 typedef AudioGroupPacketCallback = void Function(AudioGroupPacketFrame packet);
-typedef AudioGroupPacketClaimValidator = bool Function(
-  SessionUpgradeClaim claim,
-  AudioGroupPacketFrame packet,
-);
-typedef AudioMediaChannelLifecycleListener = void Function(
-  AudioMediaChannelClosedEvent event,
-);
+typedef AudioGroupPacketClaimValidator =
+    bool Function(SessionUpgradeClaim claim, AudioGroupPacketFrame packet);
+typedef AudioMediaChannelLifecycleListener =
+    void Function(AudioMediaChannelClosedEvent event);
 
 final class AudioMediaChannelClosedEvent {
   const AudioMediaChannelClosedEvent({
@@ -33,12 +30,7 @@ final class AudioMediaChannelClosedEvent {
   final Object? error;
 }
 
-enum AudioShareSessionState {
-  offering,
-  connected,
-  stopped,
-  failed,
-}
+enum AudioShareSessionState { offering, connected, stopped, failed }
 
 class AudioShareSession {
   const AudioShareSession({
@@ -55,9 +47,7 @@ class AudioShareSession {
   final AudioStreamFormat format;
   final AudioShareSessionState state;
 
-  AudioShareSession copyWith({
-    AudioShareSessionState? state,
-  }) {
+  AudioShareSession copyWith({AudioShareSessionState? state}) {
     return AudioShareSession(
       sessionId: sessionId,
       sourcePeerId: sourcePeerId,
@@ -78,8 +68,8 @@ class AudioShareManager {
     this.onGroupPacket,
     Uuid? uuid,
     AudioShareDiagnostics? diagnostics,
-  })  : _uuid = uuid ?? const Uuid(),
-        _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
+  }) : _uuid = uuid ?? const Uuid(),
+       _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   static final AudioShareManager shared = AudioShareManager();
 
@@ -235,12 +225,7 @@ class AudioShareManager {
     _sessions[sessionId] = current.copyWith(
       state: AudioShareSessionState.failed,
     );
-    unawaited(
-      closeSessionChannels(
-        sessionId,
-        namespace: 'audio',
-      ),
-    );
+    unawaited(closeSessionChannels(sessionId, namespace: 'audio'));
   }
 
   Future<void> closeSessionChannels(
@@ -267,8 +252,7 @@ class AudioShareManager {
   }) {
     return _closeMatchingChannels(
       (claim) =>
-          claim.peerId == peerId &&
-          !constantTimeBytesEqual(claim.mediaMacKey, mediaMacKey),
+          claim.peerId == peerId && !claim.matchesMediaMacKey(mediaMacKey),
     );
   }
 
@@ -415,39 +399,49 @@ class AudioShareManager {
       unawaited(channel.sink.close().catchError((Object _) {}));
       return false;
     }
-    final packetDecoder = AuthenticatedMediaPacketDecoder(
-      route: claim.route,
-      sessionId: claim.sessionId,
-      mediaMacKey: claim.mediaMacKey,
-      maxPayloadBytes: maxPacketPayloadBytes,
+    final packetDecoder = claim.withMediaPacketContext(
+      (mediaMacKey, channelBinding) => AuthenticatedMediaPacketDecoder(
+        route: claim.route,
+        namespace: claim.namespace,
+        sessionId: claim.sessionId,
+        mediaMacKey: mediaMacKey,
+        channelBinding: channelBinding,
+        maxPayloadBytes: maxPacketPayloadBytes,
+      ),
     );
-    _diagnostics.audioChannelAttached();
-    late final BoundedBinaryWebSocketSession binding;
-    binding = BoundedBinaryWebSocketSession(
-      channel: channel,
-      maxMessageBytes: maxChannelMessageBytes,
-      onMessage: (bytes) {
-        _diagnostics.audioChannelMessageBytes(bytes.length);
-        _handleClaimPacketBytes(
-          packetDecoder.decode(bytes),
-          claim: claim,
-          isDirectAudio: isDirectAudio,
-          groupPacketValidator: groupPacketValidator,
-        );
-      },
-      onError: (error) {
-        _channelErrors[binding] = error;
-        _diagnostics.audioChannelError(error);
-      },
-      onClosed: () {
-        _handleChannelClosed(binding);
-      },
-    );
-    _channels[binding] = claim;
-    if (_closingChannels) {
-      unawaited(_trackChannelClose(binding, expected: true));
+    try {
+      _diagnostics.audioChannelAttached();
+      late final BoundedBinaryWebSocketSession binding;
+      binding = BoundedBinaryWebSocketSession(
+        channel: channel,
+        maxMessageBytes: maxChannelMessageBytes,
+        onMessage: (bytes) {
+          _diagnostics.audioChannelMessageBytes(bytes.length);
+          _handleClaimPacketBytes(
+            packetDecoder.decode(bytes),
+            claim: claim,
+            isDirectAudio: isDirectAudio,
+            groupPacketValidator: groupPacketValidator,
+          );
+        },
+        onError: (error) {
+          _channelErrors[binding] = error;
+          _diagnostics.audioChannelError(error);
+        },
+        onClosed: () {
+          packetDecoder.destroy();
+          _handleChannelClosed(binding);
+        },
+      );
+      _channels[binding] = claim;
+      if (_closingChannels) {
+        unawaited(_trackChannelClose(binding, expected: true));
+      }
+      return true;
+    } catch (_) {
+      packetDecoder.destroy();
+      rethrow;
     }
-    return true;
   }
 
   void _handleChannelClosed(BoundedBinaryWebSocketSession channel) {
@@ -468,6 +462,7 @@ class AudioShareManager {
         listener(event);
       } catch (_) {}
     }
+    claim.destroy();
   }
 
   Future<void> _trackChannelClose(
@@ -482,15 +477,20 @@ class AudioShareManager {
       return existing;
     }
     late final Future<void> tracked;
-    tracked = channel.close().then<void>((_) {},
-        onError: (Object error, StackTrace stackTrace) {
-      _channelCloseError ??= error;
-      _channelCloseStackTrace ??= stackTrace;
-    }).whenComplete(() {
-      if (identical(_channelCloses[channel], tracked)) {
-        _channelCloses.remove(channel);
-      }
-    });
+    tracked = channel
+        .close()
+        .then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            _channelCloseError ??= error;
+            _channelCloseStackTrace ??= stackTrace;
+          },
+        )
+        .whenComplete(() {
+          if (identical(_channelCloses[channel], tracked)) {
+            _channelCloses.remove(channel);
+          }
+        });
     _channelCloses[channel] = tracked;
     return tracked;
   }
@@ -506,32 +506,36 @@ class AudioShareManager {
     _closeChannelsFuture = closeFuture;
     _channelCloseError = null;
     _channelCloseStackTrace = null;
-    unawaited(() async {
-      try {
-        while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
-          for (final channel in _channels.keys.toList(growable: false)) {
-            _trackChannelClose(channel, expected: true);
+    unawaited(
+      () async {
+        try {
+          while (_channels.isNotEmpty || _channelCloses.isNotEmpty) {
+            for (final channel in _channels.keys.toList(growable: false)) {
+              _trackChannelClose(channel, expected: true);
+            }
+            final closes = _channelCloses.values.toList(growable: false);
+            if (closes.isNotEmpty) {
+              await Future.wait(closes);
+            }
           }
-          final closes = _channelCloses.values.toList(growable: false);
-          if (closes.isNotEmpty) {
-            await Future.wait(closes);
+          if (_channelCloseError case final error?) {
+            Error.throwWithStackTrace(error, _channelCloseStackTrace!);
+          }
+        } finally {
+          _closingChannels = false;
+          if (identical(_closeChannelsFuture, closeFuture)) {
+            _closeChannelsFuture = null;
           }
         }
-        if (_channelCloseError case final error?) {
-          Error.throwWithStackTrace(error, _channelCloseStackTrace!);
-        }
-      } finally {
-        _closingChannels = false;
-        if (identical(_closeChannelsFuture, closeFuture)) {
-          _closeChannelsFuture = null;
-        }
-      }
-    }()
-        .then<void>((_) {
-      completer.complete();
-    }, onError: (Object error, StackTrace stackTrace) {
-      completer.completeError(error, stackTrace);
-    }));
+      }().then<void>(
+        (_) {
+          completer.complete();
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          completer.completeError(error, stackTrace);
+        },
+      ),
+    );
     return closeFuture;
   }
 
@@ -543,21 +547,18 @@ class AudioShareManager {
     Duration pingInterval = const Duration(seconds: 15),
     void Function()? onAttachmentComplete,
   }) {
-    return shelf_ws.webSocketHandler(
-      (WebSocketChannel channel) {
-        try {
-          attachChannel(
-            channel,
-            claim: claim,
-            additionalValidator: additionalValidator,
-            groupPacketValidator: groupPacketValidator,
-            claimValidator: claimValidator,
-          );
-        } finally {
-          onAttachmentComplete?.call();
-        }
-      },
-      pingInterval: pingInterval,
-    );
+    return shelf_ws.webSocketHandler((WebSocketChannel channel) {
+      try {
+        attachChannel(
+          channel,
+          claim: claim,
+          additionalValidator: additionalValidator,
+          groupPacketValidator: groupPacketValidator,
+          claimValidator: claimValidator,
+        );
+      } finally {
+        onAttachmentComplete?.call();
+      }
+    }, pingInterval: pingInterval);
   }
 }

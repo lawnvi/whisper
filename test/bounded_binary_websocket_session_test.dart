@@ -176,10 +176,7 @@ final class _ControlledChannel implements WebSocketChannel {
 }
 
 final class _ControlledSink implements WebSocketSink {
-  _ControlledSink({
-    required this.failClose,
-    required this.closeStream,
-  });
+  _ControlledSink({required this.failClose, required this.closeStream});
 
   final bool failClose;
   final Future<void> Function() closeStream;
@@ -220,58 +217,60 @@ final class _ControlledSink implements WebSocketSink {
 }
 
 void main() {
-  test('remote input callback completion drives websocket receive watermarks',
-      () async {
-    final manager = RemoteInputManager();
-    const sessionId = '11111111-1111-4111-8111-111111111111';
-    manager.acceptOffer(
-      const RemoteInputControlMessage(
-        action: RemoteInputControlAction.offer,
-        sessionId: sessionId,
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'local',
-        layoutEdge: RemoteInputEdge.right,
-      ),
-    );
-    final firstStarted = Completer<void>();
-    final releaseFirst = Completer<void>();
-    final delivered = <int>[];
-    manager.onPacket = (packet) async {
-      delivered.add(packet.sequence);
-      if (packet.sequence == 1) {
-        firstStarted.complete();
-        await releaseFirst.future;
-      }
-    };
-    final channel = _ReentrantChannel();
-    final session = BoundedBinaryWebSocketSession(
-      channel: channel,
-      maxMessageBytes: RemoteInputManager.maxChannelMessageBytes,
-      onMessage: manager.handlePacketBytes,
-    );
-    Uint8List packet(int sequence) => RemoteInputPacketFrame(
+  test(
+    'remote input callback completion drives websocket receive watermarks',
+    () async {
+      final manager = RemoteInputManager();
+      const sessionId = '11111111-1111-4111-8111-111111111111';
+      manager.acceptOffer(
+        const RemoteInputControlMessage(
+          action: RemoteInputControlAction.offer,
           sessionId: sessionId,
-          sequence: sequence,
-          timestampMicros: sequence,
-          eventType: RemoteInputEventType.release,
-          payload: Uint8List(0),
-        ).encode();
+          sourcePeerId: 'peer-a',
+          sinkPeerId: 'local',
+          layoutEdge: RemoteInputEdge.right,
+        ),
+      );
+      final firstStarted = Completer<void>();
+      final releaseFirst = Completer<void>();
+      final delivered = <int>[];
+      manager.onPacket = (packet) async {
+        delivered.add(packet.sequence);
+        if (packet.sequence == 1) {
+          firstStarted.complete();
+          await releaseFirst.future;
+        }
+      };
+      final channel = _ReentrantChannel();
+      final session = BoundedBinaryWebSocketSession(
+        channel: channel,
+        maxMessageBytes: RemoteInputManager.maxChannelMessageBytes,
+        onMessage: manager.handlePacketBytes,
+      );
+      Uint8List packet(int sequence) => RemoteInputPacketFrame(
+        sessionId: sessionId,
+        sequence: sequence,
+        timestampMicros: sequence,
+        eventType: RemoteInputEventType.release,
+        payload: Uint8List(0),
+      ).encode();
 
-    channel.addIncoming(packet(1));
-    await firstStarted.future;
-    channel.addIncoming(packet(2));
-    await Future<void>.delayed(Duration.zero);
-
-    expect(delivered, <int>[1]);
-    expect(session.pendingItems, 2);
-
-    releaseFirst.complete();
-    for (var i = 0; i < 10 && delivered.length < 2; i++) {
+      channel.addIncoming(packet(1));
+      await firstStarted.future;
+      channel.addIncoming(packet(2));
       await Future<void>.delayed(Duration.zero);
-    }
-    expect(delivered, <int>[1, 2]);
-    await session.close();
-  });
+
+      expect(delivered, <int>[1]);
+      expect(session.pendingItems, 2);
+
+      releaseFirst.complete();
+      for (var i = 0; i < 10 && delivered.length < 2; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(delivered, <int>[1, 2]);
+      await session.close();
+    },
+  );
 
   test('a blocked media socket does not block another socket', () async {
     final loopback = await _LoopbackSockets.start();
@@ -367,18 +366,15 @@ void main() {
     final observedError = Completer<Object>();
     late final BoundedBinaryWebSocketSession session;
 
-    runZonedGuarded(
-      () {
-        session = BoundedBinaryWebSocketSession(
-          channel: channel,
-          maxMessageBytes: 4,
-          onMessage: (_) {},
-          onError: (_) => throw StateError('observer failed'),
-        );
-        channel.addIncoming('not-binary');
-      },
-      (error, stackTrace) => observedError.complete(error),
-    );
+    runZonedGuarded(() {
+      session = BoundedBinaryWebSocketSession(
+        channel: channel,
+        maxMessageBytes: 4,
+        onMessage: (_) {},
+        onError: (_) => throw StateError('observer failed'),
+      );
+      channel.addIncoming('not-binary');
+    }, (error, stackTrace) => observedError.complete(error));
 
     expect(await observedError.future, isA<StateError>());
     await Future<void>.delayed(Duration.zero);
@@ -387,63 +383,66 @@ void main() {
     expect(channel.sinkCloseCount, 1);
   });
 
-  test('manager close awaits concurrent channels after one close fails',
-      () async {
-    final manager = AudioShareManager();
-    const sessionId = '11111111-1111-4111-8111-111111111111';
-    manager.acceptOffer(
-      const AudioControlMessage(
-        action: AudioControlAction.offer,
-        sessionId: sessionId,
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'local',
-        format: AudioStreamFormat(
-          codec: AudioCodecKind.opus,
-          sampleRate: 48000,
-          channels: 2,
-          frameDurationMs: 20,
-          bitRate: 128000,
+  test(
+    'manager close awaits concurrent channels after one close fails',
+    () async {
+      final manager = AudioShareManager();
+      const sessionId = '11111111-1111-4111-8111-111111111111';
+      manager.acceptOffer(
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
+          sessionId: sessionId,
+          sourcePeerId: 'peer-a',
+          sinkPeerId: 'local',
+          format: AudioStreamFormat(
+            codec: AudioCodecKind.opus,
+            sampleRate: 48000,
+            channels: 2,
+            frameDurationMs: 20,
+            bitRate: 128000,
+          ),
         ),
-      ),
-    );
-    final claim = SessionUpgradeClaim(
-      route: '/audio',
-      namespace: 'audio',
-      sessionId: sessionId,
-      peerId: 'peer-a',
-      mediaMacKey: Uint8List(32),
-    );
-    final first = _ControlledChannel(failClose: true);
-    final second = _ControlledChannel(failClose: false);
-    manager.attachChannel(first, claim: claim);
+      );
+      final claim = SessionUpgradeClaim(
+        route: '/audio',
+        namespace: 'audio',
+        sessionId: sessionId,
+        peerId: 'peer-a',
+        mediaMacKey: Uint8List(32),
+        channelBinding: Uint8List(32),
+      );
+      final first = _ControlledChannel(failClose: true);
+      final second = _ControlledChannel(failClose: false);
+      manager.attachChannel(first, claim: claim);
 
-    final closing = manager.closeChannels();
-    bool? closingStateOnCompletion;
-    final observed = closing.then<Object?>(
-      (_) => null,
-      onError: (Object error, StackTrace stackTrace) {
-        closingStateOnCompletion = manager.isClosingChannels;
-        return error;
-      },
-    );
-    var completed = false;
-    observed.whenComplete(() => completed = true);
-    await first.closeStarted.future;
-    manager.attachChannel(second, claim: claim);
+      final closing = manager.closeChannels();
+      bool? closingStateOnCompletion;
+      final observed = closing.then<Object?>(
+        (_) => null,
+        onError: (Object error, StackTrace stackTrace) {
+          closingStateOnCompletion = manager.isClosingChannels;
+          return error;
+        },
+      );
+      var completed = false;
+      observed.whenComplete(() => completed = true);
+      await first.closeStarted.future;
+      manager.attachChannel(second, claim: claim);
 
-    first.releaseClose.complete();
-    await second.closeStarted.future;
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(completed, isFalse);
+      first.releaseClose.complete();
+      await second.closeStarted.future;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(completed, isFalse);
 
-    second.releaseClose.complete();
-    expect(await observed, isA<StateError>());
-    expect(closingStateOnCompletion, isFalse);
-    expect(manager.isClosingChannels, isFalse);
-    expect(first.closeCount, 1);
-    expect(second.closeCount, 1);
-    expect(manager.activeChannelCount, 0);
-  });
+      second.releaseClose.complete();
+      expect(await observed, isA<StateError>());
+      expect(closingStateOnCompletion, isFalse);
+      expect(manager.isClosingChannels, isFalse);
+      expect(first.closeCount, 1);
+      expect(second.closeCount, 1);
+      expect(manager.activeChannelCount, 0);
+    },
+  );
 
   test('audio manager reports an unexpected remote channel close', () async {
     final manager = AudioShareManager();
@@ -474,6 +473,7 @@ void main() {
         sessionId: sessionId,
         peerId: 'peer-a',
         mediaMacKey: Uint8List(32),
+        channelBinding: Uint8List(32),
       ),
     );
 
@@ -520,6 +520,7 @@ void main() {
           sessionId: sessionId,
           peerId: 'peer-a',
           mediaMacKey: Uint8List(32),
+          channelBinding: Uint8List(32),
         ),
       );
 
@@ -540,122 +541,18 @@ void main() {
     expect((await close(stopSession: false)).expected, isFalse);
   });
 
-  test('attach revalidates the authenticated peer after token consumption',
-      () async {
-    final manager = AudioShareManager();
-    const sessionId = '11111111-1111-4111-8111-111111111111';
-    manager.acceptOffer(
-      const AudioControlMessage(
-        action: AudioControlAction.offer,
-        sessionId: sessionId,
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'local',
-        format: AudioStreamFormat(
-          codec: AudioCodecKind.opus,
-          sampleRate: 48000,
-          channels: 2,
-          frameDurationMs: 20,
-          bitRate: 128000,
-        ),
-      ),
-    );
-    final channel = _ControlledChannel(failClose: false);
-
-    final attached = manager.attachChannel(
-      channel,
-      claim: SessionUpgradeClaim(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: sessionId,
-        peerId: 'peer-a',
-        mediaMacKey: Uint8List(32),
-      ),
-      claimValidator: (_) => false,
-    );
-
-    expect(attached, isFalse);
-    await channel.closeStarted.future;
-    channel.releaseClose.complete();
-    await Future<void>.delayed(Duration.zero);
-    expect(channel.closeCount, 1);
-    expect(manager.activeChannelCount, 0);
-  });
-
-  test('terminal cleanup isolates direct and group audio sharing one tuple',
-      () async {
-    final manager = AudioShareManager();
-    const sessionId = '11111111-1111-4111-8111-111111111111';
-    manager.acceptOffer(
-      const AudioControlMessage(
-        action: AudioControlAction.offer,
-        sessionId: sessionId,
-        sourcePeerId: 'peer-a',
-        sinkPeerId: 'local',
-        format: AudioStreamFormat(
-          codec: AudioCodecKind.opus,
-          sampleRate: 48000,
-          channels: 2,
-          frameDurationMs: 20,
-          bitRate: 128000,
-        ),
-      ),
-    );
-    final direct = _ControlledChannel(failClose: false);
-    final group = _ControlledChannel(failClose: false);
-    manager.attachChannel(
-      direct,
-      claim: SessionUpgradeClaim(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: sessionId,
-        peerId: 'peer-a',
-        mediaMacKey: Uint8List(32),
-      ),
-    );
-    manager.attachChannel(
-      group,
-      claim: SessionUpgradeClaim(
-        route: '/audio',
-        namespace: 'audio-group',
-        sessionId: sessionId,
-        peerId: 'peer-a',
-        mediaMacKey: Uint8List(32),
-      ),
-      additionalValidator: (_) => true,
-      groupPacketValidator: (_, __) => true,
-    );
-    expect(manager.activeChannelCount, 2);
-
-    final closingDirect = manager.closeSessionChannels(
-      sessionId,
-      peerId: 'peer-a',
-      namespace: 'audio',
-    );
-    await direct.closeStarted.future;
-    direct.releaseClose.complete();
-    await closingDirect;
-
-    expect(group.closeStarted.isCompleted, isFalse);
-    expect(manager.activeChannelCount, 1);
-    final closingGroup = manager.closeChannels();
-    await group.closeStarted.future;
-    group.releaseClose.complete();
-    await closingGroup;
-  });
-
-  test('new audio generation closes old-key channels but preserves its own',
-      () async {
-    final manager = AudioShareManager();
-    const oldSessionId = '11111111-1111-4111-8111-111111111111';
-    const newSessionId = '22222222-2222-4222-8222-222222222222';
-    for (final sessionId in <String>[oldSessionId, newSessionId]) {
+  test(
+    'attach revalidates the authenticated peer after token consumption',
+    () async {
+      final manager = AudioShareManager();
+      const sessionId = '11111111-1111-4111-8111-111111111111';
       manager.acceptOffer(
-        AudioControlMessage(
+        const AudioControlMessage(
           action: AudioControlAction.offer,
           sessionId: sessionId,
           sourcePeerId: 'peer-a',
           sinkPeerId: 'local',
-          format: const AudioStreamFormat(
+          format: AudioStreamFormat(
             codec: AudioCodecKind.opus,
             sampleRate: 48000,
             channels: 2,
@@ -664,102 +561,221 @@ void main() {
           ),
         ),
       );
-    }
-    final oldKey = Uint8List.fromList(List<int>.filled(32, 1));
-    final newKey = Uint8List.fromList(List<int>.filled(32, 2));
-    final oldChannel = _ControlledChannel(failClose: false);
-    final newChannel = _ControlledChannel(failClose: false);
-    manager.attachChannel(
-      oldChannel,
-      claim: SessionUpgradeClaim(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: oldSessionId,
-        peerId: 'peer-a',
-        mediaMacKey: oldKey,
-      ),
-    );
-    manager.attachChannel(
-      newChannel,
-      claim: SessionUpgradeClaim(
-        route: '/audio',
-        namespace: 'audio',
-        sessionId: newSessionId,
-        peerId: 'peer-a',
-        mediaMacKey: newKey,
-      ),
-    );
+      final channel = _ControlledChannel(failClose: false);
 
-    final closingOld = manager.closeSupersededPeerChannels(
-      'peer-a',
-      mediaMacKey: newKey,
-    );
-    await oldChannel.closeStarted.future;
-    oldChannel.releaseClose.complete();
-    await closingOld;
+      final attached = manager.attachChannel(
+        channel,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: sessionId,
+          peerId: 'peer-a',
+          mediaMacKey: Uint8List(32),
+          channelBinding: Uint8List(32),
+        ),
+        claimValidator: (_) => false,
+      );
 
-    expect(newChannel.closeStarted.isCompleted, isFalse);
-    expect(manager.activeChannelCount, 1);
-    final closingNew = manager.closeChannels();
-    await newChannel.closeStarted.future;
-    newChannel.releaseClose.complete();
-    await closingNew;
-  });
+      expect(attached, isFalse);
+      await channel.closeStarted.future;
+      channel.releaseClose.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(channel.closeCount, 1);
+      expect(manager.activeChannelCount, 0);
+    },
+  );
 
-  test('new input generation closes old-key channels but preserves its own',
-      () async {
-    final manager = RemoteInputManager();
-    const oldSessionId = '11111111-1111-4111-8111-111111111111';
-    const newSessionId = '22222222-2222-4222-8222-222222222222';
-    for (final sessionId in <String>[oldSessionId, newSessionId]) {
+  test(
+    'terminal cleanup isolates direct and group audio sharing one tuple',
+    () async {
+      final manager = AudioShareManager();
+      const sessionId = '11111111-1111-4111-8111-111111111111';
       manager.acceptOffer(
-        RemoteInputControlMessage(
-          action: RemoteInputControlAction.offer,
+        const AudioControlMessage(
+          action: AudioControlAction.offer,
           sessionId: sessionId,
           sourcePeerId: 'peer-a',
           sinkPeerId: 'local',
-          layoutEdge: RemoteInputEdge.right,
+          format: AudioStreamFormat(
+            codec: AudioCodecKind.opus,
+            sampleRate: 48000,
+            channels: 2,
+            frameDurationMs: 20,
+            bitRate: 128000,
+          ),
         ),
       );
-    }
-    final oldKey = Uint8List.fromList(List<int>.filled(32, 1));
-    final newKey = Uint8List.fromList(List<int>.filled(32, 2));
-    final oldChannel = _ControlledChannel(failClose: false);
-    final newChannel = _ControlledChannel(failClose: false);
-    manager.attachChannel(
-      oldChannel,
-      claim: SessionUpgradeClaim(
-        route: '/input',
-        namespace: 'remote-input',
-        sessionId: oldSessionId,
+      final direct = _ControlledChannel(failClose: false);
+      final group = _ControlledChannel(failClose: false);
+      manager.attachChannel(
+        direct,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: sessionId,
+          peerId: 'peer-a',
+          mediaMacKey: Uint8List(32),
+          channelBinding: Uint8List(32),
+        ),
+      );
+      manager.attachChannel(
+        group,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio-group',
+          sessionId: sessionId,
+          peerId: 'peer-a',
+          mediaMacKey: Uint8List(32),
+          channelBinding: Uint8List(32),
+        ),
+        additionalValidator: (_) => true,
+        groupPacketValidator: (_, __) => true,
+      );
+      expect(manager.activeChannelCount, 2);
+
+      final closingDirect = manager.closeSessionChannels(
+        sessionId,
         peerId: 'peer-a',
-        mediaMacKey: oldKey,
-      ),
-    );
-    manager.attachChannel(
-      newChannel,
-      claim: SessionUpgradeClaim(
-        route: '/input',
-        namespace: 'remote-input',
-        sessionId: newSessionId,
-        peerId: 'peer-a',
+        namespace: 'audio',
+      );
+      await direct.closeStarted.future;
+      direct.releaseClose.complete();
+      await closingDirect;
+
+      expect(group.closeStarted.isCompleted, isFalse);
+      expect(manager.activeChannelCount, 1);
+      final closingGroup = manager.closeChannels();
+      await group.closeStarted.future;
+      group.releaseClose.complete();
+      await closingGroup;
+    },
+  );
+
+  test(
+    'new audio generation closes old-key channels but preserves its own',
+    () async {
+      final manager = AudioShareManager();
+      const oldSessionId = '11111111-1111-4111-8111-111111111111';
+      const newSessionId = '22222222-2222-4222-8222-222222222222';
+      for (final sessionId in <String>[oldSessionId, newSessionId]) {
+        manager.acceptOffer(
+          AudioControlMessage(
+            action: AudioControlAction.offer,
+            sessionId: sessionId,
+            sourcePeerId: 'peer-a',
+            sinkPeerId: 'local',
+            format: const AudioStreamFormat(
+              codec: AudioCodecKind.opus,
+              sampleRate: 48000,
+              channels: 2,
+              frameDurationMs: 20,
+              bitRate: 128000,
+            ),
+          ),
+        );
+      }
+      final oldKey = Uint8List.fromList(List<int>.filled(32, 1));
+      final newKey = Uint8List.fromList(List<int>.filled(32, 2));
+      final oldChannel = _ControlledChannel(failClose: false);
+      final newChannel = _ControlledChannel(failClose: false);
+      manager.attachChannel(
+        oldChannel,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: oldSessionId,
+          peerId: 'peer-a',
+          mediaMacKey: oldKey,
+          channelBinding: Uint8List(32),
+        ),
+      );
+      manager.attachChannel(
+        newChannel,
+        claim: SessionUpgradeClaim(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: newSessionId,
+          peerId: 'peer-a',
+          mediaMacKey: newKey,
+          channelBinding: Uint8List(32),
+        ),
+      );
+
+      final closingOld = manager.closeSupersededPeerChannels(
+        'peer-a',
         mediaMacKey: newKey,
-      ),
-    );
+      );
+      await oldChannel.closeStarted.future;
+      oldChannel.releaseClose.complete();
+      await closingOld;
 
-    final closingOld = manager.closeSupersededPeerChannels(
-      'peer-a',
-      mediaMacKey: newKey,
-    );
-    await oldChannel.closeStarted.future;
-    oldChannel.releaseClose.complete();
-    await closingOld;
+      expect(newChannel.closeStarted.isCompleted, isFalse);
+      expect(manager.activeChannelCount, 1);
+      final closingNew = manager.closeChannels();
+      await newChannel.closeStarted.future;
+      newChannel.releaseClose.complete();
+      await closingNew;
+    },
+  );
 
-    expect(newChannel.closeStarted.isCompleted, isFalse);
-    expect(manager.activeChannelCount, 1);
-    final closingNew = manager.closeChannels();
-    await newChannel.closeStarted.future;
-    newChannel.releaseClose.complete();
-    await closingNew;
-  });
+  test(
+    'new input generation closes old-key channels but preserves its own',
+    () async {
+      final manager = RemoteInputManager();
+      const oldSessionId = '11111111-1111-4111-8111-111111111111';
+      const newSessionId = '22222222-2222-4222-8222-222222222222';
+      for (final sessionId in <String>[oldSessionId, newSessionId]) {
+        manager.acceptOffer(
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.offer,
+            sessionId: sessionId,
+            sourcePeerId: 'peer-a',
+            sinkPeerId: 'local',
+            layoutEdge: RemoteInputEdge.right,
+          ),
+        );
+      }
+      final oldKey = Uint8List.fromList(List<int>.filled(32, 1));
+      final newKey = Uint8List.fromList(List<int>.filled(32, 2));
+      final oldChannel = _ControlledChannel(failClose: false);
+      final newChannel = _ControlledChannel(failClose: false);
+      manager.attachChannel(
+        oldChannel,
+        claim: SessionUpgradeClaim(
+          route: '/input',
+          namespace: 'remote-input',
+          sessionId: oldSessionId,
+          peerId: 'peer-a',
+          mediaMacKey: oldKey,
+          channelBinding: Uint8List(32),
+        ),
+      );
+      manager.attachChannel(
+        newChannel,
+        claim: SessionUpgradeClaim(
+          route: '/input',
+          namespace: 'remote-input',
+          sessionId: newSessionId,
+          peerId: 'peer-a',
+          mediaMacKey: newKey,
+          channelBinding: Uint8List(32),
+        ),
+      );
+
+      final closingOld = manager.closeSupersededPeerChannels(
+        'peer-a',
+        mediaMacKey: newKey,
+      );
+      await oldChannel.closeStarted.future;
+      oldChannel.releaseClose.complete();
+      await closingOld;
+
+      expect(newChannel.closeStarted.isCompleted, isFalse);
+      expect(manager.activeChannelCount, 1);
+      final closingNew = manager.closeChannels();
+      await newChannel.closeStarted.future;
+      newChannel.releaseClose.complete();
+      await closingNew;
+    },
+  );
 }

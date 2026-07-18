@@ -28,6 +28,12 @@ Terminal=false
 Type=Application
 Categories=Utility;Network;
 StartupWMClass=whisper
+MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;inode/directory;
+Actions=QuickSend;
+
+[Desktop Action QuickSend]
+Name=Send with Whisper
+Exec=${APP_NAME} --quick-send %F
 EOF
 
 cp "${APPDIR}/${APP_NAME}.desktop" "${APPDIR}/usr/share/applications/${APP_NAME}.desktop"

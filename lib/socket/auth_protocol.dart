@@ -85,6 +85,7 @@ final class AuthEnvelope {
     required String peerNonce,
     required String profileDigest,
     required String signature,
+    String reason = 'approved',
   }) {
     return _validated(
       action: AuthAction.proof,
@@ -94,6 +95,7 @@ final class AuthEnvelope {
       peerNonce: peerNonce,
       profileDigest: profileDigest,
       signature: signature,
+      reason: reason,
     );
   }
 
@@ -233,6 +235,7 @@ final class AuthEnvelope {
           peerNonce: _requiredString(json, 'peerNonce'),
           profileDigest: common.profileDigest,
           signature: _requiredString(json, 'signature'),
+          reason: _requiredString(json, 'reason'),
         );
       case AuthAction.approval:
         return AuthEnvelope.approval(
@@ -451,6 +454,7 @@ const Map<AuthAction, Set<String>> _allowedKeys = <AuthAction, Set<String>>{
     'peerNonce',
     'profileDigest',
     'signature',
+    'reason',
   },
   AuthAction.approval: <String>{
     'action',

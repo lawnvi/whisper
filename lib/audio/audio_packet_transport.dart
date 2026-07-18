@@ -22,12 +22,12 @@ class AudioPacketByteTransport implements AudioObservablePacketTransport {
     Future<void> Function()? closeSink,
     AudioShareDiagnostics? diagnostics,
   }) : this.withTransport(
-          PacketByteTransport(
-            sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-            closeSink: closeSink ?? () async {},
-          ),
-          diagnostics: diagnostics,
-        );
+         PacketByteTransport(
+           sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+           closeSink: closeSink ?? () async {},
+         ),
+         diagnostics: diagnostics,
+       );
 
   AudioPacketByteTransport.withTransport(
     this._inner, {
@@ -63,19 +63,21 @@ class AudioPacketByteTransport implements AudioObservablePacketTransport {
       return;
     }
     final delivery = _inner.send(packet.encode());
-    unawaited(delivery.then((result) {
-      if (result == PacketSendResult.sent) {
-        _emitSent(packet);
-      } else {
-        final reason = switch (result) {
-          PacketSendResult.sent => 'sent',
-          PacketSendResult.dropped => 'backpressure',
-          PacketSendResult.closed => 'closed',
-          PacketSendResult.transportFailure => 'transport',
-        };
-        _emitDropped(packet, reason: reason);
-      }
-    }));
+    unawaited(
+      delivery.then((result) {
+        if (result == PacketSendResult.sent) {
+          _emitSent(packet);
+        } else {
+          final reason = switch (result) {
+            PacketSendResult.sent => 'sent',
+            PacketSendResult.dropped => 'backpressure',
+            PacketSendResult.closed => 'closed',
+            PacketSendResult.transportFailure => 'transport',
+          };
+          _emitDropped(packet, reason: reason);
+        }
+      }),
+    );
   }
 
   @override
@@ -86,10 +88,7 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
   AudioWebSocketPacketTransport._(
     PacketByteTransport channelTransport, {
     required AudioShareDiagnostics diagnostics,
-  }) : super.withTransport(
-          channelTransport,
-          diagnostics: diagnostics,
-        );
+  }) : super.withTransport(channelTransport, diagnostics: diagnostics);
 
   static Future<AudioWebSocketPacketTransport> connect(
     Uri uri, {
@@ -111,8 +110,10 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
         ),
         packetEncoder: AuthenticatedMediaPacketEncoder(
           route: '/audio',
+          namespace: 'audio',
           sessionId: sessionId,
           mediaMacKey: mediaMacKey,
+          channelBinding: mediaPacketChannelBindingFromUri(uri),
           maxPayloadBytes: 256 * 1024,
         ),
       );

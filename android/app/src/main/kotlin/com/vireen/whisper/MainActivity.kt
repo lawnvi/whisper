@@ -11,6 +11,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(BackgroundKeepAlivePlugin())
         flutterEngine.plugins.add(AudioSharePlugin())
         flutterEngine.plugins.add(AndroidDocumentPickerPlugin())
+        flutterEngine.plugins.add(AndroidSystemSharePlugin())
         flutterEngine.plugins.add(TransferNotificationPlugin())
         flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())
         flutterEngine.plugins.add(LocalNetworkPermissionPlugin())

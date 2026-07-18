@@ -9,12 +9,20 @@ void main() {
 
     expect(socketManager, contains('bool remoteTrustsPeer(String peerId)'));
     expect(socketManager, contains('bool remotePeerTrustsPeer'));
-    expect(conversation,
-        contains('socketManager.remotePeerTrustsPeer(device.uid, self.uid)'));
+    expect(
+      conversation,
+      matches(
+        RegExp(
+          r'socketManager\.remotePeerTrustsPeer\(\s*device\.uid,\s*self\.uid,?\s*\)',
+        ),
+      ),
+    );
     expect(conversation, contains('remoteInputPeerMustTrustThisDevice'));
     expect(conversation, contains('isMutuallyTrusted: isMutuallyTrusted'));
-    expect(conversation,
-        contains('remoteCanInject: socketManager.supportsRemoteInputFor'));
+    expect(
+      conversation,
+      contains('remoteCanInject: socketManager.supportsRemoteInputFor'),
+    );
 
     final toggleMethod = RegExp(
       r'Future<void> _toggleRemoteInput[\s\S]*?Future<void> _maybeAutoStartRemoteInput',
@@ -40,7 +48,9 @@ void main() {
     expect(getter, contains('_isConnectedSession'));
     expect(getter, contains('supportsNativeRemoteInput()'));
     expect(
-        getter, contains('socketManager.supportsRemoteInputFor(device.uid)'));
+      getter,
+      contains('socketManager.supportsRemoteInputFor(device.uid)'),
+    );
   });
 
   test('settings remote input entry explains missing mutual trust', () {
@@ -51,11 +61,17 @@ void main() {
       isNot(contains('device.auth ? _openRemoteInputAutoModePicker : null')),
     );
     expect(settings, contains('_openRemoteInputAutoModePickerWithTrustPrompt'));
-    expect(settings,
-        contains('showAppToast(l10n.remoteInputRequiresMutualTrust)'));
-    expect(settings,
-        contains('showAppToast(l10n.remoteInputPeerMustTrustThisDevice)'));
-    expect(settings,
-        contains('WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)'));
+    expect(
+      settings,
+      contains('showAppToast(l10n.remoteInputRequiresMutualTrust)'),
+    );
+    expect(
+      settings,
+      contains('showAppToast(l10n.remoteInputPeerMustTrustThisDevice)'),
+    );
+    expect(
+      settings,
+      contains('WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)'),
+    );
   });
 }

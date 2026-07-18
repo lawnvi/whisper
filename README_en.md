@@ -31,8 +31,12 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 ## Features
 
+- **End-to-end encryption**: paired text, files, clipboard data, notifications, audio, and keyboard/mouse control use encrypted channels with visible identity and trust state.
 - **Direct multi-device connections**: one device can connect to multiple computers or phones, with visible and explicit connection state.
 - **Chat-style transfer**: send text, clipboard content, and files in conversations for links, commands, screenshots, installers, and other quick handoffs.
+- **System quick send**: use the Android share sheet, desktop context menus, or a global hotkey; offline items remain queued for the selected device.
+- **QR pairing and diagnostics**: pairing codes bind the LAN endpoint to the device identity, while failures identify Wi-Fi, address, service, firewall, identity, or version problems.
+- **Transfer assistant**: send folders, search message text, save favorite snippets, and optionally enable clipboard auto-sync.
 - **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
 - **Keyboard and mouse sharing**: share one keyboard and mouse across trusted desktop devices, switching targets through screen layout and edge crossing.
 - **Desktop experience**: tray integration, launch at startup, close to tray, drag files out from desktop messages, light/dark themes, and multilingual UI.
@@ -41,7 +45,7 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 Whisper first tries LAN discovery. When two devices are on the same network and both have Whisper open, they should usually appear in each other's device list. Select a discovered device, then confirm the connection request on the receiving side.
 
-If discovery is unavailable, manually enter the peer's LAN IP address and service port. The default service port is `10002`, and it can be changed in Settings under "Server Port". When connecting manually, make sure the firewall allows LAN access to that port.
+If discovery is unavailable, scan the pairing QR code shown by the other device or enter its LAN IP address and service port manually. The default service port is `10002`, and it can be changed in Settings under "Server Port". First-time pairing requires both devices to verify and confirm the same pairing code.
 
 Linux discovery depends on Avahi. If the network blocks mDNS/Bonjour, manual IP connection is usually more reliable.
 
@@ -49,7 +53,7 @@ Linux discovery depends on Avahi. If the network blocks mDNS/Bonjour, manual IP 
 
 ### 1. Prepare the Environment
 
-Install Flutter stable, and make sure the Flutter SDK satisfies Dart `>=3.5.0 <4.0.0`.
+Install Flutter stable, and make sure the Flutter SDK satisfies Dart `>=3.11.0 <4.0.0`.
 
 ```bash
 flutter doctor
@@ -60,7 +64,7 @@ Prepare the toolchain for your target platform:
 - Android: Android Studio / Android SDK
 - macOS / iOS: Xcode
 - Windows: Visual Studio C++ toolchain
-- Linux: Flutter Linux desktop dependencies, Avahi, PulseAudio or PipeWire Pulse
+- Linux: Flutter Linux desktop dependencies, Avahi, PulseAudio or PipeWire Pulse, libsecret/keybinder/jsoncpp, and an available system keyring
 
 ### 2. Install Dependencies and Run
 
@@ -127,7 +131,7 @@ After granting notification listener permission on Android, choose which apps to
 
 ## Boundaries and Security
 
-- End-to-end encryption is not implemented yet. Do not use Whisper on untrusted LANs.
+- Paired application data uses end-to-end encryption. LAN discovery and connection metadata remain visible, local databases and staged files are not encrypted at rest, and the implementation has not received an independent cryptographic audit.
 - Whisper does not provide public relays, hub forwarding, or transitive trust.
 - Files, audio, and keyboard/mouse input all require connection and capability negotiation; they are not designed as silent background control paths.
 - Keyboard/mouse sharing is for nearby personal devices, not unattended remote control.

@@ -9,38 +9,37 @@ SecretKey _key(int start) => SecretKey(
     );
 
 void main() {
-  test('directional codecs exchange plaintext in strict sequence', () async {
-    final clientToServer = _key(0);
-    final serverToClient = _key(32);
-    final client = AuthenticatedFrameCodec(
-      sendKey: clientToServer,
-      receiveKey: serverToClient,
+  test('directional codecs encrypt and exchange payloads in strict sequence',
+      () async {
+    final client = await AuthenticatedFrameCodec.create(
+      sendKey: _key(0),
+      receiveKey: _key(32),
     );
-    final server = AuthenticatedFrameCodec(
-      sendKey: serverToClient,
-      receiveKey: clientToServer,
+    final server = await AuthenticatedFrameCodec.create(
+      sendKey: _key(32),
+      receiveKey: _key(0),
     );
 
     final first = await client.encode(Uint8List.fromList(<int>[1, 2, 3]));
     final second = await client.encode(Uint8List.fromList(<int>[4, 5]));
 
+    expect(first.sublist(16, 19), isNot(orderedEquals(<int>[1, 2, 3])));
+    expect(String.fromCharCodes(first.sublist(0, 4)), 'WAE1');
     expect(await server.decode(first), orderedEquals(<int>[1, 2, 3]));
     expect(await server.decode(second), orderedEquals(<int>[4, 5]));
     expect(client.lastSentSequence, 2);
     expect(server.lastReceivedSequence, 2);
   });
 
-  test('rejects payload and MAC tampering without consuming sequence',
+  test('rejects ciphertext and tag tampering without consuming sequence',
       () async {
-    final sendKey = _key(0);
-    final receiveKey = _key(32);
-    final sender = AuthenticatedFrameCodec(
-      sendKey: sendKey,
-      receiveKey: receiveKey,
+    final sender = await AuthenticatedFrameCodec.create(
+      sendKey: _key(0),
+      receiveKey: _key(32),
     );
-    final receiver = AuthenticatedFrameCodec(
-      sendKey: receiveKey,
-      receiveKey: sendKey,
+    final receiver = await AuthenticatedFrameCodec.create(
+      sendKey: _key(32),
+      receiveKey: _key(0),
     );
     final frame = await sender.encode(Uint8List.fromList(<int>[7, 8, 9]));
     final tamperedPayload = Uint8List.fromList(frame)..[18] ^= 0xff;
@@ -62,19 +61,17 @@ void main() {
   });
 
   test('rejects replay, gaps, and the reverse direction key', () async {
-    final clientToServer = _key(0);
-    final serverToClient = _key(32);
-    final client = AuthenticatedFrameCodec(
-      sendKey: clientToServer,
-      receiveKey: serverToClient,
+    final client = await AuthenticatedFrameCodec.create(
+      sendKey: _key(0),
+      receiveKey: _key(32),
     );
-    final server = AuthenticatedFrameCodec(
-      sendKey: serverToClient,
-      receiveKey: clientToServer,
+    final server = await AuthenticatedFrameCodec.create(
+      sendKey: _key(32),
+      receiveKey: _key(0),
     );
-    final wrongDirection = AuthenticatedFrameCodec(
-      sendKey: clientToServer,
-      receiveKey: serverToClient,
+    final wrongDirection = await AuthenticatedFrameCodec.create(
+      sendKey: _key(0),
+      receiveKey: _key(32),
     );
 
     final first = await client.encode(Uint8List.fromList(<int>[1]));
@@ -96,7 +93,7 @@ void main() {
   });
 
   test('rejects truncated and oversized declared payload frames', () async {
-    final codec = AuthenticatedFrameCodec(
+    final codec = await AuthenticatedFrameCodec.create(
       sendKey: _key(0),
       receiveKey: _key(0),
     );
@@ -109,16 +106,17 @@ void main() {
     final malformed = Uint8List.fromList(valid);
     ByteData.sublistView(malformed).setUint32(12, 3);
     await expectLater(
-      AuthenticatedFrameCodec(
+      (await AuthenticatedFrameCodec.create(
         sendKey: _key(0),
         receiveKey: _key(0),
-      ).decode(malformed),
+      ))
+          .decode(malformed),
       throwsA(isA<AuthenticatedFrameException>()),
     );
   });
 
   test('concurrent encoding assigns a unique increasing sequence', () async {
-    final codec = AuthenticatedFrameCodec(
+    final codec = await AuthenticatedFrameCodec.create(
       sendKey: _key(0),
       receiveKey: _key(32),
     );
@@ -139,11 +137,11 @@ void main() {
   });
 
   test('concurrent decoding accepts a frame only once', () async {
-    final sender = AuthenticatedFrameCodec(
+    final sender = await AuthenticatedFrameCodec.create(
       sendKey: _key(0),
       receiveKey: _key(32),
     );
-    final receiver = AuthenticatedFrameCodec(
+    final receiver = await AuthenticatedFrameCodec.create(
       sendKey: _key(32),
       receiveKey: _key(0),
     );
@@ -161,5 +159,26 @@ void main() {
 
     expect(accepted.where((value) => value), hasLength(1));
     expect(receiver.lastReceivedSequence, 1);
+  });
+
+  test('closing a codec destroys its directional keys', () async {
+    final codec = await AuthenticatedFrameCodec.create(
+      sendKey: SecretKeyData.random(length: 32),
+      receiveKey: SecretKeyData.random(length: 32),
+    );
+
+    codec.close();
+    codec.close();
+
+    await expectLater(
+      codec.encode(Uint8List.fromList(<int>[1])),
+      throwsA(
+        isA<AuthenticatedFrameException>().having(
+          (error) => error.code,
+          'code',
+          'codec_closed',
+        ),
+      ),
+    );
   });
 }

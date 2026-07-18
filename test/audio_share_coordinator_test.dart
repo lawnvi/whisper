@@ -36,9 +36,9 @@ void main() {
       platform = AudioPlatform(channel: channel);
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return null;
-      });
+            calls.add(call);
+            return null;
+          });
     });
 
     tearDown(() {
@@ -46,68 +46,70 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('source starts capture and sends packets after an offer is accepted',
-        () async {
-      final transport = _FakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (uri) async {
-          expect(uri.path, '/audio');
-          expect(uri.queryParameters['session'], isNotEmpty);
-          expect(uri.queryParameters['token'], 'audio-token');
-          return transport;
-        },
-      );
+    test(
+      'source starts capture and sends packets after an offer is accepted',
+      () async {
+        final transport = _FakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (uri) async {
+            expect(uri.path, '/audio');
+            expect(uri.queryParameters['session'], isNotEmpty);
+            expect(uri.queryParameters['token'], 'audio-token');
+            return transport;
+          },
+        );
 
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-
-      final offer = sentControls.single;
-      expect(offer.action, AudioControlAction.offer);
-
-      await coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-          transportToken: 'audio-token',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        mediaSendKey: mediaKey,
-        sendControl: sentControls.add,
-      );
+        );
 
-      expect(calls.map((call) => call.method), contains('startCapture'));
+        final offer = sentControls.single;
+        expect(offer.action, AudioControlAction.offer);
 
-      await platform.handleNativeMethodCall(
-        MethodCall('onCapturePcm', <String, dynamic>{
-          'sessionId': offer.sessionId,
-          'sequence': 7,
-          'captureTimeMicros': 1234,
-          'pcm': Uint8List(format.frameSize * format.channels * 2),
-        }),
-      );
-      await Future<void>.delayed(Duration.zero);
+        await coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+            transportToken: 'audio-token',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          mediaSendKey: mediaKey,
+          sendControl: sentControls.add,
+        );
 
-      expect(transport.sentPackets, hasLength(1));
-      expect(transport.sentPackets.single.sessionId, offer.sessionId);
-      expect(transport.sentPackets.single.sequence, 0);
-    });
+        expect(calls.map((call) => call.method), contains('startCapture'));
+
+        await platform.handleNativeMethodCall(
+          MethodCall('onCapturePcm', <String, dynamic>{
+            'sessionId': offer.sessionId,
+            'sequence': 7,
+            'captureTimeMicros': 1234,
+            'pcm': Uint8List(format.frameSize * format.channels * 2),
+          }),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(transport.sentPackets, hasLength(1));
+        expect(transport.sentPackets.single.sessionId, offer.sessionId);
+        expect(transport.sentPackets.single.sequence, 0);
+      },
+    );
 
     test('duplicate accepts share one direct capture startup', () async {
       final connectStarted = Completer<void>();
@@ -171,332 +173,343 @@ void main() {
       );
     });
 
-    test('unexpected source transport failure stops capture exactly once',
-        () async {
-      final transport = _ObservableFakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => transport,
-      );
-      var failedNotifications = 0;
-      coordinator.addListener(() {
-        if (coordinator.state.status == AudioShareRuntimeStatus.failed) {
-          failedNotifications += 1;
-        }
-      });
+    test(
+      'unexpected source transport failure stops capture exactly once',
+      () async {
+        final transport = _ObservableFakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => transport,
+        );
+        var failedNotifications = 0;
+        coordinator.addListener(() {
+          if (coordinator.state.status == AudioShareRuntimeStatus.failed) {
+            failedNotifications += 1;
+          }
+        });
 
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-      final offer = sentControls.single;
-      await coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
+        );
+        final offer = sentControls.single;
+        await coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
 
-      transport.fail(
-        PacketTransportTermination(
-          PacketTransportTerminationReason.writerFailure,
-          error: StateError('write failed'),
-        ),
-      );
-      await _waitUntil(
-        () => coordinator.state.status == AudioShareRuntimeStatus.failed,
-      );
+        transport.fail(
+          PacketTransportTermination(
+            PacketTransportTerminationReason.writerFailure,
+            error: StateError('write failed'),
+          ),
+        );
+        await _waitUntil(
+          () => coordinator.state.status == AudioShareRuntimeStatus.failed,
+        );
 
-      expect(coordinator.state.role, AudioShareRuntimeRole.source);
-      expect(coordinator.state.errorMessage, 'transport');
-      expect(manager.session(offer.sessionId)?.state,
-          AudioShareSessionState.failed);
-      expect(
-        calls.where((call) => call.method == 'stopCapture'),
-        hasLength(1),
-      );
-      expect(transport.closeCount, 1);
-      expect(failedNotifications, 1);
+        expect(coordinator.state.role, AudioShareRuntimeRole.source);
+        expect(coordinator.state.errorMessage, 'transport');
+        expect(
+          manager.session(offer.sessionId)?.state,
+          AudioShareSessionState.failed,
+        );
+        expect(
+          calls.where((call) => call.method == 'stopCapture'),
+          hasLength(1),
+        );
+        expect(transport.closeCount, 1);
+        expect(failedNotifications, 1);
 
-      await coordinator.stopLocal();
-      await Future<void>.delayed(Duration.zero);
-      expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
-      expect(
-        calls.where((call) => call.method == 'stopCapture'),
-        hasLength(1),
-      );
-      expect(transport.closeCount, 1);
-      expect(failedNotifications, 1);
-    });
+        await coordinator.stopLocal();
+        await Future<void>.delayed(Duration.zero);
+        expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
+        expect(
+          calls.where((call) => call.method == 'stopCapture'),
+          hasLength(1),
+        );
+        expect(transport.closeCount, 1);
+        expect(failedNotifications, 1);
+      },
+    );
 
-    test('transport failure becomes stable before blocked cleanup finishes',
-        () async {
-      final releaseStopCapture = Completer<void>();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'stopCapture') {
-          await releaseStopCapture.future;
-        }
-        return null;
-      });
-      final transport = _ObservableFakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => transport,
-      );
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-      final offer = sentControls.single;
-      await coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+    test(
+      'transport failure becomes stable before blocked cleanup finishes',
+      () async {
+        final releaseStopCapture = Completer<void>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if (call.method == 'stopCapture') {
+                await releaseStopCapture.future;
+              }
+              return null;
+            });
+        final transport = _ObservableFakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => transport,
+        );
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
+        );
+        final offer = sentControls.single;
+        await coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
 
-      transport.fail(
-        const PacketTransportTermination(
-          PacketTransportTerminationReason.remoteClosed,
-        ),
-      );
-      await _waitUntil(
-        () => calls.any((call) => call.method == 'stopCapture'),
-      );
+        transport.fail(
+          const PacketTransportTermination(
+            PacketTransportTerminationReason.remoteClosed,
+          ),
+        );
+        await _waitUntil(
+          () => calls.any((call) => call.method == 'stopCapture'),
+        );
 
-      expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
-      expect(coordinator.state.errorMessage, 'transport');
-      expect(manager.session(offer.sessionId)?.state,
-          AudioShareSessionState.failed);
-      expect(releaseStopCapture.isCompleted, isFalse);
+        expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
+        expect(coordinator.state.errorMessage, 'transport');
+        expect(
+          manager.session(offer.sessionId)?.state,
+          AudioShareSessionState.failed,
+        );
+        expect(releaseStopCapture.isCompleted, isFalse);
 
-      final restartedControls = <AudioControlMessage>[];
-      final restarting = coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'tablet',
-        sinkHost: 'tablet.local',
-        sinkPort: 10002,
-        sendControl: restartedControls.add,
-        format: format,
-      );
-      await Future<void>.delayed(Duration.zero);
-      expect(restartedControls, isEmpty);
+        final restartedControls = <AudioControlMessage>[];
+        final restarting = coordinator.startSharingToConnectedPeer(
+          sourcePeerId: 'pc',
+          sinkPeerId: 'tablet',
+          sinkHost: 'tablet.local',
+          sinkPort: 10002,
+          sendControl: restartedControls.add,
+          format: format,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(restartedControls, isEmpty);
 
-      releaseStopCapture.complete();
-      await _waitUntil(() => transport.closeCount == 1);
-      await restarting;
-      expect(restartedControls, hasLength(1));
-    });
+        releaseStopCapture.complete();
+        await _waitUntil(() => transport.closeCount == 1);
+        await restarting;
+        expect(restartedControls, hasLength(1));
+      },
+    );
 
-    test('intentional source stop does not become a transport failure',
-        () async {
-      final transport = _ObservableFakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final coordinator = AudioShareCoordinator(
-        manager: AudioShareManager(),
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => transport,
-      );
-      var failedNotifications = 0;
-      coordinator.addListener(() {
-        if (coordinator.state.status == AudioShareRuntimeStatus.failed) {
-          failedNotifications += 1;
-        }
-      });
+    test(
+      'intentional source stop does not become a transport failure',
+      () async {
+        final transport = _ObservableFakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final coordinator = AudioShareCoordinator(
+          manager: AudioShareManager(),
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => transport,
+        );
+        var failedNotifications = 0;
+        coordinator.addListener(() {
+          if (coordinator.state.status == AudioShareRuntimeStatus.failed) {
+            failedNotifications += 1;
+          }
+        });
 
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-      final offer = sentControls.single;
-      await coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
+        );
+        final offer = sentControls.single;
+        await coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
 
-      await coordinator.stopLocal();
-      await Future<void>.delayed(Duration.zero);
+        await coordinator.stopLocal();
+        await Future<void>.delayed(Duration.zero);
 
-      expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
-      expect(failedNotifications, 0);
-      expect(transport.closeCount, 1);
-      expect(
-        calls.where((call) => call.method == 'stopCapture'),
-        hasLength(1),
-      );
-    });
+        expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
+        expect(failedNotifications, 0);
+        expect(transport.closeCount, 1);
+        expect(
+          calls.where((call) => call.method == 'stopCapture'),
+          hasLength(1),
+        );
+      },
+    );
 
-    test('direct stop waits for pending native capture start then stops it',
-        () async {
-      final startEntered = Completer<void>();
-      final releaseStart = Completer<void>();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'startCapture') {
-          startEntered.complete();
-          await releaseStart.future;
-        }
-        return null;
-      });
-      final transport = _FakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final coordinator = AudioShareCoordinator(
-        manager: AudioShareManager(),
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => transport,
-      );
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-      final offer = sentControls.single;
-      final accepting = coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+    test(
+      'direct stop waits for pending native capture start then stops it',
+      () async {
+        final startEntered = Completer<void>();
+        final releaseStart = Completer<void>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if (call.method == 'startCapture') {
+                startEntered.complete();
+                await releaseStart.future;
+              }
+              return null;
+            });
+        final transport = _FakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final coordinator = AudioShareCoordinator(
+          manager: AudioShareManager(),
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => transport,
+        );
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
-      await startEntered.future;
+        );
+        final offer = sentControls.single;
+        final accepting = coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
+        await startEntered.future;
 
-      var stopCompleted = false;
-      final stopping = coordinator.stopLocal().whenComplete(() {
-        stopCompleted = true;
-      });
-      await Future<void>.delayed(Duration.zero);
-      expect(stopCompleted, isFalse);
-      expect(
-        calls.where((call) => call.method == 'stopCapture'),
-        isEmpty,
-      );
+        var stopCompleted = false;
+        final stopping = coordinator.stopLocal().whenComplete(() {
+          stopCompleted = true;
+        });
+        await Future<void>.delayed(Duration.zero);
+        expect(stopCompleted, isFalse);
+        expect(calls.where((call) => call.method == 'stopCapture'), isEmpty);
 
-      releaseStart.complete();
-      await Future.wait(<Future<void>>[accepting, stopping]);
-      expect(
-        calls.where((call) => call.method == 'stopCapture'),
-        hasLength(1),
-      );
-      expect(transport.closed, isTrue);
-      expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
-    });
+        releaseStart.complete();
+        await Future.wait(<Future<void>>[accepting, stopping]);
+        expect(
+          calls.where((call) => call.method == 'stopCapture'),
+          hasLength(1),
+        );
+        expect(transport.closed, isTrue);
+        expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
+      },
+    );
 
-    test('source reports an audio control error when capture is denied',
-        () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'startCapture') {
-          throw PlatformException(
-            code: 'audio-capture-permission-denied',
-            message: 'Screen recording permission denied',
-          );
-        }
-        return null;
-      });
+    test(
+      'source reports an audio control error when capture is denied',
+      () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if (call.method == 'startCapture') {
+                throw PlatformException(
+                  code: 'audio-capture-permission-denied',
+                  message: 'Screen recording permission denied',
+                );
+              }
+              return null;
+            });
 
-      final transport = _FakeAudioTransport();
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => transport,
-      );
+        final transport = _FakeAudioTransport();
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => transport,
+        );
 
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        sinkHost: 'phone.local',
-        sinkPort: 10002,
-        sendControl: sentControls.add,
-        format: format,
-      );
-
-      final offer = sentControls.single;
-      await coordinator.handleControlMessage(
-        AudioControlMessage(
-          action: AudioControlAction.accept,
-          sessionId: offer.sessionId,
+        await coordinator.startSharingToConnectedPeer(
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
+          sinkHost: 'phone.local',
+          sinkPort: 10002,
+          sendControl: sentControls.add,
           format: format,
-          path: '/audio',
-        ),
-        localPeerId: 'pc',
-        remoteHost: 'phone.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
+        );
 
-      expect(sentControls.last.action, AudioControlAction.error);
-      expect(sentControls.last.errorMessage, 'permission');
-      expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
-      expect(coordinator.state.errorMessage, 'permission');
-      expect(transport.closed, isTrue);
-    });
+        final offer = sentControls.single;
+        await coordinator.handleControlMessage(
+          AudioControlMessage(
+            action: AudioControlAction.accept,
+            sessionId: offer.sessionId,
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
+          ),
+          localPeerId: 'pc',
+          remoteHost: 'phone.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
+
+        expect(sentControls.last.action, AudioControlAction.error);
+        expect(sentControls.last.errorMessage, 'permission');
+        expect(coordinator.state.status, AudioShareRuntimeStatus.failed);
+        expect(coordinator.state.errorMessage, 'permission');
+        expect(transport.closed, isTrue);
+      },
+    );
 
     test('remote audio errors are reduced to a stable local reason', () async {
       final sentControls = <AudioControlMessage>[];
@@ -571,126 +584,133 @@ void main() {
       expect(coordinator.state.errorMessage, 'unsupported');
     });
 
-    test('sink auto-accepts offers and writes received packets to playback',
-        () async {
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        transportFactory: (_) async => _FakeAudioTransport(),
-        playbackGainProvider: () async => 2.0,
-      );
+    test(
+      'sink auto-accepts offers and writes received packets to playback',
+      () async {
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          transportFactory: (_) async => _FakeAudioTransport(),
+          playbackGainProvider: () async => 2.0,
+        );
 
-      final offer = AudioControlMessage(
-        action: AudioControlAction.offer,
-        sessionId: 'audio-1',
-        sourcePeerId: 'pc',
-        sinkPeerId: 'phone',
-        format: format,
-        path: '/audio',
-      );
-
-      await coordinator.handleControlMessage(
-        offer,
-        localPeerId: 'phone',
-        remoteHost: 'pc.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
-
-      expect(sentControls.single.action, AudioControlAction.accept);
-      expect(calls.map((call) => call.method), contains('startPlayback'));
-
-      manager.handlePacketBytes(
-        AudioPacketFrame(
-          sessionId: 'audio-1',
-          sequence: 1,
-          captureTimeMicros: 99,
-          payload: Uint8List.fromList(<int>[1, 0, 2, 0]),
-        ).encode(),
-      );
-      await Future<void>.delayed(Duration.zero);
-
-      expect(calls.map((call) => call.method), contains('writePcm'));
-      final writeCall = calls.singleWhere((call) => call.method == 'writePcm');
-      final arguments = writeCall.arguments as Map<Object?, Object?>;
-      expect(arguments['pcm'], Uint8List.fromList(<int>[2, 0, 4, 0]));
-    });
-
-    test('unexpected receiver channel close stops playback and fails session',
-        () async {
-      final sentControls = <AudioControlMessage>[];
-      final manager = AudioShareManager();
-      final coordinator = AudioShareCoordinator(
-        manager: manager,
-        platform: platform,
-        codecFactory: _pcmCodec,
-        playbackGainProvider: () async => 1.0,
-      );
-      await coordinator.handleControlMessage(
-        const AudioControlMessage(
+        final offer = AudioControlMessage(
           action: AudioControlAction.offer,
-          sessionId: 'audio-receiver-close',
+          sessionId: 'audio-1',
           sourcePeerId: 'pc',
           sinkPeerId: 'phone',
           format: format,
           path: '/audio',
-        ),
-        localPeerId: 'phone',
-        remoteHost: 'pc.local',
-        remotePort: 10002,
-        sendControl: sentControls.add,
-      );
-      final channel = _RemoteCloseChannel();
-      expect(
-        manager.attachChannel(
-          channel,
-          claim: SessionUpgradeClaim(
-            route: '/audio',
-            namespace: 'audio',
+        );
+
+        await coordinator.handleControlMessage(
+          offer,
+          localPeerId: 'phone',
+          remoteHost: 'pc.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
+
+        expect(sentControls.single.action, AudioControlAction.accept);
+        expect(calls.map((call) => call.method), contains('startPlayback'));
+
+        manager.handlePacketBytes(
+          AudioPacketFrame(
+            sessionId: 'audio-1',
+            sequence: 1,
+            captureTimeMicros: 99,
+            payload: Uint8List.fromList(<int>[1, 0, 2, 0]),
+          ).encode(),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(calls.map((call) => call.method), contains('writePcm'));
+        final writeCall = calls.singleWhere(
+          (call) => call.method == 'writePcm',
+        );
+        final arguments = writeCall.arguments as Map<Object?, Object?>;
+        expect(arguments['pcm'], Uint8List.fromList(<int>[2, 0, 4, 0]));
+      },
+    );
+
+    test(
+      'unexpected receiver channel close stops playback and fails session',
+      () async {
+        final sentControls = <AudioControlMessage>[];
+        final manager = AudioShareManager();
+        final coordinator = AudioShareCoordinator(
+          manager: manager,
+          platform: platform,
+          codecFactory: _pcmCodec,
+          playbackGainProvider: () async => 1.0,
+        );
+        await coordinator.handleControlMessage(
+          const AudioControlMessage(
+            action: AudioControlAction.offer,
             sessionId: 'audio-receiver-close',
-            peerId: 'pc',
-            mediaMacKey: Uint8List(32),
+            sourcePeerId: 'pc',
+            sinkPeerId: 'phone',
+            format: format,
+            path: '/audio',
           ),
-        ),
-        isTrue,
-      );
+          localPeerId: 'phone',
+          remoteHost: 'pc.local',
+          remotePort: 10002,
+          sendControl: sentControls.add,
+        );
+        final channel = _RemoteCloseChannel();
+        expect(
+          manager.attachChannel(
+            channel,
+            claim: SessionUpgradeClaim(
+              route: '/audio',
+              namespace: 'audio',
+              sessionId: 'audio-receiver-close',
+              peerId: 'pc',
+              mediaMacKey: Uint8List(32),
+              channelBinding: Uint8List(32),
+            ),
+          ),
+          isTrue,
+        );
 
-      await channel.closeRemote();
-      await _waitUntil(
-        () => coordinator.state.status == AudioShareRuntimeStatus.failed,
-      );
+        await channel.closeRemote();
+        await _waitUntil(
+          () => coordinator.state.status == AudioShareRuntimeStatus.failed,
+        );
 
-      expect(coordinator.state.role, AudioShareRuntimeRole.sink);
-      expect(coordinator.state.errorMessage, 'transport');
-      expect(
-        manager.session('audio-receiver-close')?.state,
-        AudioShareSessionState.failed,
-      );
-      expect(manager.activeChannelCount, 0);
-      expect(
-        calls.where((call) => call.method == 'stopPlayback'),
-        hasLength(1),
-      );
+        expect(coordinator.state.role, AudioShareRuntimeRole.sink);
+        expect(coordinator.state.errorMessage, 'transport');
+        expect(
+          manager.session('audio-receiver-close')?.state,
+          AudioShareSessionState.failed,
+        );
+        expect(manager.activeChannelCount, 0);
+        expect(
+          calls.where((call) => call.method == 'stopPlayback'),
+          hasLength(1),
+        );
 
-      await coordinator.stopLocal();
-      expect(
-        calls.where((call) => call.method == 'stopPlayback'),
-        hasLength(1),
-      );
-    });
+        await coordinator.stopLocal();
+        expect(
+          calls.where((call) => call.method == 'stopPlayback'),
+          hasLength(1),
+        );
+      },
+    );
 
     test('native playback write failure fails the direct sink once', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'writePcm') {
-          throw PlatformException(code: 'audio-playback-write-failed');
-        }
-        return null;
-      });
+            calls.add(call);
+            if (call.method == 'writePcm') {
+              throw PlatformException(code: 'audio-playback-write-failed');
+            }
+            return null;
+          });
       final manager = AudioShareManager();
       final coordinator = AudioShareCoordinator(
         manager: manager,
@@ -740,12 +760,12 @@ void main() {
       final releaseStopPlayback = Completer<void>();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'stopPlayback') {
-          await releaseStopPlayback.future;
-        }
-        return null;
-      });
+            calls.add(call);
+            if (call.method == 'stopPlayback') {
+              await releaseStopPlayback.future;
+            }
+            return null;
+          });
       final manager = AudioShareManager();
       final coordinator = AudioShareCoordinator(
         manager: manager,
@@ -783,6 +803,7 @@ void main() {
             sessionId: 'audio-intentional-crossing',
             peerId: 'pc',
             mediaMacKey: Uint8List(32),
+            channelBinding: Uint8List(32),
           ),
         ),
         isTrue,
@@ -881,7 +902,9 @@ void main() {
       expect(sentControls, isEmpty);
       expect(coordinator.state.status, AudioShareRuntimeStatus.idle);
       expect(
-          calls.map((call) => call.method), isNot(contains('startPlayback')));
+        calls.map((call) => call.method),
+        isNot(contains('startPlayback')),
+      );
     });
 
     test('rejects a competing offer while an audio session is live', () async {
@@ -986,9 +1009,7 @@ void main() {
 }
 
 Future<AudioCodec> _pcmCodec(AudioStreamFormat format) async {
-  return PcmPassthroughAudioCodec(
-    AudioCodecConfig.fromStreamFormat(format),
-  );
+  return PcmPassthroughAudioCodec(AudioCodecConfig.fromStreamFormat(format));
 }
 
 class _FakeAudioTransport implements AudioPacketTransport {

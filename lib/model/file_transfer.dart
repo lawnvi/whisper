@@ -1,9 +1,6 @@
 import 'package:drift/drift.dart';
 
-enum FileTransferDirection {
-  incoming,
-  outgoing,
-}
+enum FileTransferDirection { incoming, outgoing }
 
 enum FileTransferState {
   queued,
@@ -18,6 +15,15 @@ enum FileTransferState {
 }
 
 const int pendingResumeProofResetMarker = -1;
+
+const List<String> retryableOutgoingInvalidationReasons = <String>[
+  'trust_revoked',
+  'device_deleted',
+  'identity_replaced',
+];
+
+bool isRetryableOutgoingInvalidationReason(String reason) =>
+    retryableOutgoingInvalidationReasons.contains(reason);
 
 bool isTerminalFileTransferState(FileTransferState state) {
   return state == FileTransferState.completed ||

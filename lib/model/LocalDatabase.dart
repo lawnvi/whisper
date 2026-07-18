@@ -1,14 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart' as hashes;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 
 import '../helper/helper.dart';
 import 'device.dart';
+import 'favorite_text.dart';
 import 'file_transfer.dart';
 import 'message.dart';
 
@@ -54,7 +58,26 @@ final class FileTransferAdmissionResult {
   final FileTransferData? transfer;
 }
 
-@DriftDatabase(tables: [Device, Message, FileTransfer, RemoteInputLayout])
+final class TextMessageSearchResult {
+  const TextMessageSearchResult({
+    required this.message,
+    required this.isFavorite,
+  });
+
+  final MessageData message;
+  final bool isFavorite;
+
+  TextMessageSearchResult copyWith({bool? isFavorite}) {
+    return TextMessageSearchResult(
+      message: message,
+      isFavorite: isFavorite ?? this.isFavorite,
+    );
+  }
+}
+
+@DriftDatabase(
+  tables: [Device, Message, FileTransfer, RemoteInputLayout, FavoriteText],
+)
 class LocalDatabase extends _$LocalDatabase {
   static final LocalDatabase _singleton = LocalDatabase._internal();
 
@@ -69,48 +92,106 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (Migrator m) async {
-          await m.createAll();
-          await _ensureMessageUuidIndex();
-          await _ensureFileTransferMessageRowIndexes();
-        },
-        onUpgrade: (Migrator m, int from, int to) async {
-          if (from < 2) {
-            await m.createTable(fileTransfer);
-          }
-          if (from < 3) {
-            await m.createTable(remoteInputLayout);
-          }
-          if (from < 5) {
-            await _repairRemoteInputLayoutColumns();
-          }
-          if (from < 6) {
-            await _migrateDeviceIdentitySchema(m);
-          }
-          if (from < 7) {
-            await _ensureMessageUuidIndex();
-          }
-          if (from < 8) {
-            await _migrateFileTransferHardeningSchema(m);
-          }
-          if (from < 9) {
-            await _sanitizeFileTransferFailureReasons();
-          }
-        },
-        beforeOpen: (_) async {
-          await _repairRemoteInputLayoutColumns();
-          await _ensureMessageUuidIndex();
-          await _ensureFileTransferMessageRowIndexes();
-        },
+    onCreate: (Migrator m) async {
+      await m.createAll();
+      await _ensureMessageUuidIndex();
+      await _ensureFileTransferMessageRowIndexes();
+      await _ensureMessageSearchIndex(rebuild: true);
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        await m.createTable(fileTransfer);
+      }
+      if (from < 3) {
+        await m.createTable(remoteInputLayout);
+      }
+      if (from < 5) {
+        await _repairRemoteInputLayoutColumns();
+      }
+      if (from < 6) {
+        await _migrateDeviceIdentitySchema(m);
+      }
+      if (from < 7) {
+        await _ensureMessageUuidIndex();
+      }
+      if (from < 8) {
+        await _migrateFileTransferHardeningSchema(m);
+      }
+      if (from < 9) {
+        await _sanitizeFileTransferFailureReasons();
+      }
+      if (from < 10) {
+        await m.createTable(favoriteText);
+        await _ensureMessageSearchIndex(rebuild: true);
+      }
+    },
+    beforeOpen: (_) async {
+      await _repairRemoteInputLayoutColumns();
+      await _ensureMessageUuidIndex();
+      await _ensureFileTransferMessageRowIndexes();
+      await _ensureMessageSearchIndex();
+    },
+  );
+
+  Future<void> _ensureMessageSearchIndex({bool rebuild = false}) async {
+    final messageColumns = await customSelect(
+      'PRAGMA table_info(message)',
+    ).get();
+    if (!messageColumns.any((row) => row.data['name'] == 'content')) {
+      return;
+    }
+    final existing = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'message_fts'",
+    ).getSingleOrNull();
+    await customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+        content,
+        content = 'message',
+        content_rowid = 'id',
+        tokenize = 'trigram'
+      )
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS message_fts_after_insert
+      AFTER INSERT ON message
+      BEGIN
+        INSERT INTO message_fts(rowid, content)
+        VALUES (new.id, new.content);
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS message_fts_after_delete
+      AFTER DELETE ON message
+      BEGIN
+        INSERT INTO message_fts(message_fts, rowid, content)
+        VALUES ('delete', old.id, old.content);
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS message_fts_after_update
+      AFTER UPDATE OF content ON message
+      BEGIN
+        INSERT INTO message_fts(message_fts, rowid, content)
+        VALUES ('delete', old.id, old.content);
+        INSERT INTO message_fts(rowid, content)
+        VALUES (new.id, new.content);
+      END
+    ''');
+    if (rebuild || existing == null) {
+      await customStatement(
+        "INSERT INTO message_fts(message_fts) VALUES ('rebuild')",
       );
+    }
+  }
 
   Future<void> _sanitizeFileTransferFailureReasons() async {
-    final columns =
-        await customSelect('PRAGMA table_info(file_transfer)').get();
+    final columns = await customSelect(
+      'PRAGMA table_info(file_transfer)',
+    ).get();
     if (!columns.any((row) => row.data['name'] == 'last_error')) {
       return;
     }
@@ -129,8 +210,9 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> _migrateFileTransferHardeningSchema(Migrator migrator) async {
-    final columns =
-        await customSelect('PRAGMA table_info(file_transfer)').get();
+    final columns = await customSelect(
+      'PRAGMA table_info(file_transfer)',
+    ).get();
     if (columns.isEmpty) {
       await migrator.createTable(fileTransfer);
       await _ensureFileTransferMessageRowIndexes();
@@ -209,8 +291,9 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> _ensureFileTransferMessageRowIndexes() async {
-    final columns =
-        await customSelect('PRAGMA table_info(file_transfer)').get();
+    final columns = await customSelect(
+      'PRAGMA table_info(file_transfer)',
+    ).get();
     if (!columns.any((row) => row.data['name'] == 'message_row_id')) {
       return;
     }
@@ -256,9 +339,7 @@ class LocalDatabase extends _$LocalDatabase {
 
   Future<void> _ensureMessageUuidIndex() async {
     final columns = await customSelect('PRAGMA table_info(message)').get();
-    final hasUuid = columns.any(
-      (row) => row.data['name'] == 'uuid',
-    );
+    final hasUuid = columns.any((row) => row.data['name'] == 'uuid');
     if (!hasUuid) {
       return;
     }
@@ -268,8 +349,9 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> _migrateDeviceIdentitySchema(Migrator migrator) async {
-    final existingColumns =
-        await customSelect('PRAGMA table_info(device)').get();
+    final existingColumns = await customSelect(
+      'PRAGMA table_info(device)',
+    ).get();
     if (existingColumns.isEmpty) {
       await migrator.createTable(device);
       return;
@@ -299,8 +381,9 @@ class LocalDatabase extends _$LocalDatabase {
       ).get();
       final keeperId = rows.first.read<int>('id');
       final mergedAuth = rows.any((row) => row.read<int>('auth') == 1);
-      final mergedClipboard =
-          rows.any((row) => row.read<int>('clipboard') == 1);
+      final mergedClipboard = rows.any(
+        (row) => row.read<int>('clipboard') == 1,
+      );
       await customUpdate(
         'UPDATE device SET auth = ?, clipboard = ? WHERE id = ?',
         variables: <Variable<Object>>[
@@ -336,16 +419,19 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> _repairRemoteInputLayoutColumns() async {
-    final columns =
-        await customSelect('PRAGMA table_info(remote_input_layout)').get();
+    final columns = await customSelect(
+      'PRAGMA table_info(remote_input_layout)',
+    ).get();
     if (columns.isEmpty) {
       return;
     }
     final hasAutoRole = columns.any((row) => row.data['name'] == 'auto_role');
-    final hasLayoutVersion =
-        columns.any((row) => row.data['name'] == 'layout_version');
-    final hasLayoutJson =
-        columns.any((row) => row.data['name'] == 'layout_json');
+    final hasLayoutVersion = columns.any(
+      (row) => row.data['name'] == 'layout_version',
+    );
+    final hasLayoutJson = columns.any(
+      (row) => row.data['name'] == 'layout_json',
+    );
     if (!hasAutoRole) {
       await customStatement(
         "ALTER TABLE remote_input_layout ADD COLUMN auto_role TEXT DEFAULT '${RemoteInputAutoRole.source.name}'",
@@ -373,25 +459,18 @@ class LocalDatabase extends _$LocalDatabase {
     await customUpdate(
       'UPDATE remote_input_layout SET layout_version = ? '
       'WHERE layout_version IS NULL',
-      variables: [
-        const Variable<int>(1),
-      ],
+      variables: [const Variable<int>(1)],
       updates: {remoteInputLayout},
     );
     await customUpdate(
       'UPDATE remote_input_layout SET layout_json = ? '
       'WHERE layout_json IS NULL',
-      variables: [
-        const Variable<String>(''),
-      ],
+      variables: [const Variable<String>('')],
       updates: {remoteInputLayout},
     );
   }
 
-  MessageCompanion _messageCompanion(
-    MessageData data, {
-    required bool acked,
-  }) {
+  MessageCompanion _messageCompanion(MessageData data, {required bool acked}) {
     return MessageCompanion.insert(
       sender: Value(data.sender),
       receiver: Value(data.receiver),
@@ -419,9 +498,9 @@ class LocalDatabase extends _$LocalDatabase {
     bool? acked,
   }) async {
     final persistedAcked = acked ?? data.acked;
-    final id = await into(message).insert(
-      _messageCompanion(data, acked: persistedAcked),
-    );
+    final id = await into(
+      message,
+    ).insert(_messageCompanion(data, acked: persistedAcked));
     return data.copyWith(id: id, acked: persistedAcked);
   }
 
@@ -430,9 +509,7 @@ class LocalDatabase extends _$LocalDatabase {
       return null;
     }
     await (update(message)..where((t) => t.uuid.equals(data.uuid))).write(
-      const MessageCompanion(
-        acked: Value(true),
-      ),
+      const MessageCompanion(acked: Value(true)),
     );
     return (select(message)
           ..where((t) => t.uuid.equals(data.uuid))
@@ -479,9 +556,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> clearDeviceDiscoveryPresence() async {
-    await update(device).write(
-      const DeviceCompanion(around: Value(false)),
-    );
+    await update(device).write(const DeviceCompanion(around: Value(false)));
   }
 
   Future<void> authDevice(String uid, bool auth) async {
@@ -489,9 +564,7 @@ class LocalDatabase extends _$LocalDatabase {
       return;
     }
     await (update(device)..where((t) => t.uid.equals(uid))).write(
-      DeviceCompanion(
-        auth: Value(auth),
-      ),
+      DeviceCompanion(auth: Value(auth)),
     );
   }
 
@@ -527,10 +600,16 @@ class LocalDatabase extends _$LocalDatabase {
     }
     if (replaceIdentity && expectedPublicKey.isEmpty) {
       throw ArgumentError(
-          'expectedPublicKey must not be empty for replacement');
+        'expectedPublicKey must not be empty for replacement',
+      );
     }
     return transaction(() async {
       requireCurrent();
+      final existingDevice = await fetchDevice(candidate.uid);
+      requireCurrent();
+      final identityChanged =
+          existingDevice != null &&
+          existingDevice.identityPublicKey != publicKey;
       await upsertDevice(candidate);
       requireCurrent();
 
@@ -544,6 +623,14 @@ class LocalDatabase extends _$LocalDatabase {
       requireCurrent();
       if (!pinResult.isSuccess) {
         throw StateError('identity_pin_conflict');
+      }
+
+      if (identityChanged) {
+        await _cancelOutgoingTransfersForPeerInTransaction(
+          candidate.uid,
+          reason: 'identity_replaced',
+        );
+        requireCurrent();
       }
 
       final authenticated = await authDeviceIfPinned(candidate.uid, publicKey);
@@ -580,19 +667,22 @@ class LocalDatabase extends _$LocalDatabase {
         return false;
       }
       if (previous == null) {
-        final removed = await (delete(device)
-              ..where((row) =>
-                  row.uid.equals(peerId) &
-                  row.identityPublicKey.equals(attemptedPublicKey)))
-            .go();
+        final removed =
+            await (delete(device)..where(
+                  (row) =>
+                      row.uid.equals(peerId) &
+                      row.identityPublicKey.equals(attemptedPublicKey),
+                ))
+                .go();
         return removed == 1;
       }
       if (previous.uid != peerId) {
         return false;
       }
-      final restored = await (update(device)
-            ..where((row) => row.uid.equals(peerId)))
-          .write(previous.toCompanion(false));
+      final restored =
+          await (update(device)..where((row) => row.uid.equals(peerId))).write(
+            previous.toCompanion(false),
+          );
       return restored == 1;
     });
   }
@@ -602,17 +692,16 @@ class LocalDatabase extends _$LocalDatabase {
       return;
     }
     await (update(device)..where((t) => t.uid.equals(uid))).write(
-      DeviceCompanion(
-        clipboard: Value(clipboard),
-      ),
+      DeviceCompanion(clipboard: Value(clipboard)),
     );
   }
 
   Future<List<String>> fetchTrustedPeerIds() async {
-    final trustedDevices = await (select(device)
-          ..where(
-              (t) => t.auth.equals(true) & t.identityPublicKey.isNotValue('')))
-        .get();
+    final trustedDevices =
+        await (select(device)..where(
+              (t) => t.auth.equals(true) & t.identityPublicKey.isNotValue(''),
+            ))
+            .get();
     return trustedDevices.map((item) => item.uid).toList(growable: false);
   }
 
@@ -620,11 +709,12 @@ class LocalDatabase extends _$LocalDatabase {
     if (uid.isEmpty) {
       return null;
     }
-    final stored = await (selectOnly(device)
-          ..addColumns(<Expression<Object>>[device.identityPublicKey])
-          ..where(device.uid.equals(uid))
-          ..limit(1))
-        .getSingleOrNull();
+    final stored =
+        await (selectOnly(device)
+              ..addColumns(<Expression<Object>>[device.identityPublicKey])
+              ..where(device.uid.equals(uid))
+              ..limit(1))
+            .getSingleOrNull();
     final key = stored?.read(device.identityPublicKey) ?? '';
     return key.isEmpty ? null : key;
   }
@@ -699,12 +789,15 @@ class LocalDatabase extends _$LocalDatabase {
     if (uid.isEmpty || publicKey.isEmpty) {
       return false;
     }
-    final match = await (selectOnly(device)
-          ..addColumns(<Expression<Object>>[device.id])
-          ..where(device.uid.equals(uid) &
-              device.identityPublicKey.equals(publicKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final match =
+        await (selectOnly(device)
+              ..addColumns(<Expression<Object>>[device.id])
+              ..where(
+                device.uid.equals(uid) &
+                    device.identityPublicKey.equals(publicKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     return match != null;
   }
 
@@ -716,22 +809,26 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<List<DeviceData>> fetchAllDevice() {
-    return (select(device)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.lastTime, mode: OrderingMode.desc)
-          ]))
+    return (select(device)..orderBy([
+          (t) => OrderingTerm(expression: t.lastTime, mode: OrderingMode.desc),
+        ]))
         .get();
   }
 
-  Future<List<MessageData>> fetchMessageList(String uid,
-      {int beforeId = 0, int limit = 8}) {
+  Future<List<MessageData>> fetchMessageList(
+    String uid, {
+    int beforeId = 0,
+    int limit = 8,
+  }) {
     if (beforeId > 0) {
       return (select(message)
-            ..where((t) =>
-                (t.sender.equals(uid) | t.receiver.equals(uid)) &
-                t.id.isSmallerThanValue(beforeId))
+            ..where(
+              (t) =>
+                  (t.sender.equals(uid) | t.receiver.equals(uid)) &
+                  t.id.isSmallerThanValue(beforeId),
+            )
             ..orderBy([
-              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
+              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
             ])
             ..limit(limit))
           .get();
@@ -739,11 +836,141 @@ class LocalDatabase extends _$LocalDatabase {
       return (select(message)
             ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
             ..orderBy([
-              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
+              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
             ])
             ..limit(limit))
           .get();
     }
+  }
+
+  Future<List<TextMessageSearchResult>> searchTextMessagesForPeer(
+    String peerUid, {
+    String query = '',
+    int beforeId = 0,
+    int limit = 100,
+  }) async {
+    if (peerUid.trim().isEmpty || limit <= 0) {
+      return const <TextMessageSearchResult>[];
+    }
+    final normalizedQuery = query.trim();
+    final effectiveLimit = limit > 500 ? 500 : limit;
+    final useFullTextIndex = normalizedQuery.runes.length >= 3;
+    final fromClause = useFullTextIndex
+        ? 'FROM message_fts '
+              'JOIN message AS m ON m.id = message_fts.rowid '
+        : 'FROM message AS m ';
+    final filters = <String>[
+      'm.type = ?',
+      '(m.sender = ? OR m.receiver = ?)',
+      "COALESCE(m.content, '') <> ''",
+    ];
+    final variables = <Variable<Object>>[
+      Variable<int>(MessageEnum.Text.index),
+      Variable<String>(peerUid),
+      Variable<String>(peerUid),
+    ];
+    if (beforeId > 0) {
+      filters.add('m.id < ?');
+      variables.add(Variable<int>(beforeId));
+    }
+    if (normalizedQuery.isNotEmpty) {
+      if (useFullTextIndex) {
+        filters.add('message_fts MATCH ?');
+        final literalQuery = '"${normalizedQuery.replaceAll('"', '""')}"';
+        variables.add(Variable<String>(literalQuery));
+      } else {
+        filters.add("instr(lower(COALESCE(m.content, '')), lower(?)) > 0");
+        variables.add(Variable<String>(normalizedQuery));
+      }
+    }
+    variables.add(Variable<int>(effectiveLimit));
+
+    final rows = await customSelect(
+      'SELECT m.*, '
+      'CASE WHEN favorite_text.id IS NULL THEN 0 ELSE 1 END AS is_favorite '
+      '$fromClause'
+      'LEFT JOIN favorite_text '
+      'ON favorite_text.source_message_id = m.id '
+      'WHERE ${filters.join(' AND ')} '
+      'ORDER BY m.id DESC LIMIT ?',
+      variables: variables,
+      readsFrom: <ResultSetImplementation<Table, Object?>>{
+        message,
+        favoriteText,
+      },
+    ).get();
+    return rows
+        .map(
+          (row) => TextMessageSearchResult(
+            message: message.map(row.data),
+            isFavorite: row.read<int>('is_favorite') == 1,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<FavoriteTextData>> fetchFavoriteTextsForPeer(
+    String peerUid, {
+    int limit = 100,
+  }) {
+    if (peerUid.trim().isEmpty || limit <= 0) {
+      return Future<List<FavoriteTextData>>.value(const <FavoriteTextData>[]);
+    }
+    final effectiveLimit = limit > 500 ? 500 : limit;
+    return (select(favoriteText)
+          ..where((row) => row.peerUid.equals(peerUid))
+          ..orderBy([
+            (row) => OrderingTerm.desc(row.createdAt),
+            (row) => OrderingTerm.desc(row.id),
+          ])
+          ..limit(effectiveLimit))
+        .get();
+  }
+
+  Future<void> favoriteTextMessage(
+    MessageData source, {
+    required String peerUid,
+  }) async {
+    if (peerUid.trim().isEmpty || source.id <= 0) {
+      throw ArgumentError(
+        'peerUid and a persisted source message are required',
+      );
+    }
+    final stored = await fetchMessageById(source.id);
+    if (stored == null) {
+      throw StateError('source_message_missing');
+    }
+    if (stored.type != MessageEnum.Text ||
+        stored.content == null ||
+        stored.content!.trim().isEmpty) {
+      throw ArgumentError('only non-empty text messages can be favorited');
+    }
+    if (stored.sender != peerUid && stored.receiver != peerUid) {
+      throw ArgumentError('source message does not belong to peerUid');
+    }
+    final favorite = FavoriteTextCompanion.insert(
+      sourceMessageId: stored.id,
+      peerUid: peerUid,
+      content: stored.content!,
+      sourceTimestamp: stored.timestamp,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await into(favoriteText).insert(
+      favorite,
+      onConflict: DoUpdate(
+        (_) => favorite,
+        target: <Column<Object>>[favoriteText.sourceMessageId],
+      ),
+    );
+  }
+
+  Future<void> unfavoriteTextMessage(int sourceMessageId) async {
+    if (sourceMessageId <= 0) {
+      return;
+    }
+    await (delete(
+      favoriteText,
+    )..where((row) => row.sourceMessageId.equals(sourceMessageId))).go();
   }
 
   Future<Map<String, MessageData>> fetchLatestMessagesByPeers(
@@ -755,17 +982,19 @@ class LocalDatabase extends _$LocalDatabase {
       if (uid.isEmpty) {
         continue;
       }
-      final latest = await (select(message)
-            ..where(
-              (t) => uid == selfUid
-                  ? t.sender.equals(selfUid) & t.receiver.equals('')
-                  : t.sender.equals(uid) | t.receiver.equals(uid),
-            )
-            ..orderBy([
-              (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc)
-            ])
-            ..limit(1))
-          .getSingleOrNull();
+      final latest =
+          await (select(message)
+                ..where(
+                  (t) => uid == selfUid
+                      ? t.sender.equals(selfUid) & t.receiver.equals('')
+                      : t.sender.equals(uid) | t.receiver.equals(uid),
+                )
+                ..orderBy([
+                  (t) =>
+                      OrderingTerm(expression: t.id, mode: OrderingMode.desc),
+                ])
+                ..limit(1))
+              .getSingleOrNull();
       if (latest != null) {
         latestMessages[uid] = latest;
       }
@@ -773,10 +1002,7 @@ class LocalDatabase extends _$LocalDatabase {
     return latestMessages;
   }
 
-  Future<void> clearDevices(
-    List<String> uids, {
-    String? localPeerId,
-  }) async {
+  Future<void> clearDevices(List<String> uids, {String? localPeerId}) async {
     if (uids.isEmpty) {
       return;
     }
@@ -785,28 +1011,27 @@ class LocalDatabase extends _$LocalDatabase {
     await transaction(() async {
       final removedMessageIds = <int>{};
       if (targetIds.remove(selfUid)) {
-        final selfMessages = await (select(message)
-              ..where(
-                (item) =>
-                    item.sender.equals(selfUid) & item.receiver.equals(''),
-              ))
-            .get();
+        final selfMessages =
+            await (select(message)..where(
+                  (item) =>
+                      item.sender.equals(selfUid) & item.receiver.equals(''),
+                ))
+                .get();
         removedMessageIds.addAll(selfMessages.map((item) => item.id));
-        await (delete(message)
-              ..where(
-                (item) =>
-                    item.sender.equals(selfUid) & item.receiver.equals(''),
-              ))
+        await (delete(message)..where(
+              (item) => item.sender.equals(selfUid) & item.receiver.equals(''),
+            ))
             .go();
         await (delete(device)..where((item) => item.uid.equals(selfUid))).go();
       }
       if (targetIds.isNotEmpty) {
-        final peerMessages = await (select(message)
-              ..where(
-                (item) =>
-                    item.sender.isIn(targetIds) | item.receiver.isIn(targetIds),
-              ))
-            .get();
+        final peerMessages =
+            await (select(message)..where(
+                  (item) =>
+                      item.sender.isIn(targetIds) |
+                      item.receiver.isIn(targetIds),
+                ))
+                .get();
         removedMessageIds.addAll(peerMessages.map((item) => item.id));
       }
       await _detachFileTransfersForMessages(
@@ -814,11 +1039,10 @@ class LocalDatabase extends _$LocalDatabase {
         reason: 'device_cleared',
       );
       if (targetIds.isNotEmpty) {
-        await (delete(message)
-              ..where(
-                (item) =>
-                    item.sender.isIn(targetIds) | item.receiver.isIn(targetIds),
-              ))
+        await (delete(message)..where(
+              (item) =>
+                  item.sender.isIn(targetIds) | item.receiver.isIn(targetIds),
+            ))
             .go();
       }
       await (delete(device)..where((item) => item.uid.isIn(targetIds))).go();
@@ -827,10 +1051,9 @@ class LocalDatabase extends _$LocalDatabase {
 
   Future<void> deleteMessage(int id) async {
     await transaction(() async {
-      await _detachFileTransfersForMessages(
-        <int>{id},
-        reason: 'message_deleted',
-      );
+      await _detachFileTransfersForMessages(<int>{
+        id,
+      }, reason: 'message_deleted');
       await (delete(message)..where((item) => item.id.equals(id))).go();
     });
   }
@@ -842,26 +1065,26 @@ class LocalDatabase extends _$LocalDatabase {
     if (messageIds.isEmpty) return;
     final ids = messageIds.toList(growable: false);
     final now = DateTime.now().millisecondsSinceEpoch;
-    await (update(fileTransfer)
-          ..where(
-            (item) =>
-                item.messageRowId.isIn(ids) &
-                item.state.isNotIn(const <String>[
-                  'completed',
-                  'failed',
-                  'canceled',
-                ]),
-          ))
+    await (update(fileTransfer)..where(
+          (item) =>
+              item.messageRowId.isIn(ids) &
+              item.state.isNotIn(const <String>[
+                'completed',
+                'failed',
+                'canceled',
+              ]),
+        ))
         .write(
-      FileTransferCompanion(
-        messageRowId: const Value(0),
-        state: const Value(FileTransferState.canceled),
-        lastError: Value(reason),
-        updatedAt: Value(now),
-      ),
-    );
-    await (update(fileTransfer)..where((item) => item.messageRowId.isIn(ids)))
-        .write(
+          FileTransferCompanion(
+            messageRowId: const Value(0),
+            state: const Value(FileTransferState.canceled),
+            lastError: Value(reason),
+            updatedAt: Value(now),
+          ),
+        );
+    await (update(
+      fileTransfer,
+    )..where((item) => item.messageRowId.isIn(ids))).write(
       FileTransferCompanion(
         messageRowId: const Value(0),
         updatedAt: Value(now),
@@ -877,10 +1100,19 @@ class LocalDatabase extends _$LocalDatabase {
     required MessageData message,
     required FileTransferData transfer,
     bool acked = false,
+    String? expectedPublicKeyHash,
     int perPeerLimit = maxNonterminalTransfersPerPeer,
     int globalLimit = maxNonterminalTransfersGlobal,
   }) {
     return transaction(() async {
+      if (!await _matchesStoredTrustedIdentityHash(
+        transfer.peerUid,
+        expectedPublicKeyHash,
+      )) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
       if (!_isExactFileTransferMessageAssociation(transfer, message)) {
         return const FileTransferAdmissionResult(
           decision: FileTransferAdmission.missing,
@@ -888,8 +1120,9 @@ class LocalDatabase extends _$LocalDatabase {
       }
       final existingTransfer = await fetchFileTransfer(transfer.transferId);
       if (existingTransfer != null) {
-        final associated =
-            await fetchAssociatedFileTransferMessage(existingTransfer);
+        final associated = await fetchAssociatedFileTransferMessage(
+          existingTransfer,
+        );
         return FileTransferAdmissionResult(
           decision: associated == null
               ? FileTransferAdmission.missing
@@ -912,8 +1145,10 @@ class LocalDatabase extends _$LocalDatabase {
       if ((await fetchMessagesByUuid(message.uuid)).isNotEmpty) {
         throw StateError('message UUID already exists without a transfer');
       }
-      final persistedMessage =
-          await insertMessageReturning(message, acked: acked);
+      final persistedMessage = await insertMessageReturning(
+        message,
+        acked: acked,
+      );
       final persistedTransfer = transfer.copyWith(
         messageRowId: persistedMessage.id,
       );
@@ -936,17 +1171,15 @@ class LocalDatabase extends _$LocalDatabase {
       final existingTransfer = await fetchFileTransfer(transfer.transferId);
       final existingMessage = await fetchMessageById(message.id);
       if (existingMessage == null ||
-          !_isExactFileTransferMessageAssociation(
-            transfer,
-            existingMessage,
-          )) {
+          !_isExactFileTransferMessageAssociation(transfer, existingMessage)) {
         return const FileTransferAdmissionResult(
           decision: FileTransferAdmission.missing,
         );
       }
       if (existingTransfer != null) {
-        final associated =
-            await fetchAssociatedFileTransferMessage(existingTransfer);
+        final associated = await fetchAssociatedFileTransferMessage(
+          existingTransfer,
+        );
         return FileTransferAdmissionResult(
           decision: associated == null
               ? FileTransferAdmission.missing
@@ -1019,24 +1252,155 @@ class LocalDatabase extends _$LocalDatabase {
       if (await _nonterminalTransferCount() >= globalLimit) {
         return FileTransferAdmission.globalLimit;
       }
-      final affected = await (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.messageRowId.equals(transfer.messageRowId) &
-                  item.state.equalsValue(FileTransferState.failed),
-            ))
-          .write(
-        FileTransferCompanion(
-          state: Value(nextState),
-          lastError: const Value(''),
-          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.messageRowId.equals(transfer.messageRowId) &
+                    item.state.equalsValue(FileTransferState.failed),
+              ))
+              .write(
+                FileTransferCompanion(
+                  state: Value(nextState),
+                  lastError: const Value(''),
+                  updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
       return affected == 1
           ? FileTransferAdmission.admitted
           : FileTransferAdmission.missing;
     });
+  }
+
+  Future<FileTransferAdmissionResult> reacquireInvalidatedOutgoingFileTransfer(
+    String transferId, {
+    required FileTransferState nextState,
+    required String expectedPublicKeyHash,
+    MessageData? replacementMessage,
+    int perPeerLimit = maxNonterminalTransfersPerPeer,
+    int globalLimit = maxNonterminalTransfersGlobal,
+  }) {
+    return transaction(() async {
+      final transfer = await fetchFileTransfer(transferId);
+      if (transfer == null ||
+          transfer.direction != FileTransferDirection.outgoing ||
+          transfer.state != FileTransferState.canceled ||
+          !isRetryableOutgoingInvalidationReason(transfer.lastError) ||
+          isTerminalFileTransferState(nextState)) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
+      if (!await _matchesStoredTrustedIdentityHash(
+        transfer.peerUid,
+        expectedPublicKeyHash,
+      )) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
+      var associated = await fetchAssociatedFileTransferMessage(transfer);
+      if (associated == null &&
+          (replacementMessage == null ||
+              !_isExactInvalidatedOutgoingReplacement(
+                transfer,
+                replacementMessage,
+              ) ||
+              (await fetchMessagesByUuid(
+                replacementMessage.uuid,
+              )).isNotEmpty)) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.missing,
+        );
+      }
+      if (await _nonterminalTransferCount(peerUid: transfer.peerUid) >=
+          perPeerLimit) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.peerLimit,
+        );
+      }
+      if (await _nonterminalTransferCount() >= globalLimit) {
+        return const FileTransferAdmissionResult(
+          decision: FileTransferAdmission.globalLimit,
+        );
+      }
+      associated ??= await insertMessageReturning(replacementMessage!);
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.direction.equalsValue(FileTransferDirection.outgoing) &
+                    item.state.equalsValue(FileTransferState.canceled) &
+                    item.lastError.equals(transfer.lastError) &
+                    item.messageRowId.equals(transfer.messageRowId),
+              ))
+              .write(
+                FileTransferCompanion(
+                  state: Value(nextState),
+                  messageRowId: Value(associated.id),
+                  lastError: const Value(''),
+                  updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
+      if (affected != 1) {
+        throw StateError('invalidated transfer changed during reacquisition');
+      }
+      return FileTransferAdmissionResult(
+        decision: FileTransferAdmission.admitted,
+        message: associated,
+        transfer: await fetchFileTransfer(transferId),
+      );
+    });
+  }
+
+  bool _isExactInvalidatedOutgoingReplacement(
+    FileTransferData transfer,
+    MessageData replacement,
+  ) {
+    if (!_isExactFileTransferMessageAssociation(transfer, replacement) ||
+        replacement.path != transfer.finalPath) {
+      return false;
+    }
+    try {
+      final metadata = FileTransferV3Metadata.parseOffer(
+        replacement.content,
+        size: replacement.size,
+      );
+      return metadata.checksumAlgorithm == transfer.checksumAlgorithm &&
+          metadata.checksumValue == transfer.checksumValue &&
+          metadata.chunkSize == transfer.chunkSize;
+    } on FileTransferV3MetadataException {
+      return false;
+    }
+  }
+
+  Future<bool> _matchesStoredTrustedIdentityHash(
+    String peerUid,
+    String? expectedPublicKeyHash,
+  ) async {
+    if (expectedPublicKeyHash == null) {
+      return true;
+    }
+    if (expectedPublicKeyHash.length != 43 ||
+        !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(expectedPublicKeyHash)) {
+      return false;
+    }
+    final stored = await fetchDevice(peerUid);
+    if (stored == null || !stored.auth || stored.identityPublicKey.isEmpty) {
+      return false;
+    }
+    try {
+      final publicKey = decodeAuthBase64Url(
+        stored.identityPublicKey,
+        expectedLength: 32,
+      );
+      final actualHash = base64Url
+          .encode(hashes.sha256.convert(publicKey).bytes)
+          .replaceAll('=', '');
+      return actualHash == expectedPublicKeyHash;
+    } on FormatException {
+      return false;
+    }
   }
 
   Future<FileTransferData?> claimIncomingResumeProofReset(
@@ -1057,20 +1421,22 @@ class LocalDatabase extends _$LocalDatabase {
       if (await fetchAssociatedFileTransferMessage(transfer) == null) {
         return null;
       }
-      final affected = await (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.direction.equalsValue(FileTransferDirection.incoming) &
-                  item.committedBytes.equals(expectedOffset) &
-                  item.resumeProofResetCount.equals(0),
-            ))
-          .write(
-        FileTransferCompanion(
-          resumeProofResetCount: const Value(pendingResumeProofResetMarker),
-          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.direction.equalsValue(FileTransferDirection.incoming) &
+                    item.committedBytes.equals(expectedOffset) &
+                    item.resumeProofResetCount.equals(0),
+              ))
+              .write(
+                FileTransferCompanion(
+                  resumeProofResetCount: const Value(
+                    pendingResumeProofResetMarker,
+                  ),
+                  updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
       if (affected != 1) {
         return null;
       }
@@ -1096,25 +1462,25 @@ class LocalDatabase extends _$LocalDatabase {
       if (await fetchAssociatedFileTransferMessage(transfer) == null) {
         return null;
       }
-      final affected = await (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.direction.equalsValue(FileTransferDirection.incoming) &
-                  item.committedBytes.equals(expectedOffset) &
-                  item.resumeProofResetCount.equals(
-                    pendingResumeProofResetMarker,
-                  ),
-            ))
-          .write(
-        FileTransferCompanion(
-          state: const Value(FileTransferState.negotiating),
-          committedBytes: const Value(0),
-          resumeProofResetCount: const Value(1),
-          lastError: const Value(''),
-          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.direction.equalsValue(FileTransferDirection.incoming) &
+                    item.committedBytes.equals(expectedOffset) &
+                    item.resumeProofResetCount.equals(
+                      pendingResumeProofResetMarker,
+                    ),
+              ))
+              .write(
+                FileTransferCompanion(
+                  state: const Value(FileTransferState.negotiating),
+                  committedBytes: const Value(0),
+                  resumeProofResetCount: const Value(1),
+                  lastError: const Value(''),
+                  updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
       if (affected != 1) return null;
       return fetchFileTransfer(transferId);
     });
@@ -1150,29 +1516,28 @@ class LocalDatabase extends _$LocalDatabase {
           await fetchAssociatedFileTransferMessage(transfer) == null) {
         return 0;
       }
-      return (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.messageRowId.equals(transfer.messageRowId) &
-                  item.state.equalsValue(transfer.state) &
-                  item.state.isNotIn(const <String>[
-                    'completed',
-                    'failed',
-                    'canceled',
-                  ]),
-            ))
+      return (update(fileTransfer)..where(
+            (item) =>
+                item.transferId.equals(transferId) &
+                item.messageRowId.equals(transfer.messageRowId) &
+                item.state.equalsValue(transfer.state) &
+                item.state.isNotIn(const <String>[
+                  'completed',
+                  'failed',
+                  'canceled',
+                ]),
+          ))
           .write(
-        FileTransferCompanion(
-          state: state,
-          committedBytes: committedBytes,
-          lastError: lastError,
-          finalPath: finalPath,
-          tempPath: tempPath,
-          checksumValue: checksumValue,
-          updatedAt: updatedAt,
-        ),
-      );
+            FileTransferCompanion(
+              state: state,
+              committedBytes: committedBytes,
+              lastError: lastError,
+              finalPath: finalPath,
+              tempPath: tempPath,
+              checksumValue: checksumValue,
+              updatedAt: updatedAt,
+            ),
+          );
     });
   }
 
@@ -1190,22 +1555,22 @@ class LocalDatabase extends _$LocalDatabase {
           isTerminalFileTransferState(transfer.state)) {
         return null;
       }
-      final affected = await (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.peerUid.equals(peerUid) &
-                  item.direction.equalsValue(direction) &
-                  item.messageRowId.equals(transfer.messageRowId) &
-                  item.state.equalsValue(transfer.state),
-            ))
-          .write(
-        FileTransferCompanion(
-          state: const Value(FileTransferState.failed),
-          lastError: Value(reason),
-          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.peerUid.equals(peerUid) &
+                    item.direction.equalsValue(direction) &
+                    item.messageRowId.equals(transfer.messageRowId) &
+                    item.state.equalsValue(transfer.state),
+              ))
+              .write(
+                FileTransferCompanion(
+                  state: const Value(FileTransferState.failed),
+                  lastError: Value(reason),
+                  updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
       return affected == 1 ? fetchFileTransfer(transferId) : null;
     });
   }
@@ -1224,40 +1589,41 @@ class LocalDatabase extends _$LocalDatabase {
           transfer.size != size) {
         throw StateError('invalid incoming transfer completion state');
       }
-      final associatedMessage =
-          await fetchAssociatedFileTransferMessage(transfer);
+      final associatedMessage = await fetchAssociatedFileTransferMessage(
+        transfer,
+      );
       if (associatedMessage == null) {
         throw StateError('invalid incoming transfer message association');
       }
       final now = DateTime.now().millisecondsSinceEpoch;
-      final transferUpdates = await (update(fileTransfer)
-            ..where(
-              (item) =>
-                  item.transferId.equals(transferId) &
-                  item.messageRowId.equals(transfer.messageRowId) &
-                  item.direction.equalsValue(FileTransferDirection.incoming) &
-                  item.state.equalsValue(FileTransferState.verifying),
-            ))
-          .write(
-        FileTransferCompanion(
-          state: const Value(FileTransferState.completed),
-          committedBytes: Value(size),
-          finalPath: Value(finalPath),
-          lastError: const Value(''),
-          updatedAt: Value(now),
-        ),
-      );
+      final transferUpdates =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.equals(transferId) &
+                    item.messageRowId.equals(transfer.messageRowId) &
+                    item.direction.equalsValue(FileTransferDirection.incoming) &
+                    item.state.equalsValue(FileTransferState.verifying),
+              ))
+              .write(
+                FileTransferCompanion(
+                  state: const Value(FileTransferState.completed),
+                  committedBytes: Value(size),
+                  finalPath: Value(finalPath),
+                  lastError: const Value(''),
+                  updatedAt: Value(now),
+                ),
+              );
       if (transferUpdates != 1) {
         throw StateError('incoming transfer completion affected no transfer');
       }
-      final messageUpdates = await (update(message)
-            ..where(
-              (item) =>
-                  item.id.equals(transfer.messageRowId) &
-                  item.uuid.equals(transfer.messageUuid) &
-                  item.type.equalsValue(MessageEnum.File),
-            ))
-          .write(MessageCompanion(path: Value(finalPath)));
+      final messageUpdates =
+          await (update(message)..where(
+                (item) =>
+                    item.id.equals(transfer.messageRowId) &
+                    item.uuid.equals(transfer.messageUuid) &
+                    item.type.equalsValue(MessageEnum.File),
+              ))
+              .write(MessageCompanion(path: Value(finalPath)));
       if (messageUpdates != 1) {
         throw StateError('incoming transfer completion affected no message');
       }
@@ -1273,8 +1639,9 @@ class LocalDatabase extends _$LocalDatabase {
     if (id <= 0) {
       return Future<MessageData?>.value();
     }
-    return (select(message)..where((item) => item.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      message,
+    )..where((item) => item.id.equals(id))).getSingleOrNull();
   }
 
   Future<MessageData?> fetchAssociatedFileTransferMessage(
@@ -1320,9 +1687,9 @@ class LocalDatabase extends _$LocalDatabase {
     if (ids.isEmpty) {
       return const <String, FileTransferData>{};
     }
-    final items = await (select(fileTransfer)
-          ..where((t) => t.transferId.isIn(ids)))
-        .get();
+    final items = await (select(
+      fileTransfer,
+    )..where((t) => t.transferId.isIn(ids))).get();
     return <String, FileTransferData>{
       for (final item in items) item.transferId: item,
     };
@@ -1348,15 +1715,89 @@ class LocalDatabase extends _$LocalDatabase {
 
   Future<List<FileTransferData>> fetchRecoverableFileTransfers() {
     return (select(fileTransfer)
-          ..where((t) => t.state.isNotIn(const <String>[
-                'completed',
-                'failed',
-                'canceled',
-              ]))
+          ..where(
+            (t) => t.state.isNotIn(const <String>[
+              'completed',
+              'failed',
+              'canceled',
+            ]),
+          )
           ..orderBy([
             (t) =>
-                OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+                OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc),
           ]))
+        .get();
+  }
+
+  Future<List<FileTransferData>> fetchRetainedOutgoingFileTransfers() {
+    return (select(fileTransfer)..where(
+          (t) =>
+              t.direction.equalsValue(FileTransferDirection.outgoing) &
+              t.state.isNotIn(const <String>['completed', 'canceled']),
+        ))
+        .get();
+  }
+
+  Future<List<FileTransferData>> cancelOutgoingTransfersForPeer(
+    String peerUid, {
+    required String reason,
+    bool revokeDeviceTrust = false,
+  }) {
+    if (peerUid.isEmpty || reason.isEmpty) {
+      return Future<List<FileTransferData>>.value(const <FileTransferData>[]);
+    }
+    return transaction(
+      () => _cancelOutgoingTransfersForPeerInTransaction(
+        peerUid,
+        reason: reason,
+        revokeDeviceTrust: revokeDeviceTrust,
+      ),
+    );
+  }
+
+  Future<List<FileTransferData>> _cancelOutgoingTransfersForPeerInTransaction(
+    String peerUid, {
+    required String reason,
+    bool revokeDeviceTrust = false,
+  }) async {
+    if (revokeDeviceTrust) {
+      await (update(device)..where((item) => item.uid.equals(peerUid))).write(
+        const DeviceCompanion(auth: Value(false)),
+      );
+    }
+    final candidates =
+        await (select(fileTransfer)..where(
+              (item) =>
+                  item.peerUid.equals(peerUid) &
+                  item.direction.equalsValue(FileTransferDirection.outgoing) &
+                  item.state.isNotIn(const <String>['completed', 'canceled']),
+            ))
+            .get();
+    if (candidates.isNotEmpty) {
+      final transferIds = candidates
+          .map((item) => item.transferId)
+          .toList(growable: false);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await (update(fileTransfer)..where(
+            (item) =>
+                item.transferId.isIn(transferIds) &
+                item.state.isNotIn(const <String>['completed', 'canceled']),
+          ))
+          .write(
+            FileTransferCompanion(
+              state: const Value(FileTransferState.canceled),
+              lastError: Value(reason),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return (select(fileTransfer)..where(
+          (item) =>
+              item.peerUid.equals(peerUid) &
+              item.direction.equalsValue(FileTransferDirection.outgoing) &
+              item.state.equalsValue(FileTransferState.canceled) &
+              item.lastError.equals(reason),
+        ))
         .get();
   }
 
@@ -1365,15 +1806,17 @@ class LocalDatabase extends _$LocalDatabase {
     FileTransferDirection? direction,
   }) async {
     final items = await fetchRecoverableFileTransfers();
-    return items.where((item) {
-      if (item.peerUid != peerUid) {
-        return false;
-      }
-      if (direction != null && item.direction != direction) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return items
+        .where((item) {
+          if (item.peerUid != peerUid) {
+            return false;
+          }
+          if (direction != null && item.direction != direction) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   Future<void> upsertRemoteInputLayout(RemoteInputLayoutData data) {
@@ -1388,13 +1831,9 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<List<RemoteInputLayoutData>> fetchRemoteInputLayouts() {
-    return (select(remoteInputLayout)
-          ..orderBy([
-            (t) => OrderingTerm(
-                  expression: t.updatedAt,
-                  mode: OrderingMode.desc,
-                ),
-          ]))
+    return (select(remoteInputLayout)..orderBy([
+          (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc),
+        ]))
         .get();
   }
 

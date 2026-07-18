@@ -42,7 +42,7 @@ URL:            Your URL
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gtk3-devel
-Requires:       libc6, libgcc1, libstdc++6
+Requires:       libgcc, libstdc++, pulseaudio-libs, libsecret, keybinder3, jsoncpp
 
 %description
 Your application description.
@@ -68,6 +68,26 @@ Icon=app_icon.png
 Terminal=false
 Type=Application
 Categories=Utility;
+MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;inode/directory;
+Actions=QuickSend;
+
+[Desktop Action QuickSend]
+Name=Send with Whisper
+Exec=/usr/local/bin/%{name}/%{name} --quick-send %F
+EOF2
+
+mkdir -p %{buildroot}/usr/share/kservices5/ServiceMenus
+cat > %{buildroot}/usr/share/kservices5/ServiceMenus/%{name}-send.desktop <<EOF2
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;inode/directory;
+Actions=WhisperQuickSend;
+
+[Desktop Action WhisperQuickSend]
+Name=Send with Whisper
+Icon=app_icon.png
+Exec=/usr/local/bin/%{name}/%{name} --quick-send %F
 EOF2
 
 # 如果有图标，也应该安装到相应的目录
@@ -77,6 +97,7 @@ EOF2
 %files
 /usr/local/bin/%{name}
 /usr/share/applications/%{name}.desktop
+/usr/share/kservices5/ServiceMenus/%{name}-send.desktop
 # /usr/share/icons/hicolor/scalable/apps/%{name}.svg
 
 %changelog

@@ -40,19 +40,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String transferNotificationBodySending(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return '发送中 $percent% · $speed · 剩余 $remaining';
   }
 
   @override
   String transferNotificationBodyReceiving(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return '接收中 $percent% · $speed · 剩余 $remaining';
   }
 
   @override
   String transferNotificationBodyMixed(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return '收发中 $percent% · $speed · 剩余 $remaining';
   }
 
@@ -89,6 +98,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sendTips => '发点什么...';
 
   @override
+  String get sendFiles => '发送文件';
+
+  @override
+  String get sendFolder => '发送文件夹（ZIP）';
+
+  @override
+  String get folderSendFailed => '文件夹打包或发送失败';
+
+  @override
   String get trust => '自动接入';
 
   @override
@@ -107,6 +125,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accessClipboard => '允许访问剪切板';
+
+  @override
+  String get clipboardAutoSync => '自动同步剪切板';
+
+  @override
+  String get clipboardAutoSyncDesc => '关闭时仅手动发送；开启后只同步到当前可信设备';
 
   @override
   String get doubleClickRmMessage => '双击消息删除';
@@ -498,27 +522,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String audioGroupSyncEvidence(
-      Object quality,
-      Object clockOffsetLabel,
-      Object offset,
-      Object rtt,
-      Object jitter,
-      Object buffer,
-      Object latePackets) {
+    Object quality,
+    Object clockOffsetLabel,
+    Object offset,
+    Object rtt,
+    Object jitter,
+    Object buffer,
+    Object latePackets,
+  ) {
     return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · 抖动 ${jitter}ms · 缓冲 ${buffer}ms · 晚包 $latePackets';
   }
 
   @override
   String audioGroupSyncEvidenceCompact(
-      Object quality,
-      Object latencyLabel,
-      Object rtt,
-      Object jitterLabel,
-      Object jitter,
-      Object bufferLabel,
-      Object buffer,
-      Object latePacketLabel,
-      Object latePackets) {
+    Object quality,
+    Object latencyLabel,
+    Object rtt,
+    Object jitterLabel,
+    Object jitter,
+    Object bufferLabel,
+    Object buffer,
+    Object latePacketLabel,
+    Object latePackets,
+  ) {
     return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
   }
 
@@ -926,4 +952,266 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pairingRejectedByPeer => '对方拒绝了连接请求';
+
+  @override
+  String get pairingEncryptionNotice => '配对后，文本、文件、剪贴板和控制数据均端到端加密';
+
+  @override
+  String get e2eeTrustedConnection => '端到端加密 · 可信设备';
+
+  @override
+  String get e2eeEncryptedConnection => '端到端加密连接';
+
+  @override
+  String get transferAssistantTitle => '传输助手';
+
+  @override
+  String get transferAssistantSearchHint => '搜索文本消息';
+
+  @override
+  String get transferAssistantClearSearch => '清除搜索';
+
+  @override
+  String get transferAssistantSearchResults => '搜索结果';
+
+  @override
+  String get transferAssistantFavorites => '收藏文本';
+
+  @override
+  String get transferAssistantRecent => '最近文本';
+
+  @override
+  String get transferAssistantNoResults => '没有找到匹配的文本';
+
+  @override
+  String get transferAssistantNoFavorites => '还没有收藏文本';
+
+  @override
+  String get transferAssistantNoRecent => '还没有文本消息';
+
+  @override
+  String get transferAssistantIncoming => '收到';
+
+  @override
+  String get transferAssistantOutgoing => '发出';
+
+  @override
+  String get transferAssistantCopy => '复制文本';
+
+  @override
+  String get transferAssistantFavorite => '收藏文本';
+
+  @override
+  String get transferAssistantUnfavorite => '取消收藏';
+
+  @override
+  String get transferAssistantLoadFailed => '无法加载文本消息';
+
+  @override
+  String get transferAssistantCopied => '已复制文本';
+
+  @override
+  String get transferAssistantCopyFailed => '无法复制文本';
+
+  @override
+  String get transferAssistantFavoriteFailed => '无法更新收藏，请重试';
+
+  @override
+  String get qrPairingTitle => '二维码连接';
+
+  @override
+  String get qrMyCode => '我的二维码';
+
+  @override
+  String get qrScanCode => '扫码连接';
+
+  @override
+  String get qrShowCodeHint => '让另一台设备扫描此二维码，地址和设备身份会同时核验';
+
+  @override
+  String qrFingerprint(String fingerprint) {
+    return '身份指纹 $fingerprint';
+  }
+
+  @override
+  String get qrWifiUnavailable => '未检测到可用的局域网地址，请先连接 Wi-Fi 再刷新二维码';
+
+  @override
+  String get qrCopyLink => '复制连接信息';
+
+  @override
+  String get qrLinkCopied => '连接信息已复制';
+
+  @override
+  String get qrScanHint => '扫描对方 Whisper 中显示的二维码';
+
+  @override
+  String get qrCameraUnavailable => '无法使用相机，请在系统设置中允许 Whisper 访问相机';
+
+  @override
+  String get qrToggleTorch => '开关手电筒';
+
+  @override
+  String get qrSwitchCamera => '切换相机';
+
+  @override
+  String get qrCannotPairSelf => '不能连接当前设备，请扫描另一台设备的二维码';
+
+  @override
+  String get qrInvalidCode => '这不是有效的 Whisper 二维码，请让对方重新出示';
+
+  @override
+  String get connectionDiagnosticTitle => '连接诊断';
+
+  @override
+  String get connectionDiagnosticWifi =>
+      '无法到达该设备。请确认两台设备连接同一 Wi-Fi，并关闭访客网络或 AP 隔离后重试。';
+
+  @override
+  String get connectionDiagnosticAddress =>
+      '二维码中的局域网地址无效或已经变化。请让对方重新打开二维码后再扫描。';
+
+  @override
+  String get connectionDiagnosticService =>
+      '地址已找到，但 Whisper 服务没有响应。请在对方设备打开 Whisper，并确认局域网服务正在运行。';
+
+  @override
+  String get connectionDiagnosticFirewall =>
+      '连接超时。请在两台设备的系统防火墙中允许 Whisper 访问局域网后重试。';
+
+  @override
+  String get connectionDiagnosticIdentity =>
+      '设备身份与二维码不一致，Whisper 已停止连接。请在对方设备重新出示二维码，切勿绕过此检查。';
+
+  @override
+  String get connectionDiagnosticVersion =>
+      '两台设备的协议版本不兼容，请将 Whisper 更新到相同的新版本后重试。';
+
+  @override
+  String get connectionDiagnosticPairing =>
+      '配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。';
+
+  @override
+  String get androidSystemShareTitle => '发送分享内容';
+
+  @override
+  String get androidSystemShareChooseTrustedDevice => '选择可信设备，确认前不会发送任何内容';
+
+  @override
+  String get androidSystemShareOnline => '在线';
+
+  @override
+  String get androidSystemShareOffline => '离线';
+
+  @override
+  String get androidSystemShareNoTrustedDevices => '没有可选的可信设备，请先完成配对并确认设备身份';
+
+  @override
+  String get androidSystemShareConfirmTarget => '确认发送目标';
+
+  @override
+  String androidSystemShareWaitingForDevice(String device) {
+    return '已选择 $device，连接后将自动发送';
+  }
+
+  @override
+  String androidSystemShareSendingTo(String device) {
+    return '正在发送给 $device';
+  }
+
+  @override
+  String androidSystemShareSentTo(String device) {
+    return '已发送给 $device';
+  }
+
+  @override
+  String get androidSystemShareFailedRetained => '发送失败，分享内容已保留';
+
+  @override
+  String get androidSystemShareStillPending => '分享内容仍在等待选择设备';
+
+  @override
+  String get androidSystemShareQueueFull => '队列已满，新内容未加入，请先处理已有分享';
+
+  @override
+  String get androidSystemShareRejected => '分享内容超过限制或无法完整读取，未加入队列';
+
+  @override
+  String get androidSystemShareTargetNeedsReselection => '目标设备身份已变化或不再可信，请重新选择';
+
+  @override
+  String get androidSystemShareChooseAction => '选择设备';
+
+  @override
+  String androidSystemShareMoreFiles(int count) {
+    return '另有 $count 个文件';
+  }
+
+  @override
+  String get desktopQuickSendTitle => '系统快捷发送';
+
+  @override
+  String desktopQuickSendSummary(int textCount, int fileCount) {
+    return '$textCount 条文本 · $fileCount 个文件';
+  }
+
+  @override
+  String desktopQuickSendMore(int count) {
+    return '还有 $count 项';
+  }
+
+  @override
+  String desktopQuickSendFiles(int count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String get desktopQuickSendChooseDevice => '发送到可信设备';
+
+  @override
+  String get desktopQuickSendNoTrustedDevices => '没有可信设备，请先完成配对';
+
+  @override
+  String get desktopQuickSendDeviceOffline => '设备离线，内容会保留到重新连接';
+
+  @override
+  String get desktopQuickSendLater => '稍后';
+
+  @override
+  String get desktopQuickSendSend => '发送';
+
+  @override
+  String get desktopQuickSendSent => '已加入加密传输队列';
+
+  @override
+  String get desktopQuickSendFailedRetained => '发送未完成，内容已保留';
+
+  @override
+  String get desktopQuickSendEmptyClipboard => '剪贴板中没有可发送的内容';
+
+  @override
+  String get desktopQuickSendShortcutUnavailable => '全局发送快捷键被其他应用占用';
+
+  @override
+  String get desktopQuickSendDraftLimit => '快捷发送已满，新内容未加入，请先处理已有内容';
+
+  @override
+  String get desktopQuickSendFileLimit => '一次选择的文件过多，新内容未加入';
+
+  @override
+  String get desktopQuickSendTextLimit => '文本过长，新内容未加入';
+
+  @override
+  String get desktopQuickSendInvalidPath => '文件路径无效或过长，新内容未加入';
+
+  @override
+  String get desktopQuickSendClipboardSnapshotUnavailable =>
+      '无法立即读取剪贴板，未加入可能已变化的内容';
+
+  @override
+  String get desktopQuickSendTargetConflict => '部分内容已发送到另一台设备，请选择原设备继续';
+
+  @override
+  String get desktopQuickSendTargetNeedsReselection =>
+      '目标设备身份已变化或不再可信，内容已保留，请重新选择';
 }

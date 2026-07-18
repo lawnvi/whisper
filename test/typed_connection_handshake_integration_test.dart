@@ -45,13 +45,14 @@ void main() {
     expect(harness.client.receiver, 'server-peer');
   });
 
-  test('server confirmation completes while the initiator remains read-only',
-      () async {
+  test('new-device pairing completes only after both peers confirm', () async {
+    final receivedActions = <AuthAction>[];
     final clientEvents = _BlockingPairingEvents();
     final serverEvents = _BlockingPairingEvents();
     final harness = await _HandshakeHarness.start(
       clientEvents: clientEvents,
       serverEvents: serverEvents,
+      serverAuthObserver: (_, envelope) => receivedActions.add(envelope.action),
     );
     var completed = false;
     final connecting = harness.connect('concurrent-pairing').whenComplete(() {
@@ -73,6 +74,12 @@ void main() {
     expect(await harness.database.fetchDevice('client-peer'), isNull);
 
     serverEvents.resolve(true);
+    await pumpEventQueue();
+    expect(completed, isFalse);
+    expect(receivedActions, isNot(contains(AuthAction.approval)));
+    expect(await harness.database.fetchDevice('server-peer'), isNull);
+
+    clientEvents.resolve(true);
     final result = await connecting;
     await clientEvents.pairingDismissed.future
         .timeout(const Duration(seconds: 2));
@@ -83,7 +90,7 @@ void main() {
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
   });
 
-  test('initiator sends proof and approval without a dialog decision',
+  test('initiator sends proof but withholds approval until confirmation',
       () async {
     final receivedActions = <AuthAction>[];
     final clientEvents = _BlockingPairingEvents();
@@ -94,11 +101,6 @@ void main() {
       serverAuthObserver: (_, envelope) => receivedActions.add(envelope.action),
     );
     final connecting = harness.connect('prompts-before-proof');
-    addTearDown(() async {
-      clientEvents.resolve(false);
-      serverEvents.resolve(false);
-      await connecting;
-    });
 
     await Future.wait(<Future<void>>[
       clientEvents.pairingStarted.future,
@@ -109,11 +111,65 @@ void main() {
     expect(serverEvents.hasPendingDecision, isTrue);
     expect(clientEvents.request?.mode, PairingPromptMode.initiator);
     expect(serverEvents.request?.mode, PairingPromptMode.responder);
-    await _waitUntil(
-      () =>
-          receivedActions.contains(AuthAction.proof) &&
-          receivedActions.contains(AuthAction.approval),
+    await _waitUntil(() => receivedActions.contains(AuthAction.proof));
+    await pumpEventQueue();
+    expect(receivedActions, isNot(contains(AuthAction.approval)));
+
+    clientEvents.resolve(true);
+    await _waitUntil(() => receivedActions.contains(AuthAction.approval));
+    serverEvents.resolve(true);
+    expect((await connecting).isAuthenticated, isTrue);
+  });
+
+  test('same-uid identity replacement waits for initiator confirmation',
+      () async {
+    final receivedActions = <AuthAction>[];
+    final clientEvents = _BlockingPairingEvents();
+    final serverEvents = _BlockingPairingEvents();
+    final harness = await _HandshakeHarness.start(
+      clientEvents: clientEvents,
+      serverEvents: serverEvents,
+      serverAuthObserver: (_, envelope) => receivedActions.add(envelope.action),
     );
+    final oldIdentity = await DeviceIdentity.fromSeed(
+      Uint8List.fromList(List<int>.generate(32, (index) => index + 96)),
+    );
+    final actualIdentity = await DeviceIdentity.fromSeed(
+      Uint8List.fromList(List<int>.generate(32, (index) => index + 1)),
+    );
+    final candidate = _profile('server-peer').device;
+    await harness.database.upsertDevice(candidate);
+    expect(
+      await harness.database.pinDeviceIdentity(
+        candidate.uid,
+        oldIdentity.publicKeyBase64Url,
+      ),
+      DeviceIdentityPinResult.pinned,
+    );
+    await harness.database.authDevice(candidate.uid, true);
+
+    final connecting = harness.connect('same-uid-new-key');
+    await Future.wait(<Future<void>>[
+      clientEvents.pairingStarted.future,
+      serverEvents.pairingStarted.future,
+    ]).timeout(const Duration(seconds: 2));
+    expect(clientEvents.request?.reason, PairingReason.identityChanged);
+    await _waitUntil(() => receivedActions.contains(AuthAction.proof));
+    expect(receivedActions, isNot(contains(AuthAction.approval)));
+
+    serverEvents.resolve(true);
+    await pumpEventQueue();
+    final beforeConfirmation =
+        await harness.database.fetchDevice('server-peer');
+    expect(
+      beforeConfirmation?.identityPublicKey,
+      oldIdentity.publicKeyBase64Url,
+    );
+
+    clientEvents.resolve(true);
+    expect((await connecting).isAuthenticated, isTrue);
+    final replaced = await harness.database.fetchDevice('server-peer');
+    expect(replaced?.identityPublicKey, actualIdentity.publicKeyBase64Url);
   });
 
   test('client cancellation retracts the server prompt and persists no trust',
@@ -403,14 +459,14 @@ void main() {
     });
   }
 
-  test('disabling automatic admission keeps the active connection', () async {
+  test('revoking trust closes the active encrypted connection', () async {
     final harness = await _HandshakeHarness.start();
     expect(
         (await harness.connect('disable-admission')).isAuthenticated, isTrue);
 
     expect(await harness.client.setPeerTrust('server-peer', false), isTrue);
 
-    expect(harness.client.isConnectedTo('server-peer'), isTrue);
+    expect(harness.client.isConnectedTo('server-peer'), isFalse);
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isFalse);
     expect(harness.clientReconnects.activeTimerCount, 0);
     expect(
@@ -442,6 +498,7 @@ void main() {
     expect(serverPairing.request?.reason, PairingReason.newDevice);
     expect(
         clientPairing.request?.pairingCode, serverPairing.request?.pairingCode);
+    clientPairing.resolve(true);
     serverPairing.resolve(true);
     expect((await redial).isAuthenticated, isTrue);
     expect(harness.server.isConnectedTo('client-peer'), isTrue);
@@ -524,8 +581,6 @@ void main() {
     expect(
         (await harness.connect('trust-repair-seed')).isAuthenticated, isTrue);
     await harness.client.setPeerTrust('server-peer', false);
-    expect(harness.client.isConnectedTo('server-peer'), isTrue);
-    expect(await harness.server.debugDropPeerTransport('client-peer'), isTrue);
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
     expect((await harness.database.fetchDevice('server-peer'))?.auth, isFalse);
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
@@ -561,6 +616,7 @@ void main() {
     await pumpEventQueue();
     expect(repairCompleted, isFalse);
 
+    clientPairing.resolve(true);
     serverPairing.resolve(true);
     final repaired = await repairing;
     await clientPairing.pairingDismissed.future
@@ -580,8 +636,7 @@ void main() {
     expect(
         (await harness.connect('trust-inbound-seed')).isAuthenticated, isTrue);
     await harness.server.setPeerTrust('client-peer', false);
-    expect(harness.server.isConnectedTo('client-peer'), isTrue);
-    expect(await harness.server.debugDropPeerTransport('client-peer'), isTrue);
+    expect(harness.server.isConnectedTo('client-peer'), isFalse);
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
 
     final clientPairing = _BlockingPairingEvents();
@@ -607,6 +662,7 @@ void main() {
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isFalse);
     await pumpEventQueue();
     expect(redialCompleted, isFalse);
+    clientPairing.resolve(true);
     serverPairing.resolve(true);
     final result = await redial;
 

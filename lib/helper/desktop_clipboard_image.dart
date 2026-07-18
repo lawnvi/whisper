@@ -37,9 +37,9 @@ class DesktopClipboardImageReader {
     MethodChannel channel = const MethodChannel(channelName),
     Future<Directory> Function()? tempDirectoryProvider,
     DateTime Function()? nowProvider,
-  })  : _channel = channel,
-        _tempDirectoryProvider = tempDirectoryProvider,
-        _nowProvider = nowProvider;
+  }) : _channel = channel,
+       _tempDirectoryProvider = tempDirectoryProvider,
+       _nowProvider = nowProvider;
 
   final MethodChannel _channel;
   final Future<Directory> Function()? _tempDirectoryProvider;
@@ -63,8 +63,9 @@ class DesktopClipboardImageReader {
       final baseDir = _tempDirectoryProvider == null
           ? Directory.systemTemp
           : await _tempDirectoryProvider();
-      final directory =
-          Directory(p.join(baseDir.path, 'whisper_clipboard_images'));
+      final directory = Directory(
+        p.join(baseDir.path, 'whisper_clipboard_images'),
+      );
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
@@ -116,7 +117,9 @@ class DesktopClipboardFileReader {
 
   final MethodChannel _channel;
 
-  Future<List<ClipboardFileDraft>> readFileDrafts() async {
+  Future<List<ClipboardFileDraft>> readFileDrafts({
+    bool includeDirectories = false,
+  }) async {
     final List<String>? paths;
     try {
       paths = await _channel.invokeListMethod<String>('readFilePaths');
@@ -132,20 +135,19 @@ class DesktopClipboardFileReader {
 
     final drafts = <ClipboardFileDraft>[];
     for (final path in paths) {
-      final file = File(path);
       try {
-        if (!await file.exists()) {
-          continue;
-        }
-        final stat = await file.stat();
-        if (stat.type != FileSystemEntityType.file) {
+        final stat = await FileStat.stat(path);
+        final isFile = stat.type == FileSystemEntityType.file;
+        final isIncludedDirectory =
+            includeDirectories && stat.type == FileSystemEntityType.directory;
+        if (!isFile && !isIncludedDirectory) {
           continue;
         }
         drafts.add(
           ClipboardFileDraft(
             path: path,
             fileName: p.basename(path),
-            size: stat.size,
+            size: isFile ? stat.size : 0,
           ),
         );
       } on FileSystemException {

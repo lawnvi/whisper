@@ -204,6 +204,21 @@ class _PairingDialogState extends State<PairingDialog> {
                 ),
               ),
             ),
+            const SizedBox(height: 14),
+            Row(
+              children: <Widget>[
+                const Icon(CupertinoIcons.lock_fill, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l10n.pairingEncryptionNotice,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -214,19 +229,18 @@ class _PairingDialogState extends State<PairingDialog> {
             onPressed: _resolved ? null : () => _resolve(false),
             child: Text(l10n.cancel),
           )
-        else ...<Widget>[
+        else
           CupertinoDialogAction(
             key: pairingRejectKey,
             isDestructiveAction: true,
             onPressed: _resolved ? null : () => _resolve(false),
             child: Text(l10n.pairingReject),
           ),
-          CupertinoDialogAction(
-            key: pairingApproveKey,
-            onPressed: _resolved ? null : () => _resolve(true),
-            child: Text(l10n.pairingApprove),
-          ),
-        ],
+        CupertinoDialogAction(
+          key: pairingApproveKey,
+          onPressed: _resolved ? null : () => _resolve(true),
+          child: Text(l10n.pairingApprove),
+        ),
       ],
     );
   }

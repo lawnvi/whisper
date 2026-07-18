@@ -7,7 +7,9 @@ import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
+import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -26,19 +28,20 @@ import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
 /// 与 svrmanager `_buildMessage` 现签名逐字对应(msg/fileName/path/uid/fileTimestamp 原本未标类型)。
-typedef TransferMessageBuilder = MessageData Function(
-  MessageEnum type,
-  String content,
-  dynamic msg,
-  dynamic fileName,
-  int size,
-  bool clipboard, {
-  String md5,
-  dynamic path,
-  dynamic uid,
-  dynamic fileTimestamp,
-  String? receiverOverride,
-});
+typedef TransferMessageBuilder =
+    MessageData Function(
+      MessageEnum type,
+      String content,
+      dynamic msg,
+      dynamic fileName,
+      int size,
+      bool clipboard, {
+      String md5,
+      dynamic path,
+      dynamic uid,
+      dynamic fileTimestamp,
+      String? receiverOverride,
+    });
 
 final class _TransferOperationLaneEntry {
   final Lock lock = Lock();
@@ -51,11 +54,7 @@ final class _TransferAdmissionRejected implements Exception {
   final FileTransferAdmission decision;
 }
 
-enum _IncomingReadyResult {
-  retained,
-  sendFailed,
-  unavailable,
-}
+enum _IncomingReadyResult { retained, sendFailed, unavailable }
 
 enum FileTransferDiagnosticKind {
   outgoingFailed,
@@ -76,13 +75,16 @@ Future<void> _setFileLastModified(File file, int timestamp) {
 class FileTransferEngine {
   FileTransferEngine({
     required TransferConnectionBinding? Function(String peerId)
-        currentConnectionBinding,
+    currentConnectionBinding,
+    required String? Function(TransferConnectionBinding connection)
+    authenticatedIdentityHashForConnection,
     required FutureOr<bool> Function(
       TransferConnectionBinding connection,
       Object bytes,
-    ) sendBytesToConnection,
+    )
+    sendBytesToConnection,
     required FutureOr<bool> Function(TransferConnectionBinding connection)
-        markPeerUnresponsive,
+    markPeerUnresponsive,
     TransferAckWatchdog? ackWatchdog,
     required void Function(TransferSnapshot snapshot) emitTransferUpdated,
     required void Function(String message) notify,
@@ -97,53 +99,58 @@ class FileTransferEngine {
     required FutureOr<void> Function(MessageData message) ackMessage,
     required WireMessageReplayGuard wireMessageReplayGuard,
     FileTransferSource Function(String sourcePath, int expectedSize)?
-        transferSourceFactory,
+    transferSourceFactory,
     Future<Directory> Function()? downloadDirectory,
     Future<int?> Function(String path)? availableBytesForDownloadPath,
     Future<void> Function(String path)? notifyFileVisible,
     Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
     PrivacyLog? privacyLogger,
     LocalDatabase Function() database = LocalDatabase.new,
-  })  : _currentConnectionBinding = currentConnectionBinding,
-        _sendBytesToConnection = sendBytesToConnection,
-        _markPeerUnresponsive = markPeerUnresponsive,
-        _ownsAckWatchdog = ackWatchdog == null,
-        _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
-        _emitTransferUpdated = emitTransferUpdated,
-        _notify = notify,
-        _remoteProfileFor = remoteProfileFor,
-        _isConnectedTo = isConnectedTo,
-        _connectedPeerIds = connectedPeerIds,
-        _defaultPeerId = defaultPeerId,
-        _hasLegacySinkFor = hasLegacySinkFor,
-        _localPeerIdFor = localPeerIdFor,
-        _buildMessage = buildMessage,
-        _dispatchOutgoingMessage = dispatchOutgoingMessage,
-        _ackMessage = ackMessage,
-        _wireMessageReplayGuard = wireMessageReplayGuard,
-        _transferSourceFactory = transferSourceFactory,
-        _downloadDirectory = downloadDirectory ?? downloadDir,
-        _availableBytesForDownloadPath =
-            availableBytesForDownloadPath ?? availableBytesForPath,
-        _notifyFileVisible =
-            notifyFileVisible ?? notifyFileVisibleToAndroidPickers,
-        _setPublishedFileTimestamp =
-            setPublishedFileTimestamp ?? _setFileLastModified,
-        _privacyLogger = privacyLogger ?? privacyLog,
-        _database = database;
+  }) : _currentConnectionBinding = currentConnectionBinding,
+       _authenticatedIdentityHashForConnection =
+           authenticatedIdentityHashForConnection,
+       _sendBytesToConnection = sendBytesToConnection,
+       _markPeerUnresponsive = markPeerUnresponsive,
+       _ownsAckWatchdog = ackWatchdog == null,
+       _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
+       _emitTransferUpdated = emitTransferUpdated,
+       _notify = notify,
+       _remoteProfileFor = remoteProfileFor,
+       _isConnectedTo = isConnectedTo,
+       _connectedPeerIds = connectedPeerIds,
+       _defaultPeerId = defaultPeerId,
+       _hasLegacySinkFor = hasLegacySinkFor,
+       _localPeerIdFor = localPeerIdFor,
+       _buildMessage = buildMessage,
+       _dispatchOutgoingMessage = dispatchOutgoingMessage,
+       _ackMessage = ackMessage,
+       _wireMessageReplayGuard = wireMessageReplayGuard,
+       _transferSourceFactory = transferSourceFactory,
+       _downloadDirectory = downloadDirectory ?? downloadDir,
+       _availableBytesForDownloadPath =
+           availableBytesForDownloadPath ?? availableBytesForPath,
+       _notifyFileVisible =
+           notifyFileVisible ?? notifyFileVisibleToAndroidPickers,
+       _setPublishedFileTimestamp =
+           setPublishedFileTimestamp ?? _setFileLastModified,
+       _privacyLogger = privacyLogger ?? privacyLog,
+       _database = database;
 
   static const int defaultTransferChunkSize = fileTransferV3FramePayloadSize;
   static const String defaultTransferChecksumAlgorithm =
       fileTransferV3ChecksumAlgorithm;
 
   final TransferConnectionBinding? Function(String peerId)
-      _currentConnectionBinding;
+  _currentConnectionBinding;
+  final String? Function(TransferConnectionBinding connection)
+  _authenticatedIdentityHashForConnection;
   final FutureOr<bool> Function(
     TransferConnectionBinding connection,
     Object bytes,
-  ) _sendBytesToConnection;
+  )
+  _sendBytesToConnection;
   final FutureOr<bool> Function(TransferConnectionBinding connection)
-      _markPeerUnresponsive;
+  _markPeerUnresponsive;
   final bool _ownsAckWatchdog;
   TransferAckWatchdog _ackWatchdog;
   final void Function(TransferSnapshot snapshot) _emitTransferUpdated;
@@ -159,12 +166,12 @@ class FileTransferEngine {
   final FutureOr<void> Function(MessageData message) _ackMessage;
   final WireMessageReplayGuard _wireMessageReplayGuard;
   final FileTransferSource Function(String sourcePath, int expectedSize)?
-      _transferSourceFactory;
+  _transferSourceFactory;
   final Future<Directory> Function() _downloadDirectory;
   final Future<int?> Function(String path) _availableBytesForDownloadPath;
   final Future<void> Function(String path) _notifyFileVisible;
   final Future<void> Function(File file, int timestamp)
-      _setPublishedFileTimestamp;
+  _setPublishedFileTimestamp;
   final PrivacyLog _privacyLogger;
   final LocalDatabase Function() _database;
 
@@ -191,6 +198,8 @@ class FileTransferEngine {
       <String, _TransferOperationLaneEntry>{};
   final Map<String, _TransferOperationLaneEntry> _transferSendLanes =
       <String, _TransferOperationLaneEntry>{};
+  final Map<String, int> _outgoingIntentEpochs = <String, int>{};
+  final Set<String> _blockedOutgoingPeers = <String>{};
 
   bool _supportsFileTransferV3For(String peerId) =>
       _remoteProfileFor(peerId)?.capabilities.fileTransferV3 == true;
@@ -200,15 +209,12 @@ class FileTransferEngine {
     Object error, {
     FileTransferDirection? direction,
   }) {
-    _privacyLogger.event(
-      PrivacyEvent.transferProgress,
-      <PrivacyField, Object>{
-        PrivacyField.kind: kind,
-        if (direction != null) PrivacyField.direction: direction,
-        PrivacyField.success: false,
-        PrivacyField.errorType: _privacyLogger.errorType(error),
-      },
-    );
+    _privacyLogger.event(PrivacyEvent.transferProgress, <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      if (direction != null) PrivacyField.direction: direction,
+      PrivacyField.success: false,
+      PrivacyField.errorType: _privacyLogger.errorType(error),
+    });
   }
 
   Future<void> retryTransfer(String transferId) async {
@@ -218,8 +224,9 @@ class FileTransferEngine {
       return;
     }
     final connection = _currentConnectionBinding(transfer.peerUid);
-    var associatedMessage =
-        await database.fetchAssociatedFileTransferMessage(transfer);
+    var associatedMessage = await database.fetchAssociatedFileTransferMessage(
+      transfer,
+    );
     if (associatedMessage == null) {
       return;
     }
@@ -228,7 +235,8 @@ class FileTransferEngine {
       return;
     }
     if (transfer.state == FileTransferState.failed) {
-      final connected = _supportsFileTransferV3For(transfer.peerUid) &&
+      final connected =
+          _supportsFileTransferV3For(transfer.peerUid) &&
           _isConnectedTo(transfer.peerUid);
       final admission = await database.reacquireFileTransferCapacity(
         transferId,
@@ -244,8 +252,9 @@ class FileTransferEngine {
       if (transfer == null) {
         return;
       }
-      associatedMessage =
-          await database.fetchAssociatedFileTransferMessage(transfer);
+      associatedMessage = await database.fetchAssociatedFileTransferMessage(
+        transfer,
+      );
       if (associatedMessage == null) {
         return;
       }
@@ -295,10 +304,7 @@ class FileTransferEngine {
       state: FileTransferState.negotiating,
       lastError: '',
     );
-    await _sendFileTransferV3Ready(
-      transferId,
-      connection: connection,
-    );
+    await _sendFileTransferV3Ready(transferId, connection: connection);
   }
 
   Future<void> cancelTransfer(String transferId) async {
@@ -306,7 +312,8 @@ class FileTransferEngine {
     if (initial == null) {
       return;
     }
-    final connection = _outgoingConnectionBindings[transferId] ??
+    final connection =
+        _outgoingConnectionBindings[transferId] ??
         _incomingConnectionBindings[transferId] ??
         _currentConnectionBinding(initial.peerUid) ??
         TransferConnectionBinding(peerId: initial.peerUid, generation: 0);
@@ -357,7 +364,12 @@ class FileTransferEngine {
     );
   }
 
-  Future<bool> sendPickedFileTo(String peerId, PickedTransferFile item) async {
+  Future<bool> sendPickedFileTo(
+    String peerId,
+    PickedTransferFile item, {
+    String? messageId,
+    String? expectedPublicKeyHash,
+  }) async {
     if (item.isAndroidContentUri) {
       return sendAndroidContentUriTo(
         peerId,
@@ -365,24 +377,88 @@ class FileTransferEngine {
         name: item.name,
         size: item.size,
         fileTimestamp: item.lastModified,
+        messageId: messageId,
+        expectedPublicKeyHash: expectedPublicKeyHash,
       );
     }
     final path = item.path;
     if (path == null || path.isEmpty) {
       return false;
     }
-    return sendFileTo(peerId, path);
+    return sendFileTo(
+      peerId,
+      path,
+      messageId: messageId,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+    );
   }
 
-  Future<bool> sendFileTo(String peerId, String path) async {
-    final connection = _currentConnectionBinding(peerId);
-    final canUseLegacySink = _hasLegacySinkFor(peerId);
+  Future<bool> sendFileTo(
+    String peerId,
+    String path, {
+    String? messageId,
+    String? expectedPublicKeyHash,
+  }) async {
     if (peerId.isEmpty ||
-        connection == null ||
-        (!_isConnectedTo(peerId) && !canUseLegacySink)) {
+        path.isEmpty ||
+        (expectedPublicKeyHash != null && expectedPublicKeyHash.isEmpty) ||
+        (messageId != null && !isCanonicalTransferId(messageId))) {
       return false;
     }
-    if (!_supportsFileTransferV3For(peerId)) {
+    final intentEpoch = _outgoingIntentEpochs[peerId] ?? 0;
+    final fileName = p.basename(path);
+    final existing = messageId == null
+        ? null
+        : await _database().fetchFileTransfer(messageId);
+    if (existing != null) {
+      final associated = await _database().fetchAssociatedFileTransferMessage(
+        existing,
+      );
+      final matches = associated == null
+          ? existing.state == FileTransferState.canceled &&
+                isRetryableOutgoingInvalidationReason(existing.lastError) &&
+                _matchesStableOutgoingTransferRecord(
+                  transfer: existing,
+                  peerId: peerId,
+                  sourcePath: path,
+                )
+          : _matchesStableOutgoingTransfer(
+              transfer: existing,
+              message: associated,
+              peerId: peerId,
+              sourcePath: path,
+              fileName: fileName,
+            );
+      if (!matches) {
+        return false;
+      }
+      if (existing.state == FileTransferState.completed ||
+          (existing.state == FileTransferState.canceled &&
+              !isRetryableOutgoingInvalidationReason(existing.lastError))) {
+        return true;
+      }
+    }
+    if (_blockedOutgoingPeers.contains(peerId)) {
+      return false;
+    }
+    final connection = _currentConnectionBinding(peerId);
+    final expectedConnection = expectedPublicKeyHash == null
+        ? null
+        : connection;
+    if (!_matchesExpectedIdentity(
+      connection,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+      requiredConnection: expectedConnection,
+    )) {
+      return false;
+    }
+    final canUseLegacySink = _hasLegacySinkFor(peerId);
+    if (existing == null &&
+        (connection == null ||
+            (!_isConnectedTo(peerId) && !canUseLegacySink))) {
+      return false;
+    }
+    if (existing == null && !_supportsFileTransferV3For(peerId)) {
       _notify('当前设备版本不支持新版文件传输');
       return false;
     }
@@ -393,7 +469,6 @@ class FileTransferEngine {
     }
     final source = _sourceFor(path, await file.length());
     final size = await source.length();
-    final fileName = p.basename(path);
     if (size < 0 ||
         size > fileTransferV3MaxFileSize ||
         !validateIncomingFileName(fileName)) {
@@ -418,6 +493,33 @@ class FileTransferEngine {
       _notify(FileTransferFailureReason.source.wireCode);
       return false;
     }
+    if (existing != null) {
+      final associated = await _database().fetchAssociatedFileTransferMessage(
+        existing,
+      );
+      final matches = associated == null
+          ? existing.state == FileTransferState.canceled &&
+                isRetryableOutgoingInvalidationReason(existing.lastError) &&
+                _matchesStableOutgoingTransferRecord(
+                  transfer: existing,
+                  peerId: peerId,
+                  sourcePath: path,
+                  size: size,
+                  checksumValue: checksumValue,
+                )
+          : _matchesStableOutgoingTransfer(
+              transfer: existing,
+              message: associated,
+              peerId: peerId,
+              sourcePath: path,
+              fileName: fileName,
+              size: size,
+              checksumValue: checksumValue,
+            );
+      if (!matches) {
+        return false;
+      }
+    }
     final timestamp = (await file.lastModified()).millisecondsSinceEpoch;
     return _persistAndOfferOutgoingTransfer(
       peerId: peerId,
@@ -426,7 +528,10 @@ class FileTransferEngine {
       size: size,
       fileTimestamp: timestamp,
       checksumValue: checksumValue,
-      connection: connection,
+      messageId: messageId,
+      intentEpoch: intentEpoch,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+      expectedConnection: expectedConnection,
     );
   }
 
@@ -436,22 +541,77 @@ class FileTransferEngine {
     required String name,
     required int size,
     required int fileTimestamp,
+    String? messageId,
+    String? expectedPublicKeyHash,
   }) async {
-    final connection = _currentConnectionBinding(peerId);
-    final canUseLegacySink = _hasLegacySinkFor(peerId);
     if (peerId.isEmpty ||
-        connection == null ||
-        (!_isConnectedTo(peerId) && !canUseLegacySink)) {
+        uri.isEmpty ||
+        (expectedPublicKeyHash != null && expectedPublicKeyHash.isEmpty) ||
+        (messageId != null && !isCanonicalTransferId(messageId))) {
       return false;
     }
-    if (uri.isEmpty || !isAndroidContentUri(uri)) {
+    final intentEpoch = _outgoingIntentEpochs[peerId] ?? 0;
+    final fileName = name.isNotEmpty ? name : 'document';
+    final existing = messageId == null
+        ? null
+        : await _database().fetchFileTransfer(messageId);
+    if (existing != null) {
+      final associated = await _database().fetchAssociatedFileTransferMessage(
+        existing,
+      );
+      final matches = associated == null
+          ? existing.state == FileTransferState.canceled &&
+                isRetryableOutgoingInvalidationReason(existing.lastError) &&
+                _matchesStableOutgoingTransferRecord(
+                  transfer: existing,
+                  peerId: peerId,
+                  sourcePath: uri,
+                  size: size,
+                )
+          : _matchesStableOutgoingTransfer(
+              transfer: existing,
+              message: associated,
+              peerId: peerId,
+              sourcePath: uri,
+              fileName: fileName,
+              size: size,
+            );
+      if (!matches) {
+        return false;
+      }
+      if (existing.state == FileTransferState.completed ||
+          (existing.state == FileTransferState.canceled &&
+              !isRetryableOutgoingInvalidationReason(existing.lastError))) {
+        return true;
+      }
+    }
+    if (_blockedOutgoingPeers.contains(peerId)) {
       return false;
     }
-    if (!_supportsFileTransferV3For(peerId)) {
+    final connection = _currentConnectionBinding(peerId);
+    final expectedConnection = expectedPublicKeyHash == null
+        ? null
+        : connection;
+    if (!_matchesExpectedIdentity(
+      connection,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+      requiredConnection: expectedConnection,
+    )) {
+      return false;
+    }
+    final canUseLegacySink = _hasLegacySinkFor(peerId);
+    if (existing == null &&
+        (connection == null ||
+            (!_isConnectedTo(peerId) && !canUseLegacySink))) {
+      return false;
+    }
+    if (!isAndroidContentUri(uri)) {
+      return false;
+    }
+    if (existing == null && !_supportsFileTransferV3For(peerId)) {
       _notify('当前设备版本不支持无复制文件发送');
       return false;
     }
-    final fileName = name.isNotEmpty ? name : 'document';
     if (size < 0 ||
         size > fileTransferV3MaxFileSize ||
         !validateIncomingFileName(fileName)) {
@@ -465,9 +625,7 @@ class FileTransferEngine {
         return false;
       }
       if (await source.length() != size) {
-        throw const FileSystemException(
-          '文件实际大小与选择时记录的大小不一致',
-        );
+        throw const FileSystemException('文件实际大小与选择时记录的大小不一致');
       }
       checksumValue = await checksumForTransferSource(
         source,
@@ -486,6 +644,33 @@ class FileTransferEngine {
       _notify(FileTransferFailureReason.source.wireCode);
       return false;
     }
+    if (existing != null) {
+      final associated = await _database().fetchAssociatedFileTransferMessage(
+        existing,
+      );
+      final matches = associated == null
+          ? existing.state == FileTransferState.canceled &&
+                isRetryableOutgoingInvalidationReason(existing.lastError) &&
+                _matchesStableOutgoingTransferRecord(
+                  transfer: existing,
+                  peerId: peerId,
+                  sourcePath: uri,
+                  size: size,
+                  checksumValue: checksumValue,
+                )
+          : _matchesStableOutgoingTransfer(
+              transfer: existing,
+              message: associated,
+              peerId: peerId,
+              sourcePath: uri,
+              fileName: fileName,
+              size: size,
+              checksumValue: checksumValue,
+            );
+      if (!matches) {
+        return false;
+      }
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     return _persistAndOfferOutgoingTransfer(
       peerId: peerId,
@@ -494,7 +679,10 @@ class FileTransferEngine {
       size: size,
       fileTimestamp: fileTimestamp > 0 ? fileTimestamp : now,
       checksumValue: checksumValue,
-      connection: connection,
+      messageId: messageId,
+      intentEpoch: intentEpoch,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+      expectedConnection: expectedConnection,
     );
   }
 
@@ -505,15 +693,22 @@ class FileTransferEngine {
     required int size,
     required int fileTimestamp,
     required String checksumValue,
-    required TransferConnectionBinding connection,
+    String? messageId,
+    required int intentEpoch,
+    String? expectedPublicKeyHash,
+    TransferConnectionBinding? expectedConnection,
   }) {
     return _sendFileLock.synchronized(() async {
-      if (!_isConnectedTo(peerId) && !_hasLegacySinkFor(peerId)) {
+      if (_blockedOutgoingPeers.contains(peerId) ||
+          (_outgoingIntentEpochs[peerId] ?? 0) != intentEpoch ||
+          !_matchesExpectedIdentity(
+            _currentConnectionBinding(peerId),
+            expectedPublicKeyHash: expectedPublicKeyHash,
+            requiredConnection: expectedConnection,
+          )) {
         return false;
       }
-      final metadata = FileTransferV3Metadata(
-        checksumValue: checksumValue,
-      );
+      final metadata = FileTransferV3Metadata(checksumValue: checksumValue);
       final content = jsonEncode(metadata.toJson());
       final draft = _buildMessage(
         MessageEnum.File,
@@ -523,6 +718,7 @@ class FileTransferEngine {
         size,
         false,
         path: sourcePath,
+        uid: messageId,
         md5: '',
         fileTimestamp: fileTimestamp,
         receiverOverride: peerId,
@@ -547,23 +743,285 @@ class FileTransferEngine {
         createdAt: now,
         updatedAt: now,
       );
-      final admission = await _database().admitFileTransfer(
+      var admission = await _database().admitFileTransfer(
         message: draft,
         transfer: transfer,
+        expectedPublicKeyHash: expectedPublicKeyHash,
       );
+      if (admission.decision == FileTransferAdmission.existing) {
+        final existingTransfer = admission.transfer;
+        final existingMessage = admission.message;
+        if (existingTransfer == null ||
+            existingMessage == null ||
+            !_matchesStableOutgoingTransfer(
+              transfer: existingTransfer,
+              message: existingMessage,
+              peerId: peerId,
+              sourcePath: sourcePath,
+              fileName: fileName,
+              size: size,
+              checksumValue: checksumValue,
+            )) {
+          return false;
+        }
+        return _resumeStableOutgoingTransfer(
+          existingTransfer,
+          existingMessage,
+          intentEpoch: intentEpoch,
+          expectedPublicKeyHash: expectedPublicKeyHash,
+          expectedConnection: expectedConnection,
+        );
+      }
+      if (admission.decision == FileTransferAdmission.missing &&
+          messageId != null) {
+        final invalidated = await _database().fetchFileTransfer(messageId);
+        if (invalidated == null ||
+            invalidated.state != FileTransferState.canceled ||
+            !isRetryableOutgoingInvalidationReason(invalidated.lastError) ||
+            !_matchesStableOutgoingTransferRecord(
+              transfer: invalidated,
+              peerId: peerId,
+              sourcePath: sourcePath,
+              size: size,
+              checksumValue: checksumValue,
+            )) {
+          return false;
+        }
+        admission = await _database().reacquireInvalidatedOutgoingFileTransfer(
+          messageId,
+          expectedPublicKeyHash: expectedPublicKeyHash ?? '',
+          nextState: _currentConnectionBinding(peerId) == null
+              ? FileTransferState.waitingReconnect
+              : FileTransferState.negotiating,
+          replacementMessage: draft,
+        );
+      }
       if (admission.decision != FileTransferAdmission.admitted) {
-        _notify('文件传输队列已满');
+        if (admission.decision == FileTransferAdmission.peerLimit ||
+            admission.decision == FileTransferAdmission.globalLimit) {
+          _notify('文件传输队列已满');
+        }
         return false;
       }
       final message = admission.message!;
       _dispatchTransferData(admission.transfer!);
       _dispatchOutgoingMessage(message);
-      return _sendFileTransferV3OfferTo(
+      if (_blockedOutgoingPeers.contains(peerId) ||
+          (_outgoingIntentEpochs[peerId] ?? 0) != intentEpoch ||
+          !_matchesExpectedIdentity(
+            _currentConnectionBinding(peerId),
+            expectedPublicKeyHash: expectedPublicKeyHash,
+            requiredConnection: expectedConnection,
+          )) {
+        return false;
+      }
+      final offerFailed = !await _offerOnCurrentConnection(
         peerId,
         message,
-        connection: connection,
+        expectedPublicKeyHash: expectedPublicKeyHash,
+        requiredConnection: expectedConnection,
       );
+      if (offerFailed) {
+        try {
+          await _updateTransfer(
+            message.uuid,
+            state: FileTransferState.waitingReconnect,
+            lastError: '',
+          );
+        } catch (error) {
+          _logFailure(
+            FileTransferDiagnosticKind.outgoingFailed,
+            error,
+            direction: FileTransferDirection.outgoing,
+          );
+        }
+      }
+      // Admission transfers ownership of the source to the durable queue.
+      // Initial wire delivery may fail, but reconnect recovery will retry it.
+      return true;
     });
+  }
+
+  bool _matchesStableOutgoingTransfer({
+    required FileTransferData transfer,
+    required MessageData message,
+    required String peerId,
+    required String sourcePath,
+    required String fileName,
+    int? size,
+    String? checksumValue,
+  }) {
+    if (!_matchesStableOutgoingTransferRecord(
+          transfer: transfer,
+          peerId: peerId,
+          sourcePath: sourcePath,
+          size: size,
+          checksumValue: checksumValue,
+        ) ||
+        message.receiver != peerId ||
+        message.type != MessageEnum.File ||
+        message.path != sourcePath ||
+        message.name != fileName ||
+        message.size != transfer.size ||
+        message.uuid != transfer.transferId) {
+      return false;
+    }
+    try {
+      final metadata = FileTransferV3Metadata.parseOffer(
+        message.content,
+        size: message.size,
+      );
+      return metadata.checksumAlgorithm == transfer.checksumAlgorithm &&
+          metadata.checksumValue == transfer.checksumValue;
+    } on FileTransferV3MetadataException {
+      return false;
+    }
+  }
+
+  bool _matchesStableOutgoingTransferRecord({
+    required FileTransferData transfer,
+    required String peerId,
+    required String sourcePath,
+    int? size,
+    String? checksumValue,
+  }) {
+    return transfer.direction == FileTransferDirection.outgoing &&
+        transfer.peerUid == peerId &&
+        transfer.transferId == transfer.messageUuid &&
+        transfer.finalPath == sourcePath &&
+        (size == null || transfer.size == size) &&
+        transfer.checksumAlgorithm == fileTransferV3ChecksumAlgorithm &&
+        (checksumValue == null || transfer.checksumValue == checksumValue);
+  }
+
+  Future<bool> _resumeStableOutgoingTransfer(
+    FileTransferData transfer,
+    MessageData message, {
+    required int intentEpoch,
+    String? expectedPublicKeyHash,
+    TransferConnectionBinding? expectedConnection,
+  }) async {
+    if (transfer.state == FileTransferState.completed ||
+        transfer.state == FileTransferState.transferring ||
+        transfer.state == FileTransferState.verifying) {
+      return true;
+    }
+    var current = transfer;
+    if (current.state == FileTransferState.canceled) {
+      if (!isRetryableOutgoingInvalidationReason(current.lastError)) {
+        return true;
+      }
+      if (expectedPublicKeyHash == null) {
+        return false;
+      }
+      final admission = await _database()
+          .reacquireInvalidatedOutgoingFileTransfer(
+            current.transferId,
+            expectedPublicKeyHash: expectedPublicKeyHash,
+            nextState: _currentConnectionBinding(current.peerUid) == null
+                ? FileTransferState.waitingReconnect
+                : FileTransferState.negotiating,
+          );
+      if (admission.decision != FileTransferAdmission.admitted) {
+        if (admission.decision == FileTransferAdmission.peerLimit ||
+            admission.decision == FileTransferAdmission.globalLimit) {
+          _notify('文件传输队列已满');
+        }
+        return false;
+      }
+      current = admission.transfer ?? current;
+      message = admission.message ?? message;
+      _dispatchTransferData(current);
+    }
+    if (current.state == FileTransferState.failed) {
+      final admission = await _database().reacquireFileTransferCapacity(
+        current.transferId,
+        nextState: _currentConnectionBinding(current.peerUid) == null
+            ? FileTransferState.waitingReconnect
+            : FileTransferState.negotiating,
+      );
+      if (admission != FileTransferAdmission.admitted &&
+          admission != FileTransferAdmission.existing) {
+        return true;
+      }
+      current =
+          await _database().fetchFileTransfer(current.transferId) ?? current;
+    }
+    if (_blockedOutgoingPeers.contains(current.peerUid) ||
+        (_outgoingIntentEpochs[current.peerUid] ?? 0) != intentEpoch ||
+        !_matchesExpectedIdentity(
+          _currentConnectionBinding(current.peerUid),
+          expectedPublicKeyHash: expectedPublicKeyHash,
+          requiredConnection: expectedConnection,
+        )) {
+      return false;
+    }
+    final offerFailed = !await _offerOnCurrentConnection(
+      current.peerUid,
+      message,
+      expectedPublicKeyHash: expectedPublicKeyHash,
+      requiredConnection: expectedConnection,
+    );
+    if (offerFailed) {
+      await _updateTransfer(
+        current.transferId,
+        state: FileTransferState.waitingReconnect,
+        lastError: '',
+      );
+    }
+    return true;
+  }
+
+  Future<bool> _offerOnCurrentConnection(
+    String peerId,
+    MessageData message, {
+    String? expectedPublicKeyHash,
+    TransferConnectionBinding? requiredConnection,
+  }) async {
+    final attemptedConnections = <TransferConnectionBinding>{};
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final connection = _currentConnectionBinding(peerId);
+      if (connection == null ||
+          !attemptedConnections.add(connection) ||
+          !_matchesExpectedIdentity(
+            connection,
+            expectedPublicKeyHash: expectedPublicKeyHash,
+            requiredConnection: requiredConnection,
+          )) {
+        return false;
+      }
+      try {
+        if (await _sendFileTransferV3OfferTo(
+          peerId,
+          message,
+          connection: connection,
+        )) {
+          return true;
+        }
+      } catch (error) {
+        _logFailure(
+          FileTransferDiagnosticKind.outgoingFailed,
+          error,
+          direction: FileTransferDirection.outgoing,
+        );
+      }
+    }
+    return false;
+  }
+
+  bool _matchesExpectedIdentity(
+    TransferConnectionBinding? connection, {
+    required String? expectedPublicKeyHash,
+    required TransferConnectionBinding? requiredConnection,
+  }) {
+    if (expectedPublicKeyHash == null) {
+      return true;
+    }
+    return connection != null &&
+        requiredConnection != null &&
+        connection == requiredConnection &&
+        _authenticatedIdentityHashForConnection(connection) ==
+            expectedPublicKeyHash;
   }
 
   /// fileOffer/fileData/fileReady/fileAck/fileComplete/fileCancel/fileError
@@ -729,9 +1187,7 @@ class FileTransferEngine {
         final existing = await _database().fetchFileTransfer(frame.transferId);
         requireCurrent();
         if (existing != null && existing.peerUid != authenticatedPeerId) {
-          throw const WireInputRejected(
-            WireInputReason.transferPeerMismatch,
-          );
+          throw const WireInputRejected(WireInputReason.transferPeerMismatch);
         }
         if (existing != null &&
             existing.direction != FileTransferDirection.incoming) {
@@ -742,9 +1198,7 @@ class FileTransferEngine {
         if (existing != null &&
             (existing.messageUuid != message.uuid ||
                 existing.size != message.size)) {
-          throw const WireInputRejected(
-            WireInputReason.transferFrameMismatch,
-          );
+          throw const WireInputRejected(WireInputReason.transferFrameMismatch);
         }
         final database = _database();
         final draft = _incomingTransferDraft(message, metadata);
@@ -794,7 +1248,7 @@ class FileTransferEngine {
           );
           invariantStarted =
               repaired.decision != FileTransferAdmission.existing &&
-                  repaired.transfer != null;
+              repaired.transfer != null;
           transfer = repaired.transfer;
         }
         if (transfer == null) {
@@ -808,9 +1262,9 @@ class FileTransferEngine {
         }
         final shouldDispatchPersistedMessage =
             claimAdmission?.decision == FileTransferAdmission.admitted ||
-                (replay.decision == WireMessageReplayDecision.duplicate &&
-                    transfer.tempPath.isEmpty &&
-                    !isTerminalFileTransferState(transfer.state));
+            (replay.decision == WireMessageReplayDecision.duplicate &&
+                transfer.tempPath.isEmpty &&
+                !isTerminalFileTransferState(transfer.state));
         await _handleFileTransferV3Offer(
           message,
           persistedMessage: replay.message!,
@@ -826,11 +1280,10 @@ class FileTransferEngine {
           throw const WireInputRejected(WireInputReason.transferNotFound);
         }
         if (transfer.peerUid != authenticatedPeerId) {
-          throw const WireInputRejected(
-            WireInputReason.transferPeerMismatch,
-          );
+          throw const WireInputRejected(WireInputReason.transferPeerMismatch);
         }
-        final expectedOffset = _receivingTransferOffsets[transfer.transferId] ??
+        final expectedOffset =
+            _receivingTransferOffsets[transfer.transferId] ??
             transfer.committedBytes;
         final expectedSequence =
             _receivingTransferSequences[transfer.transferId] ?? 0;
@@ -840,7 +1293,8 @@ class FileTransferEngine {
           authenticatedPeerId: authenticatedPeerId,
           expectedOffset: expectedOffset,
           expectedSequence: expectedSequence,
-          isActive: _transferRuntime.activeIncomingFor(transfer.peerUid) ==
+          isActive:
+              _transferRuntime.activeIncomingFor(transfer.peerUid) ==
               transfer.transferId,
         );
         if (validation.isIgnored) {
@@ -849,10 +1303,7 @@ class FileTransferEngine {
         if (validation.isDuplicate) {
           _receivingTransferSequences[transfer.transferId] =
               expectedSequence + 1;
-          await _sendFileTransferV3Ack(
-            transfer,
-            transfer.committedBytes,
-          );
+          await _sendFileTransferV3Ack(transfer, transfer.committedBytes);
           return;
         }
         validation.requireAccepted();
@@ -869,10 +1320,7 @@ class FileTransferEngine {
           if (error is WireInputRejected) {
             rethrow;
           }
-          await _handleIncomingFileTransferV3Error(
-            frame.transferId,
-            error,
-          );
+          await _handleIncomingFileTransferV3Error(frame.transferId, error);
         }
         break;
       case WhisperFrameType.fileReady:
@@ -887,16 +1335,15 @@ class FileTransferEngine {
           frame: frame,
           control: control,
         ).requireAccepted();
-        final transfer =
-            await _database().fetchFileTransfer(control.transferId);
+        final transfer = await _database().fetchFileTransfer(
+          control.transferId,
+        );
         requireCurrent();
         if (transfer == null) {
           throw const WireInputRejected(WireInputReason.transferNotFound);
         }
         if (transfer.peerUid != authenticatedPeerId) {
-          throw const WireInputRejected(
-            WireInputReason.transferPeerMismatch,
-          );
+          throw const WireInputRejected(WireInputReason.transferPeerMismatch);
         }
         final validation = WireInputPolicy.validateFileControl(
           frame: frame,
@@ -918,15 +1365,9 @@ class FileTransferEngine {
             rethrow;
           }
           if (transfer.direction == FileTransferDirection.incoming) {
-            await _handleIncomingFileTransferV3Error(
-              control.transferId,
-              error,
-            );
+            await _handleIncomingFileTransferV3Error(control.transferId, error);
           } else {
-            await _handleOutgoingFileTransferV3Error(
-              control.transferId,
-              error,
-            );
+            await _handleOutgoingFileTransferV3Error(control.transferId, error);
           }
         }
         break;
@@ -940,10 +1381,42 @@ class FileTransferEngine {
     _transferRuntime.clearPeer(peerId);
   }
 
-  bool _matchesIncomingFileOffer(
-    MessageData persisted,
-    MessageData incoming,
-  ) {
+  Future<void> invalidateOutgoingTransfersForPeer(
+    String peerId, {
+    required String reason,
+    bool revokeDeviceTrust = false,
+  }) async {
+    if (peerId.isEmpty) {
+      return;
+    }
+    _blockedOutgoingPeers.add(peerId);
+    _outgoingIntentEpochs[peerId] = (_outgoingIntentEpochs[peerId] ?? 0) + 1;
+    final canceled = await _sendFileLock.synchronized(
+      () => _database().cancelOutgoingTransfersForPeer(
+        peerId,
+        reason: reason,
+        revokeDeviceTrust: revokeDeviceTrust,
+      ),
+    );
+    for (final transfer in canceled) {
+      _ackWatchdog.cancel(transfer.transferId);
+      _outgoingWindowEndOffsets.remove(transfer.transferId);
+      _outgoingTransferSequences.remove(transfer.transferId);
+      _outgoingConnectionBindings.remove(transfer.transferId);
+      _transferRuntime.release(
+        peerId: peerId,
+        transferId: transfer.transferId,
+        direction: FileTransferDirection.outgoing,
+      );
+      _dispatchTransferData(transfer);
+    }
+  }
+
+  void allowOutgoingTransfersForPeer(String peerId) {
+    _blockedOutgoingPeers.remove(peerId);
+  }
+
+  bool _matchesIncomingFileOffer(MessageData persisted, MessageData incoming) {
     return persisted.sender == incoming.sender &&
         persisted.receiver == incoming.receiver &&
         persisted.name == incoming.name &&
@@ -1008,13 +1481,15 @@ class FileTransferEngine {
     final affected = await _database().updateFileTransfer(
       transferId,
       state: state == null ? const Value.absent() : Value(state),
-      committedBytes:
-          committedBytes == null ? const Value.absent() : Value(committedBytes),
+      committedBytes: committedBytes == null
+          ? const Value.absent()
+          : Value(committedBytes),
       lastError: lastError == null ? const Value.absent() : Value(lastError),
       finalPath: finalPath == null ? const Value.absent() : Value(finalPath),
       tempPath: tempPath == null ? const Value.absent() : Value(tempPath),
-      checksumValue:
-          checksumValue == null ? const Value.absent() : Value(checksumValue),
+      checksumValue: checksumValue == null
+          ? const Value.absent()
+          : Value(checksumValue),
       updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
     );
     if (affected != 1) return null;
@@ -1029,6 +1504,15 @@ class FileTransferEngine {
       return null;
     }
     _dispatchTransferData(updated);
+    if (updated.direction == FileTransferDirection.outgoing &&
+        (updated.state == FileTransferState.completed ||
+            updated.state == FileTransferState.canceled)) {
+      if (isAndroidSystemShareStagedUri(updated.finalPath)) {
+        await releaseAndroidSystemShareStagedItem(updated.finalPath);
+      } else {
+        await releaseStagedFolderTransferArchive(updated.finalPath);
+      }
+    }
     return updated;
   }
 
@@ -1040,7 +1524,8 @@ class FileTransferEngine {
       if (isTerminalFileTransferState(item.state)) {
         continue;
       }
-      final connection = _outgoingConnectionBindings[item.transferId] ??
+      final connection =
+          _outgoingConnectionBindings[item.transferId] ??
           TransferConnectionBinding(peerId: peerId, generation: -1);
       await _runTransferOperation<void>(
         item.transferId,
@@ -1052,10 +1537,7 @@ class FileTransferEngine {
           }
           _ackWatchdog.cancel(current.transferId);
           if (current.direction == FileTransferDirection.incoming) {
-            await _clearActiveIncomingTransfer(
-              current.transferId,
-              flush: true,
-            );
+            await _clearActiveIncomingTransfer(current.transferId, flush: true);
           }
           _outgoingWindowEndOffsets.remove(current.transferId);
           _outgoingTransferSequences.remove(current.transferId);
@@ -1082,8 +1564,9 @@ class FileTransferEngine {
     // DB 里的 offer content 是创建时序列化的:重发/续传前把节奏字段
     // (chunkSize/windowSize)刷新为当前常量,身份字段(校验和)保持,
     // 否则升级前中断的传输会被对端以 invalid_metadata 永久拒绝。
-    final refreshedContent =
-        FileTransferV3Metadata.refreshOfferContent(message.content);
+    final refreshedContent = FileTransferV3Metadata.refreshOfferContent(
+      message.content,
+    );
     return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
@@ -1092,12 +1575,16 @@ class FileTransferEngine {
         offset: 0,
         sequence: 0,
         payload: Uint8List.fromList(
-          utf8.encode(encodeWireMessage(message.copyWith(
-            path: '',
-            content: refreshedContent == null
-                ? const Value.absent()
-                : Value<String?>(refreshedContent),
-          ))),
+          utf8.encode(
+            encodeWireMessage(
+              message.copyWith(
+                path: '',
+                content: refreshedContent == null
+                    ? const Value.absent()
+                    : Value<String?>(refreshedContent),
+              ),
+            ),
+          ),
         ),
       ),
       connection: connection,
@@ -1134,7 +1621,8 @@ class FileTransferEngine {
     WhisperFrameV3 frame, {
     TransferConnectionBinding? connection,
   }) async {
-    connection ??= _operationConnectionBindings[frame.transferId] ??
+    connection ??=
+        _operationConnectionBindings[frame.transferId] ??
         _outgoingConnectionBindings[frame.transferId] ??
         _incomingConnectionBindings[frame.transferId] ??
         _currentConnectionBinding(peerId);
@@ -1239,10 +1727,7 @@ class FileTransferEngine {
           requireCurrent: requireCurrent,
         );
         try {
-          await _sendFileOfferError(
-            message,
-            FileTransferFailureReason.storage,
-          );
+          await _sendFileOfferError(message, FileTransferFailureReason.storage);
         } finally {
           await _releaseIncomingAndStartNext(
             transfer,
@@ -1481,10 +1966,7 @@ class FileTransferEngine {
         );
         break;
       case FileTransferV3Action.ack:
-        await _handleFileTransferV3Ack(
-          control,
-          requireCurrent: requireCurrent,
-        );
+        await _handleFileTransferV3Ack(control, requireCurrent: requireCurrent);
         break;
       case FileTransferV3Action.complete:
         await _handleFileTransferV3Complete(
@@ -1535,8 +2017,9 @@ class FileTransferEngine {
       throw const WireInputRejected(WireInputReason.transferOffsetInvalid);
     }
     _ackWatchdog.cancel(transfer.transferId);
-    final message =
-        await _database().fetchAssociatedFileTransferMessage(transfer);
+    final message = await _database().fetchAssociatedFileTransferMessage(
+      transfer,
+    );
     requireCurrent();
     if (message == null) {
       return;
@@ -1618,17 +2101,10 @@ class FileTransferEngine {
       lastError: '',
     );
     if (updated == null) {
-      await _releaseOutgoingAndStartNext(
-        transfer,
-        connection: connection,
-      );
+      await _releaseOutgoingAndStartNext(transfer, connection: connection);
       return;
     }
-    await _sendFileTransferV3WindowSafely(
-      updated,
-      message,
-      offset: offset,
-    );
+    await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
   }
 
   Future<void> _failOutgoingFileTransferV3(
@@ -1640,7 +2116,8 @@ class FileTransferEngine {
       state: FileTransferState.failed,
       lastError: failureReason.wireCode,
     );
-    final connection = _outgoingConnectionBindings[transfer.transferId] ??
+    final connection =
+        _outgoingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
     try {
       await _sendFileTransferV3ControlTo(
@@ -1654,10 +2131,7 @@ class FileTransferEngine {
         ),
       );
     } finally {
-      await _releaseOutgoingAndStartNext(
-        transfer,
-        connection: connection,
-      );
+      await _releaseOutgoingAndStartNext(transfer, connection: connection);
       _notify(failureReason.wireCode);
     }
   }
@@ -1691,17 +2165,10 @@ class FileTransferEngine {
     try {
       return await _runTransferSend<int?>(
         transfer.transferId,
-        () => _sendFileTransferV3Window(
-          transfer,
-          message,
-          offset: offset,
-        ),
+        () => _sendFileTransferV3Window(transfer, message, offset: offset),
       );
     } catch (error) {
-      await _handleOutgoingFileTransferV3Error(
-        transfer.transferId,
-        error,
-      );
+      await _handleOutgoingFileTransferV3Error(transfer.transferId, error);
       return null;
     }
   }
@@ -1726,8 +2193,10 @@ class FileTransferEngine {
     }
     final source = _transferSourceForMessage(message, transfer);
     final durableOffset = offset;
-    final windowEnd =
-        math.min(transfer.size, durableOffset + fileTransferV3WindowSize);
+    final windowEnd = math.min(
+      transfer.size,
+      durableOffset + fileTransferV3WindowSize,
+    );
     var sequence = _outgoingTransferSequences[transfer.transferId] ?? 0;
     var cursor =
         _outgoingWindowEndOffsets[transfer.transferId] ?? durableOffset;
@@ -1739,10 +2208,13 @@ class FileTransferEngine {
           transfer.transferId) {
         return null;
       }
-      final expectedWindow =
-          armWatchdog ? _ackWatchdog.currentWindow(transfer.transferId) : null;
-      final length =
-          math.min(fileTransferV3FramePayloadSize, windowEnd - cursor);
+      final expectedWindow = armWatchdog
+          ? _ackWatchdog.currentWindow(transfer.transferId)
+          : null;
+      final length = math.min(
+        fileTransferV3FramePayloadSize,
+        windowEnd - cursor,
+      );
       final payload = await source.readRange(cursor, length);
       if (expectedWindow != null &&
           !identical(
@@ -1862,8 +2334,9 @@ class FileTransferEngine {
                 timeout.transferId) {
           return null;
         }
-        final transfer =
-            await _database().fetchFileTransfer(timeout.transferId);
+        final transfer = await _database().fetchFileTransfer(
+          timeout.transferId,
+        );
         if (transfer == null ||
             transfer.peerUid != timeout.connection.peerId ||
             transfer.direction != FileTransferDirection.outgoing ||
@@ -1927,7 +2400,8 @@ class FileTransferEngine {
         transfer.transferId) {
       return;
     }
-    final expectedOffset = _receivingTransferOffsets[transfer.transferId] ??
+    final expectedOffset =
+        _receivingTransferOffsets[transfer.transferId] ??
         transfer.committedBytes;
     if (frame.offset != expectedOffset) {
       final durableOffset = await _flushIncomingFileTransferV3(
@@ -2039,7 +2513,8 @@ class FileTransferEngine {
     String transferId,
     Object error,
   ) async {
-    final transfer = _receivingTransfers[transferId] ??
+    final transfer =
+        _receivingTransfers[transferId] ??
         await _database().fetchFileTransfer(transferId);
     if (transfer == null ||
         transfer.direction != FileTransferDirection.incoming ||
@@ -2181,8 +2656,9 @@ class FileTransferEngine {
       _outgoingWindowEndOffsets.remove(control.transferId);
       return;
     }
-    final message =
-        await _database().fetchAssociatedFileTransferMessage(updated);
+    final message = await _database().fetchAssociatedFileTransferMessage(
+      updated,
+    );
     if (message == null) {
       return;
     }
@@ -2198,7 +2674,8 @@ class FileTransferEngine {
     TransferConnectionBinding? connection,
     bool startNext = true,
   }) async {
-    connection ??= _outgoingConnectionBindings[transfer.transferId] ??
+    connection ??=
+        _outgoingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
     _ackWatchdog.cancel(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
@@ -2243,8 +2720,9 @@ class FileTransferEngine {
         );
         continue;
       }
-      final message =
-          await _database().fetchAssociatedFileTransferMessage(transfer);
+      final message = await _database().fetchAssociatedFileTransferMessage(
+        transfer,
+      );
       if (message == null) {
         _transferRuntime.release(
           peerId: peerId,
@@ -2269,11 +2747,7 @@ class FileTransferEngine {
         continue;
       }
       _outgoingConnectionBindings[transferId] = connection;
-      await _sendFileTransferV3WindowSafely(
-        updated,
-        message,
-        offset: offset,
-      );
+      await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
       return;
     }
   }
@@ -2355,7 +2829,8 @@ class FileTransferEngine {
       var prefixMatches = false;
       try {
         final tempFile = await _validatedIncomingTempFile(existing);
-        prefixMatches = await tempFile.exists() &&
+        prefixMatches =
+            await tempFile.exists() &&
             await tempFile.length() == control.durableOffset;
       } catch (_) {
         prefixMatches = false;
@@ -2507,8 +2982,9 @@ class FileTransferEngine {
     }
     try {
       try {
-        final message =
-            await _database().fetchAssociatedFileTransferMessage(transfer);
+        final message = await _database().fetchAssociatedFileTransferMessage(
+          transfer,
+        );
         if (message == null) {
           throw StateError('incoming file message is missing');
         }
@@ -2642,15 +3118,14 @@ class FileTransferEngine {
     );
     await _releaseOutgoingAndStartNext(
       transfer,
-      connection: _outgoingConnectionBindings[transfer.transferId] ??
+      connection:
+          _outgoingConnectionBindings[transfer.transferId] ??
           _operationConnectionBindings[transfer.transferId],
     );
     _notify(failureReason.wireCode);
   }
 
-  Future<void> _failStaleIncomingQueueEntry(
-    FileTransferData transfer,
-  ) async {
+  Future<void> _failStaleIncomingQueueEntry(FileTransferData transfer) async {
     final failed = await _database().failRecoverableFileTransfer(
       transferId: transfer.transferId,
       peerUid: transfer.peerUid,
@@ -2688,8 +3163,9 @@ class FileTransferEngine {
         continue;
       }
       final attemptedTransferIds = <String>{...excludedTransferIds};
-      var preferredConnection =
-          connection?.peerId == candidatePeerId ? connection : null;
+      var preferredConnection = connection?.peerId == candidatePeerId
+          ? connection
+          : null;
       while (true) {
         final queuedId = _transferRuntime.claimNext(
           peerId: candidatePeerId,
@@ -2818,8 +3294,9 @@ class FileTransferEngine {
                   item.transferId) {
             return;
           }
-          final unclaimed =
-              await _database().fetchFileTransfer(item.transferId);
+          final unclaimed = await _database().fetchFileTransfer(
+            item.transferId,
+          );
           if (unclaimed != null &&
               !isTerminalFileTransferState(unclaimed.state)) {
             await _failStaleIncomingQueueEntry(unclaimed);
@@ -2842,11 +3319,9 @@ class FileTransferEngine {
           item.state == FileTransferState.canceled) {
         continue;
       }
-      final connection = _outgoingConnectionBindings[item.transferId] ??
-          TransferConnectionBinding(
-            peerId: item.peerUid,
-            generation: -1,
-          );
+      final connection =
+          _outgoingConnectionBindings[item.transferId] ??
+          TransferConnectionBinding(peerId: item.peerUid, generation: -1);
       await _runTransferOperation<void>(
         item.transferId,
         connection: connection,
@@ -2920,12 +3395,10 @@ class FileTransferEngine {
     TransferConnectionBinding? connection,
     bool startNext = true,
   }) async {
-    connection ??= _incomingConnectionBindings[transfer.transferId] ??
+    connection ??=
+        _incomingConnectionBindings[transfer.transferId] ??
         _operationConnectionBindings[transfer.transferId];
-    await _clearActiveIncomingTransfer(
-      transfer.transferId,
-      flush: flush,
-    );
+    await _clearActiveIncomingTransfer(transfer.transferId, flush: flush);
     final released = _transferRuntime.release(
       peerId: transfer.peerUid,
       transferId: transfer.transferId,
@@ -2980,8 +3453,9 @@ class FileTransferEngine {
             item.state == FileTransferState.canceled) {
           continue;
         }
-        final message =
-            await _database().fetchAssociatedFileTransferMessage(item);
+        final message = await _database().fetchAssociatedFileTransferMessage(
+          item,
+        );
         if (message != null) {
           final sent = await _sendFileTransferV3OfferTo(
             item.peerUid,

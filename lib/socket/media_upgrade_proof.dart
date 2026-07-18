@@ -33,8 +33,27 @@ final class MediaUpgradeClientContext {
   final String peerId;
   final Duration timeout;
   final Uint8List _mediaMacKey;
+  bool _destroyed = false;
 
-  Uint8List get mediaMacKey => Uint8List.fromList(_mediaMacKey);
+  T withMediaMacKey<T>(T Function(Uint8List key) action) {
+    if (_destroyed) {
+      throw StateError('media upgrade context has been destroyed');
+    }
+    final scopedKey = Uint8List.fromList(_mediaMacKey);
+    try {
+      return action(scopedKey);
+    } finally {
+      scopedKey.fillRange(0, scopedKey.length, 0);
+    }
+  }
+
+  void destroy() {
+    if (_destroyed) {
+      return;
+    }
+    _destroyed = true;
+    _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
+  }
 }
 
 final class MediaUpgradeChallenge {
@@ -46,8 +65,8 @@ final class MediaUpgradeChallenge {
     required this.nonce,
     required this.peerId,
     required this.connectionGeneration,
-  })  : route = normalizeMediaRoute(route),
-        namespace = normalizeMediaNamespace(namespace, route: route) {
+  }) : route = normalizeMediaRoute(route),
+       namespace = normalizeMediaNamespace(namespace, route: route) {
     if (sessionId.isEmpty || peerId.isEmpty || connectionGeneration < 0) {
       throw const FormatException('invalid media upgrade challenge context');
     }
@@ -107,15 +126,15 @@ final class MediaUpgradeChallenge {
   final int connectionGeneration;
 
   String toWire() => jsonEncode(<String, Object>{
-        'type': mediaUpgradeChallengeType,
-        'route': route,
-        'namespace': namespace,
-        'session': sessionId,
-        'tokenHash': tokenHash,
-        'nonce': nonce,
-        'peer': peerId,
-        'generation': connectionGeneration,
-      });
+    'type': mediaUpgradeChallengeType,
+    'route': route,
+    'namespace': namespace,
+    'session': sessionId,
+    'tokenHash': tokenHash,
+    'nonce': nonce,
+    'peer': peerId,
+    'generation': connectionGeneration,
+  });
 }
 
 String mediaUpgradeTokenHash(String token) =>
@@ -128,9 +147,10 @@ String createMediaUpgradeProof({
   if (mediaMacKey.length != 32) {
     throw ArgumentError.value(mediaMacKey.length, 'mediaMacKey.length');
   }
-  final mac = Hmac(sha256, mediaMacKey).convert(
-    _mediaUpgradeProofTranscript(challenge),
-  );
+  final mac = Hmac(
+    sha256,
+    mediaMacKey,
+  ).convert(_mediaUpgradeProofTranscript(challenge));
   return _encodeCanonical32Bytes(mac.bytes);
 }
 
@@ -176,10 +196,7 @@ bool verifyMediaUpgradeProof({
     return false;
   }
   final expected = _decodeCanonical32Bytes(
-    createMediaUpgradeProof(
-      challenge: challenge,
-      mediaMacKey: mediaMacKey,
-    ),
+    createMediaUpgradeProof(challenge: challenge, mediaMacKey: mediaMacKey),
     field: 'proof',
   );
   return constantTimeBytesEqual(supplied, expected);
@@ -248,8 +265,8 @@ final class _MediaUpgradeClientHandshake {
     required this.tokenHash,
     required Uint8List mediaMacKey,
     required Duration timeout,
-  })  : _channel = channel,
-        _mediaMacKey = Uint8List.fromList(mediaMacKey) {
+  }) : _channel = channel,
+       _mediaMacKey = Uint8List.fromList(mediaMacKey) {
     _subscription = channel.stream.listen(
       _handleMessage,
       onError: _handleError,
@@ -312,6 +329,7 @@ final class _MediaUpgradeClientHandshake {
       _authenticated = true;
       _timer?.cancel();
       _timer = null;
+      _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
       _result.complete(
         _ForwardedWebSocketChannel(_channel, _authenticatedMessages.stream),
       );
@@ -341,6 +359,7 @@ final class _MediaUpgradeClientHandshake {
       return;
     }
     _failed = true;
+    _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
     _timer?.cancel();
     _timer = null;
     if (!_result.isCompleted) {
@@ -373,12 +392,12 @@ final class MediaUpgradeServerSession {
     required Duration timeout,
     required bool Function(WebSocketChannel channel) onAuthenticated,
     required void Function() onProvisionalFinished,
-  })  : _channel = channel,
-        _challenge = challenge,
-        _mediaMacKey = Uint8List.fromList(mediaMacKey),
-        _timeout = timeout,
-        _onAuthenticated = onAuthenticated,
-        _onProvisionalFinished = onProvisionalFinished {
+  }) : _channel = channel,
+       _challenge = challenge,
+       _mediaMacKey = Uint8List.fromList(mediaMacKey),
+       _timeout = timeout,
+       _onAuthenticated = onAuthenticated,
+       _onProvisionalFinished = onProvisionalFinished {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout');
     }
@@ -488,6 +507,7 @@ final class MediaUpgradeServerSession {
       return;
     }
     _finished = true;
+    _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
     _onProvisionalFinished();
   }
 }
@@ -531,7 +551,8 @@ Uint8List _mediaUpgradeProofTranscript(MediaUpgradeChallenge challenge) {
   if (fields.any((field) => field.length > 0xffff)) {
     throw const FormatException('media upgrade proof context is too long');
   }
-  final length = domain.length +
+  final length =
+      domain.length +
       fields.fold<int>(0, (total, field) => total + 2 + field.length) +
       8;
   final transcript = Uint8List(length);

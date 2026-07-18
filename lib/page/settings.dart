@@ -68,6 +68,7 @@ class SettingsPresentation {
     required this.audioSharePlaybackGain,
     required this.remoteInputScrollMultiplier,
     required this.themeMode,
+    this.clipboardAutoSync = false,
     this.isAndroid = false,
     this.isDesktop = true,
     this.isMobile = false,
@@ -87,6 +88,7 @@ class SettingsPresentation {
   final double audioSharePlaybackGain;
   final double remoteInputScrollMultiplier;
   final ThemeMode themeMode;
+  final bool clipboardAutoSync;
   final bool isAndroid;
   final bool isDesktop;
   final bool isMobile;
@@ -173,6 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoConnect = true;
   bool _launchAtStartup = false;
   bool _androidBackgroundKeepAlive = true;
+  bool _clipboardAutoSync = false;
   double _audioSharePlaybackGain = 1.0;
   double _remoteInputScrollMultiplier = 1.0;
   ThemeMode _themeMode = ThemeMode.system;
@@ -212,6 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final listenAndroid = await LocalSetting().isListenAndroid();
     final ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
     final autoConnect = await LocalSetting().autoConnectEnabled();
+    final clipboardAutoSync = await LocalSetting().clipboardAutoSync();
     final launchAtStartup = await _loadLaunchAtStartup();
     final androidBackgroundKeepAlive =
         await LocalSetting().androidBackgroundKeepAlive();
@@ -230,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       listenAndroidNotifications: listenAndroid,
       ignoreAndroidNotifications: ignoreAndroid,
       autoConnect: autoConnect,
+      clipboardAutoSync: clipboardAutoSync,
       launchAtStartup: launchAtStartup,
       androidBackgroundKeepAlive: androidBackgroundKeepAlive,
       audioSharePlaybackGain: audioSharePlaybackGain,
@@ -265,6 +270,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ignoreAndroid = presentation.ignoreAndroidNotifications;
         _listenAndroid = presentation.listenAndroidNotifications;
         _autoConnect = presentation.autoConnect;
+        _clipboardAutoSync = presentation.clipboardAutoSync;
         _launchAtStartup = presentation.launchAtStartup;
         _androidBackgroundKeepAlive = presentation.androidBackgroundKeepAlive;
         _audioSharePlaybackGain = presentation.audioSharePlaybackGain;
@@ -506,6 +512,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onChanged: (bool value) async {
                             await LocalSetting().updateClipboard(value);
                             await _refreshDevice();
+                          },
+                        ),
+                      ),
+                      _buildSettingItem(
+                        l10n.clipboardAutoSync,
+                        Icon(
+                          Icons.sync_alt_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: l10n.clipboardAutoSyncDesc,
+                        trailing: CupertinoSwitch(
+                          value: _clipboardAutoSync,
+                          onChanged: (bool value) async {
+                            await LocalSetting().updateClipboardAutoSync(value);
+                            if (mounted) {
+                              setState(() => _clipboardAutoSync = value);
+                            }
                           },
                         ),
                       ),

@@ -22,10 +22,7 @@ void main() {
 
   test('client heartbeat timer captures its authenticated peer', () {
     expect(source, contains('final peerId = session.remotePeerId'));
-    expect(
-      source,
-      contains('_heartBeat(peerId: peerId, sink: channelSink)'),
-    );
+    expect(source, contains('_heartBeat(peerId: peerId, sink: channelSink)'));
     expect(source, isNot(contains('_heartBeat(sink: channelSink)')));
   });
 
@@ -65,17 +62,18 @@ void main() {
   });
 
   test(
-      'authenticated control routing never falls back to another selected peer',
-      () {
-    final start = source.indexOf('Future<void> _listen(');
-    final end = source.indexOf('MessageData _buildMessage(', start);
-    expect(start, greaterThanOrEqualTo(0));
-    expect(end, greaterThan(start));
-    final listen = source.substring(start, end);
+    'authenticated control routing never falls back to another selected peer',
+    () {
+      final start = source.indexOf('Future<void> _listen(');
+      final end = source.indexOf('MessageData _buildMessage(', start);
+      expect(start, greaterThanOrEqualTo(0));
+      expect(end, greaterThan(start));
+      final listen = source.substring(start, end);
 
-    expect(listen, isNot(contains('?? _selectedRemoteProfile')));
-    expect(listen, contains('_requireRemoteProfileForSession('));
-  });
+      expect(listen, isNot(contains('?? _selectedRemoteProfile')));
+      expect(listen, contains('_requireRemoteProfileForSession('));
+    },
+  );
 
   test('control session ids are bound before coordinator side effects', () {
     expect(source, contains('WireControlSessionRegistry'));
@@ -98,12 +96,12 @@ void main() {
   test('media accept binds one token to authenticated directional keys', () {
     expect(source, contains('_sessionUpgradeTokens.issue('));
     expect(source, contains('mediaMacKey: mediaReceiveKey'));
-    expect(source, contains('mediaSendKey: session.mediaSendKey'));
+    expect(source, contains('withMediaSendKeyAsync('));
     expect(source, contains("route: '/audio'"));
     expect(source, contains("route: '/input'"));
     expect(source, contains('withTransportToken('));
     expect(source, contains('claimValidator: _isExpectedMediaPeerClaim'));
-    expect(source, contains('constantTimeBytesEqual(mediaReceiveKey'));
+    expect(source, contains('withMediaReceiveKey(claim.matchesMediaMacKey)'));
   });
 
   test('terminal controls and lifecycle cleanup release media claims', () {
@@ -118,10 +116,7 @@ void main() {
 
   test('new peer generation revokes only superseded media keys', () {
     expect(source, contains('await _closeSupersededMediaChannels(session);'));
-    expect(
-      source,
-      contains('_audioManager.closeSupersededPeerChannels('),
-    );
+    expect(source, contains('_audioManager.closeSupersededPeerChannels('));
     expect(
       source,
       contains('_remoteInputManager.closeSupersededPeerChannels('),
@@ -147,13 +142,7 @@ void main() {
     expect(end, greaterThan(start));
     final sendGroup = source.substring(start, end);
 
-    expect(
-      sendGroup,
-      contains('acceptedGroup?.groupId != control.groupId'),
-    );
-    expect(
-      sendGroup,
-      contains('acceptedGroup?.streamId != control.streamId'),
-    );
+    expect(sendGroup, contains('acceptedGroup?.groupId != control.groupId'));
+    expect(sendGroup, contains('acceptedGroup?.streamId != control.streamId'));
   });
 }

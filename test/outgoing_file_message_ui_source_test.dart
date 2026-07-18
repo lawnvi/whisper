@@ -12,11 +12,12 @@ void main() {
   }
 
   test('outgoing file messages are dispatched locally before network ack', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendFileTo = methodBody(
       source,
-      'Future<bool> sendFileTo(String peerId, String path)',
+      'Future<bool> sendFileTo(',
       'Future<bool> sendAndroidContentUriTo(',
     );
     final sendAndroidUri = methodBody(
@@ -32,22 +33,20 @@ void main() {
     final persistAndOffer = methodBody(
       source,
       'Future<bool> _persistAndOfferOutgoingTransfer(',
-      'Future<void> handleFrame(',
+      'bool _matchesStableOutgoingTransfer(',
     );
-    final admissionIndex =
-        persistAndOffer.indexOf('await _database().admitFileTransfer(');
-    final dispatchIndex =
-        persistAndOffer.indexOf('_dispatchOutgoingMessage(message)');
-    final sendIndex =
-        persistAndOffer.indexOf('return _sendFileTransferV3OfferTo(');
+    final admissionIndex = persistAndOffer.indexOf(
+      'await _database().admitFileTransfer(',
+    );
+    final dispatchIndex = persistAndOffer.indexOf(
+      '_dispatchOutgoingMessage(message)',
+    );
+    final sendIndex = persistAndOffer.indexOf('_offerOnCurrentConnection(');
 
     expect(admissionIndex, isNonNegative);
     expect(dispatchIndex, greaterThan(admissionIndex));
     expect(sendIndex, greaterThan(dispatchIndex));
-    expect(
-      persistAndOffer.substring(sendIndex),
-      contains('connection: connection'),
-    );
+    expect(persistAndOffer.substring(sendIndex), contains('return true;'));
   });
 
   test('conversation updates an existing message with the same uuid', () {

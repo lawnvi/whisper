@@ -52,6 +52,8 @@
     <true/>
 
     <!-- Permissions -->
+    <key>NSCameraUsageDescription</key>
+    <string>Scan a Whisper pairing code to connect to a nearby device.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>The app needs photo library access so that the user can select photos to share.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

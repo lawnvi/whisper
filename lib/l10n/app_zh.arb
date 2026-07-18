@@ -92,12 +92,17 @@
   "retry": "重试",
   "setting": "设置",
   "sendTips": "发点什么...",
+  "sendFiles": "发送文件",
+  "sendFolder": "发送文件夹（ZIP）",
+  "folderSendFailed": "文件夹打包或发送失败",
   "trust": "自动接入",
   "writeClipboard": "写入剪切板",
   "deleteDevice": "删除设备",
   "serverPort": "服务端口 {port}",
   "serverPortTitle": "服务端口",
   "accessClipboard": "允许访问剪切板",
+  "clipboardAutoSync": "自动同步剪切板",
+  "clipboardAutoSyncDesc": "关闭时仅手动发送；开启后只同步到当前可信设备",
   "doubleClickRmMessage": "双击消息删除",
   "close2tray": "关闭时隐藏到托盘",
   "nickname": "昵称",
@@ -541,5 +546,131 @@
   "pairingViewDetails": "查看详情",
   "pairingUpgradeRequired": "对方版本过低，请升级 Whisper 后重试",
   "pairingExpired": "配对请求已过期",
-  "pairingRejectedByPeer": "对方拒绝了连接请求"
+  "pairingRejectedByPeer": "对方拒绝了连接请求",
+  "pairingEncryptionNotice": "配对后，文本、文件、剪贴板和控制数据均端到端加密",
+  "e2eeTrustedConnection": "端到端加密 · 可信设备",
+  "e2eeEncryptedConnection": "端到端加密连接",
+  "transferAssistantTitle": "传输助手",
+  "transferAssistantSearchHint": "搜索文本消息",
+  "transferAssistantClearSearch": "清除搜索",
+  "transferAssistantSearchResults": "搜索结果",
+  "transferAssistantFavorites": "收藏文本",
+  "transferAssistantRecent": "最近文本",
+  "transferAssistantNoResults": "没有找到匹配的文本",
+  "transferAssistantNoFavorites": "还没有收藏文本",
+  "transferAssistantNoRecent": "还没有文本消息",
+  "transferAssistantIncoming": "收到",
+  "transferAssistantOutgoing": "发出",
+  "transferAssistantCopy": "复制文本",
+  "transferAssistantFavorite": "收藏文本",
+  "transferAssistantUnfavorite": "取消收藏",
+  "transferAssistantLoadFailed": "无法加载文本消息",
+  "transferAssistantCopied": "已复制文本",
+  "transferAssistantCopyFailed": "无法复制文本",
+  "transferAssistantFavoriteFailed": "无法更新收藏，请重试",
+  "qrPairingTitle": "二维码连接",
+  "qrMyCode": "我的二维码",
+  "qrScanCode": "扫码连接",
+  "qrShowCodeHint": "让另一台设备扫描此二维码，地址和设备身份会同时核验",
+  "qrFingerprint": "身份指纹 {fingerprint}",
+  "@qrFingerprint": {
+    "placeholders": {
+      "fingerprint": {
+        "type": "String"
+      }
+    }
+  },
+  "qrWifiUnavailable": "未检测到可用的局域网地址，请先连接 Wi-Fi 再刷新二维码",
+  "qrCopyLink": "复制连接信息",
+  "qrLinkCopied": "连接信息已复制",
+  "qrScanHint": "扫描对方 Whisper 中显示的二维码",
+  "qrCameraUnavailable": "无法使用相机，请在系统设置中允许 Whisper 访问相机",
+  "qrToggleTorch": "开关手电筒",
+  "qrSwitchCamera": "切换相机",
+  "qrCannotPairSelf": "不能连接当前设备，请扫描另一台设备的二维码",
+  "qrInvalidCode": "这不是有效的 Whisper 二维码，请让对方重新出示",
+  "connectionDiagnosticTitle": "连接诊断",
+  "connectionDiagnosticWifi": "无法到达该设备。请确认两台设备连接同一 Wi-Fi，并关闭访客网络或 AP 隔离后重试。",
+  "connectionDiagnosticAddress": "二维码中的局域网地址无效或已经变化。请让对方重新打开二维码后再扫描。",
+  "connectionDiagnosticService": "地址已找到，但 Whisper 服务没有响应。请在对方设备打开 Whisper，并确认局域网服务正在运行。",
+  "connectionDiagnosticFirewall": "连接超时。请在两台设备的系统防火墙中允许 Whisper 访问局域网后重试。",
+  "connectionDiagnosticIdentity": "设备身份与二维码不一致，Whisper 已停止连接。请在对方设备重新出示二维码，切勿绕过此检查。",
+  "connectionDiagnosticVersion": "两台设备的协议版本不兼容，请将 Whisper 更新到相同的新版本后重试。",
+  "connectionDiagnosticPairing": "配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。",
+  "androidSystemShareTitle": "发送分享内容",
+  "androidSystemShareChooseTrustedDevice": "选择可信设备，确认前不会发送任何内容",
+  "androidSystemShareOnline": "在线",
+  "androidSystemShareOffline": "离线",
+  "androidSystemShareNoTrustedDevices": "没有可选的可信设备，请先完成配对并确认设备身份",
+  "androidSystemShareConfirmTarget": "确认发送目标",
+  "androidSystemShareWaitingForDevice": "已选择 {device}，连接后将自动发送",
+  "@androidSystemShareWaitingForDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSendingTo": "正在发送给 {device}",
+  "@androidSystemShareSendingTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareSentTo": "已发送给 {device}",
+  "@androidSystemShareSentTo": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "androidSystemShareFailedRetained": "发送失败，分享内容已保留",
+  "androidSystemShareStillPending": "分享内容仍在等待选择设备",
+  "androidSystemShareQueueFull": "队列已满，新内容未加入，请先处理已有分享",
+  "androidSystemShareRejected": "分享内容超过限制或无法完整读取，未加入队列",
+  "androidSystemShareTargetNeedsReselection": "目标设备身份已变化或不再可信，请重新选择",
+  "androidSystemShareChooseAction": "选择设备",
+  "androidSystemShareMoreFiles": "另有 {count} 个文件",
+  "@androidSystemShareMoreFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopQuickSendTitle": "系统快捷发送",
+  "desktopQuickSendSummary": "{textCount} 条文本 · {fileCount} 个文件",
+  "@desktopQuickSendSummary": {
+    "placeholders": {
+      "textCount": { "type": "int" },
+      "fileCount": { "type": "int" }
+    }
+  },
+  "desktopQuickSendMore": "还有 {count} 项",
+  "@desktopQuickSendMore": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendFiles": "{count} 个文件",
+  "@desktopQuickSendFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "desktopQuickSendChooseDevice": "发送到可信设备",
+  "desktopQuickSendNoTrustedDevices": "没有可信设备，请先完成配对",
+  "desktopQuickSendDeviceOffline": "设备离线，内容会保留到重新连接",
+  "desktopQuickSendLater": "稍后",
+  "desktopQuickSendSend": "发送",
+  "desktopQuickSendSent": "已加入加密传输队列",
+  "desktopQuickSendFailedRetained": "发送未完成，内容已保留",
+  "desktopQuickSendEmptyClipboard": "剪贴板中没有可发送的内容",
+  "desktopQuickSendShortcutUnavailable": "全局发送快捷键被其他应用占用",
+  "desktopQuickSendDraftLimit": "快捷发送已满，新内容未加入，请先处理已有内容",
+  "desktopQuickSendFileLimit": "一次选择的文件过多，新内容未加入",
+  "desktopQuickSendTextLimit": "文本过长，新内容未加入",
+  "desktopQuickSendInvalidPath": "文件路径无效或过长，新内容未加入",
+  "desktopQuickSendClipboardSnapshotUnavailable": "无法立即读取剪贴板，未加入可能已变化的内容",
+  "desktopQuickSendTargetConflict": "部分内容已发送到另一台设备，请选择原设备继续",
+  "desktopQuickSendTargetNeedsReselection": "目标设备身份已变化或不再可信，内容已保留，请重新选择"
 }

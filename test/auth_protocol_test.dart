@@ -44,6 +44,14 @@ void main() {
 
       expect(transcript.challengeBytes(), isNot(transcript.proofBytes()));
       expect(
+        transcript.proofBytes(reason: 'approved'),
+        isNot(
+          orderedEquals(
+            transcript.proofBytes(reason: 'pairing_identity_changed'),
+          ),
+        ),
+      );
+      expect(
         transcript.proofBytes(),
         isNot(transcript.approvalBytes(allow: true, reason: 'approved')),
       );
@@ -249,6 +257,7 @@ void main() {
         );
       }
       expect(challenge.pairingRequired, isTrue);
+      expect(proof.reason, 'approved');
     });
 
     test('rejects unknown actions, missing fields, and unexpected fields', () {

@@ -170,8 +170,7 @@ void main() {
         File('lib/socket/peer_socket_session.dart').readAsStringSync();
     expect(sessionSource, contains('final hasFinalDecision'));
     expect(sessionSource, contains('isMutuallyApproved ||'));
-    expect(sessionSource,
-        contains('(hasPairingRejection && _remoteApprovalResolved)'));
+    expect(sessionSource, contains('hasPairingRejection;'));
     expect(
       proof.indexOf('_completeAuthenticatedSession('),
       lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),

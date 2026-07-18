@@ -63,19 +63,19 @@ void main() {
     );
     expect(
       _hex(await clientKeys.clientToServerChat.extractBytes()),
-      'a03d79e7b4a5168e2035c5cb3cc021d03ec5be96324e3b9aece0a349b0a3a1c2',
+      '03b5318b37f7e8e24f08f74e7cbe61e18cb228936aa906401aa0ce27533e7044',
     );
     expect(
       _hex(await clientKeys.serverToClientChat.extractBytes()),
-      '175d25ac0784a1807f8df5b8126b9b4dcdd66016ab2ed205807a52669becdf48',
+      '0d3c9797e5c48eff94b42cd3b1cdbd24597278dd4d5a77f755cd66f1b3c3e62c',
     );
     expect(
       _hex(await clientKeys.clientToServerMedia.extractBytes()),
-      'cddd2697cc102f16494e714c3a9118c12779bf09f7d09f4b5dbb375269d1d819',
+      'ee11d31efde0e8b261ccffd2bd724bb2b38945cb9b65bcc90e2021993b804894',
     );
     expect(
       _hex(await clientKeys.serverToClientMedia.extractBytes()),
-      '759b5e9cdbdce50ea870d170be93978f43805c3e864557402798528c7a7811c5',
+      '9301f6e2a47d1bcc1b9dfd398a404461868f84eea2e45881afe00c0de5859b9e',
     );
   });
 

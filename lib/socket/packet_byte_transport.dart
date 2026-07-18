@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
+import 'package:crypto/crypto.dart' as hashes;
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/socket/aead_engine.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
@@ -45,12 +46,12 @@ class PacketByteTransport {
     this.onPacketDropped,
     this.packetEncoder,
     Duration closeTimeout = const Duration(seconds: 2),
-  })  : _sendBytes = sendBytes,
-        _closeGuard = TransportCloseGuard(
-          close: closeSink,
-          timeout: closeTimeout,
-        ),
-        _queue = null;
+  }) : _sendBytes = sendBytes,
+       _closeGuard = TransportCloseGuard(
+         close: closeSink,
+         timeout: closeTimeout,
+       ),
+       _queue = null;
 
   PacketByteTransport.audio({
     required Future<void> Function(Stream<Object>) addStream,
@@ -63,17 +64,17 @@ class PacketByteTransport {
     Duration writerTimeout = const Duration(seconds: 2),
     Duration closeTimeout = const Duration(seconds: 2),
     this.packetEncoder,
-  })  : _sendBytes = null,
-        _closeGuard = TransportCloseGuard(
-          close: closeSink,
-          timeout: closeTimeout,
-        ),
-        _queue = BoundedOutboundQueue.audio(
-          addStream: addStream,
-          maxItems: maxItems,
-          maxBytes: maxBytes,
-          writerTimeout: writerTimeout,
-        ) {
+  }) : _sendBytes = null,
+       _closeGuard = TransportCloseGuard(
+         close: closeSink,
+         timeout: closeTimeout,
+       ),
+       _queue = BoundedOutboundQueue.audio(
+         addStream: addStream,
+         maxItems: maxItems,
+         maxBytes: maxBytes,
+         writerTimeout: writerTimeout,
+       ) {
     _observeIncoming(incoming);
   }
 
@@ -88,18 +89,18 @@ class PacketByteTransport {
     Duration writerTimeout = const Duration(seconds: 2),
     Duration closeTimeout = const Duration(seconds: 2),
     this.packetEncoder,
-  })  : _sendBytes = null,
-        _closeGuard = TransportCloseGuard(
-          close: closeSink,
-          timeout: closeTimeout,
-        ),
-        _queue = BoundedOutboundQueue.remoteInput(
-          addStream: addStream,
-          maxItems: maxItems,
-          maxBytes: maxBytes,
-          writerTimeout: writerTimeout,
-          onOverflow: onOverflow,
-        );
+  }) : _sendBytes = null,
+       _closeGuard = TransportCloseGuard(
+         close: closeSink,
+         timeout: closeTimeout,
+       ),
+       _queue = BoundedOutboundQueue.remoteInput(
+         addStream: addStream,
+         maxItems: maxItems,
+         maxBytes: maxBytes,
+         writerTimeout: writerTimeout,
+         onOverflow: onOverflow,
+       );
 
   final void Function(Object bytes)? _sendBytes;
   final TransportCloseGuard _closeGuard;
@@ -142,47 +143,49 @@ class PacketByteTransport {
     }
     return queue
         .addLazyWithResult(
-      () async => _encodePacket(bytes),
-      byteLength: _byteLength(bytes) +
-          (packetEncoder == null
-              ? 0
-              : AuthenticatedMediaPacketEnvelope.overheadBytes),
-      kind: kind,
-    )
+          () async => _encodePacket(bytes),
+          byteLength:
+              _byteLength(bytes) +
+              (packetEncoder == null
+                  ? 0
+                  : AuthenticatedMediaPacketEnvelope.overheadBytes),
+          kind: kind,
+        )
         .then((result) {
-      if (result == OutboundQueueResult.sent) {
-        onPacketSent?.call();
-      } else {
-        onPacketDropped?.call();
-      }
-      if (result == OutboundQueueResult.writerFailure) {
-        _terminateUnexpected(
-          PacketTransportTermination(
-            PacketTransportTerminationReason.writerFailure,
-            error: StateError('packet transport writer failed'),
-          ),
-        );
-      } else if (result == OutboundQueueResult.dropped && queue.isClosed) {
-        _terminateUnexpected(
-          const PacketTransportTermination(
-            PacketTransportTerminationReason.writerFailure,
-          ),
-        );
-      }
-      return switch (result) {
-        OutboundQueueResult.sent => PacketSendResult.sent,
-        OutboundQueueResult.dropped => PacketSendResult.dropped,
-        OutboundQueueResult.closed => PacketSendResult.closed,
-        OutboundQueueResult.writerFailure => PacketSendResult.transportFailure,
-      };
-    });
+          if (result == OutboundQueueResult.sent) {
+            onPacketSent?.call();
+          } else {
+            onPacketDropped?.call();
+          }
+          if (result == OutboundQueueResult.writerFailure) {
+            _terminateUnexpected(
+              PacketTransportTermination(
+                PacketTransportTerminationReason.writerFailure,
+                error: StateError('packet transport writer failed'),
+              ),
+            );
+          } else if (result == OutboundQueueResult.dropped && queue.isClosed) {
+            _terminateUnexpected(
+              const PacketTransportTermination(
+                PacketTransportTerminationReason.writerFailure,
+              ),
+            );
+          }
+          return switch (result) {
+            OutboundQueueResult.sent => PacketSendResult.sent,
+            OutboundQueueResult.dropped => PacketSendResult.dropped,
+            OutboundQueueResult.closed => PacketSendResult.closed,
+            OutboundQueueResult.writerFailure =>
+              PacketSendResult.transportFailure,
+          };
+        });
   }
 
   Future<void> close() => _beginClose(
-        const PacketTransportTermination(
-          PacketTransportTerminationReason.localClosed,
-        ),
-      );
+    const PacketTransportTermination(
+      PacketTransportTerminationReason.localClosed,
+    ),
+  );
 
   void _observeIncoming(Stream<dynamic>? incoming) {
     if (incoming == null) {
@@ -232,21 +235,26 @@ class PacketByteTransport {
     _closeFuture = closeFuture;
     final subscription = _incomingSubscription;
     _incomingSubscription = null;
-    unawaited(() async {
-      await subscription?.cancel();
-      if (termination.isUnexpected) {
-        _queue?.abort();
-        await _closeGuard.close();
-      } else {
-        await _queue?.closeAndDrain();
-        await _closeGuard.close();
-      }
-    }()
-        .then<void>(
-      (_) => completer.complete(),
-      onError: (Object error, StackTrace stackTrace) =>
-          completer.completeError(error, stackTrace),
-    ));
+    unawaited(
+      () async {
+        try {
+          await subscription?.cancel();
+          if (termination.isUnexpected) {
+            _queue?.abort();
+            await _closeGuard.close();
+          } else {
+            await _queue?.closeAndDrain();
+            await _closeGuard.close();
+          }
+        } finally {
+          packetEncoder?.destroy();
+        }
+      }().then<void>(
+        (_) => completer.complete(),
+        onError: (Object error, StackTrace stackTrace) =>
+            completer.completeError(error, stackTrace),
+      ),
+    );
     return closeFuture;
   }
 
@@ -304,8 +312,8 @@ Uri redactedPacketUri(Uri uri) {
 
 final class PacketWebSocketConnectException implements Exception {
   PacketWebSocketConnectException(Uri uri, Object cause)
-      : uri = redactedPacketUri(uri),
-        causeType = cause.runtimeType.toString();
+    : uri = redactedPacketUri(uri),
+      causeType = cause.runtimeType.toString();
 
   final Uri uri;
   final String causeType;
@@ -318,36 +326,50 @@ final class PacketWebSocketConnectException implements Exception {
 abstract final class AuthenticatedMediaPacketEnvelope {
   static const int sequenceOffset = 4;
   static const int payloadLengthOffset = 12;
-  static const int macOffset = 16;
-  static const int macBytes = 32;
-  static const int overheadBytes = macOffset + macBytes;
-  static const List<int> magic = <int>[0x57, 0x4d, 0x50, 0x31];
+  static const int tagOffset = 16;
+  static const int tagBytes = 16;
+  static const int overheadBytes = tagOffset + tagBytes;
+  static const List<int> magic = <int>[0x57, 0x45, 0x50, 0x31];
 }
 
 final class AuthenticatedMediaPacketEncoder {
   AuthenticatedMediaPacketEncoder({
     required String route,
+    String namespace = '',
     required this.sessionId,
     required Uint8List mediaMacKey,
+    required Uint8List channelBinding,
     required this.maxPayloadBytes,
-  })  : route = normalizeMediaRoute(route),
-        _mediaMacKey = Uint8List.fromList(mediaMacKey) {
-    _validateMediaPacketContext(
-      sessionId: sessionId,
-      mediaMacKey: mediaMacKey,
-      maxPayloadBytes: maxPayloadBytes,
-    );
-  }
+  }) : route = normalizeMediaRoute(route),
+       namespace = normalizeMediaNamespace(
+         namespace,
+         route: normalizeMediaRoute(route),
+       ),
+       _packetKey = _createMediaPacketKey(
+         route: normalizeMediaRoute(route),
+         namespace: normalizeMediaNamespace(
+           namespace,
+           route: normalizeMediaRoute(route),
+         ),
+         sessionId: sessionId,
+         mediaKey: mediaMacKey,
+         channelBinding: channelBinding,
+         maxPayloadBytes: maxPayloadBytes,
+       );
 
   final String route;
+  final String namespace;
   final String sessionId;
   final int maxPayloadBytes;
-  final Uint8List _mediaMacKey;
+  final WhisperAeadKey _packetKey;
   int _nextSequence = 0;
 
   int get nextSequence => _nextSequence;
 
   Uint8List encode(Uint8List payload) {
+    if (_packetKey.isDestroyed) {
+      throw StateError('media packet encoder has been destroyed');
+    }
     if (payload.length > maxPayloadBytes) {
       throw ArgumentError.value(
         payload.length,
@@ -356,69 +378,79 @@ final class AuthenticatedMediaPacketEncoder {
       );
     }
     final sequence = _nextSequence;
-    final mac = _mediaPacketMac(
-      route: route,
-      sessionId: sessionId,
+    final header = _mediaPacketHeader(
       sequence: sequence,
-      payload: payload,
-      mediaMacKey: _mediaMacKey,
+      payloadLength: payload.length,
+    );
+    final secretBox = _packetKey.encrypt(
+      message: payload,
+      nonce: _mediaPacketNonce(sequence),
+      additionalData: _mediaPacketAad(
+        route: route,
+        namespace: namespace,
+        sessionId: sessionId,
+        header: header,
+      ),
     );
     final encoded = Uint8List(
       AuthenticatedMediaPacketEnvelope.overheadBytes + payload.length,
     );
+    encoded.setRange(0, header.length, header);
     encoded.setRange(
-      0,
-      AuthenticatedMediaPacketEnvelope.magic.length,
-      AuthenticatedMediaPacketEnvelope.magic,
-    );
-    final data = ByteData.sublistView(encoded);
-    data.setUint64(
-      AuthenticatedMediaPacketEnvelope.sequenceOffset,
-      sequence,
-    );
-    data.setUint32(
-      AuthenticatedMediaPacketEnvelope.payloadLengthOffset,
-      payload.length,
-    );
-    encoded.setRange(
-      AuthenticatedMediaPacketEnvelope.macOffset,
+      AuthenticatedMediaPacketEnvelope.tagOffset,
       AuthenticatedMediaPacketEnvelope.overheadBytes,
-      mac,
+      secretBox.mac,
     );
     encoded.setRange(
       AuthenticatedMediaPacketEnvelope.overheadBytes,
       encoded.length,
-      payload,
+      secretBox.cipherText,
     );
     _nextSequence += 1;
     return encoded;
   }
+
+  void destroy() => _packetKey.destroy();
 }
 
 final class AuthenticatedMediaPacketDecoder {
   AuthenticatedMediaPacketDecoder({
     required String route,
+    String namespace = '',
     required this.sessionId,
     required Uint8List mediaMacKey,
+    required Uint8List channelBinding,
     required this.maxPayloadBytes,
-  })  : route = normalizeMediaRoute(route),
-        _mediaMacKey = Uint8List.fromList(mediaMacKey) {
-    _validateMediaPacketContext(
-      sessionId: sessionId,
-      mediaMacKey: mediaMacKey,
-      maxPayloadBytes: maxPayloadBytes,
-    );
-  }
+  }) : route = normalizeMediaRoute(route),
+       namespace = normalizeMediaNamespace(
+         namespace,
+         route: normalizeMediaRoute(route),
+       ),
+       _packetKey = _createMediaPacketKey(
+         route: normalizeMediaRoute(route),
+         namespace: normalizeMediaNamespace(
+           namespace,
+           route: normalizeMediaRoute(route),
+         ),
+         sessionId: sessionId,
+         mediaKey: mediaMacKey,
+         channelBinding: channelBinding,
+         maxPayloadBytes: maxPayloadBytes,
+       );
 
   final String route;
+  final String namespace;
   final String sessionId;
   final int maxPayloadBytes;
-  final Uint8List _mediaMacKey;
+  final WhisperAeadKey _packetKey;
   int _expectedSequence = 0;
 
   int get expectedSequence => _expectedSequence;
 
   Uint8List decode(Uint8List encoded) {
+    if (_packetKey.isDestroyed) {
+      throw StateError('media packet decoder has been destroyed');
+    }
     if (encoded.length < AuthenticatedMediaPacketEnvelope.overheadBytes) {
       throw const FormatException('media packet envelope truncated');
     }
@@ -444,36 +476,49 @@ final class AuthenticatedMediaPacketDecoder {
             AuthenticatedMediaPacketEnvelope.overheadBytes + payloadLength) {
       throw const FormatException('invalid media packet payload length');
     }
-    final payload = Uint8List.sublistView(
-      encoded,
-      AuthenticatedMediaPacketEnvelope.overheadBytes,
-    );
-    final suppliedMac = Uint8List.sublistView(
-      encoded,
-      AuthenticatedMediaPacketEnvelope.macOffset,
-      AuthenticatedMediaPacketEnvelope.overheadBytes,
-    );
-    final expectedMac = _mediaPacketMac(
-      route: route,
-      sessionId: sessionId,
-      sequence: sequence,
-      payload: payload,
-      mediaMacKey: _mediaMacKey,
-    );
-    if (!constantTimeBytesEqual(suppliedMac, expectedMac)) {
-      throw const FormatException('invalid media packet MAC');
-    }
     if (sequence != _expectedSequence) {
       throw const FormatException('invalid media packet sequence');
     }
+    final cipherText = Uint8List.sublistView(
+      encoded,
+      AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
+    final suppliedTag = Uint8List.sublistView(
+      encoded,
+      AuthenticatedMediaPacketEnvelope.tagOffset,
+      AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
+    final Uint8List clearText;
+    try {
+      clearText = _packetKey.decrypt(
+        cipherText: cipherText,
+        mac: suppliedTag,
+        nonce: _mediaPacketNonce(sequence),
+        additionalData: _mediaPacketAad(
+          route: route,
+          namespace: namespace,
+          sessionId: sessionId,
+          header: Uint8List.sublistView(
+            encoded,
+            0,
+            AuthenticatedMediaPacketEnvelope.tagOffset,
+          ),
+        ),
+      );
+    } on WhisperAeadAuthenticationException {
+      throw const FormatException('invalid media packet authentication tag');
+    }
     _expectedSequence += 1;
-    return Uint8List.fromList(payload);
+    return clearText;
   }
+
+  void destroy() => _packetKey.destroy();
 }
 
 void _validateMediaPacketContext({
   required String sessionId,
   required Uint8List mediaMacKey,
+  required Uint8List channelBinding,
   required int maxPayloadBytes,
 }) {
   if (sessionId.isEmpty) {
@@ -482,22 +527,126 @@ void _validateMediaPacketContext({
   if (mediaMacKey.length != 32) {
     throw ArgumentError.value(mediaMacKey.length, 'mediaMacKey.length');
   }
+  if (channelBinding.length != 32) {
+    throw ArgumentError.value(
+      channelBinding.length,
+      'channelBinding.length',
+      'must be 32',
+    );
+  }
   if (maxPayloadBytes <= 0) {
     throw ArgumentError.value(maxPayloadBytes, 'maxPayloadBytes');
   }
 }
 
-Uint8List _mediaPacketMac({
+Uint8List _deriveMediaPacketKey({
   required String route,
+  required String namespace,
   required String sessionId,
-  required int sequence,
-  required Uint8List payload,
-  required Uint8List mediaMacKey,
+  required Uint8List mediaKey,
+  required Uint8List channelBinding,
 }) {
-  final domain = utf8.encode('whisper-media-packet-v1\u0000');
+  final domain = utf8.encode(
+    'whisper-media-packet-key-v1\u0000$route\u0000$namespace\u0000$sessionId',
+  );
+  final context = Uint8List(domain.length + channelBinding.length)
+    ..setRange(0, domain.length, domain)
+    ..setRange(
+      domain.length,
+      domain.length + channelBinding.length,
+      channelBinding,
+    );
+  return Uint8List.fromList(
+    hashes.Hmac(hashes.sha256, mediaKey).convert(context).bytes,
+  );
+}
+
+WhisperAeadKey _createMediaPacketKey({
+  required String route,
+  required String namespace,
+  required String sessionId,
+  required Uint8List mediaKey,
+  required Uint8List channelBinding,
+  required int maxPayloadBytes,
+}) {
+  _validateMediaPacketContext(
+    sessionId: sessionId,
+    mediaMacKey: mediaKey,
+    channelBinding: channelBinding,
+    maxPayloadBytes: maxPayloadBytes,
+  );
+  return WhisperAead.takeKey(
+    _deriveMediaPacketKey(
+      route: route,
+      namespace: namespace,
+      sessionId: sessionId,
+      mediaKey: mediaKey,
+      channelBinding: channelBinding,
+    ),
+  );
+}
+
+Uint8List mediaPacketChannelBindingFromUri(Uri uri) {
+  final tokens = uri.queryParametersAll['token'];
+  if (tokens == null || tokens.length != 1) {
+    throw const FormatException('missing media channel binding');
+  }
+  final token = tokens.single;
+  if (token.length != 43 ||
+      token.contains('=') ||
+      !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(token)) {
+    throw const FormatException('invalid media channel binding');
+  }
+  try {
+    final decoded = Uint8List.fromList(base64Url.decode('$token='));
+    if (decoded.length != 32 ||
+        base64Url.encode(decoded).replaceAll('=', '') != token) {
+      throw const FormatException('invalid media channel binding');
+    }
+    return decoded;
+  } on FormatException {
+    throw const FormatException('invalid media channel binding');
+  }
+}
+
+Uint8List _mediaPacketHeader({
+  required int sequence,
+  required int payloadLength,
+}) {
+  final header = Uint8List(AuthenticatedMediaPacketEnvelope.tagOffset);
+  header.setRange(
+    0,
+    AuthenticatedMediaPacketEnvelope.magic.length,
+    AuthenticatedMediaPacketEnvelope.magic,
+  );
+  ByteData.sublistView(header)
+    ..setUint64(AuthenticatedMediaPacketEnvelope.sequenceOffset, sequence)
+    ..setUint32(
+      AuthenticatedMediaPacketEnvelope.payloadLengthOffset,
+      payloadLength,
+    );
+  return header;
+}
+
+Uint8List _mediaPacketNonce(int sequence) {
+  final nonce = Uint8List(24);
+  ByteData.sublistView(nonce).setUint64(16, sequence);
+  return nonce;
+}
+
+Uint8List _mediaPacketAad({
+  required String route,
+  required String namespace,
+  required String sessionId,
+  required List<int> header,
+}) {
+  final domain = utf8.encode('whisper-media-packet-aead-v1\u0000');
   final routeBytes = utf8.encode(route);
+  final namespaceBytes = utf8.encode(namespace);
   final sessionBytes = utf8.encode(sessionId);
-  if (routeBytes.length > 0xffff || sessionBytes.length > 0xffff) {
+  if (routeBytes.length > 0xffff ||
+      namespaceBytes.length > 0xffff ||
+      sessionBytes.length > 0xffff) {
     throw const FormatException('media packet context is too long');
   }
   final input = Uint8List(
@@ -505,10 +654,10 @@ Uint8List _mediaPacketMac({
         2 +
         routeBytes.length +
         2 +
+        namespaceBytes.length +
+        2 +
         sessionBytes.length +
-        8 +
-        4 +
-        payload.length,
+        header.length,
   );
   var offset = 0;
   input.setRange(offset, offset + domain.length, domain);
@@ -518,25 +667,24 @@ Uint8List _mediaPacketMac({
   offset += 2;
   input.setRange(offset, offset + routeBytes.length, routeBytes);
   offset += routeBytes.length;
+  data.setUint16(offset, namespaceBytes.length);
+  offset += 2;
+  input.setRange(offset, offset + namespaceBytes.length, namespaceBytes);
+  offset += namespaceBytes.length;
   data.setUint16(offset, sessionBytes.length);
   offset += 2;
   input.setRange(offset, offset + sessionBytes.length, sessionBytes);
   offset += sessionBytes.length;
-  data.setUint64(offset, sequence);
-  offset += 8;
-  data.setUint32(offset, payload.length);
-  offset += 4;
-  input.setRange(offset, input.length, payload);
-  return Uint8List.fromList(Hmac(sha256, mediaMacKey).convert(input).bytes);
+  input.setRange(offset, input.length, header);
+  return input;
 }
 
 typedef PacketWebSocketConnection = ({
   Future<void> Function(Stream<Object>) addStream,
   Future<void> Function() closeSink,
 });
-typedef PacketWebSocketConnector = Future<PacketWebSocketConnection> Function(
-  Uri uri,
-);
+typedef PacketWebSocketConnector =
+    Future<PacketWebSocketConnection> Function(Uri uri);
 
 /// Connects a `WebSocketChannel` to [uri] and wraps it in a
 /// [PacketByteTransport]. Channel establishment (`IOWebSocketChannel.connect`
@@ -551,23 +699,32 @@ Future<PacketByteTransport> connectPacketWebSocket(
   int remoteInputMaxItems = 128,
   int remoteInputMaxBytes = 256 * 1024,
 }) async {
-  final PacketWebSocketConnection connection;
-  Stream<dynamic>? incoming;
+  var unownedPacketEncoder = packetEncoder;
+  var unownedMediaUpgradeContext = mediaUpgradeContext;
   try {
+    final PacketWebSocketConnection connection;
+    Stream<dynamic>? incoming;
     if (connector == null) {
       WebSocketChannel channel = IOWebSocketChannel.connect(uri);
       await channel.ready;
-      if (mediaUpgradeContext case final context?) {
-        channel = await authenticateMediaWebSocketClient(
-          channel,
-          uri: uri,
-          route: uri.path,
-          namespace: context.namespace,
-          sessionId: context.sessionId,
-          peerId: context.peerId,
-          mediaMacKey: context.mediaMacKey,
-          timeout: context.timeout,
-        );
+      if (unownedMediaUpgradeContext case final context?) {
+        try {
+          channel = await context.withMediaMacKey(
+            (mediaMacKey) => authenticateMediaWebSocketClient(
+              channel,
+              uri: uri,
+              route: uri.path,
+              namespace: context.namespace,
+              sessionId: context.sessionId,
+              peerId: context.peerId,
+              mediaMacKey: mediaMacKey,
+              timeout: context.timeout,
+            ),
+          );
+        } finally {
+          context.destroy();
+          unownedMediaUpgradeContext = null;
+        }
       }
       incoming = channel.stream;
       connection = (
@@ -575,13 +732,32 @@ Future<PacketByteTransport> connectPacketWebSocket(
         closeSink: () => channel.sink.close(),
       );
     } else {
-      if (mediaUpgradeContext != null) {
+      if (unownedMediaUpgradeContext != null) {
         throw UnsupportedError(
           'custom packet websocket connectors cannot skip media proof',
         );
       }
       connection = await connector(uri);
     }
+    final PacketByteTransport transport;
+    if (uri.path == '/input') {
+      transport = PacketByteTransport.remoteInput(
+        addStream: connection.addStream,
+        closeSink: connection.closeSink,
+        maxItems: remoteInputMaxItems,
+        maxBytes: remoteInputMaxBytes,
+        packetEncoder: unownedPacketEncoder,
+      );
+    } else {
+      transport = PacketByteTransport.audio(
+        addStream: connection.addStream,
+        closeSink: connection.closeSink,
+        incoming: incoming,
+        packetEncoder: unownedPacketEncoder,
+      );
+    }
+    unownedPacketEncoder = null;
+    return transport;
   } catch (error, stackTrace) {
     Error.throwWithStackTrace(
       error is PacketWebSocketConnectException
@@ -589,20 +765,8 @@ Future<PacketByteTransport> connectPacketWebSocket(
           : PacketWebSocketConnectException(uri, error),
       stackTrace,
     );
+  } finally {
+    unownedMediaUpgradeContext?.destroy();
+    unownedPacketEncoder?.destroy();
   }
-  if (uri.path == '/input') {
-    return PacketByteTransport.remoteInput(
-      addStream: connection.addStream,
-      closeSink: connection.closeSink,
-      maxItems: remoteInputMaxItems,
-      maxBytes: remoteInputMaxBytes,
-      packetEncoder: packetEncoder,
-    );
-  }
-  return PacketByteTransport.audio(
-    addStream: connection.addStream,
-    closeSink: connection.closeSink,
-    incoming: incoming,
-    packetEncoder: packetEncoder,
-  );
 }

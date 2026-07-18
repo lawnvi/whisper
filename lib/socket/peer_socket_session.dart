@@ -48,11 +48,11 @@ final class PeerSocketSession {
     required this.intendedPublicKeyHash,
     required Duration handshakeTimeout,
     required void Function()? onTimeout,
-  })  : _localEphemeralKeyPair = localEphemeralKeyPair,
-        _localNonce = Uint8List.fromList(localNonce),
-        phase = role == PeerSocketRole.server
-            ? PeerSocketPhase.awaitingHello
-            : PeerSocketPhase.awaitingChallenge {
+  }) : _localEphemeralKeyPair = localEphemeralKeyPair,
+       _localNonce = Uint8List.fromList(localNonce),
+       phase = role == PeerSocketRole.server
+           ? PeerSocketPhase.awaitingHello
+           : PeerSocketPhase.awaitingChallenge {
     _handshakeTimer = Timer(handshakeTimeout, () {
       if (phase == PeerSocketPhase.authenticated ||
           phase == PeerSocketPhase.closing) {
@@ -63,7 +63,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 7;
+  static const int protocolVersion = 8;
 
   final PeerSocketRole role;
   final int connectionGeneration;
@@ -89,6 +89,9 @@ final class PeerSocketSession {
   bool _remoteApprovalResolved = false;
   bool _remoteApprovalAllowed = false;
   String _remoteApprovalReason = '';
+  String _localProofReason = '';
+  String _remoteProofReason = '';
+  bool _proofCreated = false;
   bool _pairingCompletionClaimed = false;
   bool _authenticationApproved = false;
   bool _authenticationCommitted = false;
@@ -129,7 +132,8 @@ final class PeerSocketSession {
       connectionGeneration: connectionGeneration,
       localIdentity: localIdentity,
       localProfile: localProfile,
-      localEphemeralKeyPair: localEphemeralKeyPair ??
+      localEphemeralKeyPair:
+          localEphemeralKeyPair ??
           await AuthSessionKeys.generateEphemeralKeyPair(),
       localNonce: nonce,
       intendedPeerId: intendedPeerId,
@@ -144,12 +148,6 @@ final class PeerSocketSession {
   String get remoteIdentityPublicKey => _remoteIdentityPublicKey ?? '';
   String get pairingCode => _transcript?.pairingCode() ?? '';
   AuthenticatedFrameCodec? get codec => _codec;
-  Uint8List? get mediaSendKey => isAuthenticated && _mediaSendKey != null
-      ? Uint8List.fromList(_mediaSendKey!)
-      : null;
-  Uint8List? get mediaReceiveKey => isAuthenticated && _mediaReceiveKey != null
-      ? Uint8List.fromList(_mediaReceiveKey!)
-      : null;
   bool get isAuthenticated =>
       !_closed && phase == PeerSocketPhase.authenticated;
   bool get isAuthenticationReady {
@@ -177,22 +175,42 @@ final class PeerSocketSession {
       (_remoteApprovalResolved && !_remoteApprovalAllowed);
   bool get isLocalApprovalResolved => _approvalResolved;
   String get remoteApprovalReason => _remoteApprovalReason;
+  String get remotePairingReason => _remoteProofReason;
   bool get serverPairingRequired => _transcript?.serverPairingRequired ?? false;
+
+  T withMediaSendKey<T>(T Function(Uint8List key) action) {
+    return _withMediaKey(_mediaSendKey, action);
+  }
+
+  Future<T> withMediaSendKeyAsync<T>(Future<T> Function(Uint8List key) action) {
+    return _withMediaKeyAsync(_mediaSendKey, action);
+  }
+
+  T withMediaReceiveKey<T>(T Function(Uint8List key) action) {
+    return _withMediaKey(_mediaReceiveKey, action);
+  }
+
+  Future<T> withMediaReceiveKeyAsync<T>(
+    Future<T> Function(Uint8List key) action,
+  ) {
+    return _withMediaKeyAsync(_mediaReceiveKey, action);
+  }
+
   bool get _canResolveLocalApproval => switch (role) {
-        PeerSocketRole.client => phase == PeerSocketPhase.awaitingLocalApproval,
-        PeerSocketRole.server => phase == PeerSocketPhase.awaitingProof ||
-            phase == PeerSocketPhase.awaitingLocalApproval,
-      };
+    PeerSocketRole.client => phase == PeerSocketPhase.awaitingLocalApproval,
+    PeerSocketRole.server =>
+      phase == PeerSocketPhase.awaitingProof ||
+          phase == PeerSocketPhase.awaitingLocalApproval,
+  };
   bool get _canDeliverPairingDecision => switch (role) {
-        PeerSocketRole.client =>
-          phase == PeerSocketPhase.awaitingLocalApproval ||
-              phase == PeerSocketPhase.awaitingResult,
-        PeerSocketRole.server => _canResolveLocalApproval,
-      };
+    PeerSocketRole.client =>
+      phase == PeerSocketPhase.awaitingLocalApproval ||
+          phase == PeerSocketPhase.awaitingResult,
+    PeerSocketRole.server => _canResolveLocalApproval,
+  };
 
   bool tryClaimPairingCompletion() {
-    final hasFinalDecision =
-        isMutuallyApproved || (hasPairingRejection && _remoteApprovalResolved);
+    final hasFinalDecision = isMutuallyApproved || hasPairingRejection;
     if (role != PeerSocketRole.server ||
         isClosed ||
         phase != PeerSocketPhase.awaitingLocalApproval ||
@@ -231,10 +249,7 @@ final class PeerSocketSession {
     );
   }
 
-  Future<bool> enqueueIncoming(
-    int byteLength,
-    Future<void> Function() action,
-  ) {
+  Future<bool> enqueueIncoming(int byteLength, Future<void> Function() action) {
     final queue = _inboundQueue;
     if (queue == null) {
       return Future<bool>.value(false);
@@ -242,10 +257,7 @@ final class PeerSocketSession {
     return queue.add(byteLength, action);
   }
 
-  Future<bool> enqueueOutgoing(
-    Object value, {
-    required int byteLength,
-  }) {
+  Future<bool> enqueueOutgoing(Object value, {required int byteLength}) {
     final queue = _outboundQueue;
     if (queue == null) {
       return Future<bool>.value(false);
@@ -261,10 +273,7 @@ final class PeerSocketSession {
     if (queue == null) {
       return Future<bool>.value(false);
     }
-    return queue.addLazy(
-      () => encodeOutgoing(payload),
-      byteLength: byteLength,
-    );
+    return queue.addLazy(() => encodeOutgoing(payload), byteLength: byteLength);
   }
 
   void markTransportAuthenticated() {
@@ -298,19 +307,23 @@ final class PeerSocketSession {
 
   Future<Uint8List> encodeOutgoing(Uint8List payload) {
     final completer = Completer<Uint8List>();
-    _sendChain = _sendChain.then((_) async {
-      if (!isAuthenticated || _codec == null) {
-        throw const AuthHandshakeException('session_not_authenticated');
-      }
-      completer.complete(await _continueAfter(
-        _codec!.encode(payload),
-        PeerSocketPhase.authenticated,
-      ));
-    }).catchError((Object error, StackTrace stackTrace) {
-      if (!completer.isCompleted) {
-        completer.completeError(error, stackTrace);
-      }
-    });
+    _sendChain = _sendChain
+        .then((_) async {
+          if (!isAuthenticated || _codec == null) {
+            throw const AuthHandshakeException('session_not_authenticated');
+          }
+          completer.complete(
+            await _continueAfter(
+              _codec!.encode(payload),
+              PeerSocketPhase.authenticated,
+            ),
+          );
+        })
+        .catchError((Object error, StackTrace stackTrace) {
+          if (!completer.isCompleted) {
+            completer.completeError(error, stackTrace);
+          }
+        });
     return completer.future;
   }
 
@@ -318,10 +331,7 @@ final class PeerSocketSession {
     if (!isAuthenticated || _codec == null) {
       throw const AuthHandshakeException('session_not_authenticated');
     }
-    return _continueAfter(
-      _codec!.decode(frame),
-      PeerSocketPhase.authenticated,
-    );
+    return _continueAfter(_codec!.decode(frame), PeerSocketPhase.authenticated);
   }
 
   Future<AuthEnvelope> createHello() async {
@@ -338,8 +348,9 @@ final class PeerSocketSession {
       nonce: encodeAuthBase64Url(_localNonce),
       profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
       intendedPeerId: intendedPeerId.isEmpty ? null : intendedPeerId,
-      intendedPublicKeyHash:
-          intendedPublicKeyHash.isEmpty ? null : intendedPublicKeyHash,
+      intendedPublicKeyHash: intendedPublicKeyHash.isEmpty
+          ? null
+          : intendedPublicKeyHash,
       profile: localProfile.toJson(),
     );
   }
@@ -370,10 +381,7 @@ final class PeerSocketSession {
       final remoteEphemeralPublicKey = AuthSessionKeys.parseEphemeralPublicKey(
         hello.ephemeralPublicKey!,
       );
-      final remoteNonce = decodeAuthBase64Url(
-        hello.nonce,
-        expectedLength: 32,
-      );
+      final remoteNonce = decodeAuthBase64Url(hello.nonce, expectedLength: 32);
       final localEphemeralPublicKey = await _continueAfter(
         AuthSessionKeys.publicKeyBase64Url(_localEphemeralKeyPair),
         PeerSocketPhase.awaitingHello,
@@ -402,10 +410,7 @@ final class PeerSocketSession {
       _remoteEphemeralPublicKey = remoteEphemeralPublicKey;
       _remoteNonce = remoteNonce;
       _transcript = transcript;
-      _transition(
-        PeerSocketPhase.awaitingHello,
-        PeerSocketPhase.awaitingProof,
-      );
+      _transition(PeerSocketPhase.awaitingHello, PeerSocketPhase.awaitingProof);
       return AuthEnvelope.challenge(
         protocolVersion: protocolVersion,
         peerId: localProfile.uid,
@@ -501,19 +506,23 @@ final class PeerSocketSession {
     }
   }
 
-  Future<AuthEnvelope> createProof() async {
-    if (role != PeerSocketRole.client || isClosed) {
+  Future<AuthEnvelope> createProof({String reason = 'approved'}) async {
+    if (role != PeerSocketRole.client ||
+        isClosed ||
+        (phase != PeerSocketPhase.awaitingLocalApproval &&
+            phase != PeerSocketPhase.awaitingResult) ||
+        _transcript == null) {
       return _fail('unexpected_phase');
     }
-    if (phase != PeerSocketPhase.awaitingResult ||
-        !_approvalResolved ||
-        !_approvalAllowed ||
-        _transcript == null) {
-      return _fail('approval_required');
+    if (_proofCreated) {
+      return _fail('duplicate_proof');
     }
+    final expectedPhase = phase;
+    _proofCreated = true;
+    _localProofReason = reason;
     final signature = await _continueAfter(
-      localIdentity.sign(_transcript!.proofBytes()),
-      PeerSocketPhase.awaitingResult,
+      localIdentity.sign(_transcript!.proofBytes(reason: reason)),
+      expectedPhase,
     );
     return AuthEnvelope.proof(
       protocolVersion: protocolVersion,
@@ -522,6 +531,7 @@ final class PeerSocketSession {
       peerNonce: encodeAuthBase64Url(_remoteNonce!),
       profileDigest: encodeAuthBase64Url(localProfile.canonicalDigest()),
       signature: signature,
+      reason: reason,
     );
   }
 
@@ -547,7 +557,7 @@ final class PeerSocketSession {
       final valid = await _continueAfter(
         verifyDeviceSignature(
           publicKeyBase64Url: remoteIdentityPublicKey,
-          message: _transcript!.proofBytes(),
+          message: _transcript!.proofBytes(reason: proof.reason!),
           signatureBase64Url: proof.signature!,
         ),
         PeerSocketPhase.awaitingProof,
@@ -555,6 +565,7 @@ final class PeerSocketSession {
       if (!valid) {
         _fail<void>('invalid_proof_signature');
       }
+      _remoteProofReason = proof.reason!;
       _transition(
         PeerSocketPhase.awaitingProof,
         PeerSocketPhase.awaitingLocalApproval,
@@ -576,7 +587,8 @@ final class PeerSocketSession {
     _require(PeerSocketRole.client, expectedPhase);
     if (!_approvalResolved ||
         _approvalAllowed != allow ||
-        _transcript == null) {
+        _transcript == null ||
+        (allow && reason != _localProofReason)) {
       return _fail('approval_required');
     }
     final signature = await _continueAfter(
@@ -633,6 +645,9 @@ final class PeerSocketSession {
       if (!valid) {
         return _fail('invalid_approval_signature');
       }
+      if (approval.allow! && approval.reason != _remoteProofReason) {
+        return _fail('approval_reason_mismatch');
+      }
       _remoteApprovalResolved = true;
       _remoteApprovalAllowed = approval.allow!;
       _remoteApprovalReason = approval.reason!;
@@ -644,10 +659,7 @@ final class PeerSocketSession {
     }
   }
 
-  bool resolveLocalApproval({
-    required int generation,
-    required bool allow,
-  }) {
+  bool resolveLocalApproval({required int generation, required bool allow}) {
     if (generation != connectionGeneration ||
         !_canResolveLocalApproval ||
         _approvalResolved) {
@@ -806,7 +818,14 @@ final class PeerSocketSession {
     phase = PeerSocketPhase.closing;
     _handshakeTimer.cancel();
     _outboundQueue?.abort();
+    _codec?.close();
+    _codec = null;
     _clearMediaKeys();
+    _localEphemeralKeyPair.destroy();
+    _localNonce.fillRange(0, _localNonce.length, 0);
+    _remoteNonce?.fillRange(0, _remoteNonce!.length, 0);
+    _remoteNonce = null;
+    _transcript = null;
     _completePairingResolution();
     _closedCompleter.complete();
   }
@@ -818,31 +837,50 @@ final class PeerSocketSession {
   }
 
   Future<void> _enableCodec(PeerSocketPhase expectedPhase) async {
-    final keys = await _continueAfter(
-      AuthSessionKeys.derive(
-        localEphemeralKeyPair: _localEphemeralKeyPair,
-        remoteEphemeralPublicKey: _remoteEphemeralPublicKey!,
-        transcriptHash: _transcript!.transcriptHash(),
-      ),
-      expectedPhase,
+    final keys = await AuthSessionKeys.derive(
+      localEphemeralKeyPair: _localEphemeralKeyPair,
+      remoteEphemeralPublicKey: _remoteEphemeralPublicKey!,
+      transcriptHash: _transcript!.transcriptHash(),
     );
-    _codec = role == PeerSocketRole.client
-        ? AuthenticatedFrameCodec(
-            sendKey: keys.clientToServerChat,
-            receiveKey: keys.serverToClientChat,
-          )
-        : AuthenticatedFrameCodec(
-            sendKey: keys.serverToClientChat,
-            receiveKey: keys.clientToServerChat,
-          );
-    final sendMediaKey = role == PeerSocketRole.client
-        ? keys.clientToServerMedia
-        : keys.serverToClientMedia;
-    final receiveMediaKey = role == PeerSocketRole.client
-        ? keys.serverToClientMedia
-        : keys.clientToServerMedia;
-    _mediaSendKey = Uint8List.fromList(await sendMediaKey.extractBytes());
-    _mediaReceiveKey = Uint8List.fromList(await receiveMediaKey.extractBytes());
+    Uint8List? sendMediaBytes;
+    Uint8List? receiveMediaBytes;
+    AuthenticatedFrameCodec? unattachedCodec;
+    try {
+      _requirePhase(expectedPhase);
+      final nextCodec = role == PeerSocketRole.client
+          ? await AuthenticatedFrameCodec.create(
+              sendKey: keys.clientToServerChat,
+              receiveKey: keys.serverToClientChat,
+            )
+          : await AuthenticatedFrameCodec.create(
+              sendKey: keys.serverToClientChat,
+              receiveKey: keys.clientToServerChat,
+            );
+      unattachedCodec = nextCodec;
+      _requirePhase(expectedPhase);
+      final sendMediaKey = role == PeerSocketRole.client
+          ? keys.clientToServerMedia
+          : keys.serverToClientMedia;
+      final receiveMediaKey = role == PeerSocketRole.client
+          ? keys.serverToClientMedia
+          : keys.clientToServerMedia;
+      sendMediaBytes = Uint8List.fromList(await sendMediaKey.extractBytes());
+      receiveMediaBytes = Uint8List.fromList(
+        await receiveMediaKey.extractBytes(),
+      );
+      _requirePhase(expectedPhase);
+      _codec = nextCodec;
+      _mediaSendKey = sendMediaBytes;
+      _mediaReceiveKey = receiveMediaBytes;
+      unattachedCodec = null;
+      sendMediaBytes = null;
+      receiveMediaBytes = null;
+    } finally {
+      sendMediaBytes?.fillRange(0, sendMediaBytes.length, 0);
+      receiveMediaBytes?.fillRange(0, receiveMediaBytes.length, 0);
+      unattachedCodec?.close();
+      keys.destroy();
+    }
   }
 
   void _clearMediaKeys() {
@@ -856,6 +894,33 @@ final class PeerSocketSession {
     }
     _mediaSendKey = null;
     _mediaReceiveKey = null;
+  }
+
+  T _withMediaKey<T>(Uint8List? source, T Function(Uint8List key) action) {
+    if (!isAuthenticated || source == null) {
+      throw const AuthHandshakeException('media_key_missing');
+    }
+    final scopedKey = Uint8List.fromList(source);
+    try {
+      return action(scopedKey);
+    } finally {
+      scopedKey.fillRange(0, scopedKey.length, 0);
+    }
+  }
+
+  Future<T> _withMediaKeyAsync<T>(
+    Uint8List? source,
+    Future<T> Function(Uint8List key) action,
+  ) async {
+    if (!isAuthenticated || source == null) {
+      throw const AuthHandshakeException('media_key_missing');
+    }
+    final scopedKey = Uint8List.fromList(source);
+    try {
+      return await action(scopedKey);
+    } finally {
+      scopedKey.fillRange(0, scopedKey.length, 0);
+    }
   }
 
   WirePeerProfile _decodeProfile(AuthEnvelope envelope) {
@@ -943,10 +1008,7 @@ final class PeerSocketSession {
     return result;
   }
 
-  void _transition(
-    PeerSocketPhase expectedPhase,
-    PeerSocketPhase nextPhase,
-  ) {
+  void _transition(PeerSocketPhase expectedPhase, PeerSocketPhase nextPhase) {
     _requirePhase(expectedPhase);
     phase = nextPhase;
   }
@@ -954,9 +1016,11 @@ final class PeerSocketSession {
   void _requireEnvelope(AuthEnvelope envelope, AuthAction action) {
     if (envelope.action != action ||
         envelope.protocolVersion != protocolVersion) {
-      _fail<void>(envelope.protocolVersion == protocolVersion
-          ? 'unexpected_action'
-          : 'upgrade_required');
+      _fail<void>(
+        envelope.protocolVersion == protocolVersion
+            ? 'unexpected_action'
+            : 'upgrade_required',
+      );
     }
   }
 
@@ -967,10 +1031,7 @@ final class PeerSocketSession {
 }
 
 String identityPublicKeyHash(String publicKeyBase64Url) {
-  final publicKey = decodeAuthBase64Url(
-    publicKeyBase64Url,
-    expectedLength: 32,
-  );
+  final publicKey = decodeAuthBase64Url(publicKeyBase64Url, expectedLength: 32);
   return base64Url
       .encode(hashes.sha256.convert(publicKey).bytes)
       .replaceAll('=', '');
@@ -978,9 +1039,7 @@ String identityPublicKeyHash(String publicKeyBase64Url) {
 
 Uint8List _secureNonce() {
   final random = Random.secure();
-  return Uint8List.fromList(
-    List<int>.generate(32, (_) => random.nextInt(256)),
-  );
+  return Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
 }
 
 bool _sameBytes(List<int> first, List<int> second) {

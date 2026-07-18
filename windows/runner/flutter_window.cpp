@@ -4,8 +4,10 @@
 
 #include "audio_share_plugin.h"
 #include "desktop_clipboard_image_plugin.h"
+#include "desktop_quick_send_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
+#include "single_instance.h"
 #include "window_theme_plugin.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -46,6 +48,9 @@ bool FlutterWindow::OnCreate() {
       flutter_controller_->engine()->GetRegistrarForPlugin(
           "DesktopClipboardImagePlugin"),
       GetHandle());
+  DesktopQuickSendPluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin(
+          "DesktopQuickSendPlugin"));
   WindowThemePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("WindowThemePlugin"),
       GetHandle());
@@ -75,6 +80,16 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_COPYDATA) {
+    std::vector<std::string> arguments;
+    if (ReadQuickSendCopyData(
+            reinterpret_cast<const COPYDATASTRUCT*>(lparam), &arguments)) {
+      return DesktopQuickSendPluginEmitArguments(arguments) ==
+                     DesktopQuickSendEnqueueOutcome::kAccepted
+                 ? TRUE
+                 : FALSE;
+    }
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     RemoteInputPluginHandleWindowMessage(hwnd, message, wparam, lparam);

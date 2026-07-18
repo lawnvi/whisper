@@ -24,12 +24,12 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
   }) : _inner = PacketByteTransport(
-          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-          closeSink: closeSink ?? () async {},
-        );
+         sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+         closeSink: closeSink ?? () async {},
+       );
 
   RemoteInputPacketByteTransport.withTransport(PacketByteTransport transport)
-      : _inner = transport;
+    : _inner = transport;
 
   final PacketByteTransport _inner;
 
@@ -43,8 +43,7 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
       RemoteInputEventType.mouseWheel => OutboundPacketKind.scroll,
       RemoteInputEventType.mouseButton => OutboundPacketKind.button,
       RemoteInputEventType.key ||
-      RemoteInputEventType.modifiers =>
-        OutboundPacketKind.key,
+      RemoteInputEventType.modifiers => OutboundPacketKind.key,
       RemoteInputEventType.release => OutboundPacketKind.release,
     };
     _inner.send(packet.encode(), kind: kind);
@@ -59,8 +58,8 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   RemoteInputWebSocketPacketTransport._(
     Stream<dynamic> incoming,
     PacketByteTransport transport,
-  )   : _stream = incoming.asBroadcastStream(),
-        super.withTransport(transport) {
+  ) : _stream = incoming.asBroadcastStream(),
+      super.withTransport(transport) {
     _streamSubscription = _stream.listen(
       (_) {},
       onError: (_, __) {
@@ -82,15 +81,14 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     int maxItems = 128,
     int maxBytes = 256 * 1024,
     AuthenticatedMediaPacketEncoder? packetEncoder,
-  }) =>
-      RemoteInputWebSocketPacketTransport.forStreams(
-        incoming: channel.stream,
-        addStream: channel.sink.addStream,
-        closeSink: () => channel.sink.close(),
-        maxItems: maxItems,
-        maxBytes: maxBytes,
-        packetEncoder: packetEncoder,
-      );
+  }) => RemoteInputWebSocketPacketTransport.forStreams(
+    incoming: channel.stream,
+    addStream: channel.sink.addStream,
+    closeSink: () => channel.sink.close(),
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    packetEncoder: packetEncoder,
+  );
 
   factory RemoteInputWebSocketPacketTransport.forStreams({
     required Stream<dynamic> incoming,
@@ -123,6 +121,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     required String sessionId,
     required String peerId,
   }) async {
+    AuthenticatedMediaPacketEncoder? unownedPacketEncoder;
     try {
       WebSocketChannel channel = IOWebSocketChannel.connect(uri);
       await channel.ready;
@@ -135,15 +134,20 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
         peerId: peerId,
         mediaMacKey: mediaMacKey,
       );
-      return RemoteInputWebSocketPacketTransport.forChannel(
-        channel,
-        packetEncoder: AuthenticatedMediaPacketEncoder(
-          route: '/input',
-          sessionId: sessionId,
-          mediaMacKey: mediaMacKey,
-          maxPayloadBytes: 64 * 1024,
-        ),
+      unownedPacketEncoder = AuthenticatedMediaPacketEncoder(
+        route: '/input',
+        namespace: 'remote-input',
+        sessionId: sessionId,
+        mediaMacKey: mediaMacKey,
+        channelBinding: mediaPacketChannelBindingFromUri(uri),
+        maxPayloadBytes: 64 * 1024,
       );
+      final transport = RemoteInputWebSocketPacketTransport.forChannel(
+        channel,
+        packetEncoder: unownedPacketEncoder,
+      );
+      unownedPacketEncoder = null;
+      return transport;
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         error is PacketWebSocketConnectException
@@ -151,6 +155,8 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
             : PacketWebSocketConnectException(uri, error),
         stackTrace,
       );
+    } finally {
+      unownedPacketEncoder?.destroy();
     }
   }
 

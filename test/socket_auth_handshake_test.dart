@@ -370,10 +370,9 @@ void main() {
       ),
       isTrue,
     );
-    await expectLater(
-      client.createProof(),
-      throwsA(isA<AuthHandshakeException>()),
-    );
+    final proof = await client.createProof();
+    expect(proof.action, AuthAction.proof);
+    expect(client.isAuthenticated, isFalse);
     client.close();
     expect(client.phase, PeerSocketPhase.closing);
     expect(client.isClosed, isTrue);

@@ -11,8 +11,14 @@ final class SessionUpgradeClaim {
     required this.sessionId,
     required this.peerId,
     required Uint8List mediaMacKey,
+    required Uint8List channelBinding,
     this.connectionGeneration = 0,
-  }) : _mediaMacKey = Uint8List.fromList(mediaMacKey);
+  }) : _mediaMacKey = Uint8List.fromList(mediaMacKey),
+       _channelBinding = Uint8List.fromList(channelBinding) {
+    if (mediaMacKey.length != 32 || channelBinding.length != 32) {
+      throw ArgumentError('media keys and channel binding must be 32 bytes');
+    }
+  }
 
   final String route;
   final String namespace;
@@ -20,8 +26,55 @@ final class SessionUpgradeClaim {
   final String peerId;
   final int connectionGeneration;
   final Uint8List _mediaMacKey;
+  final Uint8List _channelBinding;
+  bool _destroyed = false;
 
-  Uint8List get mediaMacKey => Uint8List.fromList(_mediaMacKey);
+  T withMediaMacKey<T>(T Function(Uint8List key) action) {
+    if (_destroyed) {
+      throw StateError('session upgrade claim has been destroyed');
+    }
+    final scopedKey = Uint8List.fromList(_mediaMacKey);
+    try {
+      return action(scopedKey);
+    } finally {
+      scopedKey.fillRange(0, scopedKey.length, 0);
+    }
+  }
+
+  bool matchesMediaMacKey(Uint8List candidate) {
+    return !_destroyed && constantTimeBytesEqual(_mediaMacKey, candidate);
+  }
+
+  T withMediaPacketContext<T>(
+    T Function(Uint8List key, Uint8List channelBinding) action,
+  ) {
+    if (_destroyed) {
+      throw StateError('session upgrade claim has been destroyed');
+    }
+    final scopedKey = Uint8List.fromList(_mediaMacKey);
+    final scopedBinding = Uint8List.fromList(_channelBinding);
+    try {
+      return action(scopedKey, scopedBinding);
+    } finally {
+      scopedKey.fillRange(0, scopedKey.length, 0);
+      scopedBinding.fillRange(0, scopedBinding.length, 0);
+    }
+  }
+
+  bool matchesChannelBinding(Uint8List candidate) {
+    return !_destroyed && constantTimeBytesEqual(_channelBinding, candidate);
+  }
+
+  bool get isDestroyed => _destroyed;
+
+  void destroy() {
+    if (_destroyed) {
+      return;
+    }
+    _destroyed = true;
+    _mediaMacKey.fillRange(0, _mediaMacKey.length, 0);
+    _channelBinding.fillRange(0, _channelBinding.length, 0);
+  }
 }
 
 final class SessionUpgradeTokenRegistry {
@@ -119,7 +172,10 @@ final class SessionUpgradeTokenRegistry {
     if (matchingIndex < 0) {
       return null;
     }
-    return _claimFor(_entries.removeAt(matchingIndex));
+    final entry = _entries.removeAt(matchingIndex);
+    final claim = _claimFor(entry);
+    entry.destroy();
+    return claim;
   }
 
   SessionUpgradeClaim? lookup({
@@ -172,6 +228,7 @@ final class SessionUpgradeTokenRegistry {
       sessionId: entry.sessionId,
       peerId: entry.peerId,
       mediaMacKey: entry.mediaMacKey,
+      channelBinding: entry.tokenBytes,
       connectionGeneration: entry.connectionGeneration,
     );
   }
@@ -191,7 +248,7 @@ final class SessionUpgradeTokenRegistry {
         (namespace != null && normalizedNamespace == null)) {
       return;
     }
-    _entries.removeWhere(
+    _removeWhereAndDestroy(
       (entry) =>
           entry.route == normalizedRoute &&
           (normalizedNamespace == null ||
@@ -205,15 +262,29 @@ final class SessionUpgradeTokenRegistry {
     if (peerId.isEmpty) {
       return;
     }
-    _entries.removeWhere((entry) => entry.peerId == peerId);
+    _removeWhereAndDestroy((entry) => entry.peerId == peerId);
   }
 
   void clearAll() {
+    for (final entry in _entries) {
+      entry.destroy();
+    }
     _entries.clear();
   }
 
   void _purgeExpired(DateTime now) {
-    _entries.removeWhere((entry) => !now.isBefore(entry.expiresAt));
+    _removeWhereAndDestroy((entry) => !now.isBefore(entry.expiresAt));
+  }
+
+  void _removeWhereAndDestroy(bool Function(_SessionUpgradeEntry) remove) {
+    for (var index = _entries.length - 1; index >= 0; index -= 1) {
+      final entry = _entries[index];
+      if (!remove(entry)) {
+        continue;
+      }
+      _entries.removeAt(index);
+      entry.destroy();
+    }
   }
 }
 
@@ -225,10 +296,7 @@ String normalizeMediaRoute(String route) {
   return normalized;
 }
 
-String normalizeMediaNamespace(
-  String namespace, {
-  required String route,
-}) {
+String normalizeMediaNamespace(String namespace, {required String route}) {
   final normalized = _tryNormalizeMediaNamespace(namespace, route: route);
   if (normalized == null) {
     throw ArgumentError.value(
@@ -325,16 +393,19 @@ final class _SessionUpgradeEntry {
   final Uint8List mediaMacKey;
   final int connectionGeneration;
   final DateTime expiresAt;
+
+  void destroy() {
+    tokenBytes.fillRange(0, tokenBytes.length, 0);
+    mediaMacKey.fillRange(0, mediaMacKey.length, 0);
+  }
 }
 
-bool _entryMatchesClaim(
-  _SessionUpgradeEntry entry,
-  SessionUpgradeClaim claim,
-) {
+bool _entryMatchesClaim(_SessionUpgradeEntry entry, SessionUpgradeClaim claim) {
   return entry.route == claim.route &&
       entry.namespace == claim.namespace &&
       entry.sessionId == claim.sessionId &&
       entry.peerId == claim.peerId &&
       entry.connectionGeneration == claim.connectionGeneration &&
-      constantTimeBytesEqual(entry.mediaMacKey, claim.mediaMacKey);
+      claim.matchesMediaMacKey(entry.mediaMacKey) &&
+      claim.matchesChannelBinding(entry.tokenBytes);
 }

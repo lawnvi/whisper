@@ -20,7 +20,7 @@ void main() {
     await transport.close();
     transport.send([2]);
     expect(sentBytes, [
-      [1]
+      [1],
     ]);
     expect(dropped, 1);
     expect(closes, 1);
@@ -68,17 +68,24 @@ void main() {
     final key = Uint8List.fromList(
       List<int>.generate(32, (index) => index + 1),
     );
+    final channelBinding = Uint8List.fromList(
+      List<int>.generate(32, (index) => 255 - index),
+    );
 
     AuthenticatedMediaPacketDecoder decoder({
       String route = '/audio',
+      String namespace = '',
       String sessionId = 'session-a',
       Uint8List? mediaMacKey,
+      Uint8List? binding,
       int maxPayloadBytes = 256 * 1024,
     }) {
       return AuthenticatedMediaPacketDecoder(
         route: route,
+        namespace: namespace,
         sessionId: sessionId,
         mediaMacKey: mediaMacKey ?? key,
+        channelBinding: binding ?? channelBinding,
         maxPayloadBytes: maxPayloadBytes,
       );
     }
@@ -88,14 +95,18 @@ void main() {
         route: '/audio',
         sessionId: 'session-a',
         mediaMacKey: key,
+        channelBinding: channelBinding,
         maxPayloadBytes: 256 * 1024,
       );
       final receiver = decoder();
+      final first = encoder.encode(Uint8List.fromList(<int>[1, 2]));
 
-      expect(receiver.decode(encoder.encode(Uint8List.fromList(<int>[1, 2]))),
-          <int>[1, 2]);
-      expect(receiver.decode(encoder.encode(Uint8List.fromList(<int>[3]))),
-          <int>[3]);
+      expect(first.sublist(32), isNot(orderedEquals(<int>[1, 2])));
+      expect(receiver.decode(first), <int>[1, 2]);
+      expect(
+        receiver.decode(encoder.encode(Uint8List.fromList(<int>[3]))),
+        <int>[3],
+      );
       expect(encoder.nextSequence, 2);
       expect(receiver.expectedSequence, 2);
     });
@@ -105,15 +116,16 @@ void main() {
         route: '/audio',
         sessionId: 'session-a',
         mediaMacKey: key,
+        channelBinding: channelBinding,
         maxPayloadBytes: 256 * 1024,
       ).encode(Uint8List.fromList(<int>[1, 2, 3]));
       final tampered = Uint8List.fromList(encoded)..last ^= 0xff;
       final wrongLength = Uint8List.fromList(encoded);
-      ByteData.sublistView(wrongLength).setUint32(
-        AuthenticatedMediaPacketEnvelope.payloadLengthOffset,
-        4,
-      );
+      ByteData.sublistView(
+        wrongLength,
+      ).setUint32(AuthenticatedMediaPacketEnvelope.payloadLengthOffset, 4);
       final wrongKey = Uint8List.fromList(key)..[0] ^= 0xff;
+      final wrongBinding = Uint8List.fromList(channelBinding)..[0] ^= 0xff;
 
       expect(() => decoder().decode(tampered), throwsFormatException);
       expect(
@@ -121,7 +133,15 @@ void main() {
         throwsFormatException,
       );
       expect(
+        () => decoder(binding: wrongBinding).decode(encoded),
+        throwsFormatException,
+      );
+      expect(
         () => decoder(route: '/input').decode(encoded),
+        throwsFormatException,
+      );
+      expect(
+        () => decoder(namespace: 'audio-group').decode(encoded),
         throwsFormatException,
       );
       expect(
@@ -136,6 +156,7 @@ void main() {
         route: '/input',
         sessionId: 'input-session',
         mediaMacKey: key,
+        channelBinding: channelBinding,
         maxPayloadBytes: 64 * 1024,
       );
       final first = encoder.encode(Uint8List.fromList(<int>[1]));
@@ -158,64 +179,104 @@ void main() {
       );
     });
 
-    test('enforces the route payload cap before authenticating or decoding',
-        () {
-      final encoder = AuthenticatedMediaPacketEncoder(
+    test('binds a rebuilt channel to its one-time upgrade token', () {
+      final nextBinding = Uint8List.fromList(channelBinding)..[0] ^= 0xff;
+      final firstChannel = AuthenticatedMediaPacketEncoder(
         route: '/audio',
         sessionId: 'session-a',
         mediaMacKey: key,
-        maxPayloadBytes: 4,
-      );
-      final maximum = encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4]));
+        channelBinding: channelBinding,
+        maxPayloadBytes: 256,
+      ).encode(Uint8List.fromList(<int>[1, 2, 3]));
+      final rebuiltChannel = AuthenticatedMediaPacketEncoder(
+        route: '/audio',
+        sessionId: 'session-a',
+        mediaMacKey: key,
+        channelBinding: nextBinding,
+        maxPayloadBytes: 256,
+      ).encode(Uint8List.fromList(<int>[1, 2, 3]));
 
-      expect(decoder(maxPayloadBytes: 4).decode(maximum), <int>[1, 2, 3, 4]);
+      expect(firstChannel, isNot(orderedEquals(rebuiltChannel)));
       expect(
-        () => encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4, 5])),
-        throwsArgumentError,
+        () => decoder(
+          binding: nextBinding,
+          maxPayloadBytes: 256,
+        ).decode(firstChannel),
+        throwsFormatException,
       );
       expect(
-        () => decoder(maxPayloadBytes: 3).decode(maximum),
-        throwsFormatException,
+        decoder(
+          binding: nextBinding,
+          maxPayloadBytes: 256,
+        ).decode(rebuiltChannel),
+        <int>[1, 2, 3],
       );
     });
 
-    test('drop-oldest queue assigns envelope sequence only when written',
-        () async {
-      final firstWrite = Completer<void>();
-      final releaseFirstWrite = Completer<void>();
-      final written = <Uint8List>[];
-      final transport = PacketByteTransport.audio(
-        addStream: (stream) async {
-          written.add(await stream.single as Uint8List);
-          if (!firstWrite.isCompleted) {
-            firstWrite.complete();
-            await releaseFirstWrite.future;
-          }
-        },
-        closeSink: () async {},
-        maxItems: 2,
-        maxBytes: 1024,
-        packetEncoder: AuthenticatedMediaPacketEncoder(
+    test(
+      'enforces the route payload cap before authenticating or decoding',
+      () {
+        final encoder = AuthenticatedMediaPacketEncoder(
           route: '/audio',
           sessionId: 'session-a',
           mediaMacKey: key,
-          maxPayloadBytes: 256,
-        ),
-      );
+          channelBinding: channelBinding,
+          maxPayloadBytes: 4,
+        );
+        final maximum = encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4]));
 
-      transport.send(Uint8List.fromList(<int>[1]));
-      await firstWrite.future;
-      transport.send(Uint8List.fromList(<int>[2]));
-      transport.send(Uint8List.fromList(<int>[3]));
-      releaseFirstWrite.complete();
-      await transport.close();
+        expect(decoder(maxPayloadBytes: 4).decode(maximum), <int>[1, 2, 3, 4]);
+        expect(
+          () => encoder.encode(Uint8List.fromList(<int>[1, 2, 3, 4, 5])),
+          throwsArgumentError,
+        );
+        expect(
+          () => decoder(maxPayloadBytes: 3).decode(maximum),
+          throwsFormatException,
+        );
+      },
+    );
 
-      final receiver = decoder(maxPayloadBytes: 256);
-      expect(written.map(receiver.decode), <List<int>>[
-        <int>[1],
-        <int>[3],
-      ]);
-    });
+    test(
+      'drop-oldest queue assigns envelope sequence only when written',
+      () async {
+        final firstWrite = Completer<void>();
+        final releaseFirstWrite = Completer<void>();
+        final written = <Uint8List>[];
+        final transport = PacketByteTransport.audio(
+          addStream: (stream) async {
+            written.add(await stream.single as Uint8List);
+            if (!firstWrite.isCompleted) {
+              firstWrite.complete();
+              await releaseFirstWrite.future;
+            }
+          },
+          closeSink: () async {},
+          maxItems: 2,
+          maxBytes: 1024,
+          packetEncoder: AuthenticatedMediaPacketEncoder(
+            route: '/audio',
+            sessionId: 'session-a',
+            mediaMacKey: key,
+            channelBinding: channelBinding,
+            maxPayloadBytes: 256,
+          ),
+        );
+
+        transport.send(Uint8List.fromList(<int>[1]));
+        await firstWrite.future;
+        transport.send(Uint8List.fromList(<int>[2]));
+        transport.send(Uint8List.fromList(<int>[3]));
+        releaseFirstWrite.complete();
+        await transport.close();
+
+        final receiver = decoder(maxPayloadBytes: 256);
+        expect(written.map(receiver.decode), <List<int>>[
+          <int>[1],
+          <int>[3],
+        ]);
+      },
+    );
   });
 
   test('queued audio transport drains addStream before closing', () async {
@@ -345,42 +406,44 @@ void main() {
     expect(sinkCloses, 1);
   });
 
-  test('remote close aborts an active writer without waiting for its deadline',
-      () async {
-    final incoming = StreamController<dynamic>();
-    final writerStarted = Completer<void>();
-    final releaseWriter = Completer<void>();
-    var sinkCloses = 0;
-    final transport = PacketByteTransport.audio(
-      incoming: incoming.stream,
-      addStream: (stream) async {
-        await stream.single;
-        writerStarted.complete();
-        await releaseWriter.future;
-      },
-      closeSink: () async => sinkCloses += 1,
-      writerTimeout: const Duration(seconds: 1),
-    );
+  test(
+    'remote close aborts an active writer without waiting for its deadline',
+    () async {
+      final incoming = StreamController<dynamic>();
+      final writerStarted = Completer<void>();
+      final releaseWriter = Completer<void>();
+      var sinkCloses = 0;
+      final transport = PacketByteTransport.audio(
+        incoming: incoming.stream,
+        addStream: (stream) async {
+          await stream.single;
+          writerStarted.complete();
+          await releaseWriter.future;
+        },
+        closeSink: () async => sinkCloses += 1,
+        writerTimeout: const Duration(seconds: 1),
+      );
 
-    final sending = transport.send(Uint8List.fromList(<int>[1]));
-    await writerStarted.future;
-    await incoming.close();
+      final sending = transport.send(Uint8List.fromList(<int>[1]));
+      await writerStarted.future;
+      await incoming.close();
 
-    expect(
-      (await transport.done).reason,
-      PacketTransportTerminationReason.remoteClosed,
-    );
-    expect(
-      await sending.timeout(const Duration(milliseconds: 100)),
-      PacketSendResult.closed,
-    );
-    await transport.close().timeout(const Duration(milliseconds: 100));
-    expect(sinkCloses, 1);
+      expect(
+        (await transport.done).reason,
+        PacketTransportTerminationReason.remoteClosed,
+      );
+      expect(
+        await sending.timeout(const Duration(milliseconds: 100)),
+        PacketSendResult.closed,
+      );
+      await transport.close().timeout(const Duration(milliseconds: 100));
+      expect(sinkCloses, 1);
 
-    releaseWriter.complete();
-    await Future<void>.delayed(Duration.zero);
-    expect(sinkCloses, 1);
-  });
+      releaseWriter.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(sinkCloses, 1);
+    },
+  );
 
   test('intentional queued audio close reports local closure only', () async {
     final incoming = StreamController<dynamic>();
@@ -414,19 +477,10 @@ void main() {
       maxBytes: 12,
     );
 
-    transport.send(
-      [0, 0, 0, 0],
-      kind: OutboundPacketKind.key,
-    );
+    transport.send([0, 0, 0, 0], kind: OutboundPacketKind.key);
     await Future<void>.delayed(Duration.zero);
-    transport.send(
-      [1, 1, 1, 1],
-      kind: OutboundPacketKind.mouseMove,
-    );
-    transport.send(
-      [2, 2, 2, 2],
-      kind: OutboundPacketKind.mouseMove,
-    );
+    transport.send([1, 1, 1, 1], kind: OutboundPacketKind.mouseMove);
+    transport.send([2, 2, 2, 2], kind: OutboundPacketKind.mouseMove);
 
     firstGate.complete();
     await transport.close();
@@ -464,19 +518,10 @@ void main() {
       ),
     );
 
-    transport.send(
-      [1],
-      kind: OutboundPacketKind.key,
-    );
+    transport.send([1], kind: OutboundPacketKind.key);
     await firstWriteStarted.future;
-    transport.send(
-      [2],
-      kind: OutboundPacketKind.key,
-    );
-    transport.send(
-      [3],
-      kind: OutboundPacketKind.release,
-    );
+    transport.send([2], kind: OutboundPacketKind.key);
+    transport.send([3], kind: OutboundPacketKind.release);
 
     await overflowClosed.future;
     expect(transport.isClosed, isTrue);

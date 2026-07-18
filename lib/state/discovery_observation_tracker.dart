@@ -21,23 +21,28 @@ final class DiscoveredServiceCandidate {
   DiscoveredServiceCandidate({
     required this.publicKeyHash,
     required this.serviceName,
+    required this.advertisedProtocolVersion,
     required this.endpoint,
     required Iterable<PeerEndpoint> endpoints,
     required this.lastSeenAt,
   }) : endpoints = UnmodifiableListView<PeerEndpoint>(
-          endpoints.toList(growable: false),
-        );
+         endpoints.toList(growable: false),
+       );
 
   final String publicKeyHash;
   final String serviceName;
+  final int advertisedProtocolVersion;
   final PeerEndpoint endpoint;
   final List<PeerEndpoint> endpoints;
   final DateTime lastSeenAt;
+
+  bool get isProtocolCompatible =>
+      advertisedProtocolVersion == int.parse(DiscoveryIdentity.protocolVersion);
 }
 
 final class DiscoveryObservationTracker {
   DiscoveryObservationTracker({DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   static const serviceType = '_whisper._tcp';
 
@@ -56,6 +61,7 @@ final class DiscoveryObservationTracker {
     for (final observation in _observations.values) {
       if (!observation.active ||
           observation.publicKeyHash == null ||
+          observation.advertisedProtocolVersion == null ||
           observation.endpoint == null) {
         continue;
       }
@@ -69,9 +75,9 @@ final class DiscoveryObservationTracker {
 
     final values = <DiscoveredServiceCandidate>[];
     for (final entry in byHash.entries) {
-      entry.value.sort((left, right) => right.resolvedAt!.compareTo(
-            left.resolvedAt!,
-          ));
+      entry.value.sort(
+        (left, right) => right.resolvedAt!.compareTo(left.resolvedAt!),
+      );
       final newest = entry.value.first;
       final endpoints = <PeerEndpoint>{
         for (final observation in entry.value) observation.endpoint!,
@@ -80,6 +86,7 @@ final class DiscoveryObservationTracker {
         DiscoveredServiceCandidate(
           publicKeyHash: entry.key,
           serviceName: newest.serviceName,
+          advertisedProtocolVersion: newest.advertisedProtocolVersion!,
           endpoint: newest.endpoint!,
           endpoints: endpoints,
           lastSeenAt: newest.resolvedAt!,
@@ -142,8 +149,12 @@ final class DiscoveryObservationTracker {
         observation.serviceType != handle.serviceType ||
         observation.serviceType != serviceType ||
         !observation.serviceName.startsWith('whisper-') ||
-        !_isStrictTxt(attributes) ||
         host == null) {
+      return false;
+    }
+
+    final advertisedProtocolVersion = _parseStrictTxtVersion(attributes);
+    if (advertisedProtocolVersion == null) {
       return false;
     }
 
@@ -155,22 +166,25 @@ final class DiscoveryObservationTracker {
     }
     observation
       ..publicKeyHash = attributes['pkh']
+      ..advertisedProtocolVersion = advertisedProtocolVersion
       ..endpoint = endpoint
       ..resolvedAt = _clock();
     return true;
   }
 
   bool lost({required String serviceName, String? serviceType}) {
-    final matches = _observations.values
-        .where(
-          (observation) =>
-              observation.active &&
-              observation.generation == _generation &&
-              observation.serviceName == serviceName &&
-              (serviceType == null || observation.serviceType == serviceType),
-        )
-        .toList(growable: false)
-      ..sort((left, right) => left.id.compareTo(right.id));
+    final matches =
+        _observations.values
+            .where(
+              (observation) =>
+                  observation.active &&
+                  observation.generation == _generation &&
+                  observation.serviceName == serviceName &&
+                  (serviceType == null ||
+                      observation.serviceType == serviceType),
+            )
+            .toList(growable: false)
+          ..sort((left, right) => left.id.compareTo(right.id));
     if (matches.isEmpty) {
       return false;
     }
@@ -178,16 +192,22 @@ final class DiscoveryObservationTracker {
     return true;
   }
 
-  static bool _isStrictTxt(Map<String, String> attributes) {
+  static int? _parseStrictTxtVersion(Map<String, String> attributes) {
     if (attributes.length != 2 ||
         !attributes.containsKey('v') ||
-        !attributes.containsKey('pkh') ||
-        attributes['v'] != DiscoveryIdentity.protocolVersion) {
-      return false;
+        !attributes.containsKey('pkh')) {
+      return null;
     }
+    final rawVersion = attributes['v'];
     final publicKeyHash = attributes['pkh'];
-    return publicKeyHash != null &&
-        DiscoveryIdentity.isCanonicalPublicKeyHash(publicKeyHash);
+    if (rawVersion == null ||
+        !RegExp(r'^[1-9][0-9]{0,4}$').hasMatch(rawVersion) ||
+        publicKeyHash == null ||
+        !DiscoveryIdentity.isCanonicalPublicKeyHash(publicKeyHash)) {
+      return null;
+    }
+    final version = int.parse(rawVersion);
+    return version <= 0xffff ? version : null;
   }
 }
 
@@ -205,6 +225,7 @@ final class _DiscoveryObservation {
   final String serviceType;
   bool active = true;
   String? publicKeyHash;
+  int? advertisedProtocolVersion;
   PeerEndpoint? endpoint;
   DateTime? resolvedAt;
 }
