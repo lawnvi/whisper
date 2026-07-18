@@ -38,6 +38,9 @@ void main() {
     expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
     expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
     expect(find.byIcon(Icons.verified_user_rounded), findsOneWidget);
+    final dialog = tester.widget<Dialog>(find.byType(Dialog));
+    final shape = dialog.shape! as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(24));
     expect(
       tester.getSize(
         find.byKey(const ValueKey<String>('pairing-qr-dialog-content')),

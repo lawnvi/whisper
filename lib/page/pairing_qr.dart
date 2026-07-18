@@ -81,7 +81,9 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      backgroundColor: context.whisperPalette.surfaceElevated,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: SizedBox(
         key: const ValueKey<String>('pairing-qr-dialog-content'),
         width: dialogWidth,
@@ -109,45 +111,30 @@ class _PairingQrDialogState extends State<PairingQrDialog>
 
   Widget _buildHeader(AppLocalizations l10n) {
     final theme = Theme.of(context);
-    final palette = context.whisperPalette;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.borderSubtle)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.qr_code_2_rounded,
-                size: 21,
-                color: theme.colorScheme.primary,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 18, 12, 8),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            Icons.qr_code_2_rounded,
+            size: 24,
+            color: theme.colorScheme.onSurface,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              l10n.qrPairingTitle,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                l10n.qrPairingTitle,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: l10n.close,
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close_rounded),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            tooltip: l10n.close,
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
       ),
     );
   }
@@ -157,11 +144,11 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     final palette = context.whisperPalette;
     return Container(
       height: 48,
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      margin: const EdgeInsets.fromLTRB(24, 10, 24, 0),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: palette.surfaceMuted,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: TabBar(
         controller: _tabController,
@@ -169,8 +156,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
           color: palette.surfaceElevated,
-          border: Border.all(color: palette.borderSubtle),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(10),
         ),
         labelColor: theme.colorScheme.onSurface,
         unselectedLabelColor: palette.textMuted,
@@ -209,10 +195,10 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         );
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
-            useWideLayout ? 28 : 20,
-            useWideLayout ? 28 : 22,
-            useWideLayout ? 28 : 20,
-            28,
+            useWideLayout ? 24 : 20,
+            useWideLayout ? 20 : 18,
+            useWideLayout ? 24 : 20,
+            24,
           ),
           child: Center(
             child: ConstrainedBox(
@@ -255,7 +241,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: palette.borderSubtle),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -325,7 +311,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: theme.colorScheme.error.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,7 +335,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
           ),
         ],
         const SizedBox(height: 22),
-        FilledButton.tonalIcon(
+        FilledButton.icon(
           onPressed: () => _copyInvite(inviteText, l10n),
           icon: const Icon(Icons.copy_rounded),
           label: Text(l10n.qrCopyLink),
@@ -391,7 +377,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(18),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final scanFrameSize =
