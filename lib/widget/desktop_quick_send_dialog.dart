@@ -55,19 +55,19 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
   void initState() {
     super.initState();
     final preferred = widget.peers
-        .where(
-          (peer) => peer.id == widget.initialPeerId && peer.isConnected,
-        )
+        .where((peer) => peer.id == widget.initialPeerId && peer.isConnected)
         .firstOrNull;
-    _selectedPeerId = preferred?.id ??
+    _selectedPeerId =
+        preferred?.id ??
         widget.peers.where((peer) => peer.isConnected).firstOrNull?.id;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final textCount =
-        widget.drafts.where((draft) => draft.text.isNotEmpty).length;
+    final textCount = widget.drafts
+        .where((draft) => draft.text.isNotEmpty)
+        .length;
     final fileCount = widget.drafts.fold<int>(
       0,
       (count, draft) => count + draft.filePaths.length,
@@ -81,53 +81,55 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
           Expanded(child: Text(l10n.desktopQuickSendTitle)),
         ],
       ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.desktopQuickSendSummary(textCount, fileCount),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textMuted,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  ...widget.drafts.take(4).map(_buildDraftRow),
-                  if (widget.drafts.length > 4)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-                      child: Text(
-                        l10n.desktopQuickSendMore(widget.drafts.length - 4),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: palette.textMuted,
-                            ),
-                      ),
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    l10n.desktopQuickSendChooseDevice,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 6),
-                  if (widget.peers.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text(
-                        l10n.desktopQuickSendNoTrustedDevices,
-                        style: TextStyle(color: palette.textMuted),
-                      ),
-                    ),
-                  ...widget.peers.map(_buildPeerRow),
-                ],
+      content: SizedBox(
+        width: 460,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.desktopQuickSendSummary(textCount, fileCount),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: palette.textMuted),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ...widget.drafts.take(4).map(_buildDraftRow),
+                    if (widget.drafts.length > 4)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                        child: Text(
+                          l10n.desktopQuickSendMore(widget.drafts.length - 4),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.textMuted),
+                        ),
+                      ),
+                    const Divider(height: 24),
+                    Text(
+                      l10n.desktopQuickSendChooseDevice,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    if (widget.peers.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          l10n.desktopQuickSendNoTrustedDevices,
+                          style: TextStyle(color: palette.textMuted),
+                        ),
+                      ),
+                    ...widget.peers.map(_buildPeerRow),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -152,8 +154,8 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
     final title = draft.text.isNotEmpty
         ? draft.text.replaceAll(RegExp(r'\s+'), ' ').trim()
         : draft.filePaths.isEmpty
-            ? ''
-            : p.basename(draft.filePaths.first);
+        ? ''
+        : p.basename(draft.filePaths.first);
     final fileCount = draft.filePaths.length;
     return ListTile(
       dense: true,
@@ -162,11 +164,7 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
         draft.text.isNotEmpty ? Icons.text_snippet_outlined : Icons.attach_file,
         color: theme.colorScheme.primary,
       ),
-      title: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: fileCount == 0
           ? null
           : Text(
@@ -189,13 +187,10 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
         peer.isConnected ? Icons.lock_rounded : Icons.lock_clock_outlined,
         size: 20,
       ),
-      title: Text(
-        peer.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle:
-          peer.isConnected ? null : Text(l10n.desktopQuickSendDeviceOffline),
+      title: Text(peer.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: peer.isConnected
+          ? null
+          : Text(l10n.desktopQuickSendDeviceOffline),
     );
   }
 }
