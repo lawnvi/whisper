@@ -1,13 +1,21 @@
 import 'dart:collection';
+import 'dart:io';
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/android_system_share.dart';
+import 'package:whisper/model/LocalDatabase.dart';
+import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/model/message.dart';
 import 'package:whisper/state/android_system_share_inbox.dart';
 
 const _hashA = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const _hashB = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('recognizes only Whisper private staged share uris', () {
     expect(
       isAndroidSystemShareStagedUri(
@@ -252,6 +260,107 @@ void main() {
       AndroidSystemShareFailureReason.tooManyItems,
     );
   });
+
+  test('startup discards queued system-share transfers only', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{'_uuid': 'local'});
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    const shareId = '01234567-89ab-4cde-8fab-0123456789ab';
+    const regularId = '11234567-89ab-4cde-8fab-0123456789ab';
+    final share = await _admitOutgoingTransfer(
+      database,
+      transferId: shareId,
+      path:
+          'content://$androidSystemShareFileProviderAuthority/'
+          'android_system_shares/event/item-00.bin',
+    );
+    final regular = await _admitOutgoingTransfer(
+      database,
+      transferId: regularId,
+      path:
+          'content://com.vireen.whisper.systemXshareYfiles/'
+          'androidXsystemYshares/event/item-00.bin',
+    );
+
+    final discarded = await database
+        .discardRecoverableOutgoingTransfersWithPathPrefix(
+          'content://$androidSystemShareFileProviderAuthority/'
+          'android_system_shares/',
+        );
+
+    expect(discarded, 1);
+    expect(
+      (await database.fetchFileTransfer(shareId))?.state,
+      FileTransferState.canceled,
+    );
+    expect((await database.fetchFileTransfer(shareId))?.messageRowId, 0);
+    expect(await database.fetchMessageById(share.message!.id), isNull);
+    expect(
+      (await database.fetchFileTransfer(regularId))?.state,
+      FileTransferState.queued,
+    );
+    expect(await database.fetchMessageById(regular.message!.id), isNotNull);
+  });
+
+  test('native share staging is scoped to one app process', () {
+    final source = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'AndroidSystemSharePlugin.kt',
+    ).readAsStringSync();
+
+    expect(
+      source,
+      contains('ioExecutor.execute { discardPreviousSessionState() }'),
+    );
+    expect(source, contains('.put("sessionId", sessionId)'));
+    expect(source, contains('event.optString("sessionId") != sessionId'));
+  });
+}
+
+Future<FileTransferAdmissionResult> _admitOutgoingTransfer(
+  LocalDatabase database, {
+  required String transferId,
+  required String path,
+}) {
+  final message = MessageData(
+    id: 0,
+    sender: 'local',
+    receiver: 'peer-a',
+    name: 'shared.bin',
+    clipboard: false,
+    size: 4,
+    type: MessageEnum.File,
+    content: '{}',
+    message: '',
+    timestamp: 1,
+    uuid: transferId,
+    acked: false,
+    path: path,
+    md5: '',
+  );
+  return database.admitFileTransfer(
+    message: message,
+    transfer: FileTransferData(
+      transferId: transferId,
+      messageUuid: transferId,
+      messageRowId: 0,
+      peerUid: 'peer-a',
+      direction: FileTransferDirection.outgoing,
+      state: FileTransferState.queued,
+      finalPath: path,
+      tempPath: '',
+      size: 4,
+      checksumAlgorithm: 'sha256',
+      checksumValue:
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      chunkSize: 512 * 1024,
+      committedBytes: 0,
+      resumeProofResetCount: 0,
+      lastError: '',
+      createdAt: 1,
+      updatedAt: 1,
+    ),
+  );
 }
 
 AndroidSystemShareEvent _event(String id) {

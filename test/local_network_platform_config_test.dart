@@ -6,26 +6,37 @@ void main() {
   const pluginPath =
       'android/app/src/main/kotlin/com/vireen/whisper/LocalNetworkPermissionPlugin.kt';
 
-  test('Android manifest declares LAN permissions without location expansion',
-      () {
-    final manifest =
-        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+  test(
+    'Android manifest declares LAN permissions without location expansion',
+    () {
+      final manifest = File(
+        'android/app/src/main/AndroidManifest.xml',
+      ).readAsStringSync();
 
-    expect(manifest, contains('android.permission.INTERNET'));
-    expect(manifest, contains('android.permission.ACCESS_NETWORK_STATE'));
-    expect(manifest, contains('android.permission.ACCESS_WIFI_STATE'));
-    expect(
-        manifest, contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'));
-    expect(manifest, contains('android.permission.NEARBY_WIFI_DEVICES'));
-    expect(manifest, contains('android:maxSdkVersion="36"'));
-    expect(
-        manifest, contains('android:usesPermissionFlags="neverForLocation"'));
-    expect(manifest, contains('android.permission.ACCESS_LOCAL_NETWORK'));
-    expect(
-        manifest, isNot(contains('android.permission.ACCESS_FINE_LOCATION')));
-    expect(
-        manifest, isNot(contains('android.permission.ACCESS_COARSE_LOCATION')));
-  });
+      expect(manifest, contains('android.permission.INTERNET'));
+      expect(manifest, contains('android.permission.ACCESS_NETWORK_STATE'));
+      expect(manifest, contains('android.permission.ACCESS_WIFI_STATE'));
+      expect(
+        manifest,
+        contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'),
+      );
+      expect(manifest, contains('android.permission.NEARBY_WIFI_DEVICES'));
+      expect(manifest, contains('android:maxSdkVersion="36"'));
+      expect(
+        manifest,
+        contains('android:usesPermissionFlags="neverForLocation"'),
+      );
+      expect(manifest, contains('android.permission.ACCESS_LOCAL_NETWORK'));
+      expect(
+        manifest,
+        isNot(contains('android.permission.ACCESS_FINE_LOCATION')),
+      );
+      expect(
+        manifest,
+        isNot(contains('android.permission.ACCESS_COARSE_LOCATION')),
+      );
+    },
+  );
 
   test('Android permission plugin covers normal, compat, and API 37 paths', () {
     final plugin = File(pluginPath).readAsStringSync();
@@ -43,7 +54,9 @@ void main() {
     expect(plugin, contains('registerActivityLifecycleCallbacks(this)'));
     expect(plugin, contains('unregisterActivityLifecycleCallbacks(this)'));
     expect(
-        plugin, contains('override fun onActivityResumed(activity: Activity)'));
+      plugin,
+      contains('override fun onActivityResumed(activity: Activity)'),
+    );
     expect(plugin, contains('emitCurrentPermissionStatus()'));
     expect(plugin, contains('android16CompatTest'));
     expect(requestState, contains('sdkInt >= 37'));
@@ -55,15 +68,9 @@ void main() {
     expect(plugin, contains('state.hasPendingRequest'));
     expect(plugin, contains('SecurityException'));
     expect(plugin, contains('finishPending'));
-    expect(
-      plugin,
-      contains('detachActivity(permanent = false)'),
-    );
+    expect(plugin, contains('detachActivity(permanent = false)'));
     expect(plugin, contains('detachActivity(permanent = true)'));
-    expect(
-      plugin,
-      contains('state.onActivityPermanentlyDetached()'),
-    );
+    expect(plugin, contains('state.onActivityPermanentlyDetached()'));
     expect(
       plugin,
       contains(
@@ -75,6 +82,9 @@ void main() {
       contains('isPermissionRevokedByPolicy(permission, context.packageName)'),
     );
     expect(activity, contains('LocalNetworkPermissionPlugin()'));
+    expect(plugin, contains('ConnectivityManager'));
+    expect(plugin, contains('NetworkCapabilities.TRANSPORT_WIFI'));
+    expect(plugin, contains('currentLanAddress'));
   });
 
   test('iOS ATS is a dictionary and Bonjour declares the Whisper service', () {
@@ -83,10 +93,7 @@ void main() {
     final bonjourIndex = plist.indexOf('<key>NSBonjourServices</key>');
 
     expect(atsIndex, greaterThanOrEqualTo(0));
-    expect(
-      plist.substring(atsIndex, bonjourIndex),
-      contains('<dict>'),
-    );
+    expect(plist.substring(atsIndex, bonjourIndex), contains('<dict>'));
     expect(
       plist.substring(atsIndex, bonjourIndex),
       contains('<key>NSAllowsLocalNetworking</key>'),
@@ -95,7 +102,9 @@ void main() {
     expect(plist, contains('<string>_whisper._tcp</string>'));
     expect(plist, isNot(contains('NSLocationWhenInUseUsageDescription')));
     expect(
-        plist, isNot(contains('NSLocationAlwaysAndWhenInUseUsageDescription')));
+      plist,
+      isNot(contains('NSLocationAlwaysAndWhenInUseUsageDescription')),
+    );
 
     final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
     expect(appDelegate, contains('NWBrowser'));
@@ -116,8 +125,9 @@ void main() {
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
     expect(deviceList, isNot(contains('Permission.location')));
 
-    final entitlements =
-        File('ios/Runner/Runner.entitlements').readAsStringSync();
+    final entitlements = File(
+      'ios/Runner/Runner.entitlements',
+    ).readAsStringSync();
     expect(
       entitlements,
       isNot(contains('com.apple.developer.networking.wifi-info')),
@@ -129,8 +139,10 @@ void main() {
     );
 
     if (Platform.isMacOS) {
-      final lint =
-          Process.runSync('plutil', <String>['-lint', 'ios/Runner/Info.plist']);
+      final lint = Process.runSync('plutil', <String>[
+        '-lint',
+        'ios/Runner/Info.plist',
+      ]);
       expect(lint.exitCode, 0, reason: '${lint.stdout}${lint.stderr}');
     }
   });
@@ -153,10 +165,10 @@ void main() {
     }
 
     if (Platform.isMacOS) {
-      final lint = Process.runSync(
-        'plutil',
-        <String>['-lint', 'macos/Runner/Info.plist'],
-      );
+      final lint = Process.runSync('plutil', <String>[
+        '-lint',
+        'macos/Runner/Info.plist',
+      ]);
       expect(lint.exitCode, 0, reason: '${lint.stdout}${lint.stderr}');
     }
   });

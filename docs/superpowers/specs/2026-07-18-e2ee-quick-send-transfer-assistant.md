@@ -18,7 +18,7 @@
 ### 身份、握手与会话密钥
 
 - 连接协议硬切到 v8，旧版本返回升级提示，不回退到明文业务帧。
-- 每台设备使用长期 Ed25519 身份密钥；私钥 seed 保存到平台安全存储，并迁移、删除旧的 SharedPreferences 副本。
+- 每台设备使用长期 Ed25519 身份密钥；发布构建的私钥 seed 保存到平台安全存储，并迁移、删除旧的 SharedPreferences 副本。macOS Debug 构建为避免本地重签名反复触发系统密码框，使用仅限当前用户配置目录的本地存储。
 - 每次连接生成临时 X25519 密钥和 32-byte nonce；双方签名包含身份、公钥、nonce、profile digest、目标 peer/pkh 和配对语义的固定 transcript。
 - 首次配对或身份需要重新确认时，双方显示同一 6 位配对码并分别明确确认；提前发送的签名 proof 只证明身份，`allow=true` 必须等本机确认后才生成，已保存的 peerId 必须同时匹配 pinned public key。
 - 撤销信任、删除设备或确认身份替换时，先阻止该 peer 的新发送；信任位、identity CAS 与旧身份下的持久文件队列在同一数据库事务内失效，连接随后关闭。旧目标绑定必须重新选择并校验当前 trusted peerId + pkh，不能因后台重连自行恢复。
@@ -30,7 +30,7 @@
 - 文本、文件 offer/chunk/ack、剪贴板、通知和控制消息都经过 chat AEAD，业务分发只发生在鉴权完成后。
 - 音频、音频组和远程输入使用 `WEP1`，XChaCha20-Poly1305；route、namespace、sessionId、一次性升级令牌、header 和序号共同派生或绑定密钥与 AAD，重建通道后序号归零也不会复用旧 key/nonce。
 - `/audio` 与 `/input` 升级令牌为 32-byte 随机值，默认 30 秒、单次消费，并绑定 route、session、peer 和连接 generation；随后还需用 media key 完成 challenge proof。
-- App 启动时加载 libsodium 的 XChaCha20-Poly1305 原生实现；常规文件选择器仍按现有分块流式传输，不增加整文件内存缓冲或第二份磁盘副本。Android 系统分享为支持断线和进程重启恢复，会先生成一份应用私有暂存副本。
+- App 启动时加载 libsodium 的 XChaCha20-Poly1305 原生实现；常规文件选择器仍按现有分块流式传输，不增加整文件内存缓冲或第二份磁盘副本。Android 系统分享会生成应用私有暂存副本，但任务仅在当前应用运行周期内保留。
 
 ### 明确边界
 
@@ -51,7 +51,7 @@
 - 队列满、文本或条目超限、来源不可读时原子拒绝新事件并持久化可见错误，不截断内容、不驱逐旧事件；冷启动后仍会提示拒绝原因。
 - 设备列表用底部弹层选择已配对可信设备。只有一个可信在线设备时可预选，但用户仍须明确确认，不允许静默发送。
 - 文本使用由事件 ID 派生的稳定消息 UUID，并只在收到目标设备的认证 ACK 后记录完成；暂存文件通过应用私有 `FileProvider` URI、现有 Android document reader 和 `sendPickedFileTo` 分块发送。
-- 离线目标以 peerId 和 pinned public key hash 双重绑定并保留 inbox；失败、断线或进程重启后按已持久化进度自动重试，身份缺失或变化会清除目标绑定并要求重新选择，已确认条目不会重复发送。完成或取消传输时清理对应暂存文件，等待重连和失败状态下继续保留。
+- 离线目标以 peerId 和 pinned public key hash 双重绑定，并可在当前运行周期内等待重连；应用进程重启后直接丢弃未完成任务、传输记录和暂存文件，不再重新弹出或自动重试。身份缺失或变化会清除目标绑定并要求重新选择，已确认条目不会重复发送。
 
 ### 桌面入口
 
@@ -94,7 +94,7 @@
 |---|---|---|
 | 身份与 chat AEAD | `auth_session_keys_test`、`authenticated_frame_test`、`peer_socket_session_test`、`typed_connection_handshake_integration_test` | 两台设备首次配对、旧版本拒绝、身份变化告警 |
 | media 加密与升级 | `packet_byte_transport_test`、`media_websocket_authorization_test`、`session_upgrade_token_registry_test` | 音频、音频组、键鼠长时间运行和断线重连 |
-| Android 分享 | `android_system_share_test`、`android_system_share_router_test`、`android_quick_share_removed_source_test` | 真机冷/热启动、单/多文件、强杀恢复、离线目标与暂存清理 |
+| Android 分享 | `android_system_share_test`、`android_system_share_router_test`、`android_quick_share_removed_source_test` | 真机冷/热启动、单/多文件、重启丢弃、离线目标与暂存清理 |
 | 桌面快捷发送 | `desktop_quick_send_inbox_test`、`desktop_quick_send_native_source_test`、`windows_quick_send_bare_snapshot_source_test` | macOS Services、Windows 安装器右键、Linux 文件管理器、全局快捷键 |
 | QR 与诊断 | `pairing_invite_test`、`pairing_qr_test`、`connection_diagnostic_test`、`qr_pairing_wiring_source_test` | 双真机扫码、Wi-Fi 隔离、防火墙、地址变化、身份不匹配 |
 | 文件夹与传输助手 | `folder_transfer_stager_test`、`local_database_transfer_assistant_test`、`transfer_assistant_page_test`、`clipboard_sync_test` | 大目录、符号链接、磁盘不足、长文本和多语言 UI |

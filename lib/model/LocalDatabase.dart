@@ -1058,6 +1058,66 @@ class LocalDatabase extends _$LocalDatabase {
     });
   }
 
+  Future<int> discardRecoverableOutgoingTransfersWithPathPrefix(
+    String pathPrefix,
+  ) {
+    if (pathPrefix.isEmpty) {
+      throw ArgumentError.value(pathPrefix, 'pathPrefix', 'must not be empty');
+    }
+    final escapedPrefix = pathPrefix
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    return transaction(() async {
+      final transfers =
+          await (select(fileTransfer)..where(
+                (item) =>
+                    item.direction.equalsValue(FileTransferDirection.outgoing) &
+                    item.state.isNotIn(const <String>[
+                      'completed',
+                      'failed',
+                      'canceled',
+                    ]) &
+                    item.finalPath.like('$escapedPrefix%', escapeChar: r'\'),
+              ))
+              .get();
+      if (transfers.isEmpty) {
+        return 0;
+      }
+      final transferIds = transfers
+          .map((item) => item.transferId)
+          .toList(growable: false);
+      final messageIds = transfers
+          .map((item) => item.messageRowId)
+          .where((id) => id > 0)
+          .toSet()
+          .toList(growable: false);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final affected =
+          await (update(fileTransfer)..where(
+                (item) =>
+                    item.transferId.isIn(transferIds) &
+                    item.state.isNotIn(const <String>[
+                      'completed',
+                      'failed',
+                      'canceled',
+                    ]),
+              ))
+              .write(
+                FileTransferCompanion(
+                  messageRowId: const Value(0),
+                  state: const Value(FileTransferState.canceled),
+                  lastError: const Value(''),
+                  updatedAt: Value(now),
+                ),
+              );
+      if (messageIds.isNotEmpty) {
+        await (delete(message)..where((item) => item.id.isIn(messageIds))).go();
+      }
+      return affected;
+    });
+  }
+
   Future<void> _detachFileTransfersForMessages(
     Set<int> messageIds, {
     required String reason,

@@ -138,8 +138,11 @@ class MainFlutterWindow: NSWindow {
         result(false)
         return
       }
-      NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-      result(true)
+      let parentPath = URL(fileURLWithPath: path).deletingLastPathComponent().path
+      let selected = NSWorkspace.shared.selectFile(
+        path,
+        inFileViewerRootedAtPath: parentPath)
+      result(selected)
     }
     fileManagerChannel = channel
   }

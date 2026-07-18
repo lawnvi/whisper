@@ -2940,13 +2940,19 @@ class FileTransferEngine {
   ) async {
     await _closeReceivingTransferFile(transfer.transferId, flush: true);
     var tempFile = await _validatedIncomingTempFile(transfer);
-    _receivingChecksums.remove(transfer.transferId)?.close();
     VerifiedTransferSnapshot? snapshot;
     try {
-      snapshot = await VerifiedTransferSnapshot.open(
+      var checksum = _receivingChecksums.remove(transfer.transferId);
+      checksum ??= await streamingChecksumForFilePrefix(
+        tempFile,
+        algorithm: transfer.checksumAlgorithm,
+        end: transfer.size,
+      );
+      snapshot = await VerifiedTransferSnapshot.openFromStreamingChecksum(
         tempFile,
         expectedSize: transfer.size,
         expectedSha256: transfer.checksumValue,
+        streamingSha256: checksum.close(),
       );
     } on FileSystemException {
       tempFile = await _validatedIncomingTempFile(transfer);
@@ -2993,12 +2999,14 @@ class FileTransferEngine {
         late final File published;
         late final FileTransferData completed;
         try {
-          published = await publishVerifiedSnapshot(snapshot, reservation);
           final fileTimestamp = message.fileTimestamp ?? 0;
-          if (fileTimestamp > 0) {
-            await _setPublishedFileTimestamp(published, fileTimestamp);
-            await refreshPublishedDownloadReservation(reservation);
-          }
+          published = await publishVerifiedSnapshot(
+            snapshot,
+            reservation,
+            preparePublishedFile: fileTimestamp > 0
+                ? (file) => _setPublishedFileTimestamp(file, fileTimestamp)
+                : null,
+          );
           completed = await _database().completeIncomingFileTransfer(
             transferId: transfer.transferId,
             finalPath: published.path,

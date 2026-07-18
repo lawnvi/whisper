@@ -218,7 +218,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deleteDeviceDesc => '删除与此设备的所有消息，不可恢复';
+  String get deleteDeviceDesc => '断开连接并删除与此设备的所有消息，不可恢复';
 
   @override
   String get brokeConnectTitle => '断开连接';

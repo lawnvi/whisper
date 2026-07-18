@@ -77,11 +77,13 @@ void _logConversationFailure(ConversationOperationKind kind, Object error) {
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   final bool embedded;
+  final Future<void> Function(String uid)? onDeviceDeleted;
 
   const SendMessageScreen({
     super.key,
     required this.device,
     this.embedded = false,
+    this.onDeviceDeleted,
   });
 
   @override
@@ -435,6 +437,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         state == FileTransferState.canceled;
   }
 
+  TransferSnapshot? get _activeTransferSnapshot {
+    final transferId = _activeTransferId;
+    return transferId == null ? null : _transferSnapshots[transferId];
+  }
+
   bool _canDragFileMessage(MessageData message, TransferSnapshot? transfer) {
     if (!isDesktop() ||
         message.path.isEmpty ||
@@ -562,10 +569,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
+    final activeTransfer = _activeTransferSnapshot;
     final content = Column(
       children: [
         if (embedded) _buildEmbeddedHeader(isDark),
-        if (percent > 0 && percent < 1)
+        if (activeTransfer?.state == FileTransferState.verifying)
+          LinearProgressIndicator(
+            minHeight: 3,
+            color: colorScheme.primary,
+            backgroundColor: colorScheme.primary.withValues(alpha: 0.14),
+          )
+        else if (percent > 0 && percent < 1)
           _buildAnimatedTransferProgress(
             value: percent,
             builder: (context, value) =>
@@ -738,7 +752,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
         : null;
     final actionVisualDensity = compactActions ? VisualDensity.compact : null;
     final actions = <Widget>[];
-    if (percent > 0 && percent < 1 && _isConnectedSession) {
+    final activeTransfer = _activeTransferSnapshot;
+    if (activeTransfer?.state == FileTransferState.verifying &&
+        _isConnectedSession) {
+      actions.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  value: null,
+                  strokeWidth: 2,
+                  color: palette.textMuted,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                l10n.fileTransferVerifying,
+                style: TextStyle(fontSize: 12, color: palette.textMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (percent > 0 && percent < 1 && _isConnectedSession) {
       actions.add(
         Padding(
           padding: const EdgeInsets.only(right: 10),
@@ -866,8 +907,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  app_settings.ClientSettingsScreen(device: device),
+              builder: (context) => app_settings.ClientSettingsScreen(
+                device: device,
+                deleteDevice: widget.onDeviceDeleted,
+              ),
             ),
           );
           await _refreshCurrentDeviceState();
@@ -2036,17 +2079,27 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 SizedBox(
                   width: 24,
                   height: 24,
-                  child: _buildAnimatedTransferProgress(
-                    value: transfer.progress,
-                    builder: (context, value) => CircularProgressIndicator(
-                      value: value,
-                      strokeWidth: 2.4,
-                      color: colorScheme.primary,
-                      backgroundColor: colorScheme.primary.withValues(
-                        alpha: 0.18,
-                      ),
-                    ),
-                  ),
+                  child: transfer.state == FileTransferState.verifying
+                      ? CircularProgressIndicator(
+                          value: null,
+                          strokeWidth: 2.4,
+                          color: colorScheme.primary,
+                          backgroundColor: colorScheme.primary.withValues(
+                            alpha: 0.18,
+                          ),
+                        )
+                      : _buildAnimatedTransferProgress(
+                          value: transfer.progress,
+                          builder: (context, value) =>
+                              CircularProgressIndicator(
+                                value: value,
+                                strokeWidth: 2.4,
+                                color: colorScheme.primary,
+                                backgroundColor: colorScheme.primary.withValues(
+                                  alpha: 0.18,
+                                ),
+                              ),
+                        ),
                 )
               else
                 Icon(
@@ -2187,7 +2240,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => SendMessageScreen(device: deviceData),
+            builder: (context) => SendMessageScreen(
+              device: deviceData,
+              onDeviceDeleted: widget.onDeviceDeleted,
+            ),
           ),
         );
       }

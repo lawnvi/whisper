@@ -7,8 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
-import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/clipboard_write_suppression.dart';
+import 'package:whisper/helper/local_network_permission.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -174,6 +175,13 @@ Future<bool> isLocalhost(String address) async {
 }
 
 Future<String> getLocalIpAddress() async {
+  if (Platform.isAndroid) {
+    final nativeAddress = await LocalNetworkPermission().currentLanAddress();
+    if (nativeAddress != null && isPrivateLanIpv4(nativeAddress)) {
+      return nativeAddress;
+    }
+  }
+
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {

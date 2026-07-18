@@ -35,11 +35,15 @@ class AndroidSystemSharePlugin :
     private var activityBinding: ActivityPluginBinding? = null
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val sessionId = UUID.randomUUID().toString()
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
         channel.setMethodCallHandler(this)
+        // System shares are intentionally scoped to one app process. This task
+        // is queued before Activity attachment captures a cold-start share.
+        ioExecutor.execute { discardPreviousSessionState() }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -203,6 +207,7 @@ class AndroidSystemSharePlugin :
 
         val event = JSONObject()
             .put("schema", EVENT_SCHEMA_VERSION)
+            .put("sessionId", sessionId)
             .put("id", eventId)
             .put("action", snapshot.action)
             .put("mimeType", snapshot.mimeType.take(MAX_MIME_TYPE_LENGTH))
@@ -460,6 +465,16 @@ class AndroidSystemSharePlugin :
         return events
     }
 
+    private fun discardPreviousSessionState() {
+        stagingRoot().listFiles().orEmpty().forEach { directory ->
+            val event = readEvent(directory)
+            if (event == null || event.optString("sessionId") != sessionId) {
+                directory.deleteRecursively()
+            }
+        }
+        AtomicFile(failureFile()).delete()
+    }
+
     private fun eventToMap(event: JSONObject): Map<String, Any?> {
         val items = mutableListOf<Map<String, Any?>>()
         val itemArray = event.optJSONArray("items") ?: JSONArray()
@@ -628,6 +643,7 @@ class AndroidSystemSharePlugin :
             fun from(intent: Intent): ShareIntentParseResult? {
                 val textParts = LinkedHashSet<String>()
                 val uris = LinkedHashMap<String, Uri>()
+                val acceptsSingleUri = intent.action == Intent.ACTION_SEND
                 var textLength = 0
                 var rejectionCode: String? = null
 
@@ -654,6 +670,12 @@ class AndroidSystemSharePlugin :
                         return
                     }
                     val key = uri.toString()
+                    // ACTION_SEND represents one shared item. Some Android
+                    // providers expose that item through both EXTRA_STREAM and
+                    // ClipData using different content URIs.
+                    if (key !in uris && acceptsSingleUri && uris.isNotEmpty()) {
+                        return
+                    }
                     if (key !in uris && uris.size >= MAX_ITEMS_PER_EVENT) {
                         rejectionCode = FAILURE_TOO_MANY_ITEMS
                         return
@@ -753,7 +775,7 @@ class AndroidSystemSharePlugin :
         private const val FILE_PROVIDER_ROOT = "android_system_shares"
         private const val EVENT_FILE_NAME = "event.json"
         private const val FAILURE_FILE_NAME = "android_system_share_failures.json"
-        private const val EVENT_SCHEMA_VERSION = 1
+        private const val EVENT_SCHEMA_VERSION = 2
         private const val MAX_PENDING_EVENTS = 16
         private const val MAX_PENDING_FAILURES = 16
         private const val MAX_ITEMS_PER_EVENT = 64

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -8,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
 const int maxIncomingFileNameBytes = 240;
+const int _fileIoBufferSize = 1024 * 1024;
 
 final RegExp _canonicalTransferId = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -71,10 +73,7 @@ bool _hasWellFormedUtf16(String value) {
   return true;
 }
 
-Future<String> safeTransferTempPath(
-  Directory root,
-  String transferId,
-) async {
+Future<String> safeTransferTempPath(Directory root, String transferId) async {
   if (!_canonicalTransferId.hasMatch(transferId)) {
     throw const FormatException('invalid transfer id');
   }
@@ -169,9 +168,9 @@ final class DownloadFileReservation {
     required RandomAccessFile handle,
     required Uint8List ownershipToken,
     required FileStat ownershipStat,
-  })  : _handle = handle,
-        _ownershipToken = ownershipToken,
-        _ownershipStat = ownershipStat;
+  }) : _handle = handle,
+       _ownershipToken = ownershipToken,
+       _ownershipStat = ownershipStat;
 
   final String path;
   final RandomAccessFile _handle;
@@ -192,14 +191,17 @@ final class VerifiedTransferSnapshot {
     required this.length,
     required this.sha256Value,
     required FileStat pathStat,
-  })  : _handle = handle,
-        _pathStat = pathStat;
+    required bool verifyPathContentBeforePublishing,
+  }) : _handle = handle,
+       _pathStat = pathStat,
+       _verifyPathContentBeforePublishing = verifyPathContentBeforePublishing;
 
   final String path;
   final int length;
   final String sha256Value;
   final RandomAccessFile _handle;
   final FileStat _pathStat;
+  final bool _verifyPathContentBeforePublishing;
   bool _closed = false;
 
   static Future<VerifiedTransferSnapshot> open(
@@ -214,7 +216,9 @@ final class VerifiedTransferSnapshot {
     final type = await FileSystemEntity.type(file.path, followLinks: false);
     if (type != FileSystemEntityType.file) {
       throw FileSystemException(
-          'transfer temp is not a regular file', file.path);
+        'transfer temp is not a regular file',
+        file.path,
+      );
     }
     final before = await file.stat();
     if (before.size != expectedSize) {
@@ -242,6 +246,7 @@ final class VerifiedTransferSnapshot {
         length: expectedSize,
         sha256Value: actual,
         pathStat: after,
+        verifyPathContentBeforePublishing: true,
       );
     } catch (_) {
       await handle.close();
@@ -249,7 +254,52 @@ final class VerifiedTransferSnapshot {
     }
   }
 
-  Future<void> _verifyStillOwned() async {
+  static Future<VerifiedTransferSnapshot> openFromStreamingChecksum(
+    File file, {
+    required int expectedSize,
+    required String expectedSha256,
+    required String streamingSha256,
+  }) async {
+    if (expectedSize < 0 ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedSha256) ||
+        streamingSha256 != expectedSha256) {
+      throw FileSystemException('transfer checksum mismatch', file.path);
+    }
+    final type = await FileSystemEntity.type(file.path, followLinks: false);
+    if (type != FileSystemEntityType.file) {
+      throw FileSystemException(
+        'transfer temp is not a regular file',
+        file.path,
+      );
+    }
+    final before = await file.stat();
+    if (before.size != expectedSize) {
+      throw FileSystemException('transfer temp length changed', file.path);
+    }
+    final handle = await file.open(mode: FileMode.read);
+    try {
+      if (await handle.length() != expectedSize ||
+          !_sameStableFileStat(before, await file.stat())) {
+        throw FileSystemException(
+          'transfer temp changed after streaming verification',
+          file.path,
+        );
+      }
+      return VerifiedTransferSnapshot._(
+        path: file.path,
+        handle: handle,
+        length: expectedSize,
+        sha256Value: streamingSha256,
+        pathStat: before,
+        verifyPathContentBeforePublishing: false,
+      );
+    } catch (_) {
+      await handle.close();
+      rethrow;
+    }
+  }
+
+  Future<void> _verifyStillOwnedMetadata() async {
     if (_closed) {
       throw StateError('verified transfer snapshot is closed');
     }
@@ -259,6 +309,10 @@ final class VerifiedTransferSnapshot {
         !_sameStableFileStat(_pathStat, await File(path).stat())) {
       throw FileSystemException('verified transfer snapshot changed', path);
     }
+  }
+
+  Future<void> _verifyStillOwned() async {
+    await _verifyStillOwnedMetadata();
     if (await _hashFilePath(File(path), expectedLength: length) !=
         sha256Value) {
       throw FileSystemException('verified transfer snapshot changed', path);
@@ -376,12 +430,17 @@ Future<File> publishVerifiedSnapshot(
   VerifiedTransferSnapshot snapshot,
   DownloadFileReservation reservation, {
   ReservationFlush? flushReservation,
+  FutureOr<void> Function(File file)? preparePublishedFile,
 }) {
   return reservation._publishLock.synchronized(() async {
     if (reservation._consumed) {
       throw StateError('download reservation has already been consumed');
     }
-    await snapshot._verifyStillOwned();
+    if (snapshot._verifyPathContentBeforePublishing) {
+      await snapshot._verifyStillOwned();
+    } else {
+      await snapshot._verifyStillOwnedMetadata();
+    }
     await _verifyReservationPlaceholder(reservation);
     reservation._consumed = true;
     try {
@@ -393,7 +452,7 @@ Future<File> publishVerifiedSnapshot(
       var copied = 0;
       while (copied < snapshot.length) {
         final bytes = await snapshot._handle.read(
-          min(64 * 1024, snapshot.length - copied),
+          min(_fileIoBufferSize, snapshot.length - copied),
         );
         if (bytes.isEmpty) {
           throw FileSystemException(
@@ -414,10 +473,10 @@ Future<File> publishVerifiedSnapshot(
           snapshot.path,
         );
       }
-      await (flushReservation ?? _flushReservationHandle)(
-        reservation._handle,
-      );
-      await snapshot._verifyStillOwned();
+      await (flushReservation ?? _flushReservationHandle)(reservation._handle);
+      await snapshot._verifyStillOwnedMetadata();
+      final published = File(reservation.path);
+      await preparePublishedFile?.call(published);
       await _verifyPublishedReservation(
         reservation,
         expectedSize: snapshot.length,
@@ -426,8 +485,8 @@ Future<File> publishVerifiedSnapshot(
       );
       reservation._publishedSize = snapshot.length;
       reservation._publishedSha256 = snapshot.sha256Value;
-      reservation._publishedStat = await File(reservation.path).stat();
-      return File(reservation.path);
+      reservation._publishedStat = await published.stat();
+      return published;
     } catch (_) {
       await _capturePartialReservationOwnership(reservation);
       rethrow;
@@ -466,9 +525,7 @@ Future<void> _capturePartialReservationOwnership(
   }
 }
 
-Future<void> discardDownloadReservation(
-  DownloadFileReservation reservation,
-) {
+Future<void> discardDownloadReservation(DownloadFileReservation reservation) {
   return reservation._publishLock.synchronized(() async {
     if (reservation._closed) return;
     var mayDelete = false;
@@ -519,9 +576,7 @@ Future<void> refreshPublishedDownloadReservation(
   });
 }
 
-Future<void> releaseDownloadReservation(
-  DownloadFileReservation reservation,
-) {
+Future<void> releaseDownloadReservation(DownloadFileReservation reservation) {
   return reservation._publishLock.synchronized(() async {
     if (reservation._closed) return;
     if (reservation._publishedSize == null ||
@@ -612,16 +667,10 @@ Future<void> _closeReservationHandle(
   await reservation._handle.close();
 }
 
-Future<String> _hashFilePath(
-  File file, {
-  required int expectedLength,
-}) async {
+Future<String> _hashFilePath(File file, {required int expectedLength}) async {
   final handle = await file.open(mode: FileMode.read);
   try {
-    return await _hashRandomAccessFile(
-      handle,
-      expectedLength: expectedLength,
-    );
+    return await _hashRandomAccessFile(handle, expectedLength: expectedLength);
   } finally {
     await handle.close();
   }
@@ -636,7 +685,9 @@ Future<String> _hashRandomAccessFile(
   final input = sha256.startChunkedConversion(digestSink);
   var consumed = 0;
   while (consumed < expectedLength) {
-    final bytes = await handle.read(min(64 * 1024, expectedLength - consumed));
+    final bytes = await handle.read(
+      min(_fileIoBufferSize, expectedLength - consumed),
+    );
     if (bytes.isEmpty) {
       throw const FileSystemException('file ended before expected length');
     }

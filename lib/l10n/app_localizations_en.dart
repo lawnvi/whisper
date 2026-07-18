@@ -222,7 +222,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteDeviceDesc =>
-      'Clear all messages for this device. This cannot be undone.';
+      'Disconnect and clear all messages for this device. This cannot be undone.';
 
   @override
   String get brokeConnectTitle => 'Disconnect';

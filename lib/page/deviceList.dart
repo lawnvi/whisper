@@ -73,6 +73,7 @@ import 'dart:io' show Platform;
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
+  androidSystemShareCleanup,
   audioToggle,
   socketDialog,
   serverStart,
@@ -212,6 +213,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   bool _desktopQuickSendDialogVisible = false;
   bool _desktopQuickSendPresentationScheduled = false;
   String? _lastPresentedDesktopQuickSendDraftId;
+  PairingQrDialogController? _activePairingQrController;
 
   BorderRadius get _desktopToolbarPillRadius => BorderRadius.circular(14);
 
@@ -243,7 +245,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         sendItem: _sendAndroidSystemShareItem,
       );
       _androidSystemShareInbox.addListener(_handleAndroidSystemShareChanged);
-      unawaited(_androidSystemShareInbox.initialize());
+      unawaited(_initializeAndroidSystemShare());
     }
     if (isDesktop()) {
       _desktopQuickSendHotKey = DesktopQuickSendHotKeyController(
@@ -264,6 +266,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // start watch
     clipboardWatcher.start();
     super.initState();
+  }
+
+  Future<void> _initializeAndroidSystemShare() async {
+    try {
+      await db.discardRecoverableOutgoingTransfersWithPathPrefix(
+        'content://$androidSystemShareFileProviderAuthority/'
+        'android_system_shares/',
+      );
+    } on Object catch (error) {
+      _logDeviceListFailure(
+        DeviceListOperationKind.androidSystemShareCleanup,
+        error,
+      );
+    }
+    await _androidSystemShareInbox.initialize();
   }
 
   @override
@@ -1407,6 +1424,23 @@ class _DeviceListScreen extends State<DeviceListScreen>
             if (uid == device?.uid) {
               return;
             }
+            if (socketManager.shouldSuppressDiscoveredPeer(uid)) {
+              if (isLost) {
+                socketManager.releaseDeletedPeerDiscoverySuppression(uid);
+              }
+              if (mounted) {
+                setState(() {
+                  devices.removeWhere((item) => item.uid == uid);
+                  _sessionItems = _sessionItems
+                      .where((item) => item.device.uid != uid)
+                      .toList(growable: false);
+                  if (_selectedDesktopPeerId == uid) {
+                    _selectedDesktopPeerId = null;
+                  }
+                });
+              }
+              return;
+            }
             final temp = await db.fetchDevice(uid);
             if (isLost && temp == null) {
               return;
@@ -1530,7 +1564,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (isFirst) {
       await db.clearDeviceDiscoveryPresence();
     }
-    var arr = await db.fetchAllDevice();
+    var arr = (await db.fetchAllDevice())
+        .where((item) => !socketManager.shouldSuppressDiscoveredPeer(item.uid))
+        .toList(growable: false);
     final storedDevicesByUid = <String, DeviceData>{
       for (final item in arr) item.uid: item,
     };
@@ -1539,6 +1575,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
     for (var item in devices) {
+      if (socketManager.shouldSuppressDiscoveredPeer(item.uid)) {
+        continue;
+      }
       if (aroundIds.contains(item.uid)) {
         continue;
       }
@@ -1815,6 +1854,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                       key: ValueKey('desktop-${selectedSession.device.uid}'),
                       device: selectedSession.device,
                       embedded: true,
+                      onDeviceDeleted: _removeDevice,
                     ),
             ),
           ],
@@ -2714,8 +2754,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.delete ?? '删除',
-          onSelected: () {
-            _removeDevice(deviceItem.uid);
+          onSelected: () async {
+            await _confirmRemoveDevice(deviceItem);
           },
         ),
     ];
@@ -2791,11 +2831,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _openPairingQr() async {
+    final qrController = PairingQrDialogController();
+    _activePairingQrController?.dismiss();
+    _activePairingQrController = qrController;
     try {
       final localDevice = device ?? await LocalSetting().instance();
+      final currentHost = await getLocalIpAddress();
       final identity = await DeviceIdentityStore().loadOrCreate();
       final localInvite = PairingInvite(
-        host: localDevice.host,
+        host: currentHost,
         port: localDevice.port,
         peerId: localDevice.uid,
         publicKeyHash: identityPublicKeyHash(identity.publicKeyBase64Url),
@@ -2807,6 +2851,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         context,
         localInvite: localInvite,
         startWithScanner: isMobile(),
+        controller: qrController,
       );
       if (!mounted || invite == null) {
         return;
@@ -2830,6 +2875,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (mounted) {
         _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service);
       }
+    } finally {
+      if (identical(_activePairingQrController, qrController)) {
+        _activePairingQrController = null;
+      }
     }
   }
 
@@ -2846,24 +2895,46 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SendMessageScreen(device: deviceItem),
+        builder: (context) => SendMessageScreen(
+          device: deviceItem,
+          onDeviceDeleted: _removeDevice,
+        ),
       ),
     );
     _refreshDevice();
   }
 
-  void _removeDevice(String uid) async {
+  Future<void> _confirmRemoveDevice(DeviceData target) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await confirmAction(
+      context,
+      title: l10n?.deleteDeviceTitle(target.name) ?? '删除 ${target.name}',
+      description: l10n?.deleteDeviceDesc ?? '删除与此设备的所有消息，不可恢复',
+      confirmButtonText: l10n?.confirm ?? '确定',
+      cancelButtonText: l10n?.cancel ?? '取消',
+      isDestructive: true,
+    );
+    if (confirmed) {
+      await _removeDevice(target.uid);
+    }
+  }
+
+  Future<void> _removeDevice(String uid) async {
     _connectionAttempts.cancel('peer:$uid');
     await socketManager.deletePeer(uid);
     if (!mounted) {
       return;
     }
     setState(() {
+      devices.removeWhere((item) => item.uid == uid);
+      _sessionItems = _sessionItems
+          .where((item) => item.device.uid != uid)
+          .toList(growable: false);
       if (_selectedDesktopPeerId == uid) {
         _selectedDesktopPeerId = null;
       }
     });
-    _refreshDevice();
+    await _refreshDevice();
   }
 
   void _handleDeviceConnect(DeviceData deviceItem) {
@@ -2898,7 +2969,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return SwipeActionCell(
       key: ValueKey(deviceItem.uid),
       trailingActions: [
-        if (socketManager.receiver != deviceItem.uid)
+        if (!socketManager.isConnectedTo(deviceItem.uid))
           SwipeAction(
             widthSpace: ism ? 120 : 140,
             nestedAction: SwipeNestedAction(
@@ -2935,26 +3006,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             /// 设置了content就不要设置title和icon了
             content: _getIconButton(Colors.red, Icons.delete),
             onTap: (handler) {
-              if (socketManager.isConnectedTo(deviceItem.uid)) {
-                showLoadingDialog(
-                  context,
-                  title: AppLocalizations.of(context)?.warning ?? '警告',
-                  description:
-                      AppLocalizations.of(context)?.deleteWarningText ??
-                      "连接正在使用，禁止快速删除",
-                  isLoading: true,
-                  // 是否显示加载指示器
-                  icon: const Icon(Icons.warning_rounded, color: Colors.red),
-                  cancelButtonText: AppLocalizations.of(context)?.close ?? '关闭',
-                  onCancel: () {
-                    // 处理取消操作
-                    Navigator.of(context).pop(); // 关闭对话框
-                  },
-                  task: (VoidCallback onCancel) async {},
-                );
-                return;
-              }
-              _removeDevice(deviceItem.uid);
+              unawaited(_removeDevice(deviceItem.uid));
             },
           ),
       ],
@@ -3219,7 +3271,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => SendMessageScreen(device: connectedDevice),
+              builder: (context) => SendMessageScreen(
+                device: connectedDevice,
+                onDeviceDeleted: _removeDevice,
+              ),
             ),
           );
           if (mounted) {
@@ -3365,7 +3420,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
       resolve(false);
       return;
     }
-    unawaited(showPairingDialog(context, request: request, resolve: resolve));
+    final pairingQrController = _activePairingQrController;
+    unawaited(
+      showPairingDialog(
+        context,
+        request: request,
+        resolve: (allow) {
+          if (allow) {
+            pairingQrController?.dismiss();
+          }
+          resolve(allow);
+        },
+      ),
+    );
   }
 
   @override
@@ -3389,7 +3456,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SendMessageScreen(device: deviceData),
+        builder: (context) => SendMessageScreen(
+          device: deviceData,
+          onDeviceDeleted: _removeDevice,
+        ),
       ),
     );
     _refreshDevice();

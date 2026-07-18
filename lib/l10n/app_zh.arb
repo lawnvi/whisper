@@ -144,7 +144,7 @@
       }
     }
   },
-  "deleteDeviceDesc": "删除与此设备的所有消息，不可恢复",
+  "deleteDeviceDesc": "断开连接并删除与此设备的所有消息，不可恢复",
   "brokeConnectTitle": "断开连接",
   "brokeConnectDesc": "断开 {device}",
   "@brokeConnectDesc": {

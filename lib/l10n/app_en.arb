@@ -126,7 +126,7 @@
   "deleteWarningText": "The connection is still active, so quick delete is blocked",
   "close": "Close",
   "deleteDeviceTitle": "Delete {device}",
-  "deleteDeviceDesc": "Clear all messages for this device. This cannot be undone.",
+  "deleteDeviceDesc": "Disconnect and clear all messages for this device. This cannot be undone.",
   "brokeConnectTitle": "Disconnect",
   "brokeConnectDesc": "Disconnect {device}",
   "connectFailed": "Connection Failed",

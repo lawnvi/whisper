@@ -457,7 +457,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteDeviceDesc.
   ///
   /// In zh, this message translates to:
-  /// **'删除与此设备的所有消息，不可恢复'**
+  /// **'断开连接并删除与此设备的所有消息，不可恢复'**
   String get deleteDeviceDesc;
 
   /// No description provided for @brokeConnectTitle.

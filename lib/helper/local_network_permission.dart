@@ -20,9 +20,9 @@ final class LocalNetworkPermission {
     MethodChannel? channel,
     EventChannel? eventChannel,
     TargetPlatform? targetPlatform,
-  })  : _channel = channel ?? const MethodChannel(channelName),
-        _eventChannel = eventChannel ?? const EventChannel(eventChannelName),
-        _targetPlatform = targetPlatform ?? defaultTargetPlatform;
+  }) : _channel = channel ?? const MethodChannel(channelName),
+       _eventChannel = eventChannel ?? const EventChannel(eventChannelName),
+       _targetPlatform = targetPlatform ?? defaultTargetPlatform;
 
   static const String channelName =
       'com.vireen.whisper/local_network_permission';
@@ -38,8 +38,8 @@ final class LocalNetworkPermission {
       return const Stream<LocalNetworkPermissionStatus>.empty();
     }
     return _eventChannel.receiveBroadcastStream().map(
-          (event) => _parseStatus(event as String?),
-        );
+      (event) => _parseStatus(event as String?),
+    );
   }
 
   Future<LocalNetworkPermissionStatus> ensureGranted({
@@ -60,6 +60,22 @@ final class LocalNetworkPermission {
     );
   }
 
+  Future<String?> currentLanAddress() async {
+    if (_targetPlatform != TargetPlatform.android) {
+      return null;
+    }
+    try {
+      final address = (await _channel.invokeMethod<String>(
+        'currentLanAddress',
+      ))?.trim();
+      return address == null || address.isEmpty ? null : address;
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   Future<LocalNetworkPermissionStatus> _status({
     required String method,
     required bool android16CompatTest,
@@ -76,9 +92,7 @@ final class LocalNetworkPermission {
     try {
       final status = await _channel.invokeMethod<String>(
         method,
-        <String, Object?>{
-          'android16CompatTest': android16CompatTest,
-        },
+        <String, Object?>{'android16CompatTest': android16CompatTest},
       );
       return _parseStatus(status);
     } on PlatformException catch (error) {
@@ -96,10 +110,10 @@ final class LocalNetworkPermission {
 }
 
 LocalNetworkPermissionStatus _parseStatus(String? status) => switch (status) {
-      'granted' => LocalNetworkPermissionStatus.granted,
-      'denied' => LocalNetworkPermissionStatus.denied,
-      'restricted' => LocalNetworkPermissionStatus.restricted,
-      'unavailable' => LocalNetworkPermissionStatus.unavailable,
-      'retryable' => LocalNetworkPermissionStatus.retryable,
-      _ => LocalNetworkPermissionStatus.unknown,
-    };
+  'granted' => LocalNetworkPermissionStatus.granted,
+  'denied' => LocalNetworkPermissionStatus.denied,
+  'restricted' => LocalNetworkPermissionStatus.restricted,
+  'unavailable' => LocalNetworkPermissionStatus.unavailable,
+  'retryable' => LocalNetworkPermissionStatus.retryable,
+  _ => LocalNetworkPermissionStatus.unknown,
+};

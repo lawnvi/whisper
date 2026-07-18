@@ -539,11 +539,19 @@ void main() {
 
     await harness.server.deletePeer('client-peer');
     await _waitUntil(() => !harness.client.isConnectedTo('server-peer'));
+    expect(
+      harness.server.shouldSuppressDiscoveredPeer('client-peer'),
+      isTrue,
+    );
 
     final redial = await harness.connect('delete-policy-redial');
 
     expect(redial.isAuthenticated, isTrue);
     expect(harness.server.isConnectedTo('client-peer'), isTrue);
+    expect(
+      harness.server.shouldSuppressDiscoveredPeer('client-peer'),
+      isFalse,
+    );
     expect((await harness.database.fetchDevice('client-peer'))?.auth, isTrue);
   });
 

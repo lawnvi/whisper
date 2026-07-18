@@ -144,7 +144,7 @@
       }
     }
   },
-  "deleteDeviceDesc": "Borra todos los mensajes de este dispositivo. No se puede recuperar.",
+  "deleteDeviceDesc": "Desconecta y borra todos los mensajes de este dispositivo. No se puede recuperar.",
   "brokeConnectTitle": "Desconectar",
   "brokeConnectDesc": "Desconectar {device}",
   "@brokeConnectDesc": {

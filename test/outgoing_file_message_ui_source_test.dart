@@ -86,6 +86,19 @@ void main() {
     expect(fileMessage, contains('_buildAnimatedTransferProgress('));
   });
 
+  test('verifying uses indeterminate progress instead of a full ring', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final fileMessage = methodBody(
+      source,
+      'Widget _buildFileMessage(',
+      'void onPairing(',
+    );
+
+    expect(fileMessage, contains('FileTransferState.verifying'));
+    expect(fileMessage, contains('value: null'));
+    expect(source, contains('l10n.fileTransferVerifying'));
+  });
+
   test('conversation animates visible transfer percentage text', () {
     final source = File('lib/page/conversation.dart').readAsStringSync();
     final fileStatus = methodBody(

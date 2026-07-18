@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,13 +54,73 @@ void main() {
   testWidgets('fits the QR code on a narrow mobile viewport', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
     await tester.pumpWidget(buildDialog());
     await tester.pump();
 
     expect(tester.takeException(), isNull);
     expect(find.text('192.168.1.20:10002'), findsOneWidget);
+    final dialogSize = tester.getSize(
+      find.byKey(const ValueKey<String>('pairing-qr-dialog-content')),
+    );
+    expect(dialogSize.width, 296);
+    expect(dialogSize.height, lessThan(420));
+  });
+
+  testWidgets('controller removes the QR route below a pairing prompt', (
+    tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final controller = PairingQrDialogController();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () {
+              unawaited(
+                showPairingQrDialog(
+                  context,
+                  localInvite: _invite,
+                  startWithScanner: false,
+                  controller: controller,
+                ),
+              );
+            },
+            child: const Text('Open QR'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open QR'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect with QR code'), findsOneWidget);
+
+    unawaited(
+      showDialog<void>(
+        context: navigatorKey.currentContext!,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(content: Text('Pairing code')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    controller.dismiss();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect with QR code'), findsNothing);
+    expect(find.text('Pairing code'), findsOneWidget);
   });
 }

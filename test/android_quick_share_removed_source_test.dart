@@ -25,13 +25,22 @@ void main() {
     expect(manifest, contains('android.intent.action.SEND'));
     expect(manifest, contains('android.intent.action.SEND_MULTIPLE'));
     expect(manifest, contains('android:mimeType="*/*"'));
-    expect(manifest, contains('android:launchMode="singleTop"'));
+    expect(manifest, contains('android:launchMode="singleTask"'));
+    expect(manifest, contains('android:documentLaunchMode="never"'));
     expect(activity, contains('AndroidSystemSharePlugin()'));
     expect(plugin, contains('PluginRegistry.NewIntentListener'));
     expect(plugin, contains('captureShareIntent(binding.activity.intent)'));
     expect(plugin, contains('Intent.EXTRA_TEXT'));
     expect(plugin, contains('Intent.EXTRA_STREAM'));
     expect(plugin, contains('intent.clipData'));
+    expect(
+      plugin,
+      contains('val acceptsSingleUri = intent.action == Intent.ACTION_SEND'),
+    );
+    expect(
+      plugin,
+      contains('acceptsSingleUri && uris.isNotEmpty()'),
+    );
     expect(plugin, contains('OpenableColumns.DISPLAY_NAME'));
     expect(plugin, contains('OpenableColumns.SIZE'));
     expect(plugin, contains('ContentResolver.SCHEME_CONTENT'));

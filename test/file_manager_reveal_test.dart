@@ -36,6 +36,16 @@ void main() {
     expect(calls.single.arguments, <String>['-R', file.path]);
   });
 
+  test('macOS native bridge reports whether Finder selected the file', () {
+    final source = File(
+      'macos/Runner/MainFlutterWindow.swift',
+    ).readAsStringSync();
+
+    expect(source, contains('NSWorkspace.shared.selectFile('));
+    expect(source, contains('inFileViewerRootedAtPath: parentPath'));
+    expect(source, contains('result(selected)'));
+  });
+
   test('Windows passes the file separately from the select switch', () async {
     final calls = <FileManagerCommand>[];
 

@@ -5,6 +5,9 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
@@ -16,6 +19,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.PluginRegistry
+import java.net.Inet4Address
 
 class LocalNetworkPermissionPlugin :
     FlutterPlugin,
@@ -94,8 +98,47 @@ class LocalNetworkPermissionPlugin :
         when (call.method) {
             "ensureGranted" -> ensureGranted(android16CompatTest, result)
             "currentStatus" -> result.success(currentStatus(android16CompatTest))
+            "currentLanAddress" -> result.success(currentLanAddress())
             else -> result.notImplemented()
         }
+    }
+
+    private fun currentLanAddress(): String? {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+            as? ConnectivityManager ?: return null
+        val activeNetwork = manager.activeNetwork
+        val networks = buildList {
+            activeNetwork?.let(::add)
+            addAll(manager.allNetworks.filterNot { it == activeNetwork })
+        }
+        return networks.firstNotNullOfOrNull { network ->
+            currentLanAddress(manager, network)
+        }
+    }
+
+    private fun currentLanAddress(
+        manager: ConnectivityManager,
+        network: Network,
+    ): String? {
+        val capabilities = manager.getNetworkCapabilities(network) ?: return null
+        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        ) {
+            return null
+        }
+        return manager.getLinkProperties(network)?.linkAddresses
+            ?.asSequence()
+            ?.map { it.address }
+            ?.filterIsInstance<Inet4Address>()
+            ?.firstOrNull { !it.isLoopbackAddress && isPrivateLanIpv4(it) }
+            ?.hostAddress
+    }
+
+    private fun isPrivateLanIpv4(address: Inet4Address): Boolean {
+        val octets = address.address.map { it.toInt() and 0xff }
+        return octets[0] == 10 ||
+            (octets[0] == 172 && octets[1] in 16..31) ||
+            (octets[0] == 192 && octets[1] == 168)
     }
 
     private fun ensureGranted(

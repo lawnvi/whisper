@@ -225,7 +225,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteDeviceDesc =>
-      'Borra todos los mensajes de este dispositivo. No se puede recuperar.';
+      'Desconecta y borra todos los mensajes de este dispositivo. No se puede recuperar.';
 
   @override
   String get brokeConnectTitle => 'Desconectar';

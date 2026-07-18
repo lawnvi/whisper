@@ -99,6 +99,7 @@ void main() {
 
     await manager.deletePeer('peer-a');
     expect(await database.fetchDevice('peer-a'), isNull);
+    expect(manager.shouldSuppressDiscoveredPeer('peer-a'), isTrue);
     expect(scheduler.activeTimerCount, 0);
   });
 

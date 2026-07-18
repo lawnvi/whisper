@@ -13,11 +13,15 @@ void main() {
     expect(source, contains('publicKeyHash: invite.publicKeyHash'));
     expect(source, contains('expectedPeerId: peerId ??'));
     expect(source, contains('expectedPublicKeyHash: publicKeyHash ??'));
+    expect(source, contains('controller: qrController'));
+    expect(source, contains('pairingQrController?.dismiss();'));
   });
 
   test('invalid local QR host is diagnosed as a Wi-Fi problem', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 
+    expect(source, contains('final currentHost = await getLocalIpAddress();'));
+    expect(source, contains('host: currentHost'));
     expect(source, contains('error.reason == PairingInviteError.invalidHost'));
     expect(source, contains('? ConnectionDiagnosticStage.wifi'));
   });

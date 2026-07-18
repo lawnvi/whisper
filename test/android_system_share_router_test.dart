@@ -131,51 +131,48 @@ void main() {
     inbox.dispose();
   });
 
-  test(
-    'process restart restores target and skips persisted sent content',
-    () async {
-      final original = _event(
-        'restored',
-        text: 'already sent',
-        itemUris: const <String>['one', 'two'],
-      );
-      final restored = original.copyWithProgress(
-        targetPeerId: 'peer-a',
-        targetPublicKeyHash: _hashA,
-        textSent: true,
-        waitingForConnection: false,
-        sentItemUris: <String>[original.items.first.uri],
-      );
-      final platform = _FakeSharePlatform(<AndroidSystemShareEvent>[restored]);
-      final inbox = AndroidSystemShareInbox(platform: platform);
-      await inbox.initialize();
-      final sent = <String>[];
-      final router = AndroidSystemShareRouter(
-        inbox: inbox,
-        isConnected: (_) => true,
-        trustedIdentityHashFor: (_) => _hashA,
-        sendText: (peerId, event) async {
-          sent.add('text:${event.text}');
-          return true;
-        },
-        sendItem: (peerId, event, item) async {
-          sent.add(item.uri);
-          return true;
-        },
-      );
+  test('router rebuild in one session skips persisted sent content', () async {
+    final original = _event(
+      'restored',
+      text: 'already sent',
+      itemUris: const <String>['one', 'two'],
+    );
+    final restored = original.copyWithProgress(
+      targetPeerId: 'peer-a',
+      targetPublicKeyHash: _hashA,
+      textSent: true,
+      waitingForConnection: false,
+      sentItemUris: <String>[original.items.first.uri],
+    );
+    final platform = _FakeSharePlatform(<AndroidSystemShareEvent>[restored]);
+    final inbox = AndroidSystemShareInbox(platform: platform);
+    await inbox.initialize();
+    final sent = <String>[];
+    final router = AndroidSystemShareRouter(
+      inbox: inbox,
+      isConnected: (_) => true,
+      trustedIdentityHashFor: (_) => _hashA,
+      sendText: (peerId, event) async {
+        sent.add('text:${event.text}');
+        return true;
+      },
+      sendItem: (peerId, event, item) async {
+        sent.add(item.uri);
+        return true;
+      },
+    );
 
-      expect(router.targetPeerIdFor('restored'), 'peer-a');
-      final results = await router.retryConnected();
+    expect(router.targetPeerIdFor('restored'), 'peer-a');
+    final results = await router.retryConnected();
 
-      expect(results.single.outcome, AndroidSystemShareRouteOutcome.completed);
-      expect(sent, <String>['content://provider/two']);
-      expect(platform.completedEventIds, <String>{'restored'});
-      expect(platform.progressSnapshots.last.sentItemUris, hasLength(2));
-      inbox.dispose();
-    },
-  );
+    expect(results.single.outcome, AndroidSystemShareRouteOutcome.completed);
+    expect(sent, <String>['content://provider/two']);
+    expect(platform.completedEventIds, <String>{'restored'});
+    expect(platform.progressSnapshots.last.sentItemUris, hasLength(2));
+    inbox.dispose();
+  });
 
-  test('restored route without a pinned identity never sends', () async {
+  test('persisted route without a pinned identity never sends', () async {
     final restored = _event('legacy', text: 'do not send').copyWithProgress(
       targetPeerId: 'peer-a',
       targetPublicKeyHash: '',

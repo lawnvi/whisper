@@ -745,7 +745,7 @@ void main() {
     expect(find.text('Enter a port from 1001 to 65535'), findsWidgets);
   });
 
-  testWidgets('client destructive delete awaits confirmation and callback',
+  testWidgets('disconnected client delete awaits confirmation and callback',
       (tester) async {
     const peer = DeviceData(
       id: 9,
@@ -795,6 +795,44 @@ void main() {
     await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Confirm'));
     await tester.pumpAndSettle();
     expect(deleted, <String>['android-peer']);
+  });
+
+  testWidgets('connected client does not expose delete action', (tester) async {
+    const peer = DeviceData(
+      id: 9,
+      uid: 'android-peer',
+      name: 'Pixel',
+      host: '192.168.1.9',
+      port: 10002,
+      platform: 'android',
+      isServer: false,
+      online: true,
+      clipboard: false,
+      auth: true,
+      lastTime: 0,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        locale: const Locale('en'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ClientSettingsScreen(
+          device: peer,
+          deviceLoader: (_) async => peer,
+          isConnected: true,
+          canConfigureRemoteInput: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete Device'), findsNothing);
   });
 
   test('settings source keeps the original row styling and safe dialogs', () {

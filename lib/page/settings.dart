@@ -1540,6 +1540,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
     final showRemoteInputSettings = _canConfigureRemoteInput;
+    final isConnected =
+        widget.isConnected ?? WsSvrManager().isConnectedTo(device.uid);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
@@ -1636,8 +1638,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                       ),
                   ],
                 ),
-                if (!(widget.isConnected ??
-                    WsSvrManager().isConnectedTo(device.uid)))
+                if (!isConnected)
                   _buildClientSettingsSection(
                     l10n.dangerousActions,
                     l10n.deleteDeviceDesc,
@@ -1669,7 +1670,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           if (!mounted) {
                             return;
                           }
-                          Navigator.popUntil(context, (route) => route.isFirst);
+                          Navigator.popUntil(
+                            context,
+                            (route) => route.isFirst,
+                          );
                         },
                       ),
                     ],

@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/local.dart';
@@ -167,7 +169,7 @@ final class DeviceIdentity {
 
 final class DeviceIdentityStore {
   DeviceIdentityStore({DeviceIdentitySeedStorage? storage})
-    : _storage = storage ?? SecureDeviceIdentitySeedStorage();
+    : _storage = storage ?? _defaultDeviceIdentitySeedStorage();
 
   static final Lock _creationLock = Lock();
 
@@ -204,6 +206,16 @@ final class DeviceIdentityStore {
       }
     });
   }
+}
+
+DeviceIdentitySeedStorage _defaultDeviceIdentitySeedStorage() {
+  // Locally rebuilt macOS debug apps receive a new code hash frequently, which
+  // makes the login Keychain show a password prompt during ordinary pairing.
+  // Release builds keep using platform secure storage.
+  if (kDebugMode && Platform.isMacOS) {
+    return LocalDeviceIdentitySeedStorage();
+  }
+  return SecureDeviceIdentitySeedStorage();
 }
 
 Future<bool> verifyDeviceSignature({

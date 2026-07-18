@@ -70,4 +70,27 @@ void main() {
     expect(discovery, isNot(contains('devices.insert(index, temp)')));
     expect(refresh, contains('await db.clearDeviceDiscoveryPresence()'));
   });
+
+  test('deleted nearby peers stay hidden until their service is lost', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+
+    expect(source, contains('socketManager.shouldSuppressDiscoveredPeer(uid)'));
+    expect(
+      source,
+      contains('socketManager.releaseDeletedPeerDiscoverySuppression(uid)'),
+    );
+    expect(source, contains('devices.removeWhere((item) => item.uid == uid)'));
+  });
+
+  test('conversation settings reports deletion back to the device list', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+
+    expect(deviceList, contains('onDeviceDeleted: _removeDevice'));
+    expect(conversation, contains('deleteDevice: widget.onDeviceDeleted'));
+    expect(
+      deviceList,
+      contains('if (!socketManager.isConnectedTo(deviceItem.uid))'),
+    );
+  });
 }
