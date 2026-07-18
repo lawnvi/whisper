@@ -1236,7 +1236,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get desktopQuickSendTitle => 'Envío rápido del sistema';
+  String get desktopQuickSendTitle => 'Envío rápido';
 
   @override
   String desktopQuickSendSummary(int textCount, int fileCount) {

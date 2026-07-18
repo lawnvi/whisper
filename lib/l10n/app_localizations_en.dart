@@ -1219,7 +1219,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get desktopQuickSendTitle => 'System quick send';
+  String get desktopQuickSendTitle => 'Quick send';
 
   @override
   String desktopQuickSendSummary(int textCount, int fileCount) {

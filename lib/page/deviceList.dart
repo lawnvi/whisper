@@ -144,7 +144,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
   static const double _desktopToolbarGap = 10;
-  static const double _desktopToolbarToolGroupWidth = 208;
+  static const double _desktopToolbarToolGroupWidth = 174;
   static const Duration _desktopToolbarAnimationDuration = Duration(
     milliseconds: 220,
   );
@@ -2020,8 +2020,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
               onPressed: _openPairingQr,
             ),
             const SizedBox(width: 2),
-            _buildDesktopQuickSendAction(),
-            const SizedBox(width: 2),
             _buildDesktopAudioShareAction(),
             const SizedBox(width: 2),
             _buildDesktopRemoteInputWorkspaceAction(),
@@ -2041,62 +2039,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDesktopQuickSendAction() {
-    final l10n = AppLocalizations.of(context)!;
-    final pendingCount = _desktopQuickSendInbox.drafts.length;
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          _buildDesktopToolButton(
-            icon: Icons.outbox_outlined,
-            tooltip: l10n.desktopQuickSendTitle,
-            iconColor: pendingCount > 0
-                ? Theme.of(context).colorScheme.primary
-                : null,
-            onPressed: pendingCount == 0
-                ? () async {
-                    final result = await _desktopQuickSendHotKey
-                        .captureClipboard(
-                          revealWindow: _revealDesktopQuickSendWindow,
-                        );
-                    if (mounted && result.isEmpty) {
-                      showAppToast(l10n.desktopQuickSendEmptyClipboard);
-                    }
-                  }
-                : () => _scheduleDesktopQuickSendPresentation(force: true),
-          ),
-          if (pendingCount > 0)
-            Positioned(
-              right: -2,
-              top: -2,
-              child: IgnorePointer(
-                child: Container(
-                  width: 17,
-                  height: 17,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    pendingCount > 9 ? '9+' : '$pendingCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -2856,13 +2798,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!mounted) {
         return;
       }
-      final invite = await Navigator.of(context).push<PairingInvite>(
-        MaterialPageRoute<PairingInvite>(
-          builder: (context) => PairingQrScreen(
-            localInvite: localInvite,
-            startWithScanner: isMobile(),
-          ),
-        ),
+      final invite = await showPairingQrDialog(
+        context,
+        localInvite: localInvite,
+        startWithScanner: isMobile(),
       );
       if (!mounted || invite == null) {
         return;

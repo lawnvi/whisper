@@ -2155,7 +2155,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopQuickSendTitle.
   ///
   /// In zh, this message translates to:
-  /// **'系统快捷发送'**
+  /// **'快捷发送'**
   String get desktopQuickSendTitle;
 
   /// No description provided for @desktopQuickSendSummary.

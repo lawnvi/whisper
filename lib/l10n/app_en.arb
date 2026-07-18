@@ -544,7 +544,7 @@
       }
     }
   },
-  "desktopQuickSendTitle": "System quick send",
+  "desktopQuickSendTitle": "Quick send",
   "desktopQuickSendSummary": "{textCount} text items · {fileCount} files",
   "@desktopQuickSendSummary": {
     "placeholders": {

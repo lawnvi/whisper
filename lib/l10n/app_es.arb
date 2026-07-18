@@ -571,7 +571,7 @@
       }
     }
   },
-  "desktopQuickSendTitle": "Envío rápido del sistema",
+  "desktopQuickSendTitle": "Envío rápido",
   "desktopQuickSendSummary": "{textCount} textos · {fileCount} archivos",
   "@desktopQuickSendSummary": {
     "placeholders": {

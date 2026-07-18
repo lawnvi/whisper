@@ -6,7 +6,9 @@ void main() {
   test('QR pairing pins both peer id and public-key hash', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 
-    expect(source, contains('PairingQrScreen('));
+    expect(source, contains('showPairingQrDialog('));
+    expect(source, isNot(contains('PairingQrScreen(')));
+    expect(source, isNot(contains('MaterialPageRoute<PairingInvite>')));
     expect(source, contains('peerId: invite.peerId'));
     expect(source, contains('publicKeyHash: invite.publicKeyHash'));
     expect(source, contains('expectedPeerId: peerId ??'));

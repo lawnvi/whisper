@@ -13,26 +13,25 @@ final _invite = PairingInvite(
 );
 
 void main() {
-  Widget buildScreen() => MaterialApp(
-        locale: const Locale('en'),
-        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: PairingQrScreen(
-          localInvite: _invite,
-          startWithScanner: false,
-        ),
-      );
+  Widget buildDialog() => MaterialApp(
+    locale: const Locale('en'),
+    localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: PairingQrDialog(localInvite: _invite, startWithScanner: false),
+  );
 
-  testWidgets('shows an identity-pinned QR code and connection endpoint',
-      (tester) async {
-    await tester.pumpWidget(buildScreen());
+  testWidgets('shows an identity-pinned QR code and connection endpoint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildDialog());
     await tester.pump();
 
+    expect(find.byType(Dialog), findsOneWidget);
     expect(find.text('Connect with QR code'), findsOneWidget);
     expect(find.text('192.168.1.20:10002'), findsOneWidget);
     expect(find.textContaining('AAAAAAAA'), findsOneWidget);
@@ -45,7 +44,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(buildScreen());
+    await tester.pumpWidget(buildDialog());
     await tester.pump();
 
     expect(tester.takeException(), isNull);

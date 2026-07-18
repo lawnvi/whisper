@@ -1148,7 +1148,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get desktopQuickSendTitle => '系统快捷发送';
+  String get desktopQuickSendTitle => '快捷发送';
 
   @override
   String desktopQuickSendSummary(int textCount, int fileCount) {

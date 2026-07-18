@@ -641,7 +641,7 @@
       }
     }
   },
-  "desktopQuickSendTitle": "系统快捷发送",
+  "desktopQuickSendTitle": "快捷发送",
   "desktopQuickSendSummary": "{textCount} 条文本 · {fileCount} 个文件",
   "@desktopQuickSendSummary": {
     "placeholders": {

@@ -8,8 +8,22 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_invite.dart';
 
-class PairingQrScreen extends StatefulWidget {
-  const PairingQrScreen({
+Future<PairingInvite?> showPairingQrDialog(
+  BuildContext context, {
+  required PairingInvite localInvite,
+  bool startWithScanner = true,
+}) {
+  return showDialog<PairingInvite>(
+    context: context,
+    builder: (context) => PairingQrDialog(
+      localInvite: localInvite,
+      startWithScanner: startWithScanner,
+    ),
+  );
+}
+
+class PairingQrDialog extends StatefulWidget {
+  const PairingQrDialog({
     super.key,
     required this.localInvite,
     this.startWithScanner = true,
@@ -19,17 +33,17 @@ class PairingQrScreen extends StatefulWidget {
   final bool startWithScanner;
 
   @override
-  State<PairingQrScreen> createState() => _PairingQrScreenState();
+  State<PairingQrDialog> createState() => _PairingQrDialogState();
 }
 
-class _PairingQrScreenState extends State<PairingQrScreen>
+class _PairingQrDialogState extends State<PairingQrDialog>
     with SingleTickerProviderStateMixin {
   late final bool _canScan = Platform.isAndroid || Platform.isIOS;
   late final MobileScannerController _scannerController =
       MobileScannerController(
-    formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
-    detectionSpeed: DetectionSpeed.normal,
-  );
+        formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
+        detectionSpeed: DetectionSpeed.normal,
+      );
   TabController? _tabController;
   bool _handlingScan = false;
   String? _scanError;
@@ -58,11 +72,38 @@ class _PairingQrScreenState extends State<PairingQrScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.qrPairingTitle),
-        bottom: _canScan
-            ? TabBar(
+    final windowSize = MediaQuery.sizeOf(context);
+    final dialogWidth = (windowSize.width - 32).clamp(280.0, 560.0);
+    final dialogHeight = (windowSize.height - 32).clamp(360.0, 680.0);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
+        child: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      l10n.qrPairingTitle,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: l10n.close,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            if (_canScan)
+              TabBar(
                 controller: _tabController,
                 tabs: <Widget>[
                   Tab(icon: const Icon(Icons.qr_code_2), text: l10n.qrMyCode),
@@ -71,183 +112,187 @@ class _PairingQrScreenState extends State<PairingQrScreen>
                     text: l10n.qrScanCode,
                   ),
                 ],
-              )
-            : null,
+              ),
+            Expanded(
+              child: _canScan
+                  ? TabBarView(
+                      controller: _tabController,
+                      children: <Widget>[
+                        _buildMyCode(l10n),
+                        _buildScanner(l10n),
+                      ],
+                    )
+                  : _buildMyCode(l10n),
+            ),
+          ],
+        ),
       ),
-      body: _canScan
-          ? TabBarView(
-              controller: _tabController,
-              children: <Widget>[
-                _buildMyCode(l10n),
-                _buildScanner(l10n),
-              ],
-            )
-          : _buildMyCode(l10n),
     );
   }
 
   Widget _buildMyCode(AppLocalizations l10n) {
     final inviteText = widget.localInvite.encode();
     final fingerprint = widget.localInvite.publicKeyHash;
-    final qrSize =
-        (MediaQuery.sizeOf(context).width - 80).clamp(140.0, 264.0).toDouble();
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Column(
-              children: <Widget>[
-                Text(
-                  l10n.qrShowCodeHint,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 24),
-                Semantics(
-                  label: l10n.qrMyCode,
-                  image: true,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.black12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: QrImageView(
-                        data: inviteText,
-                        version: QrVersions.auto,
-                        size: qrSize,
-                        gapless: true,
-                        backgroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '${widget.localInvite.host}:${widget.localInvite.port}',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  l10n.qrFingerprint(
-                    '${fingerprint.substring(0, 8)}...${fingerprint.substring(fingerprint.length - 8)}',
-                  ),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                if (_isLoopback(widget.localInvite.host)) ...<Widget>[
-                  const SizedBox(height: 14),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final qrSize = (constraints.maxWidth - 80)
+            .clamp(120.0, 264.0)
+            .toDouble();
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                children: <Widget>[
                   Text(
-                    l10n.qrWifiUnavailable,
+                    l10n.qrShowCodeHint,
                     textAlign: TextAlign.center,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                ],
-                const SizedBox(height: 18),
-                FilledButton.tonalIcon(
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: inviteText));
-                    if (!mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(l10n.qrLinkCopied)),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_rounded),
-                  label: Text(l10n.qrCopyLink),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScanner(AppLocalizations l10n) {
-    return SafeArea(
-      child: Column(
-        children: <Widget>[
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                MobileScanner(
-                  controller: _scannerController,
-                  onDetect: _onDetect,
-                  errorBuilder: (context, error) => ColoredBox(
-                    color: Colors.black,
-                    child: Center(
+                  const SizedBox(height: 24),
+                  Semantics(
+                    label: l10n.qrMyCode,
+                    image: true,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.black12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          l10n.qrCameraUnavailable,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white),
+                        padding: const EdgeInsets.all(16),
+                        child: QrImageView(
+                          data: inviteText,
+                          version: QrVersions.auto,
+                          size: qrSize,
+                          gapless: true,
+                          backgroundColor: Colors.white,
                         ),
                       ),
                     ),
                   ),
-                ),
-                Center(
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 252,
-                      height: 252,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white, width: 3),
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 20),
+                  Text(
+                    '${widget.localInvite.host}:${widget.localInvite.port}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.qrFingerprint(
+                      '${fingerprint.substring(0, 8)}...${fingerprint.substring(fingerprint.length - 8)}',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (_isLoopback(widget.localInvite.host)) ...<Widget>[
+                    const SizedBox(height: 14),
+                    Text(
+                      l10n.qrWifiUnavailable,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  FilledButton.tonalIcon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: inviteText));
+                      if (!mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.qrLinkCopied)),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded),
+                    label: Text(l10n.qrCopyLink),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScanner(AppLocalizations l10n) {
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              MobileScanner(
+                controller: _scannerController,
+                onDetect: _onDetect,
+                errorBuilder: (context, error) => ColoredBox(
+                  color: Colors.black,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        l10n.qrCameraUnavailable,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: Row(
-                    children: <Widget>[
-                      IconButton.filledTonal(
-                        tooltip: l10n.qrToggleTorch,
-                        onPressed: _scannerController.toggleTorch,
-                        icon: const Icon(Icons.flashlight_on_outlined),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton.filledTonal(
-                        tooltip: l10n.qrSwitchCamera,
-                        onPressed: _scannerController.switchCamera,
-                        icon: const Icon(Icons.cameraswitch_outlined),
-                      ),
-                    ],
+              ),
+              Center(
+                child: IgnorePointer(
+                  child: Container(
+                    width: 252,
+                    height: 252,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white, width: 3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: Row(
+                  children: <Widget>[
+                    IconButton.filledTonal(
+                      tooltip: l10n.qrToggleTorch,
+                      onPressed: _scannerController.toggleTorch,
+                      icon: const Icon(Icons.flashlight_on_outlined),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton.filledTonal(
+                      tooltip: l10n.qrSwitchCamera,
+                      onPressed: _scannerController.switchCamera,
+                      icon: const Icon(Icons.cameraswitch_outlined),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Column(
-              children: <Widget>[
-                Text(l10n.qrScanHint, textAlign: TextAlign.center),
-                if (_scanError != null) ...<Widget>[
-                  const SizedBox(height: 8),
-                  Text(
-                    _scanError!,
-                    textAlign: TextAlign.center,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            children: <Widget>[
+              Text(l10n.qrScanHint, textAlign: TextAlign.center),
+              if (_scanError != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  _scanError!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ],
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -282,7 +327,7 @@ class _PairingQrScreenState extends State<PairingQrScreen>
       try {
         await _scannerController.stop();
       } on MobileScannerException {
-        // Disposing the route also releases the camera after a valid scan.
+        // Disposing the dialog also releases the camera after a valid scan.
       }
       if (mounted) {
         Navigator.of(context).pop(invite);

@@ -33,6 +33,14 @@ void main() {
     expect(source, contains('e2eeTrustedConnection'));
   });
 
+  test('desktop toolbar leaves quick send to native entry points', () {
+    final source = File('lib/page/deviceList.dart').readAsStringSync();
+
+    expect(source, isNot(contains('_buildDesktopQuickSendAction')));
+    expect(source, isNot(contains('Icons.outbox_outlined')));
+    expect(source, contains('DesktopQuickSendHotKeyController'));
+  });
+
   test('desktop quick-send copy is localized in all supported languages', () {
     for (final path in <String>[
       'lib/l10n/app_zh.arb',
