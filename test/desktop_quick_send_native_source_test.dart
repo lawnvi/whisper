@@ -43,6 +43,10 @@ void main() {
     expect(plist, contains('<key>NSServices</key>'));
     expect(plist, contains('<string>receiveQuickSendService</string>'));
     expect(appDelegate, contains('NSApp.servicesProvider = self'));
+    expect(
+      appDelegate,
+      isNot(contains('super.applicationDidFinishLaunching(notification)')),
+    );
     expect(appDelegate, contains('DesktopQuickSendBridge.shared.enqueue'));
     expect(appDelegate, contains('maximumPendingCount = 32'));
     expect(appDelegate, contains('acknowledgeQuickSend'));

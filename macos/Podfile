@@ -73,6 +73,19 @@ def fix_macos_opus_framework_layout(framework_path)
   end
 end
 
+def move_privacy_manifests_to_resources(target)
+  return unless target.respond_to?(:source_build_phase)
+
+  privacy_manifests = target.source_build_phase.files_references.select do |file_reference|
+    file_reference.path&.end_with?('.xcprivacy')
+  end
+
+  privacy_manifests.each do |file_reference|
+    target.source_build_phase.remove_file_reference(file_reference)
+    target.resources_build_phase.add_file_reference(file_reference, true)
+  end
+end
+
 post_install do |installer|
   [
     File.join(
@@ -100,6 +113,7 @@ post_install do |installer|
   end
 
   installer.pods_project.targets.each do |target|
+    move_privacy_manifests_to_resources(target)
     flutter_additional_macos_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'

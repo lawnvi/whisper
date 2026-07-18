@@ -163,7 +163,6 @@ final class DesktopQuickSendBridge {
 @main
 class AppDelegate: FlutterAppDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    super.applicationDidFinishLaunching(notification)
     NSApp.servicesProvider = self
   }
 

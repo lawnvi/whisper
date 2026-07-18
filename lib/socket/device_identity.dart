@@ -60,6 +60,9 @@ final class FlutterSecureIdentitySeedVault implements SecureIdentitySeedVault {
             mOptions: MacOsOptions(
               accessibility: KeychainAccessibility.first_unlock_this_device,
               synchronizable: false,
+              // The data-protection keychain requires a provisioning profile.
+              // The standard login Keychain also supports ad-hoc local builds.
+              usesDataProtectionKeychain: false,
             ),
           );
 

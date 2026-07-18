@@ -1,0 +1,29 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('macOS secure identity storage remains compatible with ad-hoc builds', () {
+    final identitySource = File(
+      'lib/socket/device_identity.dart',
+    ).readAsStringSync();
+    final debugEntitlements = File(
+      'macos/Runner/DebugProfile.entitlements',
+    ).readAsStringSync();
+    final releaseEntitlements = File(
+      'macos/Runner/Release.entitlements',
+    ).readAsStringSync();
+
+    expect(identitySource, contains('usesDataProtectionKeychain: false'));
+    expect(debugEntitlements, isNot(contains('keychain-access-groups')));
+    expect(releaseEntitlements, isNot(contains('keychain-access-groups')));
+  });
+
+  test('macOS privacy manifests are treated as resources', () {
+    final podfile = File('macos/Podfile').readAsStringSync();
+
+    expect(podfile, contains('move_privacy_manifests_to_resources'));
+    expect(podfile, contains("end_with?('.xcprivacy')"));
+    expect(podfile, contains('target.resources_build_phase'));
+  });
+}
