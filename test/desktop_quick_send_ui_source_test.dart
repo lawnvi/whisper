@@ -41,6 +41,17 @@ void main() {
     expect(source, contains('DesktopQuickSendHotKeyController'));
   });
 
+  test(
+    'ordinary startup keeps restored quick-send drafts in the background',
+    () {
+      final source = File('lib/page/deviceList.dart').readAsStringSync();
+
+      expect(source, contains('takePresentationRequest()'));
+      expect(source, contains('_lastPresentedDesktopQuickSendDraftId ='));
+      expect(source, contains('_desktopQuickSendInbox.drafts.last.id'));
+    },
+  );
+
   test('desktop quick-send copy is localized in all supported languages', () {
     for (final path in <String>[
       'lib/l10n/app_zh.arb',

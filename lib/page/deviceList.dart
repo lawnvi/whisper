@@ -503,6 +503,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _initializeDesktopQuickSend() async {
     await _desktopQuickSendInbox.initialize();
+    final shouldPresent = _desktopQuickSendInbox.takePresentationRequest();
+    if (!shouldPresent && _desktopQuickSendInbox.hasPendingDrafts) {
+      _lastPresentedDesktopQuickSendDraftId =
+          _desktopQuickSendInbox.drafts.last.id;
+    }
     _showPendingDesktopQuickSendRejection();
     final registered = await _desktopQuickSendHotKey.register(
       revealWindow: _revealDesktopQuickSendWindow,

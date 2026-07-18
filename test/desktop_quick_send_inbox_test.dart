@@ -72,6 +72,53 @@ class _FakePlatform implements DesktopQuickSendPlatform {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('restored drafts stay quiet until a new quick-send request', () async {
+    final store = _MemoryStore()
+      ..drafts = <DesktopQuickSendDraft>[
+        const DesktopQuickSendDraft(
+          id: 'restored-draft',
+          source: DesktopQuickSendSource.clipboardShortcut,
+          text: 'old clipboard',
+          filePaths: <String>[],
+          receivedAt: 1,
+        ),
+      ];
+    final inbox = DesktopQuickSendInbox(
+      store: store,
+      platform: _FakePlatform(),
+    );
+
+    await inbox.initialize();
+
+    expect(inbox.hasPendingDrafts, isTrue);
+    expect(inbox.takePresentationRequest(), isFalse);
+    expect(
+      (await inbox.addClipboard(
+        text: 'new clipboard',
+        filePaths: const [],
+      )).isAccepted,
+      isTrue,
+    );
+    expect(inbox.takePresentationRequest(), isTrue);
+    expect(inbox.takePresentationRequest(), isFalse);
+  });
+
+  test(
+    'current cold-start arguments request quick-send presentation',
+    () async {
+      final inbox = DesktopQuickSendInbox(
+        store: _MemoryStore(),
+        platform: _FakePlatform(),
+      );
+
+      await inbox.initialize(
+        initialArguments: const <String>['--quick-send-text', 'send now'],
+      );
+
+      expect(inbox.takePresentationRequest(), isTrue);
+    },
+  );
+
   test(
     'native wake events drain the queue without replaying event arguments',
     () async {

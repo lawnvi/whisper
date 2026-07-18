@@ -547,6 +547,7 @@ class DesktopQuickSendInbox extends ChangeNotifier {
       <_DesktopQuickSendPendingRejection>[];
   final Set<String> _queuedNativeRejectionIds = <String>{};
   final List<String> _presentedNativeRejectionIds = <String>[];
+  bool _presentationRequested = false;
   bool _disposed = false;
 
   List<DesktopQuickSendDraft> get drafts =>
@@ -559,6 +560,12 @@ class DesktopQuickSendInbox extends ChangeNotifier {
   bool get hasPendingDrafts => _drafts.isNotEmpty;
 
   bool get isSending => _sendFuture != null;
+
+  bool takePresentationRequest() {
+    final requested = _presentationRequested;
+    _presentationRequested = false;
+    return requested;
+  }
 
   DesktopQuickSendRejection? takePendingRejection() {
     if (_pendingRejections.isEmpty) {
@@ -808,6 +815,7 @@ class DesktopQuickSendInbox extends ChangeNotifier {
     if (invalidContent != null) {
       return _reject(invalidContent, nativeEntryId: nativeEntryId);
     }
+    var added = false;
     final result = await _persistenceLock.synchronized(() async {
       if (draftId != null && _drafts.any((draft) => draft.id == draftId)) {
         return const DesktopQuickSendEnqueueResult.accepted();
@@ -831,10 +839,14 @@ class DesktopQuickSendInbox extends ChangeNotifier {
         await _store.save(<DesktopQuickSendDraft>[..._drafts, draft]);
       }
       _drafts.add(draft);
+      added = true;
       return const DesktopQuickSendEnqueueResult.accepted();
     });
     if (result.rejection != null) {
       return _reject(result.rejection!, nativeEntryId: nativeEntryId);
+    }
+    if (added) {
+      _presentationRequested = true;
     }
     if (persist && !_disposed) {
       notifyListeners();

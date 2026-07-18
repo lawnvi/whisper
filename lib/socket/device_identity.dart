@@ -58,10 +58,12 @@ final class FlutterSecureIdentitySeedVault implements SecureIdentitySeedVault {
               synchronizable: false,
             ),
             mOptions: MacOsOptions(
+              accountName: 'com.vireen.whisper.device-identity.v1',
               accessibility: KeychainAccessibility.first_unlock_this_device,
               synchronizable: false,
               // The data-protection keychain requires a provisioning profile.
-              // The standard login Keychain also supports ad-hoc local builds.
+              // A Whisper-specific service avoids inheriting access controls
+              // from the plugin's shared default service after signing changes.
               usesDataProtectionKeychain: false,
             ),
           );
