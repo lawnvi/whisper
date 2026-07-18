@@ -695,74 +695,64 @@ class _TransferStateOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
-    return ColoredBox(
-      color: colorScheme.surface.withValues(alpha: 0.38),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(minWidth: 92, maxWidth: 190),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-          decoration: BoxDecoration(
-            color: palette.surfaceElevated.withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: palette.borderSubtle),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+    final progressValue = progress.clamp(0, 1).toDouble();
+    final displayStatus = _visualTransferStatusLabel(status);
+    return Semantics(
+      liveRegion: true,
+      label: displayStatus,
+      value: verifying ? displayStatus : '${(progressValue * 100).round()}%',
+      child: ColoredBox(
+        key: const ValueKey<String>('visual-transfer-overlay'),
+        color: Colors.black.withValues(alpha: 0.28),
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (failed)
                 IconButton(
+                  key: const ValueKey<String>('visual-transfer-retry'),
                   tooltip: AppLocalizations.of(context)?.retry ?? '重试',
                   onPressed: onRetry,
-                  icon: Icon(
-                    Icons.refresh_rounded,
-                    color: palette.danger,
-                    size: 26,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.42),
+                    foregroundColor: Colors.white,
                   ),
+                  icon: const Icon(Icons.refresh_rounded, size: 26),
                 )
               else
                 SizedBox.square(
-                  dimension: 38,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CircularProgressIndicator(
-                        value: verifying ? 1 : progress.clamp(0, 1),
-                        strokeWidth: 3,
-                        color: colorScheme.primary,
-                        backgroundColor: colorScheme.primary.withValues(
-                          alpha: 0.16,
-                        ),
-                      ),
-                      if (verifying)
-                        CircularProgressIndicator(
-                          value: null,
-                          strokeWidth: 2,
-                          color: colorScheme.onPrimaryContainer,
-                          backgroundColor: Colors.transparent,
-                        ),
-                    ],
+                  key: const ValueKey<String>('visual-transfer-progress'),
+                  dimension: 52,
+                  child: CircularProgressIndicator(
+                    value: verifying ? null : progressValue,
+                    strokeWidth: 3.2,
+                    color: Colors.white,
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
                   ),
                 ),
-              const SizedBox(height: 7),
-              Text(
-                status,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: failed ? palette.danger : colorScheme.onSurface,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(height: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  displayStatus,
+                  key: const ValueKey<String>('visual-transfer-status'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: failed ? palette.danger : Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    shadows: const [
+                      Shadow(
+                        color: Color(0x99000000),
+                        blurRadius: 5,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -771,6 +761,13 @@ class _TransferStateOverlay extends StatelessWidget {
       ),
     );
   }
+}
+
+String _visualTransferStatusLabel(String status) {
+  return status.trim().replaceFirstMapped(
+    RegExp(r'\s+(\d{1,3})%$'),
+    (match) => ' · ${match.group(1)}%',
+  );
 }
 
 class _OverlayIconButton extends StatelessWidget {
@@ -786,15 +783,15 @@ class _OverlayIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
     return IconButton(
+      key: const ValueKey<String>('visual-transfer-cancel'),
       tooltip: tooltip,
       constraints: const BoxConstraints.tightFor(width: 36, height: 36),
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-        backgroundColor: palette.surfaceElevated.withValues(alpha: 0.94),
-        foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        side: BorderSide(color: palette.borderSubtle),
+        backgroundColor: Colors.black.withValues(alpha: 0.46),
+        foregroundColor: Colors.white,
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 20),

@@ -49,10 +49,61 @@ void main() {
 
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('12.8 MB  68%'), findsOneWidget);
+      expect(
+        find.text(
+          kind == MediaFileKind.audio ? '12.8 MB  68%' : '12.8 MB · 68%',
+        ),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
     });
   }
+
+  testWidgets('visual transfer progress is integrated into one overlay', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 260,
+            child: MediaMessagePreview(
+              kind: MediaFileKind.image,
+              path: '',
+              name: 'photo.jpg',
+              status: '4.72 MB  42%',
+              contentAvailable: false,
+              progress: 0.42,
+              onCancel: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final overlay = find.byKey(
+      const ValueKey<String>('visual-transfer-overlay'),
+    );
+    expect(overlay, findsOneWidget);
+    expect(
+      tester.widget<ColoredBox>(overlay).color,
+      Colors.black.withValues(alpha: 0.28),
+    );
+    expect(
+      find.byKey(const ValueKey<String>('visual-transfer-progress')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('visual-transfer-status')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('visual-transfer-cancel')),
+      findsOneWidget,
+    );
+    expect(find.text('4.72 MB · 42%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('completed audio uses a compact music attachment card', (
     tester,
