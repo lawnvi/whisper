@@ -244,18 +244,6 @@ abstract class AppLocalizations {
   /// **'发送文件'**
   String get sendFiles;
 
-  /// No description provided for @sendFolder.
-  ///
-  /// In zh, this message translates to:
-  /// **'发送文件夹（ZIP）'**
-  String get sendFolder;
-
-  /// No description provided for @folderSendFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'文件夹打包或发送失败'**
-  String get folderSendFailed;
-
   /// No description provided for @trust.
   ///
   /// In zh, this message translates to:

@@ -68,7 +68,7 @@ Icon=app_icon.png
 Terminal=false
 Type=Application
 Categories=Utility;
-MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;inode/directory;
+MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;
 Actions=QuickSend;
 
 [Desktop Action QuickSend]
@@ -81,7 +81,7 @@ cat > %{buildroot}/usr/share/kservices5/ServiceMenus/%{name}-send.desktop <<EOF2
 [Desktop Entry]
 Type=Service
 X-KDE-ServiceTypes=KonqPopupMenu/Plugin
-MimeType=all/allfiles;inode/directory;
+MimeType=all/allfiles;
 Actions=WhisperQuickSend;
 
 [Desktop Action WhisperQuickSend]

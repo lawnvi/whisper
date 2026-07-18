@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Windows installer registers file and folder quick-send verbs', () {
+  test('Windows installer registers file quick-send only', () {
     final installer = File('windows/installer.nsi').readAsStringSync();
     final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
     final plugin = File(
@@ -13,7 +13,11 @@ void main() {
     expect(installer, contains(r'Software\Classes\*\shell\Whisper.Send'));
     expect(
       installer,
-      contains(r'Software\Classes\Directory\shell\Whisper.Send'),
+      isNot(contains(r'WriteRegStr HKCU "Software\Classes\Directory')),
+    );
+    expect(
+      installer,
+      contains(r'DeleteRegKey HKCU "Software\Classes\Directory'),
     );
     expect(installer, contains('--quick-send-file'));
     expect(installer, contains('CONTROL|ALT|V'));
@@ -48,6 +52,8 @@ void main() {
       isNot(contains('super.applicationDidFinishLaunching(notification)')),
     );
     expect(appDelegate, contains('DesktopQuickSendBridge.shared.enqueue'));
+    expect(appDelegate, contains('regularFilePaths'));
+    expect(appDelegate, contains('!isDirectory.boolValue'));
     expect(appDelegate, contains('maximumPendingCount = 32'));
     expect(appDelegate, contains('acknowledgeQuickSend'));
     expect(appDelegate, contains('desktop_quick_send_queue.json'));
@@ -71,8 +77,11 @@ void main() {
     expect(application, contains('desktop_quick_send_plugin_emit_arguments'));
     expect(deb, contains('--quick-send %F'));
     expect(deb, contains('ServiceMenus'));
+    expect(deb, isNot(contains('inode/directory')));
     expect(rpm, contains('--quick-send %F'));
+    expect(rpm, isNot(contains('inode/directory')));
     expect(appImage, contains('--quick-send %F'));
+    expect(appImage, isNot(contains('inode/directory')));
     expect(cmake, contains('desktop_quick_send_plugin.cc'));
     expect(plugin, contains('pending_entries'));
     expect(plugin, contains('consumePendingQuickSends'));
@@ -112,7 +121,7 @@ void main() {
     expect(source, contains('HotKeyModifier.meta'));
     expect(source, contains('HotKeyModifier.control'));
     expect(source, contains('DesktopClipboardFileReader'));
-    expect(source, contains('includeDirectories: true'));
+    expect(source, isNot(contains('includeDirectories')));
     expect(source, contains('DesktopClipboardImageReader'));
     expect(source, contains('_inbox.addClipboard'));
     expect(macOSPlugins, contains('hotkey_manager_macos'));

@@ -16,7 +16,6 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
-import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -40,6 +39,7 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/media_message_preview.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
 import '../helper/file.dart';
@@ -58,7 +58,6 @@ enum ConversationOperationKind {
   sendClipboardFiles,
   sendClipboardImage,
   pickFiles,
-  pickFolder,
   audioToggle,
   remoteInputToggle,
   sendText,
@@ -120,9 +119,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       const DesktopClipboardImageReader();
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
-  final FolderTransferStager _folderTransferStager = const FolderTransferStager(
-    activeTransferPathsProvider: recoverableFolderTransferAndDesktopDraftPaths,
-  );
   final ConnectionAttemptTracker _connectionAttempts =
       ConnectionAttemptTracker();
   DeviceData device;
@@ -321,7 +317,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     setState(() {
       for (final entry in transfers.entries) {
-        _transferSnapshots[entry.key] = db.snapshotForTransfer(entry.value);
+        final snapshot = db.snapshotForTransfer(entry.value);
+        final current = _transferSnapshots[entry.key];
+        if (current != null && current.updatedAt > snapshot.updatedAt) {
+          continue;
+        }
+        _transferSnapshots[entry.key] = snapshot;
+        if (snapshot.state == FileTransferState.completed &&
+            snapshot.finalPath.isNotEmpty) {
+          final messageIndex = messageList.indexWhere(
+            (message) => message.uuid == snapshot.messageUuid,
+          );
+          if (messageIndex >= 0 &&
+              messageList[messageIndex].path != snapshot.finalPath) {
+            messageList[messageIndex] = messageList[messageIndex].copyWith(
+              path: snapshot.finalPath,
+            );
+          }
+        }
       }
     });
   }
@@ -431,6 +444,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return _transferSnapshots[message.uuid];
   }
 
+  String _effectiveMessagePath(
+    MessageData message, [
+    TransferSnapshot? transfer,
+  ]) {
+    final snapshot = transfer ?? _transferForMessage(message);
+    if (snapshot?.state == FileTransferState.completed &&
+        snapshot?.finalPath.isNotEmpty == true) {
+      return snapshot!.finalPath;
+    }
+    return message.path;
+  }
+
   bool _isTransferTerminal(FileTransferState state) {
     return state == FileTransferState.completed ||
         state == FileTransferState.failed ||
@@ -443,9 +468,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   bool _canDragFileMessage(MessageData message, TransferSnapshot? transfer) {
-    if (!isDesktop() ||
-        message.path.isEmpty ||
-        !File(message.path).existsSync()) {
+    final path = _effectiveMessagePath(message, transfer);
+    if (!isDesktop() || path.isEmpty || !File(path).existsSync()) {
       return false;
     }
     return transfer == null || transfer.state == FileTransferState.completed;
@@ -505,7 +529,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<void> _deleteMessageFileIfExists(MessageData message) async {
-    final path = message.path;
+    final path = _effectiveMessagePath(message);
     if (path.isEmpty) {
       return;
     }
@@ -593,7 +617,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             listKey: key,
             messages: messageList,
             onOpenContainingFolder: (path) => openDir(path, parent: true),
-            onOpenFile: openFile,
+            onOpenFile: _openMessageFile,
             onCopyText: copyToClipboard,
             onDeleteMessage: (message, {deleteFile = false}) async {
               if (deleteFile) {
@@ -631,6 +655,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     try {
       for (final item in files) {
+        if (await FileSystemEntity.type(item.path, followLinks: false) !=
+            FileSystemEntityType.file) {
+          if (mounted) {
+            showAppToast(l10n.fileDropRejected);
+          }
+          return;
+        }
         final sent = await socketManager.sendFileTo(device.uid, item.path);
         if (!sent && mounted) {
           showAppToast(l10n.fileDropRejected);
@@ -1058,7 +1089,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       pendingClipboardFiles: _pendingClipboardFiles,
       pendingClipboardImage: _pendingClipboardImage,
       onPickFiles: _pickFilesAndSend,
-      onPickFolder: _pickFolderAndSend,
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
       },
@@ -1275,57 +1305,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         setState(() {
           _isLoading = false;
         });
-      }
-    }
-  }
-
-  Future<void> _pickFolderAndSend() async {
-    if (!_canSendCurrentDevice || _isLocalhost || _isLoading) {
-      return;
-    }
-    final shouldReconnectAfterPicker = _isConnectedSession;
-    _pickerReconnectPending = shouldReconnectAfterPicker;
-    if (_isConnectedSession) {
-      await socketManager.refreshConnectionLiveness();
-    }
-    setState(() => _isLoading = true);
-    String? stagedArchivePath;
-    try {
-      final directoryPath = await FilePicker.platform.getDirectoryPath();
-      if (directoryPath == null || directoryPath.isEmpty) {
-        return;
-      }
-      if (shouldReconnectAfterPicker && !await _restoreConnectionIfNeeded()) {
-        if (mounted) {
-          showAppToast(l10n.connectFailed);
-        }
-        return;
-      }
-      final staged = await _folderTransferStager.stage(directoryPath);
-      stagedArchivePath = staged.archiveFile.path;
-      final sent = await socketManager.sendFileTo(
-        device.uid,
-        stagedArchivePath,
-      );
-      if (!sent) {
-        await releaseUnownedStagedFolderTransferArchive(stagedArchivePath);
-        if (mounted) {
-          showAppToast(l10n.folderSendFailed);
-        }
-      }
-    } catch (error) {
-      final archivePath = stagedArchivePath;
-      if (archivePath != null) {
-        await releaseUnownedStagedFolderTransferArchive(archivePath);
-      }
-      _logConversationFailure(ConversationOperationKind.pickFolder, error);
-      if (mounted) {
-        showAppToast(l10n.folderSendFailed);
-      }
-    } finally {
-      _pickerReconnectPending = false;
-      if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }
@@ -2014,15 +1993,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
     final transfer = _transferForMessage(message);
+    final messagePath = _effectiveMessagePath(message, transfer);
     final isActiveTransfer =
         transfer != null &&
         !_isTransferTerminal(transfer.state) &&
         transfer.state != FileTransferState.queued;
     final missingLocalFile =
         isOpponent &&
-        message.path.isNotEmpty &&
+        messagePath.isNotEmpty &&
         (transfer == null || transfer.state == FileTransferState.completed) &&
-        !File(message.path).existsSync();
+        !File(messagePath).existsSync();
     var failed =
         !isOpponent &&
         !_isConnectedSession &&
@@ -2051,9 +2031,33 @@ class _SendMessageScreen extends State<SendMessageScreen>
       color: colorScheme.onSurfaceVariant,
       fontSize: 12,
     );
+    final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
+    if (mediaKind != MediaFileKind.other) {
+      final hasLocalFile =
+          messagePath.isNotEmpty && File(messagePath).existsSync();
+      final contentAvailable =
+          hasLocalFile &&
+          (transfer == null ||
+              transfer.direction == FileTransferDirection.outgoing ||
+              transfer.state == FileTransferState.completed);
+      return _buildMediaMessage(
+        message: message,
+        transfer: transfer,
+        kind: mediaKind,
+        path: messagePath,
+        width: screenWidth,
+        cardColor: cardColor,
+        borderColor: cardBorderColor,
+        incoming: isOpponent,
+        contentAvailable: contentAvailable,
+        failed: failed || showRetry,
+        showRetry: showRetry,
+        showCancel: showCancel,
+      );
+    }
 
     return DesktopFileDragSource(
-      path: message.path,
+      path: messagePath,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
@@ -2162,6 +2166,87 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMediaMessage({
+    required MessageData message,
+    required TransferSnapshot? transfer,
+    required MediaFileKind kind,
+    required String path,
+    required double width,
+    required Color cardColor,
+    required Color borderColor,
+    required bool incoming,
+    required bool contentAvailable,
+    required bool failed,
+    required bool showRetry,
+    required bool showCancel,
+  }) {
+    final showProgress =
+        transfer != null && !_isTransferTerminal(transfer.state);
+    final audioBorder = incoming
+        ? BorderSide(color: borderColor)
+        : BorderSide.none;
+    Widget buildPreview(double? progress) => MediaMessagePreview(
+      kind: kind,
+      path: path,
+      name: message.name,
+      status: _fileStatusText(message, transfer, progressOverride: progress),
+      incoming: incoming,
+      contentAvailable: contentAvailable,
+      progress: showProgress ? progress ?? transfer.progress : null,
+      verifying: transfer?.state == FileTransferState.verifying,
+      failed: failed,
+      onRetry: showRetry ? () => _retryTransfer(message.uuid) : null,
+      onCancel: showCancel ? () => _cancelTransfer(message.uuid) : null,
+    );
+
+    return DesktopFileDragSource(
+      path: path,
+      name: message.name,
+      enabled: _canDragFileMessage(message, transfer),
+      child: Container(
+        constraints: BoxConstraints(maxWidth: width),
+        clipBehavior: Clip.antiAlias,
+        decoration: kind == MediaFileKind.audio
+            ? ShapeDecoration(
+                color: cardColor,
+                shape: VoiceMessageBubbleBorder(
+                  incoming: incoming,
+                  side: audioBorder,
+                ),
+              )
+            : BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+              ),
+        child: showProgress && transfer.state != FileTransferState.verifying
+            ? _buildAnimatedTransferProgress(
+                value: transfer.progress,
+                builder: (context, value) => buildPreview(value),
+              )
+            : buildPreview(null),
+      ),
+    );
+  }
+
+  void _openMessageFile(MessageData message) {
+    final path = _effectiveMessagePath(message);
+    final kind = mediaFileKindFor(name: message.name, path: path);
+    if (kind == MediaFileKind.other || !File(path).existsSync()) {
+      openFile(path);
+      return;
+    }
+    unawaited(
+      showMediaViewer(
+        context,
+        kind: kind,
+        path: path,
+        name: message.name,
+        onOpenExternally: () => openFile(path),
       ),
     );
   }
@@ -2311,6 +2396,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (mounted) {
       setState(() {
         _transferSnapshots[snapshot.transferId] = snapshot;
+        if (snapshot.state == FileTransferState.completed &&
+            snapshot.finalPath.isNotEmpty) {
+          final messageIndex = messageList.indexWhere(
+            (message) => message.uuid == snapshot.messageUuid,
+          );
+          if (messageIndex >= 0 &&
+              messageList[messageIndex].path != snapshot.finalPath) {
+            messageList[messageIndex] = messageList[messageIndex].copyWith(
+              path: snapshot.finalPath,
+            );
+          }
+        }
       });
     }
     unawaited(_syncAndroidKeepAliveService());

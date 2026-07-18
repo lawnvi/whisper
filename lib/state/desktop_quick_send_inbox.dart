@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
-import 'package:whisper/helper/folder_transfer_stager.dart';
 
 const int desktopQuickSendMaxDrafts = 32;
 const int desktopQuickSendMaxFilesPerDraft = 64;
@@ -27,8 +26,6 @@ class DesktopQuickSendDraft {
     this.pinnedPublicKeyHash = '',
     this.deliveredPeerId = '',
     this.deliveredFileCount = 0,
-    this.stagedSourcePath = '',
-    this.stagedPath = '',
   });
 
   final String id;
@@ -40,8 +37,6 @@ class DesktopQuickSendDraft {
   final String pinnedPublicKeyHash;
   final String deliveredPeerId;
   final int deliveredFileCount;
-  final String stagedSourcePath;
-  final String stagedPath;
 
   bool get hasContent => text.isNotEmpty || filePaths.isNotEmpty;
 
@@ -59,8 +54,6 @@ class DesktopQuickSendDraft {
     String? pinnedPublicKeyHash,
     String? deliveredPeerId,
     int? deliveredFileCount,
-    String? stagedSourcePath,
-    String? stagedPath,
   }) {
     return DesktopQuickSendDraft(
       id: id,
@@ -72,8 +65,6 @@ class DesktopQuickSendDraft {
       pinnedPublicKeyHash: pinnedPublicKeyHash ?? this.pinnedPublicKeyHash,
       deliveredPeerId: deliveredPeerId ?? this.deliveredPeerId,
       deliveredFileCount: deliveredFileCount ?? this.deliveredFileCount,
-      stagedSourcePath: stagedSourcePath ?? this.stagedSourcePath,
-      stagedPath: stagedPath ?? this.stagedPath,
     );
   }
 
@@ -87,8 +78,6 @@ class DesktopQuickSendDraft {
     'pinnedPublicKeyHash': pinnedPublicKeyHash,
     'deliveredPeerId': deliveredPeerId,
     'deliveredFileCount': deliveredFileCount,
-    'stagedSourcePath': stagedSourcePath,
-    'stagedPath': stagedPath,
   };
 
   static DesktopQuickSendDraft? fromJson(Object? value) {
@@ -125,20 +114,9 @@ class DesktopQuickSendDraft {
     final deliveredPeerId = (value['deliveredPeerId'] as String? ?? '').trim();
     final deliveredFileCount =
         (value['deliveredFileCount'] as num?)?.toInt() ?? 0;
-    final stagedSourcePath = (value['stagedSourcePath'] as String? ?? '');
-    final stagedPath = (value['stagedPath'] as String? ?? '');
     if (deliveredFileCount < 0 ||
         deliveredFileCount > desktopQuickSendMaxFilesPerDraft ||
         (deliveredFileCount > 0 && deliveredPeerId.isEmpty)) {
-      return null;
-    }
-    if ((stagedSourcePath.isEmpty != stagedPath.isEmpty) ||
-        stagedSourcePath.contains('\u0000') ||
-        stagedPath.contains('\u0000') ||
-        stagedSourcePath.length > desktopQuickSendMaxPathLength ||
-        stagedPath.length > desktopQuickSendMaxPathLength ||
-        (stagedSourcePath.isNotEmpty &&
-            (filePaths.isEmpty || filePaths.first != stagedSourcePath))) {
       return null;
     }
     if (!_isValidDraftTargetBinding(
@@ -159,8 +137,6 @@ class DesktopQuickSendDraft {
       pinnedPublicKeyHash: pinnedPublicKeyHash,
       deliveredPeerId: deliveredPeerId,
       deliveredFileCount: deliveredFileCount,
-      stagedSourcePath: stagedSourcePath,
-      stagedPath: stagedPath,
     );
     return draft.hasContent ? draft : null;
   }
@@ -503,17 +479,6 @@ class DesktopQuickSendResult {
 typedef DesktopQuickSendTrustedIdentityResolver =
     String? Function(String peerId);
 
-Future<Set<String>> recoverableFolderTransferAndDesktopDraftPaths({
-  ActiveTransferPathsProvider databasePathsProvider =
-      recoverableFolderTransferPaths,
-  DesktopQuickSendInbox? inbox,
-}) async {
-  return <String>{
-    ...await databasePathsProvider(),
-    ...(inbox ?? DesktopQuickSendInbox.shared).stagedArchivePaths,
-  };
-}
-
 class DesktopQuickSendInbox extends ChangeNotifier {
   DesktopQuickSendInbox({
     DesktopQuickSendStore? store,
@@ -552,10 +517,6 @@ class DesktopQuickSendInbox extends ChangeNotifier {
 
   List<DesktopQuickSendDraft> get drafts =>
       List<DesktopQuickSendDraft>.unmodifiable(_drafts);
-
-  Set<String> get stagedArchivePaths => Set<String>.unmodifiable(
-    _drafts.map((draft) => draft.stagedPath).where((path) => path.isNotEmpty),
-  );
 
   bool get hasPendingDrafts => _drafts.isNotEmpty;
 
@@ -609,9 +570,13 @@ class DesktopQuickSendInbox extends ChangeNotifier {
   }
 
   Future<void> _initialize(List<String> initialArguments) async {
-    _drafts
-      ..clear()
-      ..addAll(await _store.load());
+    _drafts.clear();
+    for (final draft in await _store.load()) {
+      final cleaned = await _withoutDirectoryPaths(draft);
+      if (cleaned != null) {
+        _drafts.add(cleaned);
+      }
+    }
     await _addArguments(
       initialArguments,
       source: DesktopQuickSendSource.commandLine,
@@ -629,6 +594,23 @@ class DesktopQuickSendInbox extends ChangeNotifier {
     for (final nativeEntryId in entriesToAcknowledge) {
       await _platform.acknowledge(nativeEntryId);
     }
+  }
+
+  Future<DesktopQuickSendDraft?> _withoutDirectoryPaths(
+    DesktopQuickSendDraft draft,
+  ) async {
+    final files = <String>[];
+    for (final path in draft.filePaths) {
+      final type = await FileSystemEntity.type(path, followLinks: false);
+      if (type != FileSystemEntityType.directory) {
+        files.add(path);
+      }
+    }
+    if (files.length == draft.filePaths.length) {
+      return draft;
+    }
+    final cleaned = draft.copyWith(filePaths: files);
+    return cleaned.hasContent ? cleaned : null;
   }
 
   Future<DesktopQuickSendEnqueueResult> _handlePlatformArguments(
@@ -815,6 +797,18 @@ class DesktopQuickSendInbox extends ChangeNotifier {
     if (invalidContent != null) {
       return _reject(invalidContent, nativeEntryId: nativeEntryId);
     }
+    for (final path in paths) {
+      if (await FileSystemEntity.type(path, followLinks: false) ==
+          FileSystemEntityType.directory) {
+        return _reject(
+          const DesktopQuickSendRejection(
+            reason: DesktopQuickSendRejectionReason.invalidPath,
+            limit: 0,
+          ),
+          nativeEntryId: nativeEntryId,
+        );
+      }
+    }
     var added = false;
     final result = await _persistenceLock.synchronized(() async {
       if (draftId != null && _drafts.any((draft) => draft.id == draftId)) {
@@ -891,8 +885,6 @@ class DesktopQuickSendInbox extends ChangeNotifier {
       String path,
     )
     sendFile,
-    Future<String> Function(String directoryPath)? stageDirectory,
-    Future<void> Function(String stagedPath)? releaseUnownedStagedFile,
   }) {
     final active = _sendFuture;
     if (active != null) {
@@ -903,8 +895,6 @@ class DesktopQuickSendInbox extends ChangeNotifier {
       trustedIdentityHashFor: trustedIdentityHashFor,
       sendText: sendText,
       sendFile: sendFile,
-      stageDirectory: stageDirectory,
-      releaseUnownedStagedFile: releaseUnownedStagedFile,
     );
     _sendFuture = future;
     notifyListeners();
@@ -933,8 +923,6 @@ class DesktopQuickSendInbox extends ChangeNotifier {
       String path,
     )
     sendFile,
-    required Future<String> Function(String directoryPath)? stageDirectory,
-    required Future<void> Function(String stagedPath)? releaseUnownedStagedFile,
   }) async {
     var sentDrafts = 0;
     String? failedPath;
@@ -977,47 +965,11 @@ class DesktopQuickSendInbox extends ChangeNotifier {
           return _clearInvalidTargetAndResult(draft, sentDrafts: sentDrafts);
         }
         final sourcePath = draft.filePaths.first;
-        var sendPath = sourcePath;
         try {
-          final hasPersistedStage =
-              draft.stagedSourcePath == sourcePath &&
-              draft.stagedPath.isNotEmpty;
-          if (hasPersistedStage) {
-            sendPath = draft.stagedPath;
-          } else {
-            final type = await FileSystemEntity.type(
-              sourcePath,
-              followLinks: false,
-            );
-            if (type == FileSystemEntityType.directory) {
-              if (stageDirectory == null) {
-                failedPath = sourcePath;
-                break;
-              }
-              sendPath = await stageDirectory(sourcePath);
-              if (sendPath.isEmpty ||
-                  sendPath.length > desktopQuickSendMaxPathLength ||
-                  sendPath.contains('\u0000')) {
-                if (sendPath.isNotEmpty) {
-                  await releaseUnownedStagedFile?.call(sendPath);
-                }
-                failedPath = sourcePath;
-                break;
-              }
-              final staged = draft.copyWith(
-                stagedSourcePath: sourcePath,
-                stagedPath: sendPath,
-              );
-              if (!await _replaceDraftAtomically(draft, staged)) {
-                await releaseUnownedStagedFile?.call(sendPath);
-                failedPath = sourcePath;
-                break;
-              }
-              draft = staged;
-            } else if (type != FileSystemEntityType.file) {
-              failedPath = sourcePath;
-              break;
-            }
+          if (await FileSystemEntity.type(sourcePath, followLinks: false) !=
+              FileSystemEntityType.file) {
+            failedPath = sourcePath;
+            break;
           }
           if (!_hasCurrentTargetIdentity(draft, trustedIdentityHashFor)) {
             return _clearInvalidTargetAndResult(draft, sentDrafts: sentDrafts);
@@ -1032,25 +984,12 @@ class DesktopQuickSendInbox extends ChangeNotifier {
             peerId,
             fileIntentId,
             draft.pinnedPublicKeyHash,
-            sendPath,
+            sourcePath,
           )) {
-            final cleared = draft.copyWith(
-              stagedSourcePath: '',
-              stagedPath: '',
-            );
-            if (draft.stagedPath.isNotEmpty &&
-                await _replaceDraftAtomically(draft, cleared)) {
-              draft = cleared;
-            }
             failedPath = sourcePath;
             break;
           }
         } on Object catch (error) {
-          final cleared = draft.copyWith(stagedSourcePath: '', stagedPath: '');
-          if (draft.stagedPath.isNotEmpty &&
-              await _replaceDraftAtomically(draft, cleared)) {
-            draft = cleared;
-          }
           failedPath = sourcePath;
           if (error is FileSystemException) {
             break;
@@ -1061,8 +1000,6 @@ class DesktopQuickSendInbox extends ChangeNotifier {
           filePaths: draft.filePaths.skip(1).toList(),
           deliveredPeerId: peerId,
           deliveredFileCount: draft.deliveredFileCount + 1,
-          stagedSourcePath: '',
-          stagedPath: '',
         );
         if (!await _replaceDraftAtomically(draft, updated)) {
           break;

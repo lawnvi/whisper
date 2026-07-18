@@ -101,12 +101,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sendFiles => '发送文件';
 
   @override
-  String get sendFolder => '发送文件夹（ZIP）';
-
-  @override
-  String get folderSendFailed => '文件夹打包或发送失败';
-
-  @override
   String get trust => '自动接入';
 
   @override

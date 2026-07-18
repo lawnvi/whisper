@@ -84,8 +84,6 @@
   "setting": "Settings",
   "sendTips": "Type something...",
   "sendFiles": "Send files",
-  "sendFolder": "Send folder (ZIP)",
-  "folderSendFailed": "Unable to package or send the folder",
   "trust": "Trust Device",
   "writeClipboard": "Write to Clipboard",
   "deleteDevice": "Delete Device",

@@ -102,12 +102,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sendFiles => 'Enviar archivos';
 
   @override
-  String get sendFolder => 'Enviar carpeta (ZIP)';
-
-  @override
-  String get folderSendFailed => 'No se pudo empaquetar o enviar la carpeta';
-
-  @override
   String get trust => 'Confiar en este dispositivo';
 
   @override

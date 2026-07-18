@@ -9,22 +9,25 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
-enum _AttachmentSelection { files, folder }
-
 class ChatComposer extends StatelessWidget {
-  static const desktopContainerKey =
-      ValueKey('chat-composer-desktop-container');
+  static const desktopContainerKey = ValueKey(
+    'chat-composer-desktop-container',
+  );
   static const attachmentButtonKey = ValueKey('chat-composer-attachment');
   static const clipboardButtonKey = ValueKey('chat-composer-clipboard');
   static const sendButtonKey = ValueKey('chat-composer-send');
-  static const clipboardImagePreviewKey =
-      ValueKey('chat-composer-clipboard-image-preview');
-  static const clipboardImageRemoveButtonKey =
-      ValueKey('chat-composer-clipboard-image-remove');
-  static const clipboardFilesPreviewKey =
-      ValueKey('chat-composer-clipboard-files-preview');
-  static const clipboardFilesRemoveButtonKey =
-      ValueKey('chat-composer-clipboard-files-remove');
+  static const clipboardImagePreviewKey = ValueKey(
+    'chat-composer-clipboard-image-preview',
+  );
+  static const clipboardImageRemoveButtonKey = ValueKey(
+    'chat-composer-clipboard-image-remove',
+  );
+  static const clipboardFilesPreviewKey = ValueKey(
+    'chat-composer-clipboard-files-preview',
+  );
+  static const clipboardFilesRemoveButtonKey = ValueKey(
+    'chat-composer-clipboard-files-remove',
+  );
 
   final bool clipboardEnabled;
   final bool canSend;
@@ -38,7 +41,6 @@ class ChatComposer extends StatelessWidget {
   final ClipboardImageDraft? pendingClipboardImage;
   final List<ClipboardFileDraft> pendingClipboardFiles;
   final Future<void> Function() onPickFiles;
-  final Future<void> Function()? onPickFolder;
   final Future<void> Function() onSendClipboard;
   final Future<bool> Function(String text) onSendText;
   final Future<String?> Function()? onPasteClipboard;
@@ -61,7 +63,6 @@ class ChatComposer extends StatelessWidget {
     this.pendingClipboardImage,
     this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
-    this.onPickFolder,
     required this.onSendClipboard,
     required this.onSendText,
     this.onPasteClipboard,
@@ -82,10 +83,7 @@ class ChatComposer extends StatelessWidget {
     return _buildMobileComposer(context, colorScheme);
   }
 
-  Widget _buildDesktopComposer(
-    BuildContext context,
-    ColorScheme colorScheme,
-  ) {
+  Widget _buildDesktopComposer(BuildContext context, ColorScheme colorScheme) {
     final palette = context.whisperPalette;
     final accentColor = colorScheme.primary;
     final containerColor = palette.surfaceElevated;
@@ -154,11 +152,8 @@ class ChatComposer extends StatelessWidget {
                 hintText: canSend
                     ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
                     : (AppLocalizations.of(context)?.connectToSend ??
-                        '连接后即可发送消息'),
-                hintStyle: TextStyle(
-                  color: palette.textMuted,
-                  fontSize: 16,
-                ),
+                          '连接后即可发送消息'),
+                hintStyle: TextStyle(color: palette.textMuted, fontSize: 16),
               ),
             ),
           ),
@@ -191,10 +186,7 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileComposer(
-    BuildContext context,
-    ColorScheme colorScheme,
-  ) {
+  Widget _buildMobileComposer(BuildContext context, ColorScheme colorScheme) {
     final palette = context.whisperPalette;
     final accentColor = colorScheme.primary;
     final outerContainerColor = colorScheme.surface;
@@ -202,9 +194,7 @@ class ChatComposer extends StatelessWidget {
     final borderColor = palette.borderSubtle;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-      decoration: BoxDecoration(
-        color: outerContainerColor,
-      ),
+      decoration: BoxDecoration(color: outerContainerColor),
       child: Container(
         padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
         decoration: BoxDecoration(
@@ -258,11 +248,8 @@ class ChatComposer extends StatelessWidget {
                   hintText: canSend
                       ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
                       : (AppLocalizations.of(context)?.connectToSend ??
-                          '连接后即可发送消息'),
-                  hintStyle: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 16,
-                  ),
+                            '连接后即可发送消息'),
+                  hintStyle: TextStyle(color: palette.textMuted, fontSize: 16),
                 ),
               ),
             ),
@@ -317,11 +304,12 @@ class ChatComposer extends StatelessWidget {
         maximumSize: Size(buttonSize, buttonSize),
         backgroundColor: outlined
             ? (enabled
-                ? palette.surfaceElevated
-                : disabledFillColor.withValues(alpha: 0.65))
+                  ? palette.surfaceElevated
+                  : disabledFillColor.withValues(alpha: 0.65))
             : Colors.transparent,
-        foregroundColor:
-            enabled ? colorScheme.onSurfaceVariant : colorScheme.outline,
+        foregroundColor: enabled
+            ? colorScheme.onSurfaceVariant
+            : colorScheme.outline,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(outlined ? 16 : buttonSize / 2),
           side: outlined
@@ -390,10 +378,7 @@ class ChatComposer extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   _formatBytes(draft.size),
-                  style: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: palette.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -423,10 +408,13 @@ class ChatComposer extends StatelessWidget {
     final palette = context.whisperPalette;
     final files = pendingClipboardFiles;
     final first = files.first;
-    final totalSize =
-        files.fold<int>(0, (previous, draft) => previous + draft.size);
+    final totalSize = files.fold<int>(
+      0,
+      (previous, draft) => previous + draft.size,
+    );
     final l10n = AppLocalizations.of(context);
-    final countLabel = l10n?.clipboardFilesCount(files.length) ??
+    final countLabel =
+        l10n?.clipboardFilesCount(files.length) ??
         (files.length == 1 ? '1 file' : '${files.length} files');
     return Container(
       key: clipboardFilesPreviewKey,
@@ -471,10 +459,7 @@ class ChatComposer extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   '$countLabel · ${_formatBytes(totalSize)}',
-                  style: TextStyle(
-                    color: palette.textMuted,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: palette.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -509,7 +494,8 @@ class ChatComposer extends StatelessWidget {
     final accentColor = colorScheme.primary;
     final disabledBorderColor = palette.borderSubtle;
     final showsAttachmentAction = _showsAttachmentAction;
-    final enabled = canSend &&
+    final enabled =
+        canSend &&
         !isLoading &&
         (showsAttachmentAction ||
             _hasDraftText ||
@@ -534,9 +520,7 @@ class ChatComposer extends StatelessWidget {
         elevation: 0,
         side: showsAttachmentAction
             ? BorderSide.none
-            : BorderSide(
-                color: enabled ? accentColor : disabledBorderColor,
-              ),
+            : BorderSide(color: enabled ? accentColor : disabledBorderColor),
         splashFactory: NoSplash.splashFactory,
         overlayColor: Colors.transparent,
       ),
@@ -589,7 +573,7 @@ class ChatComposer extends StatelessWidget {
       return;
     }
     if (_showsAttachmentAction) {
-      await _showAttachmentMenu(context);
+      await onPickFiles();
       return;
     }
 
@@ -599,47 +583,6 @@ class ChatComposer extends StatelessWidget {
       return;
     }
     await _sendTextSnapshot(snapshot, nextText);
-  }
-
-  Future<void> _showAttachmentMenu(BuildContext context) async {
-    final folderPicker = onPickFolder;
-    if (folderPicker == null) {
-      await onPickFiles();
-      return;
-    }
-    final selection = await showModalBottomSheet<_AttachmentSelection>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context);
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: Text(l10n?.sendFiles ?? 'Send files'),
-                onTap: () => Navigator.pop(context, _AttachmentSelection.files),
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder_zip_outlined),
-                title: Text(l10n?.sendFolder ?? 'Send folder'),
-                onTap: () =>
-                    Navigator.pop(context, _AttachmentSelection.folder),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    switch (selection) {
-      case _AttachmentSelection.files:
-        await onPickFiles();
-      case _AttachmentSelection.folder:
-        await folderPicker();
-      case null:
-        return;
-    }
   }
 
   KeyEventResult _handleKeyEvent(KeyEvent event) {
@@ -700,10 +643,7 @@ class ChatComposer extends StatelessWidget {
     _insertTextAtSelection(text);
   }
 
-  Future<void> _sendTextSnapshot(
-    TextEditingValue snapshot,
-    String text,
-  ) async {
+  Future<void> _sendTextSnapshot(TextEditingValue snapshot, String text) async {
     try {
       final sent = await onSendText(text);
       if (sent && controller.text == snapshot.text) {

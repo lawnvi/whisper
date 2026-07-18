@@ -93,8 +93,6 @@
   "setting": "Ajustes",
   "sendTips": "Escribe algo...",
   "sendFiles": "Enviar archivos",
-  "sendFolder": "Enviar carpeta (ZIP)",
-  "folderSendFailed": "No se pudo empaquetar o enviar la carpeta",
   "trust": "Confiar en este dispositivo",
   "writeClipboard": "Permitir escribir en el portapapeles",
   "deleteDevice": "Eliminar dispositivo",

@@ -102,12 +102,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendFiles => 'Send files';
 
   @override
-  String get sendFolder => 'Send folder (ZIP)';
-
-  @override
-  String get folderSendFailed => 'Unable to package or send the folder';
-
-  @override
   String get trust => 'Trust Device';
 
   @override

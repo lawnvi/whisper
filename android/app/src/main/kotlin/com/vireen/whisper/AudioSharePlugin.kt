@@ -60,6 +60,8 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         stopPlayback()
+        abandonFocus()
+        MediaPlaybackService.stopForEngineDetach(appContext)
         channel.setMethodCallHandler(null)
         if (activeInstance === this) {
             activeInstance = null
@@ -163,6 +165,16 @@ class AudioSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         call.argument<String>("channelName") ?: ""
                     )
                 try {
+                    if (state == MediaPlaybackService.STATE_STOPPED &&
+                        !MediaPlaybackService.isRunning
+                    ) {
+                        result.success(null)
+                        return
+                    }
+                    if (MediaPlaybackService.deliverToRunning(intent)) {
+                        result.success(null)
+                        return
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         appContext.startForegroundService(intent)
                     } else {

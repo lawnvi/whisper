@@ -76,6 +76,9 @@ class BackgroundKeepAlivePlugin : FlutterPlugin, MethodChannel.MethodCallHandler
             channelName,
             channelDescription
         )
+        if (KeepAliveForegroundService.deliverToRunning(intent)) {
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {
@@ -84,6 +87,7 @@ class BackgroundKeepAlivePlugin : FlutterPlugin, MethodChannel.MethodCallHandler
     }
 
     private fun stopKeepAlive() {
+        KeepAliveForegroundService.prepareToStop()
         context.stopService(Intent(context, KeepAliveForegroundService::class.java))
     }
 

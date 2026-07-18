@@ -14,10 +14,10 @@ class ChatMessageList extends StatelessWidget {
   final GlobalKey<AnimatedListState> listKey;
   final List<MessageData> messages;
   final void Function(String path) onOpenContainingFolder;
-  final void Function(String path) onOpenFile;
+  final void Function(MessageData message) onOpenFile;
   final void Function(String content) onCopyText;
   final Future<void> Function(MessageData message, {bool deleteFile})
-      onDeleteMessage;
+  onDeleteMessage;
   final String? selfUid;
 
   const ChatMessageList({
@@ -68,8 +68,10 @@ class ChatMessageList extends StatelessWidget {
                       items: [
                         if (!isFile)
                           ContextMenuActionItem(
-                            label: AppLocalizations.of(context)?.copyMessage ??
+                            label:
+                                AppLocalizations.of(context)?.copyMessage ??
                                 '复制消息',
+                            icon: Icons.content_copy_rounded,
                             onSelected: () {
                               if (message.content?.isNotEmpty == true) {
                                 onCopyText(message.content!);
@@ -79,6 +81,8 @@ class ChatMessageList extends StatelessWidget {
                         if (!isFile)
                           ContextMenuActionItem(
                             label: AppLocalizations.of(context)?.delete ?? '删除',
+                            icon: Icons.delete_outline_rounded,
+                            destructive: true,
                             onSelected: () {
                               onDeleteMessage(message);
                             },
@@ -86,17 +90,21 @@ class ChatMessageList extends StatelessWidget {
                         if (isFile && (isOpponent || isDesktop()))
                           ContextMenuActionItem(
                             label: AppLocalizations.of(context)?.open ?? '打开',
+                            icon: Icons.open_in_new_rounded,
                             onSelected: () {
-                              onOpenFile(message.path);
+                              onOpenFile(message);
                             },
                           ),
                         if (isFile && (isOpponent || isDesktop()))
                           ContextMenuActionItem(
-                            label: (Platform.isMacOS
+                            label:
+                                (Platform.isMacOS
                                     ? AppLocalizations.of(context)?.openInFinder
-                                    : AppLocalizations.of(context)
-                                        ?.openInDir) ??
+                                    : AppLocalizations.of(
+                                        context,
+                                      )?.openInDir) ??
                                 '所在文件夹',
+                            icon: Icons.folder_open_rounded,
                             onSelected: () {
                               onOpenContainingFolder(message.path);
                             },
@@ -105,6 +113,8 @@ class ChatMessageList extends StatelessWidget {
                           ContextMenuActionItem(
                             label:
                                 '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.keepFile ?? '保留文件'})',
+                            icon: Icons.delete_outline_rounded,
+                            destructive: true,
                             onSelected: () {
                               onDeleteMessage(message);
                             },
@@ -113,6 +123,8 @@ class ChatMessageList extends StatelessWidget {
                           ContextMenuActionItem(
                             label:
                                 '${AppLocalizations.of(context)?.delete ?? '删除'} (${AppLocalizations.of(context)?.deleteFile ?? '删除文件'})',
+                            icon: Icons.delete_forever_outlined,
+                            destructive: true,
                             onSelected: () {
                               onDeleteMessage(message, deleteFile: true);
                             },
@@ -120,6 +132,8 @@ class ChatMessageList extends StatelessWidget {
                         if (isFile && !isOpponent)
                           ContextMenuActionItem(
                             label: AppLocalizations.of(context)?.delete ?? '删除',
+                            icon: Icons.delete_outline_rounded,
+                            destructive: true,
                             onSelected: () {
                               onDeleteMessage(message);
                             },
@@ -128,7 +142,7 @@ class ChatMessageList extends StatelessWidget {
                       child: GestureDetector(
                         onTap: () {
                           if (isFile) {
-                            onOpenFile(message.path);
+                            onOpenFile(message);
                           }
                         },
                         child: isFile
@@ -148,8 +162,9 @@ class ChatMessageList extends StatelessWidget {
                       Text(
                         formatTimestamp(message.timestamp),
                         style: TextStyle(
-                          color: colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.8),
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.8,
+                          ),
                           fontSize: 12,
                         ),
                       ),

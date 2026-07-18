@@ -93,8 +93,6 @@
   "setting": "设置",
   "sendTips": "发点什么...",
   "sendFiles": "发送文件",
-  "sendFolder": "发送文件夹（ZIP）",
-  "folderSendFailed": "文件夹打包或发送失败",
   "trust": "自动接入",
   "writeClipboard": "写入剪切板",
   "deleteDevice": "删除设备",

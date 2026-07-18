@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 
 final String _hashA = 'A' * 43;
@@ -819,181 +817,51 @@ void main() {
     expect(store.drafts.single.targetPeerId, isEmpty);
   });
 
-  test(
-    'folder arguments are staged before entering the file transfer queue',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'whisper-quick-send-folder',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      final inbox = DesktopQuickSendInbox(
-        store: _MemoryStore(),
-        platform: _FakePlatform(),
-        now: () => DateTime.fromMillisecondsSinceEpoch(1234),
-        idFactory: () => 'folder-draft',
-      );
-      await inbox.initialize(
-        initialArguments: <String>['--quick-send-file', directory.path],
-      );
-      String? stagedSource;
-      String? sentPath;
-
-      final result = await inbox.sendPendingTo(
-        peerId: 'trusted-peer',
-        trustedIdentityHashFor: (_) => _hashA,
-        sendText: (_, __, ___, ____) async => true,
-        sendFile: (_, __, pinnedHash, path) async {
-          expect(pinnedHash, _hashA);
-          sentPath = path;
-          return true;
-        },
-        stageDirectory: (path) async {
-          stagedSource = path;
-          return '${directory.path}.zip';
-        },
-      );
-
-      expect(stagedSource, directory.path);
-      expect(sentPath, '${directory.path}.zip');
-      expect(result.isComplete, isTrue);
-    },
-  );
-
-  test(
-    'restart reuses staged path and file intent after durable handoff',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'whisper-quick-send-handoff',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      await File('${directory.path}/content.txt').writeAsString('content');
-      final staged = File('${directory.path}/staged.zip');
-      final store = _MemoryStore();
-      final firstInbox = DesktopQuickSendInbox(
-        store: store,
-        platform: _FakePlatform(),
-        now: () => DateTime.fromMillisecondsSinceEpoch(1234),
-        idFactory: () => 'durable-file-draft',
-      );
-      await firstInbox.initialize(
-        initialArguments: <String>['--quick-send-file', directory.path],
-      );
-      var stageCount = 0;
-      String? firstIntent;
-
-      final firstAttempt = await firstInbox.sendPendingTo(
-        peerId: 'peer-a',
-        trustedIdentityHashFor: (_) => _hashA,
-        sendText: (_, __, ___, ____) async => true,
-        sendFile: (_, fileIntentId, pinnedHash, path) async {
-          expect(pinnedHash, _hashA);
-          firstIntent = fileIntentId;
-          expect(path, staged.path);
-          store.failNextSave = true;
-          return true;
-        },
-        stageDirectory: (_) async {
-          stageCount++;
-          await staged.writeAsString('archive');
-          return staged.path;
-        },
-      );
-
-      expect(firstAttempt.outcome, DesktopQuickSendOutcome.retained);
-      expect(store.drafts.single.stagedSourcePath, directory.path);
-      expect(store.drafts.single.stagedPath, staged.path);
-      final intentParts = jsonDecode(firstIntent!) as List<Object?>;
-      expect(intentParts, <Object?>[
-        'durable-file-draft',
-        _hashA,
-        0,
-        directory.path,
-      ]);
-
-      final restoredInbox = DesktopQuickSendInbox(
-        store: store,
-        platform: _FakePlatform(),
-        now: () => DateTime.fromMillisecondsSinceEpoch(5678),
-        idFactory: () => 'must-not-change',
-      );
-      await restoredInbox.initialize();
-      String? restoredIntent;
-      final restoredAttempt = await restoredInbox.sendPendingTo(
-        peerId: 'peer-a',
-        trustedIdentityHashFor: (_) => _hashA,
-        sendText: (_, __, ___, ____) async => true,
-        sendFile: (_, fileIntentId, pinnedHash, path) async {
-          expect(pinnedHash, _hashA);
-          restoredIntent = fileIntentId;
-          expect(path, staged.path);
-          return true;
-        },
-        stageDirectory: (_) async {
-          fail('the persisted staging path must be reused');
-        },
-      );
-
-      expect(restoredAttempt.outcome, DesktopQuickSendOutcome.completed);
-      expect(restoredIntent, firstIntent);
-      expect(stageCount, 1);
-      expect(restoredInbox.drafts, isEmpty);
-      expect(store.drafts, isEmpty);
-    },
-  );
-
-  test('stale cleanup retains archives owned by persisted drafts', () async {
-    final root = await Directory.systemTemp.createTemp(
-      'whisper-quick-send-cleanup',
+  test('folder arguments are rejected instead of packaged', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'whisper-quick-send-folder',
     );
-    addTearDown(() => root.delete(recursive: true));
-    final staging = Directory('${root.path}/staging')..createSync();
-    final stagedArchive = File('${staging.path}/draft.zip')
-      ..writeAsStringSync('draft');
-    final orphanArchive = File('${staging.path}/orphan.zip')
-      ..writeAsStringSync('orphan');
-    final staleTime = DateTime.now().subtract(const Duration(days: 8));
-    stagedArchive.setLastModifiedSync(staleTime);
-    orphanArchive.setLastModifiedSync(staleTime);
-    final sourcePath = '${root.path}/moved-folder';
+    addTearDown(() => directory.delete(recursive: true));
+    final inbox = DesktopQuickSendInbox(
+      store: _MemoryStore(),
+      platform: _FakePlatform(),
+    );
+
+    await inbox.initialize(
+      initialArguments: <String>['--quick-send-file', directory.path],
+    );
+
+    expect(inbox.drafts, isEmpty);
+    expect(
+      inbox.takePendingRejection()?.reason,
+      DesktopQuickSendRejectionReason.invalidPath,
+    );
+  });
+
+  test('restart removes folders from previously persisted drafts', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'whisper-quick-send-legacy-folder',
+    );
+    addTearDown(() => directory.delete(recursive: true));
     final store = _MemoryStore()
       ..drafts = <DesktopQuickSendDraft>[
         DesktopQuickSendDraft(
-          id: 'staged-draft',
+          id: 'legacy-folder',
           source: DesktopQuickSendSource.systemService,
           text: '',
-          filePaths: <String>[sourcePath],
+          filePaths: <String>[directory.path],
           receivedAt: 1,
-          stagedSourcePath: sourcePath,
-          stagedPath: stagedArchive.path,
         ),
       ];
     final inbox = DesktopQuickSendInbox(
       store: store,
       platform: _FakePlatform(),
     );
+
     await inbox.initialize();
 
-    final activePaths = await recoverableFolderTransferAndDesktopDraftPaths(
-      databasePathsProvider: () async => <String>{'database-owned.zip'},
-      inbox: inbox,
-    );
-    expect(
-      activePaths,
-      containsAll(<String>{'database-owned.zip', stagedArchive.path}),
-    );
-    expect(inbox.stagedArchivePaths, <String>{stagedArchive.path});
-
-    await FolderTransferStager(
-      stagingDirectoryProvider: () async => staging,
-      activeTransferPathsProvider: () =>
-          recoverableFolderTransferAndDesktopDraftPaths(
-            databasePathsProvider: () async => const <String>{},
-            inbox: inbox,
-          ),
-    ).cleanup();
-
-    expect(stagedArchive.existsSync(), isTrue);
-    expect(orphanArchive.existsSync(), isFalse);
+    expect(inbox.drafts, isEmpty);
+    expect(store.drafts, isEmpty);
   });
 
   test(

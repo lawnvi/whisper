@@ -146,22 +146,5 @@ void main() {
         expect(drafts, isEmpty);
       },
     );
-
-    test('optionally keeps copied folders for the quick-send inbox', () async {
-      final directory = Directory(p.join(tempDir.path, 'folder'));
-      await directory.create();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-            channel,
-            (_) async => <String>[directory.path],
-          );
-      final reader = DesktopClipboardFileReader(channel: channel);
-
-      final drafts = await reader.readFileDrafts(includeDirectories: true);
-
-      expect(drafts.single.path, directory.path);
-      expect(drafts.single.fileName, 'folder');
-      expect(drafts.single.size, 0);
-    });
   });
 }

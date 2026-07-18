@@ -195,6 +195,11 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func application(_ sender: NSApplication, openFiles filenames: [String]) {
+    let filenames = regularFilePaths(filenames)
+    guard !filenames.isEmpty else {
+      sender.reply(toOpenOrPrint: .failure)
+      return
+    }
     let accepted = DesktopQuickSendBridge.shared.enqueue(
       arguments: ["--quick-send"] + filenames)
     revealMainWindow(sender)
@@ -213,7 +218,7 @@ class AppDelegate: FlutterAppDelegate {
     let urls = pasteboard.readObjects(
       forClasses: [NSURL.self],
       options: options) as? [URL] ?? []
-    let paths = urls.filter(\.isFileURL).map(\.path)
+    let paths = regularFilePaths(urls.filter(\.isFileURL).map(\.path))
     if !paths.isEmpty {
       let accepted = DesktopQuickSendBridge.shared.enqueue(
         arguments: ["--quick-send"] + paths)
@@ -233,6 +238,16 @@ class AppDelegate: FlutterAppDelegate {
       return
     }
     error.pointee = "Whisper could not read the selected content."
+  }
+
+  private func regularFilePaths(_ paths: [String]) -> [String] {
+    paths.filter { path in
+      var isDirectory: ObjCBool = false
+      return FileManager.default.fileExists(
+        atPath: path,
+        isDirectory: &isDirectory
+      ) && !isDirectory.boolValue
+    }
   }
 
   private func revealMainWindow(_ sender: NSApplication) {

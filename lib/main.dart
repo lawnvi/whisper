@@ -16,6 +16,7 @@ import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:toastification/toastification.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
@@ -33,6 +34,7 @@ enum AppDiagnosticKind { desktopWindowTheme }
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   WhisperAead.installNativeAcceleration(await SodiumInit.init());
 
   if (!isMobile()) {
@@ -40,9 +42,8 @@ void main(List<String> arguments) async {
   }
 
   try {
-    await const FolderTransferStager(
-      activeTransferPathsProvider:
-          recoverableFolderTransferAndDesktopDraftPaths,
+    await const LegacyFolderTransferCleanup(
+      activeTransferPathsProvider: recoverableFolderTransferPaths,
     ).cleanup();
   } catch (_) {
     // Staging cleanup is best-effort and must not prevent app startup.

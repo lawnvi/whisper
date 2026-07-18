@@ -1,17 +1,11 @@
 package com.vireen.whisper
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.core.app.NotificationCompat
 
 class KeepAliveForegroundService : Service() {
     // channel 名/描述由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
@@ -21,11 +15,16 @@ class KeepAliveForegroundService : Service() {
     private var channelDescription: String = DEFAULT_CHANNEL_DESCRIPTION
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    @Volatile
+    private var acceptsDirectCommands = true
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        acceptsDirectCommands = true
+        activeInstance = this
+        isRunning = true
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.getString(PREF_CHANNEL_NAME, null)
             ?.takeIf { it.isNotBlank() }?.let { channelName = it }
@@ -33,16 +32,36 @@ class KeepAliveForegroundService : Service() {
             ?.takeIf { it.isNotBlank() }?.let { channelDescription = it }
         startForeground(
             NOTIFICATION_ID,
-            buildNotification(
-                DEFAULT_TITLE,
-                DEFAULT_DESCRIPTION,
-                NO_PROGRESS,
-                true
-            )
+            UnifiedForegroundNotification.bootstrap(this),
         )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        acceptSystemCommand(intent)
+        return START_NOT_STICKY
+    }
+
+    @Synchronized
+    private fun acceptSystemCommand(intent: Intent?) {
+        acceptsDirectCommands = true
+        handleCommand(intent)
+    }
+
+    @Synchronized
+    private fun deliverCommand(intent: Intent): Boolean {
+        if (!acceptsDirectCommands) {
+            return false
+        }
+        handleCommand(intent)
+        return true
+    }
+
+    @Synchronized
+    private fun beginStopping() {
+        acceptsDirectCommands = false
+    }
+
+    private fun handleCommand(intent: Intent?) {
         val extraChannelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
             ?.takeIf { it.isNotBlank() }
         val extraChannelDescription = intent?.getStringExtra(EXTRA_CHANNEL_DESCRIPTION)
@@ -60,20 +79,29 @@ class KeepAliveForegroundService : Service() {
         val progress = intent?.getIntExtra(EXTRA_PROGRESS, NO_PROGRESS) ?: NO_PROGRESS
         val indeterminateProgress =
             intent?.getBooleanExtra(EXTRA_INDETERMINATE_PROGRESS, false) ?: false
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification(title, description, progress, indeterminateProgress)
+        val notification = UnifiedForegroundNotification.setKeepAlive(
+            this,
+            title,
+            description,
+            progress.takeUnless { it == NO_PROGRESS },
+            indeterminateProgress,
+            channelName,
+            channelDescription,
         )
+        startForeground(NOTIFICATION_ID, notification)
         acquireResourceLocks()
-        // Restarting only this native service cannot recreate Flutter's Dart
-        // socket server, so avoid presenting a misleading listening state.
-        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        beginStopping()
+        isRunning = false
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         releaseResourceLocks()
-        @Suppress("DEPRECATION")
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_DETACH)
+        UnifiedForegroundNotification.clearKeepAlive(this)
+        UnifiedForegroundNotification.publishCurrent(this)
         super.onDestroy()
     }
 
@@ -137,67 +165,10 @@ class KeepAliveForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(
-        title: String,
-        description: String,
-        progressValue: Int,
-        indeterminateProgress: Boolean
-    ): Notification {
-        ensureChannel()
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(description)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(buildContentIntent())
-            .setOngoing(true)
-            .setSilent(true)
-            .setOnlyAlertOnce(true)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-
-        if (indeterminateProgress) {
-            builder.setProgress(100, 0, true)
-        } else if (progressValue != NO_PROGRESS) {
-            val progress = progressValue.coerceIn(0, 100)
-            builder.setProgress(100, progress, false)
-        }
-
-        return builder.build()
-    }
-
-    private fun buildContentIntent(): PendingIntent {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            ?: Intent(this, MainActivity::class.java)
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE
-            } else {
-                0
-            }
-        return PendingIntent.getActivity(this, 0, launchIntent, flags)
-    }
-
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            channelName,
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = channelDescription
-            setShowBadge(false)
-        }
-        manager.createNotificationChannel(channel)
-    }
-
     companion object {
-        private const val CHANNEL_ID = "whisper.keep_alive"
         private const val WAKE_LOCK_TAG = "lan-server"
         private const val WIFI_LOCK_TAG = "lan-wifi"
-        private const val NOTIFICATION_ID = 10021
+        private const val NOTIFICATION_ID = UnifiedForegroundNotification.NOTIFICATION_ID
         private const val NO_PROGRESS = -1
         private const val DEFAULT_TITLE = "Whisper"
         private const val DEFAULT_DESCRIPTION = "Keeping connection alive"
@@ -213,6 +184,20 @@ class KeepAliveForegroundService : Service() {
         private const val PREFS_NAME = "whisper.keep_alive.channel"
         private const val PREF_CHANNEL_NAME = "channelName"
         private const val PREF_CHANNEL_DESCRIPTION = "channelDescription"
+        @Volatile
+        var isRunning = false
+            private set
+        @Volatile
+        private var activeInstance: KeepAliveForegroundService? = null
+
+        fun deliverToRunning(intent: Intent): Boolean {
+            val service = activeInstance ?: return false
+            return service.deliverCommand(intent)
+        }
+
+        fun prepareToStop() {
+            activeInstance?.beginStopping()
+        }
 
         fun buildIntent(
             context: Context,

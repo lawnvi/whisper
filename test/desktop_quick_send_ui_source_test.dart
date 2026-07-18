@@ -22,7 +22,7 @@ void main() {
     expect(source, contains('sendFile: _sendDesktopQuickSendFile'));
     expect(source, contains('sendQuickFileToDurably'));
     expect(source, contains("source: 'desktop-quick-send-file'"));
-    expect(source, contains('releaseUnownedStagedFolderTransferArchive(path)'));
+    expect(source, isNot(contains('FolderTransferStager')));
     expect(source, contains('takePendingRejection'));
     expect(source, contains('desktopQuickSendDraftLimit'));
     expect(source, contains('desktopQuickSendClipboardSnapshotUnavailable'));
@@ -88,25 +88,17 @@ void main() {
     }
   });
 
-  test('folder cleanup retains archives referenced by desktop drafts', () {
-    final inbox = File(
-      'lib/state/desktop_quick_send_inbox.dart',
-    ).readAsStringSync();
-    expect(inbox, contains('Set<String> get stagedArchivePaths'));
-    expect(inbox, contains('...await databasePathsProvider()'));
-    expect(inbox, contains('DesktopQuickSendInbox.shared).stagedArchivePaths'));
-
+  test('folder packaging is absent from quick send and conversation', () {
     for (final path in <String>[
-      'lib/main.dart',
+      'lib/state/desktop_quick_send_inbox.dart',
       'lib/page/deviceList.dart',
       'lib/page/conversation.dart',
+      'lib/widget/chat_composer.dart',
     ]) {
       final source = File(path).readAsStringSync();
-      expect(
-        source,
-        contains('recoverableFolderTransferAndDesktopDraftPaths'),
-        reason: path,
-      );
+      expect(source, isNot(contains('stageDirectory')), reason: path);
+      expect(source, isNot(contains('sendFolder')), reason: path);
+      expect(source, isNot(contains('folderSendFailed')), reason: path);
     }
   });
 }

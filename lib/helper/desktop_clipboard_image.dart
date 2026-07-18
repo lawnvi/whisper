@@ -117,9 +117,7 @@ class DesktopClipboardFileReader {
 
   final MethodChannel _channel;
 
-  Future<List<ClipboardFileDraft>> readFileDrafts({
-    bool includeDirectories = false,
-  }) async {
+  Future<List<ClipboardFileDraft>> readFileDrafts() async {
     final List<String>? paths;
     try {
       paths = await _channel.invokeListMethod<String>('readFilePaths');
@@ -138,16 +136,14 @@ class DesktopClipboardFileReader {
       try {
         final stat = await FileStat.stat(path);
         final isFile = stat.type == FileSystemEntityType.file;
-        final isIncludedDirectory =
-            includeDirectories && stat.type == FileSystemEntityType.directory;
-        if (!isFile && !isIncludedDirectory) {
+        if (!isFile) {
           continue;
         }
         drafts.add(
           ClipboardFileDraft(
             path: path,
             fileName: p.basename(path),
-            size: isFile ? stat.size : 0,
+            size: stat.size,
           ),
         );
       } on FileSystemException {

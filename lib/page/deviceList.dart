@@ -28,7 +28,6 @@ import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
 import 'package:whisper/helper/file.dart';
-import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -164,11 +163,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       AndroidSystemShareInbox.shared;
   final DesktopQuickSendInbox _desktopQuickSendInbox =
       DesktopQuickSendInbox.shared;
-  final FolderTransferStager _desktopQuickSendFolderStager =
-      const FolderTransferStager(
-        activeTransferPathsProvider:
-            recoverableFolderTransferAndDesktopDraftPaths,
-      );
   late final AndroidSystemShareRouter _androidSystemShareRouter;
   late final DesktopQuickSendHotKeyController _desktopQuickSendHotKey;
   DeviceData? device;
@@ -703,11 +697,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
               expectedPublicKeyHash: pinnedHash,
             ),
         sendFile: _sendDesktopQuickSendFile,
-        stageDirectory: (path) async =>
-            (await _desktopQuickSendFolderStager.stage(path)).archiveFile.path,
-        releaseUnownedStagedFile: (path) async {
-          await releaseUnownedStagedFolderTransferArchive(path);
-        },
       );
       if (!mounted) {
         return;
@@ -733,22 +722,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     String fileIntentId,
     String pinnedPublicKeyHash,
     String path,
-  ) async {
-    try {
-      final accepted = await socketManager.sendQuickFileToDurably(
-        peerId,
-        path,
-        source: 'desktop-quick-send-file',
-        intentId: fileIntentId,
-        expectedPublicKeyHash: pinnedPublicKeyHash,
-      );
-      await releaseUnownedStagedFolderTransferArchive(path);
-      return accepted;
-    } on Object {
-      await releaseUnownedStagedFolderTransferArchive(path);
-      rethrow;
-    }
-  }
+  ) => socketManager.sendQuickFileToDurably(
+    peerId,
+    path,
+    source: 'desktop-quick-send-file',
+    intentId: fileIntentId,
+    expectedPublicKeyHash: pinnedPublicKeyHash,
+  );
 
   void _handleAndroidSystemShareChanged() {
     if (mounted) {
@@ -2736,6 +2716,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (isConnected)
         ContextMenuActionItem(
           label: l10n?.disconnect ?? '断开',
+          icon: Icons.link_off_rounded,
           onSelected: () async {
             await socketManager.disconnectPeer(deviceItem.uid);
           },
@@ -2743,6 +2724,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.connect ?? '连接',
+          icon: Icons.link_rounded,
           onSelected: () {
             _connectServer(
               deviceItem.host,
@@ -2754,6 +2736,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.delete ?? '删除',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
           onSelected: () async {
             await _confirmRemoveDevice(deviceItem);
           },

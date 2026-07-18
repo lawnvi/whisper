@@ -75,9 +75,7 @@ Section "Install"
   WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send" "Icon" "$INSTDIR\${APP_EXE}"
   WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send" "MultiSelectModel" "Document"
   WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send\command" "" '$\"$INSTDIR\${APP_EXE}$\" --quick-send-file $\"%1$\"'
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Whisper.Send" "MUIVerb" "Send with Whisper"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Whisper.Send" "Icon" "$INSTDIR\${APP_EXE}"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\Whisper.Send\command" "" '$\"$INSTDIR\${APP_EXE}$\" --quick-send-file $\"%1$\"'
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\Whisper.Send"
 
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0

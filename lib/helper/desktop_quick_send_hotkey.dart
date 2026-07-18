@@ -79,7 +79,7 @@ class DesktopQuickSendHotKeyController {
   Future<DesktopQuickSendEnqueueResult> _captureClipboardContent({
     String? nativeEntryId,
   }) async {
-    final files = await _fileReader.readFileDrafts(includeDirectories: true);
+    final files = await _fileReader.readFileDrafts();
     if (files.isNotEmpty) {
       return _inbox.addClipboard(
         text: '',

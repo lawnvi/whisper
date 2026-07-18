@@ -76,6 +76,12 @@ class TransferNotificationPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
      */
     private fun startServiceSafely(intent: android.content.Intent) {
         try {
+            // Deliver directly to an existing FGS. Starting it again from the
+            // background can be denied on Android 12+, which left the last
+            // visible progress notification stuck at "receiving".
+            if (TransferForegroundService.deliverToRunning(intent)) {
+                return
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
