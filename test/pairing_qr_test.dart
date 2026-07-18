@@ -36,6 +36,14 @@ void main() {
     expect(find.text('192.168.1.20:10002'), findsOneWidget);
     expect(find.textContaining('AAAAAAAA'), findsOneWidget);
     expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.verified_user_rounded), findsOneWidget);
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey<String>('pairing-qr-dialog-content')),
+      ),
+      const Size(640, 420),
+    );
   });
 
   testWidgets('fits the QR code on a narrow mobile viewport', (tester) async {

@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_invite.dart';
+import 'package:whisper/theme/app_theme.dart';
 
 Future<PairingInvite?> showPairingQrDialog(
   BuildContext context, {
@@ -73,46 +74,22 @@ class _PairingQrDialogState extends State<PairingQrDialog>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final windowSize = MediaQuery.sizeOf(context);
-    final dialogWidth = (windowSize.width - 32).clamp(280.0, 560.0);
-    final dialogHeight = (windowSize.height - 32).clamp(360.0, 680.0);
+    final dialogWidth = (windowSize.width - 32).clamp(288.0, 640.0);
+    final dialogHeight = _canScan
+        ? (windowSize.height - 24).clamp(420.0, 720.0)
+        : (windowSize.height - 32).clamp(360.0, 420.0);
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: SizedBox(
+        key: const ValueKey<String>('pairing-qr-dialog-content'),
         width: dialogWidth,
         height: dialogHeight,
         child: Column(
           children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      l10n.qrPairingTitle,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l10n.close,
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-            ),
-            if (_canScan)
-              TabBar(
-                controller: _tabController,
-                tabs: <Widget>[
-                  Tab(icon: const Icon(Icons.qr_code_2), text: l10n.qrMyCode),
-                  Tab(
-                    icon: const Icon(Icons.qr_code_scanner),
-                    text: l10n.qrScanCode,
-                  ),
-                ],
-              ),
+            _buildHeader(l10n),
+            if (_canScan) _buildModeSwitcher(l10n),
             Expanded(
               child: _canScan
                   ? TabBarView(
@@ -130,87 +107,138 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     );
   }
 
+  Widget _buildHeader(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final palette = context.whisperPalette;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.borderSubtle)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.qr_code_2_rounded,
+                size: 21,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                l10n.qrPairingTitle,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: l10n.close,
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeSwitcher(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final palette = context.whisperPalette;
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          color: palette.surfaceElevated,
+          border: Border.all(color: palette.borderSubtle),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        labelColor: theme.colorScheme.onSurface,
+        unselectedLabelColor: palette.textMuted,
+        labelStyle: theme.textTheme.labelLarge,
+        tabs: <Widget>[
+          Tab(
+            icon: const Icon(Icons.qr_code_2_rounded, size: 19),
+            text: l10n.qrMyCode,
+            iconMargin: const EdgeInsets.only(bottom: 2),
+          ),
+          Tab(
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 19),
+            text: l10n.qrScanCode,
+            iconMargin: const EdgeInsets.only(bottom: 2),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMyCode(AppLocalizations l10n) {
     final inviteText = widget.localInvite.encode();
     final fingerprint = widget.localInvite.publicKeyHash;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final qrSize = (constraints.maxWidth - 80)
-            .clamp(120.0, 264.0)
-            .toDouble();
+        final useWideLayout = constraints.maxWidth >= 560;
+        final qrSize = useWideLayout
+            ? 224.0
+            : (constraints.maxWidth - 88).clamp(144.0, 224.0).toDouble();
+        final qrCode = _buildQrCode(inviteText, qrSize, l10n);
+        final details = _buildInviteDetails(
+          inviteText: inviteText,
+          fingerprint: fingerprint,
+          l10n: l10n,
+          showHint: useWideLayout,
+        );
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+          padding: EdgeInsets.fromLTRB(
+            useWideLayout ? 28 : 20,
+            useWideLayout ? 28 : 22,
+            useWideLayout ? 28 : 20,
+            28,
+          ),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                children: <Widget>[
-                  Text(
-                    l10n.qrShowCodeHint,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 24),
-                  Semantics(
-                    label: l10n.qrMyCode,
-                    image: true,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: Colors.black12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: QrImageView(
-                          data: inviteText,
-                          version: QrVersions.auto,
-                          size: qrSize,
-                          gapless: true,
-                          backgroundColor: Colors.white,
+              constraints: const BoxConstraints(maxWidth: 584),
+              child: useWideLayout
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: <Widget>[
+                        qrCode,
+                        const SizedBox(width: 28),
+                        Expanded(child: details),
+                      ],
+                    )
+                  : Column(
+                      children: <Widget>[
+                        Text(
+                          l10n.qrShowCodeHint,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
-                      ),
+                        const SizedBox(height: 18),
+                        qrCode,
+                        const SizedBox(height: 22),
+                        details,
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    '${widget.localInvite.host}:${widget.localInvite.port}',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    l10n.qrFingerprint(
-                      '${fingerprint.substring(0, 8)}...${fingerprint.substring(fingerprint.length - 8)}',
-                    ),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (_isLoopback(widget.localInvite.host)) ...<Widget>[
-                    const SizedBox(height: 14),
-                    Text(
-                      l10n.qrWifiUnavailable,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  FilledButton.tonalIcon(
-                    onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: inviteText));
-                      if (!mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.qrLinkCopied)),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded),
-                    label: Text(l10n.qrCopyLink),
-                  ),
-                ],
-              ),
             ),
           ),
         );
@@ -218,69 +246,238 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     );
   }
 
-  Widget _buildScanner(AppLocalizations l10n) {
+  Widget _buildQrCode(String inviteText, double size, AppLocalizations l10n) {
+    final palette = context.whisperPalette;
+    return Semantics(
+      label: l10n.qrMyCode,
+      image: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: palette.borderSubtle),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: QrImageView(
+            data: inviteText,
+            version: QrVersions.auto,
+            size: size,
+            gapless: true,
+            backgroundColor: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInviteDetails({
+    required String inviteText,
+    required String fingerprint,
+    required AppLocalizations l10n,
+    required bool showHint,
+  }) {
+    final theme = Theme.of(context);
+    final palette = context.whisperPalette;
+    final shortFingerprint =
+        '${fingerprint.substring(0, 8)}...${fingerprint.substring(fingerprint.length - 8)}';
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              MobileScanner(
-                controller: _scannerController,
-                onDetect: _onDetect,
-                errorBuilder: (context, error) => ColoredBox(
-                  color: Colors.black,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        l10n.qrCameraUnavailable,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Center(
-                child: IgnorePointer(
-                  child: Container(
-                    width: 252,
-                    height: 252,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 16,
-                bottom: 16,
-                child: Row(
-                  children: <Widget>[
-                    IconButton.filledTonal(
-                      tooltip: l10n.qrToggleTorch,
-                      onPressed: _scannerController.toggleTorch,
-                      icon: const Icon(Icons.flashlight_on_outlined),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton.filledTonal(
-                      tooltip: l10n.qrSwitchCamera,
-                      onPressed: _scannerController.switchCamera,
-                      icon: const Icon(Icons.cameraswitch_outlined),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        if (showHint) ...<Widget>[
+          Text(
+            l10n.qrShowCodeHint,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.start,
+          ),
+          const SizedBox(height: 18),
+        ],
+        _buildDetailRow(
+          icon: Icons.wifi_rounded,
+          iconColor: theme.colorScheme.primary,
+          child: Text(
+            '${widget.localInvite.host}:${widget.localInvite.port}',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Divider(height: 1, color: palette.borderSubtle),
+        ),
+        _buildDetailRow(
+          icon: Icons.verified_user_rounded,
+          iconColor: palette.trusted,
+          child: Text(
+            l10n.qrFingerprint(shortFingerprint),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: palette.textMuted,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        if (_isLoopback(widget.localInvite.host)) ...<Widget>[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  Icons.wifi_off_rounded,
+                  size: 19,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    l10n.qrWifiUnavailable,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 22),
+        FilledButton.tonalIcon(
+          onPressed: () => _copyInvite(inviteText, l10n),
+          icon: const Icon(Icons.copy_rounded),
+          label: Text(l10n.qrCopyLink),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required Color iconColor,
+    required Widget child,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Icon(icon, size: 20, color: iconColor),
+        const SizedBox(width: 10),
+        Expanded(child: child),
+      ],
+    );
+  }
+
+  Future<void> _copyInvite(String inviteText, AppLocalizations l10n) async {
+    await Clipboard.setData(ClipboardData(text: inviteText));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.qrLinkCopied)));
+  }
+
+  Widget _buildScanner(AppLocalizations l10n) {
+    final palette = context.whisperPalette;
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final scanFrameSize =
+                      (constraints.biggest.shortestSide * 0.62)
+                          .clamp(176.0, 252.0)
+                          .toDouble();
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      MobileScanner(
+                        controller: _scannerController,
+                        onDetect: _onDetect,
+                        errorBuilder: (context, error) => ColoredBox(
+                          color: Colors.black,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                l10n.qrCameraUnavailable,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: IgnorePointer(
+                          child: Container(
+                            width: scanFrameSize,
+                            height: scanFrameSize,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2.5,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: Row(
+                          children: <Widget>[
+                            IconButton.filled(
+                              tooltip: l10n.qrToggleTorch,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black54,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _scannerController.toggleTorch,
+                              icon: const Icon(Icons.flashlight_on_outlined),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filled(
+                              tooltip: l10n.qrSwitchCamera,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black54,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _scannerController.switchCamera,
+                              icon: const Icon(Icons.cameraswitch_outlined),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
           child: Column(
             children: <Widget>[
-              Text(l10n.qrScanHint, textAlign: TextAlign.center),
+              Text(
+                l10n.qrScanHint,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: palette.textMuted),
+              ),
               if (_scanError != null) ...<Widget>[
                 const SizedBox(height: 8),
                 Text(
