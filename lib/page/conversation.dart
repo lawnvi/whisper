@@ -143,6 +143,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
   bool _composerSendInFlight = false;
+  bool _messageSelectionActive = false;
   int _clipboardPasteGeneration = 0;
   List<ClipboardFileDraft> _pendingClipboardFiles =
       const <ClipboardFileDraft>[];
@@ -548,28 +549,38 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  _deleteItem(id) {
-    var index = -1;
-    for (var i = 0; i < messageList.length; i++) {
-      if (messageList[i].id == id) {
-        index = i;
-        break;
-      }
+  Future<void> _deleteItems(Iterable<int> messageIds) async {
+    final ids = messageIds.toSet();
+    if (ids.isEmpty) {
+      return;
     }
-    if (index == -1) {
+
+    await db.deleteMessages(ids);
+    if (!mounted) {
+      return;
+    }
+
+    final indexes = <int>[
+      for (var i = 0; i < messageList.length; i++)
+        if (ids.contains(messageList[i].id)) i,
+    ]..sort((a, b) => b.compareTo(a));
+    if (indexes.isEmpty) {
       return;
     }
 
     setState(() {
-      // 删除过程执行的是反向动画，animation.value 会从1变为0
-      key.currentState?.removeItem(index, (context, animation) {
-        //注意先 build 然后再去删除
+      for (final index in indexes) {
         messageList.removeAt(index);
-        return FadeTransition(opacity: animation, child: null);
-      }, duration: const Duration(milliseconds: 500));
-    }); //解决快速删除bug 重置flag
-
-    LocalDatabase().deleteMessage(id);
+        key.currentState?.removeItem(
+          index,
+          (context, animation) => SizeTransition(
+            sizeFactor: animation,
+            child: const SizedBox.shrink(),
+          ),
+          duration: const Duration(milliseconds: 220),
+        );
+      }
+    });
   }
 
   @Deprecated("use list view reverse")
@@ -623,13 +634,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
               if (deleteFile) {
                 await _deleteMessageFileIfExists(message);
               }
-              _deleteItem(message.id);
+              await _deleteItems(<int>[message.id]);
+            },
+            onDeleteMessages: (messages) =>
+                _deleteItems(messages.map((message) => message.id)),
+            onSelectionModeChanged: (active) {
+              if (_messageSelectionActive == active) {
+                return;
+              }
+              setState(() => _messageSelectionActive = active);
             },
             selfUid: self?.uid,
           ),
         ),
-        if (_canSendCurrentDevice) _buildComposer(isDark),
-        if (!embedded && _canSendCurrentDevice) const SizedBox(height: 6),
+        if (!_messageSelectionActive && _canSendCurrentDevice)
+          _buildComposer(isDark),
+        if (!embedded && !_messageSelectionActive && _canSendCurrentDevice)
+          const SizedBox(height: 6),
       ],
     );
 

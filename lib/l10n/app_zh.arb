@@ -160,6 +160,24 @@
   "startServerFailed": "服务启动失败",
   "deleteMessageTitle": "删除消息",
   "deleteMessageDesc": "确定删除此消息吗？",
+  "selectMessages": "多选",
+  "selectedMessageCount": "已选 {count} 条",
+  "@selectedMessageCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesTitle": "删除 {count} 条消息",
+  "@deleteSelectedMessagesTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesDesc": "将删除所选聊天记录，本地文件会保留。",
   "language": "语言 {language}",
   "pushNotification": "推送安卓通知",
   "ignoreNotification": "忽略安卓通知",

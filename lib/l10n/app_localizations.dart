@@ -496,6 +496,30 @@ abstract class AppLocalizations {
   /// **'确定删除此消息吗？'**
   String get deleteMessageDesc;
 
+  /// No description provided for @selectMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'多选'**
+  String get selectMessages;
+
+  /// No description provided for @selectedMessageCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 条'**
+  String selectedMessageCount(int count);
+
+  /// No description provided for @deleteSelectedMessagesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 {count} 条消息'**
+  String deleteSelectedMessagesTitle(int count);
+
+  /// No description provided for @deleteSelectedMessagesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将删除所选聊天记录，本地文件会保留。'**
+  String get deleteSelectedMessagesDesc;
+
   /// No description provided for @language.
   ///
   /// In zh, this message translates to:

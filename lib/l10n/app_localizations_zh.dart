@@ -241,6 +241,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteMessageDesc => '确定删除此消息吗？';
 
   @override
+  String get selectMessages => '多选';
+
+  @override
+  String selectedMessageCount(int count) {
+    return '已选 $count 条';
+  }
+
+  @override
+  String deleteSelectedMessagesTitle(int count) {
+    return '删除 $count 条消息';
+  }
+
+  @override
+  String get deleteSelectedMessagesDesc => '将删除所选聊天记录，本地文件会保留。';
+
+  @override
   String language(Object language) {
     return '语言 $language';
   }

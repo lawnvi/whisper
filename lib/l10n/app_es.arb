@@ -160,6 +160,24 @@
   "startServerFailed": "No se pudo iniciar el servidor",
   "deleteMessageTitle": "Eliminar mensaje",
   "deleteMessageDesc": "¿Seguro que quieres eliminarlo?",
+  "selectMessages": "Seleccionar mensajes",
+  "selectedMessageCount": "{count} seleccionados",
+  "@selectedMessageCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesTitle": "Eliminar {count} mensajes",
+  "@deleteSelectedMessagesTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesDesc": "Se eliminarán los registros seleccionados. Los archivos locales se conservarán.",
   "language": "Idioma {language}",
   "pushNotification": "Enviar notificaciones de Android",
   "ignoreNotification": "Ignorar notificaciones de Android",

@@ -1050,11 +1050,16 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   Future<void> deleteMessage(int id) async {
+    await deleteMessages(<int>{id});
+  }
+
+  Future<void> deleteMessages(Set<int> ids) async {
+    if (ids.isEmpty) {
+      return;
+    }
     await transaction(() async {
-      await _detachFileTransfersForMessages(<int>{
-        id,
-      }, reason: 'message_deleted');
-      await (delete(message)..where((item) => item.id.equals(id))).go();
+      await _detachFileTransfersForMessages(ids, reason: 'message_deleted');
+      await (delete(message)..where((item) => item.id.isIn(ids))).go();
     });
   }
 

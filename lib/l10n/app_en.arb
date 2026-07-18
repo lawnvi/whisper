@@ -133,6 +133,24 @@
   "startServerFailed": "Failed to Start Server",
   "deleteMessageTitle": "Delete Message",
   "deleteMessageDesc": "Are you sure you want to delete it?",
+  "selectMessages": "Select messages",
+  "selectedMessageCount": "{count} selected",
+  "@selectedMessageCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesTitle": "Delete {count} messages",
+  "@deleteSelectedMessagesTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteSelectedMessagesDesc": "The selected chat records will be deleted. Local files will be kept.",
   "language": "Language {language}",
   "pushNotification": "Forward Android Notifications",
   "ignoreNotification": "Ignore Android Notifications",

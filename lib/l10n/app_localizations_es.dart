@@ -248,6 +248,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteMessageDesc => '¿Seguro que quieres eliminarlo?';
 
   @override
+  String get selectMessages => 'Seleccionar mensajes';
+
+  @override
+  String selectedMessageCount(int count) {
+    return '$count seleccionados';
+  }
+
+  @override
+  String deleteSelectedMessagesTitle(int count) {
+    return 'Eliminar $count mensajes';
+  }
+
+  @override
+  String get deleteSelectedMessagesDesc =>
+      'Se eliminarán los registros seleccionados. Los archivos locales se conservarán.';
+
+  @override
   String language(Object language) {
     return 'Idioma $language';
   }

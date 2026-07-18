@@ -261,6 +261,34 @@ void main() {
       );
     });
 
+    test('deleteMessages removes the selected rows and keeps other messages',
+        () async {
+      final first = await database.insertMessageReturning(
+        _message(uuid: _transferId),
+      );
+      final second = await database.insertMessageReturning(
+        _message(uuid: _otherTransferId),
+      );
+      final retained = await database.insertMessageReturning(
+        _message(uuid: 'retained-transfer'),
+      );
+      await database.upsertFileTransfer(
+        _transfer(
+          messageRowId: first.id,
+          state: FileTransferState.transferring,
+        ),
+      );
+
+      await database.deleteMessages(<int>{first.id, second.id});
+
+      expect(await database.fetchMessageById(first.id), isNull);
+      expect(await database.fetchMessageById(second.id), isNull);
+      expect(await database.fetchMessageById(retained.id), isNotNull);
+      final transfer = await database.fetchFileTransfer(_transferId);
+      expect(transfer?.messageRowId, 0);
+      expect(transfer?.state, FileTransferState.canceled);
+    });
+
     test('deleteMessage rolls transfer changes back if deletion fails',
         () async {
       final message = await database.insertMessageReturning(
