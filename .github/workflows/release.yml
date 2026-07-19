@@ -143,9 +143,16 @@ jobs:
 
       - name: Copy runtime DLLs
         run: |
-          copy c:\Windows\System32\vcruntime140_1.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\vcruntime140.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\msvcp140.dll .\build\windows\x64\runner\Release\
+          $releaseDir = (Resolve-Path -LiteralPath "build/windows/x64/runner/Release" -ErrorAction Stop).Path
+          $systemDir = Join-Path $env:WINDIR "System32"
+          @("vcruntime140_1.dll", "vcruntime140.dll", "msvcp140.dll") | ForEach-Object {
+            $source = Join-Path $systemDir $_
+            $destination = Join-Path $releaseDir $_
+            if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Runtime DLL not found at $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
 
       - name: Create EXE installer
         run: |
@@ -198,7 +205,10 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev alien
+          # Jammy's GStreamer requires GNU libunwind-dev, while the runner's
+          # preinstalled libc++ toolchain pins the incompatible LLVM 14 headers.
+          sudo apt-get remove -y libunwind-14-dev
+          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev alien
           sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
           sudo apt-get install -y desktop-file-utils libfuse2
 
