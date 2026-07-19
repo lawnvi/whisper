@@ -2243,7 +2243,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void _openMessageFile(MessageData message) {
     final path = _effectiveMessagePath(message);
     final kind = mediaFileKindFor(name: message.name, path: path);
-    if (kind == MediaFileKind.other || !File(path).existsSync()) {
+    if (kind == MediaFileKind.other ||
+        kind == MediaFileKind.video ||
+        !File(path).existsSync()) {
       openFile(path);
       return;
     }

@@ -3,14 +3,13 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
   bonsoir_windows
   clipboard_watcher
   desktop_drop
   flutter_secure_storage_windows
   hotkey_manager_windows
   irondash_engine_context
-  media_kit_libs_windows_video
-  media_kit_video
   open_dir_windows
   permission_handler_windows
   screen_retriever_windows

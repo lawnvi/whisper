@@ -13,6 +13,9 @@ BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
 echo "Building DEB package ${APP_NAME} ${VERSION} (${ARCHITECTURE})"
 
+dart "${PROJECT_DIR}/script/prune_flutter_assets.dart" linux-x64 \
+  "${BUNDLE_DIR}/data/flutter_assets"
+
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}/DEBIAN"
 mkdir -p "${BUILD_DIR}${INSTALL_DIR}"
@@ -30,7 +33,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libpulse0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp25 | libjsoncpp24 | libjsoncpp1, mpv
+Depends: libpulse0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
 Description: Cross-platform local network file and message transfer

@@ -9,6 +9,9 @@ OUTPUT_DIR="${PROJECT_DIR}/build/linux/appimage"
 APPDIR="${OUTPUT_DIR}/${APP_NAME}.AppDir"
 BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
+dart "${PROJECT_DIR}/script/prune_flutter_assets.dart" linux-x64 \
+  "${BUNDLE_DIR}/data/flutter_assets"
+
 rm -rf "${APPDIR}"
 mkdir -p "${APPDIR}/usr/bin"
 mkdir -p "${APPDIR}/usr/share/applications"

@@ -177,11 +177,15 @@ sign_app() {
 
 build_debug_app() {
   flutter build macos --debug
+  dart script/prune_flutter_assets.dart macos \
+    "$DEBUG_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   sign_app "$DEBUG_APP_BUNDLE" "$DEBUG_ENTITLEMENTS"
 }
 
 build_release_app() {
   flutter build macos
+  dart script/prune_flutter_assets.dart macos \
+    "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   sign_app "$RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
 }
 

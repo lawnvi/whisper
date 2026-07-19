@@ -89,6 +89,7 @@ jobs:
       - name: Build iOS IPA
         run: |
           flutter build ios --no-codesign
+          dart script/prune_flutter_assets.dart ios build/ios/iphoneos/Runner.app/Frameworks/App.framework/flutter_assets
           cd build/ios/iphoneos
           mkdir Payload
           cd Payload
@@ -138,6 +139,7 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows
+          dart script/prune_flutter_assets.dart windows-x64 build/windows/x64/runner/Release/data/flutter_assets
 
       - name: Copy runtime DLLs
         run: |
@@ -196,7 +198,7 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libmpv-dev mpv alien
+          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev alien
           sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
           sudo apt-get install -y desktop-file-utils libfuse2
 
@@ -269,6 +271,16 @@ jobs:
         run: |
           flutter build apk
           flutter build apk --split-per-abi
+
+      - name: Verify Android package size pruning
+        run: |
+          for apk in build/app/outputs/flutter-apk/app*-release.apk; do
+            if unzip -Z1 "$apk" | grep -Eq 'opus_codec_(linux|web|windows)'; then
+              echo "Foreign Opus assets remain in $apk" >&2
+              exit 1
+            fi
+            du -h "$apk"
+          done
 
       - name: Normalize Android APK names
         run: |

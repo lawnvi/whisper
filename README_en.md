@@ -33,7 +33,7 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 - **End-to-end encryption**: paired text, files, clipboard data, notifications, audio, and keyboard/mouse control use encrypted channels with visible identity and trust state.
 - **Direct multi-device connections**: one device can connect to multiple computers or phones, with visible and explicit connection state.
-- **Chat-style transfer**: send text, clipboard content, and files in conversations; view images full screen, play video and audio inline, and select multiple messages for deletion.
+- **Chat-style transfer**: send text, clipboard content, and files in conversations; view images full screen, play audio inline, open video in the system player, and select multiple messages for deletion.
 - **System quick send**: use the Android share sheet, desktop context menus, or a global hotkey without opening a conversation first. Desktop drafts can wait for a trusted device to reconnect; unsent Android system shares are discarded when the app restarts.
 - **QR pairing and diagnostics**: pairing codes bind the LAN endpoint to the device identity, while failures identify Wi-Fi, address, service, firewall, identity, or version problems.
 - **Transfer assistant**: send folders, search message text, save favorite snippets, and optionally enable clipboard auto-sync.
@@ -46,7 +46,7 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 - Control traffic and large-file payloads now share the same end-to-end encrypted session, with trusted-device state visible in the UI.
 - QR pairing now stays in an in-place dialog, carries both the LAN endpoint and device identity, and requires no extra password; first-time pairing still asks both devices to confirm the same code.
-- Image, video, and audio messages now preview or play inline, while receiving, verifying, and completed states update in the same message card.
+- Image, video, and audio messages use dedicated media cards; images open full screen, audio plays inline, video opens in the system player, and transfer states update in place.
 - Android combines LAN listening, file transfer, and audio playback into one foreground notification and clears the receiving state when a transfer completes.
 - Long-press any message to enter multi-select mode, select all, or batch-delete chat records; local files are kept by default.
 
@@ -73,7 +73,7 @@ Prepare the toolchain for your target platform:
 - Android: Android Studio / Android SDK
 - macOS / iOS: Xcode
 - Windows: Visual Studio C++ toolchain
-- Linux: Flutter Linux desktop dependencies, Avahi, PulseAudio or PipeWire Pulse, libsecret/keybinder/jsoncpp, and an available system keyring
+- Linux: Flutter Linux desktop dependencies, Avahi, PulseAudio or PipeWire Pulse, GStreamer, libsecret/keybinder/jsoncpp, and an available system keyring
 
 ### 2. Install Dependencies and Run
 
@@ -114,7 +114,7 @@ flutter gen-l10n
 
 ### Send Text or Files
 
-Open a conversation with a connected device, type text directly, or use the attachment button to select files. Images open in a full-screen viewer, video and audio play inline, and other files open through an available system app. Long-press a message and choose multi-select to batch-delete chat records. On desktop, received files can also be revealed in the system file manager or dragged out of a message.
+Open a conversation with a connected device, type text directly, or use the attachment button to select files. Images open in a full-screen viewer, audio plays inline, and video or other files open through an available system app. Long-press a message and choose multi-select to batch-delete chat records. On desktop, received files can also be revealed in the system file manager or dragged out of a message.
 
 On Android, choose Whisper directly from the system share sheet. On desktop, use the file context-menu entry or press `Cmd+Option+V` on macOS and `Ctrl+Alt+V` on Windows/Linux to quick-send the current clipboard content.
 
@@ -137,7 +137,7 @@ After granting notification listener permission on Android, choose which apps to
 | Android | Primary mobile platform, with system sharing, QR pairing, media previews, one unified foreground notification, notification listening, and audio playback. |
 | macOS | Primary desktop validation platform, with system services and global quick send, tray support, file drag-out, audio sharing, keyboard/mouse sharing, and packaging scripts. |
 | Windows | Desktop target with native integration for windows, single-instance behavior, audio, and keyboard/mouse sharing. |
-| Linux | Desktop target. Discovery depends on Avahi, audio depends on PulseAudio or PipeWire Pulse, and keyboard/mouse sharing currently focuses on X11. |
+| Linux | Desktop target. Discovery depends on Avahi, system audio sharing uses PulseAudio or PipeWire Pulse, message audio playback uses GStreamer, and keyboard/mouse sharing currently focuses on X11. |
 | iOS | Flutter runner is kept, but capabilities are limited by the system and not fully tested. |
 
 ## Boundaries and Security

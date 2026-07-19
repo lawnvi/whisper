@@ -20,6 +20,8 @@ rpmdev-setuptree
 # 编译Flutter项目为Linux应用程序
 cd "${FLUTTER_PROJECT_DIR}"
 flutter build linux --release
+dart script/prune_flutter_assets.dart linux-x64 \
+  build/linux/x64/release/bundle/data/flutter_assets
 
 # 创建RPM构建目录中的源码包目录
 SOURCES_DIR="$HOME/rpmbuild/SOURCES"

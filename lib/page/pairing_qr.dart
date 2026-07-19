@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_invite.dart';
@@ -59,11 +59,9 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     with SingleTickerProviderStateMixin {
   late final VoidCallback _dismissCallback = _dismissDialog;
   late final bool _canScan = Platform.isAndroid || Platform.isIOS;
-  late final MobileScannerController _scannerController =
-      MobileScannerController(
-        formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
-        detectionSpeed: DetectionSpeed.normal,
-      );
+  final GlobalKey _scannerKey = GlobalKey(debugLabel: 'pairing-qr-scanner');
+  QRViewController? _scannerController;
+  StreamSubscription<Barcode>? _scanSubscription;
   TabController? _tabController;
   bool _handlingScan = false;
   String? _scanError;
@@ -85,9 +83,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
   void dispose() {
     widget.controller?._detach(_dismissCallback);
     _tabController?.dispose();
-    if (_canScan) {
-      unawaited(_scannerController.dispose());
-    }
+    unawaited(_scanSubscription?.cancel());
     super.dispose();
   }
 
@@ -525,22 +521,19 @@ class _PairingQrDialogState extends State<PairingQrDialog>
                   return Stack(
                     fit: StackFit.expand,
                     children: <Widget>[
-                      MobileScanner(
-                        controller: _scannerController,
-                        onDetect: _onDetect,
-                        errorBuilder: (context, error) => ColoredBox(
-                          color: Colors.black,
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                l10n.qrCameraUnavailable,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
+                      QRView(
+                        key: _scannerKey,
+                        formatsAllowed: const <BarcodeFormat>[
+                          BarcodeFormat.qrcode,
+                        ],
+                        onQRViewCreated: _onScannerCreated,
+                        onPermissionSet: (_, granted) {
+                          if (!granted && mounted) {
+                            setState(() {
+                              _scanError = l10n.qrCameraUnavailable;
+                            });
+                          }
+                        },
                       ),
                       Center(
                         child: IgnorePointer(
@@ -568,7 +561,8 @@ class _PairingQrDialogState extends State<PairingQrDialog>
                                 backgroundColor: Colors.black54,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: _scannerController.toggleTorch,
+                              onPressed: () =>
+                                  _scannerController?.toggleFlash(),
                               icon: const Icon(Icons.flashlight_on_outlined),
                             ),
                             const SizedBox(width: 8),
@@ -578,7 +572,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
                                 backgroundColor: Colors.black54,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: _scannerController.switchCamera,
+                              onPressed: () => _scannerController?.flipCamera(),
                               icon: const Icon(Icons.cameraswitch_outlined),
                             ),
                           ],
@@ -622,19 +616,22 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     );
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  void _onScannerCreated(QRViewController controller) {
+    _scannerController = controller;
+    unawaited(_scanSubscription?.cancel());
+    _scanSubscription = controller.scannedDataStream.listen(_onDetect);
+  }
+
+  void _onDetect(Barcode barcode) {
     if (_handlingScan) {
       return;
     }
-    for (final barcode in capture.barcodes) {
-      final value = barcode.rawValue;
-      if (value == null) {
-        continue;
-      }
-      _handlingScan = true;
-      unawaited(_acceptScannedValue(value));
+    final value = barcode.code;
+    if (value == null) {
       return;
     }
+    _handlingScan = true;
+    unawaited(_acceptScannedValue(value));
   }
 
   Future<void> _acceptScannedValue(String value) async {
@@ -651,8 +648,8 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         return;
       }
       try {
-        await _scannerController.stop();
-      } on MobileScannerException {
+        await _scannerController?.pauseCamera();
+      } on CameraException {
         // Disposing the dialog also releases the camera after a valid scan.
       }
       if (mounted) {

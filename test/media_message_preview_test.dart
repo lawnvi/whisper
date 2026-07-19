@@ -1,9 +1,26 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 
 void main() {
+  test('media previews avoid bundled video decoder libraries', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final preview = File(
+      'lib/widget/media_message_preview.dart',
+    ).readAsStringSync();
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+
+    expect(pubspec, contains('audioplayers:'));
+    expect(pubspec, isNot(contains('media_kit:')));
+    expect(pubspec, isNot(contains('media_kit_video:')));
+    expect(preview, contains('DeviceFileSource'));
+    expect(preview, isNot(contains('VideoController')));
+    expect(conversation, contains('kind == MediaFileKind.video'));
+  });
+
   test('classifies common media extensions', () {
     expect(mediaFileKindFor(name: 'photo.webp', path: ''), MediaFileKind.image);
     expect(mediaFileKindFor(name: 'photo.heic', path: ''), MediaFileKind.other);
@@ -137,6 +154,31 @@ void main() {
       findsOneWidget,
     );
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('completed video offers the system player without a filename', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 280,
+            child: MediaMessagePreview(
+              kind: MediaFileKind.video,
+              path: '/tmp/example.mp4',
+              name: 'example.mp4',
+              status: '8.2 MB',
+              contentAvailable: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.open_in_new_rounded), findsOneWidget);
+    expect(find.text('example.mp4'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

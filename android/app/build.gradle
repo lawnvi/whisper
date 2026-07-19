@@ -85,6 +85,29 @@ android {
     }
 }
 
+tasks.register("pruneFlutterAssetsRelease") {
+    dependsOn("compileFlutterBuildRelease")
+    outputs.upToDateWhen { false }
+    doLast {
+        def packagesDir = layout.buildDirectory.dir(
+                "intermediates/flutter/release/flutter_assets/packages"
+        ).get().asFile
+        // Android has its own native Opus implementation. Federated package
+        // assets for other platforms otherwise add about 2 MB to every APK.
+        project.delete(
+                new File(packagesDir, "opus_codec_linux"),
+                new File(packagesDir, "opus_codec_web"),
+                new File(packagesDir, "opus_codec_windows")
+        )
+    }
+}
+
+tasks.configureEach {
+    if (name == "copyFlutterAssetsRelease") {
+        dependsOn("pruneFlutterAssetsRelease")
+    }
+}
+
 flutter {
     source '../..'
 }

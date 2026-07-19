@@ -2,12 +2,10 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' show FontFeature;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import 'package:mime/mime.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -200,7 +198,6 @@ class _VisualMediaPreview extends StatelessWidget {
                     ),
                     MediaFileKind.video => _VideoPreview(
                       key: ValueKey<String>('video:$path'),
-                      path: path,
                       name: name,
                     ),
                     _ => const SizedBox.shrink(),
@@ -343,242 +340,52 @@ class _ImagePreviewState extends State<_ImagePreview> {
   }
 }
 
-class _VideoPreviewData {
-  const _VideoPreviewData({
-    required this.bytes,
-    required this.duration,
-    required this.aspectRatio,
-  });
+class _VideoPreview extends StatelessWidget {
+  const _VideoPreview({super.key, required this.name});
 
-  final Uint8List? bytes;
-  final Duration duration;
-  final double aspectRatio;
-}
-
-final LinkedHashMap<String, Future<_VideoPreviewData?>> _videoPreviewCache =
-    LinkedHashMap<String, Future<_VideoPreviewData?>>();
-final LinkedHashSet<String> _pendingVideoPreviewKeys = LinkedHashSet<String>();
-Future<void> _videoPreviewQueue = Future<void>.value();
-
-Future<_VideoPreviewData?> _cachedVideoPreview(String path) {
-  try {
-    final stat = File(path).statSync();
-    final key = '$path:${stat.size}:${stat.modified.millisecondsSinceEpoch}';
-    final cached = _videoPreviewCache.remove(key);
-    if (cached != null) {
-      _videoPreviewCache[key] = cached;
-      return cached;
-    }
-    while (_videoPreviewCache.length >= 24) {
-      final evicted = _videoPreviewCache.keys.first;
-      _videoPreviewCache.remove(evicted);
-      _pendingVideoPreviewKeys.remove(evicted);
-    }
-    while (_pendingVideoPreviewKeys.length >= 6) {
-      final evicted = _pendingVideoPreviewKeys.first;
-      _pendingVideoPreviewKeys.remove(evicted);
-      _videoPreviewCache.remove(evicted);
-    }
-    late final Future<_VideoPreviewData?> preview;
-    preview = _videoPreviewQueue.then((_) async {
-      if (!_videoPreviewCache.containsKey(key)) {
-        return null;
-      }
-      try {
-        return await _extractVideoPreview(path);
-      } catch (_) {
-        return null;
-      }
-    });
-    _videoPreviewQueue = preview.then<void>((_) {});
-    _videoPreviewCache[key] = preview;
-    _pendingVideoPreviewKeys.add(key);
-    unawaited(
-      preview.then((value) {
-        _pendingVideoPreviewKeys.remove(key);
-        if (value == null && identical(_videoPreviewCache[key], preview)) {
-          _videoPreviewCache.remove(key);
-        }
-      }),
-    );
-    return preview;
-  } catch (_) {
-    return Future<_VideoPreviewData?>.value();
-  }
-}
-
-Future<_VideoPreviewData?> _extractVideoPreview(String path) async {
-  MediaKit.ensureInitialized();
-  final player = Player(configuration: const PlayerConfiguration(muted: true));
-  final controller = VideoController(
-    player,
-    configuration: const VideoControllerConfiguration(width: 480),
-  );
-  try {
-    // A paused player can expose metadata before it has decoded a frame. Start
-    // muted, wait for the video output, then pause before taking the snapshot.
-    await player.open(Media(Uri.file(path).toString()), play: true);
-    var duration = player.state.duration;
-    if (duration == Duration.zero) {
-      try {
-        duration = await player.stream.duration
-            .firstWhere((value) => value > Duration.zero)
-            .timeout(const Duration(seconds: 2));
-      } catch (_) {
-        duration = player.state.duration;
-      }
-    }
-    final seekMs = math.min(1000, math.max(0, duration.inMilliseconds ~/ 5));
-    if (seekMs > 0) {
-      await player.seek(Duration(milliseconds: seekMs));
-    }
-    try {
-      await controller.waitUntilFirstFrameRendered.timeout(
-        const Duration(seconds: 3),
-      );
-    } catch (_) {
-      await Future<void>.delayed(const Duration(milliseconds: 240));
-    }
-    await player.pause();
-    final width = player.state.width;
-    final height = player.state.height;
-    final videoParamsAspectRatio = player.state.videoParams.aspect;
-    final aspectRatio = width != null && height != null && height > 0
-        ? width / height
-        : videoParamsAspectRatio != null && videoParamsAspectRatio > 0
-        ? videoParamsAspectRatio
-        : 16 / 9;
-
-    Uint8List? bytes;
-    for (var attempt = 0; attempt < 4; attempt++) {
-      bytes = await player.screenshot(format: 'image/jpeg');
-      if (bytes?.isNotEmpty == true) {
-        break;
-      }
-      await player.play();
-      await Future<void>.delayed(const Duration(milliseconds: 160));
-      await player.pause();
-    }
-    if (bytes == null || bytes.isEmpty) {
-      return duration > Duration.zero
-          ? _VideoPreviewData(
-              bytes: null,
-              duration: duration,
-              aspectRatio: aspectRatio,
-            )
-          : null;
-    }
-    return _VideoPreviewData(
-      bytes: bytes,
-      duration: duration,
-      aspectRatio: aspectRatio,
-    );
-  } finally {
-    await player.dispose();
-  }
-}
-
-class _VideoPreview extends StatefulWidget {
-  const _VideoPreview({super.key, required this.path, required this.name});
-
-  final String path;
   final String name;
-
-  @override
-  State<_VideoPreview> createState() => _VideoPreviewState();
-}
-
-class _VideoPreviewState extends State<_VideoPreview> {
-  late Future<_VideoPreviewData?> _preview;
-
-  @override
-  void initState() {
-    super.initState();
-    _preview = _cachedVideoPreview(widget.path);
-  }
-
-  @override
-  void didUpdateWidget(covariant _VideoPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path) {
-      _preview = _cachedVideoPreview(widget.path);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.whisperPalette;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Semantics(
-      label: widget.name,
+      label: name,
       button: true,
-      child: FutureBuilder<_VideoPreviewData?>(
-        future: _preview,
-        builder: (context, snapshot) {
-          final preview = snapshot.data;
-          final thumbnailBytes = preview?.bytes;
-          return _AdaptiveVisualMediaFrame(
-            frameKey: const ValueKey<String>('video-preview-frame'),
-            sourceAspectRatio: preview?.aspectRatio ?? 16 / 9,
-            child: ColoredBox(
-              color: palette.surfaceMuted,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  AnimatedSwitcher(
-                    duration: reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    switchInCurve: Curves.easeOutCubic,
-                    transitionBuilder: (child, animation) =>
-                        FadeTransition(opacity: animation, child: child),
-                    child: thumbnailBytes != null
-                        ? Image.memory(
-                            thumbnailBytes,
-                            key: ValueKey<String>('thumbnail:${widget.path}'),
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.medium,
-                            gaplessPlayback: true,
-                          )
-                        : Icon(
-                            Icons.movie_outlined,
-                            key: const ValueKey<String>('video-placeholder'),
-                            color: palette.textMuted,
-                            size: 40,
-                          ),
-                  ),
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.68),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.34),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow_rounded,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  if (preview != null && preview.duration > Duration.zero)
-                    Positioned(
-                      right: 10,
-                      bottom: 10,
-                      child: _MediaStatusPill(
-                        text: _formatDuration(preview.duration),
-                        dark: true,
-                      ),
-                    ),
-                ],
+      child: _AdaptiveVisualMediaFrame(
+        frameKey: const ValueKey<String>('video-preview-frame'),
+        sourceAspectRatio: 16 / 9,
+        child: ColoredBox(
+          color: palette.surfaceMuted,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Icon(
+                Icons.movie_outlined,
+                key: const ValueKey<String>('video-placeholder'),
+                color: palette.textMuted,
+                size: 42,
               ),
-            ),
-          );
-        },
+              Center(
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.68),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.34),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.open_in_new_rounded,
+                    size: 24,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -642,10 +449,9 @@ class _MediaPlaceholder extends StatelessWidget {
 }
 
 class _MediaStatusPill extends StatelessWidget {
-  const _MediaStatusPill({required this.text, this.dark = false});
+  const _MediaStatusPill({required this.text});
 
   final String text;
-  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -654,22 +460,16 @@ class _MediaStatusPill extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 180),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.black.withValues(alpha: 0.68)
-            : Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: dark
-              ? Colors.white.withValues(alpha: 0.2)
-              : palette.borderSubtle,
-        ),
+        border: Border.all(color: palette.borderSubtle),
       ),
       child: Text(
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: dark ? Colors.white : palette.textMuted,
+          color: palette.textMuted,
           fontSize: 11,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
@@ -997,21 +797,10 @@ Future<Duration> _cachedAudioDuration(String path) {
 }
 
 Future<Duration> _extractAudioDuration(String path) async {
-  MediaKit.ensureInitialized();
-  final player = Player();
+  final player = AudioPlayer();
   try {
-    await player.open(Media(Uri.file(path).toString()), play: false);
-    var duration = player.state.duration;
-    if (duration == Duration.zero) {
-      try {
-        duration = await player.stream.duration
-            .firstWhere((value) => value > Duration.zero)
-            .timeout(const Duration(seconds: 2));
-      } catch (_) {
-        duration = player.state.duration;
-      }
-    }
-    return duration;
+    await player.setSource(DeviceFileSource(path));
+    return await player.getDuration() ?? Duration.zero;
   } finally {
     await player.dispose();
   }
@@ -1036,8 +825,8 @@ class AudioMessagePlayer extends StatefulWidget {
 }
 
 class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
-  Player? _player;
-  final List<StreamSubscription<Object?>> _subscriptions = [];
+  AudioPlayer? _player;
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _playing = false;
@@ -1066,23 +855,24 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
         _loading = true;
         _failed = false;
       });
-      final attemptSubscriptions = <StreamSubscription<Object?>>[];
+      final attemptSubscriptions = <StreamSubscription<dynamic>>[];
       try {
-        MediaKit.ensureInitialized();
-        player = Player();
+        player = AudioPlayer();
         _player = player;
         attemptSubscriptions.addAll([
-          player.stream.playing.listen((value) {
-            if (mounted) setState(() => _playing = value);
+          player.onPlayerStateChanged.listen((value) {
+            if (mounted) {
+              setState(() => _playing = value == PlayerState.playing);
+            }
           }),
-          player.stream.position.listen((value) {
+          player.onPositionChanged.listen((value) {
             if (mounted) setState(() => _position = value);
           }),
-          player.stream.duration.listen((value) {
+          player.onDurationChanged.listen((value) {
             if (mounted) setState(() => _duration = value);
           }),
-          player.stream.completed.listen((completed) {
-            if (completed && mounted) {
+          player.onPlayerComplete.listen((_) {
+            if (mounted) {
               setState(() {
                 _playing = false;
                 _position = Duration.zero;
@@ -1091,9 +881,9 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
           }),
         ]);
         _subscriptions.addAll(attemptSubscriptions);
-        await player.open(Media(Uri.file(widget.path).toString()), play: true);
-        final duration = player.state.duration;
-        if (mounted && duration > Duration.zero) {
+        await player.play(DeviceFileSource(widget.path));
+        final duration = await player.getDuration();
+        if (mounted && duration != null && duration > Duration.zero) {
           setState(() => _duration = duration);
         }
       } catch (_) {
@@ -1111,7 +901,13 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
       }
       return;
     }
-    await player.playOrPause();
+    if (_playing) {
+      await player.pause();
+    } else if (player.state == PlayerState.completed) {
+      await player.play(DeviceFileSource(widget.path));
+    } else {
+      await player.resume();
+    }
   }
 
   Future<void> _seekToFraction(double fraction) async {
@@ -1474,6 +1270,10 @@ Future<void> showMediaViewer(
   required String name,
   required VoidCallback onOpenExternally,
 }) {
+  if (kind == MediaFileKind.video) {
+    onOpenExternally();
+    return Future<void>.value();
+  }
   return Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (context) => _MediaViewerPage(
@@ -1529,7 +1329,7 @@ class _MediaViewerPage extends StatelessWidget {
               child: Image.file(File(path), fit: BoxFit.contain),
             ),
           ),
-          MediaFileKind.video => _VideoPlayer(path: path),
+          MediaFileKind.video => const SizedBox.shrink(),
           MediaFileKind.audio => Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
@@ -1538,48 +1338,6 @@ class _MediaViewerPage extends StatelessWidget {
           ),
           MediaFileKind.other => const SizedBox.shrink(),
         },
-      ),
-    );
-  }
-}
-
-class _VideoPlayer extends StatefulWidget {
-  const _VideoPlayer({required this.path});
-
-  final String path;
-
-  @override
-  State<_VideoPlayer> createState() => _VideoPlayerState();
-}
-
-class _VideoPlayerState extends State<_VideoPlayer> {
-  late final Player _player;
-  late final VideoController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    MediaKit.ensureInitialized();
-    _player = Player();
-    _controller = VideoController(_player);
-    unawaited(
-      _player.open(Media(Uri.file(widget.path).toString()), play: true),
-    );
-  }
-
-  @override
-  void dispose() {
-    unawaited(_player.dispose());
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Video(
-        controller: _controller,
-        fit: BoxFit.contain,
-        fill: Colors.black,
       ),
     );
   }
