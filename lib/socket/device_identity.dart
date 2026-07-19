@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/local.dart';
@@ -209,10 +208,11 @@ final class DeviceIdentityStore {
 }
 
 DeviceIdentitySeedStorage _defaultDeviceIdentitySeedStorage() {
-  // Locally rebuilt macOS debug apps receive a new code hash frequently, which
-  // makes the login Keychain show a password prompt during ordinary pairing.
-  // Release builds keep using platform secure storage.
-  if (kDebugMode && Platform.isMacOS) {
+  // Ad-hoc and locally signed macOS builds can lose Keychain ACL access after
+  // an update and show the login-password prompt during ordinary connections.
+  // SharedPreferences lives inside the app sandbox, so keep the identity there
+  // on macOS and reserve platform secure storage for mobile platforms.
+  if (Platform.isMacOS) {
     return LocalDeviceIdentitySeedStorage();
   }
   return SecureDeviceIdentitySeedStorage();

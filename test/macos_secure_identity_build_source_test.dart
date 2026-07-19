@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('macOS debug identity avoids interactive Keychain access', () {
+  test('all macOS builds avoid interactive Keychain identity access', () {
     final identitySource = File(
       'lib/socket/device_identity.dart',
     ).readAsStringSync();
@@ -14,7 +14,8 @@ void main() {
       'macos/Runner/Release.entitlements',
     ).readAsStringSync();
 
-    expect(identitySource, contains('if (kDebugMode && Platform.isMacOS)'));
+    expect(identitySource, contains('if (Platform.isMacOS)'));
+    expect(identitySource, isNot(contains('kDebugMode && Platform.isMacOS')));
     expect(
       identitySource,
       contains('return LocalDeviceIdentitySeedStorage();'),
