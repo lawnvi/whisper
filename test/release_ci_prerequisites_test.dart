@@ -59,14 +59,13 @@ void main() {
   test('release builds reuse caches and avoid redundant tool installs', () {
     expect(
       RegExp(r'^\s+cache: true$', multiLine: true).allMatches(workflow).length,
-      greaterThanOrEqualTo(4),
+      greaterThanOrEqualTo(3),
     );
-    expect(workflow, contains('build-on-android:'));
+    expect(workflow, isNot(contains('build-on-android:')));
     expect(workflow, contains('description: Platform to build'));
     expect(workflow, contains("inputs.target == 'windows'"));
     expect(workflow, contains("inputs.target == 'android'"));
-    expect(workflow, contains('name: Linux'));
-    expect(workflow, contains('name: Android'));
+    expect(workflow, contains('name: Linux + Android'));
     expect(workflow, contains('flutter build windows --no-pub'));
     expect(workflow, contains('flutter build linux --no-pub'));
     expect(workflow, contains('flutter build ios --no-codesign --no-pub'));

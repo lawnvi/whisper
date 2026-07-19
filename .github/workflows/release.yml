@@ -224,13 +224,21 @@ jobs:
           retention-days: 7
 
   build-on-linux:
-    name: Linux
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
+    name: Linux + Android
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' || inputs.target == 'android' }}
     needs: verify-release-version
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+          cache: gradle
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -243,6 +251,7 @@ jobs:
         run: flutter pub get
 
       - name: Install system packages
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           sudo apt-get update -y
           # Jammy's GStreamer requires GNU libunwind-dev, while the runner's
@@ -263,11 +272,13 @@ jobs:
           echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
 
       - name: Build Linux app
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           flutter config --enable-linux-desktop
           flutter build linux --no-pub
 
       - name: Build DEB package
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           chmod +x linux/build_deb.sh
           bash linux/build_deb.sh "$PACKAGE_VERSION" amd64
@@ -275,24 +286,28 @@ jobs:
           mv "$deb_path" "build/linux/deb/whisper-${PACKAGE_VERSION}-linux-amd64.deb"
 
       - name: Build RPM package
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           deb_path="$(find build/linux/deb -name 'whisper-*-linux-amd64.deb' -print -quit)"
           sudo alien -r "$deb_path"
           mv "whisper-${PACKAGE_VERSION}-2.x86_64.rpm" "whisper-${PACKAGE_VERSION}-linux-x86_64.rpm"
 
       - name: Install appimagetool
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           curl -L -o /tmp/appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /tmp/appimagetool.AppImage
           echo "APPIMAGE_TOOL=/tmp/appimagetool.AppImage" >> $GITHUB_ENV
 
       - name: Build AppImage
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           chmod +x linux/build_appimage.sh
           bash linux/build_appimage.sh "$PACKAGE_VERSION"
           mv "build/linux/appimage/whisper-${PACKAGE_VERSION}-x86_64.AppImage" "build/linux/appimage/whisper-${PACKAGE_VERSION}-linux-x86_64.AppImage"
 
       - name: Upload Linux artifacts
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-linux-${{ github.run_id }}
@@ -302,33 +317,8 @@ jobs:
             build/linux/appimage/whisper-*-linux-x86_64.AppImage
           retention-days: 7
 
-  build-on-android:
-    name: Android
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
-    needs: verify-release-version
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          architecture: x64
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
       - name: Ensure Android SDK packages
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: |
           missing=()
           [[ -d "$ANDROID_SDK_ROOT/platforms/android-36" ]] || missing+=("platforms;android-36")
@@ -337,25 +327,18 @@ jobs:
             yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "${missing[@]}"
           fi
 
-      - name: Set release version
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
-            PACKAGE_VERSION="${PACKAGE_VERSION#v}"
-          else
-            PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
-          fi
-          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
-
       - name: Prepare Android signing
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh "${{ secrets.KEY_PASSWORD }}" "${{ secrets.STORE_PASSWORD }}"
 
       - name: Build Android release APKs
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: |
           flutter build apk --no-pub
           flutter build apk --split-per-abi --no-pub
 
       - name: Verify Android package size pruning
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: |
           for apk in build/app/outputs/flutter-apk/app*-release.apk; do
             if unzip -Z1 "$apk" | grep -Eq 'opus_codec_(linux|web|windows)'; then
@@ -366,6 +349,7 @@ jobs:
           done
 
       - name: Normalize Android APK names
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: |
           apk_dir="build/app/outputs/flutter-apk"
           mv "$apk_dir/app-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-universal.apk"
@@ -374,6 +358,7 @@ jobs:
           mv "$apk_dir/app-x86_64-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-x86_64.apk"
 
       - name: Upload Android artifacts
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-android-${{ github.run_id }}
@@ -387,7 +372,6 @@ jobs:
       - build-on-macos
       - build-on-windows
       - build-on-linux
-      - build-on-android
     runs-on: ubuntu-22.04
     steps:
       - name: Download release artifacts
