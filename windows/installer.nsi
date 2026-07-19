@@ -25,6 +25,10 @@
   !define OUTPUT_NAME "whisper-windows-x86_64.exe"
 !endif
 
+!ifndef BUILD_DIR
+  !define BUILD_DIR "..\build\windows\x64\runner\Release"
+!endif
+
 Name "${APP_NAME}"
 OutFile "${OUTPUT_NAME}"
 InstallDir "${INSTALL_ROOT}"
@@ -54,7 +58,7 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File /r "..\build\windows\x64\runner\Release\*.*"
+  File /r "${BUILD_DIR}\*.*"
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"

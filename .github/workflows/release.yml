@@ -139,11 +139,22 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows
-          dart script/prune_flutter_assets.dart windows-x64 build/windows/x64/runner/Release/data/flutter_assets
+          $runner = @(Get-ChildItem -LiteralPath "build/windows" -Filter "whisper.exe" -File -Recurse)
+          if ($runner.Count -ne 1) {
+            $found = if ($runner.Count -eq 0) { "none" } else { ($runner.FullName -join ", ") }
+            throw "Expected one built whisper.exe, found $($runner.Count): $found"
+          }
+          $releaseDir = $runner[0].Directory.FullName
+          $assetsDir = Join-Path $releaseDir "data/flutter_assets"
+          if (!(Test-Path -LiteralPath $assetsDir -PathType Container)) {
+            throw "Flutter assets not found at $assetsDir"
+          }
+          "WINDOWS_RELEASE_DIR=$releaseDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          dart script/prune_flutter_assets.dart windows-x64 $assetsDir
 
       - name: Copy runtime DLLs
         run: |
-          $releaseDir = (Resolve-Path -LiteralPath "build/windows/x64/runner/Release" -ErrorAction Stop).Path
+          $releaseDir = (Resolve-Path -LiteralPath $env:WINDOWS_RELEASE_DIR -ErrorAction Stop).Path
           $systemDir = Join-Path $env:WINDIR "System32"
           @("vcruntime140_1.dll", "vcruntime140.dll", "msvcp140.dll") | ForEach-Object {
             $source = Join-Path $systemDir $_
@@ -162,6 +173,7 @@ jobs:
             /DAPP_VERSION="$env:APP_VERSION" `
             /DAPP_PUBLISHER="lawnvi" `
             /DOUTPUT_NAME="whisper-$($env:PACKAGE_VERSION)-windows-x86_64.exe" `
+            /DBUILD_DIR="$env:WINDOWS_RELEASE_DIR" `
             installer.nsi
           Pop-Location
 
