@@ -3,6 +3,9 @@
 
 #include <windows.h>
 
+#include <string>
+#include <vector>
+
 class SingleInstanceLock {
  public:
   SingleInstanceLock();
@@ -19,6 +22,8 @@ class SingleInstanceLock {
 };
 
 UINT GetSingleInstanceWakeMessage();
-bool NotifyExistingInstance();
+bool NotifyExistingInstance(const std::vector<std::string>& arguments = {});
+bool ReadQuickSendCopyData(const COPYDATASTRUCT* copy_data,
+                           std::vector<std::string>* arguments);
 
 #endif  // RUNNER_SINGLE_INSTANCE_H_

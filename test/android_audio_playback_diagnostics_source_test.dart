@@ -3,19 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Android audio plugin logs playback lifecycle and write counters', () {
+  test('Android audio diagnostics use privacy-safe lifecycle counters', () {
     final source = File(
             'android/app/src/main/kotlin/com/vireen/whisper/AudioSharePlugin.kt')
         .readAsStringSync();
 
-    expect(source, contains('import android.util.Log'));
-    expect(source, contains('WhisperAudioShare'));
-    expect(source, contains('startPlayback session='));
-    expect(source, contains('writePcm session='));
-    expect(source, contains('stopPlayback session='));
+    expect(source, contains('NativePrivacyLog.event('));
+    expect(source, contains('NativeLogEvent.audioPlaybackStarted'));
+    expect(source, contains('NativeLogEvent.audioPlaybackStopped'));
     expect(source, contains('writeCount'));
     expect(source, contains('writeBytes'));
-    expect(source, contains('peakLeft'));
-    expect(source, contains('peakRight'));
+    expect(source, isNot(contains('session=\$sessionId')));
+    expect(source, isNot(contains('peakLeft=')));
+    expect(source, isNot(contains('peakRight=')));
+    expect(source, isNot(contains('NativeLogEvent.audioWriteProgress')));
   });
 }

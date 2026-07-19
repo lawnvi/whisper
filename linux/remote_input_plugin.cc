@@ -384,11 +384,75 @@ bool ShouldTraceRemoteInput() {
   return value != nullptr && std::strcmp(value, "1") == 0;
 }
 
-void TraceRemoteInput(const std::string& message) {
+enum class RemoteInputTraceEvent {
+  kCaptureActive,
+  kCapturePaused,
+  kCaptureStarted,
+  kInjectionBlocked,
+  kInjectedEvent,
+  kInjectionReleaseLegacy,
+  kInjectionReleaseRouted,
+  kInjectionStarted,
+  kEventCaptured,
+  kPortalCaptureActive,
+  kPortalCaptureDeactivated,
+  kPortalCaptureDisabled,
+  kPortalCaptureStarted,
+  kPortalInjectionStarted,
+  kPortalReleaseFailed,
+  kPortalZonesChanged,
+  kStalePauseIgnored,
+  kX11InjectionStarted,
+};
+
+const char* TraceEventName(RemoteInputTraceEvent event) {
+  switch (event) {
+    case RemoteInputTraceEvent::kCaptureActive:
+      return "capture_active";
+    case RemoteInputTraceEvent::kCapturePaused:
+      return "capture_paused";
+    case RemoteInputTraceEvent::kCaptureStarted:
+      return "capture_started";
+    case RemoteInputTraceEvent::kInjectionBlocked:
+      return "injection_blocked";
+    case RemoteInputTraceEvent::kInjectedEvent:
+      return "injected_event";
+    case RemoteInputTraceEvent::kInjectionReleaseLegacy:
+      return "injection_release_legacy";
+    case RemoteInputTraceEvent::kInjectionReleaseRouted:
+      return "injection_release_routed";
+    case RemoteInputTraceEvent::kInjectionStarted:
+      return "injection_started";
+    case RemoteInputTraceEvent::kEventCaptured:
+      return "event_captured";
+    case RemoteInputTraceEvent::kPortalCaptureActive:
+      return "portal_capture_active";
+    case RemoteInputTraceEvent::kPortalCaptureDeactivated:
+      return "portal_capture_deactivated";
+    case RemoteInputTraceEvent::kPortalCaptureDisabled:
+      return "portal_capture_disabled";
+    case RemoteInputTraceEvent::kPortalCaptureStarted:
+      return "portal_capture_started";
+    case RemoteInputTraceEvent::kPortalInjectionStarted:
+      return "portal_injection_started";
+    case RemoteInputTraceEvent::kPortalReleaseFailed:
+      return "portal_release_failed";
+    case RemoteInputTraceEvent::kPortalZonesChanged:
+      return "portal_zones_changed";
+    case RemoteInputTraceEvent::kStalePauseIgnored:
+      return "stale_pause_ignored";
+    case RemoteInputTraceEvent::kX11InjectionStarted:
+      return "x11_injection_started";
+  }
+  return "unknown";
+}
+
+void TraceRemoteInput(RemoteInputTraceEvent event, uint64_t count = 0) {
   if (!ShouldTraceRemoteInput()) {
     return;
   }
-  g_printerr("%s\n", message.c_str());
+  g_printerr("event=%s count=%llu\n", TraceEventName(event),
+             static_cast<unsigned long long>(count));
 }
 
 #if HAVE_X11_REMOTE_INPUT
@@ -1244,9 +1308,14 @@ struct MainThreadEvent {
 gboolean InvokeMainThreadEvent(gpointer user_data) {
   auto* event = static_cast<MainThreadEvent*>(user_data);
   g_autoptr(FlValue) args = fl_value_new_map();
-  fl_value_set_string_take(
-      args, "sessionId", fl_value_new_string(event->session_id.c_str()));
-  if (event->method == "onInputEvent") {
+  if (event->method != "onDiagnostic") {
+    fl_value_set_string_take(
+        args, "sessionId", fl_value_new_string(event->session_id.c_str()));
+  }
+  if (event->method == "onDiagnostic") {
+    fl_value_set_string_take(
+        args, "event", fl_value_new_string(event->event_type.c_str()));
+  } else if (event->method == "onInputEvent") {
     fl_value_set_string_take(args, "sequence",
                              fl_value_new_int(event->sequence));
     fl_value_set_string_take(
@@ -1397,15 +1466,6 @@ enum class CaptureBackend {
 
 bool HasSegment(const EdgeSegment& segment) {
   return segment.end > segment.start;
-}
-
-std::string SegmentTrace(const EdgeSegment& segment) {
-  if (!HasSegment(segment)) {
-    return "-";
-  }
-  std::ostringstream trace;
-  trace << segment.start << ".." << segment.end;
-  return trace.str();
 }
 
 std::vector<CaptureRoute> CaptureRoutesValue(FlValue* map, const char* key) {
@@ -2133,11 +2193,9 @@ class RemoteInputPlugin {
       StopCapture(session_id);
       return false;
     }
-    TraceRemoteInput("linux remote input portal capture started session=" +
-                     session_id + " barriers=" +
-                     std::to_string(barriers.size()));
-    EmitDiagnosticForSession(session_id,
-                             "linux remote input portal capture started");
+    TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureStarted,
+                     barriers.size());
+    EmitDiagnostic(RemoteInputTraceEvent::kPortalCaptureStarted);
     return true;
   }
 
@@ -2411,15 +2469,8 @@ class RemoteInputPlugin {
                          input_capture_active_edge_,
                          input_capture_active_segment_);
     capture_route_id_ = input_capture_active_route_id_;
-    std::ostringstream trace;
-    trace << "linux remote input portal capture active edge="
-          << input_capture_active_edge_ << " barrier=" << barrier_id
-          << " activation=" << activation_id << " cursor=" << input_capture_x_
-          << "," << input_capture_y_;
-    TraceRemoteInput(trace.str());
-    EmitDiagnosticForSession(capture_session_id_,
-                             "linux remote input portal capture active edge=" +
-                                 input_capture_active_edge_);
+    TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureActive);
+    EmitDiagnostic(RemoteInputTraceEvent::kPortalCaptureActive);
     if (options != nullptr) {
       g_variant_unref(options);
     }
@@ -2435,7 +2486,7 @@ class RemoteInputPlugin {
       input_capture_active_ = false;
       input_capture_pending_active_start_ = false;
       input_capture_buttons_ = 0;
-      TraceRemoteInput("linux remote input portal capture deactivated");
+      TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureDeactivated);
     }
     if (options != nullptr) {
       g_variant_unref(options);
@@ -2452,7 +2503,7 @@ class RemoteInputPlugin {
       input_capture_active_ = false;
       input_capture_pending_active_start_ = false;
       input_capture_buttons_ = 0;
-      TraceRemoteInput("linux remote input portal capture disabled");
+      TraceRemoteInput(RemoteInputTraceEvent::kPortalCaptureDisabled);
     }
     if (options != nullptr) {
       g_variant_unref(options);
@@ -2466,8 +2517,7 @@ class RemoteInputPlugin {
     std::lock_guard<std::mutex> lock(capture_mutex_);
     if (input_capture_session_handle_ ==
         (session_handle == nullptr ? "" : session_handle)) {
-      EmitDiagnosticForSession(capture_session_id_,
-                               "linux remote input portal zones changed");
+      EmitDiagnostic(RemoteInputTraceEvent::kPortalZonesChanged);
     }
     if (options != nullptr) {
       g_variant_unref(options);
@@ -2777,9 +2827,7 @@ class RemoteInputPlugin {
     if (result != nullptr) {
       g_variant_unref(result);
     } else if (call_error != nullptr) {
-      TraceRemoteInput(std::string("linux remote input portal release failed: ") +
-                       (call_error->message == nullptr ? ""
-                                                       : call_error->message));
+      TraceRemoteInput(RemoteInputTraceEvent::kPortalReleaseFailed);
       g_error_free(call_error);
     }
     input_capture_active_ = false;
@@ -2845,8 +2893,7 @@ class RemoteInputPlugin {
     StopInjection("");
     if (IsLinuxDesktopLocked()) {
       *error = "Unlock the Linux desktop before sharing keyboard and mouse";
-      TraceRemoteInput(
-          "linux remote input injection blocked because desktop is locked");
+      TraceRemoteInput(RemoteInputTraceEvent::kInjectionBlocked);
       return false;
     }
     bool portal_attempted = false;
@@ -2897,15 +2944,8 @@ class RemoteInputPlugin {
     injected_cursor_y_ = 0;
     injected_buttons_ = 0;
     injected_keys_.clear();
-    std::ostringstream trace;
-    trace << "linux remote input injection started session=" << session_id
-          << " edge=" << (edge.empty() ? "-" : edge)
-          << " display=" << (display_id.empty() ? "-" : display_id)
-          << " segment=" << SegmentTrace(segment)
-          << " routes=" << routes.size();
-    TraceRemoteInput(trace.str());
-    EmitDiagnosticForSession(session_id,
-                             "linux remote input x11 injection started");
+    TraceRemoteInput(RemoteInputTraceEvent::kInjectionStarted, routes.size());
+    EmitDiagnostic(RemoteInputTraceEvent::kX11InjectionStarted);
     return true;
 #else
     (void)session_id;
@@ -3010,10 +3050,8 @@ class RemoteInputPlugin {
     portal_thread_ = std::thread([this, session_id] {
       PortalEventLoop(session_id);
     });
-    TraceRemoteInput("linux remote input portal injection started session=" +
-                     session_id);
-    EmitDiagnosticForSession(session_id,
-                             "linux remote input portal injection started");
+    TraceRemoteInput(RemoteInputTraceEvent::kPortalInjectionStarted);
+    EmitDiagnostic(RemoteInputTraceEvent::kPortalInjectionStarted);
     return true;
   }
 
@@ -3692,23 +3730,8 @@ class RemoteInputPlugin {
     int mouse_trace_count = 0;
     int key_trace_count = 0;
 
-    EmitDiagnosticForSession(
-        session_id, "linux remote input capture started edge=" + edge +
-                        " sourceCursorHidden=" +
-                        (show_source_cursor ? "0" : "1") +
-                        " rawMotionDisabled=" +
-                        (raw_motion_disabled ? "1" : "0"));
-    TraceRemoteInput("linux remote input native capture started edge=" + edge +
-                     " rawMotion=" + (raw_motion_enabled ? "1" : "0") +
-                     " rawMotionDisabled=" +
-                     (raw_motion_disabled ? "1" : "0") +
-                     " sourceCursorHidden=" +
-                     (show_source_cursor ? "0" : "1"));
-    if (raw_motion_enabled) {
-      EmitDiagnosticForSession(session_id,
-                               "linux remote input raw motion enabled");
-    }
-
+    EmitDiagnostic(RemoteInputTraceEvent::kCaptureStarted);
+    TraceRemoteInput(RemoteInputTraceEvent::kCaptureStarted);
     while (capture_running_.load()) {
       if (ConsumePauseRequest(session_id, activation_sequence, display, root,
                               &active_route_id, &active_display_id,
@@ -3773,15 +3796,8 @@ class RemoteInputPlugin {
               last_y = center_y;
               ignore_next_motion = true;
             }
-            EmitDiagnosticForSession(
-                session_id,
-                "linux remote input capture active edge=" + active_edge);
-            std::ostringstream trace;
-            trace << "linux remote input native active edge=" << active_edge
-                  << " x=" << x << " y=" << y
-                  << " dx=" << delta_x << " dy=" << delta_y
-                  << " rawMotion=" << (raw_motion_enabled ? 1 : 0);
-            TraceRemoteInput(trace.str());
+            EmitDiagnostic(RemoteInputTraceEvent::kCaptureActive);
+            TraceRemoteInput(RemoteInputTraceEvent::kCaptureActive);
           }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(8));
@@ -3809,18 +3825,10 @@ class RemoteInputPlugin {
               const int payload_x = active_start ? entry_x : last_x;
               const int payload_y = active_start ? entry_y : last_y;
               if (delta_x != 0 || delta_y != 0 || active_start) {
-                if (mouse_trace_count < 60) {
-                  std::ostringstream trace;
-                  trace << "linux remote input native mouse raw seq="
-                        << (sequence + 1)
-                        << " dx=" << delta_x << " dy=" << delta_y
-                        << " rawDx=" << raw_delta_x
-                        << " rawDy=" << raw_delta_y
-                        << " activeStart=" << (active_start ? 1 : 0)
-                        << " edge=" << active_edge
-                        << " payload=" << payload_x << "," << payload_y;
-                  TraceRemoteInput(trace.str());
+                if (ShouldTraceRemoteInput() && mouse_trace_count < 60) {
                   mouse_trace_count++;
+                  TraceRemoteInput(RemoteInputTraceEvent::kEventCaptured,
+                                   mouse_trace_count);
                 }
                 EmitInputEvent(
                     session_id, "mouseMove", ++sequence,
@@ -3860,16 +3868,10 @@ class RemoteInputPlugin {
           const int payload_x = active_start ? entry_x : x;
           const int payload_y = active_start ? entry_y : y;
           if (delta_x != 0 || delta_y != 0 || active_start) {
-            if (mouse_trace_count < 60) {
-              std::ostringstream trace;
-              trace << "linux remote input native mouse motion seq="
-                    << (sequence + 1)
-                    << " dx=" << delta_x << " dy=" << delta_y
-                    << " activeStart=" << (active_start ? 1 : 0)
-                    << " edge=" << active_edge
-                    << " payload=" << payload_x << "," << payload_y;
-              TraceRemoteInput(trace.str());
+            if (ShouldTraceRemoteInput() && mouse_trace_count < 60) {
               mouse_trace_count++;
+              TraceRemoteInput(RemoteInputTraceEvent::kEventCaptured,
+                               mouse_trace_count);
             }
             EmitInputEvent(
                 session_id, "mouseMove", ++sequence,
@@ -3899,14 +3901,10 @@ class RemoteInputPlugin {
             capture_running_.store(false);
             break;
           }
-          if (key_trace_count < 40) {
-            std::ostringstream trace;
-            trace << "linux remote input native key seq=" << (sequence + 1)
-                  << " type="
-                  << (event.type == KeyPress ? "press" : "release")
-                  << " keycode=" << event.xkey.keycode;
-            TraceRemoteInput(trace.str());
+          if (ShouldTraceRemoteInput() && key_trace_count < 40) {
             key_trace_count++;
+            TraceRemoteInput(RemoteInputTraceEvent::kEventCaptured,
+                             key_trace_count);
           }
           EmitInputEvent(
               session_id, "key", ++sequence,
@@ -3970,8 +3968,7 @@ class RemoteInputPlugin {
     }
     if (release_activation_sequence > 0 &&
         activation_sequence > static_cast<uint64_t>(release_activation_sequence)) {
-      EmitDiagnosticForSession(
-          session_id, "linux remote input ignored stale pause");
+      EmitDiagnostic(RemoteInputTraceEvent::kStalePauseIgnored);
       return true;
     }
     if (*keyboard_grabbed) {
@@ -4000,11 +3997,11 @@ class RemoteInputPlugin {
     *pending_active_start = false;
     *capture_buttons = 0;
     *has_last = false;
-    std::ostringstream diagnostic;
-    diagnostic << "linux remote input capture paused edge=" << *active_edge
-               << " releaseSequence=" << release_sequence
-               << " releaseActivationSequence=" << release_activation_sequence;
-    EmitDiagnosticForSession(session_id, diagnostic.str());
+    TraceRemoteInput(RemoteInputTraceEvent::kCapturePaused,
+                     release_sequence > 0
+                         ? static_cast<uint64_t>(release_sequence)
+                         : 0);
+    EmitDiagnostic(RemoteInputTraceEvent::kCapturePaused);
     return true;
   }
 
@@ -4543,20 +4540,7 @@ class RemoteInputPlugin {
     InjectedCursorPositionLocked(&current_x, &current_y, &mask);
     const bool active_start = JsonBool(json, "activeStart");
     if (ShouldTraceRemoteInput()) {
-      std::ostringstream trace;
-      trace << "linux remote input injection move session="
-            << injection_session_id_
-            << " activeStart=" << (active_start ? 1 : 0)
-            << " dx=" << delta_x << " dy=" << delta_y
-            << " current=" << current_x << "," << current_y
-            << " edge=" << (injection_edge_.empty() ? "-" : injection_edge_)
-            << " display="
-            << (injection_display_id_.empty() ? "-" : injection_display_id_)
-            << " segment=" << SegmentTrace(injection_segment_)
-            << " interior="
-            << (injected_cursor_entered_interior_ ? 1 : 0)
-            << " routes=" << injection_routes_.size();
-      TraceRemoteInput(trace.str());
+      TraceRemoteInput(RemoteInputTraceEvent::kInjectedEvent);
     }
     Maybe<InjectionReleaseRoute> routed_release;
     if (!active_start && injected_cursor_entered_interior_) {
@@ -4568,18 +4552,7 @@ class RemoteInputPlugin {
       const std::string session_id = injection_session_id_;
       const auto release_route = routed_release.value();
       if (ShouldTraceRemoteInput()) {
-        std::ostringstream trace;
-        trace << "linux remote input injection release routed session="
-              << session_id << " requested=" << current_x << "," << current_y
-              << "->" << (current_x + delta_x) << ","
-              << (current_y + delta_y)
-              << " edgeUnit=" << release_route.edge_unit
-              << " route=" << release_route.route_id
-              << " sourceDisplay=" << release_route.source_display_id
-              << " sourceEdge=" << release_route.source_edge
-              << " sourceSegment="
-              << SegmentTrace(release_route.source_segment);
-        TraceRemoteInput(trace.str());
+        TraceRemoteInput(RemoteInputTraceEvent::kInjectionReleaseRouted);
       }
       ReleaseInjectedButtonsLocked();
       ReleaseInjectedKeysLocked();
@@ -4599,15 +4572,7 @@ class RemoteInputPlugin {
       const std::string session_id = injection_session_id_;
       const double edge_unit = InjectionEdgeUnit(current_x, current_y);
       if (ShouldTraceRemoteInput()) {
-        std::ostringstream trace;
-        trace << "linux remote input injection release legacy session="
-              << session_id << " requested=" << current_x << "," << current_y
-              << "->" << (current_x + delta_x) << ","
-              << (current_y + delta_y)
-              << " edgeUnit=" << edge_unit
-              << " edge=" << (injection_edge_.empty() ? "-" : injection_edge_)
-              << " segment=" << SegmentTrace(injection_segment_);
-        TraceRemoteInput(trace.str());
+        TraceRemoteInput(RemoteInputTraceEvent::kInjectionReleaseLegacy);
       }
       ReleaseInjectedButtonsLocked();
       ReleaseInjectedKeysLocked();
@@ -4646,18 +4611,7 @@ class RemoteInputPlugin {
     UpdateInjectedCursorInteriorState(json, final_x, final_y);
     XFlush(injection_display_);
     if (ShouldTraceRemoteInput()) {
-      int actual_x = final_x;
-      int actual_y = final_y;
-      QueryPointer(injection_display_, DefaultRootWindow(injection_display_),
-                   &actual_x, &actual_y, &mask);
-      std::ostringstream trace;
-      trace << "linux remote input injection applied session="
-            << injection_session_id_
-            << " requested=" << final_x << "," << final_y
-            << " actual=" << actual_x << "," << actual_y
-            << " interior="
-            << (injected_cursor_entered_interior_ ? 1 : 0);
-      TraceRemoteInput(trace.str());
+      TraceRemoteInput(RemoteInputTraceEvent::kInjectedEvent);
     }
   }
 
@@ -5162,16 +5116,14 @@ class RemoteInputPlugin {
     g_main_context_invoke(nullptr, InvokeMainThreadEvent, event);
   }
 
-  void EmitDiagnosticForSession(const std::string& session_id,
-                                const std::string& message) {
-    if (session_id.empty()) {
+  void EmitDiagnostic(RemoteInputTraceEvent event_name) {
+    if (!ShouldTraceRemoteInput()) {
       return;
     }
     auto* event = new MainThreadEvent();
     event->channel = FL_METHOD_CHANNEL(g_object_ref(channel_));
     event->method = "onDiagnostic";
-    event->session_id = session_id;
-    event->message = message;
+    event->event_type = TraceEventName(event_name);
     g_main_context_invoke(nullptr, InvokeMainThreadEvent, event);
   }
 

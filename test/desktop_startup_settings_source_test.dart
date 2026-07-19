@@ -11,13 +11,18 @@ void main() {
     expect(source, contains("import 'package:whisper/helper/toast.dart';"));
     expect(source, contains('bool _launchAtStartup = false;'));
     expect(source, contains('DesktopStartupManager().isEnabled()'));
-    expect(source, contains('DesktopStartupManager().setEnabled(value)'));
+    expect(
+      source,
+      matches(
+        RegExp(r'DesktopStartupManager\(\)\s*\.setEnabled\(value\)'),
+      ),
+    );
     expect(source, contains('l10n.launchAtStartup'));
     expect(source, contains('l10n.launchAtStartupDesc'));
     expect(source, contains('l10n.launchAtStartupFailed('));
 
     final desktopSection = RegExp(
-      r'if \(isDesktop\(\)\)[\s\S]*?l10n\.launchAtStartup[\s\S]*?CupertinoSwitch',
+      r'if \(_isDesktopPlatform\)[\s\S]*?l10n\.launchAtStartup[\s\S]*?CupertinoSwitch',
     );
     expect(desktopSection.hasMatch(source), isTrue);
   });

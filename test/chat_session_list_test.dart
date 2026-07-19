@@ -8,6 +8,7 @@ DeviceData buildDevice(
   required String name,
   required String host,
   bool around = false,
+  bool auth = false,
   int lastTime = 0,
 }) {
   return DeviceData(
@@ -21,7 +22,7 @@ DeviceData buildDevice(
     isServer: false,
     online: false,
     clipboard: false,
-    auth: false,
+    auth: auth,
     lastTime: lastTime,
     around: around,
   );
@@ -166,6 +167,7 @@ void main() {
             'history',
             name: 'History',
             host: '192.168.1.30',
+            auth: true,
           ),
         ],
         latestMessages: const {},
@@ -176,6 +178,34 @@ void main() {
       expect(sessions[0].preview, 'Connected now');
       expect(sessions[1].preview, 'Available nearby');
       expect(sessions[2].preview, 'No messages yet');
+    });
+
+    test('hides offline untrusted discoveries that have no history', () {
+      final sessions = ChatSessionListBuilder.build(
+        devices: [
+          buildDevice('stale', name: 'Phone', host: '192.168.1.20'),
+          buildDevice(
+            'trusted',
+            name: 'Trusted Phone',
+            host: '192.168.1.21',
+            auth: true,
+          ),
+          buildDevice('history', name: 'Old Phone', host: '192.168.1.22'),
+        ],
+        latestMessages: {
+          'history': buildMessage(
+            'history',
+            content: 'kept history',
+            timestamp: 100,
+          ),
+        },
+        strings: strings,
+      );
+
+      expect(
+        sessions.map((item) => item.device.uid),
+        unorderedEquals(<String>['trusted', 'history']),
+      );
     });
 
     test('filters by device name, host, and preview text', () {

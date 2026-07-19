@@ -1,17 +1,11 @@
 package com.vireen.whisper
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import androidx.core.app.NotificationCompat
 
 /**
  * 播放端媒体外壳:MediaSession + MediaStyle 通知 + mediaPlayback 前台服务。
@@ -20,6 +14,9 @@ import androidx.core.app.NotificationCompat
  */
 class MediaPlaybackService : Service() {
     private var mediaSession: MediaSessionCompat? = null
+    private var registered = false
+    @Volatile
+    private var acceptsDirectCommands = true
 
     // channel 名由 Flutter 侧随启动 Intent 传入已本地化文案,缺省回退英文。
     private var channelName: String = DEFAULT_CHANNEL_NAME
@@ -28,6 +25,9 @@ class MediaPlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        acceptsDirectCommands = true
+        activeInstance = this
+        isRunning = true
         mediaSession = MediaSessionCompat(this, "WhisperMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
@@ -47,13 +47,51 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        acceptSystemCommand(intent)
+        return START_NOT_STICKY
+    }
+
+    @Synchronized
+    private fun acceptSystemCommand(intent: Intent?) {
+        acceptsDirectCommands = true
+        handleCommand(intent)
+    }
+
+    @Synchronized
+    private fun deliverCommand(intent: Intent): Boolean {
+        if (!acceptsDirectCommands) {
+            return false
+        }
+        handleCommand(intent)
+        return true
+    }
+
+    @Synchronized
+    private fun beginStopping() {
+        acceptsDirectCommands = false
+    }
+
+    private fun handleCommand(intent: Intent?) {
         intent?.getStringExtra(EXTRA_CHANNEL_NAME)
             ?.takeIf { it.isNotBlank() }?.let { channelName = it }
         val state = intent?.getStringExtra(EXTRA_STATE) ?: STATE_STOPPED
         if (state == STATE_STOPPED) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            beginStopping()
+            updatePlaybackState(state)
+            registered = false
+            val current = UnifiedForegroundNotification.clearMedia(this)
+            startForeground(
+                NOTIFICATION_ID,
+                current ?: UnifiedForegroundNotification.bootstrap(this),
+            )
+            if (current == null) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                stopForeground(STOP_FOREGROUND_DETACH)
+                UnifiedForegroundNotification.publishCurrent(this)
+            }
             stopSelf()
-            return START_NOT_STICKY
+            return
         }
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Whisper"
         val subtitle = intent?.getStringExtra(EXTRA_SUBTITLE) ?: ""
@@ -63,14 +101,37 @@ class MediaPlaybackService : Service() {
         val disconnectLabel =
             intent?.getStringExtra(EXTRA_DISCONNECT_LABEL) ?: "Disconnect"
         updatePlaybackState(state)
+        val notification = UnifiedForegroundNotification.setMedia(
+            this,
+            state,
+            title,
+            subtitle,
+            canResume,
+            pauseLabel,
+            playLabel,
+            disconnectLabel,
+            channelName,
+            mediaSession?.sessionToken,
+        )
+        registered = true
         startForeground(
             NOTIFICATION_ID,
-            buildNotification(state, title, subtitle, canResume, pauseLabel, playLabel, disconnectLabel),
+            notification,
         )
-        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        beginStopping()
+        isRunning = false
+        if (activeInstance === this) {
+            activeInstance = null
+        }
+        if (registered) {
+            registered = false
+            stopForeground(STOP_FOREGROUND_DETACH)
+            UnifiedForegroundNotification.clearMedia(this)
+            UnifiedForegroundNotification.publishCurrent(this)
+        }
         mediaSession?.release()
         mediaSession = null
         super.onDestroy()
@@ -93,90 +154,29 @@ class MediaPlaybackService : Service() {
         )
     }
 
-    private fun buildNotification(
-        state: String,
-        title: String,
-        subtitle: String,
-        canResume: Boolean,
-        pauseLabel: String,
-        playLabel: String,
-        disconnectLabel: String,
-    ): Notification {
-        ensureChannel()
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(subtitle)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(buildContentIntent())
-            .setSilent(true)
-            .setOnlyAlertOnce(true)
-            .setOngoing(state == STATE_PLAYING || state == STATE_BUFFERING)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-
-        if (state == STATE_PLAYING || state == STATE_BUFFERING) {
-            builder.addAction(
-                android.R.drawable.ic_media_pause, pauseLabel,
-                controlIntent("pause", 1),
-            )
-        } else if (canResume) {
-            builder.addAction(
-                android.R.drawable.ic_media_play, playLabel,
-                controlIntent("resume", 2),
-            )
-        }
-        builder.addAction(
-            android.R.drawable.ic_menu_close_clear_cancel, disconnectLabel,
-            controlIntent("disconnect", 3),
-        )
-        // 紧凑视图索引跟随实际 addAction 数量:有播放/暂停键时 disconnect 在 1,否则只有 0。
-        val hasPlaybackAction =
-            state == STATE_PLAYING || state == STATE_BUFFERING || canResume
-        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
-            .setMediaSession(mediaSession?.sessionToken)
-        if (hasPlaybackAction) {
-            mediaStyle.setShowActionsInCompactView(0, 1)
-        } else {
-            mediaStyle.setShowActionsInCompactView(0)
-        }
-        builder.setStyle(mediaStyle)
-        return builder.build()
-    }
-
-    private fun controlIntent(action: String, requestCode: Int): PendingIntent {
-        val intent = Intent(this, MediaControlReceiver::class.java)
-            .putExtra(EXTRA_CONTROL_ACTION, action)
-        return PendingIntent.getBroadcast(
-            this,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
-    private fun buildContentIntent(): PendingIntent {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            ?: Intent(this, MainActivity::class.java)
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(
-            this, 0, launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW)
-                .apply { setShowBadge(false) },
-        )
-    }
-
     companion object {
-        const val CHANNEL_ID = "whisper.media_playback"
-        const val NOTIFICATION_ID = 10023
+        const val NOTIFICATION_ID = UnifiedForegroundNotification.NOTIFICATION_ID
+        @Volatile
+        var isRunning = false
+            private set
+        @Volatile
+        private var activeInstance: MediaPlaybackService? = null
+
+        fun deliverToRunning(intent: Intent): Boolean {
+            val service = activeInstance ?: return false
+            return service.deliverCommand(intent)
+        }
+
+        fun stopForEngineDetach(context: Context) {
+            val intent = Intent(context, MediaPlaybackService::class.java)
+                .putExtra(EXTRA_STATE, STATE_STOPPED)
+            if (deliverToRunning(intent)) {
+                return
+            }
+            UnifiedForegroundNotification.clearMedia(context)
+            context.stopService(intent)
+            UnifiedForegroundNotification.publishCurrent(context)
+        }
         const val EXTRA_STATE = "state"
         const val EXTRA_TITLE = "title"
         const val EXTRA_SUBTITLE = "subtitle"

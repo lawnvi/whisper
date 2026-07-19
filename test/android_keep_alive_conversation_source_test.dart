@@ -9,12 +9,15 @@ void main() {
     final source = File('lib/page/conversation.dart').readAsStringSync();
 
     expect(source, contains('_buildAndroidKeepAliveNotification()'));
-    expect(source, isNot(contains('androidBackgroundKeepAliveTransferSending')));
-    expect(source,
-        isNot(contains('androidBackgroundKeepAliveTransferReceiving')));
+    expect(
+        source, isNot(contains('androidBackgroundKeepAliveTransferSending')));
+    expect(
+        source, isNot(contains('androidBackgroundKeepAliveTransferReceiving')));
     expect(source, isNot(contains('androidBackgroundKeepAliveAudioSharing')));
     expect(source, isNot(contains('androidBackgroundKeepAliveAudioPlaying')));
     expect(source, contains('androidBackgroundKeepAliveActiveDesc'));
+    expect(source, contains('AndroidKeepAliveReason.activeSession'));
+    expect(source, isNot(contains('stopAndroidBackgroundKeepAlive()')));
 
     final audioHandler = RegExp(
       r'void _handleAudioShareChanged\(\) \{[\s\S]*?\n  \}',

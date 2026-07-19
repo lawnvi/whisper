@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 import 'package:bonsoir/bonsoir.dart';
@@ -10,6 +11,9 @@ import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
+import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -20,10 +24,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:whisper/global.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
+import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/local_network_permission.dart';
+import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
@@ -31,13 +39,25 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
+import 'package:whisper/state/android_system_share_inbox.dart';
+import 'package:whisper/state/android_system_share_router.dart';
 import 'package:whisper/state/chat_session_list.dart';
+import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/state/connection_coordinator.dart';
-import 'package:whisper/state/connect_prompt_registry.dart';
+import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
-import 'package:whisper/state/peer_profile.dart';
+import 'package:whisper/state/discovery_service_presence.dart';
+import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/state/peer_endpoint.dart';
+import 'package:whisper/state/pairing_invite.dart';
+import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/socket/device_identity.dart';
+import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/desktop_quick_send_dialog.dart';
+import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
 import '../helper/notification.dart';
@@ -45,9 +65,43 @@ import '../l10n/app_localizations.dart';
 import '../socket/svrmanager.dart';
 import 'appList.dart';
 import 'conversation.dart';
+import 'pairing_qr.dart';
 import 'settings.dart' as app_settings;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
+
+enum DeviceListOperationKind {
+  temporaryFileCleanup,
+  androidSystemShareCleanup,
+  audioToggle,
+  socketDialog,
+  serverStart,
+}
+
+enum DiscoveryDiagnosticKind {
+  broadcastEvent,
+  discoveryEvent,
+  serviceFound,
+  discoveryStarted,
+  serviceSkipped,
+  serviceResolved,
+  serviceLost,
+}
+
+void _logDeviceListFailure(DeviceListOperationKind kind, Object error) {
+  privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+    PrivacyField.kind: kind,
+    PrivacyField.success: false,
+    PrivacyField.errorType: privacyLog.errorType(error),
+  });
+}
+
+void _logDiscovery(DiscoveryDiagnosticKind kind, {Enum? state}) {
+  privacyLog.event(PrivacyEvent.discoveryState, <PrivacyField, Object>{
+    PrivacyField.kind: kind,
+    if (state != null) PrivacyField.state: state,
+  });
+}
 
 String buildWhisperServiceName(String baseName, String uid) {
   final normalizedUid = uid.trim();
@@ -61,11 +115,18 @@ class _AudioGroupSetupResult {
   const _AudioGroupSetupResult.apply(this.sinks) : shouldStop = false;
 
   const _AudioGroupSetupResult.stop()
-      : shouldStop = true,
-        sinks = const <String, AudioChannelRole>{};
+    : shouldStop = true,
+      sinks = const <String, AudioChannelRole>{};
 
   final bool shouldStop;
   final Map<String, AudioChannelRole> sinks;
+}
+
+class _AndroidSystemShareTarget {
+  const _AndroidSystemShareTarget({required this.device, required this.online});
+
+  final DeviceData device;
+  final bool online;
 }
 
 class DeviceListScreen extends StatefulWidget {
@@ -83,9 +144,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
   static const double _desktopToolbarGap = 10;
-  static const double _desktopToolbarToolGroupWidth = 140;
-  static const Duration _desktopToolbarAnimationDuration =
-      Duration(milliseconds: 220);
+  static const double _desktopToolbarToolGroupWidth = 174;
+  static const Duration _desktopToolbarAnimationDuration = Duration(
+    milliseconds: 220,
+  );
   static const Curve _desktopToolbarAnimationCurve = Curves.easeOutCubic;
 
   final db = LocalDatabase();
@@ -97,7 +159,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
       RemoteInputCoordinator.shared;
   final RemoteInputWorkspaceCoordinator _remoteInputWorkspaceCoordinator =
       RemoteInputWorkspaceCoordinator.shared;
-  final ConnectPromptRegistry _connectPromptRegistry = ConnectPromptRegistry();
+  final AndroidSystemShareInbox _androidSystemShareInbox =
+      AndroidSystemShareInbox.shared;
+  final DesktopQuickSendInbox _desktopQuickSendInbox =
+      DesktopQuickSendInbox.shared;
+  late final AndroidSystemShareRouter _androidSystemShareRouter;
+  late final DesktopQuickSendHotKeyController _desktopQuickSendHotKey;
   DeviceData? device;
   List<DeviceData> devices = [];
   BonsoirBroadcast? _broadcast;
@@ -113,12 +180,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final DiscoveryResolveLimiter _resolveLimiter = DiscoveryResolveLimiter(
     minimumInterval: const Duration(seconds: 5),
   );
+  final DiscoveryServicePresenceTracker _discoveryPresence =
+      DiscoveryServicePresenceTracker();
   static var listenApps = {};
   var _clipboardText = "";
+  var _clipboardSyncGeneration = 0;
   final TextEditingController _desktopSearchController =
       TextEditingController();
   final FocusNode _desktopSearchFocusNode = FocusNode();
   final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
+  final ConnectionAttemptTracker _connectionAttempts =
+      ConnectionAttemptTracker();
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   bool _isDesktopSearchExpanded = false;
@@ -126,6 +198,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
   String? _pendingAutoConnectPeerId;
   Future<void>? _desktopShutdownFuture;
   bool _isDestroyingWindow = false;
+  bool _androidSystemShareTargetsLoaded = false;
+  bool _androidSystemShareSheetVisible = false;
+  bool _androidSystemSharePresentationScheduled = false;
+  bool _androidSystemShareRetrying = false;
+  final Set<String> _deferredAndroidSystemShareEventIds = <String>{};
+  bool _desktopQuickSendTargetsLoaded = false;
+  bool _desktopQuickSendDialogVisible = false;
+  bool _desktopQuickSendPresentationScheduled = false;
+  String? _lastPresentedDesktopQuickSendDraftId;
+  PairingQrDialogController? _activePairingQrController;
 
   BorderRadius get _desktopToolbarPillRadius => BorderRadius.circular(14);
 
@@ -148,10 +230,51 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _remoteInputWorkspaceCoordinator.addListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
+    if (Platform.isAndroid) {
+      _androidSystemShareRouter = AndroidSystemShareRouter(
+        inbox: _androidSystemShareInbox,
+        isConnected: socketManager.isConnectedTo,
+        trustedIdentityHashFor: _trustedDeviceIdentityHash,
+        sendText: _sendAndroidSystemShareText,
+        sendItem: _sendAndroidSystemShareItem,
+      );
+      _androidSystemShareInbox.addListener(_handleAndroidSystemShareChanged);
+      unawaited(_initializeAndroidSystemShare());
+    }
+    if (isDesktop()) {
+      _desktopQuickSendHotKey = DesktopQuickSendHotKeyController(
+        inbox: _desktopQuickSendInbox,
+      );
+      unawaited(
+        _desktopQuickSendInbox.setClipboardCaptureHandler((nativeEntryId) {
+          return _desktopQuickSendHotKey.captureClipboard(
+            revealWindow: _revealDesktopQuickSendWindow,
+            nativeEntryId: nativeEntryId,
+          );
+        }),
+      );
+      _desktopQuickSendInbox.addListener(_handleDesktopQuickSendChanged);
+      unawaited(_initializeDesktopQuickSend());
+    }
     clipboardWatcher.addListener(this);
     // start watch
     clipboardWatcher.start();
     super.initState();
+  }
+
+  Future<void> _initializeAndroidSystemShare() async {
+    try {
+      await db.discardRecoverableOutgoingTransfersWithPathPrefix(
+        'content://$androidSystemShareFileProviderAuthority/'
+        'android_system_shares/',
+      );
+    } on Object catch (error) {
+      _logDeviceListFailure(
+        DeviceListOperationKind.androidSystemShareCleanup,
+        error,
+      );
+    }
+    await _androidSystemShareInbox.initialize();
   }
 
   @override
@@ -169,26 +292,24 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     if (Platform.isAndroid) {
-      if (await Permission.manageExternalStorage.isDenied) {
-        await Permission.manageExternalStorage.request();
-      }
+      // Pairing alerts and the LAN listener foreground service both depend on
+      // notification permission. Ask before opening external storage settings.
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
       initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
-    } else {
-      if (await Permission.location.isDenied) {
-        await Permission.location.request();
-      }
+    } else if (Platform.isIOS) {
+      await LocalNetworkPermission().ensureGranted();
     }
 
     var permissions = [Permission.storage];
 
     for (var item in permissions) {
-      logger.i("permission status: ${await item.status}");
       if (await item.isDenied) {
-        logger.i("permission request: ${await item.isRestricted}");
         await item.request();
       }
     }
@@ -202,13 +323,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @pragma('vm:entry-point')
   static void _callback(NotificationEvent evt) {
-    // send data to ui thread if necessary.
-    // try to send the event to ui
-    print("send evt to ui: $evt");
     var soc = WsSvrManager();
-    if (soc.isConnected &&
+    final allowed =
+        soc.isConnected &&
         filterNotification(evt) &&
-        listenApps.containsKey(evt.packageName)) {
+        listenApps.containsKey(evt.packageName);
+    privacyLog.event(PrivacyEvent.notificationForwarded, <PrivacyField, Object>{
+      PrivacyField.allowed: allowed,
+    });
+    if (allowed) {
       soc.sendNotification(evt.packageName, evt.title, evt.text);
     }
   }
@@ -221,8 +344,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _setDesktopWindow() async {
     if (isMobile()) {
-      logger.i(
-          "mobile clear file picker cache res: ${await FilePicker.platform.clearTemporaryFiles()}");
+      final cleared = await FilePicker.platform.clearTemporaryFiles();
+      privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+        PrivacyField.kind: DeviceListOperationKind.temporaryFileCleanup,
+        PrivacyField.success: cleared ?? false,
+      });
       return;
     }
     await windowManager.setPreventClose(true);
@@ -233,45 +359,55 @@ class _DeviceListScreen extends State<DeviceListScreen>
     Menu menu = Menu(
       items: [
         MenuItem(
-            key: 'show_window',
-            label: AppLocalizations.of(context)?.menuShow ?? "显示",
-            onClick: (MenuItem item) {
-              windowManager.show();
-            }),
+          key: 'show_window',
+          label: AppLocalizations.of(context)?.menuShow ?? "显示",
+          onClick: (MenuItem item) {
+            windowManager.show();
+          },
+        ),
         MenuItem(
-            key: 'hide_window',
-            label: AppLocalizations.of(context)?.menuHide ?? "隐藏",
-            onClick: (MenuItem item) {
-              windowManager.hide();
-            }),
+          key: 'hide_window',
+          label: AppLocalizations.of(context)?.menuHide ?? "隐藏",
+          onClick: (MenuItem item) {
+            windowManager.hide();
+          },
+        ),
         MenuItem(
-            key: 'clipboard',
-            label: AppLocalizations.of(context)?.menuClipboard ?? "发送剪切板",
-            onClick: (MenuItem item) {
-              socketManager.sendMessage("", clipboard: true);
-            }),
+          key: 'clipboard',
+          label: AppLocalizations.of(context)?.menuClipboard ?? "发送剪切板",
+          onClick: (MenuItem item) {
+            unawaited(
+              _desktopQuickSendHotKey.captureClipboard(
+                revealWindow: _revealDesktopQuickSendWindow,
+              ),
+            );
+          },
+        ),
         MenuItem(
-            key: 'pick_file',
-            label: AppLocalizations.of(context)?.menuSendFile ?? "发送文件",
-            onClick: (MenuItem item) async {
-              if (!socketManager.isConnected) {
-                return;
-              }
-              FilePickerResult? result =
-                  await FilePicker.platform.pickFiles(allowMultiple: true);
-              if (result != null) {
-                for (var item in result.files) {
-                  await socketManager.sendFile(item.path ?? "");
-                }
-              }
-            }),
+          key: 'pick_file',
+          label: AppLocalizations.of(context)?.menuSendFile ?? "发送文件",
+          onClick: (MenuItem item) async {
+            FilePickerResult? result = await FilePicker.platform.pickFiles(
+              allowMultiple: true,
+            );
+            if (result != null) {
+              await _desktopQuickSendInbox.addSystemShare(
+                filePaths: result.files
+                    .map((item) => item.path ?? '')
+                    .where((path) => path.isNotEmpty),
+              );
+              await _revealDesktopQuickSendWindow();
+            }
+          },
+        ),
         MenuItem.separator(),
         MenuItem(
-            key: 'exit_app',
-            label: AppLocalizations.of(context)?.exit ?? '退出',
-            onClick: (MenuItem menuItem) async {
-              await _shutdownAndDestroyWindow();
-            }),
+          key: 'exit_app',
+          label: AppLocalizations.of(context)?.exit ?? '退出',
+          onClick: (MenuItem menuItem) async {
+            await _shutdownAndDestroyWindow();
+          },
+        ),
       ],
     );
     await trayManager.setContextMenu(menu);
@@ -305,7 +441,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
   //
   //   // handle system tray event
   //   systemTray.registerSystemTrayEventHandler((eventName) {
-  //     debugPrint("eventName: $eventName");
   //     if (eventName == kSystemTrayEventClick) {
   //       Platform.isWindows ? appWindow.show() : systemTray.popUpContextMenu();
   //     } else if (eventName == kSystemTrayEventRightClick) {
@@ -317,8 +452,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   @override
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
-    logger.i("dispose page");
     _broadcastRestartTimer?.cancel();
+    _connectionAttempts.cancelAll();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
     trayManager.removeListener(this);
@@ -334,6 +469,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _remoteInputWorkspaceCoordinator.removeListener(
       _handleDesktopRemoteInputWorkspaceChanged,
     );
+    if (Platform.isAndroid) {
+      _androidSystemShareInbox.removeListener(_handleAndroidSystemShareChanged);
+    }
+    if (isDesktop()) {
+      _desktopQuickSendInbox.removeListener(_handleDesktopQuickSendChanged);
+      unawaited(_desktopQuickSendInbox.setClipboardCaptureHandler(null));
+      unawaited(_desktopQuickSendHotKey.unregister());
+    }
     _desktopSearchController.dispose();
     _desktopSearchFocusNode.dispose();
     // stop watch
@@ -366,6 +509,715 @@ class _DeviceListScreen extends State<DeviceListScreen>
   void _handleDesktopRemoteInputWorkspaceChanged() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _initializeDesktopQuickSend() async {
+    await _desktopQuickSendInbox.initialize();
+    final shouldPresent = _desktopQuickSendInbox.takePresentationRequest();
+    if (!shouldPresent && _desktopQuickSendInbox.hasPendingDrafts) {
+      _lastPresentedDesktopQuickSendDraftId =
+          _desktopQuickSendInbox.drafts.last.id;
+    }
+    _showPendingDesktopQuickSendRejection();
+    final registered = await _desktopQuickSendHotKey.register(
+      revealWindow: _revealDesktopQuickSendWindow,
+    );
+    if (mounted) {
+      if (!registered) {
+        showAppToast(
+          AppLocalizations.of(context)!.desktopQuickSendShortcutUnavailable,
+        );
+      }
+      _scheduleDesktopQuickSendPresentation();
+    }
+  }
+
+  Future<void> _revealDesktopQuickSendWindow() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  void _handleDesktopQuickSendChanged() {
+    if (!mounted) {
+      return;
+    }
+    _showPendingDesktopQuickSendRejection();
+    setState(() {});
+    _scheduleDesktopQuickSendPresentation();
+  }
+
+  void _showPendingDesktopQuickSendRejection() {
+    if (!mounted) {
+      return;
+    }
+    final rejection = _desktopQuickSendInbox.takePendingRejection();
+    if (rejection == null) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final message = switch (rejection.reason) {
+      DesktopQuickSendRejectionReason.draftLimitExceeded =>
+        l10n.desktopQuickSendDraftLimit,
+      DesktopQuickSendRejectionReason.fileLimitExceeded =>
+        l10n.desktopQuickSendFileLimit,
+      DesktopQuickSendRejectionReason.textLimitExceeded =>
+        l10n.desktopQuickSendTextLimit,
+      DesktopQuickSendRejectionReason.pathLimitExceeded ||
+      DesktopQuickSendRejectionReason.invalidPath =>
+        l10n.desktopQuickSendInvalidPath,
+      DesktopQuickSendRejectionReason.clipboardSnapshotUnavailable =>
+        l10n.desktopQuickSendClipboardSnapshotUnavailable,
+    };
+    showAppToast(message);
+    unawaited(_desktopQuickSendInbox.acknowledgePresentedRejection());
+  }
+
+  void _scheduleDesktopQuickSendPresentation({bool force = false}) {
+    if (!isDesktop() ||
+        !mounted ||
+        !_desktopQuickSendTargetsLoaded ||
+        _desktopQuickSendPresentationScheduled ||
+        _desktopQuickSendDialogVisible ||
+        _desktopQuickSendInbox.isSending ||
+        !_desktopQuickSendInbox.hasPendingDrafts) {
+      return;
+    }
+    final latestId = _desktopQuickSendInbox.drafts.last.id;
+    if (!force && latestId == _lastPresentedDesktopQuickSendDraftId) {
+      return;
+    }
+    _desktopQuickSendPresentationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _desktopQuickSendPresentationScheduled = false;
+      if (mounted) {
+        unawaited(_presentDesktopQuickSend(force: force));
+      }
+    });
+  }
+
+  bool _isTrustedDevice(DeviceData candidate) {
+    return ConnectionCoordinator().peer(candidate.uid)?.locallyTrusted ??
+        (candidate.auth && candidate.identityPublicKey.isNotEmpty);
+  }
+
+  String? _trustedDeviceIdentityHash(String peerId) {
+    for (final candidate in devices) {
+      if (candidate.uid != peerId ||
+          !candidate.auth ||
+          candidate.identityPublicKey.isEmpty ||
+          !_isTrustedDevice(candidate)) {
+        continue;
+      }
+      try {
+        return identityPublicKeyHash(candidate.identityPublicKey);
+      } on Object {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  List<DesktopQuickSendPeer> _trustedDesktopQuickSendPeers() {
+    final peers = <DesktopQuickSendPeer>[];
+    for (final candidate in devices) {
+      if (_trustedDeviceIdentityHash(candidate.uid) == null) {
+        continue;
+      }
+      peers.add(
+        DesktopQuickSendPeer(
+          id: candidate.uid,
+          name: candidate.name,
+          isConnected: socketManager.isConnectedTo(candidate.uid),
+        ),
+      );
+    }
+    peers.sort((left, right) {
+      if (left.isConnected != right.isConnected) {
+        return left.isConnected ? -1 : 1;
+      }
+      return left.name.compareTo(right.name);
+    });
+    return peers;
+  }
+
+  Future<void> _presentDesktopQuickSend({bool force = false}) async {
+    if (!mounted ||
+        _desktopQuickSendDialogVisible ||
+        _desktopQuickSendInbox.isSending ||
+        !_desktopQuickSendInbox.hasPendingDrafts) {
+      return;
+    }
+    final latestId = _desktopQuickSendInbox.drafts.last.id;
+    if (!force && latestId == _lastPresentedDesktopQuickSendDraftId) {
+      return;
+    }
+    _lastPresentedDesktopQuickSendDraftId = latestId;
+    _desktopQuickSendDialogVisible = true;
+    String? peerId;
+    try {
+      peerId = await showDesktopQuickSendDialog(
+        context,
+        drafts: _desktopQuickSendInbox.drafts,
+        peers: _trustedDesktopQuickSendPeers(),
+        initialPeerId:
+            _desktopQuickSendInbox.drafts.first.preferredTargetPeerId ??
+            _selectedDesktopPeerId,
+      );
+    } finally {
+      _desktopQuickSendDialogVisible = false;
+    }
+    if (!mounted || peerId == null) {
+      _scheduleDesktopQuickSendPresentation();
+      return;
+    }
+    await _sendDesktopQuickSend(peerId);
+    _scheduleDesktopQuickSendPresentation();
+  }
+
+  Future<void> _sendDesktopQuickSend(String peerId) async {
+    final l10n = AppLocalizations.of(context)!;
+    final target = _trustedDesktopQuickSendPeers()
+        .where((candidate) => candidate.id == peerId)
+        .firstOrNull;
+    if (target == null || !target.isConnected) {
+      showAppToast(l10n.desktopQuickSendFailedRetained);
+      return;
+    }
+    try {
+      final result = await _desktopQuickSendInbox.sendPendingTo(
+        peerId: peerId,
+        trustedIdentityHashFor: _trustedDeviceIdentityHash,
+        sendText: (targetPeerId, draftId, pinnedHash, text) =>
+            socketManager.sendQuickTextToAcknowledged(
+              targetPeerId,
+              text,
+              source: 'desktop-quick-send',
+              intentId: jsonEncode(<String>[draftId, pinnedHash]),
+              expectedPublicKeyHash: pinnedHash,
+            ),
+        sendFile: _sendDesktopQuickSendFile,
+      );
+      if (!mounted) {
+        return;
+      }
+      final message = switch (result.outcome) {
+        DesktopQuickSendOutcome.completed => l10n.desktopQuickSendSent,
+        DesktopQuickSendOutcome.targetConflict =>
+          l10n.desktopQuickSendTargetConflict,
+        DesktopQuickSendOutcome.targetIdentityInvalid =>
+          l10n.desktopQuickSendTargetNeedsReselection,
+        DesktopQuickSendOutcome.retained => l10n.desktopQuickSendFailedRetained,
+      };
+      showAppToast(message);
+    } on Object {
+      if (mounted) {
+        showAppToast(l10n.desktopQuickSendFailedRetained);
+      }
+    }
+  }
+
+  Future<bool> _sendDesktopQuickSendFile(
+    String peerId,
+    String fileIntentId,
+    String pinnedPublicKeyHash,
+    String path,
+  ) => socketManager.sendQuickFileToDurably(
+    peerId,
+    path,
+    source: 'desktop-quick-send-file',
+    intentId: fileIntentId,
+    expectedPublicKeyHash: pinnedPublicKeyHash,
+  );
+
+  void _handleAndroidSystemShareChanged() {
+    if (mounted) {
+      AndroidSystemShareFailure? latestFailure;
+      while (true) {
+        final failure = _androidSystemShareInbox.takeFailure();
+        if (failure == null) {
+          break;
+        }
+        latestFailure = failure;
+      }
+      if (latestFailure != null) {
+        final failure = latestFailure;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          final l10n = AppLocalizations.of(context)!;
+          _showAndroidSystemShareSnack(
+            failure.reason == AndroidSystemShareFailureReason.queueFull
+                ? l10n.androidSystemShareQueueFull
+                : l10n.androidSystemShareRejected,
+          );
+        });
+      }
+      final pendingIds = _androidSystemShareInbox.pendingEvents
+          .map((event) => event.id)
+          .toSet();
+      _deferredAndroidSystemShareEventIds.retainAll(pendingIds);
+      setState(() {});
+      _scheduleAndroidSystemSharePresentation();
+    }
+  }
+
+  Future<bool> _sendAndroidSystemShareItem(
+    String peerId,
+    AndroidSystemShareEvent event,
+    AndroidSystemShareItem item,
+  ) async {
+    final pinnedHash = _androidSystemShareInbox
+        .event(event.id)
+        ?.targetPublicKeyHash;
+    if (pinnedHash == null ||
+        pinnedHash.isEmpty ||
+        _trustedDeviceIdentityHash(peerId) != pinnedHash) {
+      return false;
+    }
+    var size = item.size;
+    var name = item.displayName;
+    var lastModified = event.receivedAt;
+    if (size == null) {
+      final metadata = await AndroidDocumentPicker.shared.metadata(item.uri);
+      if (metadata == null || metadata.size < 0) {
+        return false;
+      }
+      size = metadata.size;
+      if (name.isEmpty) {
+        name = metadata.name;
+      }
+      if (metadata.lastModified > 0) {
+        lastModified = metadata.lastModified;
+      }
+    }
+    return socketManager.sendQuickPickedFileToDurably(
+      peerId,
+      PickedTransferFile(
+        name: name,
+        size: size,
+        lastModified: lastModified,
+        androidContentUri: item.uri,
+      ),
+      source: 'android-system-share-file',
+      intentId: jsonEncode(<String>[event.id, item.uri, pinnedHash]),
+      expectedPublicKeyHash: pinnedHash,
+    );
+  }
+
+  Future<bool> _sendAndroidSystemShareText(
+    String peerId,
+    AndroidSystemShareEvent event,
+  ) async {
+    final pinnedHash = _androidSystemShareInbox
+        .event(event.id)
+        ?.targetPublicKeyHash;
+    if (pinnedHash == null ||
+        pinnedHash.isEmpty ||
+        _trustedDeviceIdentityHash(peerId) != pinnedHash) {
+      return false;
+    }
+    return socketManager.sendQuickTextToAcknowledged(
+      peerId,
+      event.text,
+      source: 'android-system-share',
+      intentId: jsonEncode(<String>[event.id, pinnedHash]),
+      expectedPublicKeyHash: pinnedHash,
+    );
+  }
+
+  void _scheduleAndroidSystemSharePresentation() {
+    if (!Platform.isAndroid ||
+        !mounted ||
+        !_androidSystemShareTargetsLoaded ||
+        _androidSystemSharePresentationScheduled) {
+      return;
+    }
+    _androidSystemSharePresentationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _androidSystemSharePresentationScheduled = false;
+      if (mounted) {
+        unawaited(_presentNextAndroidSystemShare());
+      }
+    });
+  }
+
+  Future<void> _presentNextAndroidSystemShare() async {
+    if (!mounted || _androidSystemShareSheetVisible) {
+      return;
+    }
+    AndroidSystemShareEvent? event;
+    for (final candidate in _androidSystemShareInbox.pendingEvents) {
+      if (!_deferredAndroidSystemShareEventIds.contains(candidate.id) &&
+          _androidSystemShareRouter.targetPeerIdFor(candidate.id) == null) {
+        event = candidate;
+        break;
+      }
+    }
+    if (event == null) {
+      return;
+    }
+    await _presentAndroidSystemShare(event);
+  }
+
+  Future<void> _presentAndroidSystemShare(AndroidSystemShareEvent event) async {
+    if (!mounted ||
+        _androidSystemShareSheetVisible ||
+        _androidSystemShareInbox.event(event.id) == null) {
+      return;
+    }
+    _androidSystemShareSheetVisible = true;
+    String? targetPeerId;
+    try {
+      targetPeerId = await _showAndroidSystemShareTargetSheet(event);
+    } finally {
+      _androidSystemShareSheetVisible = false;
+    }
+    if (!mounted || _androidSystemShareInbox.event(event.id) == null) {
+      return;
+    }
+    if (targetPeerId == null) {
+      _deferredAndroidSystemShareEventIds.add(event.id);
+      _showAndroidSystemShareSnack(
+        AppLocalizations.of(context)!.androidSystemShareStillPending,
+        actionLabel: AppLocalizations.of(
+          context,
+        )!.androidSystemShareChooseAction,
+        onAction: () {
+          _deferredAndroidSystemShareEventIds.remove(event.id);
+          unawaited(_presentAndroidSystemShare(event));
+        },
+      );
+      _scheduleAndroidSystemSharePresentation();
+      return;
+    }
+    _deferredAndroidSystemShareEventIds.remove(event.id);
+    final targetName = _androidSystemShareTargetName(targetPeerId);
+    if (socketManager.isConnectedTo(targetPeerId)) {
+      _showAndroidSystemShareSnack(
+        AppLocalizations.of(context)!.androidSystemShareSendingTo(targetName),
+      );
+    }
+    final result = await _androidSystemShareRouter.sendTo(
+      event.id,
+      targetPeerId,
+    );
+    if (mounted) {
+      _handleAndroidSystemShareRouteResult(result, targetName: targetName);
+      _scheduleAndroidSystemSharePresentation();
+    }
+  }
+
+  Future<String?> _showAndroidSystemShareTargetSheet(
+    AndroidSystemShareEvent event,
+  ) {
+    final targets = _trustedAndroidSystemShareTargets();
+    final onlineTargets = targets.where((target) => target.online).toList();
+    String? selectedPeerId = onlineTargets.length == 1
+        ? onlineTargets.single.device.uid
+        : null;
+    final l10n = AppLocalizations.of(context)!;
+    final normalizedText = event.text.trim();
+    final textPreview = normalizedText.length <= 500
+        ? normalizedText
+        : normalizedText.substring(0, 500);
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    l10n.androidSystemShareTitle,
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.androidSystemShareChooseTrustedDevice,
+                    style: Theme.of(sheetContext).textTheme.bodyMedium
+                        ?.copyWith(
+                          color: sheetContext.whisperPalette.textMuted,
+                        ),
+                  ),
+                  if (textPreview.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.text_snippet_outlined, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            textPreview,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (event.items.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    ...event.items
+                        .take(3)
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.insert_drive_file_outlined,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    item.displayName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    if (event.items.length > 3)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          l10n.androidSystemShareMoreFiles(
+                            event.items.length - 3,
+                          ),
+                          style: Theme.of(sheetContext).textTheme.bodySmall
+                              ?.copyWith(
+                                color: sheetContext.whisperPalette.textMuted,
+                              ),
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: targets.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Text(
+                              l10n.androidSystemShareNoTrustedDevices,
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: targets.length,
+                            itemBuilder: (context, index) {
+                              final target = targets[index];
+                              final selected =
+                                  selectedPeerId == target.device.uid;
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  selected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  color: selected
+                                      ? Theme.of(
+                                          sheetContext,
+                                        ).colorScheme.primary
+                                      : null,
+                                ),
+                                title: Text(
+                                  target.device.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  target.online
+                                      ? l10n.androidSystemShareOnline
+                                      : l10n.androidSystemShareOffline,
+                                ),
+                                trailing: Icon(
+                                  target.online
+                                      ? Icons.wifi_rounded
+                                      : Icons.wifi_off_rounded,
+                                  size: 20,
+                                  color: target.online
+                                      ? sheetContext.whisperPalette.trusted
+                                      : sheetContext.whisperPalette.textMuted,
+                                ),
+                                onTap: () => setSheetState(
+                                  () => selectedPeerId = target.device.uid,
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: Text(targets.isEmpty ? l10n.close : l10n.cancel),
+                      ),
+                      if (targets.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: selectedPeerId == null
+                              ? null
+                              : () => Navigator.of(
+                                  sheetContext,
+                                ).pop(selectedPeerId),
+                          icon: const Icon(Icons.send_rounded, size: 18),
+                          label: Text(l10n.androidSystemShareConfirmTarget),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<_AndroidSystemShareTarget> _trustedAndroidSystemShareTargets() {
+    final targetsById = <String, _AndroidSystemShareTarget>{};
+    for (final candidate in devices) {
+      if (_trustedDeviceIdentityHash(candidate.uid) == null) {
+        continue;
+      }
+      targetsById[candidate.uid] = _AndroidSystemShareTarget(
+        device: candidate,
+        online: socketManager.isConnectedTo(candidate.uid),
+      );
+    }
+    final targets = targetsById.values.toList(growable: false);
+    targets.sort((left, right) {
+      if (left.online != right.online) {
+        return left.online ? -1 : 1;
+      }
+      return left.device.name.compareTo(right.device.name);
+    });
+    return targets;
+  }
+
+  String _androidSystemShareTargetName(String peerId) {
+    for (final candidate in devices) {
+      if (candidate.uid == peerId) {
+        return candidate.name;
+      }
+    }
+    return peerId;
+  }
+
+  void _showAndroidSystemShareSnack(
+    String message, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: actionLabel == null || onAction == null
+              ? null
+              : SnackBarAction(label: actionLabel, onPressed: onAction),
+        ),
+      );
+  }
+
+  void _handleAndroidSystemShareRouteResult(
+    AndroidSystemShareRouteResult result, {
+    required String targetName,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (result.outcome) {
+      case AndroidSystemShareRouteOutcome.completed:
+        _showAndroidSystemShareSnack(l10n.androidSystemShareSentTo(targetName));
+        break;
+      case AndroidSystemShareRouteOutcome.waitingForConnection:
+        _showAndroidSystemShareSnack(
+          l10n.androidSystemShareWaitingForDevice(targetName),
+        );
+        break;
+      case AndroidSystemShareRouteOutcome.failed ||
+          AndroidSystemShareRouteOutcome.targetConflict:
+        _showAndroidSystemShareSnack(
+          l10n.androidSystemShareFailedRetained,
+          actionLabel: l10n.retry,
+          onAction: () => unawaited(_retryAndroidSystemShare(result.eventId)),
+        );
+        break;
+      case AndroidSystemShareRouteOutcome.targetIdentityInvalid:
+        _deferredAndroidSystemShareEventIds.add(result.eventId);
+        _showAndroidSystemShareSnack(
+          l10n.androidSystemShareTargetNeedsReselection,
+          actionLabel: l10n.androidSystemShareChooseAction,
+          onAction: () {
+            _deferredAndroidSystemShareEventIds.remove(result.eventId);
+            final event = _androidSystemShareInbox.event(result.eventId);
+            if (event != null) {
+              unawaited(_presentAndroidSystemShare(event));
+            }
+          },
+        );
+        break;
+      case AndroidSystemShareRouteOutcome.missingEvent:
+        break;
+    }
+  }
+
+  Future<void> _retryAndroidSystemShare(String eventId) async {
+    if (!mounted || _androidSystemShareInbox.event(eventId) == null) {
+      return;
+    }
+    final peerId = _androidSystemShareRouter.targetPeerIdFor(eventId);
+    if (peerId == null) {
+      _scheduleAndroidSystemSharePresentation();
+      return;
+    }
+    final targetName = _androidSystemShareTargetName(peerId);
+    if (socketManager.isConnectedTo(peerId)) {
+      _showAndroidSystemShareSnack(
+        AppLocalizations.of(context)!.androidSystemShareSendingTo(targetName),
+      );
+    }
+    final result = await _androidSystemShareRouter.retry(eventId);
+    if (mounted) {
+      _handleAndroidSystemShareRouteResult(result, targetName: targetName);
+    }
+  }
+
+  Future<void> _retryConnectedAndroidSystemShares() async {
+    if (!Platform.isAndroid || _androidSystemShareRetrying) {
+      return;
+    }
+    _androidSystemShareRetrying = true;
+    try {
+      final results = await _androidSystemShareRouter.retryConnected();
+      if (!mounted) {
+        return;
+      }
+      for (final result in results) {
+        _handleAndroidSystemShareRouteResult(
+          result,
+          targetName: _androidSystemShareTargetName(result.peerId),
+        );
+      }
+    } finally {
+      _androidSystemShareRetrying = false;
     }
   }
 
@@ -403,8 +1255,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return _resolveLimiter.shouldResolve(_serviceResolveKey(service));
   }
 
-  Future<void> _stopSocketServer() {
-    return socketManager.closeGracefully(
+  Future<void> _stopSocketServer() async {
+    await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+      AndroidKeepAliveReason.lanServer,
+      false,
+    );
+    await socketManager.closeGracefully(
       closeServer: true,
       forceServerClose: true,
     );
@@ -436,10 +1292,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
-    final trustedPeerIds = await db.fetchTrustedPeerIds();
-    final autoConnectEnabled = await LocalSetting().autoConnectEnabled();
-
-    logger.i("wifi ip: $wifiIP");
 
     if (wifiIP == "127.0.0.1") {
       _isBroadcasting = false;
@@ -457,8 +1309,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
         'name': device?.name ?? await deviceName(),
         'platform': device?.platform ?? "未知",
         'uid': device?.uid ?? "",
-        'trustedPeers': trustedPeerIds.join(','),
-        'autoConnect': autoConnectEnabled ? '1' : '0',
       },
     );
 
@@ -468,7 +1318,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     _broadcastSubscription?.cancel();
     _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
-      debugPrint('Broadcast event : ${event.type}');
+      _logDiscovery(DiscoveryDiagnosticKind.broadcastEvent, state: event.type);
     });
 
     await _broadcast!.start();
@@ -490,68 +1340,97 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // This is the type of service we're looking for :
 
     // Once defined, we can start the discovery :
-    _discovery = BonsoirDiscovery(type: serviceType, printLogs: true);
+    _discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
     await _discovery!.ready;
 
     // If you want to listen to the discovery :
     _discoverySubscription?.cancel();
     _discoverySubscription = _discovery?.eventStream!.listen((event) async {
-      debugPrint('Discovery event : ${event.type}');
+      _logDiscovery(DiscoveryDiagnosticKind.discoveryEvent, state: event.type);
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
       if (service != null) {
         switch (event.type) {
           case BonsoirDiscoveryEventType.discoveryServiceFound:
-            logger.i(
-                "event type: ${event.type}, service name: $serviceName ${service.name}");
+            _logDiscovery(DiscoveryDiagnosticKind.serviceFound);
             if (service.name.startsWith(serviceName) &&
                 _shouldResolveService(service)) {
               event.service!.resolve(_discovery!.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
-            logger.i(
-                "event type: ${event.type}, service name: ${service.name} start");
+            _logDiscovery(DiscoveryDiagnosticKind.discoveryStarted);
             break;
           case BonsoirDiscoveryEventType.discoveryServiceResolved ||
-                BonsoirDiscoveryEventType.discoveryServiceLost:
+              BonsoirDiscoveryEventType.discoveryServiceLost:
             final svr = service;
-            if (!svr.attributes.containsKey('uid')) {
-              logger.i(
-                  "event type: ${event.type}, service name: ${service.name} not contains uid skip. ${svr.toString()}");
-              return;
-            }
-            var isLost =
+            final isLost =
                 event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+            final serviceKey = _serviceResolveKey(svr);
+            final advertisedUid = svr.attributes['uid'];
+            final String uid;
+            if (isLost) {
+              _resolveLimiter.clear(serviceKey);
+              final loss = _discoveryPresence.lost(
+                serviceKey: serviceKey,
+                peerIdHint: advertisedUid,
+              );
+              if (loss == null) {
+                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
+                return;
+              }
+              if (loss.stillDiscovered) {
+                return;
+              }
+              uid = loss.peerId;
+            } else {
+              if (advertisedUid == null || advertisedUid.isEmpty) {
+                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
+                return;
+              }
+              uid = advertisedUid;
+              _discoveryPresence.resolved(serviceKey: serviceKey, peerId: uid);
+            }
             final host = svr.attributes["host"];
             final port =
                 int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
-            final uid = svr.attributes["uid"];
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
-            final remoteTrustedPeerIds =
-                PeerProfile.trustedPeersFromDiscovery(svr.attributes);
-            final remoteAutoConnectEnabled =
-                PeerProfile.autoConnectFromDiscovery(svr.attributes);
-            logger.i("${isLost ? '丢失' : '发现'}本地设备");
-            logger.i("本地设备uid: $uid");
-            logger.i("本地设备name: $name");
-            logger.i("本地设备host: $host");
-            logger.i("本地设备port: $port");
-            logger.i("本地设备platform: $platform");
-            if (uid == null || uid == device?.uid) {
+            _logDiscovery(
+              isLost
+                  ? DiscoveryDiagnosticKind.serviceLost
+                  : DiscoveryDiagnosticKind.serviceResolved,
+            );
+            if (uid == device?.uid) {
               return;
             }
-            if (isLost) {
-              _resolveLimiter.clear(_serviceResolveKey(svr));
+            if (socketManager.shouldSuppressDiscoveredPeer(uid)) {
+              if (isLost) {
+                socketManager.releaseDeletedPeerDiscoverySuppression(uid);
+              }
+              if (mounted) {
+                setState(() {
+                  devices.removeWhere((item) => item.uid == uid);
+                  _sessionItems = _sessionItems
+                      .where((item) => item.device.uid != uid)
+                      .toList(growable: false);
+                  if (_selectedDesktopPeerId == uid) {
+                    _selectedDesktopPeerId = null;
+                  }
+                });
+              }
+              return;
             }
-            var temp = await LocalDatabase().fetchDevice(uid);
+            final temp = await db.fetchDevice(uid);
+            if (isLost && temp == null) {
+              return;
+            }
             final resolvedDevice = buildDevice(
               uid: uid,
-              name: temp?.name ?? name,
+              name: temp?.name ?? name ?? '',
               port: port,
-              host: host,
-              platform: platform,
+              host: host ?? temp?.host ?? '',
+              platform: platform ?? temp?.platform ?? '',
               around: !isLost,
             );
             final visibleDevice = _mergeStoredDeviceWithDiscovery(
@@ -561,29 +1440,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
             if (!isLost) {
               await db.upsertDevice(visibleDevice);
             }
+            await db.setDeviceDiscoveryPresence(uid, !isLost);
             await ConnectionCoordinator().updateDiscovery(
               visibleDevice,
               discovered: !isLost,
-              remoteTrustedPeerIds: remoteTrustedPeerIds,
-              remoteAutoConnectEnabled: remoteAutoConnectEnabled,
             );
-            for (var item in devices) {
-              if (item.uid == uid) {
-                break;
+            if (!isLost && host != null) {
+              try {
+                socketManager.updateReconnectEndpoint(uid, host, port);
+              } on ArgumentError {
+                // Invalid discovery endpoints are never promoted to retries.
               }
             }
             setState(() {
-              var index = -1;
-              for (var i = devices.length - 1; i >= 0; i--) {
-                if (devices[i].uid == uid) {
-                  index = i;
-                  devices.removeAt(i);
-                  break;
-                }
-              }
-              if (isLost && temp != null) {
-                devices.insert(index, temp);
-              } else if (!isLost) {
+              devices.removeWhere((item) => item.uid == uid);
+              if (!isLost) {
                 devices.insert(0, visibleDevice);
               }
             });
@@ -612,30 +1483,33 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _discoverySubscription = null;
     await _discovery?.stop();
     _discovery = null;
+    _discoveryPresence.clear();
     _isDiscovering = false;
   }
 
-  DeviceData buildDevice(
-      {uid = "",
-      name = "",
-      host = "",
-      port = 10002,
-      platform = "",
-      around = true}) {
+  DeviceData buildDevice({
+    uid = "",
+    name = "",
+    host = "",
+    port = 10002,
+    platform = "",
+    around = true,
+  }) {
     return DeviceData(
-        id: 0,
-        uid: uid,
-        name: name,
-        host: host,
-        port: port,
-        platform: platform,
-        isServer: false,
-        lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        online: false,
-        password: "",
-        clipboard: false,
-        auth: false,
-        around: around);
+      id: 0,
+      uid: uid,
+      name: name,
+      host: host,
+      port: port,
+      platform: platform,
+      isServer: false,
+      lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      online: false,
+      password: "",
+      clipboard: false,
+      auth: false,
+      around: around,
+    );
   }
 
   DeviceData _mergeStoredDeviceWithDiscovery(
@@ -648,6 +1522,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return DeviceData(
       id: stored.id,
       uid: discovered.uid,
+      identityPublicKey: stored.identityPublicKey,
       name: discovered.name.isNotEmpty ? discovered.name : stored.name,
       host: discovered.host.isNotEmpty ? discovered.host : stored.host,
       port: discovered.port,
@@ -666,7 +1541,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _refreshDevice({isFirst = false}) async {
     var temp = await LocalSetting().instance();
-    var arr = await db.fetchAllDevice();
+    if (isFirst) {
+      await db.clearDeviceDiscoveryPresence();
+    }
+    var arr = (await db.fetchAllDevice())
+        .where((item) => !socketManager.shouldSuppressDiscoveredPeer(item.uid))
+        .toList(growable: false);
     final storedDevicesByUid = <String, DeviceData>{
       for (final item in arr) item.uid: item,
     };
@@ -675,6 +1555,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
     for (var item in devices) {
+      if (socketManager.shouldSuppressDiscoveredPeer(item.uid)) {
+        continue;
+      }
       if (aroundIds.contains(item.uid)) {
         continue;
       }
@@ -705,21 +1588,24 @@ class _DeviceListScreen extends State<DeviceListScreen>
     var localProfileUpdate = device != null && device!.name != temp.name;
 
     if (isFirst || device?.port != temp.port) {
-      _startServer(port: temp.port);
+      await _startServer(port: temp.port);
     }
 
-    final latestMessages = await db
-        .fetchLatestMessagesByPeers(newArr.map((item) => item.uid).toList());
+    final latestMessages = await db.fetchLatestMessagesByPeers(
+      newArr.map((item) => item.uid).toList(),
+    );
     final sessions = ChatSessionListBuilder.build(
       devices: newArr,
       latestMessages: latestMessages,
-      activePeerId:
-          socketManager.receiver.isEmpty ? null : socketManager.receiver,
+      activePeerId: socketManager.receiver.isEmpty
+          ? null
+          : socketManager.receiver,
       connectedPeerIds: socketManager.connectedPeerIds,
       selectedPeerId: _selectedDesktopPeerId,
       strings: _sessionPreviewStrings(context),
     );
-    final selectedPeerId = _selectedDesktopPeerId != null &&
+    final selectedPeerId =
+        _selectedDesktopPeerId != null &&
             sessions.any((item) => item.device.uid == _selectedDesktopPeerId)
         ? _selectedDesktopPeerId
         : null;
@@ -732,10 +1618,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
       devices = newArr;
       _sessionItems = sessions;
       _selectedDesktopPeerId = selectedPeerId;
+      _androidSystemShareTargetsLoaded = true;
+      _desktopQuickSendTargetsLoaded = true;
     });
 
-    logger.i(
-        "refresh ui: broadcasting=$_isBroadcasting discovering=$_isDiscovering serverPortUpdate=$serverPortUpdate localProfileUpdate=$localProfileUpdate");
+    if (Platform.isAndroid) {
+      _scheduleAndroidSystemSharePresentation();
+      unawaited(_retryConnectedAndroidSystemShares());
+    }
+    if (isDesktop()) {
+      _scheduleDesktopQuickSendPresentation();
+    }
+
     if (localProfileUpdate) {
       unawaited(socketManager.broadcastLocalProfileUpdate());
     }
@@ -797,31 +1691,36 @@ class _DeviceListScreen extends State<DeviceListScreen>
           color: Colors.grey,
           icon: const Icon(Icons.add, size: 32), // 调整圆角以获得更圆的按钮
         ),
-        title: Row(
+        title: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Column(
+            Text(
+              device?.name ?? 'localhost',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(device?.name ?? "localhost"), // 替换为实际昵称
-                Row(
-                  children: [
-                    Text(
-                      "${device?.host ?? "127.0.0.1"}:${device?.port ?? 10002}",
-                      // 替换为实际 IP 地址
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white54
-                              : Colors.black54),
+                Flexible(
+                  child: Text(
+                    '${device?.host ?? "127.0.0.1"}:${device?.port ?? 10002}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white54
+                          : Colors.black54,
                     ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.wifi_rounded,
-                        size: socketManager.started ? 14 : 0,
-                        color: Colors.lightBlue)
-                  ],
-                )
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.wifi_rounded,
+                  size: socketManager.started ? 14 : 0,
+                  color: Colors.lightBlue,
+                ),
               ],
             ),
           ],
@@ -842,16 +1741,27 @@ class _DeviceListScreen extends State<DeviceListScreen>
                   context,
                   MaterialPageRoute(
                     builder: (context) => SendMessageScreen(
-                        device: buildDevice(
-                            uid: LocalUuid.v4(),
-                            name: "",
-                            port: -1,
-                            host: "localhost")),
+                      device: buildDevice(
+                        uid: LocalUuid.v4(),
+                        name: "",
+                        port: -1,
+                        host: "localhost",
+                      ),
+                    ),
                   ),
                 );
                 _refreshDevice();
               },
             ),
+          IconButton(
+            tooltip: AppLocalizations.of(context)?.qrPairingTitle ?? '二维码连接',
+            onPressed: _openPairingQr,
+            icon: Icon(
+              Icons.qr_code_scanner_rounded,
+              size: 28,
+              color: isDark ? Colors.white60 : Colors.black45,
+            ),
+          ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
@@ -894,11 +1804,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               width: 340,
               decoration: BoxDecoration(
                 color: palette.surfaceElevated,
-                border: Border(
-                  right: BorderSide(
-                    color: palette.borderSubtle,
-                  ),
-                ),
+                border: Border(right: BorderSide(color: palette.borderSubtle)),
               ),
               child: Column(
                 children: [
@@ -928,6 +1834,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                       key: ValueKey('desktop-${selectedSession.device.uid}'),
                       device: selectedSession.device,
                       embedded: true,
+                      onDeviceDeleted: _removeDevice,
                     ),
             ),
           ],
@@ -948,12 +1855,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 (maxWidth - _desktopToolbarGap - _desktopToolbarToolGroupWidth)
                     .clamp(0.0, maxWidth)
                     .toDouble();
-            final searchWidth =
-                _isDesktopSearchExpanded ? maxWidth : collapsedSearchWidth;
-            final gapWidth =
-                _isDesktopSearchExpanded ? 0.0 : _desktopToolbarGap;
-            final toolGroupWidth =
-                _isDesktopSearchExpanded ? 0.0 : _desktopToolbarToolGroupWidth;
+            final searchWidth = _isDesktopSearchExpanded
+                ? maxWidth
+                : collapsedSearchWidth;
+            final gapWidth = _isDesktopSearchExpanded
+                ? 0.0
+                : _desktopToolbarGap;
+            final toolGroupWidth = _isDesktopSearchExpanded
+                ? 0.0
+                : _desktopToolbarToolGroupWidth;
 
             return ClipRect(
               child: Row(
@@ -1042,9 +1952,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 focusNode: _desktopSearchFocusNode,
                 clearButtonMode: OverlayVisibilityMode.editing,
                 cursorColor: Colors.lightBlue,
-                decoration: const BoxDecoration(
-                  color: Colors.transparent,
-                ),
+                decoration: const BoxDecoration(color: Colors.transparent),
                 padding: const EdgeInsets.fromLTRB(0, 8, 12, 8),
                 prefix: Padding(
                   padding: const EdgeInsets.only(left: 12, right: 7),
@@ -1131,6 +2039,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
               onPressed: _showManualConnectDialog,
             ),
             const SizedBox(width: 2),
+            _buildDesktopToolButton(
+              icon: Icons.qr_code_scanner_rounded,
+              tooltip: AppLocalizations.of(context)?.qrPairingTitle ?? '二维码连接',
+              onPressed: _openPairingQr,
+            ),
+            const SizedBox(width: 2),
             _buildDesktopAudioShareAction(),
             const SizedBox(width: 2),
             _buildDesktopRemoteInputWorkspaceAction(),
@@ -1160,10 +2074,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final isBusy = _isDesktopAudioShareBusy;
     return _buildDesktopToolButton(
       icon: isBusy ? Icons.sync_rounded : Icons.volume_up_outlined,
-      tooltip: _desktopAudioShareTooltip(
-        isActive: isActive,
-        isBusy: isBusy,
-      ),
+      tooltip: _desktopAudioShareTooltip(isActive: isActive, isBusy: isBusy),
       iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
       onPressed: isBusy ? null : _toggleDesktopAudioShare,
     );
@@ -1173,11 +2084,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final palette = context.whisperPalette;
     final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
     final legacyState = _remoteInputCoordinator.state;
-    final legacyLive = legacyState.status != RemoteInputRuntimeStatus.idle &&
+    final legacyLive =
+        legacyState.status != RemoteInputRuntimeStatus.idle &&
         legacyState.status != RemoteInputRuntimeStatus.failed;
     final isActive =
         snapshot.isControllerLive || snapshot.isControlledLive || legacyLive;
-    final isBusy = snapshot.status == RemoteInputWorkspaceStatus.offering ||
+    final isBusy =
+        snapshot.status == RemoteInputWorkspaceStatus.offering ||
         legacyState.status == RemoteInputRuntimeStatus.offering ||
         legacyState.status == RemoteInputRuntimeStatus.connecting;
     return _buildDesktopToolButton(
@@ -1205,11 +2118,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           padding: EdgeInsets.zero,
           borderRadius: BorderRadius.circular(11),
           onPressed: onPressed,
-          child: Icon(
-            icon,
-            size: 20,
-            color: iconColor ?? palette.textMuted,
-          ),
+          child: Icon(icon, size: 20, color: iconColor ?? palette.textMuted),
         ),
       ),
     );
@@ -1306,11 +2215,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
         sourcePeerId: self.uid,
         sinks: sinks,
       );
-    } catch (error, stackTrace) {
-      logger.e('desktop audio share toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.protocol,
+      );
+      _logDeviceListFailure(DeviceListOperationKind.audioToggle, error);
       if (mounted) {
-        showAppToast(l10n.audioShareFailed(error.toString()));
+        final detail = reason == AudioFailureReason.unsupported
+            ? l10n.audioShareUnsupportedCapture
+            : l10n.connectFailed;
+        showAppToast(l10n.audioShareFailed(detail));
       }
     }
   }
@@ -1422,18 +2337,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
         candidate.uid: initialSinks.isNotEmpty
             ? initialSinks.containsKey(candidate.uid)
             : candidate.uid ==
-                (preferredPeerId.isNotEmpty
-                    ? preferredPeerId
-                    : candidates.first.uid),
+                  (preferredPeerId.isNotEmpty
+                      ? preferredPeerId
+                      : candidates.first.uid),
     };
     final roles = <String, AudioChannelRole>{
       for (var index = 0; index < candidates.length; index++)
-        candidates[index].uid: initialSinks[candidates[index].uid] ??
+        candidates[index].uid:
+            initialSinks[candidates[index].uid] ??
             (index == 0
                 ? AudioChannelRole.left
                 : (index == 1
-                    ? AudioChannelRole.right
-                    : AudioChannelRole.stereo)),
+                      ? AudioChannelRole.right
+                      : AudioChannelRole.stereo)),
     };
     final l10n = AppLocalizations.of(context)!;
     return showModalBottomSheet<_AudioGroupSetupResult>(
@@ -1442,8 +2358,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final selectedCount =
-                selected.values.where((value) => value).length;
+            final selectedCount = selected.values
+                .where((value) => value)
+                .length;
             return SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1502,8 +2419,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
                                       .map(
                                         (role) => DropdownMenuItem(
                                           value: role,
-                                          child:
-                                              Text(_audioGroupRoleLabel(role)),
+                                          child: Text(
+                                            _audioGroupRoleLabel(role),
+                                          ),
                                         ),
                                       )
                                       .toList(growable: false),
@@ -1518,9 +2436,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
                     if (allowStop) ...[
                       OutlinedButton.icon(
                         onPressed: () {
-                          Navigator.of(context).pop(
-                            const _AudioGroupSetupResult.stop(),
-                          );
+                          Navigator.of(
+                            context,
+                          ).pop(const _AudioGroupSetupResult.stop());
                         },
                         icon: const Icon(Icons.stop_rounded),
                         label: Text(l10n.audioGroupStop),
@@ -1536,7 +2454,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
                                   <String, AudioChannelRole>{
                                     for (final candidate in candidates)
                                       if (selected[candidate.uid] == true)
-                                        candidate.uid: roles[candidate.uid] ??
+                                        candidate.uid:
+                                            roles[candidate.uid] ??
                                             AudioChannelRole.stereo,
                                   },
                                 ),
@@ -1547,8 +2466,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
                         applyingActiveConfig
                             ? l10n.audioGroupApply
                             : selectedCount > 1
-                                ? l10n.audioGroupStart
-                                : l10n.audioShareStart,
+                            ? l10n.audioGroupStart
+                            : l10n.audioShareStart,
                       ),
                     ),
                   ],
@@ -1609,10 +2528,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: palette.textMuted,
-        fontSize: 12,
-      ),
+      style: TextStyle(color: palette.textMuted, fontSize: 12),
     );
   }
 
@@ -1621,7 +2537,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (sink == null) {
       return '';
     }
-    final hasEvidence = sink.rttMicros > 0 ||
+    final hasEvidence =
+        sink.rttMicros > 0 ||
         sink.jitterMicros > 0 ||
         sink.bufferTargetMicros > 0 ||
         sink.latePacketCount > 0 ||
@@ -1676,10 +2593,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       child: Text(
         AppLocalizations.of(context)?.selectConversationPlaceholder ??
             '选择一个设备开始对话',
-        style: TextStyle(
-          color: palette.textMuted,
-          fontSize: 18,
-        ),
+        style: TextStyle(color: palette.textMuted, fontSize: 18),
       ),
     );
   }
@@ -1693,8 +2607,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final palette = context.whisperPalette;
     final backgroundColor = selected
         ? (colorScheme.brightness == Brightness.dark
-            ? palette.surfaceMuted
-            : colorScheme.primary.withValues(alpha: 0.08))
+              ? palette.surfaceMuted
+              : colorScheme.primary.withValues(alpha: 0.08))
         : Colors.transparent;
 
     return ContextMenuRegion(
@@ -1733,6 +2647,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
                               ),
                             ),
                           ),
+                          if (_isTrustedDevice(deviceItem)) ...[
+                            const SizedBox(width: 6),
+                            Tooltip(
+                              message: AppLocalizations.of(
+                                context,
+                              )!.e2eeTrustedConnection,
+                              child: Icon(
+                                Icons.verified_user_rounded,
+                                size: 16,
+                                color: palette.trusted,
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 8),
                           Text(
                             _formatSessionTime(session.lastTimestamp),
@@ -1781,13 +2708,15 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   List<ContextMenuActionItem> _buildSessionContextActions(
-      DeviceData deviceItem) {
+    DeviceData deviceItem,
+  ) {
     final l10n = AppLocalizations.of(context);
     final isConnected = socketManager.isConnectedTo(deviceItem.uid);
     return [
       if (isConnected)
         ContextMenuActionItem(
           label: l10n?.disconnect ?? '断开',
+          icon: Icons.link_off_rounded,
           onSelected: () async {
             await socketManager.disconnectPeer(deviceItem.uid);
           },
@@ -1795,6 +2724,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.connect ?? '连接',
+          icon: Icons.link_rounded,
           onSelected: () {
             _connectServer(
               deviceItem.host,
@@ -1806,8 +2736,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!isConnected)
         ContextMenuActionItem(
           label: l10n?.delete ?? '删除',
-          onSelected: () {
-            _removeDevice(deviceItem.uid);
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
+          onSelected: () async {
+            await _confirmRemoveDevice(deviceItem);
           },
         ),
     ];
@@ -1818,8 +2750,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final background = session.isConnected
         ? Colors.lightBlue
         : session.isNearby
-            ? Colors.green
-            : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
+        ? Colors.green
+        : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
     return CircleAvatar(
       radius: 24,
       backgroundColor: background,
@@ -1850,8 +2782,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final messageTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final targetDay =
-        DateTime(messageTime.year, messageTime.month, messageTime.day);
+    final targetDay = DateTime(
+      messageTime.year,
+      messageTime.month,
+      messageTime.day,
+    );
     if (targetDay == today) {
       return DateFormat('HH:mm').format(messageTime);
     }
@@ -1869,7 +2804,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           AppLocalizations.of(context)?.connectDeviceDesc ?? '输入对方局域网地址与端口',
       inputHints: [
         {device?.host ?? "192.168.0.1": false},
-        {"10002": true}
+        {"10002": true},
       ],
       confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
       cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
@@ -1877,6 +2812,58 @@ class _DeviceListScreen extends State<DeviceListScreen>
         _connectServer(inputValues[0], int.parse(inputValues[1]));
       },
     );
+  }
+
+  Future<void> _openPairingQr() async {
+    final qrController = PairingQrDialogController();
+    _activePairingQrController?.dismiss();
+    _activePairingQrController = qrController;
+    try {
+      final localDevice = device ?? await LocalSetting().instance();
+      final currentHost = await getLocalIpAddress();
+      final identity = await DeviceIdentityStore().loadOrCreate();
+      final localInvite = PairingInvite(
+        host: currentHost,
+        port: localDevice.port,
+        peerId: localDevice.uid,
+        publicKeyHash: identityPublicKeyHash(identity.publicKeyBase64Url),
+      );
+      if (!mounted) {
+        return;
+      }
+      final invite = await showPairingQrDialog(
+        context,
+        localInvite: localInvite,
+        startWithScanner: isMobile(),
+        controller: qrController,
+      );
+      if (!mounted || invite == null) {
+        return;
+      }
+      await _connectServerInternal(
+        invite.host,
+        invite.port,
+        manual: true,
+        peerId: invite.peerId,
+        publicKeyHash: invite.publicKeyHash,
+      );
+    } on PairingInviteFormatException catch (error) {
+      if (mounted) {
+        _showConnectionDiagnosticStage(
+          error.reason == PairingInviteError.invalidHost
+              ? ConnectionDiagnosticStage.wifi
+              : ConnectionDiagnosticStage.address,
+        );
+      }
+    } on Object {
+      if (mounted) {
+        _showConnectionDiagnosticStage(ConnectionDiagnosticStage.service);
+      }
+    } finally {
+      if (identical(_activePairingQrController, qrController)) {
+        _activePairingQrController = null;
+      }
+    }
   }
 
   void _openConv(DeviceData deviceItem) async {
@@ -1892,23 +2879,46 @@ class _DeviceListScreen extends State<DeviceListScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SendMessageScreen(device: deviceItem),
+        builder: (context) => SendMessageScreen(
+          device: deviceItem,
+          onDeviceDeleted: _removeDevice,
+        ),
       ),
     );
     _refreshDevice();
   }
 
-  void _removeDevice(String uid) async {
-    await LocalDatabase().clearDevices([uid]);
+  Future<void> _confirmRemoveDevice(DeviceData target) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await confirmAction(
+      context,
+      title: l10n?.deleteDeviceTitle(target.name) ?? '删除 ${target.name}',
+      description: l10n?.deleteDeviceDesc ?? '删除与此设备的所有消息，不可恢复',
+      confirmButtonText: l10n?.confirm ?? '确定',
+      cancelButtonText: l10n?.cancel ?? '取消',
+      isDestructive: true,
+    );
+    if (confirmed) {
+      await _removeDevice(target.uid);
+    }
+  }
+
+  Future<void> _removeDevice(String uid) async {
+    _connectionAttempts.cancel('peer:$uid');
+    await socketManager.deletePeer(uid);
     if (!mounted) {
       return;
     }
     setState(() {
+      devices.removeWhere((item) => item.uid == uid);
+      _sessionItems = _sessionItems
+          .where((item) => item.device.uid != uid)
+          .toList(growable: false);
       if (_selectedDesktopPeerId == uid) {
         _selectedDesktopPeerId = null;
       }
     });
-    _refreshDevice();
+    await _refreshDevice();
   }
 
   void _handleDeviceConnect(DeviceData deviceItem) {
@@ -1943,69 +2953,46 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return SwipeActionCell(
       key: ValueKey(deviceItem.uid),
       trailingActions: [
-        if (socketManager.receiver != deviceItem.uid)
+        if (!socketManager.isConnectedTo(deviceItem.uid))
           SwipeAction(
-              widthSpace: ism ? 120 : 140,
-              nestedAction: SwipeNestedAction(
-                /// 自定义你nestedAction 的内容
-                content: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    color: Colors.red,
-                  ),
-                  width: ism ? 100 : 120,
-                  height: 40,
-                  child: OverflowBox(
-                    maxWidth: double.infinity,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.delete,
+            widthSpace: ism ? 120 : 140,
+            nestedAction: SwipeNestedAction(
+              /// 自定义你nestedAction 的内容
+              content: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.red,
+                ),
+                width: ism ? 100 : 120,
+                height: 40,
+                child: OverflowBox(
+                  maxWidth: double.infinity,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.delete, color: Colors.white),
+                      Text(
+                        AppLocalizations.of(context)?.deleteConfirm ?? '确认删除 ',
+                        style: TextStyle(
                           color: Colors.white,
+                          fontSize: ism ? 16 : 18,
                         ),
-                        Text(
-                            AppLocalizations.of(context)?.deleteConfirm ??
-                                '确认删除 ',
-                            style: TextStyle(
-                                color: Colors.white, fontSize: ism ? 16 : 18)),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
 
-              /// 将原本的背景设置为透明，因为要用你自己的背景
-              color: Colors.transparent,
+            /// 将原本的背景设置为透明，因为要用你自己的背景
+            color: Colors.transparent,
 
-              /// 设置了content就不要设置title和icon了
-              content: _getIconButton(Colors.red, Icons.delete),
-              onTap: (handler) {
-                if (socketManager.isConnectedTo(deviceItem.uid)) {
-                  showLoadingDialog(
-                    context,
-                    title: AppLocalizations.of(context)?.warning ?? '警告',
-                    description:
-                        AppLocalizations.of(context)?.deleteWarningText ??
-                            "连接正在使用，禁止快速删除",
-                    isLoading: true,
-                    // 是否显示加载指示器
-                    icon: const Icon(
-                      Icons.warning_rounded,
-                      color: Colors.red,
-                    ),
-                    cancelButtonText:
-                        AppLocalizations.of(context)?.close ?? '关闭',
-                    onCancel: () {
-                      // 处理取消操作
-                      Navigator.of(context).pop(); // 关闭对话框
-                    },
-                    task: (VoidCallback onCancel) async {},
-                  );
-                  return;
-                }
-                _removeDevice(deviceItem.uid);
-              }),
+            /// 设置了content就不要设置title和icon了
+            content: _getIconButton(Colors.red, Icons.delete),
+            onTap: (handler) {
+              unawaited(_removeDevice(deviceItem.uid));
+            },
+          ),
       ],
       child: InkWell(
         onTap: () {
@@ -2034,6 +3021,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
                             ),
                           ),
                         ),
+                        if (_isTrustedDevice(deviceItem)) ...[
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: AppLocalizations.of(
+                              context,
+                            )!.e2eeTrustedConnection,
+                            child: Icon(
+                              Icons.verified_user_rounded,
+                              size: 16,
+                              color: context.whisperPalette.trusted,
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Text(
                           _formatSessionTime(session.lastTimestamp),
@@ -2041,8 +3041,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
                             fontSize: 12,
                             color:
                                 Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white38
-                                    : Colors.black38,
+                                ? Colors.white38
+                                : Colors.black38,
                           ),
                         ),
                       ],
@@ -2065,7 +3065,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Theme.of(context).brightness ==
+                              color:
+                                  Theme.of(context).brightness ==
                                       Brightness.dark
                                   ? Colors.white54
                                   : Colors.black45,
@@ -2094,19 +3095,70 @@ class _DeviceListScreen extends State<DeviceListScreen>
         /// 设置你自己的背景
         color: color,
       ),
-      child: Icon(
-        icon,
-        color: Colors.white,
+      child: Icon(icon, color: Colors.white),
+    );
+  }
+
+  String _connectionDiagnosticDescription(ConnectionDiagnosticStage stage) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (stage) {
+      ConnectionDiagnosticStage.wifi => l10n.connectionDiagnosticWifi,
+      ConnectionDiagnosticStage.address => l10n.connectionDiagnosticAddress,
+      ConnectionDiagnosticStage.service => l10n.connectionDiagnosticService,
+      ConnectionDiagnosticStage.firewall => l10n.connectionDiagnosticFirewall,
+      ConnectionDiagnosticStage.identity => l10n.connectionDiagnosticIdentity,
+      ConnectionDiagnosticStage.version => l10n.connectionDiagnosticVersion,
+      ConnectionDiagnosticStage.pairing => l10n.connectionDiagnosticPairing,
+    };
+  }
+
+  void _showConnectionDiagnosticStage(
+    ConnectionDiagnosticStage stage, {
+    Future<void> Function()? onRetry,
+    String? description,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(
+          stage == ConnectionDiagnosticStage.identity
+              ? Icons.shield_outlined
+              : Icons.wifi_find_rounded,
+          color: Theme.of(dialogContext).colorScheme.error,
+        ),
+        title: Text(l10n.connectionDiagnosticTitle),
+        content: Text(description ?? _connectionDiagnosticDescription(stage)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.cancel),
+          ),
+          if (onRetry != null)
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(onRetry());
+              },
+              child: Text(l10n.retry),
+            ),
+        ],
       ),
     );
   }
 
-  void _connectServer(String host, int port, {String? peerId}) async {
+  void _connectServer(
+    String host,
+    int port, {
+    String? peerId,
+    String? publicKeyHash,
+  }) async {
     await _connectServerInternal(
       host,
       port,
       manual: true,
       peerId: peerId,
+      publicKeyHash: publicKeyHash,
     );
   }
 
@@ -2115,65 +3167,165 @@ class _DeviceListScreen extends State<DeviceListScreen>
     int port, {
     required bool manual,
     String? peerId,
+    String? publicKeyHash,
   }) async {
     if (await isLocalhost(host)) {
+      if (publicKeyHash?.isNotEmpty == true) {
+        if (mounted) {
+          _showConnectionDiagnosticStage(ConnectionDiagnosticStage.address);
+        }
+        return;
+      }
       afterAuth(true, device);
       return;
     }
     if (manual && peerId != null) {
       await ConnectionCoordinator().markManualSelection(peerId);
     }
+    if (!manual && peerId != null) {
+      ConnectionCoordinator().markConnecting(peerId, reconnecting: true);
+      _pendingAutoConnectPeerId = peerId;
+      try {
+        socketManager.scheduleReconnect(peerId, host, port);
+      } on ArgumentError {
+        ConnectionCoordinator().markDisconnected(peerId: peerId);
+        _pendingAutoConnectPeerId = null;
+      }
+      return;
+    }
     if (peerId != null) {
       ConnectionCoordinator().markConnecting(peerId);
       _pendingAutoConnectPeerId = peerId;
     }
-    socketManager.connectToServer(host, port, (ok, message) {
-      // _showToast(message);
-      if (!ok) {
-        if (message == WsSvrManager.duplicateAuthRequestMessage) {
-          if (manual && mounted) {
-            showAppToast(message.toString());
-          }
+    final targetKey = peerId?.isNotEmpty == true
+        ? 'peer:$peerId'
+        : 'endpoint:${host.trim()}:$port';
+    final attemptGeneration = _connectionAttempts.begin(targetKey);
+    try {
+      ConnectionAttemptResult result;
+      try {
+        final endpoint = PeerEndpoint(host: host, port: port);
+        result = await socketManager.connectToServer(
+          ConnectionAttemptRequest(
+            requestId: '$targetKey:$attemptGeneration',
+            endpoint: endpoint,
+            expectedPeerId: peerId ?? '',
+            expectedPublicKeyHash: publicKeyHash ?? '',
+            mode: ConnectionAttemptMode.interactive,
+          ),
+        );
+      } on ArgumentError {
+        result = ConnectionAttemptResult.networkFailure(
+          requestId: '$targetKey:$attemptGeneration',
+          reason: ConnectionAttemptReason.invalidEndpoint,
+        );
+      }
+      if (!mounted ||
+          !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+        return;
+      }
+      if (result.isAuthenticated &&
+          socketManager.isCurrentConnectionGeneration(
+            result.peerId,
+            result.generation,
+          )) {
+        final connectedDevice = await db.fetchDevice(result.peerId);
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration) ||
+            connectedDevice == null ||
+            !socketManager.isCurrentConnectionGeneration(
+              result.peerId,
+              result.generation,
+            )) {
           return;
         }
-        ConnectionCoordinator()
-            .markDisconnected(peerId: peerId, error: message.toString());
+        socketManager.selectPeer(result.peerId);
+        ConnectionCoordinator().markConnected(connectedDevice);
+        _pendingAutoConnectPeerId = null;
+        await _refreshDevice();
+        if (!mounted ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+          return;
+        }
+        if (isDesktop()) {
+          setState(() {
+            _selectedDesktopPeerId = connectedDevice.uid;
+          });
+        } else {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SendMessageScreen(
+                device: connectedDevice,
+                onDeviceDeleted: _removeDevice,
+              ),
+            ),
+          );
+          if (mounted) {
+            _refreshDevice();
+          }
+        }
+        return;
+      }
+      final localizations = AppLocalizations.of(context);
+      if (result.reason == ConnectionAttemptReason.duplicateRequest) {
+        // 同 peer 已有连接尝试在途:复位方法开头预置的 connecting 状态——
+        // 挡路的在途尝试若以 cancelled/networkFailure 收场,不会有任何
+        // 路径清理该状态,设备行会永久转圈。随后仅轻提示,不弹失败对话框;
+        // 在途尝试成功时 markConnected 会自行恢复状态。
+        if (peerId != null) {
+          ConnectionCoordinator().markDisconnected(peerId: peerId);
+        }
         if (_pendingAutoConnectPeerId == peerId) {
           _pendingAutoConnectPeerId = null;
         }
-        if (!manual) {
-          _refreshDevice();
-          return;
+        if (manual) {
+          showAppToast(
+            localizations?.connectAlreadyInProgress ??
+                'Connection already in progress',
+          );
         }
-        showLoadingDialog(
-          context,
-          title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
-          description: "$message",
-          isLoading: true,
-          // 是否显示加载指示器
-          icon: const Icon(
-            Icons.warning_rounded,
-            color: Colors.red,
-          ),
-          cancelButtonText: 'Cancel',
-          onCancel: () {
-            // 处理取消操作
-            Navigator.of(context).pop(); // 关闭对话框
-          },
-          task: (VoidCallback onCancel) async {},
-        );
         return;
       }
-    }, peerId: peerId);
+      final diagnostic = ConnectionDiagnostic.fromReason(result.reason);
+      final displayMessage =
+          result.reason == ConnectionAttemptReason.peerRejected &&
+              localizations != null
+          ? localizations.pairingRejectedByPeer
+          : _connectionDiagnosticDescription(diagnostic.stage);
+      ConnectionCoordinator().markDisconnected(
+        peerId: peerId,
+        error: displayMessage,
+      );
+      if (_pendingAutoConnectPeerId == peerId) {
+        _pendingAutoConnectPeerId = null;
+      }
+      if (manual && result.status != ConnectionAttemptStatus.cancelled) {
+        _showConnectionDiagnosticStage(
+          diagnostic.stage,
+          description: displayMessage,
+          onRetry:
+              diagnostic.stage == ConnectionDiagnosticStage.identity ||
+                  diagnostic.stage == ConnectionDiagnosticStage.version
+              ? null
+              : () => _connectServerInternal(
+                  host,
+                  port,
+                  manual: true,
+                  peerId: peerId,
+                  publicKeyHash: publicKeyHash,
+                ),
+        );
+      }
+    } finally {
+      _connectionAttempts.complete(targetKey, attemptGeneration);
+    }
   }
 
   Future<void> _attemptAutoConnect() async {
-    final candidate =
-        await ConnectionCoordinator().chooseAutoConnectCandidate();
+    final candidate = await ConnectionCoordinator()
+        .chooseAutoConnectCandidate();
     if (candidate == null) {
-      return;
-    }
-    if (_pendingAutoConnectPeerId == candidate.peerId) {
       return;
     }
     await _connectServerInternal(
@@ -2184,125 +3336,91 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  void _startServer({port}) {
-    socketManager.startServer(port ?? device?.port ?? 10002, (ok, msg) {
-      setState(() {
-        socketManager.started = ok;
-        if (!ok) {
-          showLoadingDialog(
-            context,
-            title: AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败',
-            description: "error: $msg",
-            isLoading: true,
-            // 是否显示加载指示器
-            icon: const Icon(
-              Icons.warning_rounded,
-              color: Colors.red,
-            ),
-            cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
-            onCancel: () {
-              // 处理取消操作
-              Navigator.of(context).pop(); // 关闭对话框
-            },
-            task: (VoidCallback onCancel) async {},
-          );
-        }
-      });
+  Future<void> _startServer({port}) async {
+    final result = await socketManager.startServer(
+      port ?? device?.port ?? 10002,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      socketManager.started = result.isSuccess;
     });
+    if (result.isSuccess) {
+      if (Platform.isAndroid) {
+        final keepAliveEnabled = await LocalSetting()
+            .androidBackgroundKeepAlive();
+        if (!mounted) {
+          return;
+        }
+        final l10n = AppLocalizations.of(context);
+        final notification = AndroidKeepAliveNotification(
+          title: l10n?.androidBackgroundKeepAliveActiveTitle ?? 'Whisper',
+          description:
+              l10n?.androidBackgroundKeepAliveActiveDesc ??
+              'Listening for nearby connection requests',
+        );
+        await AndroidBackgroundKeepAliveCoordinator.shared.setEnabled(
+          keepAliveEnabled,
+          notification: notification,
+        );
+        await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+          AndroidKeepAliveReason.lanServer,
+          true,
+          notification: notification,
+        );
+      }
+      return;
+    }
+    await AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+      AndroidKeepAliveReason.lanServer,
+      false,
+    );
+    final error = result.error;
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: DeviceListOperationKind.serverStart,
+      PrivacyField.success: false,
+      if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
+    });
+    final failureMessage =
+        AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败';
+    showLoadingDialog(
+      context,
+      title: failureMessage,
+      description: failureMessage,
+      isLoading: true,
+      icon: const Icon(Icons.warning_rounded, color: Colors.red),
+      cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
+      onCancel: () {
+        Navigator.of(context).pop();
+      },
+      task: (VoidCallback onCancel) async {},
+    );
   }
 
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
-    if (msg.isNotEmpty) {
-      showLoadingDialog(
-        context,
-        title: AppLocalizations.of(context)?.connectFailed ?? '连接失败',
-        description: "${deviceData?.name} $msg",
-        isLoading: true,
-        // 是否显示加载指示器
-        icon: const Icon(
-          Icons.warning_rounded,
-          color: Colors.red,
-        ),
-        cancelButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
-        onCancel: () {
-          // 处理取消操作
-          callback(false);
-          Navigator.of(context).pop(); // 关闭对话框
-        },
-        task: (VoidCallback onCancel) async {},
-      );
+  void onPairing(PairingRequest request, void Function(bool) resolve) {
+    if (!mounted) {
+      resolve(false);
       return;
     }
-    if (asServer) {
-      final peerId = deviceData?.uid ?? '';
-      final needsPrompt = _connectPromptRegistry.register(
-        peerId,
-        (allow) => callback(allow),
-      );
-      if (!needsPrompt) {
-        return;
-      }
-      final l10n = AppLocalizations.of(context);
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      showCupertinoDialog(
-        context: context,
-        builder: (dialogContext) {
-          _connectPromptRegistry.bindCloser(peerId, () {
-            Navigator.of(dialogContext).pop();
-          });
-          void resolve(bool allow) {
-            final latest = _connectPromptRegistry.latestCallbackFor(peerId);
-            if (!allow) {
-              logger.i("拒绝连接");
-            }
-            latest?.call(allow);
-            _connectPromptRegistry.resolveAndClose(peerId);
+    final pairingQrController = _activePairingQrController;
+    unawaited(
+      showPairingDialog(
+        context,
+        request: request,
+        resolve: (allow) {
+          if (allow) {
+            pairingQrController?.dismiss();
           }
-
-          return CupertinoAlertDialog(
-            title: Text(l10n?.connectRequest ?? '连接请求'),
-            content: Column(
-              children: [
-                const SizedBox(height: 14),
-                Text(
-                  l10n?.connectRequestDesc(deviceData?.name ?? "") ??
-                      '接入设备: ${deviceData?.name}?',
-                  style: TextStyle(
-                    color: isDark ? Colors.grey[400] : Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            actions: <Widget>[
-              CupertinoDialogAction(
-                onPressed: () => resolve(false),
-                child: Text(
-                  l10n?.refuse ?? '拒绝',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-              CupertinoDialogAction(
-                onPressed: () => resolve(true),
-                child: Text(
-                  l10n?.allow ?? '同意',
-                  style: const TextStyle(color: Colors.lightBlue),
-                ),
-              ),
-            ],
-          );
+          resolve(allow);
         },
-      );
-    } else {
-      callback(true);
-    }
+      ),
+    );
   }
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) async {
-    if (deviceData != null) {
-      _connectPromptRegistry.resolveAndClose(deviceData.uid);
-    }
     if (!allow || deviceData == null) {
       return;
     }
@@ -2324,6 +3442,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       MaterialPageRoute(
         builder: (context) => SendMessageScreen(
           device: deviceData,
+          onDeviceDeleted: _removeDevice,
         ),
       ),
     );
@@ -2349,6 +3468,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onConnect() {
+    _pendingAutoConnectPeerId = null;
     _refreshDevice();
   }
 
@@ -2360,22 +3480,42 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context,
-        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
-        description: message,
-        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-        cancelButtonText: AppLocalizations.of(context)?.keepConnect ?? "取消",
-        onConfirm: () {
-      WsSvrManager().close();
+    unawaited(_handleSocketError(message));
+  }
+
+  Future<void> _handleSocketError(String message) async {
+    if (!mounted) {
       _isAlert = false;
-    }, onCancel: () {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    try {
+      final confirmed = await confirmAction(
+        context,
+        title: l10n?.timeoutTitle ?? "是否释放连接",
+        description: l10n?.connectFailed ?? 'Connection Failed',
+        confirmButtonText: l10n?.disconnect ?? "断开",
+        cancelButtonText: l10n?.keepConnect ?? "取消",
+      );
+      if (confirmed) {
+        await WsSvrManager().close();
+      }
+    } catch (error) {
+      _logDeviceListFailure(DeviceListOperationKind.socketDialog, error);
+      if (mounted) {
+        showAppToast(l10n?.connectFailed ?? 'Connection Failed');
+      }
+    } finally {
       _isAlert = false;
-    });
+    }
   }
 
   @override
   void onNotice(String message) {
-    showAppToast(message);
+    showAppToast(
+      AppLocalizations.of(context)?.fileTransferFailedRetryable ??
+          'Transfer failed',
+    );
   }
 
   @override
@@ -2497,7 +3637,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     var rect = await windowManager.getBounds();
-    logger.i("resized window: ${rect.width} ${rect.height}");
     LocalSetting().setWindowWidth(rect.width);
     LocalSetting().setWindowHeight(rect.height);
   }
@@ -2519,14 +3658,40 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onClipboardChanged() async {
+    final generation = ++_clipboardSyncGeneration;
     final text = await readClipboardTextForSync();
-    if (text == null ||
-        _clipboardText == text ||
-        shouldIgnoreClipboardSync(text)) {
+    if (text == null || generation != _clipboardSyncGeneration) {
+      return;
+    }
+    if (shouldIgnoreClipboardSync(text)) {
+      _clipboardText = text;
+      return;
+    }
+    if (_clipboardText == text) {
       return;
     }
     _clipboardText = text;
-    socketManager.sendMessage(text, clipboard: true);
+    if (!await LocalSetting().clipboardAutoSync()) {
+      return;
+    }
+    if (generation != _clipboardSyncGeneration) {
+      return;
+    }
+    final peerId = socketManager.receiver;
+    if (peerId.isEmpty || !socketManager.isConnectedTo(peerId)) {
+      return;
+    }
+    final target = await db.fetchDevice(peerId);
+    if (generation != _clipboardSyncGeneration ||
+        socketManager.receiver != peerId ||
+        !socketManager.isConnectedTo(peerId) ||
+        target == null ||
+        !target.auth ||
+        !target.clipboard ||
+        target.identityPublicKey.isEmpty) {
+      return;
+    }
+    await socketManager.sendMessageTo(peerId, text, clipboard: true);
   }
 }
 
@@ -2538,10 +3703,7 @@ class DeviceDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(device.name.toString()),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(device.name.toString()), centerTitle: true),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2578,9 +3740,7 @@ void showConfirmationDialog(
         title: Text(title),
         content: Column(
           children: [
-            const SizedBox(
-              height: 14,
-            ),
+            const SizedBox(height: 14),
             Text(
               description,
               style: TextStyle(
@@ -2593,9 +3753,7 @@ void showConfirmationDialog(
           CupertinoDialogAction(
             child: Text(
               cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
+              style: const TextStyle(color: Colors.red),
             ),
             onPressed: () {
               if (onCancel != null) {
@@ -2607,9 +3765,7 @@ void showConfirmationDialog(
           CupertinoDialogAction(
             child: Text(
               confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
+              style: const TextStyle(color: Colors.lightBlue),
             ),
             onPressed: () {
               Navigator.of(context).pop();
@@ -2636,8 +3792,9 @@ void showInputAlertDialog(
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
   for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller =
-        TextEditingController(text: inputHints[i].keys.first);
+    TextEditingController controller = TextEditingController(
+      text: inputHints[i].keys.first,
+    );
     controllers.add(controller);
 
     inputFields.add(
@@ -2647,9 +3804,7 @@ void showInputAlertDialog(
           CupertinoTextField(
             controller: controller,
             placeholder: inputHints[i].keys.first,
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black,
-            ),
+            style: TextStyle(color: isDark ? Colors.white : Colors.black),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[800] : Colors.white,
               border: Border.all(
@@ -2658,9 +3813,7 @@ void showInputAlertDialog(
               borderRadius: BorderRadius.circular(8),
             ),
             inputFormatters: inputHints[i].values.first
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                  ]
+                ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
                 : null,
           ),
         ],
@@ -2678,9 +3831,7 @@ void showInputAlertDialog(
             const SizedBox(height: 6),
             Text(
               description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.grey,
-              ),
+              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey),
             ),
             const SizedBox(height: 8),
             ...inputFields,
@@ -2690,9 +3841,7 @@ void showInputAlertDialog(
           CupertinoDialogAction(
             child: Text(
               cancelButtonText,
-              style: const TextStyle(
-                color: Colors.red,
-              ),
+              style: const TextStyle(color: Colors.red),
             ),
             onPressed: () {
               Navigator.of(context).pop();
@@ -2701,13 +3850,12 @@ void showInputAlertDialog(
           CupertinoDialogAction(
             child: Text(
               confirmButtonText,
-              style: const TextStyle(
-                color: Colors.lightBlue,
-              ),
+              style: const TextStyle(color: Colors.lightBlue),
             ),
             onPressed: () {
-              List<String> inputValues =
-                  controllers.map((controller) => controller.text).toList();
+              List<String> inputValues = controllers
+                  .map((controller) => controller.text)
+                  .toList();
               onConfirm(inputValues);
               Navigator.of(context).pop();
             },
@@ -2740,13 +3888,9 @@ void showLoadingDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             if (isLoading) icon,
-            const SizedBox(
-              height: 8,
-            ),
+            const SizedBox(height: 8),
             Text(
               description,
               style: TextStyle(
@@ -2761,9 +3905,7 @@ void showLoadingDialog(
               onPressed: onCancel,
               child: Text(
                 cancelButtonText,
-                style: const TextStyle(
-                  color: Colors.red,
-                ),
+                style: const TextStyle(color: Colors.red),
               ),
             ),
         ],

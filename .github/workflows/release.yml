@@ -6,6 +6,18 @@ on:
       - 'dev-v*.*.*'
       - 'release-v*.*.*'
   workflow_dispatch:
+    inputs:
+      target:
+        description: Platform to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
+          - linux
+          - android
 
 permissions:
   contents: write
@@ -41,6 +53,7 @@ jobs:
 
   build-on-macos:
     name: macOS + iOS
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
     needs: verify-release-version
     runs-on: macos-15-intel
     steps:
@@ -52,6 +65,7 @@ jobs:
         with:
           channel: stable
           architecture: x64
+          cache: true
 
       - name: Disable Flutter Swift Package Manager
         run: flutter config --no-enable-swift-package-manager
@@ -59,13 +73,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Refresh CocoaPods dependencies
+      - name: Install CocoaPods dependencies
         run: |
-          rm -f macos/Podfile.lock ios/Podfile.lock
-          cd macos
-          pod install --repo-update
-          cd ../ios
-          pod install --repo-update
+          pod install --project-directory=macos
+          pod install --project-directory=ios
 
       - name: Set release version
         run: |
@@ -88,7 +99,8 @@ jobs:
 
       - name: Build iOS IPA
         run: |
-          flutter build ios --no-codesign
+          flutter build ios --no-codesign --no-pub
+          dart script/prune_flutter_assets.dart ios build/ios/iphoneos/Runner.app/Frameworks/App.framework/flutter_assets
           cd build/ios/iphoneos
           mkdir Payload
           cd Payload
@@ -105,21 +117,14 @@ jobs:
             build/ios/iphoneos/whisper-*-ios-unsigned.ipa
           retention-days: 7
 
-      - name: Publish macOS and iOS release assets
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: |
-            whisper-*-macos-x86_64.dmg
-            build/ios/iphoneos/whisper-*-ios-unsigned.ipa
-
   build-on-windows:
     name: Windows
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'windows' }}
     needs: verify-release-version
-    runs-on: windows-latest
+    runs-on: windows-2022
+    env:
+      # Cargokit's symlink resolver cannot traverse the hidden AppData folder.
+      PUB_CACHE: ${{ github.workspace }}\.pub-cache
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -128,9 +133,19 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache-path: ${{ env.PUB_CACHE }}
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Restore Windows native build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/super_native_extensions
+            build/irondash_engine_context
+          key: windows-native-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Set release version
         run: |
@@ -142,19 +157,45 @@ jobs:
           "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install NSIS
-        run: choco install nsis -y
+      - name: Verify NSIS
+        run: |
+          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path -LiteralPath $makensis -PathType Leaf)) {
+            throw "NSIS not found at $makensis"
+          }
 
       - name: Build Windows app
         run: |
           flutter config --enable-windows-desktop
-          flutter build windows
+          flutter build windows --no-pub
+          if ($LASTEXITCODE -ne 0) {
+            throw "flutter build windows failed with exit code $LASTEXITCODE"
+          }
+          $runner = @(Get-ChildItem -LiteralPath "build/windows" -Filter "whisper.exe" -File -Recurse)
+          if ($runner.Count -ne 1) {
+            $found = if ($runner.Count -eq 0) { "none" } else { ($runner.FullName -join ", ") }
+            throw "Expected one built whisper.exe, found $($runner.Count): $found"
+          }
+          $releaseDir = $runner[0].Directory.FullName
+          $assetsDir = Join-Path $releaseDir "data/flutter_assets"
+          if (!(Test-Path -LiteralPath $assetsDir -PathType Container)) {
+            throw "Flutter assets not found at $assetsDir"
+          }
+          "WINDOWS_RELEASE_DIR=$releaseDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          dart script/prune_flutter_assets.dart windows-x64 $assetsDir
 
       - name: Copy runtime DLLs
         run: |
-          copy c:\Windows\System32\vcruntime140_1.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\vcruntime140.dll .\build\windows\x64\runner\Release\
-          copy c:\Windows\System32\msvcp140.dll .\build\windows\x64\runner\Release\
+          $releaseDir = (Resolve-Path -LiteralPath $env:WINDOWS_RELEASE_DIR -ErrorAction Stop).Path
+          $systemDir = Join-Path $env:WINDIR "System32"
+          @("vcruntime140_1.dll", "vcruntime140.dll", "msvcp140.dll") | ForEach-Object {
+            $source = Join-Path $systemDir $_
+            $destination = Join-Path $releaseDir $_
+            if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Runtime DLL not found at $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
 
       - name: Create EXE installer
         run: |
@@ -164,6 +205,7 @@ jobs:
             /DAPP_VERSION="$env:APP_VERSION" `
             /DAPP_PUBLISHER="lawnvi" `
             /DOUTPUT_NAME="whisper-$($env:PACKAGE_VERSION)-windows-x86_64.exe" `
+            /DBUILD_DIR="$env:WINDOWS_RELEASE_DIR" `
             installer.nsi
           Pop-Location
 
@@ -181,34 +223,21 @@ jobs:
           path: windows/whisper-*-windows-x86_64.exe
           retention-days: 7
 
-      - name: Publish Windows release asset
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: windows/whisper-*-windows-x86_64.exe
-
   build-on-linux:
-    name: Linux + Android
+    name: Linux
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
     needs: verify-release-version
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           architecture: x64
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -216,31 +245,12 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev alien
+          # Jammy's GStreamer requires GNU libunwind-dev, while the runner's
+          # preinstalled libc++ toolchain pins the incompatible LLVM 14 headers.
+          sudo apt-get remove -y libunwind-14-dev
+          sudo apt-get install -y ninja-build lld pkg-config libgtk-3-dev libpulse-dev libsecret-1-dev libkeybinder-3.0-dev libjsoncpp-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev alien
           sudo apt-get install -y avahi-daemon avahi-discover avahi-utils libnss-mdns mdns-scan libayatana-appindicator3-dev
           sudo apt-get install -y desktop-file-utils libfuse2
-
-      - name: Install Android command line tools
-        run: |
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          cd "$ANDROID_SDK_ROOT/cmdline-tools"
-          curl -sSLo commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-          unzip -q commandlinetools.zip
-          rm commandlinetools.zip
-          mv cmdline-tools latest
-
-      - name: Accept Android SDK licenses
-        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
-
-      - name: Install Android SDK packages
-        run: |
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --update
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-
-      - name: Export Android environment
-        run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Set release version
         run: |
@@ -255,7 +265,7 @@ jobs:
       - name: Build Linux app
         run: |
           flutter config --enable-linux-desktop
-          flutter build linux
+          flutter build linux --no-pub
 
       - name: Build DEB package
         run: |
@@ -282,13 +292,78 @@ jobs:
           bash linux/build_appimage.sh "$PACKAGE_VERSION"
           mv "build/linux/appimage/whisper-${PACKAGE_VERSION}-x86_64.AppImage" "build/linux/appimage/whisper-${PACKAGE_VERSION}-linux-x86_64.AppImage"
 
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-linux-${{ github.run_id }}
+          path: |
+            whisper-*-linux-x86_64.rpm
+            build/linux/deb/whisper-*-linux-amd64.deb
+            build/linux/appimage/whisper-*-linux-x86_64.AppImage
+          retention-days: 7
+
+  build-on-android:
+    name: Android
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
+    needs: verify-release-version
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          architecture: x64
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Ensure Android SDK packages
+        run: |
+          missing=()
+          [[ -d "$ANDROID_SDK_ROOT/platforms/android-36" ]] || missing+=("platforms;android-36")
+          [[ -d "$ANDROID_SDK_ROOT/build-tools/36.0.0" ]] || missing+=("build-tools;36.0.0")
+          if (( ${#missing[@]} > 0 )); then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "${missing[@]}"
+          fi
+
+      - name: Set release version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
+            PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          else
+            PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+
       - name: Prepare Android signing
         run: chmod +x android/append_local_properties.sh && sh android/append_local_properties.sh "${{ secrets.KEY_PASSWORD }}" "${{ secrets.STORE_PASSWORD }}"
 
       - name: Build Android release APKs
         run: |
-          flutter build apk
-          flutter build apk --split-per-abi
+          flutter build apk --no-pub
+          flutter build apk --split-per-abi --no-pub
+
+      - name: Verify Android package size pruning
+        run: |
+          for apk in build/app/outputs/flutter-apk/app*-release.apk; do
+            if unzip -Z1 "$apk" | grep -Eq 'opus_codec_(linux|web|windows)'; then
+              echo "Foreign Opus assets remain in $apk" >&2
+              exit 1
+            fi
+            du -h "$apk"
+          done
 
       - name: Normalize Android APK names
         run: |
@@ -298,26 +373,36 @@ jobs:
           mv "$apk_dir/app-armeabi-v7a-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-armeabi-v7a.apk"
           mv "$apk_dir/app-x86_64-release.apk" "$apk_dir/whisper-${PACKAGE_VERSION}-android-x86_64.apk"
 
-      - name: Upload Linux and Android artifacts
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-linux-android-${{ github.run_id }}
-          path: |
-            whisper-*-linux-x86_64.rpm
-            build/linux/deb/whisper-*-linux-amd64.deb
-            build/linux/appimage/whisper-*-linux-x86_64.AppImage
-            build/app/outputs/flutter-apk/whisper-*-android-*.apk
+          name: whisper-android-${{ github.run_id }}
+          path: build/app/outputs/flutter-apk/whisper-*-android-*.apk
           retention-days: 7
 
-      - name: Publish Linux and Android release assets
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+  publish-release:
+    name: Publish release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs:
+      - build-on-macos
+      - build-on-windows
+      - build-on-linux
+      - build-on-android
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-*-${{ github.run_id }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'dev-v') }}
-          files: |
-            whisper-*-linux-x86_64.rpm
-            build/linux/deb/whisper-*-linux-amd64.deb
-            build/linux/appimage/whisper-*-linux-x86_64.AppImage
-            build/app/outputs/flutter-apk/whisper-*-android-*.apk
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release-assets/**/*

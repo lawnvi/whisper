@@ -2,113 +2,271 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 多 peer 场景下入站鉴权与解码路径的源级回归:
-/// 1. 鉴权前的 socket 不得抢占全局默认发送目标 `_sink`;
-/// 2. 拒绝连接请求只关闭该条 socket,不得触发全局 close 断开所有 peer;
-/// 3. 入站待确认的连接请求必须有超时自动拒绝,不能无限半开;
-/// 4. 消息解码需容忍 Error(枚举序号越界),降级为 UNKONWN 而非丢弃整条消息。
 void main() {
-  final source =
-      File('lib/socket/svrmanager.dart').readAsStringSync();
+  final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 
   String section(String startMarker, String endMarker) {
     final start = source.indexOf(startMarker);
-    expect(start, greaterThanOrEqualTo(0),
-        reason: '未找到代码段起点: $startMarker');
+    expect(start, greaterThanOrEqualTo(0), reason: 'Missing $startMarker');
     final end = source.indexOf(endMarker, start);
-    expect(end, greaterThan(start), reason: '未找到代码段终点: $endMarker');
+    expect(end, greaterThan(start), reason: 'Missing $endMarker');
     return source.substring(start, end);
   }
 
-  test('pre-auth sockets never take over the global default sink', () {
-    expect(source.contains('_sink = webSocket.sink'), isFalse,
-        reason: '入站 socket 在鉴权前不得写全局 _sink(svrmanager startServer)');
-    expect(source.contains('_sink = channelSink'), isFalse,
-        reason: '出站 socket 在鉴权前不得写全局 _sink(svrmanager connectToServer)');
-    // 鉴权成功后仍由 _registerPeerConnection 统一设置。
+  test('pre-auth sockets cannot register or take the default sink', () {
+    expect(source, isNot(contains('_sink = webSocket.sink')));
+    expect(source, isNot(contains('_sink = channelSink')));
     final register = section(
       'Future<void> _registerPeerConnection(',
-      '_setRemoteProfile(profile, peerId: peerId);',
+      'Future<void> _handlePeerSocketDoneQueued(',
     );
-    expect(register.contains('_sink = sink;'), isTrue,
-        reason: '鉴权后的 _registerPeerConnection 应保留 _sink 设置');
+    expect(register, contains('!session.isAuthenticationReady'));
+    expect(register, contains('_sink = sink'));
   });
 
-  test('rejecting an auth request closes only that socket', () {
-    final respond = section(
-      'Future<void> respond(bool allow) async {',
-      'final guarded = GuardedAuthCallback(',
+  test('authenticated direct replacement cleans the old generation first', () {
+    final register = section(
+      'Future<void> _registerPeerConnection(',
+      'Future<void> _handlePeerSocketDoneQueued(',
     );
-    expect(respond.contains('sink?.close()'), isTrue,
-        reason: '拒绝时应只关闭本条 socket');
-    expect(RegExp(r'(?<![\w.?])close\(\);').hasMatch(respond), isFalse,
-        reason: '拒绝连接请求不得调用全局 close() 断开所有 peer');
-  });
 
-  test('pending incoming auth requests time out with auto-reject', () {
-    expect(source.contains('incomingAuthRequestTimeout'), isTrue,
-        reason: '应存在入站鉴权超时常量');
-    final authCase = section(
-      'case MessageEnum.Auth:',
-      'case MessageEnum.Ack:',
-    );
-    expect(authCase.contains('incomingAuthRequestTimeout'), isTrue,
-        reason: 'Auth 分支应启动超时定时器');
-    expect(authCase.contains('guarded.call(false)'), isTrue,
-        reason: '超时应通过 GuardedAuthCallback 自动拒绝(幂等)');
-    expect(authCase.contains('.cancel()'), isTrue,
-        reason: '鉴权被处理后应取消超时定时器');
-  });
-
-  test('message decode degrades to UNKONWN on Error, not just Exception', () {
-    final decode = section(
-      'str = utf8.decode(data);',
-      'final incomingPeerId =',
-    );
-    expect(decode.contains('on Exception'), isFalse,
-        reason: '枚举序号越界抛 RangeError(Error),on Exception 兜不住,'
-            '应 catch 全部并降级为 UNKONWN 消息');
-    expect(decode.contains('catch'), isTrue);
-  });
-
-  test('socket role (asServer) is per-connection, not global state', () {
-    // 设备可同时对不同 peer 兼具 server/client 两种角色:
-    // 角色必须随每条 socket 的消息逐层透传,不允许回退到全局可变布尔
-    // (旧实现在连接建立时写、Auth 到达时读,双角色并发下会串味)。
-    expect(source.contains('bool asServer = true;'), isFalse,
-        reason: 'asServer 不得是 WsSvrManager 的全局可变字段');
-    expect(source.contains('asServer = true;'), isFalse,
-        reason: '不得有对全局 asServer 的赋值(server 侧)');
-    expect(source.contains('asServer = false;'), isFalse,
-        reason: '不得有对全局 asServer 的赋值(client 侧)');
+    expect(register, contains('afterRemove:'));
+    expect(register, contains('_afterPeerRemoved('));
     expect(
-      source.contains('sink: webSocket.sink, asServer: true'),
-      isTrue,
-      reason: '服务端接入的 socket 必须显式以 asServer: true 处理消息',
-    );
-    expect(
-      source.contains('sink: channelSink, asServer: false'),
-      isTrue,
-      reason: '本机拨出的 socket 必须显式以 asServer: false 处理消息',
+      register.indexOf('afterRemove:'),
+      lessThan(register.indexOf('afterRegister:')),
     );
   });
 
-  test('simultaneous dials are resolved deterministically by uid', () {
-    final authCase = section(
-      'case MessageEnum.Auth:',
-      'case MessageEnum.Ack:',
+  test('signed pairing rejection lets the client close only its socket', () {
+    final completion = section(
+      'Future<void> _tryCompleteServerPairing(',
+      'Future<void> _handleClientResult(',
     );
-    expect(authCase.contains('hasOutgoing'), isTrue,
-        reason: '入站 auth 需检测对同一 peer 的在途出站拨号');
-    expect(authCase.contains('resolveSimultaneousDial'), isTrue,
-        reason: '互拨时必须走确定性裁决而非 last-writer-wins');
-    expect(authCase.contains('SimultaneousDialDecision.keepOutgoing'), isTrue,
-        reason: '赢方需关闭入站连接保留出站');
+    final denial = completion.substring(
+      completion.indexOf('if (session.hasPairingRejection)'),
+    );
+    expect(denial, contains('await _sendAuthEnvelope(sink, result)'));
+    expect(denial, isNot(contains('session.close()')));
+    expect(denial, isNot(contains('await _closeSocketSink(sink)')));
+    final clientResult = section(
+      'Future<void> _handleClientResult(',
+      'Future<_IdentityPinPlan> _pairingReason(',
+    );
+    expect(clientResult, contains('await _closeSocketSink(sink)'));
+    expect(completion, isNot(contains('closeGracefully(')));
+    expect(completion, isNot(contains('close(closeServer')));
+  });
+
+  test('session timeout invalidates its generation and closes only its sink',
+      () {
+    final create = section(
+      'Future<PeerSocketSession> _createSocketSession(',
+      'Future<void> _attachIncomingSocket(',
+    );
+    expect(create, contains('onTimeout:'));
+    expect(create, contains('identical(_sessionsBySink[sink], session)'));
+    expect(create,
+        contains("_completeSocketAuth(sink, false, 'pairing_expired')"));
+    expect(create, contains('_closeSocketSink(sink)'));
+  });
+
+  test('authenticated frames are verified before business parsing', () {
+    final incoming = section(
+      'Future<void> _handleIncomingMessage(',
+      'Uint8List _incomingBytes(',
+    );
+    expect(incoming, contains('session.decodeIncoming(bytes)'));
     expect(
-      authCase.indexOf('resolveSimultaneousDial') <
-          authCase.indexOf('if (asServer) {'),
-      isTrue,
-      reason: '裁决必须先于信任自动通过分支,否则受信任 peer 互拨会双注册',
+      incoming.indexOf('session.decodeIncoming(bytes)'),
+      lessThan(incoming.indexOf('await _listen(')),
     );
+    final listen =
+        section('Future<void> _listen(', 'MessageData _buildMessage(');
+    expect(listen, contains('message.type != MessageEnum.Auth'));
+    expect(listen, contains('session.close()'));
+  });
+
+  test('socket role is immutable per PeerSocketSession', () {
+    expect(source, isNot(contains('bool asServer = true;')));
+    expect(source, contains('role: PeerSocketRole.server'));
+    expect(source, contains('role: PeerSocketRole.client'));
+    expect(source, contains('session.role != PeerSocketRole.server'));
+    expect(source, contains('session.role != PeerSocketRole.client'));
+  });
+
+  test('simultaneous dials are resolved only after proof verification', () {
+    final proof = section(
+      'Future<void> _handleServerProof(',
+      'Future<void> _handleClientResult(',
+    );
+    expect(proof, contains('await session.receiveProof(proof)'));
+    expect(proof, contains('hasOutgoing'));
+    expect(proof, contains('resolveSimultaneousDial'));
+    expect(
+      proof.indexOf('await session.receiveProof(proof)'),
+      lessThan(proof.indexOf('resolveSimultaneousDial')),
+    );
+  });
+
+  test('legacy auth booleans cannot bypass signed pairing', () {
+    final pairingPolicy =
+        File('lib/state/pairing_request.dart').readAsStringSync();
+    expect(source, isNot(contains('self.auth ||')));
+    expect(source, isNot(contains('localTemp.auth')));
+    expect(source, contains('pairingReasonForIdentity'));
+    expect(pairingPolicy, contains('PairingReason.legacyTrustWithoutPin'));
+    expect(pairingPolicy, contains('stored?.identityPublicKey'));
+  });
+
+  test('signed result verification precedes client registration', () {
+    final result = section(
+      'Future<void> _handleClientResult(',
+      'Future<_IdentityPinPlan> _pairingReason(',
+    );
+    expect(result, contains('session.receiveResult(result)'));
+    expect(result, contains('_completeAuthenticatedSession('));
+    expect(
+      result.indexOf('session.receiveResult(result)'),
+      lessThan(result.indexOf('_completeAuthenticatedSession(')),
+    );
+  });
+
+  test('identity pin commits use captured compare-and-set state', () {
+    final completion = section(
+      'Future<DeviceData> _completeAuthenticatedSession(',
+      'Future<void> _sendUpgradeRequired(',
+    );
+    expect(completion, contains('_database.commitAuthenticatedDevice('));
+    expect(completion, contains('pinPlan.expectedPublicKey'));
+    expect(completion, contains('PairingReason.identityChanged'));
+    expect(completion, contains('_requireCurrentSession('));
+    expect(
+      completion.indexOf('_requireCurrentSession('),
+      lessThan(completion.indexOf('database.commitAuthenticatedDevice(')),
+    );
+
+    final challenge = section(
+      'Future<void> _handleClientChallenge(',
+      'Future<void> _handleServerProof(',
+    );
+    expect(challenge, contains('_identityPinPlansBySink[sink] = pinPlan'));
+  });
+
+  test('server persists and registers before sending an allow result', () {
+    final proof = section(
+      'Future<void> _handleServerProof(',
+      'Future<void> _handleClientResult(',
+    );
+    expect(
+      proof,
+      contains('AuthHandshakeLifecycle.completeServerAllow<DeviceData>('),
+    );
+    expect(proof, contains('_completeAuthenticatedSession('));
+    expect(proof, contains('_sendAuthEnvelope(sink, result)'));
+    expect(proof, contains('session.tryClaimPairingCompletion()'));
+    expect(proof, isNot(contains('session.isMutuallyApproved')));
+    final sessionSource =
+        File('lib/socket/peer_socket_session.dart').readAsStringSync();
+    expect(sessionSource, contains('final hasFinalDecision'));
+    expect(sessionSource, contains('isMutuallyApproved ||'));
+    expect(sessionSource, contains('hasPairingRejection;'));
+    expect(
+      proof.indexOf('_completeAuthenticatedSession('),
+      lessThan(proof.lastIndexOf('_sendAuthEnvelope(sink, result)')),
+    );
+  });
+
+  test('guarded UI resolution uses the tested failure boundary', () {
+    final guarded = section(
+      'void _runGuardedApproval({',
+      'Future<DeviceData> _deviceForSession(',
+    );
+    expect(guarded, contains('AuthHandshakeLifecycle.resolveGuarded('));
+    expect(guarded, contains('_failSocketSession('));
+  });
+
+  test('pending sessions participate in graceful shutdown', () {
+    final close = section(
+      'Future<void> closeGracefully(',
+      'Future<void> disconnectPeer(',
+    );
+    expect(close, contains('_sessionsBySink.isNotEmpty'));
+    expect(close, contains('_authResultsBySink.isNotEmpty'));
+  });
+
+  test('stream terminal callbacks close sessions before queued cleanup', () {
+    final attach = section(
+      'void _attachSocketTransport(',
+      'Future<void> _attachIncomingSocket(',
+    );
+    expect(attach, contains('AuthSocketLifecycle.closeBeforeQueuedCleanup('));
+    expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
+    final connect = section(
+      'Future<ConnectionAttemptResult> connectToServer(',
+      'Future<void> closeGracefully(',
+    );
+    expect(connect, contains('_attachSocketTransport('));
+  });
+
+  test('outbound failure closes and cleans only the captured socket', () {
+    final attach = section(
+      'void _attachSocketTransport(',
+      'Future<void> _attachIncomingSocket(',
+    );
+    final register = section(
+      'Future<void> _registerPeerConnection(',
+      'Future<void> _handlePeerSocketDoneQueued(',
+    );
+
+    expect(attach, contains('_closeSocketSink(sink)'));
+    expect(attach, contains('identical(_sessionsBySink[sink], session)'));
+    expect(attach, contains('_handlePeerSocketDoneQueued(sink)'));
+    expect(register, contains('await _closeSocketSink(sink)'));
+    expect(register, isNot(contains('await sink.close()')));
+  });
+
+  test('cancelling a ready outgoing attempt bounds its socket close', () {
+    final pendingAttempt = section(
+      'final class _PendingOutgoingConnection',
+      'class WsSvrManager',
+    );
+
+    expect(pendingAttempt, contains('TransportCloseGuard'));
+    expect(pendingAttempt, contains('return _sinkCloseGuard!.close()'));
+    expect(pendingAttempt, isNot(contains('return _sinkCloseFuture!')));
+  });
+
+  test('outbound auth outcomes are returned only to the awaiting caller', () {
+    final challenge = section(
+      'Future<void> _handleClientChallenge(',
+      'Future<bool> _automaticAttemptStillEligible(',
+    );
+    final result = section(
+      'Future<void> _handleClientResult(',
+      'Future<_IdentityPinPlan> _pairingReason(',
+    );
+    final announce = section(
+      'void _announceAuthenticatedSession(',
+      'bool _isSameSession(',
+    );
+
+    expect(challenge, isNot(contains('afterAuth(')));
+    expect(result, isNot(contains('afterAuth(')));
+    expect(announce, contains('session.role == PeerSocketRole.server'));
+  });
+
+  test('old socket cleanup removes only its own connection generation', () {
+    final cleanup = section(
+      'Future<void> _handlePeerSocketDone(',
+      'Future<PeerSocketSession> _createSocketSession(',
+    );
+    expect(
+      cleanup,
+      contains('AuthSocketLifecycle.removeConnectionIfCurrent('),
+    );
+    expect(cleanup, contains('closingSession: session'));
+    expect(cleanup, contains('currentSession: currentSession'));
+    expect(cleanup, isNot(contains('_peerConnections.disconnect(peerId)')));
   });
 }

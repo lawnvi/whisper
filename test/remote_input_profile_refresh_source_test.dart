@@ -21,7 +21,8 @@ void main() {
         heartbeatCase,
         contains(RegExp(
           r'_refreshRemoteProfileFromHeartbeat\(\s*message,\s*'
-          r'peerId:\s*incomingPeerId,\s*\)',
+          r'peerId:\s*incomingPeerId,\s*'
+          r'requireCurrent:\s*requireCurrentBusiness,\s*\)',
         )));
     expect(heartbeatCase,
         contains('message.message == _profileRefreshRequestMessage'));

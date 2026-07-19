@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_diagnostics.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class AudioPacketTransport {
@@ -10,26 +12,35 @@ abstract class AudioPacketTransport {
   Future<void> close();
 }
 
-class AudioPacketByteTransport implements AudioPacketTransport {
+abstract class AudioObservablePacketTransport implements AudioPacketTransport {
+  Future<PacketTransportTermination> get done;
+}
+
+class AudioPacketByteTransport implements AudioObservablePacketTransport {
   AudioPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
     AudioShareDiagnostics? diagnostics,
-  }) : _diagnostics = diagnostics ?? AudioShareDiagnostics.shared {
-    _inner = PacketByteTransport(
-      sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-      closeSink: closeSink ?? () async {},
-      onPacketSent: _emitSent,
-      onPacketDropped: _emitDropped,
-    );
-  }
+  }) : this.withTransport(
+         PacketByteTransport(
+           sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+           closeSink: closeSink ?? () async {},
+         ),
+         diagnostics: diagnostics,
+       );
+
+  AudioPacketByteTransport.withTransport(
+    this._inner, {
+    AudioShareDiagnostics? diagnostics,
+  }) : _diagnostics = diagnostics ?? AudioShareDiagnostics.shared;
 
   final AudioShareDiagnostics _diagnostics;
-  late final PacketByteTransport _inner;
-  AudioPacketFrame? _pending;
+  final PacketByteTransport _inner;
 
-  void _emitSent() {
-    final packet = _pending!;
+  @override
+  Future<PacketTransportTermination> get done => _inner.done;
+
+  void _emitSent(AudioPacketFrame packet) {
     _diagnostics.audioPacketSent(
       sessionId: packet.sessionId,
       sequence: packet.sequence,
@@ -37,19 +48,36 @@ class AudioPacketByteTransport implements AudioPacketTransport {
     );
   }
 
-  void _emitDropped() {
-    final packet = _pending!;
+  void _emitDropped(AudioPacketFrame packet, {required String reason}) {
     _diagnostics.audioPacketSendDropped(
       sessionId: packet.sessionId,
       sequence: packet.sequence,
-      reason: 'closed',
+      reason: reason,
     );
   }
 
   @override
   void send(AudioPacketFrame packet) {
-    _pending = packet;
-    _inner.send(_inner.isClosed ? Uint8List(0) : packet.encode());
+    if (_inner.isClosed) {
+      _emitDropped(packet, reason: 'closed');
+      return;
+    }
+    final delivery = _inner.send(packet.encode());
+    unawaited(
+      delivery.then((result) {
+        if (result == PacketSendResult.sent) {
+          _emitSent(packet);
+        } else {
+          final reason = switch (result) {
+            PacketSendResult.sent => 'sent',
+            PacketSendResult.dropped => 'backpressure',
+            PacketSendResult.closed => 'closed',
+            PacketSendResult.transportFailure => 'transport',
+          };
+          _emitDropped(packet, reason: reason);
+        }
+      }),
+    );
   }
 
   @override
@@ -60,20 +88,35 @@ class AudioWebSocketPacketTransport extends AudioPacketByteTransport {
   AudioWebSocketPacketTransport._(
     PacketByteTransport channelTransport, {
     required AudioShareDiagnostics diagnostics,
-  }) : super(
-          sendBytes: (bytes) => channelTransport.send(bytes),
-          closeSink: channelTransport.close,
-          diagnostics: diagnostics,
-        );
+  }) : super.withTransport(channelTransport, diagnostics: diagnostics);
 
   static Future<AudioWebSocketPacketTransport> connect(
     Uri uri, {
+    required Uint8List mediaMacKey,
+    required String sessionId,
+    required String peerId,
     AudioShareDiagnostics? diagnostics,
   }) async {
     final resolvedDiagnostics = diagnostics ?? AudioShareDiagnostics.shared;
     resolvedDiagnostics.transportConnecting(uri);
     try {
-      final channelTransport = await connectPacketWebSocket(uri);
+      final channelTransport = await connectPacketWebSocket(
+        uri,
+        mediaUpgradeContext: MediaUpgradeClientContext(
+          namespace: 'audio',
+          sessionId: sessionId,
+          peerId: peerId,
+          mediaMacKey: mediaMacKey,
+        ),
+        packetEncoder: AuthenticatedMediaPacketEncoder(
+          route: '/audio',
+          namespace: 'audio',
+          sessionId: sessionId,
+          mediaMacKey: mediaMacKey,
+          channelBinding: mediaPacketChannelBindingFromUri(uri),
+          maxPayloadBytes: 256 * 1024,
+        ),
+      );
       resolvedDiagnostics.transportConnected(uri);
       return AudioWebSocketPacketTransport._(
         channelTransport,

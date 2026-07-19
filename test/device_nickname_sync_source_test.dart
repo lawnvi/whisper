@@ -36,8 +36,7 @@ void main() {
         'Future<void> _refreshRemoteProfileFromHeartbeat',
       ),
     );
-    expect(
-        source, contains('await LocalDatabase().upsertDevice(profile.device)'));
+    expect(source, contains('await _database.upsertDevice(profile.device)'));
     expect(source, contains('ConnectionCoordinator().markConnected'));
     expect(source, contains('profileDeviceChanged'));
     expect(source, contains('_dispatchToAll((event) => event.onConnect())'));

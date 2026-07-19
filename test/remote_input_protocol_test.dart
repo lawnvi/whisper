@@ -143,6 +143,40 @@ void main() {
       expect(json['releaseEdgeUnit'], 0);
       expect(decoded.releaseEdgeUnit, 0);
     });
+
+    test('serializes a transport token only for a successful accept', () {
+      const accept = RemoteInputControlMessage(
+        action: RemoteInputControlAction.accept,
+        sessionId: 'input-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        transportToken: 'input-token',
+      );
+
+      expect(accept.toJson()['transportToken'], 'input-token');
+      expect(
+        RemoteInputControlMessage.fromJson(accept.toJson()).transportToken,
+        'input-token',
+      );
+      for (final action in RemoteInputControlAction.values
+          .where((action) => action != RemoteInputControlAction.accept)) {
+        final control = RemoteInputControlMessage(
+          action: action,
+          sessionId: 'input-1',
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          transportToken: 'must-not-leak',
+        );
+        expect(control.toJson(), isNot(contains('transportToken')));
+        expect(
+          () => RemoteInputControlMessage.fromJson(<String, dynamic>{
+            ...control.toJson(),
+            'transportToken': 'unexpected',
+          }),
+          throwsFormatException,
+        );
+      }
+    });
   });
 
   group('RemoteInputPacketFrame', () {

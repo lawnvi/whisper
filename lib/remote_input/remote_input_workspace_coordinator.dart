@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -36,6 +39,12 @@ enum RemoteInputWorkspaceTargetStatus {
   connected,
   failed,
   stopped,
+}
+
+enum RemoteInputWorkspaceDiagnosticKind {
+  transportClosed,
+  platformDiagnostic,
+  platformError,
 }
 
 class RemoteInputWorkspaceTargetRequest {
@@ -293,8 +302,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     RemoteInputWorkspaceSessionIdFactory? workspaceSessionIdFactory,
   })  : _manager = manager ?? RemoteInputManager(),
         _platform = platform ?? RemoteInputCoordinator.shared.platform,
-        _transportFactory =
-            transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _workspaceSessionIdFactory =
             workspaceSessionIdFactory ?? const Uuid().v4;
 
@@ -305,7 +313,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
-  final RemoteInputTransportFactory _transportFactory;
+  final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputWorkspaceSessionIdFactory _workspaceSessionIdFactory;
 
   RemoteInputWorkspaceSnapshot _snapshot =
@@ -321,6 +329,23 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   RemoteInputWorkspaceSnapshot get snapshot => _snapshot;
 
   bool get isControllerLive => _snapshot.isControllerLive;
+
+  void _traceWorkspace(
+    RemoteInputWorkspaceDiagnosticKind kind, {
+    RemoteInputFailureReason? reason,
+  }) {
+    if (kReleaseMode &&
+        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] != '1') {
+      return;
+    }
+    privacyLog.event(
+      PrivacyEvent.remoteInputDiagnostic,
+      <PrivacyField, Object>{
+        PrivacyField.kind: kind,
+        if (reason != null) PrivacyField.reason: reason,
+      },
+    );
+  }
 
   Future<void> startControllerWorkspace({
     required String sourcePeerId,
@@ -425,7 +450,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         sessionId: offer.sessionId,
         sourcePeerId: offer.sourcePeerId,
         sinkPeerId: offer.sinkPeerId,
-        errorMessage: 'Local device is already a controller workspace',
+        errorMessage: RemoteInputFailureReason.busy.name,
       ),
     );
     return true;
@@ -437,6 +462,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputPeerControlSender sendControlTo,
+    Uint8List? mediaSendKey,
   }) async {
     _sendControlTo = sendControlTo;
     switch (message.action) {
@@ -446,6 +472,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           localPeerId: localPeerId,
           remoteHost: remoteHost,
           remotePort: remotePort,
+          mediaSendKey: mediaSendKey,
         );
       case RemoteInputControlAction.release:
         return _handleRelease(message);
@@ -471,7 +498,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     await _closeControllerTarget(
       target,
       terminalStatus: RemoteInputWorkspaceStatus.idle,
-      errorMessage: 'Peer disconnected',
+      errorMessage: RemoteInputFailureReason.transport.name,
     );
   }
 
@@ -506,6 +533,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String localPeerId,
     required String remoteHost,
     required int remotePort,
+    Uint8List? mediaSendKey,
   }) async {
     if (accept.sourcePeerId != localPeerId ||
         _snapshot.role != RemoteInputWorkspaceRole.controller) {
@@ -517,13 +545,30 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     }
     _manager.handleControlMessage(accept);
     final path = accept.path.isNotEmpty ? accept.path : target.offer.path;
-    target.transport = await _transportFactory(
-      buildPeerPacketUri(
-        host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
-        port: remotePort > 0 ? remotePort : target.request.port,
-        path: path,
-      ),
+    final uri = buildPeerPacketUri(
+      host: remoteHost.isNotEmpty ? remoteHost : target.request.host,
+      port: remotePort > 0 ? remotePort : target.request.port,
+      path: path,
+      queryParameters: <String, String>{
+        if (accept.transportToken.isNotEmpty) 'session': accept.sessionId,
+        if (accept.transportToken.isNotEmpty) 'token': accept.transportToken,
+      },
     );
+    final transportFactory = _transportFactory;
+    if (transportFactory != null) {
+      target.transport = await transportFactory(uri);
+    } else {
+      if (accept.transportToken.isEmpty || mediaSendKey == null) {
+        throw StateError(
+            'authenticated remote input workspace context missing');
+      }
+      target.transport = await RemoteInputWebSocketPacketTransport.connect(
+        uri,
+        mediaMacKey: mediaSendKey,
+        sessionId: accept.sessionId,
+        peerId: accept.sourcePeerId,
+      );
+    }
     target.transportDoneSubscription = _listenForTargetTransportDone(target);
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.connected,
@@ -572,13 +617,16 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     await target.transport?.close();
     target.transport = null;
     _manager.stopSession(message.sessionId);
+    final stableError = message.action == RemoteInputControlAction.reject
+        ? remoteInputFailureReasonFromWire(message.errorMessage).name
+        : '';
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.stopped,
-      errorMessage: message.errorMessage,
+      errorMessage: stableError,
     );
     await _publishAfterTargetClosed(
       terminalStatus: RemoteInputWorkspaceStatus.idle,
-      errorMessage: message.errorMessage,
+      errorMessage: stableError,
     );
     return true;
   }
@@ -588,6 +636,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
+    final failureReason =
+        remoteInputFailureReasonFromWire(message.errorMessage);
     await _releaseCaptureForActiveTargetIfNeeded(target);
     await target.transportDoneSubscription?.cancel();
     target.transportDoneSubscription = null;
@@ -595,11 +645,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     target.transport = null;
     target.snapshot = target.snapshot.copyWith(
       status: RemoteInputWorkspaceTargetStatus.failed,
-      errorMessage: message.errorMessage,
+      errorMessage: failureReason.name,
     );
     await _publishAfterTargetClosed(
       terminalStatus: RemoteInputWorkspaceStatus.failed,
-      errorMessage: message.errorMessage,
+      errorMessage: failureReason.name,
     );
     return true;
   }
@@ -686,10 +736,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           !target.snapshot.isConnected) {
         return;
       }
-      debugPrint(
-        '[WhisperRemoteInputWorkspace] packet transport closed '
-        'peer=${target.request.peerId}',
-      );
+      _traceWorkspace(RemoteInputWorkspaceDiagnosticKind.transportClosed);
       unawaited(_handleTargetTransportClosed(target));
     });
   }
@@ -700,7 +747,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     await _closeControllerTarget(
       target,
       terminalStatus: RemoteInputWorkspaceStatus.idle,
-      errorMessage: 'Remote input transport closed',
+      errorMessage: RemoteInputFailureReason.transport.name,
     );
   }
 
@@ -753,8 +800,12 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         _setSnapshot(
           _snapshot.copyWith(
             status: RemoteInputWorkspaceStatus.failed,
-            errorMessage: error.message,
+            errorMessage: RemoteInputFailureReason.capture.name,
           ),
+        );
+        _traceWorkspace(
+          RemoteInputWorkspaceDiagnosticKind.platformError,
+          reason: RemoteInputFailureReason.capture,
         );
         unawaited(_disposeControllerRuntime(
           workspaceSessionId: _snapshot.workspaceSessionId,
@@ -763,7 +814,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     });
     _diagnosticSubscription ??= _platform.diagnostics.listen((diagnostic) {
       if (diagnostic.sessionId == _snapshot.workspaceSessionId) {
-        debugPrint('[WhisperRemoteInputWorkspace] ${diagnostic.message}');
+        _traceWorkspace(RemoteInputWorkspaceDiagnosticKind.platformDiagnostic);
       }
     });
   }

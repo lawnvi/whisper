@@ -23,10 +23,8 @@ void main() {
     expect(source, contains('final colorScheme = theme.colorScheme;'));
     expect(source, contains('final palette = context.whisperPalette;'));
     expect(source, contains('backgroundColor: colorScheme.surface'));
+    expect(source, contains('CupertinoNavigationBar('));
     expect(source, contains('automaticBackgroundVisibility: false'));
-    expect(source, contains('enableBackgroundFilterBlur: false'));
-    expect(
-        source, contains('isDark ? palette.textMuted : colorScheme.onSurface'));
   });
 
   test('notification app picker shows package names under app names', () {
@@ -53,8 +51,11 @@ void main() {
 
     expect(source, contains('final bool isChecked;'));
     expect(source, contains('value: isChecked'));
-    expect(source, contains('checkedApps[packageName] = value;'));
+    expect(source, contains('Map<String, bool>.of(checkedApps)'));
     expect(source, contains('_updateAppChecked(app.packageName, value)'));
+    expect(source, contains('Future<void> _commitSelection('));
+    expect(source, contains('checkedApps = previousSelection;'));
+    expect(source, contains('bool _isSaving = false;'));
     expect(source, isNot(contains('ValueNotifier<bool>')));
   });
 
@@ -76,5 +77,7 @@ void main() {
       isFalse,
     );
     expect(source, contains('AnimatedSwitcher('));
+    expect(source, contains('final AppListLoader? loader;'));
+    expect(source, contains('Widget _buildStatus('));
   });
 }

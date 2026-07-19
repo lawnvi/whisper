@@ -38,10 +38,30 @@ void main() {
 
     expect(workflow, isNot(contains('WHISPER_MACOS_DMG_PATH: whisper.dmg')));
     expect(workflow, isNot(contains('zip -r app.ipa Payload')));
-    expect(workflow,
-        isNot(contains('/DOUTPUT_NAME="whisper-windows-x86_64.exe"')));
+    expect(
+      workflow,
+      isNot(contains('/DOUTPUT_NAME="whisper-windows-x86_64.exe"')),
+    );
     expect(workflow, isNot(contains('whisper-x86_64.rpm')));
     expect(workflow, isNot(contains('build/linux/deb/whisper-amd64.deb')));
     expect(workflow, isNot(contains('build/app/outputs/flutter-apk/*.apk')));
+  });
+
+  test('release assets are published once after every platform build', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    final releaseActions = RegExp(
+      'uses: softprops/action-gh-release@v2',
+    ).allMatches(workflow);
+
+    expect(workflow, contains('publish-release:'));
+    expect(workflow, contains('uses: actions/download-artifact@v4'));
+    expect(workflow, contains('merge-multiple: true'));
+    expect(workflow, contains('      - build-on-macos'));
+    expect(workflow, contains('      - build-on-windows'));
+    expect(workflow, contains('      - build-on-linux'));
+    expect(workflow, contains('      - build-on-android'));
+    expect(workflow, contains('files: release-assets/**/*'));
+    expect(workflow, contains('overwrite_files: true'));
+    expect(releaseActions.length, 1);
   });
 }

@@ -13,6 +13,7 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final mediaKey = Uint8List.fromList(List<int>.generate(32, (index) => index));
 
   group('RemoteInputCoordinator', () {
     late MethodChannel channel;
@@ -44,7 +45,9 @@ void main() {
         manager: manager,
         platform: platform,
         transportFactory: (uri) async {
-          expect(uri.toString(), 'ws://win.local:10002/input');
+          expect(uri.path, '/input');
+          expect(uri.queryParameters['session'], isNotEmpty);
+          expect(uri.queryParameters['token'], 'input-token');
           return transport;
         },
       );
@@ -70,12 +73,14 @@ void main() {
           sinkPeerId: 'win',
           layoutEdge: RemoteInputEdge.right,
           releaseHotkey: 'ctrl+alt+esc',
+          transportToken: 'input-token',
         ),
         localPeerId: 'mac',
         remoteHost: 'win.local',
         remotePort: 10002,
         isMutuallyTrusted: true,
         localCanInject: true,
+        mediaSendKey: mediaKey,
         sendControl: sentControls.add,
       );
 
@@ -419,6 +424,88 @@ void main() {
       expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
     });
 
+    test('remote input errors are reduced to a stable local reason', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final offer = sentControls.single;
+      const remoteText =
+          'remote token=never-store-this /Users/alice/private.txt';
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          errorMessage: remoteText,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
+      expect(coordinator.state.errorMessage, 'remoteFailure');
+      expect(coordinator.state.errorMessage, isNot(contains(remoteText)));
+    });
+
+    test('remote input errors preserve an allowlisted wire reason', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final offer = sentControls.single;
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          errorMessage: 'permission',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.errorMessage, 'permission');
+    });
+
     test('sink auto-accepts trusted capable offers and injects packets',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
@@ -541,6 +628,110 @@ void main() {
       ) as Map<String, dynamic>;
       expect(coalescedPayload['deltaX'], 5);
       expect(coalescedPayload['deltaY'], 10);
+    });
+
+    test('sink safely coalesces adjacent normalized wheel packets', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final firstInjectStarted = Completer<void>();
+      final releaseFirstInject = Completer<void>();
+      addTearDown(() {
+        if (!releaseFirstInject.isCompleted) {
+          releaseFirstInject.complete();
+        }
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent' && !firstInjectStarted.isCompleted) {
+          firstInjectStarted.complete();
+          await releaseFirstInject.future;
+        }
+        return null;
+      });
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        platformKindProvider: () => RemoteInputPlatformKind.macos,
+        scrollMultiplierProvider: () async => 1,
+      );
+      addTearDown(coordinator.stopLocal);
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-wheel-coalesce-1',
+        sourcePeerId: 'win',
+        sinkPeerId: 'mac',
+        layoutEdge: RemoteInputEdge.right,
+        sourcePlatform: 'windows',
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final firstDelivery = _deliverPacket(
+        manager,
+        _eventFrameBytes(
+          sessionId: offer.sessionId,
+          sequence: 1,
+          eventType: RemoteInputEventType.release,
+          payload: const <String, dynamic>{},
+        ),
+      );
+      await firstInjectStarted.future;
+      final firstWheel = _deliverPacket(
+        manager,
+        _eventFrameBytes(
+          sessionId: offer.sessionId,
+          sequence: 2,
+          eventType: RemoteInputEventType.mouseWheel,
+          payload: const <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'deltaX': 0,
+            'deltaY': 120,
+          },
+        ),
+      );
+      final secondWheel = _deliverPacket(
+        manager,
+        _eventFrameBytes(
+          sessionId: offer.sessionId,
+          sequence: 3,
+          eventType: RemoteInputEventType.mouseWheel,
+          payload: const <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'deltaX': 0,
+            'deltaY': 120,
+          },
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(coordinator.debugPendingInjectionItems, 2);
+      releaseFirstInject.complete();
+      await Future.wait(<Future<void>>[
+        firstDelivery,
+        firstWheel,
+        secondWheel,
+      ]);
+
+      final injectCalls =
+          calls.where((call) => call.method == 'injectEvent').toList();
+      expect(injectCalls, hasLength(2));
+      final wheelArguments =
+          injectCalls.last.arguments as Map<Object?, Object?>;
+      expect(wheelArguments['eventType'], 'mouseWheel');
+      expect(wheelArguments['sequence'], 3);
+      final payload = jsonDecode(
+        utf8.decode(wheelArguments['payload'] as Uint8List),
+      ) as Map<String, dynamic>;
+      expect(payload['scrollDeltaY'], 2);
+      expect(payload['deltaY'], 240);
     });
 
     test('sink normalizes legacy wheel packets before injection', () async {
@@ -809,6 +1000,442 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(injectCalls, hasLength(2));
+    });
+
+    test('sink preserves every queued key button and release in order',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        platformKindProvider: () => RemoteInputPlatformKind.windows,
+      );
+      final firstInjectStarted = Completer<void>();
+      final releaseFirstInject = Completer<void>();
+      addTearDown(() async {
+        if (!releaseFirstInject.isCompleted) {
+          releaseFirstInject.complete();
+        }
+        await coordinator.stopLocal();
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent' && !firstInjectStarted.isCompleted) {
+          firstInjectStarted.complete();
+          await releaseFirstInject.future;
+        }
+        return null;
+      });
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-semantic-order-1',
+        sourcePeerId: 'win-source',
+        sinkPeerId: 'win-sink',
+        layoutEdge: RemoteInputEdge.right,
+        sourcePlatform: 'windows',
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win-sink',
+        remoteHost: 'win-source.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      const packetCount = 200;
+      final expectedTypes = <RemoteInputEventType>[];
+      final deliveries = <Future<void>>[];
+      for (var sequence = 1; sequence <= packetCount; sequence++) {
+        final eventType = switch (sequence % 3) {
+          1 => RemoteInputEventType.key,
+          2 => RemoteInputEventType.mouseButton,
+          _ => RemoteInputEventType.release,
+        };
+        expectedTypes.add(eventType);
+        deliveries.add(_deliverPacket(
+          manager,
+          _eventFrameBytes(
+            sessionId: offer.sessionId,
+            sequence: sequence,
+            eventType: eventType,
+            payload: switch (eventType) {
+              RemoteInputEventType.key => <String, dynamic>{
+                  'sourcePlatform': 'windows',
+                  'windowsKeyCode': 0x41,
+                  'keyCode': 0x41,
+                  'down': sequence.isOdd,
+                },
+              RemoteInputEventType.mouseButton => <String, dynamic>{
+                  'button': 1,
+                  'down': sequence.isOdd,
+                },
+              _ => const <String, dynamic>{},
+            },
+          ),
+        ));
+        if (sequence == 1) {
+          await firstInjectStarted.future;
+        }
+      }
+      expect(coordinator.debugPendingInjectionItems, packetCount);
+
+      releaseFirstInject.complete();
+      await Future.wait(deliveries).timeout(const Duration(seconds: 2));
+
+      final injected =
+          calls.where((call) => call.method == 'injectEvent').toList();
+      expect(injected, hasLength(packetCount));
+      expect(
+        injected.map((call) => call.arguments['sequence']),
+        List<int>.generate(packetCount, (index) => index + 1),
+      );
+      expect(
+        injected.map((call) => call.arguments['eventType']),
+        expectedTypes.map((eventType) => eventType.name),
+      );
+    });
+
+    test('sink fails closed when slow native injection exhausts hard bounds',
+        () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      final firstInjectStarted = Completer<void>();
+      final releaseFirstInject = Completer<void>();
+      var stopInjectionCount = 0;
+      addTearDown(() async {
+        if (!releaseFirstInject.isCompleted) {
+          releaseFirstInject.complete();
+        }
+        await coordinator.stopLocal();
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent' && !firstInjectStarted.isCompleted) {
+          firstInjectStarted.complete();
+          await releaseFirstInject.future;
+        }
+        if (call.method == 'stopInjection') {
+          stopInjectionCount++;
+        }
+        return null;
+      });
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-overflow-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+      manager.handlePacketBytes(_eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 1,
+        eventType: RemoteInputEventType.release,
+        payload: const <String, dynamic>{},
+      ));
+      await firstInjectStarted.future;
+
+      const semanticTypes = <RemoteInputEventType>[
+        RemoteInputEventType.key,
+        RemoteInputEventType.mouseButton,
+        RemoteInputEventType.release,
+        RemoteInputEventType.modifiers,
+        RemoteInputEventType.mouseMove,
+        RemoteInputEventType.mouseWheel,
+      ];
+      var maxPendingItems = coordinator.debugPendingInjectionItems;
+      var maxPendingBytes = coordinator.debugPendingInjectionBytes;
+      for (var sequence = 2; sequence <= 3000; sequence++) {
+        final eventType = semanticTypes[(sequence - 2) % semanticTypes.length];
+        manager.handlePacketBytes(_eventFrameBytes(
+          sessionId: offer.sessionId,
+          sequence: sequence,
+          eventType: eventType,
+          payload: switch (eventType) {
+            RemoteInputEventType.key => <String, dynamic>{
+                'sourcePlatform': 'windows',
+                'windowsKeyCode': 0x41,
+                'keyCode': 0x41,
+                'down': sequence.isEven,
+              },
+            RemoteInputEventType.mouseButton => <String, dynamic>{
+                'button': 1,
+                'down': sequence.isEven,
+              },
+            RemoteInputEventType.mouseMove => const <String, dynamic>{
+                'activeStart': false,
+                'deltaX': 1,
+                'deltaY': 1,
+                'edge': 'right',
+              },
+            RemoteInputEventType.mouseWheel => const <String, dynamic>{
+                'sourcePlatform': 'windows',
+                'deltaX': 0,
+                'deltaY': 120,
+              },
+            RemoteInputEventType.modifiers ||
+            RemoteInputEventType.release =>
+              const <String, dynamic>{},
+          },
+        ));
+        if (coordinator.debugPendingInjectionItems > maxPendingItems) {
+          maxPendingItems = coordinator.debugPendingInjectionItems;
+        }
+        if (coordinator.debugPendingInjectionBytes > maxPendingBytes) {
+          maxPendingBytes = coordinator.debugPendingInjectionBytes;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        manager.session(offer.sessionId)?.state,
+        RemoteInputSessionState.stopped,
+      );
+      expect(stopInjectionCount, 1);
+      expect(
+        maxPendingItems,
+        lessThanOrEqualTo(RemoteInputCoordinator.maxPendingInjectionItems),
+      );
+      expect(
+        maxPendingBytes,
+        lessThanOrEqualTo(RemoteInputCoordinator.maxPendingInjectionBytes),
+      );
+      expect(coordinator.debugPendingInjectionItems, 0);
+      expect(coordinator.debugPendingInjectionBytes, 0);
+      expect(
+        sentControls.where(
+            (control) => control.action == RemoteInputControlAction.error),
+        hasLength(1),
+      );
+      expect(manager.onPacket, isNull);
+
+      releaseFirstInject.complete();
+      await Future<void>.delayed(Duration.zero);
+      calls.clear();
+      const replacementOffer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-overflow-2',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+      await coordinator.handleControlMessage(
+        replacementOffer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+      final replacementHandled = manager.handlePacketBytes(_eventFrameBytes(
+        sessionId: replacementOffer.sessionId,
+        sequence: 1,
+        eventType: RemoteInputEventType.release,
+        payload: const <String, dynamic>{},
+      ));
+      if (replacementHandled is Future<void>) {
+        await replacementHandled;
+      }
+
+      expect(
+        calls.where((call) {
+          if (call.method != 'injectEvent') {
+            return false;
+          }
+          final arguments = call.arguments as Map<Object?, Object?>;
+          return arguments['sessionId'] == replacementOffer.sessionId;
+        }),
+        hasLength(1),
+      );
+      expect(
+        manager.session(replacementOffer.sessionId)?.state,
+        RemoteInputSessionState.connected,
+      );
+    });
+
+    test('sink enforces its byte bound before the item bound', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+      final firstInjectStarted = Completer<void>();
+      final releaseFirstInject = Completer<void>();
+      var stopInjectionCount = 0;
+      addTearDown(() async {
+        if (!releaseFirstInject.isCompleted) {
+          releaseFirstInject.complete();
+        }
+        await coordinator.stopLocal();
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent' && !firstInjectStarted.isCompleted) {
+          firstInjectStarted.complete();
+          await releaseFirstInject.future;
+        }
+        if (call.method == 'stopInjection') {
+          stopInjectionCount++;
+        }
+        return null;
+      });
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-byte-overflow-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+      manager.handlePacketBytes(_eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 1,
+        eventType: RemoteInputEventType.release,
+        payload: const <String, dynamic>{},
+      ));
+      await firstInjectStarted.future;
+
+      var maxPendingItems = coordinator.debugPendingInjectionItems;
+      var maxPendingBytes = coordinator.debugPendingInjectionBytes;
+      for (var sequence = 2; sequence <= 40; sequence++) {
+        manager.handlePacketBytes(
+          RemoteInputPacketFrame(
+            sessionId: offer.sessionId,
+            sequence: sequence,
+            timestampMicros: sequence,
+            eventType: RemoteInputEventType.release,
+            payload: Uint8List(60 * 1024),
+          ).encode(),
+        );
+        if (coordinator.debugPendingInjectionItems > maxPendingItems) {
+          maxPendingItems = coordinator.debugPendingInjectionItems;
+        }
+        if (coordinator.debugPendingInjectionBytes > maxPendingBytes) {
+          maxPendingBytes = coordinator.debugPendingInjectionBytes;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        maxPendingItems,
+        lessThan(RemoteInputCoordinator.maxPendingInjectionItems),
+      );
+      expect(
+        maxPendingBytes,
+        lessThanOrEqualTo(RemoteInputCoordinator.maxPendingInjectionBytes),
+      );
+      expect(
+        manager.session(offer.sessionId)?.state,
+        RemoteInputSessionState.stopped,
+      );
+      expect(stopInjectionCount, 1);
+      expect(
+        sentControls.where(
+            (control) => control.action == RemoteInputControlAction.error),
+        hasLength(1),
+      );
+    });
+
+    test('sink times out a permanently blocked native injection', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+        nativeInjectionTimeout: const Duration(milliseconds: 20),
+      );
+      final blockedInjection = Completer<void>();
+      var stopInjectionCount = 0;
+      addTearDown(() async {
+        if (!blockedInjection.isCompleted) {
+          blockedInjection.complete();
+        }
+        await coordinator.stopLocal();
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'injectEvent') {
+          await blockedInjection.future;
+        }
+        if (call.method == 'stopInjection') {
+          stopInjectionCount++;
+        }
+        return null;
+      });
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-timeout-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      await _deliverPacket(
+        manager,
+        _eventFrameBytes(
+          sessionId: offer.sessionId,
+          sequence: 1,
+          eventType: RemoteInputEventType.release,
+          payload: const <String, dynamic>{},
+        ),
+      ).timeout(const Duration(milliseconds: 200));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        manager.session(offer.sessionId)?.state,
+        RemoteInputSessionState.stopped,
+      );
+      expect(stopInjectionCount, 1);
+      expect(
+        sentControls.where(
+            (control) => control.action == RemoteInputControlAction.error),
+        hasLength(1),
+      );
+      expect(coordinator.debugPendingInjectionItems, 0);
     });
 
     test('sink sends an edge release control without stopping injection',
@@ -1470,8 +2097,7 @@ void main() {
       );
 
       expect(sentControls.single.action, RemoteInputControlAction.error);
-      expect(sentControls.single.errorMessage,
-          'Remote input is not available on this platform');
+      expect(sentControls.single.errorMessage, 'unsupported');
       expect(coordinator.state.status, RemoteInputRuntimeStatus.failed);
     });
   });
@@ -1489,6 +2115,28 @@ Uint8List _keyFrameBytes({
     eventType: RemoteInputEventType.key,
     payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
   ).encode();
+}
+
+Uint8List _eventFrameBytes({
+  required String sessionId,
+  required int sequence,
+  required RemoteInputEventType eventType,
+  required Map<String, dynamic> payload,
+}) {
+  return RemoteInputPacketFrame(
+    sessionId: sessionId,
+    sequence: sequence,
+    timestampMicros: sequence,
+    eventType: eventType,
+    payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+  ).encode();
+}
+
+Future<void> _deliverPacket(
+  RemoteInputManager manager,
+  Uint8List bytes,
+) async {
+  await manager.handlePacketBytes(bytes);
 }
 
 Uint8List _mouseMoveFrameBytes({

@@ -21,7 +21,7 @@ class AndroidDocumentFile {
     return AndroidDocumentFile(
       uri: map['uri'] as String? ?? '',
       name: map['name'] as String? ?? 'document',
-      size: (map['size'] as num?)?.toInt() ?? 0,
+      size: (map['size'] as num?)?.toInt() ?? -1,
       mimeType: map['mimeType'] as String? ?? '',
       lastModified: (map['lastModified'] as num?)?.toInt() ?? 0,
     );

@@ -6,8 +6,10 @@ void main() {
   test('clipboard watcher reads text through the text-only sync guard', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 
-    expect(source,
-        contains("import 'package:whisper/helper/clipboard_sync.dart';"));
+    expect(
+      source,
+      contains("import 'package:whisper/helper/clipboard_sync.dart';"),
+    );
     expect(source, contains('final text = await readClipboardTextForSync();'));
     expect(source, contains('if (text == null ||'));
   });
@@ -15,9 +17,20 @@ void main() {
   test('manual clipboard message send uses the text-only sync guard', () {
     final source = File('lib/socket/svrmanager.dart').readAsStringSync();
 
-    expect(source,
-        contains("import 'package:whisper/helper/clipboard_sync.dart';"));
     expect(
-        source, contains('var str = await readClipboardTextForSync() ?? "";'));
+      source,
+      contains("import 'package:whisper/helper/clipboard_sync.dart';"),
+    );
+    expect(
+      source,
+      contains('var str = await readClipboardTextForSync() ?? "";'),
+    );
+  });
+
+  test('remote clipboard writes await source-aware suppression', () {
+    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+
+    expect(source, contains('await copyToClipboard('));
+    expect(source, contains('sourcePeerId: session.remotePeerId'));
   });
 }

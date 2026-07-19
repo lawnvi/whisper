@@ -7,6 +7,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/pairing_request.dart';
 
 /// 订阅 socket 传输事件,把聚合结果推给原生传输通知模块。
 /// 仅 Android;进程级单例,应用启动时 attach 一次。
@@ -114,8 +115,10 @@ class TransferNotificationBridge implements ISocketEvent {
   void onConnect() {}
 
   @override
-  void onAuth(
-      DeviceData? deviceData, bool asServer, String msg, var callback) {}
+  void onPairing(
+    PairingRequest request,
+    void Function(bool) resolve,
+  ) {}
 
   @override
   void afterAuth(bool allow, DeviceData? device) {}

@@ -7,12 +7,35 @@
 
 #include "audio_share_plugin.h"
 #include "desktop_clipboard_image_plugin.h"
+#include "desktop_quick_send_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
+
+namespace {
+
+enum class ApplicationLogReason {
+  kRegistrationFailed,
+};
+
+const char* ApplicationLogReasonName(ApplicationLogReason reason) {
+  switch (reason) {
+    case ApplicationLogReason::kRegistrationFailed:
+      return "registration_failed";
+  }
+  return "unknown";
+}
+
+void LogApplicationWarning(ApplicationLogReason reason) {
+  g_warning("event=application_warning reason=%s",
+            ApplicationLogReasonName(reason));
+}
+
+}  // namespace
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  GtkWindow* window;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -20,8 +43,15 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  if (self->window != nullptr) {
+    gtk_window_present(self->window);
+    return;
+  }
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  self->window = window;
+  g_object_add_weak_pointer(G_OBJECT(window),
+                            reinterpret_cast<gpointer*>(&self->window));
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -65,39 +95,56 @@ static void my_application_activate(GApplication* application) {
   audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
   remote_input_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));
+  desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
-// Implements GApplication::local_command_line.
-static gboolean my_application_local_command_line(GApplication* application, gchar*** arguments, int* exit_status) {
+// Implements GApplication::command_line. Secondary launches are forwarded to
+// the primary process by GApplication and delivered to the running Dart isolate.
+static int my_application_command_line(
+    GApplication* application, GApplicationCommandLine* command_line) {
   MyApplication* self = MY_APPLICATION(application);
-  // Strip out the first argument as it is the binary name.
-  self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
-
-  g_autoptr(GError) error = nullptr;
-  if (!g_application_register(application, nullptr, &error)) {
-     g_warning("Failed to register: %s", error->message);
-     *exit_status = 1;
-     return TRUE;
+  if (!g_application_get_is_registered(application)) {
+    LogApplicationWarning(ApplicationLogReason::kRegistrationFailed);
+    return 1;
   }
-
-  g_application_activate(application);
-  *exit_status = 0;
-
-  return TRUE;
+  int argument_count = 0;
+  gchar** arguments =
+      g_application_command_line_get_arguments(command_line, &argument_count);
+  char** dart_arguments = argument_count > 1 ? arguments + 1
+                                             : arguments + argument_count;
+  const DesktopQuickSendEnqueueOutcome quick_send_outcome =
+      desktop_quick_send_plugin_emit_arguments(dart_arguments);
+  if (self->window == nullptr) {
+    g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+    self->dart_entrypoint_arguments =
+        quick_send_outcome == DESKTOP_QUICK_SEND_IGNORED
+            ? g_strdupv(dart_arguments)
+            : g_new0(gchar*, 1);
+    g_application_activate(application);
+  } else {
+    gtk_window_present(self->window);
+  }
+  g_strfreev(arguments);
+  return quick_send_outcome == DESKTOP_QUICK_SEND_REJECTED ? 1 : 0;
 }
 
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  if (self->window != nullptr) {
+    g_object_remove_weak_pointer(
+        G_OBJECT(self->window), reinterpret_cast<gpointer*>(&self->window));
+    self->window = nullptr;
+  }
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
-  G_APPLICATION_CLASS(klass)->local_command_line = my_application_local_command_line;
+  G_APPLICATION_CLASS(klass)->command_line = my_application_command_line;
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
@@ -106,6 +153,6 @@ static void my_application_init(MyApplication* self) {}
 MyApplication* my_application_new() {
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID,
-                                     "flags", G_APPLICATION_NON_UNIQUE,
+                                     "flags", G_APPLICATION_HANDLES_COMMAND_LINE,
                                      nullptr));
 }

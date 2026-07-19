@@ -1,0 +1,1123 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/peer_reconnect_controller.dart';
+
+void main() {
+  group('retry policy', () {
+    test('uses the full capped base-delay sequence after network failures',
+        () async {
+      final scheduler = _FakeScheduler();
+      final attemptedTargets = <ReconnectTarget>[];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptedTargets.add(attempt.target);
+          return ConnectionAttemptStatus.networkFailure;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      for (var index = 0; index < 8; index += 1) {
+        await scheduler.runNext();
+      }
+
+      expect(attemptedTargets, List<ReconnectTarget>.filled(8, _target));
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[
+          Duration(seconds: 1),
+          Duration(seconds: 2),
+          Duration(seconds: 4),
+          Duration(seconds: 8),
+          Duration(seconds: 16),
+          Duration(seconds: 30),
+          Duration(seconds: 60),
+          Duration(seconds: 60),
+          Duration(seconds: 60),
+        ],
+      );
+    });
+
+    test('applies exactly 0.8 + 0.4 * randomDouble jitter', () async {
+      final scheduler = _FakeScheduler();
+      final randomValues = <double>[0, 1];
+      final controller = _controller(
+        scheduler: scheduler,
+        randomDouble: () => randomValues.removeAt(0),
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[
+          Duration(milliseconds: 800),
+          Duration(milliseconds: 2400),
+        ],
+      );
+    });
+
+    test('authenticated success stops retries; a stable connection resets '
+        'the delay', () async {
+      final scheduler = _FakeScheduler();
+      final results = <ConnectionAttemptStatus>[
+        ConnectionAttemptStatus.networkFailure,
+        ConnectionAttemptStatus.authenticated,
+      ];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => results.removeAt(0),
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      await scheduler.runNext();
+
+      expect(scheduler.activeTimerCount, 0);
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+      expect(controller.attemptCount, 0);
+    });
+
+    test('a short-lived authenticated connection keeps escalating backoff',
+        () async {
+      final scheduler = _FakeScheduler();
+      final results = <ConnectionAttemptStatus>[
+        ConnectionAttemptStatus.networkFailure,
+        ConnectionAttemptStatus.authenticated,
+      ];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => results.removeAt(0),
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      await scheduler.runNext();
+      expect(scheduler.activeTimerCount, 0);
+
+      // 握手成功但连接 30s 内即断:视为连续失败,退避继续升档,
+      // 不允许「断联-秒级重连-再断」的死循环。
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 2);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 4));
+    });
+
+    test('consecutive short-lived connections keep raising the delay',
+        () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+
+      expect(controller.attemptCount, 3);
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[
+          Duration(seconds: 1),
+          Duration(seconds: 2),
+          Duration(seconds: 4),
+          Duration(seconds: 8),
+        ],
+      );
+    });
+
+    for (final result in <ConnectionAttemptStatus>[
+      ConnectionAttemptStatus.cancelled,
+      ConnectionAttemptStatus.rejected,
+    ]) {
+      test('$result stops without another retry', () async {
+        final scheduler = _FakeScheduler();
+        final controller = _controller(
+          scheduler: scheduler,
+          attempt: (_) => result,
+        );
+
+        controller.scheduleReconnect(_target);
+        await scheduler.runNext();
+
+        expect(scheduler.activeTimerCount, 0);
+        expect(scheduler.scheduledDelays, const [Duration(seconds: 1)]);
+        expect(controller.isSuppressed, isFalse);
+        controller.scheduleReconnect(_target);
+        expect(scheduler.activeTimerCount, 1);
+      });
+    }
+
+    for (final entry in <({String name, ReconnectAttempt attempt})>[
+      (
+        name: 'synchronous throw',
+        attempt: (_) => throw StateError('sync attempt failure'),
+      ),
+      (
+        name: 'asynchronous throw',
+        attempt: (_) => Future<ConnectionAttemptStatus>.error(
+              StateError('async attempt failure'),
+            ),
+      ),
+    ]) {
+      test('${entry.name} stops without being classified as network failure',
+          () async {
+        final scheduler = _FakeScheduler();
+        final controller = _controller(
+          scheduler: scheduler,
+          attempt: entry.attempt,
+        );
+
+        controller.scheduleReconnect(_target);
+        await scheduler.runNext();
+
+        expect(controller.attemptCount, 0);
+        expect(controller.isAttemptInFlight, isFalse);
+        expect(scheduler.activeTimerCount, 0);
+        expect(scheduler.scheduledDelays, const [Duration(seconds: 1)]);
+      });
+    }
+  });
+
+  group('endpoint refresh', () {
+    test('replaces the target and accelerates a pending timer', () async {
+      final scheduler = _FakeScheduler();
+      final attemptedTargets = <ReconnectTarget>[];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptedTargets.add(attempt.target);
+          return ConnectionAttemptStatus.cancelled;
+        },
+      );
+      final refreshed = ReconnectTarget(
+        peerId: _target.peerId,
+        host: '192.168.1.21',
+        port: 10005,
+      );
+
+      controller.scheduleReconnect(_target);
+      final staleTimer = scheduler.latestTimer;
+      scheduler.advance(const Duration(milliseconds: 250));
+      controller.updateTarget(refreshed);
+
+      expect(controller.target, refreshed);
+      expect(controller.attemptCount, 0);
+      expect(scheduler.activeTimerCount, 1);
+      expect(scheduler.scheduledDelays.last, Duration.zero);
+      expect(controller.nextAttemptAt, scheduler.now());
+
+      staleTimer.fireEvenIfCancelled();
+      await pumpEventQueue();
+      expect(attemptedTargets, isEmpty);
+
+      await scheduler.runNext();
+      expect(attemptedTargets, [refreshed]);
+    });
+
+    test('can retain the remaining deadline while invalidating the old timer',
+        () {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
+      );
+      final refreshed = ReconnectTarget(
+        peerId: _target.peerId,
+        host: '192.168.1.22',
+        port: 10004,
+      );
+
+      controller.scheduleReconnect(_target);
+      final originalDeadline = controller.nextAttemptAt;
+      scheduler.advance(const Duration(milliseconds: 250));
+      controller.updateTarget(refreshed, accelerate: false);
+
+      expect(scheduler.scheduledDelays.last, const Duration(milliseconds: 750));
+      expect(controller.nextAttemptAt, originalDeadline);
+    });
+
+    test('new endpoint is attempted while an invalidated attempt is still hung',
+        () async {
+      final scheduler = _FakeScheduler();
+      final staleResult = Completer<ConnectionAttemptStatus>();
+      final attemptedTargets = <ReconnectTarget>[];
+      final attemptContexts = <ReconnectAttemptContext>[];
+      var randomReads = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        randomDouble: () {
+          randomReads += 1;
+          return 0.5;
+        },
+        attempt: (attempt) {
+          attemptContexts.add(attempt);
+          attemptedTargets.add(attempt.target);
+          if (attemptedTargets.length == 1) {
+            return staleResult.future;
+          }
+          return ConnectionAttemptStatus.cancelled;
+        },
+      );
+      final refreshed = ReconnectTarget(
+        peerId: _target.peerId,
+        host: '192.168.1.23',
+        port: 10004,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.isAttemptInFlight, isTrue);
+
+      controller.updateTarget(refreshed);
+      expect(scheduler.activeTimerCount, 1);
+      expect(randomReads, 1);
+      expect(attemptContexts.single.isCancelled, isTrue);
+      await expectLater(attemptContexts.single.whenCancelled, completes);
+      expect(scheduler.scheduledDelays.last, Duration.zero);
+      await scheduler.runNext();
+
+      expect(controller.attemptCount, 0);
+      expect(attemptedTargets, [_target, refreshed]);
+      staleResult.complete(ConnectionAttemptStatus.networkFailure);
+      await pumpEventQueue();
+      expect(scheduler.activeTimerCount, 0);
+    });
+
+    test('an identical pending endpoint refresh is a complete no-op', () {
+      final scheduler = _FakeScheduler();
+      var randomReads = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        randomDouble: () {
+          randomReads += 1;
+          return 0.5;
+        },
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
+      );
+      final equalTarget = ReconnectTarget(
+        peerId: _target.peerId,
+        host: _target.host,
+        port: _target.port,
+      );
+
+      controller.scheduleReconnect(_target);
+      final timer = scheduler.latestTimer;
+      final generation = controller.generation;
+      final deadline = controller.nextAttemptAt;
+      scheduler.advance(const Duration(milliseconds: 250));
+      controller.updateTarget(equalTarget);
+
+      expect(controller.generation, generation);
+      expect(controller.nextAttemptAt, deadline);
+      expect(scheduler.latestTimer, same(timer));
+      expect(scheduler.scheduledDelays, const [Duration(seconds: 1)]);
+      expect(randomReads, 1);
+    });
+
+    test('duplicate reconnect scheduling cannot reset pending work', () async {
+      final timerScheduler = _FakeScheduler();
+      var randomReads = 0;
+      final timerController = _controller(
+        scheduler: timerScheduler,
+        randomDouble: () {
+          randomReads += 1;
+          return 0.5;
+        },
+        attempt: (_) => ConnectionAttemptStatus.cancelled,
+      );
+
+      timerController.scheduleReconnect(_target);
+      final timer = timerScheduler.latestTimer;
+      final timerGeneration = timerController.generation;
+      timerController.scheduleReconnect(
+        ReconnectTarget(
+          peerId: _target.peerId,
+          host: _target.host,
+          port: _target.port,
+        ),
+      );
+
+      expect(timerController.generation, timerGeneration);
+      expect(timerScheduler.latestTimer, same(timer));
+      expect(randomReads, 1);
+
+      final attemptScheduler = _FakeScheduler();
+      final result = Completer<ConnectionAttemptStatus>();
+      late ReconnectAttemptContext attemptContext;
+      final attemptController = _controller(
+        scheduler: attemptScheduler,
+        attempt: (attempt) {
+          attemptContext = attempt;
+          return result.future;
+        },
+      );
+      attemptController.scheduleReconnect(_target);
+      await attemptScheduler.runNext();
+      final attemptGeneration = attemptController.generation;
+
+      attemptController.scheduleReconnect(_target);
+
+      expect(attemptController.generation, attemptGeneration);
+      expect(attemptContext.isCurrent, isTrue);
+      expect(attemptScheduler.activeTimerCount, 0);
+      result.complete(ConnectionAttemptStatus.cancelled);
+      await pumpEventQueue();
+    });
+
+    test('an identical endpoint does not invalidate an in-flight guard',
+        () async {
+      final scheduler = _FakeScheduler();
+      final result = Completer<ConnectionAttemptStatus>();
+      late ReconnectAttemptContext attemptContext;
+      var registrationSideEffects = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) async {
+          attemptContext = attempt;
+          final attemptResult = await result.future;
+          if (attempt.isCurrent) {
+            registrationSideEffects += 1;
+          }
+          return attemptResult;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      final generation = controller.generation;
+      controller.updateTarget(
+        ReconnectTarget(
+          peerId: _target.peerId,
+          host: _target.host,
+          port: _target.port,
+        ),
+      );
+
+      expect(controller.generation, generation);
+      expect(attemptContext.isCurrent, isTrue);
+      expect(scheduler.activeTimerCount, 0);
+      result.complete(ConnectionAttemptStatus.authenticated);
+      await pumpEventQueue();
+      expect(registrationSideEffects, 1);
+    });
+  });
+
+  group('eligibility', () {
+    test('is re-read before every retry and false suppresses future attempts',
+        () async {
+      final scheduler = _FakeScheduler();
+      var eligible = true;
+      var eligibilityReads = 0;
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        eligibility: (_) {
+          eligibilityReads += 1;
+          return eligible
+              ? ReconnectEligibilityResult.eligible
+              : ReconnectEligibilityResult.autoConnectDisabled;
+        },
+        attempt: (_) {
+          attemptCalls += 1;
+          return ConnectionAttemptStatus.networkFailure;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      eligible = false;
+      await scheduler.runNext();
+
+      expect(eligibilityReads, 2);
+      expect(attemptCalls, 1);
+      expect(controller.isSuppressed, isTrue);
+      expect(
+        controller.suppressionReasons,
+        {ReconnectSuppressionReason.autoConnectDisabled},
+      );
+      expect(scheduler.activeTimerCount, 0);
+    });
+
+    for (final entry in <String,
+        ({
+      ReconnectEligibilityResult result,
+      ReconnectSuppressionReason suppression,
+    })>{
+      'auto-connect disabled': (
+        result: ReconnectEligibilityResult.autoConnectDisabled,
+        suppression: ReconnectSuppressionReason.autoConnectDisabled,
+      ),
+      'identity not pinned': (
+        result: ReconnectEligibilityResult.identityUnpinned,
+        suppression: ReconnectSuppressionReason.identityUnpinned,
+      ),
+      'trust revoked': (
+        result: ReconnectEligibilityResult.trustRevoked,
+        suppression: ReconnectSuppressionReason.trustRevoked,
+      ),
+    }.entries) {
+      test('${entry.key} fails closed before dialing', () async {
+        final scheduler = _FakeScheduler();
+        var attemptCalls = 0;
+        final controller = _controller(
+          scheduler: scheduler,
+          eligibility: (_) => entry.value.result,
+          attempt: (_) {
+            attemptCalls += 1;
+            return ConnectionAttemptStatus.authenticated;
+          },
+        );
+
+        controller.scheduleReconnect(_target);
+        await scheduler.runNext();
+
+        expect(attemptCalls, 0);
+        expect(controller.isSuppressed, isTrue);
+        expect(
+          controller.suppressionReasons,
+          {entry.value.suppression},
+        );
+      });
+    }
+
+    test('a late eligibility result cannot dial after cancellation', () async {
+      final scheduler = _FakeScheduler();
+      final eligible = Completer<ReconnectEligibilityResult>();
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        eligibility: (_) => eligible.future,
+        attempt: (_) {
+          attemptCalls += 1;
+          return ConnectionAttemptStatus.authenticated;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.manualDisconnect();
+      eligible.complete(ReconnectEligibilityResult.eligible);
+      await pumpEventQueue();
+
+      expect(attemptCalls, 0);
+      expect(controller.isSuppressed, isTrue);
+    });
+
+    test('an eligibility read error fails closed until explicitly restored',
+        () async {
+      final scheduler = _FakeScheduler();
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        eligibility: (_) => Future<ReconnectEligibilityResult>.error(
+          StateError('database unavailable'),
+        ),
+        attempt: (_) {
+          attemptCalls += 1;
+          return ConnectionAttemptStatus.authenticated;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      expect(attemptCalls, 0);
+      expect(
+        controller.suppressionReasons,
+        {ReconnectSuppressionReason.eligibilityCheckFailed},
+      );
+      controller.autoConnectEnabled();
+      expect(controller.isSuppressed, isTrue);
+      controller.eligibilityRestored();
+      expect(controller.isSuppressed, isFalse);
+    });
+  });
+
+  group('cancellation and generation', () {
+    final suppressors = <String, void Function(PeerReconnectController)>{
+      'manual disconnect': (controller) => controller.manualDisconnect(),
+      'trust revoke': (controller) => controller.trustRevoked(),
+      'auto-connect disable': (controller) => controller.autoConnectDisabled(),
+      'identity unpin': (controller) => controller.identityUnpinned(),
+    };
+
+    for (final entry in suppressors.entries) {
+      test('${entry.key} cancels and suppresses a stale timer', () async {
+        final scheduler = _FakeScheduler();
+        var attemptCalls = 0;
+        final controller = _controller(
+          scheduler: scheduler,
+          attempt: (_) {
+            attemptCalls += 1;
+            return ConnectionAttemptStatus.networkFailure;
+          },
+        );
+
+        controller.scheduleReconnect(_target);
+        final staleTimer = scheduler.latestTimer;
+        entry.value(controller);
+
+        expect(controller.isSuppressed, isTrue);
+        expect(controller.hasPendingAttempt, isFalse);
+        staleTimer.fireEvenIfCancelled();
+        await pumpEventQueue();
+        controller.scheduleReconnect(_target);
+
+        expect(attemptCalls, 0);
+        expect(scheduler.activeTimerCount, 0);
+      });
+    }
+
+    test('a late attempt result cannot resurrect a manual disconnect',
+        () async {
+      final scheduler = _FakeScheduler();
+      final result = Completer<ConnectionAttemptStatus>();
+      late ReconnectAttemptContext attemptContext;
+      var registrationSideEffects = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) async {
+          attemptContext = attempt;
+          final attemptResult = await result.future;
+          if (attempt.isCurrent) {
+            registrationSideEffects += 1;
+          }
+          return attemptResult;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      final generationBeforeCancel = controller.generation;
+      expect(attemptContext.isCurrent, isTrue);
+      expect(attemptContext.generation, generationBeforeCancel);
+      expect(attemptContext.target, _target);
+      controller.manualDisconnect();
+      expect(attemptContext.isCancelled, isTrue);
+      await expectLater(attemptContext.whenCancelled, completes);
+      result.complete(ConnectionAttemptStatus.networkFailure);
+      await pumpEventQueue();
+
+      expect(controller.generation, greaterThan(generationBeforeCancel));
+      expect(controller.attemptCount, 0);
+      expect(registrationSideEffects, 0);
+      expect(scheduler.activeTimerCount, 0);
+    });
+
+    test('explicit manual connect can unsuppress without starting a retry',
+        () async {
+      final scheduler = _FakeScheduler();
+      final attemptedTargets = <ReconnectTarget>[];
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptedTargets.add(attempt.target);
+          return ConnectionAttemptStatus.cancelled;
+        },
+      );
+      final manualTarget = ReconnectTarget(
+        peerId: _target.peerId,
+        host: '192.168.1.24',
+        port: 10004,
+      );
+
+      controller.manualDisconnect();
+      controller.unsuppressForManualConnect(manualTarget);
+
+      expect(controller.isSuppressed, isFalse);
+      expect(controller.target, manualTarget);
+      expect(scheduler.activeTimerCount, 0);
+      controller.scheduleReconnect(manualTarget);
+      await scheduler.runNext();
+      expect(attemptedTargets, [manualTarget]);
+    });
+
+    test('manager close is final and cannot be manually unsuppressed',
+        () async {
+      final scheduler = _FakeScheduler();
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) {
+          attemptCalls += 1;
+          return ConnectionAttemptStatus.authenticated;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      final staleTimer = scheduler.latestTimer;
+      controller.close();
+      controller.autoConnectEnabled();
+      controller.identityPinned();
+      controller.trustRestored();
+      controller.unsuppressForManualConnect(_target);
+      controller.scheduleReconnect(_target);
+      staleTimer.fireEvenIfCancelled();
+      await pumpEventQueue();
+
+      expect(controller.isClosed, isTrue);
+      expect(controller.isSuppressed, isTrue);
+      expect(
+        controller.suppressionReasons,
+        {ReconnectSuppressionReason.managerClosed},
+      );
+      expect(attemptCalls, 0);
+      expect(scheduler.activeTimerCount, 0);
+    });
+
+    test('external authenticated signal cancels pending retry and resets '
+        'count only after a stable lifetime', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.attemptCount, 1);
+      controller.authenticated();
+
+      // 计数不再立即清零:等断开时按存活时长结算。
+      expect(controller.attemptCount, 1);
+      expect(controller.hasPendingAttempt, isFalse);
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+      controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 0);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+    });
+
+    test('external authenticated signal invalidates an in-flight attempt',
+        () async {
+      final scheduler = _FakeScheduler();
+      final result = Completer<ConnectionAttemptStatus>();
+      late ReconnectAttemptContext attemptContext;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptContext = attempt;
+          return result.future;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.authenticated();
+
+      expect(attemptContext.isCancelled, isTrue);
+      expect(controller.attemptCount, 0);
+      expect(controller.isSuppressed, isFalse);
+      result.complete(ConnectionAttemptStatus.networkFailure);
+      await pumpEventQueue();
+      expect(scheduler.activeTimerCount, 0);
+    });
+  });
+
+  group('suppression recovery', () {
+    final cases = <({
+      String name,
+      ReconnectSuppressionReason reason,
+      void Function(PeerReconnectController) restore,
+      void Function(PeerReconnectController) suppress,
+      void Function(PeerReconnectController) wrongRestore,
+    })>[
+      (
+        name: 'auto-connect setting',
+        reason: ReconnectSuppressionReason.autoConnectDisabled,
+        suppress: (controller) => controller.autoConnectDisabled(),
+        restore: (controller) => controller.autoConnectEnabled(),
+        wrongRestore: (controller) => controller.identityPinned(),
+      ),
+      (
+        name: 'identity pin',
+        reason: ReconnectSuppressionReason.identityUnpinned,
+        suppress: (controller) => controller.identityUnpinned(),
+        restore: (controller) => controller.identityPinned(),
+        wrongRestore: (controller) => controller.trustRestored(),
+      ),
+      (
+        name: 'trust state',
+        reason: ReconnectSuppressionReason.trustRevoked,
+        suppress: (controller) => controller.trustRevoked(),
+        restore: (controller) => controller.trustRestored(),
+        wrongRestore: (controller) => controller.autoConnectEnabled(),
+      ),
+    ];
+
+    for (final entry in cases) {
+      test('${entry.name} only clears its matching suppression', () async {
+        final scheduler = _FakeScheduler();
+        var attemptCalls = 0;
+        final controller = _controller(
+          scheduler: scheduler,
+          attempt: (_) {
+            attemptCalls += 1;
+            return ConnectionAttemptStatus.cancelled;
+          },
+        );
+
+        entry.suppress(controller);
+        expect(controller.suppressionReasons, {entry.reason});
+        entry.wrongRestore(controller);
+        expect(controller.suppressionReasons, {entry.reason});
+        controller.scheduleReconnect(_target);
+        expect(scheduler.activeTimerCount, 0);
+
+        entry.restore(controller);
+        expect(controller.isSuppressed, isFalse);
+        expect(scheduler.activeTimerCount, 0);
+        controller.scheduleReconnect(_target);
+        await scheduler.runNext();
+        expect(attemptCalls, 1);
+      });
+    }
+
+    test('eligibility recovery APIs cannot clear manual suppression', () {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
+      );
+
+      controller.manualDisconnect();
+      controller.authenticated();
+      controller.autoConnectEnabled();
+      controller.identityPinned();
+      controller.trustRestored();
+
+      expect(
+        controller.suppressionReasons,
+        {ReconnectSuppressionReason.manualDisconnect},
+      );
+      controller.scheduleReconnect(_target);
+      expect(scheduler.activeTimerCount, 0);
+    });
+
+    test('overlapping suppression reasons are restored independently', () {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
+      );
+
+      controller.manualDisconnect();
+      controller.trustRevoked();
+      expect(
+        controller.suppressionReasons,
+        {
+          ReconnectSuppressionReason.manualDisconnect,
+          ReconnectSuppressionReason.trustRevoked,
+        },
+      );
+
+      controller.trustRestored();
+      expect(
+        controller.suppressionReasons,
+        {ReconnectSuppressionReason.manualDisconnect},
+      );
+      expect(controller.isSuppressed, isTrue);
+    });
+
+    test('manual connect only removes manual disconnect suppression', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        eligibility: (_) => Future<ReconnectEligibilityResult>.error(
+          StateError('eligibility unavailable'),
+        ),
+        attempt: (_) => ConnectionAttemptStatus.authenticated,
+      );
+      final manualTarget = ReconnectTarget(
+        peerId: _target.peerId,
+        host: '192.168.1.25',
+        port: 10004,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.manualDisconnect();
+      controller.trustRevoked();
+      controller.autoConnectDisabled();
+      controller.identityUnpinned();
+
+      controller.unsuppressForManualConnect(manualTarget);
+
+      expect(controller.target, manualTarget);
+      expect(
+        controller.suppressionReasons,
+        {
+          ReconnectSuppressionReason.trustRevoked,
+          ReconnectSuppressionReason.autoConnectDisabled,
+          ReconnectSuppressionReason.identityUnpinned,
+          ReconnectSuppressionReason.eligibilityCheckFailed,
+        },
+      );
+      controller.scheduleReconnect(manualTarget);
+      expect(scheduler.activeTimerCount, 0);
+    });
+  });
+
+  group('session settlement', () {
+    test('sessionClosed resets the backoff after a stable session regardless '
+        'of disconnect cause', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.attemptCount, 1);
+      controller.authenticated();
+
+      // 结算绑定会话生命周期:任何断因(含手动断开)都在断开通知处结算,
+      // 不再依赖只有 network/watchdog 才会触发的 scheduleReconnect。
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+
+      expect(controller.attemptCount, 0);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+    });
+
+    test('sessionClosed keeps escalating the backoff after a short-lived '
+        'session', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      controller.authenticated();
+
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.sessionClosed();
+
+      expect(controller.attemptCount, 2);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 4));
+    });
+
+    test('sessionClosed settles at most once per authenticated session', () {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.authenticated();
+      scheduler.advance(
+        PeerReconnectController.stableConnectionThreshold -
+            const Duration(seconds: 1),
+      );
+      controller.sessionClosed();
+      expect(controller.attemptCount, 1);
+
+      // 重复的断开通知不得再次结算。
+      controller.sessionClosed();
+      expect(controller.attemptCount, 1);
+    });
+
+    test('scheduleReconnect during a live session neither settles it as a '
+        'failure nor schedules a redundant dial', () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (_) => ConnectionAttemptStatus.networkFailure,
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+      expect(controller.attemptCount, 1);
+      controller.authenticated();
+
+      // 自动连接重开/信任恢复会在连接仍存活时调用 scheduleReconnect:
+      // 活着的会话不得被误结算为短命失败,也不得排冗余拨号。
+      controller.scheduleReconnect(_target);
+      expect(controller.attemptCount, 1);
+      expect(scheduler.activeTimerCount, 0);
+
+      // 稳定存活挣得的复位在真正断开时仍然有效。
+      scheduler.advance(PeerReconnectController.stableConnectionThreshold);
+      controller.sessionClosed();
+      expect(controller.attemptCount, 0);
+      controller.scheduleReconnect(_target);
+      expect(scheduler.scheduledDelays.last, const Duration(seconds: 1));
+    });
+  });
+
+  group('duplicate-request rejection', () {
+    test('an automatic duplicate-request rejection reschedules at the current '
+        'backoff instead of going dormant', () async {
+      final scheduler = _FakeScheduler();
+      var attemptCalls = 0;
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attemptCalls += 1;
+          if (attemptCalls == 1) {
+            attempt.reportResultReason(
+              ConnectionAttemptReason.duplicateRequest,
+            );
+            return ConnectionAttemptStatus.rejected;
+          }
+          return ConnectionAttemptStatus.cancelled;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      // 去重拒绝说明同 peer 仍有在途/清理中的尝试,不是终态:
+      // 按当前退避重排(计数不升档),避免自动重连从此休眠。
+      expect(controller.attemptCount, 0);
+      expect(scheduler.activeTimerCount, 1);
+      expect(
+        scheduler.scheduledDelays,
+        const <Duration>[Duration(seconds: 1), Duration(seconds: 1)],
+      );
+
+      await scheduler.runNext();
+      expect(attemptCalls, 2);
+    });
+
+    test('a rejected result with a non-duplicate reason stays terminal',
+        () async {
+      final scheduler = _FakeScheduler();
+      final controller = _controller(
+        scheduler: scheduler,
+        attempt: (attempt) {
+          attempt.reportResultReason(ConnectionAttemptReason.peerRejected);
+          return ConnectionAttemptStatus.rejected;
+        },
+      );
+
+      controller.scheduleReconnect(_target);
+      await scheduler.runNext();
+
+      expect(scheduler.activeTimerCount, 0);
+      expect(scheduler.scheduledDelays, const [Duration(seconds: 1)]);
+    });
+  });
+}
+
+final ReconnectTarget _target = ReconnectTarget(
+  peerId: 'peer-a',
+  host: '192.168.1.20',
+  port: 10004,
+);
+
+PeerReconnectController _controller({
+  required _FakeScheduler scheduler,
+  required ReconnectAttempt attempt,
+  ReconnectEligibility? eligibility,
+  ReconnectRandomDouble? randomDouble,
+}) {
+  return PeerReconnectController(
+    clock: scheduler.now,
+    timerFactory: scheduler.createTimer,
+    randomDouble: randomDouble ?? () => 0.5,
+    eligibility: eligibility ?? (_) => ReconnectEligibilityResult.eligible,
+    attempt: attempt,
+  );
+}
+
+final class _FakeScheduler {
+  DateTime _now = DateTime.utc(2026, 7, 10, 12);
+  final List<_FakeTimer> _timers = <_FakeTimer>[];
+  final List<Duration> scheduledDelays = <Duration>[];
+
+  int get activeTimerCount => _timers.where((timer) => timer.isActive).length;
+
+  _FakeTimer get latestTimer => _timers.last;
+
+  DateTime now() => _now;
+
+  Timer createTimer(Duration delay, void Function() callback) {
+    scheduledDelays.add(delay);
+    final timer = _FakeTimer(_now.add(delay), callback);
+    _timers.add(timer);
+    return timer;
+  }
+
+  void advance(Duration duration) {
+    final advanced = _now.add(duration);
+    if (_timers.any(
+      (timer) => timer.isActive && !timer.dueAt.isAfter(advanced),
+    )) {
+      throw StateError('advance would pass a pending timer');
+    }
+    _now = advanced;
+  }
+
+  Future<void> runNext() async {
+    final active = _timers.where((timer) => timer.isActive).toList()
+      ..sort((left, right) => left.dueAt.compareTo(right.dueAt));
+    if (active.isEmpty) {
+      throw StateError('No timer is pending');
+    }
+    final timer = active.first;
+    _now = timer.dueAt;
+    timer.fire();
+    await pumpEventQueue();
+  }
+}
+
+final class _FakeTimer implements Timer {
+  _FakeTimer(this.dueAt, this._callback);
+
+  final DateTime dueAt;
+  final void Function() _callback;
+  bool _active = true;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  int get tick => _active ? 0 : 1;
+
+  @override
+  void cancel() {
+    _active = false;
+  }
+
+  void fire() {
+    if (!_active) {
+      return;
+    }
+    _active = false;
+    _callback();
+  }
+
+  void fireEvenIfCancelled() {
+    _active = false;
+    _callback();
+  }
+}

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/bounded_outbound_queue.dart';
+import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 abstract class RemoteInputPacketTransport {
@@ -22,9 +24,12 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
   }) : _inner = PacketByteTransport(
-          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
-          closeSink: closeSink ?? () async {},
-        );
+         sendBytes: (bytes) => sendBytes(bytes as Uint8List),
+         closeSink: closeSink ?? () async {},
+       );
+
+  RemoteInputPacketByteTransport.withTransport(PacketByteTransport transport)
+    : _inner = transport;
 
   final PacketByteTransport _inner;
 
@@ -33,7 +38,15 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
     if (_inner.isClosed) {
       return;
     }
-    _inner.send(packet.encode());
+    final kind = switch (packet.eventType) {
+      RemoteInputEventType.mouseMove => OutboundPacketKind.mouseMove,
+      RemoteInputEventType.mouseWheel => OutboundPacketKind.scroll,
+      RemoteInputEventType.mouseButton => OutboundPacketKind.button,
+      RemoteInputEventType.key ||
+      RemoteInputEventType.modifiers => OutboundPacketKind.key,
+      RemoteInputEventType.release => OutboundPacketKind.release,
+    };
+    _inner.send(packet.encode(), kind: kind);
   }
 
   @override
@@ -42,12 +55,11 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
 
 class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     implements RemoteInputObservablePacketTransport {
-  RemoteInputWebSocketPacketTransport._(WebSocketChannel channel)
-      : _stream = channel.stream.asBroadcastStream(),
-        super(
-          sendBytes: channel.sink.add,
-          closeSink: () => channel.sink.close(),
-        ) {
+  RemoteInputWebSocketPacketTransport._(
+    Stream<dynamic> incoming,
+    PacketByteTransport transport,
+  ) : _stream = incoming.asBroadcastStream(),
+      super.withTransport(transport) {
     _streamSubscription = _stream.listen(
       (_) {},
       onError: (_, __) {
@@ -64,10 +76,88 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   late final StreamSubscription<dynamic> _streamSubscription;
   bool _doneNotified = false;
 
-  static Future<RemoteInputWebSocketPacketTransport> connect(Uri uri) async {
-    final channel = IOWebSocketChannel.connect(uri);
-    await channel.ready;
-    return RemoteInputWebSocketPacketTransport._(channel);
+  factory RemoteInputWebSocketPacketTransport.forChannel(
+    WebSocketChannel channel, {
+    int maxItems = 128,
+    int maxBytes = 256 * 1024,
+    AuthenticatedMediaPacketEncoder? packetEncoder,
+  }) => RemoteInputWebSocketPacketTransport.forStreams(
+    incoming: channel.stream,
+    addStream: channel.sink.addStream,
+    closeSink: () => channel.sink.close(),
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    packetEncoder: packetEncoder,
+  );
+
+  factory RemoteInputWebSocketPacketTransport.forStreams({
+    required Stream<dynamic> incoming,
+    required Future<void> Function(Stream<Object>) addStream,
+    required Future<void> Function() closeSink,
+    int maxItems = 128,
+    int maxBytes = 256 * 1024,
+    AuthenticatedMediaPacketEncoder? packetEncoder,
+  }) {
+    late final RemoteInputWebSocketPacketTransport transport;
+    transport = RemoteInputWebSocketPacketTransport._(
+      incoming,
+      PacketByteTransport.remoteInput(
+        addStream: addStream,
+        closeSink: closeSink,
+        maxItems: maxItems,
+        maxBytes: maxBytes,
+        packetEncoder: packetEncoder,
+        onOverflow: () {
+          transport._notifyDone();
+        },
+      ),
+    );
+    return transport;
+  }
+
+  static Future<RemoteInputWebSocketPacketTransport> connect(
+    Uri uri, {
+    required Uint8List mediaMacKey,
+    required String sessionId,
+    required String peerId,
+  }) async {
+    AuthenticatedMediaPacketEncoder? unownedPacketEncoder;
+    try {
+      WebSocketChannel channel = IOWebSocketChannel.connect(uri);
+      await channel.ready;
+      channel = await authenticateMediaWebSocketClient(
+        channel,
+        uri: uri,
+        route: '/input',
+        namespace: 'remote-input',
+        sessionId: sessionId,
+        peerId: peerId,
+        mediaMacKey: mediaMacKey,
+      );
+      unownedPacketEncoder = AuthenticatedMediaPacketEncoder(
+        route: '/input',
+        namespace: 'remote-input',
+        sessionId: sessionId,
+        mediaMacKey: mediaMacKey,
+        channelBinding: mediaPacketChannelBindingFromUri(uri),
+        maxPayloadBytes: 64 * 1024,
+      );
+      final transport = RemoteInputWebSocketPacketTransport.forChannel(
+        channel,
+        packetEncoder: unownedPacketEncoder,
+      );
+      unownedPacketEncoder = null;
+      return transport;
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        error is PacketWebSocketConnectException
+            ? error
+            : PacketWebSocketConnectException(uri, error),
+        stackTrace,
+      );
+    } finally {
+      unownedPacketEncoder?.destroy();
+    }
   }
 
   @override

@@ -60,7 +60,7 @@ android {
         applicationId "com.vireen.whisper"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 24
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -85,6 +85,29 @@ android {
     }
 }
 
+tasks.register("pruneFlutterAssetsRelease") {
+    dependsOn("compileFlutterBuildRelease")
+    outputs.upToDateWhen { false }
+    doLast {
+        def packagesDir = layout.buildDirectory.dir(
+                "intermediates/flutter/release/flutter_assets/packages"
+        ).get().asFile
+        // Android has its own native Opus implementation. Federated package
+        // assets for other platforms otherwise add about 2 MB to every APK.
+        project.delete(
+                new File(packagesDir, "opus_codec_linux"),
+                new File(packagesDir, "opus_codec_web"),
+                new File(packagesDir, "opus_codec_windows")
+        )
+    }
+}
+
+tasks.configureEach {
+    if (name == "copyFlutterAssetsRelease") {
+        dependsOn("pruneFlutterAssetsRelease")
+    }
+}
+
 flutter {
     source '../..'
 }
@@ -94,5 +117,6 @@ dependencies {
     implementation 'androidx.window:window-java:1.0.0'
     implementation 'androidx.core:core:1.17.0'
     implementation 'androidx.media:media:1.7.0'
+    testImplementation 'junit:junit:4.13.2'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }

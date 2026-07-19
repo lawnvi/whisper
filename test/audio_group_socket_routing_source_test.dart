@@ -10,7 +10,7 @@ void main() {
         source,
         contains(
             "import 'package:whisper/audio/audio_group_coordinator.dart';"));
-    expect(source, contains('void sendAudioGroupControlTo('));
+    expect(source, contains('Future<bool> sendAudioGroupControlTo('));
     expect(source, contains('MessageEnum.AudioGroupControl'));
     expect(source, contains('receiverOverride: peerId'));
 
@@ -20,9 +20,10 @@ void main() {
     expect(audioGroupCase, contains('AudioGroupControlMessage.fromJson'));
     expect(audioGroupCase,
         contains('AudioGroupCoordinator.shared.handleControlMessage'));
-    expect(audioGroupCase, contains('incomingPeerId == null'));
+    expect(audioGroupCase, contains("namespace: 'audio-group'"));
+    expect(audioGroupCase, isNot(contains('incomingPeerId == null')));
     expect(audioGroupCase,
-        contains('sendAudioGroupControlTo(incomingPeerId, control)'));
+        contains('sendAudioGroupControlTo(session.remotePeerId, control)'));
   });
 
   test('websocket manager exposes audio group capability checks per peer', () {

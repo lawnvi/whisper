@@ -24,7 +24,11 @@ void main() {
         deviceList, contains('notifyExistingDownloadsVisibleToAndroidPickers'));
     expect(
       manager,
-      contains('await notifyFileVisibleToAndroidPickers(transfer.finalPath);'),
+      contains('await _notifyFileVisible(published.path);'),
+    );
+    expect(
+      manager.indexOf('completeIncomingFileTransfer('),
+      lessThan(manager.indexOf('await _notifyFileVisible(published.path);')),
     );
   });
 }

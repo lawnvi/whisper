@@ -9,9 +9,37 @@ import OSLog
 import ScreenCaptureKit
 import window_manager
 
-private let remoteInputLog = OSLog(
+private let privacyTraceLog = OSLog(
   subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
   category: "RemoteInput")
+
+private enum RemoteInputTraceEvent: String {
+  case capturePauseIgnored = "capture_pause_ignored"
+  case eventDroppedInvalidData = "event_dropped_invalid_data"
+  case eventDroppedSessionMismatch = "event_dropped_session_mismatch"
+  case injectedEvent = "injected_event"
+  case injectionReleased = "injection_released"
+  case injectionStarted = "injection_started"
+  case injectionStopped = "injection_stopped"
+}
+
+private let remoteInputTraceEnabled =
+  ProcessInfo.processInfo.environment["WHISPER_REMOTE_INPUT_TRACE"] == "1"
+
+private func traceRemoteInput(
+  _ event: RemoteInputTraceEvent,
+  count: Int = 0
+) {
+  guard remoteInputTraceEnabled else {
+    return
+  }
+  os_log(
+    "event=%{public}@ count=%{public}d",
+    log: privacyTraceLog,
+    type: .debug,
+    event.rawValue,
+    count)
+}
 
 private func remoteInputEventMask(for type: CGEventType) -> CGEventMask {
   return CGEventMask(1) << CGEventMask(type.rawValue)
@@ -37,6 +65,10 @@ private let remoteInputCaptureEventMask: CGEventMask = [
 }
 
 class MainFlutterWindow: NSWindow {
+  private var windowThemeChannel: FlutterMethodChannel?
+  private var fileManagerChannel: FlutterMethodChannel?
+  private var desktopQuickSendChannel: FlutterMethodChannel?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -50,8 +82,83 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "RemoteInputPlugin"))
     DesktopClipboardImagePlugin.register(
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
+    registerWindowThemeChannel(with: flutterViewController)
+    registerFileManagerChannel(with: flutterViewController)
+    registerDesktopQuickSendChannel(with: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func registerDesktopQuickSendChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/desktop_quick_send",
+      binaryMessenger: controller.engine.binaryMessenger)
+    DesktopQuickSendBridge.shared.attach(channel: channel)
+    desktopQuickSendChannel = channel
+  }
+
+  private func registerWindowThemeChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/window_theme",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "setBrightness" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let arguments = call.arguments as? [String: Any],
+            let brightness = arguments["brightness"] as? String,
+            brightness == "light" || brightness == "dark" else {
+        result(
+          FlutterError(
+            code: "invalid_brightness",
+            message: "Expected light or dark brightness",
+            details: nil))
+        return
+      }
+      self?.applyWindowTheme(brightness: brightness)
+      result(nil)
+    }
+    windowThemeChannel = channel
+  }
+
+  private func registerFileManagerChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/file_manager",
+      binaryMessenger: controller.engine.binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "revealFile" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let arguments = call.arguments as? [String: Any],
+            let path = arguments["path"] as? String,
+            !path.isEmpty,
+            FileManager.default.fileExists(atPath: path) else {
+        result(false)
+        return
+      }
+      let parentPath = URL(fileURLWithPath: path).deletingLastPathComponent().path
+      let selected = NSWorkspace.shared.selectFile(
+        path,
+        inFileViewerRootedAtPath: parentPath)
+      result(selected)
+    }
+    fileManagerChannel = channel
+  }
+
+  private func applyWindowTheme(brightness: String) {
+    titlebarAppearsTransparent = true
+    titleVisibility = .visible
+    styleMask.remove(.fullSizeContentView)
+    backgroundColor = brightness == "dark" ? .black : .white
+    isOpaque = true
+
+    if let displayName = Bundle.main.object(
+      forInfoDictionaryKey: "CFBundleDisplayName") as? String,
+      !displayName.isEmpty {
+      title = displayName
+    }
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
@@ -209,8 +316,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedCapsLockEnabled = false
   private var suppressedAppCommandShortcutKeyCodes: [Int] = []
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
-  private var injectionKeyDiagnosticCount = 0
-  private var injectionMouseDiagnosticCount = 0
+  private var injectionDiagnosticCount = 0
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -315,8 +421,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectedCapsLockEnabled = CGEventSource.flagsState(.hidSystemState)
         .contains(.maskAlphaShift)
       suppressedAppCommandShortcutKeyCodes = []
-      injectionKeyDiagnosticCount = 0
-      injectionMouseDiagnosticCount = 0
+      injectionDiagnosticCount = 0
       injectionSessionId = sessionId
       injectionDisplayId = args["displayId"] as? String ?? ""
       injectionEdge = args["edge"] as? String ?? ""
@@ -325,12 +430,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectionSegmentEnd = doubleValue(args["segmentEnd"])
       injectionRoutes = injectionRoutes(from: args["mappings"])
       showCursorForRemoteInjection(at: nil)
-      os_log(
-        "remote input injection started session=%{public}@",
-        log: remoteInputLog,
-        type: .info,
-        sessionId)
-      emitDiagnostic(message: "mac remote input injection started")
+      traceRemoteInput(.injectionStarted)
+      emitDiagnostic(event: .injectionStarted)
       result(nil)
 
     case "injectEvent":
@@ -448,11 +549,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
   private func stopInjection() {
     if !injectionSessionId.isEmpty {
-      os_log(
-        "remote input injection stopped session=%{public}@",
-        log: remoteInputLog,
-        type: .info,
-        injectionSessionId)
+      traceRemoteInput(.injectionStopped)
     }
     releaseInjectedMouseButtons()
     releaseInjectedKeys()
@@ -463,8 +560,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     injectedModifierFlags = []
     injectedCapsLockEnabled = false
     suppressedAppCommandShortcutKeyCodes = []
-    injectionKeyDiagnosticCount = 0
-    injectionMouseDiagnosticCount = 0
+    injectionDiagnosticCount = 0
     injectionSessionId = ""
     injectionDisplayId = ""
     injectionEdge = ""
@@ -490,14 +586,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     guard releaseActivationSequence <= 0 ||
           captureActivationSequence <= releaseActivationSequence else {
-      os_log(
-        "remote input ignored stale pause releaseSequence=%{public}d releaseActivationSequence=%{public}d nativeSequence=%{public}d activationSequence=%{public}d",
-        log: remoteInputLog,
-        type: .info,
-        releaseSequence,
-        releaseActivationSequence,
-        sequence,
-        captureActivationSequence)
+      traceRemoteInput(.capturePauseIgnored)
       return
     }
     captureActive = false
@@ -686,25 +775,15 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     timestampMicros: Int64 = 0
   ) {
     guard sessionId == injectionSessionId else {
-      os_log(
-        "drop remote input event session mismatch event=%{public}@ incoming=%{public}@ active=%{public}@",
-        log: remoteInputLog,
-        type: .info,
-        eventType,
-        sessionId,
-        injectionSessionId)
+      traceRemoteInput(.eventDroppedSessionMismatch)
       return
     }
     guard let object = try? JSONSerialization.jsonObject(with: payload),
           let data = object as? [String: Any] else {
-      os_log(
-        "drop remote input event invalid payload event=%{public}@ session=%{public}@",
-        log: remoteInputLog,
-        type: .info,
-        eventType,
-        sessionId)
+      traceRemoteInput(.eventDroppedInvalidData)
       return
     }
+    emitInjectedDiagnostic()
 
     switch eventType {
     case "mouseMove":
@@ -761,15 +840,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       }
       updateInjectedMouseInteriorState(data, point: point)
       let drag = injectedMouseDragEvent()
-      emitMouseDiagnostic(
-        eventType: drag.type,
-        point: point,
-        requestedPoint: requestedPoint,
-        currentPoint: currentPoint,
-        deltaX: deltaX,
-        deltaY: deltaY,
-        activeStart: entryPoint != nil,
-        edge: data["edge"] as? String ?? "right")
       guard shouldMove else {
         injectedMousePoint = point
         return
@@ -817,21 +887,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let down = boolValue(data["down"])
       let semantic =
         data["modifierSemantic"] as? String ?? data["keySemantic"] as? String ?? ""
-      os_log(
-        "remote key inject session=%{public}@ down=%{public}d nativeMac=%{public}d keyCode=%{public}d mac=%{public}d win=%{public}d linux=%{public}d semantic=%{public}@ injectedFlags=%{public}llu",
-        log: remoteInputLog,
-        type: .info,
-        sessionId,
-        down ? 1 : 0,
-        nativeKeyCode,
-        intValue(data["keyCode"]),
-        intValue(data["macKeyCode"]),
-        intValue(data["windowsKeyCode"]),
-        intValue(data["linuxKeyCode"]),
-        semantic,
-        injectedModifierFlags.rawValue)
-      emitKeyDiagnostic(
-        message: "mac remote key inject down=\(down ? 1 : 0) nativeMac=\(nativeKeyCode) keyCode=\(intValue(data["keyCode"])) mac=\(intValue(data["macKeyCode"])) win=\(intValue(data["windowsKeyCode"])) linux=\(intValue(data["linuxKeyCode"])) semantic=\(semantic) flags=\(injectedModifierFlags.rawValue)")
       if isCapsLockKey(nativeKeyCode: nativeKeyCode, semantic: semantic) {
         if down {
           handleCapsLockKey()
@@ -1409,8 +1464,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     DispatchQueue.main.async { [channel] in
       channel.invokeMethod("onTextShortcut", arguments: arguments)
     }
-    emitKeyDiagnostic(
-      message: "mac app command text shortcut=\(shortcut) target=flutter")
   }
 
   private func isCapsLockKey(nativeKeyCode: Int, semantic: String) -> Bool {
@@ -1467,12 +1520,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     spaceUp.post(tap: .cghidEventTap)
     controlUp.post(tap: .cghidEventTap)
 
-    emitDiagnostic(message: "mac caps input source shortcut posted control+space tap=hid")
-    os_log(
-      "mac caps input source shortcut posted control+space tap=%{public}@",
-      log: remoteInputLog,
-      type: .info,
-      "hid")
     return true
   }
 
@@ -1521,75 +1568,23 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     capsEvent.type = .flagsChanged
     capsEvent.flags = nextFlags
     capsEvent.post(tap: .cghidEventTap)
-    emitDiagnostic(
-      message: "mac post remote caps lock enabled=\(injectedCapsLockEnabled ? 1 : 0) flags=\(nextFlags.rawValue) tap=hid")
-    os_log(
-      "post remote caps lock enabled=%{public}d flags=%{public}llu tap=%{public}@",
-      log: remoteInputLog,
-      type: .info,
-      injectedCapsLockEnabled ? 1 : 0,
-      nextFlags.rawValue,
-      "hid")
   }
 
-  private func emitKeyDiagnostic(message: String) {
-    guard injectionKeyDiagnosticCount < 40 else {
+  private func emitInjectedDiagnostic() {
+    guard remoteInputTraceEnabled, injectionDiagnosticCount < 80 else {
       return
     }
-    injectionKeyDiagnosticCount += 1
-    emitDiagnostic(message: message)
+    injectionDiagnosticCount += 1
+    traceRemoteInput(.injectedEvent, count: injectionDiagnosticCount)
+    emitDiagnostic(event: .injectedEvent)
   }
 
-  private func emitMouseDiagnostic(
-    eventType: CGEventType,
-    point: CGPoint,
-    requestedPoint: CGPoint,
-    currentPoint: CGPoint,
-    deltaX: CGFloat,
-    deltaY: CGFloat,
-    activeStart: Bool,
-    edge: String
-  ) {
-    guard injectionMouseDiagnosticCount < 40 else {
+  private func emitDiagnostic(event: RemoteInputTraceEvent) {
+    guard remoteInputTraceEnabled else {
       return
     }
-    injectionMouseDiagnosticCount += 1
-    let bounds = virtualDisplayBounds()
-    let livePoint = CGEvent(source: nil)?.location ?? CGPoint.zero
-    os_log(
-      "mac remote mouse inject type=%{public}d activeStart=%{public}d edge=%{public}@ current=%{public}d,%{public}d point=%{public}d,%{public}d requested=%{public}d,%{public}d live=%{public}d,%{public}d delta=%{public}d,%{public}d bounds=%{public}d,%{public}d,%{public}d,%{public}d",
-      log: remoteInputLog,
-      type: .info,
-      eventType.rawValue,
-      activeStart ? 1 : 0,
-      edge,
-      Int(currentPoint.x),
-      Int(currentPoint.y),
-      Int(point.x),
-      Int(point.y),
-      Int(requestedPoint.x),
-      Int(requestedPoint.y),
-      Int(livePoint.x),
-      Int(livePoint.y),
-      Int(deltaX),
-      Int(deltaY),
-      Int(bounds.minX),
-      Int(bounds.minY),
-      Int(bounds.width),
-      Int(bounds.height))
-    emitDiagnostic(
-      message:
-        "mac remote mouse inject type=\(eventType.rawValue) activeStart=\(activeStart ? 1 : 0) edge=\(edge) current=\(Int(currentPoint.x)),\(Int(currentPoint.y)) point=\(Int(point.x)),\(Int(point.y)) requested=\(Int(requestedPoint.x)),\(Int(requestedPoint.y)) live=\(Int(livePoint.x)),\(Int(livePoint.y)) delta=\(Int(deltaX)),\(Int(deltaY)) bounds=\(Int(bounds.minX)),\(Int(bounds.minY)),\(Int(bounds.width)),\(Int(bounds.height))")
-  }
-
-  private func emitDiagnostic(message: String) {
-    guard !injectionSessionId.isEmpty else {
-      return
-    }
-    NSLog("remote input diagnostic: %@", message)
     let arguments: [String: Any] = [
-      "sessionId": injectionSessionId,
-      "message": message
+      "event": event.rawValue
     ]
     DispatchQueue.main.async { [channel] in
       channel.invokeMethod("onDiagnostic", arguments: arguments)
@@ -1606,18 +1601,6 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       } else {
         keyEvent.flags = nativeFlags.union(injectedModifierFlags)
       }
-      let eventType = isModifier ? "flagsChanged" : (down ? "keyDown" : "keyUp")
-      os_log(
-        "post remote key mac=%{public}d down=%{public}d type=%{public}@ flags=%{public}llu tap=%{public}@",
-        log: remoteInputLog,
-        type: .info,
-        Int(keyCode),
-        down ? 1 : 0,
-        eventType,
-        keyEvent.flags.rawValue,
-        "hid")
-      emitKeyDiagnostic(
-        message: "mac post remote key mac=\(Int(keyCode)) down=\(down ? 1 : 0) type=\(eventType) flags=\(keyEvent.flags.rawValue) tap=hid")
       keyEvent.post(tap: .cghidEventTap)
     }
   }
@@ -2189,14 +2172,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       if let point = point {
         CGWarpMouseCursorPosition(point)
       }
-      let showResult = CGDisplayShowCursor(CGMainDisplayID())
-      os_log(
-        "remote input cursor show requested result=%{public}d point=%{public}d,%{public}d",
-        log: remoteInputLog,
-        type: .info,
-        showResult.rawValue,
-        point.map { Int($0.x) } ?? -1,
-        point.map { Int($0.y) } ?? -1)
+      _ = CGDisplayShowCursor(CGMainDisplayID())
     }
     if Thread.isMainThread {
       showCursor()
@@ -2521,7 +2497,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     guard !sessionId.isEmpty else {
       return
     }
-    emitDiagnostic(message: "mac remote input injection release reason=\(reason)")
+    emitDiagnostic(event: .injectionReleased)
     releaseInjectedMouseButtons()
     releaseInjectedKeys()
     releaseCommonModifierKeys()
@@ -2812,10 +2788,13 @@ final class AudioSharePlugin: NSObject, FlutterPlugin {
           result(nil)
         }
       } catch {
-        capture.sendError(sessionId: sessionId, message: error.localizedDescription)
+        let wasCancelled = error is CancellationError || capture.isStopRequested
+        if !wasCancelled {
+          capture.sendError(sessionId: sessionId, message: error.localizedDescription)
+        }
         DispatchQueue.main.async {
           result(FlutterError(
-            code: "audio-capture",
+            code: wasCancelled ? "audio-capture-cancelled" : "audio-capture",
             message: error.localizedDescription,
             details: nil))
         }
@@ -2875,10 +2854,15 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
 
   private let channel: FlutterMethodChannel
   private let sampleQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture")
+  private let stateQueue = DispatchQueue(label: "com.vireen.whisper.audio.capture.state")
   private var stream: SCStream?
+  private var stopRequested = false
   private var sessionId = ""
   private var sequence: Int64 = 0
-  private var frameLogCount = 0
+
+  var isStopRequested: Bool {
+    stateQueue.sync { stopRequested }
+  }
 
   init(channel: FlutterMethodChannel) {
     self.channel = channel
@@ -2886,15 +2870,16 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   }
 
   func start(sessionId: String, format: [String: Any]) async throws {
+    try throwIfStopRequested()
     self.sessionId = sessionId
     sequence = 0
-    frameLogCount = 0
 
     let sampleRate = format["sampleRate"] as? Int ?? 48000
     let channels = max(1, min(format["channels"] as? Int ?? 2, 2))
     let content = try await SCShareableContent.excludingDesktopWindows(
       false,
       onScreenWindowsOnly: true)
+    try throwIfStopRequested()
     guard let display = content.displays.first else {
       throw NSError(
         domain: "AudioSharePlugin",
@@ -2919,15 +2904,36 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       self,
       type: .audio,
       sampleHandlerQueue: sampleQueue)
+    try throwIfStopRequested()
     try await stream.startCapture()
-    self.stream = stream
+    let shouldKeepStream = stateQueue.sync { () -> Bool in
+      if stopRequested {
+        return false
+      }
+      self.stream = stream
+      return true
+    }
+    if !shouldKeepStream {
+      try? await stream.stopCapture()
+      throw CancellationError()
+    }
   }
 
   func stop() {
-    let stream = self.stream
-    self.stream = nil
+    let stream = stateQueue.sync { () -> SCStream? in
+      stopRequested = true
+      let current = self.stream
+      self.stream = nil
+      return current
+    }
     Task {
       try? await stream?.stopCapture()
+    }
+  }
+
+  private func throwIfStopRequested() throws {
+    if isStopRequested {
+      throw CancellationError()
     }
   }
 
@@ -2943,14 +2949,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     }
     let currentSequence = sequence
     sequence += 1
-    frameLogCount += 1
     let captureTimeMicros = Int64(Date().timeIntervalSince1970 * 1_000_000)
-    if frameLogCount <= 3 || frameLogCount % 100 == 0 {
-      NSLog(
-        "WhisperAudioCapture frame session=\(sessionId) seq=\(currentSequence) " +
-          "sampleRate=\(captured.sampleRate) channels=\(captured.channels) " +
-          "bytes=\(captured.data.count) count=\(frameLogCount)")
-    }
     DispatchQueue.main.async { [channel, sessionId, captured] in
       channel.invokeMethod("onCapturePcm", arguments: [
         "sessionId": sessionId,

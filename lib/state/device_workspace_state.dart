@@ -110,7 +110,7 @@ class DeviceWorkspaceStateBuilder {
       ),
       connectedCount: connected.length,
       trustedCount:
-          presences.values.where(AutoConnectPlanner.isMutuallyTrusted).length,
+          presences.values.where(AutoConnectPlanner.isLocallyTrusted).length,
     );
   }
 

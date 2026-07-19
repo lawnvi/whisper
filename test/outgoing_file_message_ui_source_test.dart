@@ -12,29 +12,41 @@ void main() {
   }
 
   test('outgoing file messages are dispatched locally before network ack', () {
-    final source =
-        File('lib/socket/file_transfer_engine.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
     final sendFileTo = methodBody(
       source,
-      'Future<bool> sendFileTo(String peerId, String path)',
+      'Future<bool> sendFileTo(',
       'Future<bool> sendAndroidContentUriTo(',
     );
     final sendAndroidUri = methodBody(
       source,
       'Future<bool> sendAndroidContentUriTo(',
-      'Future<void> handleFrame(',
+      'Future<bool> _persistAndOfferOutgoingTransfer(',
     );
 
     for (final body in [sendFileTo, sendAndroidUri]) {
-      final insertIndex = body.indexOf('await _database().insertMessage');
-      final dispatchIndex = body.indexOf('_dispatchOutgoingMessage(message)');
-      final sendIndex =
-          body.indexOf('_sendFileTransferV3OfferTo(peerId, message)');
-
-      expect(insertIndex, isNonNegative);
-      expect(dispatchIndex, greaterThan(insertIndex));
-      expect(sendIndex, greaterThan(dispatchIndex));
+      expect(body, contains('_persistAndOfferOutgoingTransfer('));
     }
+
+    final persistAndOffer = methodBody(
+      source,
+      'Future<bool> _persistAndOfferOutgoingTransfer(',
+      'bool _matchesStableOutgoingTransfer(',
+    );
+    final admissionIndex = persistAndOffer.indexOf(
+      'await _database().admitFileTransfer(',
+    );
+    final dispatchIndex = persistAndOffer.indexOf(
+      '_dispatchOutgoingMessage(message)',
+    );
+    final sendIndex = persistAndOffer.indexOf('_offerOnCurrentConnection(');
+
+    expect(admissionIndex, isNonNegative);
+    expect(dispatchIndex, greaterThan(admissionIndex));
+    expect(sendIndex, greaterThan(dispatchIndex));
+    expect(persistAndOffer.substring(sendIndex), contains('return true;'));
   });
 
   test('conversation updates an existing message with the same uuid', () {
@@ -67,11 +79,24 @@ void main() {
     final fileMessage = methodBody(
       source,
       'Widget _buildFileMessage(',
-      'void onAuth(',
+      'void onPairing(',
     );
 
     expect(build, contains('_buildAnimatedTransferProgress('));
     expect(fileMessage, contains('_buildAnimatedTransferProgress('));
+  });
+
+  test('verifying uses indeterminate progress instead of a full ring', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final fileMessage = methodBody(
+      source,
+      'Widget _buildFileMessage(',
+      'void onPairing(',
+    );
+
+    expect(fileMessage, contains('FileTransferState.verifying'));
+    expect(fileMessage, contains('value: null'));
+    expect(source, contains('l10n.fileTransferVerifying'));
   });
 
   test('conversation animates visible transfer percentage text', () {
@@ -89,7 +114,7 @@ void main() {
     final fileMessage = methodBody(
       source,
       'Widget _buildFileMessage(',
-      'void onAuth(',
+      'void onPairing(',
     );
 
     expect(fileStatus, contains('progressOverride'));

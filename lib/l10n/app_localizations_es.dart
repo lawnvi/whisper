@@ -40,19 +40,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String transferNotificationBodySending(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Enviando $percent% · $speed · quedan $remaining';
   }
 
   @override
   String transferNotificationBodyReceiving(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Recibiendo $percent% · $speed · quedan $remaining';
   }
 
   @override
   String transferNotificationBodyMixed(
-      int percent, String speed, String remaining) {
+    int percent,
+    String speed,
+    String remaining,
+  ) {
     return 'Sincronizando $percent% · $speed · quedan $remaining';
   }
 
@@ -90,10 +99,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sendTips => 'Escribe algo...';
 
   @override
-  String get trust => 'Confiar en dispositivo';
+  String get sendFiles => 'Enviar archivos';
 
   @override
-  String get writeClipboard => 'Escribir al portapapeles';
+  String get trust => 'Confiar en este dispositivo';
+
+  @override
+  String get writeClipboard => 'Permitir escribir en el portapapeles';
 
   @override
   String get deleteDevice => 'Eliminar dispositivo';
@@ -107,10 +119,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get serverPortTitle => 'Puerto del servidor';
 
   @override
-  String get trustNewDevice => 'Acceso automático a nuevos dispositivos';
+  String get accessClipboard => 'Permitir acceso al portapapeles';
 
   @override
-  String get accessClipboard => 'Acceder al portapapeles';
+  String get clipboardAutoSync => 'Sincronizar el portapapeles automáticamente';
+
+  @override
+  String get clipboardAutoSyncDesc =>
+      'Desactivado: envío manual; activado: solo se sincroniza con el dispositivo de confianza actual';
 
   @override
   String get doubleClickRmMessage => 'Eliminar mensaje al hacer doble clic';
@@ -122,13 +138,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nickname => 'Apodo';
 
   @override
-  String get nicknameDesc => 'Ingresa tu apodo';
+  String get nicknameDesc => 'Introduce un apodo';
 
   @override
   String get port => 'Puerto';
 
   @override
-  String get portDesc => 'Rango del puerto: [1000, 65535]';
+  String get portDesc => 'Introduce un puerto entre 1001 y 65535';
 
   @override
   String get timeoutTitle => 'Tiempo de espera de conexión';
@@ -161,6 +177,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get clipboardFilesSendFailed =>
       'No se pudieron enviar los archivos del portapapeles';
+
+  @override
+  String get messageSendFailed =>
+      'No se pudo enviar el mensaje. Inténtalo de nuevo';
 
   @override
   String clipboardFilesCount(num count) {
@@ -199,7 +219,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteDeviceDesc =>
-      'Borra todos los mensajes de este dispositivo. No se puede recuperar.';
+      'Desconecta y borra todos los mensajes de este dispositivo. No se puede recuperar.';
 
   @override
   String get brokeConnectTitle => 'Desconectar';
@@ -211,6 +231,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get connectFailed => 'Error de conexión';
+
+  @override
+  String get connectAlreadyInProgress => 'La conexión ya está en curso';
 
   @override
   String get deviceBusy => 'Dispositivo ocupado';
@@ -225,6 +248,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deleteMessageDesc => '¿Seguro que quieres eliminarlo?';
 
   @override
+  String get selectMessages => 'Seleccionar mensajes';
+
+  @override
+  String selectedMessageCount(int count) {
+    return '$count seleccionados';
+  }
+
+  @override
+  String deleteSelectedMessagesTitle(int count) {
+    return 'Eliminar $count mensajes';
+  }
+
+  @override
+  String get deleteSelectedMessagesDesc =>
+      'Se eliminarán los registros seleccionados. Los archivos locales se conservarán.';
+
+  @override
   String language(Object language) {
     return 'Idioma $language';
   }
@@ -236,9 +276,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ignoreNotification => 'Ignorar notificaciones de Android';
 
   @override
-  String get ftpService => 'Servicio FTP';
-
-  @override
   String get back => 'Volver';
 
   @override
@@ -248,7 +285,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get clearAll => 'Limpiar';
 
   @override
-  String get selectNotifyApp => 'Escuchar notificaciones de apps';
+  String get selectNotifyApp => 'Aplicaciones de notificaciones';
 
   @override
   String get copyVerifyCode => 'Copiar código de verificación al portapapeles';
@@ -315,14 +352,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get localeNameZhHans => 'Chino simplificado';
 
   @override
-  String get localeNameEnglish => 'Ingles';
+  String get localeNameEnglish => 'Inglés';
 
   @override
-  String get localeNameSpanish => 'Espanol';
+  String get localeNameSpanish => 'Español';
 
   @override
   String get autoConnectTrustedDevices =>
-      'Conectar automaticamente dispositivos con confianza mutua';
+      'Conectar automáticamente los dispositivos con confianza mutua';
 
   @override
   String get mutualTrustEnabled => 'La confianza mutua esta activada';
@@ -349,15 +386,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidBackgroundKeepAliveDesc =>
-      'Usa un servicio en primer plano durante sesiones activas para reducir desconexiones al elegir archivos o cambiar de app';
+      'Mantiene activa la recepcion por LAN para recibir solicitudes de conexion en segundo plano o con la pantalla bloqueada';
 
   @override
   String get androidBackgroundKeepAliveActiveTitle =>
-      'Whisper mantiene la conexion activa';
+      'Whisper escucha conexiones LAN';
 
   @override
   String get androidBackgroundKeepAliveActiveDesc =>
-      'Activo mientras haya una sesion conectada';
+      'Puede recibir solicitudes de dispositivos cercanos en segundo plano';
 
   @override
   String get androidBatteryOptimization => 'Optimizacion de bateria';
@@ -525,27 +562,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String audioGroupSyncEvidence(
-      Object quality,
-      Object clockOffsetLabel,
-      Object offset,
-      Object rtt,
-      Object jitter,
-      Object buffer,
-      Object latePackets) {
+    Object quality,
+    Object clockOffsetLabel,
+    Object offset,
+    Object rtt,
+    Object jitter,
+    Object buffer,
+    Object latePackets,
+  ) {
     return '$quality · $clockOffsetLabel ${offset}ms · RTT ${rtt}ms · fluctuacion ${jitter}ms · bufer ${buffer}ms · tardios $latePackets';
   }
 
   @override
   String audioGroupSyncEvidenceCompact(
-      Object quality,
-      Object latencyLabel,
-      Object rtt,
-      Object jitterLabel,
-      Object jitter,
-      Object bufferLabel,
-      Object buffer,
-      Object latePacketLabel,
-      Object latePackets) {
+    Object quality,
+    Object latencyLabel,
+    Object rtt,
+    Object jitterLabel,
+    Object jitter,
+    Object bufferLabel,
+    Object buffer,
+    Object latePacketLabel,
+    Object latePackets,
+  ) {
     return '$quality · $latencyLabel$rtt · $jitterLabel$jitter · $bufferLabel$buffer · $latePacketLabel$latePackets';
   }
 
@@ -779,4 +818,511 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notificationChannelGeneralDesc => 'Mensajes entrantes y avisos';
+
+  @override
+  String get emptyAppsTitle => 'No hay aplicaciones disponibles';
+
+  @override
+  String get emptyAppsSearchTitle => 'No se encontraron aplicaciones';
+
+  @override
+  String get fileDropRejected => 'No se pueden enviar estos archivos';
+
+  @override
+  String get validationRequired => 'Este campo es obligatorio';
+
+  @override
+  String get validationNicknameRequired => 'Introduce un apodo';
+
+  @override
+  String get validationNicknameTooLong =>
+      'El apodo no puede superar los 64 caracteres';
+
+  @override
+  String get validationHostRequired =>
+      'Introduce un nombre de host o dirección IP';
+
+  @override
+  String get validationHostInvalid =>
+      'Introduce una dirección IPv4, IPv6, .local o un host válido';
+
+  @override
+  String get validationPortInvalid => 'Introduce un puerto entre 1001 y 65535';
+
+  @override
+  String get settingsSectionDeviceAppearance => 'Dispositivo y apariencia';
+
+  @override
+  String get settingsSectionDeviceAppearanceDesc =>
+      'Nombre, tema y visibilidad de este dispositivo en la red cercana';
+
+  @override
+  String get settingsSectionConnectionTransfer => 'Conexión y transferencia';
+
+  @override
+  String get settingsSectionConnectionTransferDesc =>
+      'Puerto del servidor, archivos guardados y conexiones de confianza';
+
+  @override
+  String get settingsSectionSystemBehavior => 'Comportamiento del sistema';
+
+  @override
+  String get settingsSectionSystemBehaviorDesc =>
+      'Inicio, segundo plano y comportamiento de las ventanas';
+
+  @override
+  String get settingsSectionPermissionsSharing => 'Permisos y uso compartido';
+
+  @override
+  String get settingsSectionPermissionsSharingDesc =>
+      'Acceso al portapapeles, confianza, audio, teclado y ratón';
+
+  @override
+  String get settingsSectionMobileIntegration => 'Integración móvil';
+
+  @override
+  String get settingsSectionMobileIntegrationDesc =>
+      'Conexión en segundo plano y uso de la batería';
+
+  @override
+  String get settingsSectionNotificationForwarding =>
+      'Reenvío de notificaciones';
+
+  @override
+  String get settingsSectionNotificationForwardingDesc =>
+      'Gestión de notificaciones de Android y ayuda con códigos de verificación';
+
+  @override
+  String get settingsSectionLanguageFiles => 'Idioma y archivos';
+
+  @override
+  String get settingsSectionLanguageFilesDesc =>
+      'Idioma, carpeta de guardado e información de la aplicación';
+
+  @override
+  String get settingsSaveDirectory => 'Carpeta de guardado';
+
+  @override
+  String get settingsChangeDirectory => 'Cambiar carpeta de guardado';
+
+  @override
+  String get settingsOpenDirectory => 'Abrir carpeta de guardado';
+
+  @override
+  String get settingsVersion => 'Versión';
+
+  @override
+  String get appListSearchPlaceholder => 'Buscar aplicaciones';
+
+  @override
+  String get appListClearSearch => 'Borrar búsqueda de aplicaciones';
+
+  @override
+  String get deselectAll => 'Deseleccionar todo';
+
+  @override
+  String get settingsLoadFailedTitle => 'No se pudieron cargar los ajustes';
+
+  @override
+  String get settingsLoadFailedBody =>
+      'Comprueba los servicios locales de la aplicación e inténtalo de nuevo.';
+
+  @override
+  String get appListLoadFailedTitle => 'No se pudieron cargar las aplicaciones';
+
+  @override
+  String get appListLoadFailedBody =>
+      'Comprueba el acceso a las aplicaciones e inténtalo de nuevo.';
+
+  @override
+  String get appListSaveFailed =>
+      'No se pudo guardar la selección de aplicaciones de notificaciones';
+
+  @override
+  String get notificationApps => 'Aplicaciones de notificaciones';
+
+  @override
+  String notificationAppsSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aplicaciones seleccionadas',
+      one: '1 aplicación seleccionada',
+      zero: 'No hay aplicaciones seleccionadas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get notificationAppsDisabled =>
+      'Activa el reenvío de notificaciones para elegir aplicaciones';
+
+  @override
+  String get notificationForwardingUpdateFailed =>
+      'No se pudo actualizar el reenvío de notificaciones';
+
+  @override
+  String get dangerousActions => 'Acciones peligrosas';
+
+  @override
+  String get pairingNewDeviceTitle => 'Emparejar un dispositivo nuevo';
+
+  @override
+  String pairingNewDeviceDescription(String device) {
+    return '$device quiere establecer una conexión de confianza';
+  }
+
+  @override
+  String get pairingIdentityChangedTitle =>
+      'La identidad del dispositivo ha cambiado';
+
+  @override
+  String pairingIdentityChangedDescription(String device) {
+    return 'La clave de identidad de $device no coincide con el emparejamiento anterior. Continúa solo si el dispositivo se reinstaló o restableció';
+  }
+
+  @override
+  String get pairingLegacyTrustTitle =>
+      'Confirma de nuevo este dispositivo de confianza';
+
+  @override
+  String pairingLegacyTrustDescription(String device) {
+    return '$device usa un registro de confianza antiguo y debe emparejarse de nuevo para vincular su identidad';
+  }
+
+  @override
+  String get pairingCompareCode =>
+      'Confirma que ambos dispositivos muestran el mismo código de seis dígitos';
+
+  @override
+  String pairingNotificationBody(String device, String code) {
+    return 'Código $code · Compáralo con $device';
+  }
+
+  @override
+  String pairingInitiatorNotificationBody(String device, String code) {
+    return 'Código $code · Esperando a $device';
+  }
+
+  @override
+  String pairingIdentityChangedNotificationBody(String device, String code) {
+    return 'Código $code · La identidad de $device cambió; abre Whisper para ver los detalles';
+  }
+
+  @override
+  String pairingCodeSemantics(String code) {
+    return 'Código de emparejamiento $code';
+  }
+
+  @override
+  String get pairingReject => 'Rechazar';
+
+  @override
+  String get pairingApprove => 'Los códigos coinciden';
+
+  @override
+  String get pairingViewDetails => 'Ver detalles';
+
+  @override
+  String get pairingUpgradeRequired =>
+      'El otro dispositivo está desactualizado. Actualiza Whisper e inténtalo de nuevo';
+
+  @override
+  String get pairingExpired => 'La solicitud de emparejamiento ha caducado';
+
+  @override
+  String get pairingRejectedByPeer =>
+      'El otro dispositivo rechazó la solicitud de conexión';
+
+  @override
+  String get pairingEncryptionNotice =>
+      'Tras emparejar, el texto, los archivos, el portapapeles y los datos de control se cifran de extremo a extremo';
+
+  @override
+  String get e2eeTrustedConnection =>
+      'Cifrado de extremo a extremo · Dispositivo de confianza';
+
+  @override
+  String get e2eeEncryptedConnection => 'Conexión cifrada de extremo a extremo';
+
+  @override
+  String get transferAssistantTitle => 'Asistente de transferencias';
+
+  @override
+  String get transferAssistantSearchHint => 'Buscar mensajes de texto';
+
+  @override
+  String get transferAssistantClearSearch => 'Borrar búsqueda';
+
+  @override
+  String get transferAssistantSearchResults => 'Resultados de búsqueda';
+
+  @override
+  String get transferAssistantFavorites => 'Textos favoritos';
+
+  @override
+  String get transferAssistantRecent => 'Textos recientes';
+
+  @override
+  String get transferAssistantNoResults =>
+      'No se encontró ningún texto coincidente';
+
+  @override
+  String get transferAssistantNoFavorites => 'Aún no hay textos favoritos';
+
+  @override
+  String get transferAssistantNoRecent => 'Aún no hay mensajes de texto';
+
+  @override
+  String get transferAssistantIncoming => 'Recibido';
+
+  @override
+  String get transferAssistantOutgoing => 'Enviado';
+
+  @override
+  String get transferAssistantCopy => 'Copiar texto';
+
+  @override
+  String get transferAssistantFavorite => 'Añadir a favoritos';
+
+  @override
+  String get transferAssistantUnfavorite => 'Quitar de favoritos';
+
+  @override
+  String get transferAssistantLoadFailed =>
+      'No se pudieron cargar los mensajes de texto';
+
+  @override
+  String get transferAssistantCopied => 'Texto copiado';
+
+  @override
+  String get transferAssistantCopyFailed => 'No se pudo copiar el texto';
+
+  @override
+  String get transferAssistantFavoriteFailed =>
+      'No se pudieron actualizar los favoritos. Inténtalo de nuevo';
+
+  @override
+  String get qrPairingTitle => 'Conectar con código QR';
+
+  @override
+  String get qrMyCode => 'Mi código QR';
+
+  @override
+  String get qrScanCode => 'Escanear para conectar';
+
+  @override
+  String get qrShowCodeHint =>
+      'Haz que el otro dispositivo escanee este código para verificar la dirección y la identidad';
+
+  @override
+  String qrFingerprint(String fingerprint) {
+    return 'Huella de identidad $fingerprint';
+  }
+
+  @override
+  String get qrWifiUnavailable =>
+      'No se encontró una dirección LAN válida. Conéctate a Wi-Fi y actualiza el código';
+
+  @override
+  String get qrCopyLink => 'Copiar datos de conexión';
+
+  @override
+  String get qrLinkCopied => 'Datos de conexión copiados';
+
+  @override
+  String get qrScanHint =>
+      'Escanea el código que muestra Whisper en el otro dispositivo';
+
+  @override
+  String get qrCameraUnavailable =>
+      'La cámara no está disponible. Permite que Whisper use la cámara en los ajustes del sistema';
+
+  @override
+  String get qrToggleTorch => 'Alternar linterna';
+
+  @override
+  String get qrSwitchCamera => 'Cambiar cámara';
+
+  @override
+  String get qrCannotPairSelf =>
+      'Este es el dispositivo actual. Escanea el código de otro dispositivo';
+
+  @override
+  String get qrInvalidCode =>
+      'No es un código válido de Whisper. Pide al otro dispositivo que muestre uno nuevo';
+
+  @override
+  String get connectionDiagnosticTitle => 'Diagnóstico de conexión';
+
+  @override
+  String get connectionDiagnosticWifi =>
+      'No se puede alcanzar el dispositivo. Confirma que ambos usan la misma red Wi-Fi y desactiva el aislamiento de invitados o AP.';
+
+  @override
+  String get connectionDiagnosticAddress =>
+      'La dirección LAN del código QR no es válida o cambió. Pide al otro dispositivo que vuelva a abrir el código y escanéalo de nuevo.';
+
+  @override
+  String get connectionDiagnosticService =>
+      'Se encontró la dirección, pero Whisper no respondió. Abre Whisper en el otro dispositivo y confirma que su servicio LAN esté activo.';
+
+  @override
+  String get connectionDiagnosticFirewall =>
+      'La conexión agotó el tiempo. Permite Whisper en el cortafuegos del sistema de ambos dispositivos y vuelve a intentarlo.';
+
+  @override
+  String get connectionDiagnosticIdentity =>
+      'La identidad no coincide con el código QR y Whisper detuvo la conexión. Pide un código nuevo; no omitas esta comprobación.';
+
+  @override
+  String get connectionDiagnosticVersion =>
+      'Los dispositivos usan versiones de protocolo incompatibles. Actualiza Whisper a la misma versión reciente y vuelve a intentarlo.';
+
+  @override
+  String get connectionDiagnosticPairing =>
+      'El emparejamiento no terminó. Mantén Whisper abierto en ambos dispositivos y compara de nuevo el código.';
+
+  @override
+  String get androidSystemShareTitle => 'Enviar contenido compartido';
+
+  @override
+  String get androidSystemShareChooseTrustedDevice =>
+      'Elige un dispositivo de confianza. No se enviará nada hasta que confirmes';
+
+  @override
+  String get androidSystemShareOnline => 'En línea';
+
+  @override
+  String get androidSystemShareOffline => 'Sin conexión';
+
+  @override
+  String get androidSystemShareNoTrustedDevices =>
+      'No hay dispositivos de confianza disponibles. Empareja uno y confirma primero su identidad';
+
+  @override
+  String get androidSystemShareConfirmTarget => 'Confirmar destino';
+
+  @override
+  String androidSystemShareWaitingForDevice(String device) {
+    return 'Esperando a $device; el envío comenzará cuando se conecte';
+  }
+
+  @override
+  String androidSystemShareSendingTo(String device) {
+    return 'Enviando a $device';
+  }
+
+  @override
+  String androidSystemShareSentTo(String device) {
+    return 'Enviado a $device';
+  }
+
+  @override
+  String get androidSystemShareFailedRetained =>
+      'El envío falló. El contenido compartido se conservó';
+
+  @override
+  String get androidSystemShareStillPending =>
+      'El contenido compartido sigue esperando un dispositivo';
+
+  @override
+  String get androidSystemShareQueueFull =>
+      'La cola está llena. Procesa los elementos existentes antes de añadir más';
+
+  @override
+  String get androidSystemShareRejected =>
+      'El contenido superó un límite o no se pudo leer por completo, por lo que no se añadió';
+
+  @override
+  String get androidSystemShareTargetNeedsReselection =>
+      'La identidad del dispositivo cambió o ya no es de confianza. Vuelve a elegirlo';
+
+  @override
+  String get androidSystemShareChooseAction => 'Elegir dispositivo';
+
+  @override
+  String androidSystemShareMoreFiles(int count) {
+    return '$count archivos más';
+  }
+
+  @override
+  String get desktopQuickSendTitle => 'Envío rápido';
+
+  @override
+  String desktopQuickSendSummary(int textCount, int fileCount) {
+    return '$textCount textos · $fileCount archivos';
+  }
+
+  @override
+  String desktopQuickSendMore(int count) {
+    return '$count elementos más';
+  }
+
+  @override
+  String desktopQuickSendFiles(int count) {
+    return '$count archivos';
+  }
+
+  @override
+  String get desktopQuickSendChooseDevice =>
+      'Enviar a un dispositivo de confianza';
+
+  @override
+  String get desktopQuickSendNoTrustedDevices =>
+      'No hay dispositivos de confianza. Empareja uno primero.';
+
+  @override
+  String get desktopQuickSendDeviceOffline =>
+      'Sin conexión; el contenido seguirá pendiente';
+
+  @override
+  String get desktopQuickSendLater => 'Más tarde';
+
+  @override
+  String get desktopQuickSendSend => 'Enviar';
+
+  @override
+  String get desktopQuickSendSent =>
+      'Añadido a la cola de transferencia cifrada';
+
+  @override
+  String get desktopQuickSendFailedRetained =>
+      'El envío no terminó; el contenido se ha conservado';
+
+  @override
+  String get desktopQuickSendEmptyClipboard =>
+      'El portapapeles no tiene contenido compatible';
+
+  @override
+  String get desktopQuickSendShortcutUnavailable =>
+      'El atajo global de envío ya está en uso';
+
+  @override
+  String get desktopQuickSendDraftLimit =>
+      'El envío rápido está lleno. Procesa el contenido existente antes de añadir más';
+
+  @override
+  String get desktopQuickSendFileLimit =>
+      'Se seleccionaron demasiados archivos, por lo que no se añadió el contenido nuevo';
+
+  @override
+  String get desktopQuickSendTextLimit =>
+      'El texto es demasiado largo, por lo que no se añadió';
+
+  @override
+  String get desktopQuickSendInvalidPath =>
+      'Una ruta no es válida o es demasiado larga, por lo que no se añadió el contenido nuevo';
+
+  @override
+  String get desktopQuickSendClipboardSnapshotUnavailable =>
+      'No se pudo leer el portapapeles de inmediato, por lo que no se añadió contenido que pudiera haber cambiado';
+
+  @override
+  String get desktopQuickSendTargetConflict =>
+      'Parte del contenido ya se envió a otro dispositivo. Selecciona el dispositivo original para continuar';
+
+  @override
+  String get desktopQuickSendTargetNeedsReselection =>
+      'La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo';
 }

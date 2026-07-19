@@ -130,6 +130,7 @@ class RemoteInputControlMessage {
     required this.sinkPeerId,
     this.transport = RemoteInputTransport.websocket,
     this.path = '/input',
+    this.transportToken = '',
     this.layoutEdge,
     this.sourceDisplayId = '',
     this.sourceEdge,
@@ -157,6 +158,7 @@ class RemoteInputControlMessage {
   final String sinkPeerId;
   final RemoteInputTransport transport;
   final String path;
+  final String transportToken;
   final RemoteInputEdge? layoutEdge;
   final String sourceDisplayId;
   final RemoteInputEdge? sourceEdge;
@@ -177,6 +179,37 @@ class RemoteInputControlMessage {
   final String sourcePlatform;
   final String sinkPlatform;
 
+  RemoteInputControlMessage withTransportToken(String token) {
+    return RemoteInputControlMessage(
+      action: action,
+      sessionId: sessionId,
+      sourcePeerId: sourcePeerId,
+      sinkPeerId: sinkPeerId,
+      transport: transport,
+      path: path,
+      transportToken: token,
+      layoutEdge: layoutEdge,
+      sourceDisplayId: sourceDisplayId,
+      sourceEdge: sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd,
+      sinkDisplayId: sinkDisplayId,
+      sinkEdge: sinkEdge,
+      sinkSegmentStart: sinkSegmentStart,
+      sinkSegmentEnd: sinkSegmentEnd,
+      edgeMappings: edgeMappings,
+      routeId: routeId,
+      releaseHotkey: releaseHotkey,
+      releaseReason: releaseReason,
+      releaseSequence: releaseSequence,
+      releaseActivationSequence: releaseActivationSequence,
+      releaseEdgeUnit: releaseEdgeUnit,
+      errorMessage: errorMessage,
+      sourcePlatform: sourcePlatform,
+      sinkPlatform: sinkPlatform,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'action': action.name,
         'sessionId': sessionId,
@@ -184,6 +217,9 @@ class RemoteInputControlMessage {
         'sinkPeerId': sinkPeerId,
         'transport': transport.name,
         'path': path,
+        if (action == RemoteInputControlAction.accept &&
+            transportToken.isNotEmpty)
+          'transportToken': transportToken,
         if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
         if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
         if (sourceEdge != null) 'sourceEdge': sourceEdge!.name,
@@ -224,6 +260,10 @@ class RemoteInputControlMessage {
         RemoteInputTransport.websocket,
       ),
       path: json['path'] as String? ?? '/input',
+      transportToken: _transportTokenFromJson(
+        json,
+        allowed: json['action'] == RemoteInputControlAction.accept.name,
+      ),
       layoutEdge: nullableEnumByName(
         RemoteInputEdge.values,
         json['layoutEdge'] as String?,
@@ -263,6 +303,24 @@ class RemoteInputControlMessage {
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
     );
   }
+}
+
+String _transportTokenFromJson(
+  Map<String, dynamic> json, {
+  required bool allowed,
+}) {
+  final present = json.containsKey('transportToken');
+  if (!allowed) {
+    if (present) {
+      throw const FormatException('unexpected transport token');
+    }
+    return '';
+  }
+  final token = json['transportToken'];
+  if (token is! String || token.isEmpty) {
+    throw const FormatException('missing transport token');
+  }
+  return token;
 }
 
 class RemoteInputPacketFrame {

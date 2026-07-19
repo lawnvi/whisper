@@ -69,6 +69,7 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 add_executable(${BINARY_NAME}
   "audio_share_plugin.cc"
   "desktop_clipboard_image_plugin.cc"
+  "desktop_quick_send_plugin.cc"
   "main.cc"
   "my_application.cc"
   "remote_input_plugin.cc"

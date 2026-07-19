@@ -9,11 +9,36 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 
-import 'helper.dart';
+enum FileOperationKind {
+  storageQuery,
+  pickerScan,
+  fileManagerOpen,
+  fileManagerReveal,
+  platformChannel,
+}
+
+enum FileOperationState { failed }
+
+enum DesktopFileManagerPlatform { macOS, windows, linux }
+
+typedef FileManagerProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
+
+class FileManagerCommand {
+  const FileManagerCommand(this.executable, this.arguments);
+
+  final String executable;
+  final List<String> arguments;
+}
 
 const _androidDirChannel = MethodChannel("com.vireen.whisper/android_dir");
 const _iosDirChannel = MethodChannel("com.vireen.whisper/ios_dir");
+const _desktopFileManagerChannel =
+    MethodChannel('com.vireen.whisper/file_manager');
 
 bool hasEnoughStorageForFile({
   required int fileSize,
@@ -61,7 +86,10 @@ Future<int?> availableBytesForPath(String path) async {
       return await _availableBytesFromDf(path);
     }
   } catch (error) {
-    logger.i('Failed to determine available storage for $path: $error');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      error: error,
+    );
   }
 
   return null;
@@ -78,7 +106,10 @@ Future<void> notifyFileVisibleToAndroidPickers(String path) async {
       {'path': path},
     );
   } catch (error) {
-    logger.i('Failed to scan Android file for picker visibility: $error');
+    _logFileOperation(
+      FileOperationKind.pickerScan,
+      error: error,
+    );
   }
 }
 
@@ -103,7 +134,10 @@ Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
       await notifyFileVisibleToAndroidPickers(entity.path);
     }
   } catch (error) {
-    logger.i('Failed to scan existing Android downloads: $error');
+    _logFileOperation(
+      FileOperationKind.pickerScan,
+      error: error,
+    );
   }
 }
 
@@ -116,21 +150,20 @@ void openFile(String path) async {
   OpenFilex.open(path);
 }
 
-void openDir(String path, {parent = false}) async {
+Future<void> openDir(String path, {bool parent = false}) async {
   var file = File(path);
   if (!file.existsSync()) {
     var dir = await downloadDir();
     path = dir.path;
   } else if (parent) {
-    if (await _revealFileInFileManager(path)) {
+    if (await revealFileInFileManager(path)) {
       return;
     }
     path = file.parent.path;
   }
 
-  logger.i("打开文件: $path");
   if (Platform.isMacOS) {
-    openFinder(path);
+    await openFinder(path);
   } else if (Platform.isAndroid) {
     // openFolderInFileManager();
     // openFileExplorer(path);
@@ -144,64 +177,120 @@ void openDir(String path, {parent = false}) async {
   }
 }
 
-void openFinder(String path) async {
+Future<void> openFinder(String path) async {
   // 使用系统命令打开 Finder 并显示特定文件夹
   ProcessResult result = await Process.run('open', [path]);
 
   // 处理执行结果
-  if (result.exitCode == 0) {
-    logger.i('Finder opened successfully');
-  } else {
-    logger.i('Error opening Finder: ${result.stderr}');
+  if (result.exitCode != 0) {
+    _logFileOperation(
+      FileOperationKind.fileManagerOpen,
+      exitCode: result.exitCode,
+    );
   }
 }
 
-Future<bool> _revealFileInFileManager(String path) async {
-  if (!File(path).existsSync()) {
+DesktopFileManagerPlatform? _currentDesktopFileManagerPlatform() {
+  if (Platform.isMacOS) {
+    return DesktopFileManagerPlatform.macOS;
+  }
+  if (Platform.isWindows) {
+    return DesktopFileManagerPlatform.windows;
+  }
+  if (Platform.isLinux) {
+    return DesktopFileManagerPlatform.linux;
+  }
+  return null;
+}
+
+List<FileManagerCommand> fileManagerRevealCommands(
+  DesktopFileManagerPlatform platform,
+  String path,
+) {
+  switch (platform) {
+    case DesktopFileManagerPlatform.macOS:
+      return <FileManagerCommand>[
+        FileManagerCommand('open', <String>['-R', path]),
+      ];
+    case DesktopFileManagerPlatform.windows:
+      return <FileManagerCommand>[
+        FileManagerCommand('explorer.exe', <String>['/select,', path]),
+      ];
+    case DesktopFileManagerPlatform.linux:
+      final fileUri = Uri.file(path).toString().replaceAll("'", '%27');
+      return <FileManagerCommand>[
+        // FileManager1 works with the user's default file manager on GNOME,
+        // KDE and other freedesktop-compatible desktops.
+        FileManagerCommand('gdbus', <String>[
+          'call',
+          '--session',
+          '--dest',
+          'org.freedesktop.FileManager1',
+          '--object-path',
+          '/org/freedesktop/FileManager1',
+          '--method',
+          'org.freedesktop.FileManager1.ShowItems',
+          "['$fileUri']",
+          '',
+        ]),
+        FileManagerCommand('nautilus', <String>['--select', path]),
+        FileManagerCommand('dolphin', <String>['--select', path]),
+      ];
+  }
+}
+
+Future<bool> revealFileInFileManager(
+  String path, {
+  DesktopFileManagerPlatform? platform,
+  FileManagerProcessRunner processRunner = Process.run,
+}) async {
+  final file = File(path);
+  if (!file.existsSync()) {
+    return false;
+  }
+  final targetPath = file.absolute.path;
+
+  final resolvedPlatform = platform ?? _currentDesktopFileManagerPlatform();
+  if (resolvedPlatform == null) {
     return false;
   }
 
-  try {
-    if (Platform.isMacOS) {
-      final result = await Process.run('open', ['-R', path]);
-      if (result.exitCode == 0) {
-        logger.i('Finder revealed file successfully');
+  if (platform == null &&
+      resolvedPlatform == DesktopFileManagerPlatform.macOS) {
+    try {
+      final revealed = await _desktopFileManagerChannel.invokeMethod<bool>(
+        'revealFile',
+        <String, String>{'path': targetPath},
+      );
+      if (revealed == true) {
         return true;
       }
-      logger.i('Error revealing file in Finder: ${result.stderr}');
-      return false;
+    } catch (error) {
+      // Older builds do not have the native channel; keep the command fallback.
+      _logFileOperation(
+        FileOperationKind.platformChannel,
+        error: error,
+      );
     }
+  }
 
-    if (Platform.isWindows) {
-      final result = await Process.run('explorer', ['/select,', path]);
+  for (final command
+      in fileManagerRevealCommands(resolvedPlatform, targetPath)) {
+    try {
+      final result = await processRunner(command.executable, command.arguments);
       if (result.exitCode == 0) {
-        logger.i('Explorer revealed file successfully');
         return true;
       }
-      logger.i('Error revealing file in Explorer: ${result.stderr}');
-      return false;
+      _logFileOperation(
+        FileOperationKind.fileManagerReveal,
+        exitCode: result.exitCode,
+      );
+    } catch (error) {
+      _logFileOperation(
+        FileOperationKind.fileManagerReveal,
+        error: error,
+      );
     }
-
-    if (Platform.isLinux) {
-      final revealCommands = <List<String>>[
-        ['nautilus', '--select', path],
-        ['dolphin', '--select', path],
-      ];
-
-      for (final command in revealCommands) {
-        try {
-          final result = await Process.run(command.first, command.sublist(1));
-          if (result.exitCode == 0) {
-            logger.i('${command.first} revealed file successfully');
-            return true;
-          }
-        } catch (_) {
-          // Try the next file manager command.
-        }
-      }
-    }
-  } catch (error) {
-    logger.i('Error revealing file in file manager: $error');
   }
 
   return false;
@@ -351,45 +440,12 @@ Future<Directory> downloadDir() async {
     if (dir == null) {
       return await getApplicationDocumentsDirectory();
     }
-    dir = Directory("${dir.path}/whisper");
+    dir = Directory(p.join(dir.path, 'whisper'));
   }
   if (!dir.existsSync()) {
     dir.createSync();
   }
   return dir;
-}
-
-Future<Directory> transferTempDir() async {
-  final base = await downloadDir();
-  final dir = Directory('${base.path}/.whisper/transfers');
-  if (!dir.existsSync()) {
-    dir.createSync(recursive: true);
-  }
-  return dir;
-}
-
-Future<String> allocateFinalDownloadPath(String fileName) async {
-  final appDir = await downloadDir();
-  var candidate = File('${appDir.path}/$fileName');
-  var idx = 1;
-  final arr = fileName.split(".");
-  var before = fileName;
-  var dot = "";
-  if (arr.length > 1) {
-    dot = arr[arr.length - 1];
-    before = fileName.substring(0, fileName.length - 1 - dot.length);
-  }
-  while (candidate.existsSync()) {
-    candidate =
-        File('${appDir.path}/$before-$idx${dot.isEmpty ? '' : '.$dot'}');
-    idx++;
-  }
-  return candidate.path;
-}
-
-Future<String> transferTempFilePath(String transferId) async {
-  final dir = await transferTempDir();
-  return '${dir.path}/$transferId.part';
 }
 
 Future<void> writeResumableChunk(
@@ -438,8 +494,11 @@ Future<bool> openAndroidDir(String path) async {
   bool result = false;
   try {
     await _androidDirChannel.invokeMethod('openFolder', {'path': path});
-  } on PlatformException catch (e) {
-    logger.i(e.toString());
+  } on PlatformException catch (error) {
+    _logFileOperation(
+      FileOperationKind.platformChannel,
+      error: error,
+    );
   }
   return result;
 }
@@ -448,17 +507,22 @@ Future<String> openIosDir(String path) async {
   String result = "";
   try {
     await _iosDirChannel.invokeMethod('openFolder', {'path': path});
-  } on PlatformException catch (e) {
-    logger.i(e.toString());
+  } on PlatformException catch (error) {
+    _logFileOperation(
+      FileOperationKind.platformChannel,
+      error: error,
+    );
   }
-  logger.i(result);
   return result;
 }
 
 Future<int?> _availableBytesFromDf(String path) async {
   final result = await Process.run('df', ['-k', path]);
   if (result.exitCode != 0) {
-    logger.i('df failed for $path: ${result.stderr}');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      exitCode: result.exitCode,
+    );
     return null;
   }
 
@@ -501,9 +565,28 @@ Future<int?> _availableBytesOnWindows(String path) async {
     ],
   );
   if (result.exitCode != 0) {
-    logger.i('PowerShell storage query failed for $path: ${result.stderr}');
+    _logFileOperation(
+      FileOperationKind.storageQuery,
+      exitCode: result.exitCode,
+    );
     return null;
   }
 
   return int.tryParse(result.stdout.toString().trim());
+}
+
+void _logFileOperation(
+  FileOperationKind kind, {
+  Object? error,
+  int? exitCode,
+}) {
+  privacyLog.event(
+    PrivacyEvent.localOperation,
+    <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      PrivacyField.state: FileOperationState.failed,
+      if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
+      if (exitCode != null) PrivacyField.exitCode: exitCode,
+    },
+  );
 }

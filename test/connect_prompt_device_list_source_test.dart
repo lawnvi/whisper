@@ -11,28 +11,25 @@ void main() {
     return source.substring(startIndex, endIndex);
   }
 
-  test('device list deduplicates incoming connection prompts by peer', () {
+  test('device list uses the shared signed pairing dialog', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final onAuth = methodBody(
+    final onPairing = methodBody(
       source,
-      'void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback)',
+      'void onPairing(',
       'void afterAuth(bool allow, DeviceData? deviceData)',
     );
 
     expect(
       source,
-      contains("import 'package:whisper/state/connect_prompt_registry.dart';"),
+      contains("import 'package:whisper/widget/pairing_dialog.dart';"),
     );
-    expect(
-        source, contains('final ConnectPromptRegistry _connectPromptRegistry'));
-    expect(onAuth, contains('_connectPromptRegistry.register'));
-    expect(onAuth, contains('showCupertinoDialog'));
-    expect(onAuth, contains('_connectPromptRegistry.bindCloser'));
-    expect(onAuth, contains('_connectPromptRegistry.latestCallbackFor'));
-    expect(onAuth, isNot(contains('showConfirmationDialog(context')));
+    expect(onPairing, contains('showPairingDialog'));
+    expect(onPairing, contains('resolve'));
+    expect(onPairing, isNot(contains('showCupertinoDialog')));
+    expect(source, isNot(contains('ConnectPromptRegistry')));
   });
 
-  test('device list closes pending prompt when auth resolves elsewhere', () {
+  test('device list keeps post-auth navigation separate from pairing', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
     final afterAuth = methodBody(
       source,
@@ -40,7 +37,7 @@ void main() {
       'void onClose()',
     );
 
-    expect(afterAuth, contains('_connectPromptRegistry.resolveAndClose'));
-    expect(afterAuth, contains('deviceData.uid'));
+    expect(afterAuth, contains('db.upsertDevice(deviceData)'));
+    expect(afterAuth, isNot(contains('resolveAndClose')));
   });
 }

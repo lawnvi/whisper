@@ -56,7 +56,7 @@ Each subsystem follows the same shape: a `*_protocol.dart` (wire format), a `*_c
 Drift (SQLite) database in `LocalDatabase.dart`. `device.dart`, `message.dart` (`MessageEnum` typed messages), `file_transfer.dart` are the row models.
 
 ### Other
-- `lib/page/` screens, `lib/widget/` reusable UI, `lib/helper/` platform helpers (files, clipboard sync, notifications, Android background service, FTP, desktop startup), `lib/theme/` (`AppTheme` + `WhisperPalette` tokens — see DESIGN.md), `lib/l10n/` ARB files (zh/en/es).
+- `lib/page/` screens, `lib/widget/` reusable UI, `lib/helper/` platform helpers (files, clipboard sync, notifications, Android background service, desktop startup), `lib/theme/` (`AppTheme` + `WhisperPalette` tokens — see DESIGN.md), `lib/l10n/` ARB files (zh/en/es).
 - `android/ ios/ macos/ linux/ windows/` native runners; platform-specific behavior should stay behind the helper/coordinator/native-plugin boundaries.
 
 ## Generated files — never hand-edit

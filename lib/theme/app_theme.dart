@@ -1,6 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+abstract final class WhisperUi {
+  static const settingsMaxWidth = 760.0;
+}
+
 class WhisperPalette extends ThemeExtension<WhisperPalette> {
   const WhisperPalette({
     required this.connected,

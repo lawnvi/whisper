@@ -133,18 +133,19 @@ void main() {
       );
     });
 
-    test('reports hook installation and keyboard capture diagnostics', () {
+    test('reports allowlisted hook and capture diagnostic events', () {
       expect(source, contains('GetLastError()'));
       expect(source, contains('EmitDiagnostic('));
       expect(source, contains('"onDiagnostic"'));
-      expect(source, contains('windows remote input capture started'));
-      expect(source, contains('windows keyboard hook vk='));
-      expect(source, contains('windows keyboard hook inactive vk='));
-      expect(source, contains('windows remote input capture paused'));
+      expect(source, contains('RemoteInputDiagnosticEvent::kCaptureStarted'));
+      expect(source, contains('RemoteInputDiagnosticEvent::kEventCaptured'));
+      expect(source, contains('RemoteInputDiagnosticEvent::kEventIgnored'));
+      expect(source, contains('RemoteInputDiagnosticEvent::kCapturePaused'));
       expect(source, contains('releaseSequence'));
       expect(source, contains('releaseActivationSequence'));
       expect(source, contains('capture_activation_sequence_'));
-      expect(source, contains('windows remote input ignored stale pause'));
+      expect(
+          source, contains('RemoteInputDiagnosticEvent::kStalePauseIgnored'));
       expect(
         source,
         isNot(contains('sequence_ > static_cast<uint64_t>(release_sequence)')),
@@ -313,7 +314,8 @@ void main() {
       expect(source, contains('isInjectedModifierKey(Int(keyCode))'));
     });
 
-    test('uses system input source shortcut for remote Caps Lock with HID fallback',
+    test(
+        'uses system input source shortcut for remote Caps Lock with HID fallback',
         () {
       expect(source, contains('import Carbon.HIToolbox'));
       expect(source, contains('CGEventSource(stateID: .hidSystemState)'));
@@ -323,7 +325,7 @@ void main() {
       expect(source, contains('CGKeyCode(59)'));
       expect(source, contains('CGKeyCode(49)'));
       expect(source, contains('.maskControl'));
-      expect(source, contains('mac caps input source shortcut posted'));
+      expect(source, contains('emitInjectedDiagnostic()'));
       expect(source, contains('postCapsLockEvent()'));
       expect(source, contains('private var injectedCapsLockEnabled = false'));
       expect(
@@ -339,7 +341,7 @@ void main() {
       expect(source, isNot(contains('TISSelectInputSource')));
 
       final capsLockEvent = RegExp(
-        r'private func postCapsLockEvent\([\s\S]*?\n  private func emitKeyDiagnostic',
+        r'private func postCapsLockEvent\([\s\S]*?\n  private func emitInjectedDiagnostic',
       ).firstMatch(source)!.group(0)!;
       expect(capsLockEvent, isNot(contains('flagsState')));
     });
@@ -357,18 +359,20 @@ void main() {
       expect(source, isNot(contains('lastCapturedCapsLockTimeMicros')));
       expect(source, isNot(contains('capturedCapsLockDuplicateWindowMicros')));
       expect(source, isNot(contains('shouldEmitCapturedCapsLockEvent')));
-      expect(source, isNot(contains('mac captured duplicate caps lock skipped')));
+      expect(
+          source, isNot(contains('mac captured duplicate caps lock skipped')));
     });
 
-    test('emits sink-side diagnostics for key injection and caps switching',
+    test('emits allowlisted diagnostics for key injection and caps switching',
         () {
       expect(source, contains('"onDiagnostic"'));
-      expect(source, contains('NSLog("remote input diagnostic: %@"'));
-      expect(source, contains('mac remote input injection started'));
-      expect(source, contains('mac remote input injection release reason='));
-      expect(source, contains('mac remote key inject'));
-      expect(source, contains('mac caps input source shortcut posted'));
-      expect(source, contains('mac post remote caps lock'));
+      expect(source, contains('emitDiagnostic(event: .injectionStarted)'));
+      expect(source, contains('emitDiagnostic(event: .injectionReleased)'));
+      expect(source, contains('case injectedEvent = "injected_event"'));
+      expect(source, contains('emitInjectedDiagnostic()'));
+      expect(source, isNot(contains('capsShortcutPosted')));
+      expect(source, isNot(contains('capsLockPosted')));
+      expect(source, isNot(contains('NSLog(')));
     });
 
     test('requires accessibility permission before accepting sink injection',
@@ -528,8 +532,8 @@ void main() {
         mouseMoveCase,
         contains('let point = clampedInjectedMousePoint(requestedPoint)'),
       );
-      expect(mouseMoveCase, contains('requestedPoint: requestedPoint'));
-      expect(source, contains('requested=%{public}d,%{public}d'));
+      expect(source, contains('emitInjectedDiagnostic()'));
+      expect(source, isNot(contains('requested=%{public}d,%{public}d')));
     });
 
     test('requests the visible cursor when receiving remote mouse input', () {
@@ -543,7 +547,7 @@ void main() {
       );
       expect(source, contains('CGWarpMouseCursorPosition(point)'));
       expect(source, contains('CGDisplayShowCursor(CGMainDisplayID())'));
-      expect(source, contains('remote input cursor show requested result='));
+      expect(source, isNot(contains('cursorShown')));
       expect(source, contains('Thread.isMainThread'));
 
       final injectionCase = RegExp(
@@ -669,10 +673,14 @@ void main() {
       expect(source, contains('case 0x14: return 57'));
     });
 
-    test('logs remote key injection details for debugging', () {
+    test('traces remote key injection without payload details', () {
       expect(source, contains('import OSLog'));
-      expect(source, contains('remote key inject session='));
-      expect(source, contains('post remote key mac='));
+      expect(source, contains('WHISPER_REMOTE_INPUT_TRACE'));
+      expect(source, contains('traceRemoteInput(.injectedEvent'));
+      expect(source, contains('emitInjectedDiagnostic()'));
+      expect(source, isNot(contains('keyInjected')));
+      expect(source, isNot(contains('remote key inject session=')));
+      expect(source, isNot(contains('post remote key mac=')));
     });
 
     test('captures macOS precise scroll metadata for normalization', () {

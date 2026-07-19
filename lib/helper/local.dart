@@ -24,15 +24,13 @@ class LocalSetting {
   final String _port = "_port";
   final String _isServer = "_is_server";
   final String _clipboard = "_clipboard";
-  final String _noAuth = "_no_auth";
+  final String _clipboardAutoSync = "_clipboard_auto_sync";
   final String _password = "_password";
   final String _doubleClickDelete = "_double_click_delete";
   final String _close2tray = "_close_to_tray";
   final String _windowWidth = "_window_width";
   final String _windowHeight = "_window_height";
   final String _localization = "_localization";
-  final String _ftpDir = "_ftpDir";
-  final String _ftpPort = "_ftpPort";
   final String _notifyAppMap = "_notifyAppMap";
   final String _savePath = "_savePath";
   final String _copyVerifyCode = "_copyVerifyCode";
@@ -44,6 +42,7 @@ class LocalSetting {
   final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
   final String _audioSharePlaybackGain = "_audio_share_playback_gain";
   final String _remoteInputScrollMultiplier = "_remote_input_scroll_multiplier";
+  final String _deviceIdentitySeed = "_device_identity_seed";
 
   SharedPreferences? _cachedPreferences;
 
@@ -65,7 +64,7 @@ class LocalSetting {
         online: online,
         password: await getSPDefault(_password, ""),
         clipboard: await getSPDefault(_clipboard, true),
-        auth: await getSPDefault(_noAuth, false),
+        auth: false,
         around: false);
   }
 
@@ -105,6 +104,23 @@ class LocalSetting {
     }
   }
 
+  Future<String?> deviceIdentitySeed() async {
+    final SharedPreferences sp = await _preferences();
+    return sp.getString(_deviceIdentitySeed);
+  }
+
+  Future<void> setDeviceIdentitySeed(String seed) async {
+    if (seed.isEmpty) {
+      throw ArgumentError.value(seed, 'seed', 'must not be empty');
+    }
+    await _setSP(_deviceIdentitySeed, seed);
+  }
+
+  Future<void> deleteDeviceIdentitySeed() async {
+    final SharedPreferences sp = await _preferences();
+    await sp.remove(_deviceIdentitySeed);
+  }
+
   Future<void> updateNickname(String nickname) async {
     await _setSP(_name, nickname);
   }
@@ -121,8 +137,12 @@ class LocalSetting {
     await _setSP(_clipboard, allow);
   }
 
-  Future<void> updateNoAuth(bool allow) async {
-    await _setSP(_noAuth, allow);
+  Future<bool> clipboardAutoSync() async {
+    return getSPDefault(_clipboardAutoSync, false);
+  }
+
+  Future<void> updateClipboardAutoSync(bool enabled) async {
+    await _setSP(_clipboardAutoSync, enabled);
   }
 
   Future<void> updatePassword(String password) async {
@@ -142,7 +162,7 @@ class LocalSetting {
   }
 
   Future<bool> isClose2Tray() async {
-    return await getSPDefault(_close2tray, false);
+    return await getSPDefault(_close2tray, true);
   }
 
   Future<double> windowHeight() async {
@@ -167,22 +187,6 @@ class LocalSetting {
 
   Future<void> setLocalization(String local) async {
     await _setSP(_localization, local);
-  }
-
-  Future<String> ftpDir() async {
-    return await getSPDefault(_ftpDir, '');
-  }
-
-  Future<void> setFTPDir(String local) async {
-    await _setSP(_ftpDir, local);
-  }
-
-  Future<int> ftpPort() async {
-    return await getSPDefault(_ftpPort, 8021);
-  }
-
-  Future<void> setFTPPort(int port) async {
-    await _setSP(_ftpPort, port);
   }
 
   Future<Map<String, int>> listenAppNotifyList() async {
@@ -293,10 +297,6 @@ class LocalSetting {
 
   Future<void> setLastManualPeerId(String peerId) async {
     await _setSP(_lastManualPeerId, peerId);
-  }
-
-  Future<bool> autoApproveNewDevices() async {
-    return await getSPDefault(_noAuth, false);
   }
 
   Future<bool> listenAndroidNotifications() async {

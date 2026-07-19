@@ -4,33 +4,43 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
-import 'package:whisper/global.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
+import 'package:whisper/page/transfer_assistant.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
+import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/connection_coordinator.dart';
+import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/media_message_preview.dart';
+import 'package:whisper/widget/pairing_dialog.dart';
 
 import '../helper/file.dart';
 import '../helper/helper.dart';
@@ -41,14 +51,38 @@ import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
 
+enum ConversationOperationKind {
+  deleteFile,
+  sendDroppedFiles,
+  readClipboard,
+  sendClipboardFiles,
+  sendClipboardImage,
+  pickFiles,
+  audioToggle,
+  remoteInputToggle,
+  sendText,
+}
+
+enum ConversationRemoteInputDiagnostic { toggleStarted }
+
+void _logConversationFailure(ConversationOperationKind kind, Object error) {
+  privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+    PrivacyField.kind: kind,
+    PrivacyField.success: false,
+    PrivacyField.errorType: privacyLog.errorType(error),
+  });
+}
+
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   final bool embedded;
+  final Future<void> Function(String uid)? onDeviceDeleted;
 
   const SendMessageScreen({
     super.key,
     required this.device,
     this.embedded = false,
+    this.onDeviceDeleted,
   });
 
   @override
@@ -70,8 +104,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     with WidgetsBindingObserver
     implements ISocketEvent {
   static const int _transferUiSpeedRefreshMs = 300;
-  static const Duration _transferProgressAnimationDuration =
-      Duration(milliseconds: 180);
+  static const Duration _transferProgressAnimationDuration = Duration(
+    milliseconds: 180,
+  );
 
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
@@ -84,6 +119,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       const DesktopClipboardImageReader();
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
+  final ConnectionAttemptTracker _connectionAttempts =
+      ConnectionAttemptTracker();
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
@@ -105,6 +142,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final bool embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
+  bool _composerSendInFlight = false;
+  bool _messageSelectionActive = false;
+  int _clipboardPasteGeneration = 0;
   List<ClipboardFileDraft> _pendingClipboardFiles =
       const <ClipboardFileDraft>[];
   ClipboardImageDraft? _pendingClipboardImage;
@@ -121,23 +161,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final enabled = await LocalSetting().androidBackgroundKeepAlive();
-    if (!enabled || !_isConnectedSession) {
-      await stopAndroidBackgroundKeepAlive();
-      return;
-    }
-    final notificationPermission = await Permission.notification.status;
-    if (notificationPermission.isDenied) {
-      await Permission.notification.request();
-    }
+    final coordinator = AndroidBackgroundKeepAliveCoordinator.shared;
+    await coordinator.setEnabled(enabled);
     if (!mounted) {
       return;
     }
     final notification = _buildAndroidKeepAliveNotification();
-    await startAndroidBackgroundKeepAlive(
-      title: notification.title,
-      description: notification.description,
-      progress: notification.progress,
-      indeterminateProgress: notification.indeterminateProgress,
+    await coordinator.setReason(
+      AndroidKeepAliveReason.activeSession,
+      enabled && _isConnectedSession,
+      notification: notification,
     );
   }
 
@@ -150,17 +183,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   _SendMessageScreen(this.device, this.embedded);
 
-  void _traceRemoteInput(String message) {
-    logger.i(message);
-    if (!kReleaseMode ||
-        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1') {
-      debugPrint(message);
+  void _traceRemoteInputStart({
+    required bool trusted,
+    required int mappingCount,
+  }) {
+    if (kReleaseMode &&
+        Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] != '1') {
+      return;
     }
+    privacyLog.event(PrivacyEvent.remoteInputDiagnostic, <PrivacyField, Object>{
+      PrivacyField.kind: ConversationRemoteInputDiagnostic.toggleStarted,
+      PrivacyField.allowed: trusted,
+      PrivacyField.count: mappingCount,
+    });
   }
 
   @override
   void initState() {
-    logger.i("init conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.addObserver(this);
     socketManager.registerEvent(this);
     _audioCoordinator.addListener(_handleAudioShareChanged);
@@ -177,8 +216,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void dispose() {
-    logger.i("dispose conv: ${socketManager.receiver}-${device.uid}");
     WidgetsBinding.instance.removeObserver(this);
+    _connectionAttempts.cancelAll();
     socketManager.unregisterEvent(this);
     _audioCoordinator.removeListener(_handleAudioShareChanged);
     _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
@@ -241,7 +280,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _updatePercent(double num) {
-    // logger.i("percent: ${(100*num).toStringAsFixed(2)}%");
     setState(() {
       percent = num;
     });
@@ -280,16 +318,33 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     setState(() {
       for (final entry in transfers.entries) {
-        _transferSnapshots[entry.key] = db.snapshotForTransfer(entry.value);
+        final snapshot = db.snapshotForTransfer(entry.value);
+        final current = _transferSnapshots[entry.key];
+        if (current != null && current.updatedAt > snapshot.updatedAt) {
+          continue;
+        }
+        _transferSnapshots[entry.key] = snapshot;
+        if (snapshot.state == FileTransferState.completed &&
+            snapshot.finalPath.isNotEmpty) {
+          final messageIndex = messageList.indexWhere(
+            (message) => message.uuid == snapshot.messageUuid,
+          );
+          if (messageIndex >= 0 &&
+              messageList[messageIndex].path != snapshot.finalPath) {
+            messageList[messageIndex] = messageList[messageIndex].copyWith(
+              path: snapshot.finalPath,
+            );
+          }
+        }
       }
     });
   }
 
   void _loadMessages() async {
-    logger.i("current device: ${device.uid}");
     final me = await LocalSetting().instance();
-    final storedDevice =
-        me.uid == device.uid ? null : await db.fetchDevice(device.uid);
+    final storedDevice = me.uid == device.uid
+        ? null
+        : await db.fetchDevice(device.uid);
     final currentDevice = resolveConversationDeviceSnapshot(
       localDevice: me,
       selectedDevice: device,
@@ -328,8 +383,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Future<void> _refreshCurrentDeviceState() async {
     final me = await LocalSetting().instance();
     final isLocal = me.uid == device.uid;
-    final latestDevice =
-        isLocal ? me : await LocalDatabase().fetchDevice(device.uid);
+    final latestDevice = isLocal
+        ? me
+        : await LocalDatabase().fetchDevice(device.uid);
     if (!mounted || latestDevice == null) {
       return;
     }
@@ -346,19 +402,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _scrollController.position.maxScrollExtent) {
       // 用户滑动到了ListView的底部
       // 在这里执行你的操作
-      logger.i('滑倒顶部了！${messageList[0].id}');
-      var arr = await LocalDatabase().fetchMessageList(device.uid,
-          beforeId: messageList.last.id, limit: 12);
+      var arr = await LocalDatabase().fetchMessageList(
+        device.uid,
+        beforeId: messageList.last.id,
+        limit: 12,
+      );
       if (arr.isEmpty) {
         return;
       }
 
       _insertItems(messageList.length, arr);
-    }
-    if (_scrollController.position.pixels == 0) {
-      // 用户滑动到了ListView的顶部
-      // 在这里执行你的操作
-      logger.i('滑倒底部了！');
     }
   }
 
@@ -373,18 +426,35 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     messageList.insert(index, item);
-    key.currentState
-        ?.insertItem(index, duration: const Duration(milliseconds: 500));
+    key.currentState?.insertItem(
+      index,
+      duration: const Duration(milliseconds: 500),
+    );
   }
 
   _insertItems(index, items) {
     messageList.insertAll(index, items);
-    key.currentState?.insertAllItems(index, items.length,
-        duration: const Duration(milliseconds: 500));
+    key.currentState?.insertAllItems(
+      index,
+      items.length,
+      duration: const Duration(milliseconds: 500),
+    );
   }
 
   TransferSnapshot? _transferForMessage(MessageData message) {
     return _transferSnapshots[message.uuid];
+  }
+
+  String _effectiveMessagePath(
+    MessageData message, [
+    TransferSnapshot? transfer,
+  ]) {
+    final snapshot = transfer ?? _transferForMessage(message);
+    if (snapshot?.state == FileTransferState.completed &&
+        snapshot?.finalPath.isNotEmpty == true) {
+      return snapshot!.finalPath;
+    }
+    return message.path;
   }
 
   bool _isTransferTerminal(FileTransferState state) {
@@ -393,13 +463,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
         state == FileTransferState.canceled;
   }
 
-  bool _canDragFileMessage(
-    MessageData message,
-    TransferSnapshot? transfer,
-  ) {
-    if (!isDesktop() ||
-        message.path.isEmpty ||
-        !File(message.path).existsSync()) {
+  TransferSnapshot? get _activeTransferSnapshot {
+    final transferId = _activeTransferId;
+    return transferId == null ? null : _transferSnapshots[transferId];
+  }
+
+  bool _canDragFileMessage(MessageData message, TransferSnapshot? transfer) {
+    final path = _effectiveMessagePath(message, transfer);
+    if (!isDesktop() || path.isEmpty || !File(path).existsSync()) {
       return false;
     }
     return transfer == null || transfer.state == FileTransferState.completed;
@@ -436,9 +507,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case FileTransferState.completed:
         return formatSize(message.size);
       case FileTransferState.failed:
-        return transfer.lastError.isEmpty
-            ? l10n.fileTransferFailedRetryable
-            : transfer.lastError;
+        return l10n.fileTransferFailedRetryable;
       case FileTransferState.canceled:
         return l10n.fileTransferCanceled;
     }
@@ -456,60 +525,62 @@ class _SendMessageScreen extends State<SendMessageScreen>
     key.currentState?.removeAllItems((context, animation) {
       //注意先 build 然后再去删除
       messageList.clear();
-      return FadeTransition(
-        opacity: animation,
-        child: null,
-      );
+      return FadeTransition(opacity: animation, child: null);
     }, duration: const Duration(milliseconds: 100));
   }
 
   Future<void> _deleteMessageFileIfExists(MessageData message) async {
-    final path = message.path;
+    final path = _effectiveMessagePath(message);
     if (path.isEmpty) {
       return;
     }
     final file = File(path);
     if (!await file.exists()) {
-      logger.i("skip delete missing file $path");
       return;
     }
     try {
-      logger.i("delete $path");
       await file.delete();
     } on FileSystemException catch (error) {
       if (!await file.exists()) {
-        logger.i("skip delete missing file $path after delete error: $error");
         return;
       }
+      _logConversationFailure(ConversationOperationKind.deleteFile, error);
       rethrow;
     }
   }
 
-  _deleteItem(id) {
-    var index = -1;
-    for (var i = 0; i < messageList.length; i++) {
-      if (messageList[i].id == id) {
-        index = i;
-        break;
-      }
+  Future<void> _deleteItems(Iterable<int> messageIds) async {
+    final ids = messageIds.toSet();
+    if (ids.isEmpty) {
+      return;
     }
-    if (index == -1) {
+
+    await db.deleteMessages(ids);
+    if (!mounted) {
+      return;
+    }
+
+    final indexes = <int>[
+      for (var i = 0; i < messageList.length; i++)
+        if (ids.contains(messageList[i].id)) i,
+    ]..sort((a, b) => b.compareTo(a));
+    if (indexes.isEmpty) {
       return;
     }
 
     setState(() {
-      // 删除过程执行的是反向动画，animation.value 会从1变为0
-      key.currentState?.removeItem(index, (context, animation) {
-        //注意先 build 然后再去删除
+      for (final index in indexes) {
         messageList.removeAt(index);
-        return FadeTransition(
-          opacity: animation,
-          child: null,
+        key.currentState?.removeItem(
+          index,
+          (context, animation) => SizeTransition(
+            sizeFactor: animation,
+            child: const SizedBox.shrink(),
+          ),
+          duration: const Duration(milliseconds: 220),
         );
-      }, duration: const Duration(milliseconds: 500));
-    }); //解决快速删除bug 重置flag
-
-    LocalDatabase().deleteMessage(id);
+      }
+    });
   }
 
   @Deprecated("use list view reverse")
@@ -533,16 +604,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
+    final activeTransfer = _activeTransferSnapshot;
     final content = Column(
       children: [
         if (embedded) _buildEmbeddedHeader(isDark),
-        if (percent > 0 && percent < 1)
+        if (activeTransfer?.state == FileTransferState.verifying)
+          LinearProgressIndicator(
+            minHeight: 3,
+            color: colorScheme.primary,
+            backgroundColor: colorScheme.primary.withValues(alpha: 0.14),
+          )
+        else if (percent > 0 && percent < 1)
           _buildAnimatedTransferProgress(
             value: percent,
-            builder: (context, value) => LinearProgressIndicator(
-              value: value,
-              color: Colors.lightGreen,
-            ),
+            builder: (context, value) =>
+                LinearProgressIndicator(value: value, color: Colors.lightGreen),
           ),
         Expanded(
           child: ChatMessageList(
@@ -552,52 +628,76 @@ class _SendMessageScreen extends State<SendMessageScreen>
             listKey: key,
             messages: messageList,
             onOpenContainingFolder: (path) => openDir(path, parent: true),
-            onOpenFile: openFile,
+            onOpenFile: _openMessageFile,
             onCopyText: copyToClipboard,
             onDeleteMessage: (message, {deleteFile = false}) async {
               if (deleteFile) {
                 await _deleteMessageFileIfExists(message);
               }
-              _deleteItem(message.id);
+              await _deleteItems(<int>[message.id]);
+            },
+            onDeleteMessages: (messages) =>
+                _deleteItems(messages.map((message) => message.id)),
+            onSelectionModeChanged: (active) {
+              if (_messageSelectionActive == active) {
+                return;
+              }
+              setState(() => _messageSelectionActive = active);
             },
             selfUid: self?.uid,
           ),
         ),
-        if (_canSendCurrentDevice) _buildComposer(isDark),
-        if (!embedded && _canSendCurrentDevice)
-          const SizedBox(
-            height: 6,
-          )
+        if (!_messageSelectionActive && _canSendCurrentDevice)
+          _buildComposer(isDark),
+        if (!embedded && !_messageSelectionActive && _canSendCurrentDevice)
+          const SizedBox(height: 6),
       ],
     );
 
     Widget base = embedded
-        ? Material(
-            color: colorScheme.surface,
-            child: content,
-          )
-        : Scaffold(
-            appBar: _buildStandaloneAppBar(isDark),
-            body: content,
-          );
+        ? Material(color: colorScheme.surface, child: content)
+        : Scaffold(appBar: _buildStandaloneAppBar(isDark), body: content);
 
     if (isMobile()) {
       return base;
     }
 
     return DropTarget(
-      onDragDone: (detail) async {
-        if (detail.files.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
-          return;
-        }
-        for (var item in detail.files) {
-          await socketManager.sendFileTo(device.uid, item.path);
-        }
-      },
+      onDragDone: (detail) => unawaited(_handleFileDrop(detail.files)),
       onDragEntered: (detail) {},
       onDragExited: (detail) {},
       child: base,
     );
+  }
+
+  Future<void> _handleFileDrop(List<DropItem> files) async {
+    if (files.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
+      return;
+    }
+    try {
+      for (final item in files) {
+        if (await FileSystemEntity.type(item.path, followLinks: false) !=
+            FileSystemEntityType.file) {
+          if (mounted) {
+            showAppToast(l10n.fileDropRejected);
+          }
+          return;
+        }
+        final sent = await socketManager.sendFileTo(device.uid, item.path);
+        if (!sent && mounted) {
+          showAppToast(l10n.fileDropRejected);
+          return;
+        }
+      }
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendDroppedFiles,
+        error,
+      );
+      if (mounted) {
+        showAppToast(l10n.fileDropRejected);
+      }
+    }
   }
 
   bool get _canSendCurrentDevice {
@@ -638,11 +738,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
       decoration: BoxDecoration(
         color: palette.surfaceElevated,
-        border: Border(
-          bottom: BorderSide(
-            color: palette.borderSubtle,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: palette.borderSubtle)),
       ),
       child: Row(
         children: [
@@ -673,26 +769,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
         const SizedBox(height: 4),
         Row(
           children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isConnectedSession
-                    ? Colors.lightBlue
-                    : (device.around == true ? Colors.green : Colors.grey),
+            if (_isConnectedSession)
+              Icon(Icons.lock_rounded, size: 14, color: palette.trusted)
+            else
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: device.around == true ? Colors.green : Colors.grey,
+                ),
               ),
-            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${_connectionStatusText()} · ${device.host}:${device.port}',
+                _connectionDetailText(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: palette.textMuted,
-                ),
+                style: TextStyle(fontSize: 12, color: palette.textMuted),
               ),
             ),
           ],
@@ -710,7 +804,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
         : null;
     final actionVisualDensity = compactActions ? VisualDensity.compact : null;
     final actions = <Widget>[];
-    if (percent > 0 && percent < 1 && _isConnectedSession) {
+    final activeTransfer = _activeTransferSnapshot;
+    if (activeTransfer?.state == FileTransferState.verifying &&
+        _isConnectedSession) {
+      actions.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  value: null,
+                  strokeWidth: 2,
+                  color: palette.textMuted,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                l10n.fileTransferVerifying,
+                style: TextStyle(fontSize: 12, color: palette.textMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (percent > 0 && percent < 1 && _isConnectedSession) {
       actions.add(
         Padding(
           padding: const EdgeInsets.only(right: 10),
@@ -722,17 +843,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
               children: [
                 Text(
                   _speed,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: palette.textMuted,
-                  ),
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
                 ),
                 Text(
                   "${(100 * value).toStringAsFixed(2)}%",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: palette.textMuted,
-                  ),
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
                 ),
               ],
             ),
@@ -746,7 +861,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final isCurrentAudioSession = audioState.isForPeer(device.uid);
       final isCurrentAudioGroup =
           _audioGroupCoordinator.isForPeer(device.uid) &&
-              audioGroupSession?.isLive == true;
+          audioGroupSession?.isLive == true;
       final isActive =
           (isCurrentAudioSession && audioState.isActive) || isCurrentAudioGroup;
       final isBusy = isCurrentAudioSession && audioState.isBusy;
@@ -761,11 +876,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           onPressed: isBusy ? null : _toggleAudioShare,
           tooltip: isCurrentAudioGroup
               ? l10n.audioShareCaptureActiveStop
-              : _audioShareTooltip(
-                  role,
-                  isActive: isActive,
-                  isBusy: isBusy,
-                ),
+              : _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
           icon: Icon(_audioShareIcon(role)),
           color: _audioShareIconColor(
             isActive: isActive,
@@ -790,19 +901,32 @@ class _SendMessageScreen extends State<SendMessageScreen>
             inputState.role,
             isActive: isActive,
             isBusy: isBusy,
-            isArmed: isCurrentInputSession &&
+            isArmed:
+                isCurrentInputSession &&
                 inputState.status == RemoteInputRuntimeStatus.armed,
           ),
           icon: const Icon(Icons.keyboard_option_key_rounded),
           color: _remoteInputIconColor(
             isActive: isActive,
             isBusy: isBusy,
-            isArmed: isCurrentInputSession &&
+            isArmed:
+                isCurrentInputSession &&
                 inputState.status == RemoteInputRuntimeStatus.armed,
           ),
         ),
       );
     }
+    actions.add(
+      IconButton(
+        padding: actionPadding,
+        constraints: actionConstraints,
+        visualDensity: actionVisualDensity,
+        tooltip: l10n.transferAssistantTitle,
+        icon: const Icon(Icons.manage_search_rounded),
+        color: palette.textMuted,
+        onPressed: _openTransferAssistant,
+      ),
+    );
     actions.add(
       IconButton(
         padding: actionPadding,
@@ -816,8 +940,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
           _isConnectedSession
               ? Icons.wifi_rounded
               : (_canToggleConnection
-                  ? Icons.wifi_find_rounded
-                  : Icons.wifi_off_rounded),
+                    ? Icons.wifi_find_rounded
+                    : Icons.wifi_off_rounded),
           color: _isConnectedSession
               ? Colors.lightBlue
               : (_canToggleConnection ? palette.textMuted : Colors.grey),
@@ -830,16 +954,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
         constraints: actionConstraints,
         visualDensity: actionVisualDensity,
         tooltip: AppLocalizations.of(context)?.setting ?? '设置',
-        icon: Icon(
-          Icons.settings_outlined,
-          color: palette.textMuted,
-        ),
+        icon: Icon(Icons.settings_outlined, color: palette.textMuted),
         onPressed: () async {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  app_settings.ClientSettingsScreen(device: device),
+              builder: (context) => app_settings.ClientSettingsScreen(
+                device: device,
+                deleteDevice: widget.onDeviceDeleted,
+              ),
             ),
           );
           await _refreshCurrentDeviceState();
@@ -849,10 +972,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return actions;
   }
 
+  Future<void> _openTransferAssistant() {
+    return Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            TransferAssistantScreen(peerId: device.uid, peerName: device.name),
+      ),
+    );
+  }
+
   bool get _shouldShowAudioShareAction {
     final audioState = _audioCoordinator.state;
     final audioGroupSession = _audioGroupCoordinator.session;
-    final isCurrentAudioGroup = _audioGroupCoordinator.isForPeer(device.uid) &&
+    final isCurrentAudioGroup =
+        _audioGroupCoordinator.isForPeer(device.uid) &&
         audioGroupSession?.isLive == true;
     return !_isLocalhost &&
         _isConnectedSession &&
@@ -953,6 +1087,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return l10n?.noMessagesYet ?? '还没有消息';
   }
 
+  String _connectionDetailText() {
+    if (_isConnectedSession) {
+      return device.auth && device.identityPublicKey.isNotEmpty
+          ? l10n.e2eeTrustedConnection
+          : l10n.e2eeEncryptedConnection;
+    }
+    return '${_connectionStatusText()} · ${device.host}:${device.port}';
+  }
+
   Widget _buildComposer(bool isDark) {
     return ChatComposer(
       clipboardEnabled: self?.clipboard == true,
@@ -970,73 +1113,70 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
       },
-      onSendText: (text) async {
-        await _sendText(text);
-      },
-      onPasteClipboardFiles: _pasteClipboardFiles,
+      onSendText: _sendComposerText,
+      onPasteClipboard: _pasteClipboard,
       onSendClipboardFiles: _sendPendingClipboardFiles,
       onClearClipboardFiles: _clearPendingClipboardFiles,
-      onPasteClipboardImage: _pasteClipboardImage,
       onSendClipboardImage: _sendPendingClipboardImage,
       onClearClipboardImage: _clearPendingClipboardImage,
     );
   }
 
-  Future<bool> _pasteClipboardFiles() async {
-    if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
+  Future<bool> _sendComposerText(String text) async {
+    if (_composerSendInFlight) {
       return false;
     }
+    _composerSendInFlight = true;
     try {
-      final drafts = await _clipboardFileReader.readFileDrafts();
-      if (drafts.isEmpty) {
-        return false;
-      }
-      if (!mounted) {
-        return true;
-      }
-      setState(() {
-        _pendingClipboardFiles = drafts;
-        _pendingClipboardImage = null;
-      });
-      return true;
-    } catch (error, stackTrace) {
-      logger.e(
-        'read clipboard files failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      return false;
+      return await _sendText(text);
+    } finally {
+      _composerSendInFlight = false;
     }
   }
 
-  Future<bool> _pasteClipboardImage() async {
+  Future<String?> _pasteClipboard() async {
     if (!isDesktop() || !_canSendCurrentDevice || _isLocalhost) {
-      return false;
+      return null;
     }
+    final generation = ++_clipboardPasteGeneration;
     try {
+      final drafts = await _clipboardFileReader.readFileDrafts();
+      if (!mounted || generation != _clipboardPasteGeneration) {
+        return null;
+      }
+      if (drafts.isNotEmpty) {
+        setState(() {
+          _pendingClipboardFiles = drafts;
+          _pendingClipboardImage = null;
+        });
+        return null;
+      }
+
       final draft = await _clipboardImageReader.readImageDraft();
-      if (draft == null) {
-        return false;
+      if (!mounted || generation != _clipboardPasteGeneration) {
+        return null;
       }
-      if (!mounted) {
-        return true;
+      if (draft != null) {
+        setState(() {
+          _pendingClipboardFiles = const <ClipboardFileDraft>[];
+          _pendingClipboardImage = draft;
+        });
+        return null;
       }
-      setState(() {
-        _pendingClipboardFiles = const <ClipboardFileDraft>[];
-        _pendingClipboardImage = draft;
-      });
-      return true;
-    } catch (error, stackTrace) {
-      logger.e(
-        'read clipboard image failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      return false;
+
+      final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+      if (!mounted || generation != _clipboardPasteGeneration) {
+        return null;
+      }
+      return text;
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.readClipboard, error);
+      return null;
     }
   }
 
   void _clearPendingClipboardFiles() {
+    _clipboardPasteGeneration += 1;
     if (_pendingClipboardFiles.isEmpty) {
       return;
     }
@@ -1046,6 +1186,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _clearPendingClipboardImage() {
+    _clipboardPasteGeneration += 1;
     if (_pendingClipboardImage == null) {
       return;
     }
@@ -1082,11 +1223,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (remaining.isNotEmpty) {
         showAppToast(l10n.clipboardFilesSendFailed);
       }
-    } catch (error, stackTrace) {
-      logger.e(
-        'send clipboard files failed',
-        error: error,
-        stackTrace: stackTrace,
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendClipboardFiles,
+        error,
       );
       if (mounted) {
         setState(() {
@@ -1123,11 +1263,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       } else {
         showAppToast(l10n.clipboardImageSendFailed);
       }
-    } catch (error, stackTrace) {
-      logger.e(
-        'send clipboard image failed',
-        error: error,
-        stackTrace: stackTrace,
+    } catch (error) {
+      _logConversationFailure(
+        ConversationOperationKind.sendClipboardImage,
+        error,
       );
       if (mounted) {
         showAppToast(l10n.clipboardImageSendFailed);
@@ -1173,8 +1312,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       for (final item in result) {
         await socketManager.sendPickedFileTo(device.uid, item);
       }
-    } catch (error, stackTrace) {
-      logger.e('pick files failed', error: error, stackTrace: stackTrace);
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.pickFiles, error);
       if (mounted) {
         showAppToast(
           AppLocalizations.of(context)?.filePickerOpenFailed ??
@@ -1201,6 +1340,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         confirmButtonText: AppLocalizations.of(context)?.confirm ?? '确定',
         cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
         onConfirm: () async {
+          _connectionAttempts.cancel('peer:${device.uid}');
           await socketManager.disconnectPeer(device.uid);
         },
       );
@@ -1212,45 +1352,92 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<bool> _connectServer(String host, int port) async {
-    if (await isLocalhost(host)) {
-      afterAuth(true, device);
-      return true;
-    }
-    final completer = Completer<bool>();
-    socketManager.connectToServer(host, port, (ok, message) {
-      if (!ok) {
-        if (!completer.isCompleted) {
-          completer.complete(false);
+    final targetKey = 'peer:${device.uid}';
+    final attemptGeneration = _connectionAttempts.begin(targetKey);
+    try {
+      if (await isLocalhost(host)) {
+        if (!_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+          return false;
         }
-        if (message == WsSvrManager.duplicateAuthRequestMessage) {
-          if (mounted) {
-            showAppToast(message.toString());
-          }
-          return;
+        afterAuth(true, device);
+        return true;
+      }
+      late final ConnectionAttemptResult result;
+      try {
+        result = await socketManager.connectToServer(
+          ConnectionAttemptRequest(
+            requestId: '$targetKey:$attemptGeneration',
+            endpoint: PeerEndpoint(host: host, port: port),
+            expectedPeerId: device.uid,
+            mode: ConnectionAttemptMode.interactive,
+          ),
+        );
+      } on ArgumentError {
+        return false;
+      }
+      if (!mounted ||
+          !_isCurrentRoute ||
+          !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+        return false;
+      }
+      if (result.isAuthenticated &&
+          result.peerId == device.uid &&
+          socketManager.isCurrentConnectionGeneration(
+            result.peerId,
+            result.generation,
+          )) {
+        final stored = await db.fetchDevice(result.peerId);
+        if (!mounted ||
+            !_isCurrentRoute ||
+            !_connectionAttempts.isCurrent(targetKey, attemptGeneration) ||
+            stored == null ||
+            !socketManager.isCurrentConnectionGeneration(
+              result.peerId,
+              result.generation,
+            )) {
+          return false;
         }
+        socketManager.selectPeer(result.peerId);
+        ConnectionCoordinator().markConnected(stored);
+        setState(() {
+          device = stored;
+        });
+        _refreshCurrentDeviceState();
+        unawaited(_maybeAutoStartRemoteInput());
+        return true;
+      }
+      if (result.status != ConnectionAttemptStatus.cancelled) {
+        if (result.reason == ConnectionAttemptReason.duplicateRequest) {
+          // 同 peer 已有连接尝试在途:轻提示即可,不弹失败对话框。
+          showAppToast(l10n.connectAlreadyInProgress);
+          return false;
+        }
+        final displayMessage = switch (result.reason) {
+          ConnectionAttemptReason.protocolMismatch =>
+            l10n.pairingUpgradeRequired,
+          ConnectionAttemptReason.pairingExpired => l10n.pairingExpired,
+          ConnectionAttemptReason.peerRejected => l10n.pairingRejectedByPeer,
+          _ => l10n.connectFailed,
+        };
         showLoadingDialog(
           context,
-          title: AppLocalizations.of(context)?.connectFailed ??
+          title:
+              AppLocalizations.of(context)?.connectFailed ??
               'Connection Failed',
-          description: "$message",
+          description: displayMessage,
           isLoading: true,
-          icon: const Icon(
-            Icons.warning_rounded,
-            color: Colors.red,
-          ),
+          icon: const Icon(Icons.warning_rounded, color: Colors.red),
           cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
           onCancel: () {
             Navigator.of(context).pop();
           },
           task: (VoidCallback onCancel) async {},
         );
-        return;
       }
-      if (!completer.isCompleted) {
-        completer.complete(true);
-      }
-    }, peerId: device.uid);
-    return completer.future;
+      return false;
+    } finally {
+      _connectionAttempts.complete(targetKey, attemptGeneration);
+    }
   }
 
   Future<bool> _restoreConnectionIfNeeded() async {
@@ -1260,20 +1447,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_canToggleConnection) {
       return false;
     }
-    final connected = await _connectServer(device.host, device.port);
-    if (!connected) {
-      return false;
-    }
-    for (var i = 0; i < 20; i++) {
-      if (!mounted) {
-        return false;
-      }
-      if (_isConnectedSession || socketManager.isConnectedTo(device.uid)) {
-        return true;
-      }
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
-    return _isConnectedSession;
+    return _connectServer(device.host, device.port);
   }
 
   Future<void> _toggleAudioShare() async {
@@ -1284,7 +1458,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final audioState = _audioCoordinator.state;
     final isCurrentAudioSession = audioState.isForPeer(device.uid);
     final audioGroupSession = _audioGroupCoordinator.session;
-    final isCurrentAudioGroup = _audioGroupCoordinator.isForPeer(device.uid) &&
+    final isCurrentAudioGroup =
+        _audioGroupCoordinator.isForPeer(device.uid) &&
         audioGroupSession?.isLive == true;
     try {
       if (isCurrentAudioGroup) {
@@ -1326,8 +1501,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
             device.uid: AudioChannelRole.stereo,
           };
         } else {
-          final selectedSinks =
-              await _showAudioGroupSetupSheet(groupCandidates);
+          final selectedSinks = await _showAudioGroupSetupSheet(
+            groupCandidates,
+          );
           if (selectedSinks == null) {
             return;
           }
@@ -1358,11 +1534,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted) {
         showAppToast(l10n.audioShareRequestingPlayback);
       }
-    } catch (error, stackTrace) {
-      logger.e('audio share toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = audioFailureReasonFor(
+        error,
+        context: AudioFailureContext.protocol,
+      );
+      _logConversationFailure(ConversationOperationKind.audioToggle, error);
       if (mounted) {
-        showAppToast(l10n.audioShareFailed(error.toString()));
+        showAppToast(l10n.audioShareFailed(_audioFailureDetail(reason)));
       }
     }
   }
@@ -1386,8 +1565,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final selectedCount =
-                selected.values.where((value) => value).length;
+            final selectedCount = selected.values
+                .where((value) => value)
+                .length;
             return SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1447,14 +1627,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
                       onPressed: selectedCount == 0
                           ? null
                           : () {
-                              Navigator.of(context).pop(
-                                <String, AudioChannelRole>{
-                                  for (final candidate in candidates)
-                                    if (selected[candidate.uid] == true)
-                                      candidate.uid: roles[candidate.uid] ??
-                                          AudioChannelRole.stereo,
-                                },
-                              );
+                              Navigator.of(
+                                context,
+                              ).pop(<String, AudioChannelRole>{
+                                for (final candidate in candidates)
+                                  if (selected[candidate.uid] == true)
+                                    candidate.uid:
+                                        roles[candidate.uid] ??
+                                        AudioChannelRole.stereo,
+                              });
                             },
                       icon: const Icon(Icons.spatial_audio_off_rounded),
                       label: Text(
@@ -1486,30 +1667,32 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
+  String _audioFailureDetail(AudioFailureReason reason) {
+    return switch (reason) {
+      AudioFailureReason.unsupported => l10n.audioShareUnsupportedCapture,
+      _ => l10n.connectFailed,
+    };
+  }
+
+  String _remoteInputFailureDetail(RemoteInputFailureReason reason) {
+    return switch (reason) {
+      RemoteInputFailureReason.trustRequired =>
+        l10n.remoteInputRequiresMutualTrust,
+      RemoteInputFailureReason.unsupported => l10n.remoteInputLocalUnsupported,
+      RemoteInputFailureReason.busy => l10n.remoteInputStopCurrentFirst,
+      _ => l10n.connectFailed,
+    };
+  }
+
   Future<void> _toggleRemoteInput({bool showToast = true}) async {
     if (!_isConnectedSession || _isLocalhost) {
-      _traceRemoteInput(
-        'remote input toggle ignored connected=$_isConnectedSession '
-        'localhost=$_isLocalhost peer=${device.uid}',
-      );
       return;
     }
     final l10n = this.l10n;
     final inputState = _remoteInputCoordinator.state;
     final isCurrentInputSession = inputState.isForPeer(device.uid);
-    _traceRemoteInput(
-      'remote input toggle requested peer=${device.uid} '
-      'showToast=$showToast '
-      'state=${inputState.role.name}/${inputState.status.name} '
-      'stateSession=${inputState.sessionId} '
-      'isCurrent=$isCurrentInputSession '
-      'supportsNative=${supportsNativeRemoteInput()} '
-      'remoteSupports=${socketManager.supportsRemoteInputFor(device.uid)}',
-    );
     try {
       if (isCurrentInputSession) {
-        _traceRemoteInput(
-            'remote input toggle stopping current session peer=${device.uid}');
         await _remoteInputCoordinator.stopSharing(
           sendControl: socketManager.sendRemoteInputControl,
         );
@@ -1520,18 +1703,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       if (inputState.status != RemoteInputRuntimeStatus.idle &&
           inputState.status != RemoteInputRuntimeStatus.failed) {
-        _traceRemoteInput(
-          'remote input toggle blocked: another session is active '
-          'peer=${inputState.peerId} session=${inputState.sessionId}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputStopCurrentFirst);
         }
         return;
       }
       if (!isDesktop()) {
-        _traceRemoteInput(
-            'remote input toggle blocked: local platform is not desktop');
         if (showToast) {
           showAppToast(l10n.remoteInputLocalUnsupported);
         }
@@ -1540,31 +1717,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final self = this.self ?? await LocalSetting().instance();
       final storedDevice = await LocalDatabase().fetchDevice(device.uid);
       final localTrustsRemote = storedDevice?.auth == true;
-      final remoteTrustsLocal =
-          socketManager.remotePeerTrustsPeer(device.uid, self.uid);
+      final remoteTrustsLocal = socketManager.remotePeerTrustsPeer(
+        device.uid,
+        self.uid,
+      );
       final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
       if (!localTrustsRemote) {
-        _traceRemoteInput(
-          'remote input toggle blocked: stored auth missing peer=${device.uid}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputRequiresMutualTrust);
         }
         return;
       }
       if (!remoteTrustsLocal) {
-        _traceRemoteInput(
-          'remote input toggle blocked: remote peer does not trust local '
-          'peer=${device.uid} self=${self.uid}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
         }
         return;
       }
       if (!socketManager.supportsRemoteInputFor(device.uid)) {
-        _traceRemoteInput(
-            'remote input toggle blocked: remote peer lacks capability');
         if (showToast) {
           showAppToast(l10n.remoteInputPeerUnsupported);
         }
@@ -1579,8 +1749,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
           device.uid,
         );
         if (remoteTopology != null) {
-          final localTopology =
-              await RemoteInputCoordinator.shared.displayTopology();
+          final localTopology = await RemoteInputCoordinator.shared
+              .displayTopology();
           resolvedTopologyLayout = RemoteInputLayoutGeometry.resolveSavedLayout(
             savedLayout: topologyLayout,
             sourceTopology: localTopology,
@@ -1606,32 +1776,27 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final edge =
           resolvedTopologyLayout?.sharedSegment.sourceEdge ?? legacyEdge;
       if (edge == null) {
-        _traceRemoteInput(
-          'remote input toggle blocked: no adjacent edge peer=${device.uid} '
-          'layout=${layout.x},${layout.y},${layout.width},${layout.height}',
-        );
         if (showToast) {
           showAppToast(l10n.remoteInputLayoutRequired);
         }
         return;
       }
-      final topologyMappings = resolvedTopologyLayout?.edgeMappings ??
+      final topologyMappings =
+          resolvedTopologyLayout?.edgeMappings ??
           const <RemoteInputEdgeMapping>[];
       final sourceSegmentStart = topologyMappings.isEmpty
           ? resolvedTopologyLayout?.sharedSegment.start ?? 0
           : topologyMappings
-              .map((mapping) => mapping.sourceSegmentStart)
-              .reduce(min);
+                .map((mapping) => mapping.sourceSegmentStart)
+                .reduce(min);
       final sourceSegmentEnd = topologyMappings.isEmpty
           ? resolvedTopologyLayout?.sharedSegment.end ?? 0
           : topologyMappings
-              .map((mapping) => mapping.sourceSegmentEnd)
-              .reduce(max);
-      _traceRemoteInput(
-        'remote input toggle starting peer=${device.uid} '
-        'self=${self.uid} edge=${edge.name} '
-        'mappings=${topologyMappings.length} '
-        'host=${device.host}:${device.port}',
+                .map((mapping) => mapping.sourceSegmentEnd)
+                .reduce(max);
+      _traceRemoteInputStart(
+        trusted: isMutuallyTrusted,
+        mappingCount: topologyMappings.length,
       );
       await _remoteInputCoordinator.startSharingToConnectedPeer(
         sourcePeerId: self.uid,
@@ -1656,11 +1821,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (mounted && showToast) {
         showAppToast(l10n.remoteInputEnabledMoveToEdge);
       }
-    } catch (error, stackTrace) {
-      logger.e('remote input toggle failed',
-          error: error, stackTrace: stackTrace);
+    } catch (error) {
+      final reason = remoteInputFailureReasonFor(
+        error,
+        context: RemoteInputFailureContext.protocol,
+      );
+      _logConversationFailure(
+        ConversationOperationKind.remoteInputToggle,
+        error,
+      );
       if (mounted && showToast) {
-        showAppToast(l10n.remoteInputFailed(error.toString()));
+        showAppToast(l10n.remoteInputFailed(_remoteInputFailureDetail(reason)));
       }
     }
   }
@@ -1715,16 +1886,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return layout;
   }
 
-  Future<void> _sendText(String content, {isClipboard = false}) async {
-    if (isClipboard) {
-      var str = await getClipboardText() ?? "";
-      content = str.trimRight();
-    }
-    if (content.trim().isEmpty) {
-      return;
-    }
-    if (_isLocalhost) {
-      var message = MessageData(
+  Future<bool> _sendText(String content, {isClipboard = false}) async {
+    try {
+      if (isClipboard && content.trim().isEmpty) {
+        final clipboardText = await getClipboardText() ?? "";
+        content = clipboardText.trimRight();
+      }
+      if (content.trim().isEmpty) {
+        return false;
+      }
+      if (_isLocalhost) {
+        final message = MessageData(
           id: 0,
           sender: device.uid,
           receiver: "",
@@ -1738,15 +1910,35 @@ class _SendMessageScreen extends State<SendMessageScreen>
           acked: true,
           uuid: LocalUuid.v4(),
           path: "",
-          md5: "");
-      LocalDatabase().insertMessage(message);
-      onMessage(message);
-    } else if (socketManager.isConnectedTo(device.uid)) {
-      await socketManager.sendMessageTo(
+          md5: "",
+        );
+        await LocalDatabase().insertMessage(message);
+        if (mounted) {
+          onMessage(message);
+        }
+        return true;
+      }
+      if (!socketManager.isConnectedTo(device.uid)) {
+        if (mounted) {
+          showAppToast(l10n.messageSendFailed);
+        }
+        return false;
+      }
+      final sent = await socketManager.sendMessageTo(
         device.uid,
         content,
         clipboard: isClipboard,
       );
+      if (!sent && mounted) {
+        showAppToast(l10n.messageSendFailed);
+      }
+      return sent;
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.sendText, error);
+      if (mounted) {
+        showAppToast(l10n.messageSendFailed);
+      }
+      return false;
     }
   }
 
@@ -1756,7 +1948,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return MediaQuery.of(context).size.width;
     }
     return min(
-        MediaQuery.of(context).size.width, MediaQuery.of(context).size.height);
+      MediaQuery.of(context).size.width,
+      MediaQuery.of(context).size.height,
+    );
   }
 
   Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
@@ -1780,17 +1974,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
       constraints: BoxConstraints(maxWidth: screenWidth),
-      padding:
-          EdgeInsets.fromLTRB(isOpponent ? 2 : 18, 2, isOpponent ? 18 : 2, 2),
+      padding: EdgeInsets.fromLTRB(
+        isOpponent ? 2 : 18,
+        2,
+        isOpponent ? 18 : 2,
+        2,
+      ),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: isOpponent ? receivedBubbleColor : sentBubbleColor,
           borderRadius: BorderRadius.circular(18),
-          border: isOpponent
-              ? Border.all(
-                  color: receivedBorderColor,
-                )
-              : null,
+          border: isOpponent ? Border.all(color: receivedBorderColor) : null,
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -1820,40 +2014,70 @@ class _SendMessageScreen extends State<SendMessageScreen>
       screenWidth = 0.618 * _screenWidth(physically: false);
     }
     final transfer = _transferForMessage(message);
-    final isActiveTransfer = transfer != null &&
+    final messagePath = _effectiveMessagePath(message, transfer);
+    final isActiveTransfer =
+        transfer != null &&
         !_isTransferTerminal(transfer.state) &&
         transfer.state != FileTransferState.queued;
-    final missingLocalFile = isOpponent &&
-        message.path.isNotEmpty &&
+    final missingLocalFile =
+        isOpponent &&
+        messagePath.isNotEmpty &&
         (transfer == null || transfer.state == FileTransferState.completed) &&
-        !File(message.path).existsSync();
-    var failed = !isOpponent &&
+        !File(messagePath).existsSync();
+    var failed =
+        !isOpponent &&
         !_isConnectedSession &&
         transfer == null &&
         !message.acked &&
         message.timestamp < device.lastTime;
-    failed = failed ||
+    failed =
+        failed ||
         missingLocalFile ||
         (transfer != null &&
             (transfer.state == FileTransferState.failed ||
                 transfer.state == FileTransferState.canceled));
-    final showRetry = transfer != null &&
+    final showRetry =
+        transfer != null &&
         (transfer.state == FileTransferState.failed ||
             transfer.state == FileTransferState.paused ||
             transfer.state == FileTransferState.waitingReconnect);
     final showCancel = transfer != null && !_isTransferTerminal(transfer.state);
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
-    final cardColor =
-        isOpponent ? palette.messageIncoming : palette.messageOutgoing;
+    final cardColor = isOpponent
+        ? palette.messageIncoming
+        : palette.messageOutgoing;
     final cardBorderColor = palette.borderSubtle;
     final fileStatusStyle = TextStyle(
       color: colorScheme.onSurfaceVariant,
       fontSize: 12,
     );
+    final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
+    if (mediaKind != MediaFileKind.other) {
+      final hasLocalFile =
+          messagePath.isNotEmpty && File(messagePath).existsSync();
+      final contentAvailable =
+          hasLocalFile &&
+          (transfer == null ||
+              transfer.direction == FileTransferDirection.outgoing ||
+              transfer.state == FileTransferState.completed);
+      return _buildMediaMessage(
+        message: message,
+        transfer: transfer,
+        kind: mediaKind,
+        path: messagePath,
+        width: screenWidth,
+        cardColor: cardColor,
+        borderColor: cardBorderColor,
+        contentAvailable: contentAvailable,
+        failed: failed || showRetry,
+        showRetry: showRetry,
+        showCancel: showCancel,
+      );
+    }
 
     return DesktopFileDragSource(
-      path: message.path,
+      path: messagePath,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
@@ -1879,16 +2103,27 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 SizedBox(
                   width: 24,
                   height: 24,
-                  child: _buildAnimatedTransferProgress(
-                    value: transfer.progress,
-                    builder: (context, value) => CircularProgressIndicator(
-                      value: value,
-                      strokeWidth: 2.4,
-                      color: colorScheme.primary,
-                      backgroundColor:
-                          colorScheme.primary.withValues(alpha: 0.18),
-                    ),
-                  ),
+                  child: transfer.state == FileTransferState.verifying
+                      ? CircularProgressIndicator(
+                          value: null,
+                          strokeWidth: 2.4,
+                          color: colorScheme.primary,
+                          backgroundColor: colorScheme.primary.withValues(
+                            alpha: 0.18,
+                          ),
+                        )
+                      : _buildAnimatedTransferProgress(
+                          value: transfer.progress,
+                          builder: (context, value) =>
+                              CircularProgressIndicator(
+                                value: value,
+                                strokeWidth: 2.4,
+                                color: colorScheme.primary,
+                                backgroundColor: colorScheme.primary.withValues(
+                                  alpha: 0.18,
+                                ),
+                              ),
+                        ),
                 )
               else
                 Icon(
@@ -1955,16 +2190,95 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
   }
 
+  Widget _buildMediaMessage({
+    required MessageData message,
+    required TransferSnapshot? transfer,
+    required MediaFileKind kind,
+    required String path,
+    required double width,
+    required Color cardColor,
+    required Color borderColor,
+    required bool contentAvailable,
+    required bool failed,
+    required bool showRetry,
+    required bool showCancel,
+  }) {
+    final showProgress =
+        transfer != null && !_isTransferTerminal(transfer.state);
+    Widget buildPreview(double? progress) => MediaMessagePreview(
+      kind: kind,
+      path: path,
+      name: message.name,
+      status: _fileStatusText(message, transfer, progressOverride: progress),
+      contentAvailable: contentAvailable,
+      progress: showProgress ? progress ?? transfer.progress : null,
+      verifying: transfer?.state == FileTransferState.verifying,
+      failed: failed,
+      onRetry: showRetry ? () => _retryTransfer(message.uuid) : null,
+      onCancel: showCancel ? () => _cancelTransfer(message.uuid) : null,
+    );
+
+    return DesktopFileDragSource(
+      path: path,
+      name: message.name,
+      enabled: _canDragFileMessage(message, transfer),
+      child: Container(
+        constraints: BoxConstraints(maxWidth: width),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
+        child: showProgress && transfer.state != FileTransferState.verifying
+            ? _buildAnimatedTransferProgress(
+                value: transfer.progress,
+                builder: (context, value) => buildPreview(value),
+              )
+            : buildPreview(null),
+      ),
+    );
+  }
+
+  void _openMessageFile(MessageData message) {
+    final path = _effectiveMessagePath(message);
+    final kind = mediaFileKindFor(name: message.name, path: path);
+    if (kind == MediaFileKind.other ||
+        kind == MediaFileKind.video ||
+        !File(path).existsSync()) {
+      openFile(path);
+      return;
+    }
+    unawaited(
+      showMediaViewer(
+        context,
+        kind: kind,
+        path: path,
+        name: message.name,
+        onOpenExternally: () => openFile(path),
+      ),
+    );
+  }
+
   @override
-  void onAuth(DeviceData? deviceData, bool asServer, String msg, var callback) {
-    callback(true);
+  void onPairing(PairingRequest request, void Function(bool) resolve) {
+    if (!mounted || !_isCurrentRoute) {
+      resolve(false);
+      return;
+    }
+    unawaited(showPairingDialog(context, request: request, resolve: resolve));
   }
 
   @override
   void onClose() {
     percent = 0;
     _speed = "";
-    stopAndroidBackgroundKeepAlive();
+    unawaited(
+      AndroidBackgroundKeepAliveCoordinator.shared.setReason(
+        AndroidKeepAliveReason.activeSession,
+        false,
+      ),
+    );
     _refreshCurrentDeviceState();
     if (mounted) {
       setState(() {});
@@ -1986,17 +2300,20 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     _isAlert = true;
-    showConfirmationDialog(context,
-        title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
-        description: message,
-        confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
-        cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
-        onConfirm: () {
-      WsSvrManager().close();
-      _isAlert = false;
-    }, onCancel: () {
-      _isAlert = false;
-    });
+    showConfirmationDialog(
+      context,
+      title: AppLocalizations.of(context)?.timeoutTitle ?? "是否释放连接",
+      description: l10n.connectFailed,
+      confirmButtonText: AppLocalizations.of(context)?.disconnect ?? "断开",
+      cancelButtonText: AppLocalizations.of(context)?.cancel ?? "取消",
+      onConfirm: () {
+        WsSvrManager().close();
+        _isAlert = false;
+      },
+      onCancel: () {
+        _isAlert = false;
+      },
+    );
   }
 
   @override
@@ -2004,12 +2321,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_isCurrentRoute) {
       return;
     }
-    showAppToast(message);
+    showAppToast(l10n.fileTransferFailedRetryable);
   }
 
   @override
   void afterAuth(bool allow, DeviceData? deviceData) {
-    if (!allow || deviceData == null) {
+    if (!mounted || !_isCurrentRoute || !allow || deviceData == null) {
       return;
     }
     if (deviceData.uid != device.uid) {
@@ -2017,7 +2334,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => SendMessageScreen(device: deviceData),
+            builder: (context) => SendMessageScreen(
+              device: deviceData,
+              onDeviceDeleted: widget.onDeviceDeleted,
+            ),
           ),
         );
       }
@@ -2032,7 +2352,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onMessage(MessageData messageData) {
-    logger.i("收到消息: ${messageData.type} content: ${messageData.content}");
+    privacyLog.event(PrivacyEvent.messageReceived, <PrivacyField, Object>{
+      PrivacyField.kind: messageData.type,
+      PrivacyField.bytes: utf8.encode(messageData.content ?? '').length,
+      PrivacyField.clipboard: messageData.clipboard,
+    });
     if (_isLocalhost && messageData.receiver.isEmpty ||
         messageData.sender == device.uid ||
         messageData.receiver == device.uid) {
@@ -2081,6 +2405,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (mounted) {
       setState(() {
         _transferSnapshots[snapshot.transferId] = snapshot;
+        if (snapshot.state == FileTransferState.completed &&
+            snapshot.finalPath.isNotEmpty) {
+          final messageIndex = messageList.indexWhere(
+            (message) => message.uuid == snapshot.messageUuid,
+          );
+          if (messageIndex >= 0 &&
+              messageList[messageIndex].path != snapshot.finalPath) {
+            messageList[messageIndex] = messageList[messageIndex].copyWith(
+              path: snapshot.finalPath,
+            );
+          }
+        }
       });
     }
     unawaited(_syncAndroidKeepAliveService());

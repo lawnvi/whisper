@@ -7,6 +7,12 @@ enum TransferRuntimeDecision {
   queued,
 }
 
+enum TransferRuntimeReleaseKind {
+  absent,
+  queuedRemoved,
+  activeReleased,
+}
+
 class PeerTransferRuntime {
   String? activeIncoming;
   String? activeOutgoing;
@@ -47,29 +53,44 @@ class PeerTransferRuntime {
     }
   }
 
-  String? complete({
+  TransferRuntimeReleaseKind release({
     required String transferId,
     required FileTransferDirection direction,
   }) {
     switch (direction) {
       case FileTransferDirection.incoming:
         if (activeIncoming == transferId) {
-          final next =
-              queuedIncoming.isEmpty ? null : queuedIncoming.removeFirst();
           activeIncoming = null;
-          return next;
+          return TransferRuntimeReleaseKind.activeReleased;
         }
-        queuedIncoming.remove(transferId);
-        return activeIncoming;
+        return queuedIncoming.remove(transferId)
+            ? TransferRuntimeReleaseKind.queuedRemoved
+            : TransferRuntimeReleaseKind.absent;
       case FileTransferDirection.outgoing:
         if (activeOutgoing == transferId) {
-          final next =
-              queuedOutgoing.isEmpty ? null : queuedOutgoing.removeFirst();
           activeOutgoing = null;
-          return next;
+          return TransferRuntimeReleaseKind.activeReleased;
         }
-        queuedOutgoing.remove(transferId);
-        return activeOutgoing;
+        return queuedOutgoing.remove(transferId)
+            ? TransferRuntimeReleaseKind.queuedRemoved
+            : TransferRuntimeReleaseKind.absent;
+    }
+  }
+
+  String? claimNext({
+    required FileTransferDirection direction,
+  }) {
+    switch (direction) {
+      case FileTransferDirection.incoming:
+        if (activeIncoming != null || queuedIncoming.isEmpty) {
+          return null;
+        }
+        return activeIncoming = queuedIncoming.removeFirst();
+      case FileTransferDirection.outgoing:
+        if (activeOutgoing != null || queuedOutgoing.isEmpty) {
+          return null;
+        }
+        return activeOutgoing = queuedOutgoing.removeFirst();
     }
   }
 }
@@ -99,13 +120,23 @@ class MultiPeerTransferRuntime {
       _peers[peerId]?.queuedOutgoing.toList(growable: false) ??
       const <String>[];
 
-  String? complete({
+  TransferRuntimeReleaseKind release({
     required String peerId,
     required String transferId,
     required FileTransferDirection direction,
   }) {
-    return _peers[peerId]
-        ?.complete(transferId: transferId, direction: direction);
+    return _peers[peerId]?.release(
+          transferId: transferId,
+          direction: direction,
+        ) ??
+        TransferRuntimeReleaseKind.absent;
+  }
+
+  String? claimNext({
+    required String peerId,
+    required FileTransferDirection direction,
+  }) {
+    return _peers[peerId]?.claimNext(direction: direction);
   }
 
   void clearPeer(String peerId) {

@@ -37,9 +37,9 @@ class DesktopClipboardImageReader {
     MethodChannel channel = const MethodChannel(channelName),
     Future<Directory> Function()? tempDirectoryProvider,
     DateTime Function()? nowProvider,
-  })  : _channel = channel,
-        _tempDirectoryProvider = tempDirectoryProvider,
-        _nowProvider = nowProvider;
+  }) : _channel = channel,
+       _tempDirectoryProvider = tempDirectoryProvider,
+       _nowProvider = nowProvider;
 
   final MethodChannel _channel;
   final Future<Directory> Function()? _tempDirectoryProvider;
@@ -63,8 +63,9 @@ class DesktopClipboardImageReader {
       final baseDir = _tempDirectoryProvider == null
           ? Directory.systemTemp
           : await _tempDirectoryProvider();
-      final directory =
-          Directory(p.join(baseDir.path, 'whisper_clipboard_images'));
+      final directory = Directory(
+        p.join(baseDir.path, 'whisper_clipboard_images'),
+      );
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
@@ -132,13 +133,10 @@ class DesktopClipboardFileReader {
 
     final drafts = <ClipboardFileDraft>[];
     for (final path in paths) {
-      final file = File(path);
       try {
-        if (!await file.exists()) {
-          continue;
-        }
-        final stat = await file.stat();
-        if (stat.type != FileSystemEntityType.file) {
+        final stat = await FileStat.stat(path);
+        final isFile = stat.type == FileSystemEntityType.file;
+        if (!isFile) {
           continue;
         }
         drafts.add(

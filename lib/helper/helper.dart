@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -8,14 +7,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
+import 'package:whisper/helper/clipboard_write_suppression.dart';
+import 'package:whisper/helper/local_network_permission.dart';
+import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 var logger = Logger();
 const LocalUuid = Uuid();
-String? _suppressedClipboardText;
-DateTime? _suppressedClipboardAt;
+final ClipboardWriteCoordinator _clipboardWriteCoordinator =
+    ClipboardWriteCoordinator(
+      writer: (content) => Clipboard.setData(ClipboardData(text: content)),
+    );
+
+enum LocalOperationKind { localhostCheck, clipboardRead, filePicker }
+
+enum LocalOperationState { failed, selected, canceled }
 
 bool isDesktop() {
   return Platform.isMacOS || Platform.isLinux || Platform.isWindows;
@@ -101,12 +109,12 @@ IconData platformIcon(platform) {
   return platform.toLowerCase() == "android"
       ? Icons.android_rounded
       : platform.toLowerCase() == "macos"
-          ? Icons.laptop_mac_rounded
-          : platform.toLowerCase() == "ios"
-              ? Icons.apple_rounded
-              : platform.toLowerCase() == "windows"
-                  ? Icons.laptop_windows_rounded
-                  : Icons.laptop_rounded;
+      ? Icons.laptop_mac_rounded
+      : platform.toLowerCase() == "ios"
+      ? Icons.apple_rounded
+      : platform.toLowerCase() == "windows"
+      ? Icons.laptop_windows_rounded
+      : Icons.laptop_rounded;
 }
 
 Future<String> deviceName() async {
@@ -155,99 +163,118 @@ Future<bool> isLocalhost(String address) async {
         }
       }
     }
-  } catch (e) {
-    logger.i("is local err: $e");
+  } catch (error) {
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: LocalOperationKind.localhostCheck,
+      PrivacyField.state: LocalOperationState.failed,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    });
   }
 
   return false;
 }
 
 Future<String> getLocalIpAddress() async {
-  // var sb = StringBuffer();
-  Completer<String> completer = Completer<String>();
+  if (Platform.isAndroid) {
+    final nativeAddress = await LocalNetworkPermission().currentLanAddress();
+    if (nativeAddress != null && isPrivateLanIpv4(nativeAddress)) {
+      return nativeAddress;
+    }
+  }
 
   try {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {
         if (!addr.isLoopback &&
             addr.type == InternetAddressType.IPv4 &&
-            addr.address.startsWith("192.168")) {
-          completer.complete(addr.address);
-          // if (sb.isNotEmpty) {
-          //   sb.write("/");
-          // }
-          // sb.write(addr.address);
-          return completer.future;
+            isPrivateLanIpv4(addr.address)) {
+          return addr.address;
         }
       }
     }
-  } catch (e) {
-    completer.completeError('Error getting local IP address: $e');
+  } on SocketException {
+    return '127.0.0.1';
   }
-  completer.complete("127.0.0.1");
+  return '127.0.0.1';
+}
 
-  return completer.future;
+bool isPrivateLanIpv4(String address) {
+  final parts = address.split('.');
+  if (parts.length != 4) {
+    return false;
+  }
+  final octets = <int>[];
+  for (final part in parts) {
+    if (!RegExp(r'^(0|[1-9][0-9]{0,2})$').hasMatch(part)) {
+      return false;
+    }
+    final value = int.parse(part);
+    if (value > 255) {
+      return false;
+    }
+    octets.add(value);
+  }
+  return octets[0] == 10 ||
+      (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] == 192 && octets[1] == 168);
 }
 
 Future<String?> getClipboardText() async {
-  return await Clipboard.getData(Clipboard.kTextPlain).then((value) {
-    if (value != null && value.text != null) {
-      return value.text;
-    } else {
-      return null;
-    }
-  }).catchError((error) {
-    logger.i('Error getting clipboard data: $error');
-    return null;
-  });
+  return await Clipboard.getData(Clipboard.kTextPlain)
+      .then((value) {
+        if (value != null && value.text != null) {
+          return value.text;
+        } else {
+          return null;
+        }
+      })
+      .catchError((error) {
+        privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+          PrivacyField.kind: LocalOperationKind.clipboardRead,
+          PrivacyField.state: LocalOperationState.failed,
+          PrivacyField.errorType: privacyLog.errorType(error),
+        });
+        return null;
+      });
 }
 
-void copyToClipboard(String content, {bool suppressWatcher = false}) {
-  if (suppressWatcher) {
-    _suppressedClipboardText = content;
-    _suppressedClipboardAt = DateTime.now();
+Future<void> copyToClipboard(
+  String content, {
+  bool suppressWatcher = false,
+  String? sourcePeerId,
+}) async {
+  try {
+    await _clipboardWriteCoordinator.write(
+      content,
+      sourcePeerId: suppressWatcher ? sourcePeerId : null,
+    );
+  } catch (_) {
+    // Clipboard failures are non-fatal and retain the existing best-effort API.
   }
-  Clipboard.setData(ClipboardData(text: content))
-      .then((value) => {})
-      .catchError((error) => {});
 }
 
 bool shouldIgnoreClipboardSync(String content) {
-  if (_suppressedClipboardText == null || _suppressedClipboardAt == null) {
-    return false;
-  }
-
-  final isExpired = DateTime.now().difference(_suppressedClipboardAt!) >
-      const Duration(seconds: 2);
-  if (isExpired) {
-    _suppressedClipboardText = null;
-    _suppressedClipboardAt = null;
-    return false;
-  }
-
-  final shouldIgnore = _suppressedClipboardText == content;
-  if (shouldIgnore) {
-    _suppressedClipboardText = null;
-    _suppressedClipboardAt = null;
-  }
-  return shouldIgnore;
+  return _clipboardWriteCoordinator.suppressions.takeExact(content) != null;
 }
 
 void pickFile(var callback) async {
-  var p = await FilePicker.platform.getDirectoryPath();
-  logger.i("current path: $p");
+  await FilePicker.platform.getDirectoryPath();
   // 打开文件选择器
   FilePickerResult? result = await FilePicker.platform.pickFiles();
 
   if (result != null) {
     PlatformFile file = result.files.first;
-    logger.i('选择的文件路径: ${file.path}');
-    logger.i('选择的文件名: ${file.name}');
-    logger.i('选择的文件大小: ${file.size}');
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: LocalOperationKind.filePicker,
+      PrivacyField.state: LocalOperationState.selected,
+      PrivacyField.bytes: file.size,
+    });
     callback(file.path);
   } else {
-    // 用户取消了文件选择
-    logger.i('用户取消了文件选择');
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: LocalOperationKind.filePicker,
+      PrivacyField.state: LocalOperationState.canceled,
+    });
   }
 }
 
@@ -318,8 +345,8 @@ int _nearestMatchDistance(Match codeMatch, Iterable<Match> keywordMatches) {
     final distance = codeMatch.end < keywordMatch.start
         ? keywordMatch.start - codeMatch.end
         : keywordMatch.end < codeMatch.start
-            ? codeMatch.start - keywordMatch.end
-            : 0;
+        ? codeMatch.start - keywordMatch.end
+        : 0;
     if (distance < nearest) {
       nearest = distance;
     }

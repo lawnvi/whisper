@@ -32,5 +32,32 @@
 	<string>NSApplication</string>
 	<key>NSDownloadsFolderUsageDescription</key>
     <string>Save Files</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Whisper uses the local network only to discover and connect to nearby devices. Connections are not routed through a public relay.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_whisper._tcp</string>
+	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Send with Whisper</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>receiveQuickSendService</string>
+			<key>NSPortName</key>
+			<string>$(PRODUCT_NAME)</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+				<string>NSStringPboardType</string>
+				<string>public.file-url</string>
+				<string>public.utf8-plain-text</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

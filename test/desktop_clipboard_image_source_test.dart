@@ -23,19 +23,17 @@ void main() {
 
     expect(source, contains('_pendingClipboardImage'));
     expect(source, contains('_pendingClipboardFiles'));
-    expect(source, contains('_pasteClipboardFiles'));
+    expect(source, contains('Future<String?> _pasteClipboard()'));
     expect(source, contains('_sendPendingClipboardFiles'));
-    expect(source, contains('_pasteClipboardImage'));
     expect(source, contains('_sendPendingClipboardImage'));
     expect(source, contains('sendFileTo(device.uid, draft.path)'));
     expect(source, contains('pendingClipboardFiles: _pendingClipboardFiles'));
-    expect(source, contains('onPasteClipboardFiles: _pasteClipboardFiles'));
+    expect(source, contains('onPasteClipboard: _pasteClipboard'));
     expect(
       source,
       contains('onSendClipboardFiles: _sendPendingClipboardFiles'),
     );
     expect(source, contains('pendingClipboardImage: _pendingClipboardImage'));
-    expect(source, contains('onPasteClipboardImage: _pasteClipboardImage'));
     expect(
         source, contains('onSendClipboardImage: _sendPendingClipboardImage'));
   });

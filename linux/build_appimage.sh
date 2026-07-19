@@ -9,6 +9,9 @@ OUTPUT_DIR="${PROJECT_DIR}/build/linux/appimage"
 APPDIR="${OUTPUT_DIR}/${APP_NAME}.AppDir"
 BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
+dart "${PROJECT_DIR}/script/prune_flutter_assets.dart" linux-x64 \
+  "${BUNDLE_DIR}/data/flutter_assets"
+
 rm -rf "${APPDIR}"
 mkdir -p "${APPDIR}/usr/bin"
 mkdir -p "${APPDIR}/usr/share/applications"
@@ -28,6 +31,12 @@ Terminal=false
 Type=Application
 Categories=Utility;Network;
 StartupWMClass=whisper
+MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;
+Actions=QuickSend;
+
+[Desktop Action QuickSend]
+Name=Send with Whisper
+Exec=${APP_NAME} --quick-send %F
 EOF
 
 cp "${APPDIR}/${APP_NAME}.desktop" "${APPDIR}/usr/share/applications/${APP_NAME}.desktop"

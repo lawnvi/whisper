@@ -3,9 +3,8 @@ import 'package:whisper/state/connection_models.dart';
 class AutoConnectPlanner {
   const AutoConnectPlanner._();
 
-  static bool isMutuallyTrusted(DevicePresence candidate) {
-    return candidate.locallyTrusted && candidate.remotelyTrusted;
-  }
+  static bool isLocallyTrusted(DevicePresence candidate) =>
+      candidate.locallyTrusted;
 
   static DevicePresence? selectCandidate({
     required bool autoConnectEnabled,
@@ -26,7 +25,7 @@ class AutoConnectPlanner {
         .where(
           (candidate) =>
               candidate.discovered &&
-              isMutuallyTrusted(candidate) &&
+              isLocallyTrusted(candidate) &&
               !connected.contains(candidate.peerId),
         )
         .toList()

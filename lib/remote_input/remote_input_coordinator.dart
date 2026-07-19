@@ -1,12 +1,14 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
@@ -42,6 +44,41 @@ enum RemoteInputRuntimeStatus {
   failed,
 }
 
+enum RemoteInputDiagnosticKind {
+  startRequested,
+  startRejected,
+  offerCreated,
+  controlReceived,
+  controlStopped,
+  controlError,
+  stopped,
+  offerIgnored,
+  offerRejected,
+  offerBusy,
+  offerAcceptFailed,
+  injectionStarting,
+  acceptSent,
+  injectionFailed,
+  captureStarting,
+  captureFailed,
+  injectionStarted,
+  earlyReleaseIgnored,
+  platformError,
+  platformDiagnostic,
+  packetObserved,
+  injectionActive,
+  captureMissingEdge,
+  transportConnecting,
+  transportConnected,
+  captureStarted,
+  transportClosed,
+  staleReleaseIgnored,
+  settingFallback,
+  stateChanged,
+}
+
+enum RemoteInputTraceDirection { source, sink }
+
 class RemoteInputRuntimeState {
   const RemoteInputRuntimeState({
     required this.status,
@@ -74,6 +111,24 @@ class RemoteInputRuntimeState {
   }
 }
 
+final class _PendingInjectionEntry {
+  _PendingInjectionEntry({
+    required this.frame,
+    required this.byteLength,
+    required this.completion,
+  });
+
+  RemoteInputPacketFrame frame;
+  int byteLength;
+  final Completer<void> completion;
+
+  void complete() {
+    if (!completion.isCompleted) {
+      completion.complete();
+    }
+  }
+}
+
 class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputCoordinator({
     RemoteInputManager? manager,
@@ -82,33 +137,45 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputKeyTranslatorFactory? keyTranslatorFactory,
     RemoteInputPlatformKindProvider? platformKindProvider,
     RemoteInputScrollMultiplierProvider? scrollMultiplierProvider,
+    Duration nativeInjectionTimeout = const Duration(seconds: 2),
   })  : _manager = manager ?? RemoteInputManager.shared,
         _platform = platform ?? RemoteInputPlatform(),
-        _transportFactory =
-            transportFactory ?? RemoteInputWebSocketPacketTransport.connect,
+        _transportFactory = transportFactory,
         _keyTranslatorFactory = keyTranslatorFactory ??
             ((platform) => RemoteInputKeyTranslator(targetPlatform: platform)),
         _platformKindProvider =
             platformKindProvider ?? currentRemoteInputPlatformKind,
         _scrollMultiplierProvider = scrollMultiplierProvider ??
-            LocalSetting().remoteInputScrollMultiplier;
+            LocalSetting().remoteInputScrollMultiplier,
+        _nativeInjectionTimeout = nativeInjectionTimeout,
+        assert(nativeInjectionTimeout.inMicroseconds > 0);
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
-  static const int _packetTraceLimit = 40;
+  static const int _packetTraceLimit = 8;
+  static const int maxPendingInjectionItems = 256;
+  static const int maxPendingInjectionBytes = 1024 * 1024;
+  static const int _injectionFrameOverheadBytes = 128;
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
-  final RemoteInputTransportFactory _transportFactory;
+  final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputKeyTranslatorFactory _keyTranslatorFactory;
   final RemoteInputPlatformKindProvider _platformKindProvider;
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
+  final Duration _nativeInjectionTimeout;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
-  final List<RemoteInputPacketFrame> _pendingInjectionFrames =
-      <RemoteInputPacketFrame>[];
-  bool _injectionPumpRunning = false;
+  final ListQueue<_PendingInjectionEntry> _pendingInjectionFrames =
+      ListQueue<_PendingInjectionEntry>();
+  _PendingInjectionEntry? _activeInjectionEntry;
+  int _retainedInjectionItems = 0;
+  int _retainedInjectionBytes = 0;
+  int _injectionQueueGeneration = 0;
+  int? _injectionPumpGeneration;
+  String _injectionQueueSessionId = '';
+  String _failedInjectionSessionId = '';
   RemoteInputKeyTranslator? _keyTranslator;
   StreamSubscription<RemoteInputPacketFrame>? _inputSubscription;
   StreamSubscription<PlatformRemoteInputRelease>? _releaseSubscription;
@@ -129,6 +196,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
   RemoteInputRuntimeState get state => _state;
   RemoteInputPlatform get platform => _platform;
 
+  @visibleForTesting
+  int get debugPendingInjectionItems => _retainedInjectionItems;
+
+  @visibleForTesting
+  int get debugPendingInjectionBytes => _retainedInjectionBytes;
+
   void updateScrollMultiplier(double multiplier) {
     _scrollMultiplier = RemoteInputScrollNormalizer.clampMultiplier(multiplier);
   }
@@ -141,64 +214,41 @@ class RemoteInputCoordinator extends ChangeNotifier {
       _state.status != RemoteInputRuntimeStatus.idle &&
       _state.status != RemoteInputRuntimeStatus.failed;
 
-  String _shortSessionId(String sessionId) {
-    if (sessionId.length <= 8) {
-      return sessionId;
-    }
-    return sessionId.substring(0, 8);
-  }
-
-  String _stateSummary(RemoteInputRuntimeState state) {
-    return '${state.role.name}/${state.status.name} '
-        'session=${_shortSessionId(state.sessionId)} '
-        'peer=${state.peerId} '
-        'error=${state.errorMessage}';
-  }
-
-  String _controlSummary(RemoteInputControlMessage message) {
-    return 'action=${message.action.name} '
-        'session=${_shortSessionId(message.sessionId)} '
-        'source=${message.sourcePeerId} '
-        'sink=${message.sinkPeerId} '
-        'edge=${message.layoutEdge?.name ?? '-'} '
-        'path=${message.path} '
-        'sourcePlatform=${message.sourcePlatform} '
-        'sinkPlatform=${message.sinkPlatform} '
-        'reason=${message.releaseReason} '
-        'error=${message.errorMessage}';
-  }
-
-  void _trace(String message) {
-    logger.i(message);
-    if (_shouldPrintTrace) {
-      debugPrint(message);
-    }
-  }
-
-  void _tracePacket(String message) {
-    if (_shouldPrintTrace) {
-      _trace(message);
-    }
-  }
-
-  bool get _shouldPrintTrace =>
+  bool get _shouldTraceLifecycle =>
       !kReleaseMode ||
       Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1';
 
-  String _packetSummary(RemoteInputPacketFrame packet) {
-    final payload = _mousePayload(packet);
-    if (payload == null) {
-      return 'session=${_shortSessionId(packet.sessionId)} '
-          'seq=${packet.sequence} type=${packet.eventType.name}';
+  bool get _shouldTracePackets =>
+      Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] == '1';
+
+  void _trace(
+    RemoteInputDiagnosticKind kind, {
+    RemoteInputRuntimeStatus? state,
+    RemoteInputRuntimeRole? role,
+    RemoteInputControlAction? action,
+    RemoteInputTraceDirection? direction,
+    RemoteInputFailureReason? reason,
+    bool? allowed,
+    bool? enabled,
+    int? count,
+    Object? localError,
+  }) {
+    if (!_shouldTraceLifecycle) {
+      return;
     }
-    return 'session=${_shortSessionId(packet.sessionId)} '
-        'seq=${packet.sequence} type=${packet.eventType.name} '
-        'dx=${_numberPayload(payload['deltaX'])} '
-        'dy=${_numberPayload(payload['deltaY'])} '
-        'activeStart=${payload['activeStart'] == true} '
-        'edge=${payload['edge'] ?? '-'} '
-        'unitX=${_numberPayload(payload['unitX']).toStringAsFixed(3)} '
-        'unitY=${_numberPayload(payload['unitY']).toStringAsFixed(3)}';
+    privacyLog.event(PrivacyEvent.remoteInputDiagnostic, <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      if (state != null) PrivacyField.state: state,
+      if (role != null) PrivacyField.role: role,
+      if (action != null) PrivacyField.action: action,
+      if (direction != null) PrivacyField.direction: direction,
+      if (reason != null) PrivacyField.reason: reason,
+      if (allowed != null) PrivacyField.allowed: allowed,
+      if (enabled != null) PrivacyField.enabled: enabled,
+      if (count != null) PrivacyField.count: count,
+      if (localError != null)
+        PrivacyField.errorType: privacyLog.errorType(localError),
+    });
   }
 
   Future<void> startSharingToConnectedPeer({
@@ -223,25 +273,29 @@ class RemoteInputCoordinator extends ChangeNotifier {
         const <RemoteInputEdgeMapping>[],
   }) async {
     _trace(
-      'remote input start share requested source=$sourcePeerId '
-      'sink=$sinkPeerId sinkAddress=$sinkHost:$sinkPort '
-      'edge=${layoutEdge.name} mutualTrust=$isMutuallyTrusted '
-      'remoteCanInject=$remoteCanInject state=${_stateSummary(_state)}',
+      RemoteInputDiagnosticKind.startRequested,
+      state: _state.status,
+      role: _state.role,
+      allowed: isMutuallyTrusted,
+      enabled: remoteCanInject,
     );
     await stopLocal();
     if (!isMutuallyTrusted || !remoteCanInject) {
+      final failureReason = !isMutuallyTrusted
+          ? RemoteInputFailureReason.trustRequired
+          : RemoteInputFailureReason.unsupported;
       _trace(
-        'remote input start share rejected locally mutualTrust=$isMutuallyTrusted '
-        'remoteCanInject=$remoteCanInject sink=$sinkPeerId',
+        RemoteInputDiagnosticKind.startRejected,
+        reason: failureReason,
+        allowed: isMutuallyTrusted,
+        enabled: remoteCanInject,
       );
       _setState(
         RemoteInputRuntimeState(
           status: RemoteInputRuntimeStatus.failed,
           role: RemoteInputRuntimeRole.none,
           peerId: sinkPeerId,
-          errorMessage: !isMutuallyTrusted
-              ? 'Remote input requires mutual trust'
-              : 'Peer does not support remote input',
+          errorMessage: failureReason.name,
         ),
       );
       return;
@@ -271,7 +325,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: sinkPeerId,
       ),
     );
-    _trace('remote input created offer ${_controlSummary(offer)}');
+    _trace(RemoteInputDiagnosticKind.offerCreated);
     sendControl(offer);
   }
 
@@ -284,12 +338,15 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required bool localCanInject,
     required RemoteInputControlSender sendControl,
     String remotePlatform = '',
+    Uint8List? mediaSendKey,
   }) async {
     _trace(
-      'remote input coordinator handling ${_controlSummary(message)} '
-      'local=$localPeerId remoteAddress=$remoteHost:$remotePort '
-      'mutualTrust=$isMutuallyTrusted localCanInject=$localCanInject '
-      'state=${_stateSummary(_state)}',
+      RemoteInputDiagnosticKind.controlReceived,
+      action: message.action,
+      state: _state.status,
+      role: _state.role,
+      allowed: isMutuallyTrusted,
+      enabled: localCanInject,
     );
     switch (message.action) {
       case RemoteInputControlAction.offer:
@@ -309,6 +366,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           remoteHost: remoteHost,
           remotePort: remotePort,
           sendControl: sendControl,
+          mediaSendKey: mediaSendKey,
         );
         break;
       case RemoteInputControlAction.release:
@@ -317,14 +375,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
         _trace(
-            'remote input received ${message.action.name} ${_controlSummary(message)}');
+          RemoteInputDiagnosticKind.controlStopped,
+          action: message.action,
+        );
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
           await stopLocal();
         }
         break;
       case RemoteInputControlAction.error:
-        _trace('remote input received error ${_controlSummary(message)}');
+        final failureReason =
+            remoteInputFailureReasonFromWire(message.errorMessage);
+        _trace(
+          RemoteInputDiagnosticKind.controlError,
+          reason: failureReason,
+        );
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
           await stopLocal();
@@ -334,7 +399,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
               role: RemoteInputRuntimeRole.none,
               sessionId: message.sessionId,
               peerId: _state.peerId,
-              errorMessage: message.errorMessage,
+              errorMessage: failureReason.name,
             ),
           );
         }
@@ -364,14 +429,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
     await stopLocal();
   }
 
-  Future<void> stopLocal() async {
+  Future<void> stopLocal() => _stopLocal();
+
+  Future<void> _stopLocal({bool sessionAlreadyStopped = false}) async {
     final current = _state;
-    _trace('remote input stop local current=${_stateSummary(current)}');
+    _trace(
+      RemoteInputDiagnosticKind.stopped,
+      state: current.status,
+      role: current.role,
+    );
     final transport = _transport;
     _transport = null;
     _keyTranslator = null;
-    _pendingInjectionFrames.clear();
-    _injectionPumpRunning = false;
+    _resetInjectionQueue();
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
     _latestSinkPacketSequence = 0;
@@ -399,7 +469,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (current.role == RemoteInputRuntimeRole.sink) {
         await _platform.stopInjection(sessionId: current.sessionId);
       }
-      _manager.stopSession(current.sessionId);
+      if (!sessionAlreadyStopped) {
+        _manager.stopSession(current.sessionId);
+      }
     }
     await transport?.close();
     _setState(const RemoteInputRuntimeState.idle());
@@ -414,17 +486,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
     String remotePlatform = '',
   }) async {
     if (offer.sinkPeerId != localPeerId) {
-      _trace(
-        'remote input offer ignored for different sink '
-        '${_controlSummary(offer)} local=$localPeerId',
-      );
+      _trace(RemoteInputDiagnosticKind.offerIgnored);
       _manager.handleControlMessage(offer);
       return;
     }
     if (!isMutuallyTrusted || !localCanInject) {
+      final failureReason = !isMutuallyTrusted
+          ? RemoteInputFailureReason.trustRequired
+          : RemoteInputFailureReason.injection;
       _trace(
-        'remote input offer rejected ${_controlSummary(offer)} '
-        'mutualTrust=$isMutuallyTrusted localCanInject=$localCanInject',
+        RemoteInputDiagnosticKind.offerRejected,
+        reason: failureReason,
+        allowed: isMutuallyTrusted,
+        enabled: localCanInject,
       );
       sendControl(
         RemoteInputControlMessage(
@@ -432,17 +506,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
-          errorMessage: !isMutuallyTrusted
-              ? 'Remote input requires mutual trust'
-              : 'Local device cannot inject input',
+          errorMessage: failureReason.name,
         ),
       );
       return;
     }
     if (_hasLiveSession && _state.sessionId != offer.sessionId) {
       _trace(
-        'remote input offer rejected because local session is busy '
-        '${_controlSummary(offer)} state=${_stateSummary(_state)}',
+        RemoteInputDiagnosticKind.offerBusy,
+        state: _state.status,
+        role: _state.role,
+        reason: RemoteInputFailureReason.busy,
       );
       sendControl(
         RemoteInputControlMessage(
@@ -450,7 +524,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
-          errorMessage: 'Remote input session already active',
+          errorMessage: RemoteInputFailureReason.busy.name,
         ),
       );
       return;
@@ -461,21 +535,40 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkPlatform: _platformKindProvider().name,
     );
     if (accept.action == RemoteInputControlAction.error) {
-      _trace('remote input offer accept failed ${_controlSummary(accept)}');
-      sendControl(accept);
+      _trace(
+        RemoteInputDiagnosticKind.offerAcceptFailed,
+        reason: RemoteInputFailureReason.protocol,
+      );
+      sendControl(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: accept.sessionId,
+          sourcePeerId: accept.sourcePeerId,
+          sinkPeerId: accept.sinkPeerId,
+          errorMessage: RemoteInputFailureReason.protocol.name,
+        ),
+      );
       return;
     }
     try {
-      _trace('remote input starting injection for ${_controlSummary(accept)}');
+      _trace(RemoteInputDiagnosticKind.injectionStarting);
       await _startInjection(
         accept,
         sendControl: sendControl,
         remotePlatform: remotePlatform,
       );
-      _trace('remote input sending accept ${_controlSummary(accept)}');
+      _trace(RemoteInputDiagnosticKind.acceptSent);
       sendControl(accept);
     } catch (error) {
-      _trace('remote input start injection failed $error');
+      final failureReason = remoteInputFailureReasonFor(
+        error,
+        context: RemoteInputFailureContext.injection,
+      );
+      _trace(
+        RemoteInputDiagnosticKind.injectionFailed,
+        reason: failureReason,
+        localError: error,
+      );
       final failedPeerId = offer.sourcePeerId;
       await stopLocal();
       _setState(
@@ -484,7 +577,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           role: RemoteInputRuntimeRole.sink,
           sessionId: offer.sessionId,
           peerId: failedPeerId,
-          errorMessage: _friendlyErrorMessage(error),
+          errorMessage: failureReason.name,
         ),
       );
       sendControl(
@@ -505,28 +598,32 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     _manager.handleControlMessage(accept);
     if (accept.sourcePeerId != localPeerId) {
-      _trace(
-        'remote input accept ignored for different source '
-        '${_controlSummary(accept)} local=$localPeerId',
-      );
+      _trace(RemoteInputDiagnosticKind.offerIgnored);
       return;
     }
     try {
-      _trace(
-        'remote input starting capture for ${_controlSummary(accept)} '
-        'remoteAddress=$remoteHost:$remotePort',
-      );
+      _trace(RemoteInputDiagnosticKind.captureStarting);
       await _startCapture(
         accept,
         remoteHost: remoteHost,
         remotePort: remotePort,
         sendControl: sendControl,
+        mediaSendKey: mediaSendKey,
       );
     } catch (error) {
-      _trace('remote input start capture failed $error');
+      final failureReason = remoteInputFailureReasonFor(
+        error,
+        context: RemoteInputFailureContext.capture,
+      );
+      _trace(
+        RemoteInputDiagnosticKind.captureFailed,
+        reason: failureReason,
+        localError: error,
+      );
       final failedPeerId = accept.sinkPeerId;
       await stopLocal();
       _setState(
@@ -535,7 +632,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           role: RemoteInputRuntimeRole.source,
           sessionId: accept.sessionId,
           peerId: failedPeerId,
-          errorMessage: _friendlyErrorMessage(error),
+          errorMessage: failureReason.name,
         ),
       );
       sendControl(
@@ -555,7 +652,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required RemoteInputControlSender sendControl,
     String remotePlatform = '',
   }) async {
-    _trace('remote input _startInjection ${_controlSummary(message)}');
+    _trace(RemoteInputDiagnosticKind.injectionStarting);
     await stopLocal();
     _setState(
       RemoteInputRuntimeState(
@@ -573,10 +670,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       segmentEnd: message.sinkSegmentEnd,
       edgeMappings: message.edgeMappings,
     );
-    _trace(
-      'remote input platform startInjection returned '
-      'session=${_shortSessionId(message.sessionId)}',
-    );
+    _trace(RemoteInputDiagnosticKind.injectionStarted);
     final targetPlatform = _platformKindProvider();
     _keyTranslator = _keyTranslatorFactory(targetPlatform);
     _sinkSourcePlatform = _effectiveRemotePlatform(
@@ -594,14 +688,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
           if (_isEarlySinkEdgeRelease(release)) {
-            _trace(
-              'remote input ignored early sink edge release '
-              'releaseSequence=${release.sequence} '
-              'latestSinkPacketSequence=$_latestSinkPacketSequence '
-              'activationSequence=${release.activationSequence} '
-              'latestSinkActivationSequence=$_latestSinkActivationSequence '
-              'sinkEntryTravel=$_sinkEntryTravel',
-            );
+            _trace(RemoteInputDiagnosticKind.earlyReleaseIgnored);
             return;
           }
           sendControl(
@@ -637,15 +724,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _errorSubscription = _platform.errors.listen((error) {
       if (error.sessionId == message.sessionId) {
-        _trace('remote input platform injection error ${error.message}');
+        _trace(
+          RemoteInputDiagnosticKind.platformError,
+          reason: RemoteInputFailureReason.injection,
+        );
         unawaited(stopLocal());
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
       if (diagnostic.sessionId == message.sessionId) {
-        _trace('remote input diagnostic: ${diagnostic.message}');
+        _trace(RemoteInputDiagnosticKind.platformDiagnostic);
       }
     });
+    _beginInjectionQueue(message.sessionId);
     _manager.onPacket = (packet) {
       final routedPacket = _routeSinkActiveStartPacket(packet, message);
       if (packet.sessionId == message.sessionId &&
@@ -670,13 +761,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
           <RemoteInputPacketFrame>[
             scrollNormalized,
           ];
-      if (_sinkPacketTraceCount < _packetTraceLimit) {
+      if (_shouldTracePackets && _sinkPacketTraceCount < _packetTraceLimit) {
         _sinkPacketTraceCount++;
-        _tracePacket(
-          'remote input sink packet ${_packetSummary(scrollNormalized)}',
+        _trace(
+          RemoteInputDiagnosticKind.packetObserved,
+          direction: RemoteInputTraceDirection.sink,
+          count: _sinkPacketTraceCount,
         );
       }
-      _enqueueInjection(message.sessionId, translated);
+      return _enqueueInjection(
+        message,
+        translated,
+        sendControl: sendControl,
+      );
     };
     _setState(
       RemoteInputRuntimeState(
@@ -686,7 +783,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
-    _trace('remote input injection active ${_controlSummary(message)}');
+    _trace(RemoteInputDiagnosticKind.injectionActive);
   }
 
   bool _isEarlySinkEdgeRelease(PlatformRemoteInputRelease release) {
@@ -700,71 +797,261 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _sinkEntryTravel < _sinkEntryReleaseDistance;
   }
 
-  void _enqueueInjection(
-    String sessionId,
-    List<RemoteInputPacketFrame> frames,
-  ) {
-    for (final frame in frames) {
-      if (frame.sessionId == sessionId) {
-        _appendPendingInjectionFrame(frame);
-      }
-    }
-    _startInjectionPump();
+  void _beginInjectionQueue(String sessionId) {
+    _resetInjectionQueue();
+    _injectionQueueSessionId = sessionId;
+    _failedInjectionSessionId = '';
   }
 
-  void _appendPendingInjectionFrame(RemoteInputPacketFrame frame) {
-    if (_pendingInjectionFrames.isNotEmpty) {
-      final previous = _pendingInjectionFrames.last;
-      final coalesced = _coalesceQueuedMouseMove(previous, frame);
-      if (coalesced != null) {
-        _pendingInjectionFrames[_pendingInjectionFrames.length - 1] = coalesced;
-        return;
-      }
+  void _resetInjectionQueue() {
+    _injectionQueueGeneration++;
+    _injectionPumpGeneration = null;
+    _activeInjectionEntry?.complete();
+    _activeInjectionEntry = null;
+    for (final entry in _pendingInjectionFrames) {
+      entry.complete();
     }
-    _pendingInjectionFrames.add(frame);
+    _pendingInjectionFrames.clear();
+    _retainedInjectionItems = 0;
+    _retainedInjectionBytes = 0;
+    _injectionQueueSessionId = '';
   }
 
-  void _startInjectionPump() {
-    if (_injectionPumpRunning) {
-      return;
+  Future<void> _enqueueInjection(
+    RemoteInputControlMessage message,
+    List<RemoteInputPacketFrame> frames, {
+    required RemoteInputControlSender sendControl,
+  }) {
+    if (_state.role != RemoteInputRuntimeRole.sink ||
+        _state.sessionId != message.sessionId ||
+        _injectionQueueSessionId != message.sessionId ||
+        _failedInjectionSessionId == message.sessionId) {
+      return Future<void>.value();
     }
-    _injectionPumpRunning = true;
-    unawaited(_drainInjectionQueue());
-  }
-
-  Future<void> _drainInjectionQueue() async {
-    while (_pendingInjectionFrames.isNotEmpty) {
-      final frame = _pendingInjectionFrames.removeAt(0);
-      if (_state.role != RemoteInputRuntimeRole.sink ||
-          _state.sessionId != frame.sessionId) {
+    final acceptedFrames = frames
+        .where((frame) => frame.sessionId == message.sessionId)
+        .toList(growable: false);
+    if (acceptedFrames.isEmpty) {
+      return Future<void>.value();
+    }
+    final completions = <Completer<void>>[
+      for (var i = 0; i < acceptedFrames.length; i++) Completer<void>(),
+    ];
+    for (var i = 0; i < acceptedFrames.length; i++) {
+      if (_appendPendingInjectionFrame(acceptedFrames[i], completions[i])) {
         continue;
       }
-      try {
-        await _platform.injectEvent(frame);
-      } catch (_) {}
+      for (final completion in completions) {
+        if (!completion.isCompleted) {
+          completion.complete();
+        }
+      }
+      _failInjectionQueue(
+        message,
+        sendControl: sendControl,
+        reason: RemoteInputFailureReason.injection,
+      );
+      break;
     }
-    _injectionPumpRunning = false;
+    if (_failedInjectionSessionId != message.sessionId) {
+      _startInjectionPump(message, sendControl: sendControl);
+    }
+    return Future.wait(completions.map((completion) => completion.future));
+  }
+
+  bool _appendPendingInjectionFrame(
+    RemoteInputPacketFrame frame,
+    Completer<void> completion,
+  ) {
     if (_pendingInjectionFrames.isNotEmpty) {
-      _startInjectionPump();
+      final previous = _pendingInjectionFrames.last;
+      final coalesced = _coalesceQueuedInjectionFrame(previous.frame, frame);
+      if (coalesced != null) {
+        final coalescedBytes = _retainedFrameBytes(coalesced);
+        final nextRetainedBytes =
+            _retainedInjectionBytes - previous.byteLength + coalescedBytes;
+        if (nextRetainedBytes > maxPendingInjectionBytes) {
+          return false;
+        }
+        previous
+          ..frame = coalesced
+          ..byteLength = coalescedBytes;
+        _retainedInjectionBytes = nextRetainedBytes;
+        completion.complete();
+        return true;
+      }
     }
+    final byteLength = _retainedFrameBytes(frame);
+    if (_retainedInjectionItems >= maxPendingInjectionItems ||
+        byteLength > maxPendingInjectionBytes - _retainedInjectionBytes) {
+      return false;
+    }
+    _pendingInjectionFrames.add(
+      _PendingInjectionEntry(
+        frame: frame,
+        byteLength: byteLength,
+        completion: completion,
+      ),
+    );
+    _retainedInjectionItems++;
+    _retainedInjectionBytes += byteLength;
+    return true;
+  }
+
+  int _retainedFrameBytes(RemoteInputPacketFrame frame) {
+    return frame.payload.length +
+        frame.sessionId.length * 2 +
+        _injectionFrameOverheadBytes;
+  }
+
+  void _startInjectionPump(
+    RemoteInputControlMessage message, {
+    required RemoteInputControlSender sendControl,
+  }) {
+    final generation = _injectionQueueGeneration;
+    if (_injectionPumpGeneration == generation) {
+      return;
+    }
+    _injectionPumpGeneration = generation;
+    unawaited(
+      _drainInjectionQueue(
+        message,
+        generation: generation,
+        sendControl: sendControl,
+      ),
+    );
+  }
+
+  Future<void> _drainInjectionQueue(
+    RemoteInputControlMessage message, {
+    required int generation,
+    required RemoteInputControlSender sendControl,
+  }) async {
+    try {
+      while (_isCurrentInjectionQueue(message.sessionId, generation) &&
+          _pendingInjectionFrames.isNotEmpty) {
+        final entry = _pendingInjectionFrames.removeFirst();
+        _activeInjectionEntry = entry;
+        try {
+          await _platform
+              .injectEvent(entry.frame)
+              .timeout(_nativeInjectionTimeout);
+        } catch (error) {
+          if (_isCurrentInjectionQueue(message.sessionId, generation)) {
+            _failInjectionQueue(
+              message,
+              sendControl: sendControl,
+              reason: RemoteInputFailureReason.injection,
+              localError: error,
+            );
+          }
+          return;
+        } finally {
+          entry.complete();
+          if (_isCurrentInjectionQueue(message.sessionId, generation) &&
+              identical(_activeInjectionEntry, entry)) {
+            _activeInjectionEntry = null;
+            _retainedInjectionItems--;
+            _retainedInjectionBytes -= entry.byteLength;
+          }
+        }
+      }
+    } finally {
+      if (_isCurrentInjectionQueue(message.sessionId, generation) &&
+          _injectionPumpGeneration == generation) {
+        _injectionPumpGeneration = null;
+        if (_pendingInjectionFrames.isNotEmpty) {
+          _startInjectionPump(message, sendControl: sendControl);
+        }
+      }
+    }
+  }
+
+  bool _isCurrentInjectionQueue(String sessionId, int generation) {
+    return _injectionQueueGeneration == generation &&
+        _injectionQueueSessionId == sessionId &&
+        _failedInjectionSessionId != sessionId;
+  }
+
+  void _failInjectionQueue(
+    RemoteInputControlMessage message, {
+    required RemoteInputControlSender sendControl,
+    required RemoteInputFailureReason reason,
+    Object? localError,
+  }) {
+    if (_failedInjectionSessionId == message.sessionId ||
+        _state.role != RemoteInputRuntimeRole.sink ||
+        _state.sessionId != message.sessionId) {
+      return;
+    }
+    _failedInjectionSessionId = message.sessionId;
+    _trace(
+      RemoteInputDiagnosticKind.platformError,
+      reason: reason,
+      localError: localError,
+    );
+    _resetInjectionQueue();
+    _manager.onPacket = null;
+    _manager.stopSession(message.sessionId);
+    try {
+      sendControl(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.error,
+          sessionId: message.sessionId,
+          sourcePeerId: message.sourcePeerId,
+          sinkPeerId: message.sinkPeerId,
+          errorMessage: reason.name,
+        ),
+      );
+    } catch (_) {}
+    unawaited(_finishFailedInjectionStop(message.sessionId));
+  }
+
+  Future<void> _finishFailedInjectionStop(String sessionId) async {
+    try {
+      await _stopLocal(sessionAlreadyStopped: true);
+    } catch (_) {
+      if (_state.role == RemoteInputRuntimeRole.sink &&
+          _state.sessionId == sessionId) {
+        _manager.onPacket = null;
+        _setState(const RemoteInputRuntimeState.idle());
+      }
+    }
+  }
+
+  RemoteInputPacketFrame? _coalesceQueuedInjectionFrame(
+    RemoteInputPacketFrame previous,
+    RemoteInputPacketFrame next,
+  ) {
+    if (previous.sessionId != next.sessionId ||
+        previous.eventType != next.eventType) {
+      return null;
+    }
+    return switch (next.eventType) {
+      RemoteInputEventType.mouseMove =>
+        _coalesceQueuedMouseMove(previous, next),
+      RemoteInputEventType.mouseWheel =>
+        _coalesceQueuedMouseWheel(previous, next),
+      _ => null,
+    };
   }
 
   RemoteInputPacketFrame? _coalesceQueuedMouseMove(
     RemoteInputPacketFrame previous,
     RemoteInputPacketFrame next,
   ) {
-    if (previous.sessionId != next.sessionId ||
-        previous.eventType != RemoteInputEventType.mouseMove ||
-        next.eventType != RemoteInputEventType.mouseMove) {
-      return null;
-    }
     final previousPayload = _mousePayload(previous);
     final nextPayload = _mousePayload(next);
     if (previousPayload == null || nextPayload == null) {
       return null;
     }
     if (previousPayload['activeStart'] == true ||
-        nextPayload['activeStart'] == true) {
+        nextPayload['activeStart'] == true ||
+        !_payloadsMatchExcept(
+          previousPayload,
+          nextPayload,
+          const <String>{'deltaX', 'deltaY', 'x', 'y'},
+        )) {
       return null;
     }
     final mergedPayload = Map<String, dynamic>.from(nextPayload);
@@ -773,12 +1060,68 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _numberPayload(nextPayload['deltaX']);
     mergedPayload['deltaY'] = _numberPayload(previousPayload['deltaY']) +
         _numberPayload(nextPayload['deltaY']);
+    return _copyPacketWithPayload(next, mergedPayload);
+  }
+
+  RemoteInputPacketFrame? _coalesceQueuedMouseWheel(
+    RemoteInputPacketFrame previous,
+    RemoteInputPacketFrame next,
+  ) {
+    final previousPayload = _mousePayload(previous);
+    final nextPayload = _mousePayload(next);
+    const additiveKeys = <String>{
+      'deltaX',
+      'deltaY',
+      'scrollDeltaX',
+      'scrollDeltaY',
+      'pointDeltaX',
+      'pointDeltaY',
+    };
+    if (previousPayload == null ||
+        nextPayload == null ||
+        !_payloadsMatchExcept(previousPayload, nextPayload, additiveKeys)) {
+      return null;
+    }
+    final mergedPayload = Map<String, dynamic>.from(nextPayload);
+    var mergedAny = false;
+    for (final key in additiveKeys) {
+      if (!previousPayload.containsKey(key) && !nextPayload.containsKey(key)) {
+        continue;
+      }
+      mergedPayload[key] = _numberPayload(previousPayload[key]) +
+          _numberPayload(nextPayload[key]);
+      mergedAny = true;
+    }
+    return mergedAny ? _copyPacketWithPayload(next, mergedPayload) : null;
+  }
+
+  bool _payloadsMatchExcept(
+    Map<String, dynamic> first,
+    Map<String, dynamic> second,
+    Set<String> ignoredKeys,
+  ) {
+    final keys = <String>{...first.keys, ...second.keys}
+      ..removeAll(ignoredKeys);
+    for (final key in keys) {
+      if (!first.containsKey(key) ||
+          !second.containsKey(key) ||
+          jsonEncode(first[key]) != jsonEncode(second[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  RemoteInputPacketFrame _copyPacketWithPayload(
+    RemoteInputPacketFrame packet,
+    Map<String, dynamic> payload,
+  ) {
     return RemoteInputPacketFrame(
-      sessionId: next.sessionId,
-      sequence: next.sequence,
-      timestampMicros: next.timestampMicros,
-      eventType: next.eventType,
-      payload: Uint8List.fromList(utf8.encode(jsonEncode(mergedPayload))),
+      sessionId: packet.sessionId,
+      sequence: packet.sequence,
+      timestampMicros: packet.timestampMicros,
+      eventType: packet.eventType,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
     );
   }
 
@@ -787,19 +1130,24 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String remoteHost,
     required int remotePort,
     required RemoteInputControlSender sendControl,
+    Uint8List? mediaSendKey,
   }) async {
     final edge = message.layoutEdge;
     if (edge == null) {
       _trace(
-          'remote input capture skipped without edge ${_controlSummary(message)}');
+        RemoteInputDiagnosticKind.captureMissingEdge,
+        reason: RemoteInputFailureReason.protocol,
+      );
       return;
     }
     final uri = _inputUri(
       host: remoteHost,
       port: remotePort,
       path: message.path,
+      sessionId: message.sessionId,
+      transportToken: message.transportToken,
     );
-    _trace('remote input _startCapture ${_controlSummary(message)} uri=$uri');
+    _trace(RemoteInputDiagnosticKind.transportConnecting);
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.connecting,
@@ -808,17 +1156,27 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sinkPeerId,
       ),
     );
-    final transport = await _transportFactory(
-      uri,
-    );
+    final transportFactory = _transportFactory;
+    final RemoteInputPacketTransport transport;
+    if (transportFactory != null) {
+      transport = await transportFactory(uri);
+    } else {
+      if (message.transportToken.isEmpty || mediaSendKey == null) {
+        throw StateError('authenticated remote input context missing');
+      }
+      transport = await RemoteInputWebSocketPacketTransport.connect(
+        uri,
+        mediaMacKey: mediaSendKey,
+        sessionId: message.sessionId,
+        peerId: message.sourcePeerId,
+      );
+    }
     _transport = transport;
     _transportDoneSubscription = _listenForSourceTransportDone(
       transport,
       sessionId: message.sessionId,
     );
-    _trace(
-      'remote input transport connected session=${_shortSessionId(message.sessionId)}',
-    );
+    _trace(RemoteInputDiagnosticKind.transportConnected);
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
     _sourcePacketTraceCount = 0;
@@ -830,9 +1188,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
         event,
         sourcePlatform: _platformKindProvider(),
       );
-      if (_sourcePacketTraceCount < _packetTraceLimit) {
+      if (_shouldTracePackets && _sourcePacketTraceCount < _packetTraceLimit) {
         _sourcePacketTraceCount++;
-        _tracePacket('remote input source packet ${_packetSummary(annotated)}');
+        _trace(
+          RemoteInputDiagnosticKind.packetObserved,
+          direction: RemoteInputTraceDirection.source,
+          count: _sourcePacketTraceCount,
+        );
       }
       if (event.sequence > _latestSourceInputSequence) {
         _latestSourceInputSequence = event.sequence;
@@ -859,13 +1221,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _errorSubscription = _platform.errors.listen((error) {
       if (error.sessionId == message.sessionId) {
-        _trace('remote input platform capture error ${error.message}');
+        _trace(
+          RemoteInputDiagnosticKind.platformError,
+          reason: RemoteInputFailureReason.capture,
+        );
         unawaited(stopLocal());
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
       if (diagnostic.sessionId == message.sessionId) {
-        _trace('remote input diagnostic: ${diagnostic.message}');
+        _trace(RemoteInputDiagnosticKind.platformDiagnostic);
       }
     });
     await _platform.startCapture(
@@ -877,10 +1242,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       segmentEnd: message.sourceSegmentEnd,
       edgeMappings: message.edgeMappings,
     );
-    _trace(
-      'remote input platform startCapture returned '
-      'session=${_shortSessionId(message.sessionId)} edge=${edge.name}',
-    );
+    _trace(RemoteInputDiagnosticKind.captureStarted);
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.armed,
@@ -903,10 +1265,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           _state.sessionId != sessionId) {
         return;
       }
-      _trace(
-        'remote input packet transport closed '
-        'session=${_shortSessionId(sessionId)}',
-      );
+      _trace(RemoteInputDiagnosticKind.transportClosed);
       unawaited(stopLocal());
     });
   }
@@ -920,11 +1279,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     if (message.releaseActivationSequence > 0 &&
         _latestSourceActivationSequence > message.releaseActivationSequence) {
-      _trace(
-        'remote input ignored stale edge release '
-        'releaseActivationSequence=${message.releaseActivationSequence} '
-        'latestSourceActivationSequence=$_latestSourceActivationSequence',
-      );
+      _trace(RemoteInputDiagnosticKind.staleReleaseIgnored);
       return;
     }
     await _platform.pauseCapture(
@@ -1188,12 +1543,18 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String host,
     required int port,
     required String path,
+    required String sessionId,
+    required String transportToken,
   }) {
     final normalizedPath = path.isEmpty ? '/input' : path;
     return buildPeerPacketUri(
       host: host,
       port: port,
       path: normalizedPath,
+      queryParameters: <String, String>{
+        if (transportToken.isNotEmpty) 'session': sessionId,
+        if (transportToken.isNotEmpty) 'token': transportToken,
+      },
     );
   }
 
@@ -1212,38 +1573,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
     try {
       return await _scrollMultiplierProvider();
     } catch (error) {
-      _trace('remote input scroll multiplier fallback after error $error');
+      _trace(
+        RemoteInputDiagnosticKind.settingFallback,
+        localError: error,
+      );
       return 1.0;
     }
   }
 
   void _setState(RemoteInputRuntimeState state) {
     _trace(
-      'remote input state ${_stateSummary(_state)} -> ${_stateSummary(state)}',
+      RemoteInputDiagnosticKind.stateChanged,
+      state: state.status,
+      role: state.role,
     );
     _state = state;
     notifyListeners();
-  }
-
-  String _friendlyErrorMessage(Object error) {
-    if (error is PlatformException) {
-      return error.message?.trim().isNotEmpty == true
-          ? error.message!.trim()
-          : error.code;
-    }
-    final text = error.toString();
-    const platformPrefix = 'PlatformException(';
-    if (!text.startsWith(platformPrefix)) {
-      return text;
-    }
-    final parts = text
-        .substring(platformPrefix.length, text.length - 1)
-        .split(',')
-        .map((part) => part.trim())
-        .toList(growable: false);
-    if (parts.length >= 2 && parts[1].isNotEmpty) {
-      return parts[1];
-    }
-    return text;
   }
 }

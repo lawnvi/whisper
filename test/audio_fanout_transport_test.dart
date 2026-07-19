@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/audio/audio_fanout_transport.dart';
 import 'package:whisper/audio/audio_protocol.dart';
+import 'package:whisper/socket/packet_byte_transport.dart';
 
 void main() {
   AudioGroupPacketFrame packet(int sequence) {
@@ -89,6 +91,99 @@ void main() {
     expect(left.sent, isEmpty);
     expect(right.sent, isEmpty);
   });
+
+  test('legacy synchronous sink failure detaches the broken sink', () {
+    final failures = <Object>[];
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach(
+        'broken',
+        AudioGroupPacketByteTransport(
+          sendBytes: (_) => throw StateError('legacy sink failed'),
+        ),
+      );
+
+    fanout.send(packet(1));
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures.single, isA<StateError>());
+  });
+
+  test('queued writer failure detaches but drop-oldest backpressure does not',
+      () async {
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    var shouldFailWriter = false;
+    final failures = <Object>[];
+    final bytes = PacketByteTransport.audio(
+      addStream: (stream) async {
+        await stream.single;
+        if (!firstWriteStarted.isCompleted) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+        if (shouldFailWriter) {
+          throw StateError('queued writer failed');
+        }
+      },
+      closeSink: () async {},
+      maxItems: 2,
+      maxBytes: 1024 * 1024,
+    );
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('queued', AudioGroupPacketByteTransport.withTransport(bytes));
+
+    fanout.send(packet(1));
+    await firstWriteStarted.future;
+    fanout.send(packet(2));
+    fanout.send(packet(3));
+    expect(fanout.sinkPeerIds, contains('queued'));
+    expect(failures, isEmpty);
+
+    shouldFailWriter = true;
+    releaseFirstWrite.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures.single, isA<StateError>());
+  });
+
+  test('unexpected observable close detaches a group sink exactly once',
+      () async {
+    final failures = <Object>[];
+    final sink = _FakeObservableGroupTransport();
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('phone', sink);
+
+    sink.fail(
+      const PacketTransportTermination(
+        PacketTransportTerminationReason.remoteClosed,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(fanout.sinkPeerIds, isEmpty);
+    expect(failures, hasLength(1));
+    await fanout.closeAll();
+    expect(failures, hasLength(1));
+  });
+
+  test('intentional observable close does not fail a group sink', () async {
+    final failures = <Object>[];
+    final sink = _FakeObservableGroupTransport();
+    final fanout = AudioFanoutTransport(
+      onSinkFailure: (_, error) => failures.add(error),
+    )..attach('phone', sink);
+
+    await fanout.detachAndClose('phone');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sink.closed, isTrue);
+    expect(failures, isEmpty);
+  });
 }
 
 class _FakeGroupTransport implements AudioGroupPacketTransport {
@@ -99,17 +194,47 @@ class _FakeGroupTransport implements AudioGroupPacketTransport {
   bool closed = false;
 
   @override
-  void send(AudioGroupPacketFrame packet) {
+  Future<PacketSendResult> send(AudioGroupPacketFrame packet) {
     if (throwOnSend) {
       throw StateError('sink failed');
     }
     if (!closed) {
       sent.add(packet);
     }
+    return Future<PacketSendResult>.value(
+      closed ? PacketSendResult.closed : PacketSendResult.sent,
+    );
   }
 
   @override
   Future<void> close() async {
     closed = true;
+  }
+}
+
+class _FakeObservableGroupTransport extends _FakeGroupTransport
+    implements AudioGroupObservablePacketTransport {
+  final Completer<PacketTransportTermination> _done =
+      Completer<PacketTransportTermination>();
+
+  @override
+  Future<PacketTransportTermination> get done => _done.future;
+
+  void fail(PacketTransportTermination termination) {
+    if (!_done.isCompleted) {
+      _done.complete(termination);
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    await super.close();
+    if (!_done.isCompleted) {
+      _done.complete(
+        const PacketTransportTermination(
+          PacketTransportTerminationReason.localClosed,
+        ),
+      );
+    }
   }
 }

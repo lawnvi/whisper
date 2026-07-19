@@ -13,11 +13,16 @@ BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
 echo "Building DEB package ${APP_NAME} ${VERSION} (${ARCHITECTURE})"
 
+dart "${PROJECT_DIR}/script/prune_flutter_assets.dart" linux-x64 \
+  "${BUNDLE_DIR}/data/flutter_assets"
+
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}/DEBIAN"
 mkdir -p "${BUILD_DIR}${INSTALL_DIR}"
 mkdir -p "${BUILD_DIR}/usr/share/applications"
 mkdir -p "${BUILD_DIR}/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "${BUILD_DIR}/usr/share/kservices5/ServiceMenus"
+mkdir -p "${BUILD_DIR}/usr/share/kio/servicemenus"
 
 cp -R "${BUNDLE_DIR}/." "${BUILD_DIR}${INSTALL_DIR}"
 cp "${PROJECT_DIR}/linux/app_icon.png" "${BUILD_DIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
@@ -28,7 +33,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libpulse0
+Depends: libpulse0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
 Description: Cross-platform local network file and message transfer
@@ -44,7 +49,28 @@ Terminal=false
 Type=Application
 Categories=Utility;Network;
 StartupWMClass=whisper
+MimeType=application/octet-stream;application/pdf;application/zip;text/plain;image/png;image/jpeg;audio/mpeg;video/mp4;
+Actions=QuickSend;
+
+[Desktop Action QuickSend]
+Name=Send with Whisper
+Exec=${INSTALL_DIR}/${APP_NAME} --quick-send %F
 EOF
+
+cat > "${BUILD_DIR}/usr/share/kservices5/ServiceMenus/${APP_NAME}-send.desktop" <<EOF
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=WhisperQuickSend;
+
+[Desktop Action WhisperQuickSend]
+Name=Send with Whisper
+Icon=${APP_NAME}
+Exec=${INSTALL_DIR}/${APP_NAME} --quick-send %F
+EOF
+cp "${BUILD_DIR}/usr/share/kservices5/ServiceMenus/${APP_NAME}-send.desktop" \
+  "${BUILD_DIR}/usr/share/kio/servicemenus/${APP_NAME}-send.desktop"
 
 cat > "${BUILD_DIR}/DEBIAN/postinst" <<EOF
 #!/bin/sh

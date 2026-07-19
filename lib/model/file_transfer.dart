@@ -1,9 +1,6 @@
 import 'package:drift/drift.dart';
 
-enum FileTransferDirection {
-  incoming,
-  outgoing,
-}
+enum FileTransferDirection { incoming, outgoing }
 
 enum FileTransferState {
   queued,
@@ -16,6 +13,17 @@ enum FileTransferState {
   failed,
   canceled,
 }
+
+const int pendingResumeProofResetMarker = -1;
+
+const List<String> retryableOutgoingInvalidationReasons = <String>[
+  'trust_revoked',
+  'device_deleted',
+  'identity_replaced',
+];
+
+bool isRetryableOutgoingInvalidationReason(String reason) =>
+    retryableOutgoingInvalidationReasons.contains(reason);
 
 bool isTerminalFileTransferState(FileTransferState state) {
   return state == FileTransferState.completed ||
@@ -39,6 +47,8 @@ FileTransferState? stateAfterTransferProgress({
 class FileTransfer extends Table {
   TextColumn get transferId => text().named('transfer_id')();
   TextColumn get messageUuid => text().named('message_uuid')();
+  IntColumn get messageRowId =>
+      integer().named('message_row_id').withDefault(const Constant(0))();
   TextColumn get peerUid => text().named('peer_uid')();
   TextColumn get direction =>
       textEnum<FileTransferDirection>().named('direction')();
@@ -53,6 +63,9 @@ class FileTransfer extends Table {
   IntColumn get chunkSize => integer().named('chunk_size')();
   IntColumn get committedBytes =>
       integer().named('committed_bytes').withDefault(const Constant(0))();
+  IntColumn get resumeProofResetCount => integer()
+      .named('resume_proof_reset_count')
+      .withDefault(const Constant(0))();
   TextColumn get lastError =>
       text().named('last_error').withDefault(const Constant(''))();
   IntColumn get createdAt => integer().named('created_at')();

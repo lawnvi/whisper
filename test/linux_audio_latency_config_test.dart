@@ -3,20 +3,23 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Linux builds require PulseAudio development libraries', () {
+  test('Linux builds install native audio and media libraries', () {
     final cmake = File('linux/CMakeLists.txt').readAsStringSync();
-    final releaseWorkflow =
-        File('.github/workflows/release.yml').readAsStringSync();
+    final releaseWorkflow = File(
+      '.github/workflows/release.yml',
+    ).readAsStringSync();
     final debScript = File('linux/build_deb.sh').readAsStringSync();
 
-    expect(
-      cmake,
-      contains('pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET'),
-    );
+    expect(cmake, contains('pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET'));
     expect(releaseWorkflow, contains('lld'));
     expect(releaseWorkflow, contains('pkg-config'));
     expect(releaseWorkflow, contains('libpulse-dev'));
+    expect(releaseWorkflow, contains('libgstreamer1.0-dev'));
+    expect(releaseWorkflow, contains('libgstreamer-plugins-base1.0-dev'));
     expect(debScript, contains('Depends: libpulse0'));
+    expect(debScript, contains('libgstreamer1.0-0'));
+    expect(debScript, contains('gstreamer1.0-plugins-good'));
+    expect(debScript, contains('gstreamer1.0-libav'));
     expect(debScript, contains('--root-owner-group'));
   });
 

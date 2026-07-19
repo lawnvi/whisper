@@ -17,6 +17,8 @@ void main() {
 
     expect(callback, isNot(contains('File(message.path).delete()')));
     expect(callback, contains('await _deleteMessageFileIfExists(message);'));
-    expect(callback, contains('_deleteItem(message.id);'));
+    expect(callback, contains('await _deleteItems(<int>[message.id]);'));
+    expect(source, contains('onDeleteMessages: (messages) =>'));
+    expect(source, contains('db.deleteMessages(ids)'));
   });
 }

@@ -274,9 +274,6 @@ class AudioSharePlugin {
       *error = pa_strerror(pulse_error);
       return false;
     }
-    g_print("Audio Share Playback buffer target=%u minreq=%u frameMs=%d\n",
-            buffer_attr.tlength, buffer_attr.minreq, frame_duration_ms);
-
     std::lock_guard<std::mutex> lock(playback_mutex_);
     playback_stream_ = stream;
     playback_session_id_ = session_id;
@@ -414,9 +411,6 @@ class AudioSharePlugin {
       capture_running_.store(false);
       return;
     }
-    g_print("Audio Share Capture buffer fragment=%u frameMs=%d\n",
-            buffer_attr.fragsize, frame_duration_ms);
-
     {
       std::lock_guard<std::mutex> lock(capture_mutex_);
       capture_stream_ = stream;

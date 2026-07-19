@@ -18,6 +18,8 @@ void main() {
     expect(plugin, contains('Intent.ACTION_OPEN_DOCUMENT'));
     expect(plugin, contains('Intent.EXTRA_ALLOW_MULTIPLE'));
     expect(plugin, contains('takePersistableUriPermission'));
+    expect(plugin, contains('openFileDescriptor'));
+    expect(plugin, contains('channel.position(offset)'));
     expect(plugin, contains('contentResolver.openInputStream'));
     expect(plugin, isNot(contains('/file_picker/')));
   });

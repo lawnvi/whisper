@@ -4,7 +4,7 @@ import 'package:whisper/state/auto_connect_planner.dart';
 
 void main() {
   group('AutoConnectPlanner', () {
-    test('requires both local and remote trust before auto-connecting', () {
+    test('uses only locally persisted trust for auto-connect eligibility', () {
       final trusted = DevicePresence(
         peerId: 'trusted',
         name: 'Trusted',
@@ -26,9 +26,9 @@ void main() {
         locallyTrusted: false,
       );
 
-      expect(AutoConnectPlanner.isMutuallyTrusted(trusted), isTrue);
-      expect(AutoConnectPlanner.isMutuallyTrusted(localOnly), isFalse);
-      expect(AutoConnectPlanner.isMutuallyTrusted(remoteOnly), isFalse);
+      expect(AutoConnectPlanner.isLocallyTrusted(trusted), isTrue);
+      expect(AutoConnectPlanner.isLocallyTrusted(localOnly), isTrue);
+      expect(AutoConnectPlanner.isLocallyTrusted(remoteOnly), isFalse);
     });
 
     test(
@@ -144,7 +144,7 @@ void main() {
       expect(result?.peerId, 'peer-b');
     });
 
-    test('falls back to the freshest mutually trusted candidate', () {
+    test('ignores discovery-advertised remote trust when choosing a peer', () {
       final now = DateTime(2026, 1, 1, 12, 0);
       final result = AutoConnectPlanner.selectCandidate(
         autoConnectEnabled: true,
@@ -190,7 +190,7 @@ void main() {
         ],
       );
 
-      expect(result?.peerId, 'newer');
+      expect(result?.peerId, 'untrusted');
     });
 
     test('returns null when auto-connect is disabled', () {

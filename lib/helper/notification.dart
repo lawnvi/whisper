@@ -47,7 +47,7 @@ class NotificationHelper {
         ConnectionRequestNotifier().handleNotificationResponse(response);
       },
       onDidReceiveBackgroundNotificationResponse:
-          connectionRequestNotificationBackgroundHandler,
+          connectionRequestNotificationTapBackground,
     );
   }
 
@@ -92,7 +92,7 @@ class NotificationHelper {
   }
 }
 
-void startAndroidListening() async {
+Future<void> startAndroidListening() async {
   var hasPermission = (await NotificationsListener.hasPermission) ?? false;
   if (!hasPermission) {
     NotificationsListener.openPermissionSettings();
@@ -108,7 +108,7 @@ void startAndroidListening() async {
   }
 }
 
-void stopAndroidListening() async {
+Future<void> stopAndroidListening() async {
   await NotificationsListener.stopService();
 }
 

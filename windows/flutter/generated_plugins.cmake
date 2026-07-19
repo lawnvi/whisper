@@ -3,9 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
   bonsoir_windows
   clipboard_watcher
   desktop_drop
+  flutter_secure_storage_windows
+  hotkey_manager_windows
   irondash_engine_context
   open_dir_windows
   permission_handler_windows

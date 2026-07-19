@@ -25,6 +25,10 @@
   !define OUTPUT_NAME "whisper-windows-x86_64.exe"
 !endif
 
+!ifndef BUILD_DIR
+  !define BUILD_DIR "..\build\windows\x64\runner\Release"
+!endif
+
 Name "${APP_NAME}"
 OutFile "${OUTPUT_NAME}"
 InstallDir "${INSTALL_ROOT}"
@@ -54,10 +58,11 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File /r "..\build\windows\x64\runner\Release\*.*"
+  File /r "${BUILD_DIR}\*.*"
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} Quick Send.lnk" "$INSTDIR\${APP_EXE}" "--quick-send" "$INSTDIR\${APP_EXE}" 0 SW_SHOWNORMAL CONTROL|ALT|V "Send clipboard with ${APP_NAME}"
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
 
   WriteRegStr HKCU "Software\${APP_NAME}" "InstallDir" "$INSTDIR"
@@ -70,6 +75,12 @@ Section "Install"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
 
+  WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send" "MUIVerb" "Send with Whisper"
+  WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send" "Icon" "$INSTDIR\${APP_EXE}"
+  WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send" "MultiSelectModel" "Document"
+  WriteRegStr HKCU "Software\Classes\*\shell\Whisper.Send\command" "" '$\"$INSTDIR\${APP_EXE}$\" --quick-send-file $\"%1$\"'
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\Whisper.Send"
+
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "EstimatedSize" "$0"
@@ -79,10 +90,13 @@ SectionEnd
 
 Section "Uninstall"
   Delete "$DESKTOP\${APP_NAME}.lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} Quick Send.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKCU "Software\${APP_NAME}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+  DeleteRegKey HKCU "Software\Classes\*\shell\Whisper.Send"
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\Whisper.Send"
 SectionEnd

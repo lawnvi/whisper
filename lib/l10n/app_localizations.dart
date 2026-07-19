@@ -64,7 +64,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -87,17 +87,17 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
     Locale('es'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// No description provided for @connectDeviceTitle.
@@ -153,21 +153,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'发送中 {percent}% · {speed} · 剩余 {remaining}'**
   String transferNotificationBodySending(
-      int percent, String speed, String remaining);
+    int percent,
+    String speed,
+    String remaining,
+  );
 
   /// No description provided for @transferNotificationBodyReceiving.
   ///
   /// In zh, this message translates to:
   /// **'接收中 {percent}% · {speed} · 剩余 {remaining}'**
   String transferNotificationBodyReceiving(
-      int percent, String speed, String remaining);
+    int percent,
+    String speed,
+    String remaining,
+  );
 
   /// No description provided for @transferNotificationBodyMixed.
   ///
   /// In zh, this message translates to:
   /// **'收发中 {percent}% · {speed} · 剩余 {remaining}'**
   String transferNotificationBodyMixed(
-      int percent, String speed, String remaining);
+    int percent,
+    String speed,
+    String remaining,
+  );
 
   /// No description provided for @transferNotificationCompleted.
   ///
@@ -229,6 +238,12 @@ abstract class AppLocalizations {
   /// **'发点什么...'**
   String get sendTips;
 
+  /// No description provided for @sendFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送文件'**
+  String get sendFiles;
+
   /// No description provided for @trust.
   ///
   /// In zh, this message translates to:
@@ -259,17 +274,23 @@ abstract class AppLocalizations {
   /// **'服务端口'**
   String get serverPortTitle;
 
-  /// No description provided for @trustNewDevice.
-  ///
-  /// In zh, this message translates to:
-  /// **'自动通过新设备'**
-  String get trustNewDevice;
-
   /// No description provided for @accessClipboard.
   ///
   /// In zh, this message translates to:
   /// **'允许访问剪切板'**
   String get accessClipboard;
+
+  /// No description provided for @clipboardAutoSync.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动同步剪切板'**
+  String get clipboardAutoSync;
+
+  /// No description provided for @clipboardAutoSyncDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭时仅手动发送；开启后只同步到当前可信设备'**
+  String get clipboardAutoSyncDesc;
 
   /// No description provided for @doubleClickRmMessage.
   ///
@@ -304,7 +325,7 @@ abstract class AppLocalizations {
   /// No description provided for @portDesc.
   ///
   /// In zh, this message translates to:
-  /// **'请输入服务端口：[1000, 65535]'**
+  /// **'请输入 1001 到 65535 之间的端口'**
   String get portDesc;
 
   /// No description provided for @timeoutTitle.
@@ -367,6 +388,12 @@ abstract class AppLocalizations {
   /// **'剪贴板文件发送失败'**
   String get clipboardFilesSendFailed;
 
+  /// No description provided for @messageSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'消息发送失败，请重试'**
+  String get messageSendFailed;
+
   /// No description provided for @clipboardFilesCount.
   ///
   /// In zh, this message translates to:
@@ -418,7 +445,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteDeviceDesc.
   ///
   /// In zh, this message translates to:
-  /// **'删除与此设备的所有消息，不可恢复'**
+  /// **'断开连接并删除与此设备的所有消息，不可恢复'**
   String get deleteDeviceDesc;
 
   /// No description provided for @brokeConnectTitle.
@@ -438,6 +465,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'连接失败'**
   String get connectFailed;
+
+  /// No description provided for @connectAlreadyInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接正在进行中'**
+  String get connectAlreadyInProgress;
 
   /// No description provided for @deviceBusy.
   ///
@@ -463,6 +496,30 @@ abstract class AppLocalizations {
   /// **'确定删除此消息吗？'**
   String get deleteMessageDesc;
 
+  /// No description provided for @selectMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'多选'**
+  String get selectMessages;
+
+  /// No description provided for @selectedMessageCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 条'**
+  String selectedMessageCount(int count);
+
+  /// No description provided for @deleteSelectedMessagesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 {count} 条消息'**
+  String deleteSelectedMessagesTitle(int count);
+
+  /// No description provided for @deleteSelectedMessagesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将删除所选聊天记录，本地文件会保留。'**
+  String get deleteSelectedMessagesDesc;
+
   /// No description provided for @language.
   ///
   /// In zh, this message translates to:
@@ -480,12 +537,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'忽略安卓通知'**
   String get ignoreNotification;
-
-  /// No description provided for @ftpService.
-  ///
-  /// In zh, this message translates to:
-  /// **'FTP服务'**
-  String get ftpService;
 
   /// No description provided for @back.
   ///
@@ -508,7 +559,7 @@ abstract class AppLocalizations {
   /// No description provided for @selectNotifyApp.
   ///
   /// In zh, this message translates to:
-  /// **'监听APP通知'**
+  /// **'选择通知应用'**
   String get selectNotifyApp;
 
   /// No description provided for @copyVerifyCode.
@@ -694,19 +745,19 @@ abstract class AppLocalizations {
   /// No description provided for @androidBackgroundKeepAliveDesc.
   ///
   /// In zh, this message translates to:
-  /// **'连接期间启用前台服务，降低选文件、切后台或锁屏时被系统断开的概率'**
+  /// **'保持局域网接收服务运行，便于在后台或锁屏时收到连接请求'**
   String get androidBackgroundKeepAliveDesc;
 
   /// No description provided for @androidBackgroundKeepAliveActiveTitle.
   ///
   /// In zh, this message translates to:
-  /// **'Whisper 正在保持连接'**
+  /// **'Whisper 正在监听局域网连接'**
   String get androidBackgroundKeepAliveActiveTitle;
 
   /// No description provided for @androidBackgroundKeepAliveActiveDesc.
   ///
   /// In zh, this message translates to:
-  /// **'有活动会话时保持前台服务运行'**
+  /// **'可在后台接收附近设备的连接请求'**
   String get androidBackgroundKeepAliveActiveDesc;
 
   /// No description provided for @androidBatteryOptimization.
@@ -996,28 +1047,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{quality} · {clockOffsetLabel} {offset}ms · RTT {rtt}ms · 抖动 {jitter}ms · 缓冲 {buffer}ms · 晚包 {latePackets}'**
   String audioGroupSyncEvidence(
-      Object quality,
-      Object clockOffsetLabel,
-      Object offset,
-      Object rtt,
-      Object jitter,
-      Object buffer,
-      Object latePackets);
+    Object quality,
+    Object clockOffsetLabel,
+    Object offset,
+    Object rtt,
+    Object jitter,
+    Object buffer,
+    Object latePackets,
+  );
 
   /// No description provided for @audioGroupSyncEvidenceCompact.
   ///
   /// In zh, this message translates to:
   /// **'{quality} · {latencyLabel}{rtt} · {jitterLabel}{jitter} · {bufferLabel}{buffer} · {latePacketLabel}{latePackets}'**
   String audioGroupSyncEvidenceCompact(
-      Object quality,
-      Object latencyLabel,
-      Object rtt,
-      Object jitterLabel,
-      Object jitter,
-      Object bufferLabel,
-      Object buffer,
-      Object latePacketLabel,
-      Object latePackets);
+    Object quality,
+    Object latencyLabel,
+    Object rtt,
+    Object jitterLabel,
+    Object jitter,
+    Object bufferLabel,
+    Object buffer,
+    Object latePacketLabel,
+    Object latePackets,
+  );
 
   /// No description provided for @audioShareFailed.
   ///
@@ -1414,6 +1467,822 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'新消息与提醒'**
   String get notificationChannelGeneralDesc;
+
+  /// No description provided for @emptyAppsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可用应用'**
+  String get emptyAppsTitle;
+
+  /// No description provided for @emptyAppsSearchTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到应用'**
+  String get emptyAppsSearchTitle;
+
+  /// No description provided for @fileDropRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法发送这些文件'**
+  String get fileDropRejected;
+
+  /// No description provided for @validationRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'此项不能为空'**
+  String get validationRequired;
+
+  /// No description provided for @validationNicknameRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入昵称'**
+  String get validationNicknameRequired;
+
+  /// No description provided for @validationNicknameTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'昵称不能超过 64 个字符'**
+  String get validationNicknameTooLong;
+
+  /// No description provided for @validationHostRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入主机名或 IP 地址'**
+  String get validationHostRequired;
+
+  /// No description provided for @validationHostInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的 IPv4、IPv6、.local 或主机名'**
+  String get validationHostInvalid;
+
+  /// No description provided for @validationPortInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入 1001 到 65535 之间的端口'**
+  String get validationPortInvalid;
+
+  /// No description provided for @settingsSectionDeviceAppearance.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备与外观'**
+  String get settingsSectionDeviceAppearance;
+
+  /// No description provided for @settingsSectionDeviceAppearanceDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称、主题和本机在附近设备上的显示方式'**
+  String get settingsSectionDeviceAppearanceDesc;
+
+  /// No description provided for @settingsSectionConnectionTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接与传输'**
+  String get settingsSectionConnectionTransfer;
+
+  /// No description provided for @settingsSectionConnectionTransferDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务端口、文件保存和可信设备连接'**
+  String get settingsSectionConnectionTransferDesc;
+
+  /// No description provided for @settingsSectionSystemBehavior.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统行为'**
+  String get settingsSectionSystemBehavior;
+
+  /// No description provided for @settingsSectionSystemBehaviorDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动、后台和窗口行为'**
+  String get settingsSectionSystemBehaviorDesc;
+
+  /// No description provided for @settingsSectionPermissionsSharing.
+  ///
+  /// In zh, this message translates to:
+  /// **'权限与共享'**
+  String get settingsSectionPermissionsSharing;
+
+  /// No description provided for @settingsSectionPermissionsSharingDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板、信任、音频和键鼠权限'**
+  String get settingsSectionPermissionsSharingDesc;
+
+  /// No description provided for @settingsSectionMobileIntegration.
+  ///
+  /// In zh, this message translates to:
+  /// **'移动端集成'**
+  String get settingsSectionMobileIntegration;
+
+  /// No description provided for @settingsSectionMobileIntegrationDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台连接和电池行为'**
+  String get settingsSectionMobileIntegrationDesc;
+
+  /// No description provided for @settingsSectionNotificationForwarding.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知转发'**
+  String get settingsSectionNotificationForwarding;
+
+  /// No description provided for @settingsSectionNotificationForwardingDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'Android 通知处理和验证码辅助'**
+  String get settingsSectionNotificationForwardingDesc;
+
+  /// No description provided for @settingsSectionLanguageFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'语言与文件'**
+  String get settingsSectionLanguageFiles;
+
+  /// No description provided for @settingsSectionLanguageFilesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'语言、保存目录和应用信息'**
+  String get settingsSectionLanguageFilesDesc;
+
+  /// No description provided for @settingsSaveDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存目录'**
+  String get settingsSaveDirectory;
+
+  /// No description provided for @settingsChangeDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'更改保存目录'**
+  String get settingsChangeDirectory;
+
+  /// No description provided for @settingsOpenDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开保存目录'**
+  String get settingsOpenDirectory;
+
+  /// No description provided for @settingsVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get settingsVersion;
+
+  /// No description provided for @appListSearchPlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索应用'**
+  String get appListSearchPlaceholder;
+
+  /// No description provided for @appListClearSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除应用搜索'**
+  String get appListClearSearch;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消全选'**
+  String get deselectAll;
+
+  /// No description provided for @settingsLoadFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法加载设置'**
+  String get settingsLoadFailedTitle;
+
+  /// No description provided for @settingsLoadFailedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查本机应用服务后重试。'**
+  String get settingsLoadFailedBody;
+
+  /// No description provided for @appListLoadFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法加载应用'**
+  String get appListLoadFailedTitle;
+
+  /// No description provided for @appListLoadFailedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查应用访问权限后重试。'**
+  String get appListLoadFailedBody;
+
+  /// No description provided for @appListSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存通知应用选择'**
+  String get appListSaveFailed;
+
+  /// No description provided for @notificationApps.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知应用'**
+  String get notificationApps;
+
+  /// No description provided for @notificationAppsSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0{尚未选择应用} other{已选择 {count} 个应用}}'**
+  String notificationAppsSelected(int count);
+
+  /// No description provided for @notificationAppsDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启通知转发后可选择应用'**
+  String get notificationAppsDisabled;
+
+  /// No description provided for @notificationForwardingUpdateFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法更新通知转发，请重试'**
+  String get notificationForwardingUpdateFailed;
+
+  /// No description provided for @dangerousActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'危险操作'**
+  String get dangerousActions;
+
+  /// No description provided for @pairingNewDeviceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对新设备'**
+  String get pairingNewDeviceTitle;
+
+  /// No description provided for @pairingNewDeviceDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 请求建立可信连接'**
+  String pairingNewDeviceDescription(String device);
+
+  /// No description provided for @pairingIdentityChangedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备身份已变化'**
+  String get pairingIdentityChangedTitle;
+
+  /// No description provided for @pairingIdentityChangedDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的身份公钥与上次配对不同。仅在你确认设备已重装或重置后继续'**
+  String pairingIdentityChangedDescription(String device);
+
+  /// No description provided for @pairingLegacyTrustTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新确认可信设备'**
+  String get pairingLegacyTrustTitle;
+
+  /// No description provided for @pairingLegacyTrustDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 来自旧版信任记录，需要重新配对以绑定设备身份'**
+  String pairingLegacyTrustDescription(String device);
+
+  /// No description provided for @pairingCompareCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确认两台设备显示相同的 6 位数字'**
+  String get pairingCompareCode;
+
+  /// No description provided for @pairingNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code} · 请与 {device} 核对'**
+  String pairingNotificationBody(String device, String code);
+
+  /// No description provided for @pairingInitiatorNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code} · 等待 {device} 确认'**
+  String pairingInitiatorNotificationBody(String device, String code);
+
+  /// No description provided for @pairingIdentityChangedNotificationBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code} · {device} 的身份已变化，请打开 App 查看'**
+  String pairingIdentityChangedNotificationBody(String device, String code);
+
+  /// No description provided for @pairingCodeSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对码 {code}'**
+  String pairingCodeSemantics(String code);
+
+  /// No description provided for @pairingReject.
+  ///
+  /// In zh, this message translates to:
+  /// **'拒绝'**
+  String get pairingReject;
+
+  /// No description provided for @pairingApprove.
+  ///
+  /// In zh, this message translates to:
+  /// **'数字一致'**
+  String get pairingApprove;
+
+  /// No description provided for @pairingViewDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看详情'**
+  String get pairingViewDetails;
+
+  /// No description provided for @pairingUpgradeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方版本过低，请升级 Whisper 后重试'**
+  String get pairingUpgradeRequired;
+
+  /// No description provided for @pairingExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对请求已过期'**
+  String get pairingExpired;
+
+  /// No description provided for @pairingRejectedByPeer.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方拒绝了连接请求'**
+  String get pairingRejectedByPeer;
+
+  /// No description provided for @pairingEncryptionNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对后，文本、文件、剪贴板和控制数据均端到端加密'**
+  String get pairingEncryptionNotice;
+
+  /// No description provided for @e2eeTrustedConnection.
+  ///
+  /// In zh, this message translates to:
+  /// **'端到端加密 · 可信设备'**
+  String get e2eeTrustedConnection;
+
+  /// No description provided for @e2eeEncryptedConnection.
+  ///
+  /// In zh, this message translates to:
+  /// **'端到端加密连接'**
+  String get e2eeEncryptedConnection;
+
+  /// No description provided for @transferAssistantTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输助手'**
+  String get transferAssistantTitle;
+
+  /// No description provided for @transferAssistantSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索文本消息'**
+  String get transferAssistantSearchHint;
+
+  /// No description provided for @transferAssistantClearSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除搜索'**
+  String get transferAssistantClearSearch;
+
+  /// No description provided for @transferAssistantSearchResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索结果'**
+  String get transferAssistantSearchResults;
+
+  /// No description provided for @transferAssistantFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏文本'**
+  String get transferAssistantFavorites;
+
+  /// No description provided for @transferAssistantRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近文本'**
+  String get transferAssistantRecent;
+
+  /// No description provided for @transferAssistantNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到匹配的文本'**
+  String get transferAssistantNoResults;
+
+  /// No description provided for @transferAssistantNoFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有收藏文本'**
+  String get transferAssistantNoFavorites;
+
+  /// No description provided for @transferAssistantNoRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有文本消息'**
+  String get transferAssistantNoRecent;
+
+  /// No description provided for @transferAssistantIncoming.
+  ///
+  /// In zh, this message translates to:
+  /// **'收到'**
+  String get transferAssistantIncoming;
+
+  /// No description provided for @transferAssistantOutgoing.
+  ///
+  /// In zh, this message translates to:
+  /// **'发出'**
+  String get transferAssistantOutgoing;
+
+  /// No description provided for @transferAssistantCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制文本'**
+  String get transferAssistantCopy;
+
+  /// No description provided for @transferAssistantFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏文本'**
+  String get transferAssistantFavorite;
+
+  /// No description provided for @transferAssistantUnfavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get transferAssistantUnfavorite;
+
+  /// No description provided for @transferAssistantLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法加载文本消息'**
+  String get transferAssistantLoadFailed;
+
+  /// No description provided for @transferAssistantCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制文本'**
+  String get transferAssistantCopied;
+
+  /// No description provided for @transferAssistantCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法复制文本'**
+  String get transferAssistantCopyFailed;
+
+  /// No description provided for @transferAssistantFavoriteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法更新收藏，请重试'**
+  String get transferAssistantFavoriteFailed;
+
+  /// No description provided for @qrPairingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码连接'**
+  String get qrPairingTitle;
+
+  /// No description provided for @qrMyCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的二维码'**
+  String get qrMyCode;
+
+  /// No description provided for @qrScanCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫码连接'**
+  String get qrScanCode;
+
+  /// No description provided for @qrShowCodeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'让另一台设备扫描此二维码，地址和设备身份会同时核验'**
+  String get qrShowCodeHint;
+
+  /// No description provided for @qrFingerprint.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份指纹 {fingerprint}'**
+  String qrFingerprint(String fingerprint);
+
+  /// No description provided for @qrWifiUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到可用的局域网地址，请先连接 Wi-Fi 再刷新二维码'**
+  String get qrWifiUnavailable;
+
+  /// No description provided for @qrCopyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制连接信息'**
+  String get qrCopyLink;
+
+  /// No description provided for @qrLinkCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接信息已复制'**
+  String get qrLinkCopied;
+
+  /// No description provided for @qrScanHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫描对方 Whisper 中显示的二维码'**
+  String get qrScanHint;
+
+  /// No description provided for @qrCameraUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法使用相机，请在系统设置中允许 Whisper 访问相机'**
+  String get qrCameraUnavailable;
+
+  /// No description provided for @qrToggleTorch.
+  ///
+  /// In zh, this message translates to:
+  /// **'开关手电筒'**
+  String get qrToggleTorch;
+
+  /// No description provided for @qrSwitchCamera.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换相机'**
+  String get qrSwitchCamera;
+
+  /// No description provided for @qrCannotPairSelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'不能连接当前设备，请扫描另一台设备的二维码'**
+  String get qrCannotPairSelf;
+
+  /// No description provided for @qrInvalidCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'这不是有效的 Whisper 二维码，请让对方重新出示'**
+  String get qrInvalidCode;
+
+  /// No description provided for @connectionDiagnosticTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接诊断'**
+  String get connectionDiagnosticTitle;
+
+  /// No description provided for @connectionDiagnosticWifi.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法到达该设备。请确认两台设备连接同一 Wi-Fi，并关闭访客网络或 AP 隔离后重试。'**
+  String get connectionDiagnosticWifi;
+
+  /// No description provided for @connectionDiagnosticAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码中的局域网地址无效或已经变化。请让对方重新打开二维码后再扫描。'**
+  String get connectionDiagnosticAddress;
+
+  /// No description provided for @connectionDiagnosticService.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址已找到，但 Whisper 服务没有响应。请在对方设备打开 Whisper，并确认局域网服务正在运行。'**
+  String get connectionDiagnosticService;
+
+  /// No description provided for @connectionDiagnosticFirewall.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接超时。请在两台设备的系统防火墙中允许 Whisper 访问局域网后重试。'**
+  String get connectionDiagnosticFirewall;
+
+  /// No description provided for @connectionDiagnosticIdentity.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备身份与二维码不一致，Whisper 已停止连接。请在对方设备重新出示二维码，切勿绕过此检查。'**
+  String get connectionDiagnosticIdentity;
+
+  /// No description provided for @connectionDiagnosticVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'两台设备的协议版本不兼容，请将 Whisper 更新到相同的新版本后重试。'**
+  String get connectionDiagnosticVersion;
+
+  /// No description provided for @connectionDiagnosticPairing.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。'**
+  String get connectionDiagnosticPairing;
+
+  /// No description provided for @androidSystemShareTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送分享内容'**
+  String get androidSystemShareTitle;
+
+  /// No description provided for @androidSystemShareChooseTrustedDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择可信设备，确认前不会发送任何内容'**
+  String get androidSystemShareChooseTrustedDevice;
+
+  /// No description provided for @androidSystemShareOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线'**
+  String get androidSystemShareOnline;
+
+  /// No description provided for @androidSystemShareOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线'**
+  String get androidSystemShareOffline;
+
+  /// No description provided for @androidSystemShareNoTrustedDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可选的可信设备，请先完成配对并确认设备身份'**
+  String get androidSystemShareNoTrustedDevices;
+
+  /// No description provided for @androidSystemShareConfirmTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认发送目标'**
+  String get androidSystemShareConfirmTarget;
+
+  /// No description provided for @androidSystemShareWaitingForDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择 {device}，连接后将自动发送'**
+  String androidSystemShareWaitingForDevice(String device);
+
+  /// No description provided for @androidSystemShareSendingTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在发送给 {device}'**
+  String androidSystemShareSendingTo(String device);
+
+  /// No description provided for @androidSystemShareSentTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送给 {device}'**
+  String androidSystemShareSentTo(String device);
+
+  /// No description provided for @androidSystemShareFailedRetained.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送失败，分享内容已保留'**
+  String get androidSystemShareFailedRetained;
+
+  /// No description provided for @androidSystemShareStillPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享内容仍在等待选择设备'**
+  String get androidSystemShareStillPending;
+
+  /// No description provided for @androidSystemShareQueueFull.
+  ///
+  /// In zh, this message translates to:
+  /// **'队列已满，新内容未加入，请先处理已有分享'**
+  String get androidSystemShareQueueFull;
+
+  /// No description provided for @androidSystemShareRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享内容超过限制或无法完整读取，未加入队列'**
+  String get androidSystemShareRejected;
+
+  /// No description provided for @androidSystemShareTargetNeedsReselection.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标设备身份已变化或不再可信，请重新选择'**
+  String get androidSystemShareTargetNeedsReselection;
+
+  /// No description provided for @androidSystemShareChooseAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择设备'**
+  String get androidSystemShareChooseAction;
+
+  /// No description provided for @androidSystemShareMoreFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有 {count} 个文件'**
+  String androidSystemShareMoreFiles(int count);
+
+  /// No description provided for @desktopQuickSendTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷发送'**
+  String get desktopQuickSendTitle;
+
+  /// No description provided for @desktopQuickSendSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{textCount} 条文本 · {fileCount} 个文件'**
+  String desktopQuickSendSummary(int textCount, int fileCount);
+
+  /// No description provided for @desktopQuickSendMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'还有 {count} 项'**
+  String desktopQuickSendMore(int count);
+
+  /// No description provided for @desktopQuickSendFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个文件'**
+  String desktopQuickSendFiles(int count);
+
+  /// No description provided for @desktopQuickSendChooseDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送到可信设备'**
+  String get desktopQuickSendChooseDevice;
+
+  /// No description provided for @desktopQuickSendNoTrustedDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可信设备，请先完成配对'**
+  String get desktopQuickSendNoTrustedDevices;
+
+  /// No description provided for @desktopQuickSendDeviceOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备离线，内容会保留到重新连接'**
+  String get desktopQuickSendDeviceOffline;
+
+  /// No description provided for @desktopQuickSendLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'稍后'**
+  String get desktopQuickSendLater;
+
+  /// No description provided for @desktopQuickSendSend.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get desktopQuickSendSend;
+
+  /// No description provided for @desktopQuickSendSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已加入加密传输队列'**
+  String get desktopQuickSendSent;
+
+  /// No description provided for @desktopQuickSendFailedRetained.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送未完成，内容已保留'**
+  String get desktopQuickSendFailedRetained;
+
+  /// No description provided for @desktopQuickSendEmptyClipboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板中没有可发送的内容'**
+  String get desktopQuickSendEmptyClipboard;
+
+  /// No description provided for @desktopQuickSendShortcutUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局发送快捷键被其他应用占用'**
+  String get desktopQuickSendShortcutUnavailable;
+
+  /// No description provided for @desktopQuickSendDraftLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷发送已满，新内容未加入，请先处理已有内容'**
+  String get desktopQuickSendDraftLimit;
+
+  /// No description provided for @desktopQuickSendFileLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'一次选择的文件过多，新内容未加入'**
+  String get desktopQuickSendFileLimit;
+
+  /// No description provided for @desktopQuickSendTextLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'文本过长，新内容未加入'**
+  String get desktopQuickSendTextLimit;
+
+  /// No description provided for @desktopQuickSendInvalidPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件路径无效或过长，新内容未加入'**
+  String get desktopQuickSendInvalidPath;
+
+  /// No description provided for @desktopQuickSendClipboardSnapshotUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法立即读取剪贴板，未加入可能已变化的内容'**
+  String get desktopQuickSendClipboardSnapshotUnavailable;
+
+  /// No description provided for @desktopQuickSendTargetConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分内容已发送到另一台设备，请选择原设备继续'**
+  String get desktopQuickSendTargetConflict;
+
+  /// No description provided for @desktopQuickSendTargetNeedsReselection.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标设备身份已变化或不再可信，内容已保留，请重新选择'**
+  String get desktopQuickSendTargetNeedsReselection;
 }
 
 class _AppLocalizationsDelegate
@@ -1445,8 +2314,9 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   }
 
   throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }
