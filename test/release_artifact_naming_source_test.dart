@@ -59,6 +59,7 @@ void main() {
     expect(workflow, contains('      - build-on-macos'));
     expect(workflow, contains('      - build-on-windows'));
     expect(workflow, contains('      - build-on-linux'));
+    expect(workflow, contains('      - build-on-android'));
     expect(workflow, contains('files: release-assets/**/*'));
     expect(workflow, contains('overwrite_files: true'));
     expect(releaseActions.length, 1);
