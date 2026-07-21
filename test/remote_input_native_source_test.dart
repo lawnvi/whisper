@@ -314,14 +314,15 @@ void main() {
       expect(source, contains('isInjectedModifierKey(Int(keyCode))'));
     });
 
-    test(
-        'uses system input source shortcut for remote Caps Lock with HID fallback',
-        () {
-      expect(source, contains('import Carbon.HIToolbox'));
+    test('hides the Caps Lock input-source shortcut from foreground apps', () {
       expect(source, contains('CGEventSource(stateID: .hidSystemState)'));
       expect(source, contains('handleCapsLockKey()'));
-      expect(source, contains('hasMultipleSelectableKeyboardInputSources()'));
       expect(source, contains('postInputSourceShortcut()'));
+      expect(source, contains('ensureShortcutSuppressionTap()'));
+      expect(source, contains('.cgAnnotatedSessionEventTap'));
+      expect(source, contains('remoteInputShortcutEventMarker'));
+      expect(source, contains('.eventSourceUserData'));
+      expect(source, contains('remoteInputShortcutSuppressionCallback'));
       expect(source, contains('CGKeyCode(59)'));
       expect(source, contains('CGKeyCode(49)'));
       expect(source, contains('.maskControl'));
@@ -337,8 +338,13 @@ void main() {
       expect(source, contains('injectedCapsLockEnabled.toggle()'));
       expect(source, contains('let nextFlags = injectedCapsLockEnabled'));
       expect(source, contains('.maskAlphaShift'));
-      expect(source, contains('TISCreateInputSourceList'));
       expect(source, isNot(contains('TISSelectInputSource')));
+
+      final captureHandler = RegExp(
+        r'fileprivate func handleEvent[\s\S]*?\n  private func encodePayload',
+      ).firstMatch(source)!.group(0)!;
+      expect(captureHandler, contains('remoteInputShortcutEventMarker'));
+      expect(captureHandler, contains('return false'));
 
       final capsLockEvent = RegExp(
         r'private func postCapsLockEvent\([\s\S]*?\n  private func emitInjectedDiagnostic',
@@ -355,12 +361,28 @@ void main() {
       expect(source, contains('"down": isCapturedCapsLockEvent'));
     });
 
-    test('does not deduplicate captured Caps Lock events without evidence', () {
-      expect(source, isNot(contains('lastCapturedCapsLockTimeMicros')));
-      expect(source, isNot(contains('capturedCapsLockDuplicateWindowMicros')));
-      expect(source, isNot(contains('shouldEmitCapturedCapsLockEvent')));
+    test('deduplicates the paired 57 and 255 events from one Caps Lock tap',
+        () {
+      expect(source, contains('lastCapturedCapsLockRawKeyCode'));
+      expect(source, contains('lastCapturedCapsLockTimestamp'));
+      expect(source, contains('shouldSkipCapturedCapsLockCompanionEvent'));
+      expect(source, contains('rawKeyCode == 57 || rawKeyCode == 255'));
+      expect(source, contains('previousRawKeyCode != rawKeyCode'));
       expect(
-          source, isNot(contains('mac captured duplicate caps lock skipped')));
+        source,
+        contains('timestamp - previousTimestamp <= 500_000_000'),
+      );
+      expect(source, contains('lastCapturedCapsLockRawKeyCode = -1'));
+    });
+
+    test('deduplicates legacy Caps Lock companion packets at the sink', () {
+      expect(source, contains('lastInjectedCapsLockTimeMicros'));
+      expect(source, contains('shouldHandleInjectedCapsLock'));
+      expect(
+        source,
+        contains('eventTimeMicros - previousTimeMicros <= 300_000'),
+      );
+      expect(source, contains('.injectionCompanion'));
     });
 
     test('emits allowlisted diagnostics for key injection and caps switching',
