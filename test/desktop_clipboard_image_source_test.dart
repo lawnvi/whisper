@@ -86,6 +86,7 @@ void main() {
     expect(plugin, contains('readImagePng'));
     expect(plugin, contains('readFilePaths'));
     expect(plugin, contains('CF_HDROP'));
+    expect(plugin, contains('#include <shlobj.h>'));
     expect(plugin, contains('DragQueryFileW'));
     expect(plugin, contains('CF_DIBV5'));
     expect(plugin, contains('CF_DIB'));
@@ -109,6 +110,8 @@ void main() {
     expect(plugin, contains('readImagePng'));
     expect(plugin, contains('readFilePaths'));
     expect(plugin, contains('gtk_clipboard_wait_for_uris'));
+    expect(plugin, contains('gtk_clipboard_set_with_data'));
+    expect(plugin, contains('gtk_selection_data_set_uris'));
     expect(plugin, contains('g_filename_from_uri'));
     expect(plugin, contains('gtk_clipboard_wait_for_image'));
     expect(plugin, contains('gdk_pixbuf_save_to_buffer'));

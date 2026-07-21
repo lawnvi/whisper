@@ -12,6 +12,43 @@ namespace {
 constexpr char kDesktopClipboardImageChannel[] =
     "com.vireen.whisper/desktop_clipboard_image";
 
+constexpr guint kUriListTarget = 0;
+constexpr guint kGnomeCopiedFilesTarget = 1;
+
+GtkTargetEntry kFileClipboardTargets[] = {
+    {const_cast<gchar*>("text/uri-list"), 0, kUriListTarget},
+    {const_cast<gchar*>("x-special/gnome-copied-files"), 0,
+     kGnomeCopiedFilesTarget},
+};
+
+void ProvideFileUris(GtkClipboard*,
+                     GtkSelectionData* selection_data,
+                     guint target,
+                     gpointer user_data) {
+  auto** uris = static_cast<gchar**>(user_data);
+  if (target == kUriListTarget) {
+    gtk_selection_data_set_uris(selection_data, uris);
+    return;
+  }
+
+  GString* copied_files = g_string_new("copy\n");
+  for (gchar** uri = uris; *uri != nullptr; uri++) {
+    g_string_append(copied_files, *uri);
+    if (*(uri + 1) != nullptr) {
+      g_string_append_c(copied_files, '\n');
+    }
+  }
+  gtk_selection_data_set(
+      selection_data, gtk_selection_data_get_target(selection_data), 8,
+      reinterpret_cast<const guchar*>(copied_files->str),
+      static_cast<gint>(copied_files->len));
+  g_string_free(copied_files, TRUE);
+}
+
+void ClearFileUris(GtkClipboard*, gpointer user_data) {
+  g_strfreev(static_cast<gchar**>(user_data));
+}
+
 FlValue* ReadImagePng() {
   GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
   if (clipboard == nullptr) {
@@ -104,8 +141,17 @@ bool WriteFilePaths(FlValue* arguments) {
     }
     gtk_clipboard_set_image(clipboard, pixbuf);
   } else {
-    gtk_clipboard_set_uris(clipboard,
-                           reinterpret_cast<gchar**>(uris->pdata));
+    auto** clipboard_uris = reinterpret_cast<gchar**>(
+        g_ptr_array_free(g_steal_pointer(&uris), FALSE));
+    if (!gtk_clipboard_set_with_data(
+            clipboard, kFileClipboardTargets,
+            G_N_ELEMENTS(kFileClipboardTargets), ProvideFileUris,
+            ClearFileUris, clipboard_uris)) {
+      g_strfreev(clipboard_uris);
+      return false;
+    }
+    gtk_clipboard_set_can_store(clipboard, kFileClipboardTargets,
+                                G_N_ELEMENTS(kFileClipboardTargets));
   }
   gtk_clipboard_store(clipboard);
   return true;

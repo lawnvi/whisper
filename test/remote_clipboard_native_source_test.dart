@@ -78,7 +78,8 @@ void main() {
       expect(mac, contains('pasteboard.writeObjects'));
       expect(windows, contains('SetClipboardData(CF_HDROP'));
       expect(windows, contains('call.method_name() == "writeFilePaths"'));
-      expect(linux, contains('gtk_clipboard_set_uris'));
+      expect(linux, contains('gtk_clipboard_set_with_data'));
+      expect(linux, contains('gtk_selection_data_set_uris'));
       expect(linux, contains('std::strcmp(method, "writeFilePaths")'));
     },
   );

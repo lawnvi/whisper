@@ -7,6 +7,7 @@
 #include <flutter/standard_method_codec.h>
 #include <objidl.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 
