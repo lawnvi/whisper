@@ -107,6 +107,16 @@ _authenticatedPair() async {
 }
 
 void main() {
+  test('server claims only one visible local approval prompt', () async {
+    final pair = await _reachClientApproval();
+    addTearDown(pair.client.close);
+    addTearDown(pair.server.close);
+    await pair.server.receiveProof(await pair.client.createProof());
+
+    expect(pair.server.tryClaimLocalApprovalPrompt(), isTrue);
+    expect(pair.server.tryClaimLocalApprovalPrompt(), isFalse);
+  });
+
   test('roles begin in distinct pre-auth phases', () async {
     final client = await _session(
       role: PeerSocketRole.client,

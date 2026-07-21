@@ -346,7 +346,7 @@
   "remoteInputPeerUnsupported": "当前连接设备不支持键鼠共享",
   "remoteInputRequiresMutualTrust": "键鼠共享需要互信设备",
   "remoteInputPeerMustTrustThisDevice": "对端还没有信任本机，请先在对端信任本机后再共享键鼠",
-  "remoteInputLayoutRequired": "请先在设备设置里把对端屏幕贴到本机边缘",
+  "remoteInputLayoutRequired": "请先在键鼠工作区把对端屏幕贴到本机边缘",
   "remoteInputEnabledMoveToEdge": "键鼠共享已启用，移动到屏幕边缘开始控制对端",
   "remoteInputFailed": "键鼠共享失败：{error}",
   "@remoteInputFailed": {
@@ -356,42 +356,8 @@
       }
     }
   },
-  "remoteInputAutoModeSetting": "键鼠共享自动模式：{mode}",
-  "@remoteInputAutoModeSetting": {
-    "placeholders": {
-      "mode": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteInputLayoutSetting": "屏幕排列：{edge}",
-  "@remoteInputLayoutSetting": {
-    "placeholders": {
-      "edge": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteInputAutoModeTitle": "键鼠共享自动模式",
-  "remoteInputAutoModeOff": "关闭",
-  "remoteInputAutoModeSource": "本机控制对端",
-  "remoteInputAutoModeSink": "对端控制本机",
   "remoteInputLayoutTitle": "屏幕排列",
-  "remoteInputCurrentEdge": "当前：{edge}",
-  "@remoteInputCurrentEdge": {
-    "placeholders": {
-      "edge": {
-        "type": "String"
-      }
-    }
-  },
-  "remoteInputLayoutSave": "保存",
-  "remoteInputSnapLeft": "贴左",
-  "remoteInputSnapRight": "贴右",
-  "remoteInputSnapTop": "贴上",
-  "remoteInputSnapBottom": "贴下",
   "remoteInputLocalScreen": "本机",
-  "remoteInputPeerScreen": "对端",
   "remoteInputEdgeLeft": "左侧",
   "remoteInputEdgeRight": "右侧",
   "remoteInputEdgeTop": "上方",
@@ -491,6 +457,14 @@
   "pairingNewDeviceTitle": "配对新设备",
   "pairingNewDeviceDescription": "{device} 请求建立可信连接",
   "@pairingNewDeviceDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingNewDeviceCompareCode": "{device} 请求连接，请确认数字一致",
+  "@pairingNewDeviceCompareCode": {
     "placeholders": {
       "device": {
         "type": "String"
@@ -688,5 +662,9 @@
   "desktopQuickSendInvalidPath": "文件路径无效或过长，新内容未加入",
   "desktopQuickSendClipboardSnapshotUnavailable": "无法立即读取剪贴板，未加入可能已变化的内容",
   "desktopQuickSendTargetConflict": "部分内容已发送到另一台设备，请选择原设备继续",
-  "desktopQuickSendTargetNeedsReselection": "目标设备身份已变化或不再可信，内容已保留，请重新选择"
+  "desktopQuickSendTargetNeedsReselection": "目标设备身份已变化或不再可信，内容已保留，请重新选择",
+  "chatTimestampYesterday": "昨天 {time}",
+  "@chatTimestampYesterday": {
+    "placeholders": { "time": { "type": "String" } }
+  }
 }

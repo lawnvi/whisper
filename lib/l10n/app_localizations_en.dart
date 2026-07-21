@@ -635,7 +635,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputLayoutRequired =>
-      'Place the peer screen against this device\'s edge in device settings first';
+      'Place the peer screen against this device\'s edge in the keyboard and mouse workspace first';
 
   @override
   String get remoteInputEnabledMoveToEdge =>
@@ -647,55 +647,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String remoteInputAutoModeSetting(String mode) {
-    return 'Keyboard and mouse sharing: $mode';
-  }
-
-  @override
-  String remoteInputLayoutSetting(String edge) {
-    return 'Screen layout: $edge';
-  }
-
-  @override
-  String get remoteInputAutoModeTitle => 'Keyboard and mouse sharing';
-
-  @override
-  String get remoteInputAutoModeOff => 'Off';
-
-  @override
-  String get remoteInputAutoModeSource => 'This device controls peer';
-
-  @override
-  String get remoteInputAutoModeSink => 'Peer controls this device';
-
-  @override
   String get remoteInputLayoutTitle => 'Screen layout';
 
   @override
-  String remoteInputCurrentEdge(String edge) {
-    return 'Current: $edge';
-  }
-
-  @override
-  String get remoteInputLayoutSave => 'Save';
-
-  @override
-  String get remoteInputSnapLeft => 'Snap left';
-
-  @override
-  String get remoteInputSnapRight => 'Snap right';
-
-  @override
-  String get remoteInputSnapTop => 'Snap top';
-
-  @override
-  String get remoteInputSnapBottom => 'Snap bottom';
-
-  @override
   String get remoteInputLocalScreen => 'This device';
-
-  @override
-  String get remoteInputPeerScreen => 'Peer';
 
   @override
   String get remoteInputEdgeLeft => 'Left';
@@ -959,6 +914,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String pairingNewDeviceDescription(String device) {
     return '$device wants to establish a trusted connection';
+  }
+
+  @override
+  String pairingNewDeviceCompareCode(String device) {
+    return '$device wants to connect. Confirm the numbers match';
   }
 
   @override
@@ -1306,4 +1266,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get desktopQuickSendTargetNeedsReselection =>
       'The target identity changed or is no longer trusted. The content was retained; select a device again';
+
+  @override
+  String chatTimestampYesterday(String time) {
+    return 'Yesterday $time';
+  }
 }

@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -11,7 +14,12 @@ import 'package:whisper/widget/context_menu_region.dart';
 
 class ChatMessageList extends StatefulWidget {
   final Widget Function(MessageData message, bool isOpponent) buildFileMessage;
-  final Widget Function(MessageData message, bool isOpponent) buildTextMessage;
+  final Widget Function(
+    MessageData message,
+    bool isOpponent,
+    Widget? trailingAction,
+  )
+  buildTextMessage;
   final ScrollController controller;
   final GlobalKey<AnimatedListState> listKey;
   final List<MessageData> messages;
@@ -46,8 +54,16 @@ class ChatMessageList extends StatefulWidget {
 
 class _ChatMessageListState extends State<ChatMessageList> {
   final Set<int> _selectedMessageIds = <int>{};
+  Timer? _copyResetTimer;
+  int? _copiedMessageId;
   bool _selectionMode = false;
   bool _deleting = false;
+
+  @override
+  void dispose() {
+    _copyResetTimer?.cancel();
+    super.dispose();
+  }
 
   void _setSelectionMode(bool active) {
     if (_selectionMode == active) {
@@ -160,35 +176,45 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final isFile = message.type == MessageEnum.File;
     final isSelected = _selectedMessageIds.contains(message.id);
     final colorScheme = Theme.of(context).colorScheme;
+    final showTimestamp = shouldShowChatTimestamp(widget.messages, index);
 
     return FadeTransition(
       opacity: animation,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(14, 5, 14, 5),
+        child: Column(
           children: [
-            if (_selectionMode)
-              SizedBox(
-                width: 42,
-                height: 42,
-                child: Center(
-                  child: Checkbox(
-                    key: ValueKey('message-selection-${message.id}'),
-                    value: isSelected,
-                    shape: const CircleBorder(),
-                    side: BorderSide(color: colorScheme.outline),
-                    onChanged: (_) => _toggleSelection(message),
+            if (showTimestamp)
+              Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 10),
+                child: Text(
+                  formatChatTimestamp(context, message.timestamp),
+                  key: ValueKey<String>('message-time-${message.id}'),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
+                    fontSize: 12,
                   ),
                 ),
               ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: isOpponent
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.end,
-                children: [
-                  Container(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_selectionMode)
+                  SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: Center(
+                      child: Checkbox(
+                        key: ValueKey('message-selection-${message.id}'),
+                        value: isSelected,
+                        shape: const CircleBorder(),
+                        side: BorderSide(color: colorScheme.outline),
+                        onChanged: (_) => _toggleSelection(message),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Container(
                     alignment: isOpponent
                         ? Alignment.centerLeft
                         : Alignment.centerRight,
@@ -212,35 +238,19 @@ class _ChatMessageListState extends State<ChatMessageList> {
                         },
                         child: isFile
                             ? widget.buildFileMessage(message, isOpponent)
-                            : widget.buildTextMessage(message, isOpponent),
+                            : widget.buildTextMessage(
+                                message,
+                                isOpponent,
+                                _selectionMode ||
+                                        message.type != MessageEnum.Text
+                                    ? null
+                                    : _buildCopyButton(context, message),
+                              ),
                       ),
                     ),
                   ),
-                  SizedBox(height: isMobile() ? 1.5 : 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (message.type == MessageEnum.Text && isOpponent)
-                        _buildCopyButton(context, message),
-                      if (message.type == MessageEnum.Text && isOpponent)
-                        SizedBox(width: isMobile() ? 3 : 5),
-                      Text(
-                        formatTimestamp(message.timestamp),
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.8,
-                          ),
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (message.type == MessageEnum.Text && !isOpponent)
-                        SizedBox(width: isMobile() ? 3 : 5),
-                      if (message.type == MessageEnum.Text && !isOpponent)
-                        _buildCopyButton(context, message),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -262,7 +272,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
           icon: Icons.content_copy_rounded,
           onSelected: () {
             if (message.content?.isNotEmpty == true) {
-              widget.onCopyText(message.content!);
+              _copyMessage(message);
             }
           },
         ),
@@ -386,26 +396,99 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   Widget _buildCopyButton(BuildContext context, MessageData message) {
     final colorScheme = Theme.of(context).colorScheme;
-    return IconButton(
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints(
-        minWidth: isMobile() ? 18 : 20,
-        minHeight: isMobile() ? 18 : 20,
+    final copied = _copiedMessageId == message.id;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isMobile() ? 1 : 2),
+      child: IconButton(
+        key: ValueKey<String>('message-copy-${message.id}'),
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: BoxConstraints(
+          minWidth: isMobile() ? 18 : 20,
+          minHeight: isMobile() ? 18 : 20,
+        ),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          reverseDuration: const Duration(milliseconds: 140),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(scale: animation, child: child),
+          ),
+          child: Icon(
+            copied ? Icons.check_rounded : Icons.content_copy_rounded,
+            key: ValueKey<bool>(copied),
+            size: isMobile() ? 14 : 15,
+            color: copied
+                ? colorScheme.primary
+                : colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+          ),
+        ),
+        onPressed: () {
+          if (message.content?.isNotEmpty == true) {
+            _copyMessage(message);
+          }
+        },
       ),
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      hoverColor: Colors.transparent,
-      icon: Icon(
-        Icons.content_copy_rounded,
-        size: isMobile() ? 14 : 15,
-        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
-      ),
-      onPressed: () {
-        if (message.content?.isNotEmpty == true) {
-          widget.onCopyText(message.content!);
-        }
-      },
     );
   }
+
+  void _copyMessage(MessageData message) {
+    final content = message.content;
+    if (content == null || content.isEmpty) {
+      return;
+    }
+    widget.onCopyText(content);
+    HapticFeedback.selectionClick();
+    _copyResetTimer?.cancel();
+    setState(() => _copiedMessageId = message.id);
+    _copyResetTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted && _copiedMessageId == message.id) {
+        setState(() => _copiedMessageId = null);
+      }
+    });
+  }
+}
+
+const Duration chatTimestampClusterGap = Duration(minutes: 5);
+
+bool shouldShowChatTimestamp(List<MessageData> messages, int index) {
+  if (index < 0 || index >= messages.length) {
+    return false;
+  }
+  if (messages.length == 1 || index == messages.length - 1) {
+    return true;
+  }
+  final timestamp = messages[index].timestamp;
+  final olderTimestamp = messages[index + 1].timestamp;
+  return timestamp - olderTimestamp >= chatTimestampClusterGap.inSeconds;
+}
+
+String formatChatTimestamp(
+  BuildContext context,
+  int timestamp, {
+  DateTime? now,
+}) {
+  final locale = Localizations.localeOf(context).toLanguageTag();
+  final value = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+  final current = now ?? DateTime.now();
+  final valueDay = DateTime(value.year, value.month, value.day);
+  final currentDay = DateTime(current.year, current.month, current.day);
+  final dayDifference = currentDay.difference(valueDay).inDays;
+  final time = DateFormat.Hm(locale).format(value);
+  if (dayDifference == 0) {
+    return time;
+  }
+  if (dayDifference == 1) {
+    return AppLocalizations.of(context)!.chatTimestampYesterday(time);
+  }
+  if (dayDifference > 1 && dayDifference < 7) {
+    return '${DateFormat.E(locale).format(value)} $time';
+  }
+  final date = value.year == current.year
+      ? DateFormat.Md(locale).format(value)
+      : DateFormat.yMd(locale).format(value);
+  return '$date $time';
 }

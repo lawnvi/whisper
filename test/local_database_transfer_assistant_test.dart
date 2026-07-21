@@ -49,11 +49,25 @@ void main() {
       final newest = await database.insertMessageReturning(
         _message(content: 'latest note', timestamp: 6),
       );
+      await database.insertMessageReturning(
+        _message(
+          content: 'clipboard sync artifact',
+          timestamp: 7,
+          clipboard: true,
+        ),
+      );
 
       final recent = await database.searchTextMessagesForPeer('peer-a');
       expect(
         recent.map((result) => result.message.id),
         <int>[newest.id, quoted.id, 2, oldest.id],
+      );
+      expect(
+        await database.searchTextMessagesForPeer(
+          'peer-a',
+          query: 'clipboard sync artifact',
+        ),
+        isEmpty,
       );
       expect(
         (await database.searchTextMessagesForPeer(
@@ -230,13 +244,14 @@ MessageData _message({
   String receiver = 'local',
   MessageEnum type = MessageEnum.Text,
   int timestamp = 1,
+  bool clipboard = false,
 }) {
   return MessageData(
     id: 0,
     sender: sender,
     receiver: receiver,
     name: '',
-    clipboard: false,
+    clipboard: clipboard,
     size: 0,
     type: type,
     content: content,

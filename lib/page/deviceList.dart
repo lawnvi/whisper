@@ -27,6 +27,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/desktop_quick_send_hotkey.dart';
+import 'package:whisper/helper/desktop_window_attention.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local_network_permission.dart';
@@ -3405,17 +3406,31 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     final pairingQrController = _activePairingQrController;
-    unawaited(
-      showPairingDialog(
-        context,
-        request: request,
-        resolve: (allow) {
-          if (allow) {
-            pairingQrController?.dismiss();
-          }
-          resolve(allow);
-        },
-      ),
+    unawaited(_presentPairingRequest(request, resolve, pairingQrController));
+  }
+
+  Future<void> _presentPairingRequest(
+    PairingRequest request,
+    void Function(bool) resolve,
+    PairingQrDialogController? pairingQrController,
+  ) async {
+    await revealDesktopWindowForAttention();
+    if (request.presentation?.isDismissed == true) {
+      return;
+    }
+    if (!mounted) {
+      resolve(false);
+      return;
+    }
+    await showPairingDialog(
+      context,
+      request: request,
+      resolve: (allow) {
+        if (allow) {
+          pairingQrController?.dismiss();
+        }
+        resolve(allow);
+      },
     );
   }
 

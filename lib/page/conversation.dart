@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,7 +16,9 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/helper/desktop_window_attention.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -147,7 +150,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   int _clipboardPasteGeneration = 0;
   List<ClipboardFileDraft> _pendingClipboardFiles =
       const <ClipboardFileDraft>[];
-  ClipboardImageDraft? _pendingClipboardImage;
+  List<ClipboardImageDraft> _pendingClipboardImages =
+      const <ClipboardImageDraft>[];
 
   bool get _isCurrentRoute {
     final route = ModalRoute.of(context);
@@ -1108,7 +1112,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       controller: _textController,
       focusNode: _composerFocusNode,
       pendingClipboardFiles: _pendingClipboardFiles,
-      pendingClipboardImage: _pendingClipboardImage,
+      pendingClipboardImages: _pendingClipboardImages,
       onPickFiles: _pickFilesAndSend,
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
@@ -1117,8 +1121,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       onPasteClipboard: _pasteClipboard,
       onSendClipboardFiles: _sendPendingClipboardFiles,
       onClearClipboardFiles: _clearPendingClipboardFiles,
-      onSendClipboardImage: _sendPendingClipboardImage,
-      onClearClipboardImage: _clearPendingClipboardImage,
+      onSendClipboardImages: _sendPendingClipboardImages,
+      onRemoveClipboardImage: _removePendingClipboardImage,
     );
   }
 
@@ -1145,9 +1149,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
         return null;
       }
       if (drafts.isNotEmpty) {
+        final imageDrafts = drafts
+            .where(
+              (draft) =>
+                  mediaFileKindFor(name: draft.fileName, path: draft.path) ==
+                  MediaFileKind.image,
+            )
+            .map(
+              (draft) => ClipboardImageDraft(
+                path: draft.path,
+                fileName: draft.fileName,
+                size: draft.size,
+                bytes: Uint8List(0),
+              ),
+            )
+            .toList(growable: false);
+        if (imageDrafts.length == drafts.length) {
+          setState(() {
+            _pendingClipboardFiles = const <ClipboardFileDraft>[];
+            _pendingClipboardImages = <ClipboardImageDraft>[
+              ..._pendingClipboardImages,
+              ...imageDrafts,
+            ];
+          });
+          return null;
+        }
         setState(() {
           _pendingClipboardFiles = drafts;
-          _pendingClipboardImage = null;
+          _pendingClipboardImages = const <ClipboardImageDraft>[];
         });
         return null;
       }
@@ -1159,7 +1188,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       if (draft != null) {
         setState(() {
           _pendingClipboardFiles = const <ClipboardFileDraft>[];
-          _pendingClipboardImage = draft;
+          _pendingClipboardImages = <ClipboardImageDraft>[
+            ..._pendingClipboardImages,
+            draft,
+          ];
         });
         return null;
       }
@@ -1185,13 +1217,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
     });
   }
 
-  void _clearPendingClipboardImage() {
+  void _removePendingClipboardImage(int index) {
     _clipboardPasteGeneration += 1;
-    if (_pendingClipboardImage == null) {
+    if (index < 0 || index >= _pendingClipboardImages.length) {
       return;
     }
     setState(() {
-      _pendingClipboardImage = null;
+      _pendingClipboardImages = List<ClipboardImageDraft>.of(
+        _pendingClipboardImages,
+      )..removeAt(index);
     });
   }
 
@@ -1243,24 +1277,34 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  Future<void> _sendPendingClipboardImage() async {
-    final draft = _pendingClipboardImage;
-    if (draft == null || !_canSendCurrentDevice || _isLocalhost) {
+  Future<void> _sendPendingClipboardImages() async {
+    final drafts = List<ClipboardImageDraft>.of(_pendingClipboardImages);
+    if (drafts.isEmpty || !_canSendCurrentDevice || _isLocalhost) {
       return;
     }
     setState(() {
       _isLoading = true;
     });
+    final sentPaths = <String>{};
     try {
-      final sent = await socketManager.sendFileTo(device.uid, draft.path);
+      var failed = false;
+      for (final draft in drafts) {
+        final sent = await socketManager.sendFileTo(device.uid, draft.path);
+        if (!sent) {
+          failed = true;
+          break;
+        }
+        sentPaths.add(draft.path);
+      }
       if (!mounted) {
         return;
       }
-      if (sent) {
-        setState(() {
-          _pendingClipboardImage = null;
-        });
-      } else {
+      setState(() {
+        _pendingClipboardImages = _pendingClipboardImages
+            .where((draft) => !sentPaths.contains(draft.path))
+            .toList(growable: false);
+      });
+      if (failed) {
         showAppToast(l10n.clipboardImageSendFailed);
       }
     } catch (error) {
@@ -1269,6 +1313,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error,
       );
       if (mounted) {
+        setState(() {
+          _pendingClipboardImages = _pendingClipboardImages
+              .where((draft) => !sentPaths.contains(draft.path))
+              .toList(growable: false);
+        });
         showAppToast(l10n.clipboardImageSendFailed);
       }
     } finally {
@@ -1403,7 +1452,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
           device = stored;
         });
         _refreshCurrentDeviceState();
-        unawaited(_maybeAutoStartRemoteInput());
         return true;
       }
       if (result.status != ConnectionAttemptStatus.cancelled) {
@@ -1836,30 +1884,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  Future<void> _maybeAutoStartRemoteInput() async {
-    if (!mounted ||
-        !_isConnectedSession ||
-        _isLocalhost ||
-        !supportsNativeRemoteInput()) {
-      return;
-    }
-    if (_remoteInputCoordinator.state.isForPeer(device.uid)) {
-      return;
-    }
-    final inputState = _remoteInputCoordinator.state;
-    if (inputState.status != RemoteInputRuntimeStatus.idle &&
-        inputState.status != RemoteInputRuntimeStatus.failed) {
-      return;
-    }
-    final layout = await LocalDatabase().fetchRemoteInputLayout(device.uid);
-    if (!mounted ||
-        layout?.autoActivate != true ||
-        layout?.autoRoleValue != RemoteInputAutoRole.source) {
-      return;
-    }
-    await _toggleRemoteInput(showToast: false);
-  }
-
   Future<RemoteInputLayoutData> _remoteInputLayoutForCurrentPeer() async {
     final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
     if (saved != null) {
@@ -1890,12 +1914,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       if (isClipboard && content.trim().isEmpty) {
         final clipboardText = await getClipboardText() ?? "";
-        content = clipboardText.trimRight();
+        content = clipboardText;
       }
-      if (content.trim().isEmpty) {
+      content = content.trim();
+      if (content.isEmpty) {
         return false;
       }
       if (_isLocalhost) {
+        if (isClipboard) {
+          return true;
+        }
         final message = MessageData(
           id: 0,
           sender: device.uid,
@@ -1953,7 +1981,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
   }
 
-  Widget _buildTextMessage(MessageData messageData, bool isOpponent) {
+  Widget _buildTextMessage(
+    MessageData messageData,
+    bool isOpponent,
+    Widget? trailingAction,
+  ) {
     double screenWidth = _screenWidth();
     if (isDesktop()) {
       screenWidth *= 0.6;
@@ -1987,21 +2019,33 @@ class _SendMessageScreen extends State<SendMessageScreen>
           border: isOpponent ? Border.all(color: receivedBorderColor) : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-          child: SelectableText(
-            content,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: isDesktop() ? 16.5 : 16,
-              height: 1.55,
-            ),
-            textAlign: TextAlign.left,
-            contextMenuBuilder: (context, editableTextState) {
-              return AdaptiveTextSelectionToolbar(
-                anchors: editableTextState.contextMenuAnchors,
-                children: const [],
-              );
-            },
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: SelectableText(
+                  content,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: isDesktop() ? 16.5 : 16,
+                    height: 1.55,
+                  ),
+                  textAlign: TextAlign.left,
+                  contextMenuBuilder: (context, editableTextState) {
+                    return AdaptiveTextSelectionToolbar(
+                      anchors: editableTextState.contextMenuAnchors,
+                      children: const [],
+                    );
+                  },
+                ),
+              ),
+              if (trailingAction != null) ...[
+                const SizedBox(width: 8),
+                trailingAction,
+              ],
+            ],
           ),
         ),
       ),
@@ -2055,7 +2099,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
     if (mediaKind != MediaFileKind.other) {
       final hasLocalFile =
-          messagePath.isNotEmpty && File(messagePath).existsSync();
+          messagePath.isNotEmpty &&
+          (messagePath.startsWith('content://') ||
+              File(messagePath).existsSync());
       final contentAvailable =
           hasLocalFile &&
           (transfer == null ||
@@ -2068,7 +2114,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         path: messagePath,
         width: screenWidth,
         cardColor: cardColor,
-        borderColor: cardBorderColor,
         contentAvailable: contentAvailable,
         failed: failed || showRetry,
         showRetry: showRetry,
@@ -2197,7 +2242,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     required String path,
     required double width,
     required Color cardColor,
-    required Color borderColor,
     required bool contentAvailable,
     required bool failed,
     required bool showRetry,
@@ -2224,18 +2268,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
         constraints: BoxConstraints(maxWidth: width),
-        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: borderColor),
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: showProgress && transfer.state != FileTransferState.verifying
-            ? _buildAnimatedTransferProgress(
-                value: transfer.progress,
-                builder: (context, value) => buildPreview(value),
-              )
-            : buildPreview(null),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: showProgress && transfer.state != FileTransferState.verifying
+              ? _buildAnimatedTransferProgress(
+                  value: transfer.progress,
+                  builder: (context, value) => buildPreview(value),
+                )
+              : buildPreview(null),
+        ),
       ),
     );
   }
@@ -2243,10 +2288,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void _openMessageFile(MessageData message) {
     final path = _effectiveMessagePath(message);
     final kind = mediaFileKindFor(name: message.name, path: path);
+    final isAndroidContentUri = path.startsWith('content://');
     if (kind == MediaFileKind.other ||
         kind == MediaFileKind.video ||
-        !File(path).existsSync()) {
-      openFile(path);
+        (!isAndroidContentUri && !File(path).existsSync())) {
+      if (isAndroidContentUri) {
+        unawaited(AndroidDocumentPicker.shared.openDocument(path));
+      } else {
+        openFile(path);
+      }
       return;
     }
     unawaited(
@@ -2255,7 +2305,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         kind: kind,
         path: path,
         name: message.name,
-        onOpenExternally: () => openFile(path),
+        onOpenExternally: () {
+          if (isAndroidContentUri) {
+            unawaited(AndroidDocumentPicker.shared.openDocument(path));
+          } else {
+            openFile(path);
+          }
+        },
       ),
     );
   }
@@ -2266,7 +2322,22 @@ class _SendMessageScreen extends State<SendMessageScreen>
       resolve(false);
       return;
     }
-    unawaited(showPairingDialog(context, request: request, resolve: resolve));
+    unawaited(_presentPairingRequest(request, resolve));
+  }
+
+  Future<void> _presentPairingRequest(
+    PairingRequest request,
+    void Function(bool) resolve,
+  ) async {
+    await revealDesktopWindowForAttention();
+    if (request.presentation?.isDismissed == true) {
+      return;
+    }
+    if (!mounted || !_isCurrentRoute) {
+      resolve(false);
+      return;
+    }
+    await showPairingDialog(context, request: request, resolve: resolve);
   }
 
   @override
@@ -2289,7 +2360,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void onConnect() {
     _refreshCurrentDeviceState();
     _syncAndroidKeepAliveService();
-    unawaited(_maybeAutoStartRemoteInput());
   }
 
   var _isAlert = false;
@@ -2347,7 +2417,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       });
     }
     _refreshCurrentDeviceState();
-    unawaited(_maybeAutoStartRemoteInput());
   }
 
   @override

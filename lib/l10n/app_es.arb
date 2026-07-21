@@ -318,24 +318,11 @@
   "remoteInputPeerUnsupported": "El dispositivo conectado no admite compartir teclado y mouse",
   "remoteInputRequiresMutualTrust": "Compartir teclado y mouse requiere confianza mutua",
   "remoteInputPeerMustTrustThisDevice": "El otro dispositivo aun no confia en este. Confia en este dispositivo desde el otro antes de compartir teclado y mouse",
-  "remoteInputLayoutRequired": "Primero coloca la pantalla del otro dispositivo contra el borde en ajustes",
+  "remoteInputLayoutRequired": "Primero coloca la pantalla del otro dispositivo contra el borde en el espacio de teclado y mouse",
   "remoteInputEnabledMoveToEdge": "Compartir teclado y mouse esta activado. Mueve al borde de la pantalla para controlar el otro dispositivo",
   "remoteInputFailed": "Error al compartir teclado y mouse: {error}",
-  "remoteInputAutoModeSetting": "Compartir teclado y mouse: {mode}",
-  "remoteInputLayoutSetting": "Distribucion de pantalla: {edge}",
-  "remoteInputAutoModeTitle": "Compartir teclado y mouse",
-  "remoteInputAutoModeOff": "Desactivado",
-  "remoteInputAutoModeSource": "Este dispositivo controla al otro",
-  "remoteInputAutoModeSink": "El otro controla este dispositivo",
   "remoteInputLayoutTitle": "Distribucion de pantalla",
-  "remoteInputCurrentEdge": "Actual: {edge}",
-  "remoteInputLayoutSave": "Guardar",
-  "remoteInputSnapLeft": "Ajustar a la izquierda",
-  "remoteInputSnapRight": "Ajustar a la derecha",
-  "remoteInputSnapTop": "Ajustar arriba",
-  "remoteInputSnapBottom": "Ajustar abajo",
   "remoteInputLocalScreen": "Este dispositivo",
-  "remoteInputPeerScreen": "Otro dispositivo",
   "remoteInputEdgeLeft": "Izquierda",
   "remoteInputEdgeRight": "Derecha",
   "remoteInputEdgeTop": "Arriba",
@@ -421,6 +408,14 @@
   "pairingNewDeviceTitle": "Emparejar un dispositivo nuevo",
   "pairingNewDeviceDescription": "{device} quiere establecer una conexión de confianza",
   "@pairingNewDeviceDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingNewDeviceCompareCode": "{device} quiere conectarse. Confirma que los números coincidan",
+  "@pairingNewDeviceCompareCode": {
     "placeholders": {
       "device": {
         "type": "String"
@@ -618,5 +613,9 @@
   "desktopQuickSendInvalidPath": "Una ruta no es válida o es demasiado larga, por lo que no se añadió el contenido nuevo",
   "desktopQuickSendClipboardSnapshotUnavailable": "No se pudo leer el portapapeles de inmediato, por lo que no se añadió contenido que pudiera haber cambiado",
   "desktopQuickSendTargetConflict": "Parte del contenido ya se envió a otro dispositivo. Selecciona el dispositivo original para continuar",
-  "desktopQuickSendTargetNeedsReselection": "La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo"
+  "desktopQuickSendTargetNeedsReselection": "La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo",
+  "chatTimestampYesterday": "Ayer {time}",
+  "@chatTimestampYesterday": {
+    "placeholders": { "time": { "type": "String" } }
+  }
 }

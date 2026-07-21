@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -21,9 +20,6 @@ import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
-import 'package:whisper/remote_input/remote_input_layout.dart';
-import 'package:whisper/remote_input/remote_input_layout_editor.dart';
-import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
@@ -38,7 +34,6 @@ enum SettingsOperationKind {
   notificationUpdate,
   notificationRestore,
   notificationRead,
-  remoteInputRestart,
 }
 
 void _logSettingsFailure(SettingsOperationKind kind, Object error) {
@@ -1428,14 +1423,12 @@ class ClientSettingsScreen extends StatefulWidget {
     required this.device,
     this.deviceLoader,
     this.isConnected,
-    this.canConfigureRemoteInput,
     this.deleteDevice,
   });
 
   final DeviceData device;
   final Future<DeviceData?> Function(String uid)? deviceLoader;
   final bool? isConnected;
-  final bool? canConfigureRemoteInput;
   final Future<void> Function(String uid)? deleteDevice;
 
   @override
@@ -1444,30 +1437,12 @@ class ClientSettingsScreen extends StatefulWidget {
 
 class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   late DeviceData device;
-  RemoteInputLayoutData? _remoteInputLayout;
 
   @override
   void initState() {
     super.initState();
     device = widget.device;
     _refreshDevice();
-    if (_canConfigureRemoteInput) {
-      _loadRemoteInputLayout();
-    }
-  }
-
-  bool get _canConfigureRemoteInput {
-    final override = widget.canConfigureRemoteInput;
-    if (override != null) {
-      return override;
-    }
-    final platform = device.platform.toLowerCase();
-    final isDesktopPeer = platform.contains('mac') ||
-        platform.contains('windows') ||
-        platform.contains('linux');
-    return isDesktop() &&
-        supportsNativeRemoteInput() &&
-        (isDesktopPeer || WsSvrManager().supportsRemoteInputFor(device.uid));
   }
 
   Future<void> _refreshDevice() async {
@@ -1483,63 +1458,12 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     });
   }
 
-  Future<void> _loadRemoteInputLayout() async {
-    final layout = await _ensureRemoteInputLayout();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _remoteInputLayout = layout;
-    });
-  }
-
-  Future<RemoteInputLayoutData> _ensureRemoteInputLayout() async {
-    final saved = await LocalDatabase().fetchRemoteInputLayout(device.uid);
-    if (saved != null) {
-      return saved;
-    }
-    final layout = RemoteInputLayoutData(
-      peerId: device.uid,
-      peerName: device.name,
-      x: 1000,
-      y: 0,
-      width: 900,
-      height: 600,
-      enabled: true,
-      autoActivate: false,
-      autoRole: RemoteInputAutoRole.source.name,
-      layoutVersion: 1,
-      layoutJson: '',
-      edgeThresholdPx: 6,
-      releaseHotkey: 'ctrl+alt+esc',
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    await LocalDatabase().upsertRemoteInputLayout(layout);
-    return layout;
-  }
-
-  Future<void> _saveRemoteInputLayout(RemoteInputLayoutData layout) async {
-    final next = layout.copyWith(
-      peerName: device.name,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    await LocalDatabase().upsertRemoteInputLayout(next);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _remoteInputLayout = next;
-    });
-    await _restartRemoteInputSharingIfActive(next);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
-    final showRemoteInputSettings = _canConfigureRemoteInput;
     final isConnected =
         widget.isConnected ?? WsSvrManager().isConnectedTo(device.uid);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
@@ -1608,34 +1532,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         },
                       ),
                     ),
-                    if (showRemoteInputSettings)
-                      _DeviceSettingTile(
-                        title: l10n.remoteInputAutoModeSetting(
-                          _remoteInputAutoModeLabel(l10n, _remoteInputLayout),
-                        ),
-                        icon: Icon(
-                          Icons.keyboard_option_key_rounded,
-                          color: palette.textMuted,
-                        ),
-                        trailing: Icon(
-                          Icons.chevron_right_rounded,
-                          color: palette.textMuted,
-                        ),
-                        onTap: _openRemoteInputAutoModePickerWithTrustPrompt,
-                      ),
-                    if (showRemoteInputSettings)
-                      _DeviceSettingTile(
-                        title: l10n.remoteInputLayoutSetting(
-                          _remoteInputEdgeLabel(l10n, _remoteInputLayout),
-                        ),
-                        icon: Icon(
-                          Icons.splitscreen_rounded,
-                          color: palette.textMuted,
-                        ),
-                        onTap: () async {
-                          await _openRemoteInputLayoutEditor();
-                        },
-                      ),
                   ],
                 ),
                 if (!isConnected)
@@ -1696,309 +1592,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       child: SettingsSectionSurface(children: children),
     );
   }
-
-  String _remoteInputEdgeLabel(
-    AppLocalizations l10n,
-    RemoteInputLayoutData? layout,
-  ) {
-    if (layout == null) {
-      return l10n.remoteInputEdgeRight;
-    }
-    final edge = RemoteInputLayoutGeometry.adjacentEdge(
-      local: const RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      ),
-      peer: RemoteInputScreenRect(
-        x: layout.x,
-        y: layout.y,
-        width: layout.width,
-        height: layout.height,
-      ),
-    );
-    switch (edge) {
-      case RemoteInputEdge.left:
-        return l10n.remoteInputEdgeLeft;
-      case RemoteInputEdge.right:
-        return l10n.remoteInputEdgeRight;
-      case RemoteInputEdge.top:
-        return l10n.remoteInputEdgeTop;
-      case RemoteInputEdge.bottom:
-        return l10n.remoteInputEdgeBottom;
-      case null:
-        return l10n.remoteInputEdgeNotAdjacent;
-    }
-  }
-
-  String _remoteInputAutoModeLabel(
-    AppLocalizations l10n,
-    RemoteInputLayoutData? layout,
-  ) {
-    if (layout?.autoActivate != true) {
-      return l10n.remoteInputAutoModeOff;
-    }
-    switch (layout!.autoRoleValue) {
-      case RemoteInputAutoRole.source:
-        return l10n.remoteInputAutoModeSource;
-      case RemoteInputAutoRole.sink:
-        return l10n.remoteInputAutoModeSink;
-    }
-  }
-
-  Future<void> _openRemoteInputAutoModePickerWithTrustPrompt() async {
-    final l10n = AppLocalizations.of(context)!;
-    if (!device.auth) {
-      showAppToast(l10n.remoteInputRequiresMutualTrust);
-      return;
-    }
-    if (WsSvrManager().isConnectedTo(device.uid)) {
-      final self = await LocalSetting().instance();
-      if (!WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)) {
-        showAppToast(l10n.remoteInputPeerMustTrustThisDevice);
-        return;
-      }
-    }
-    await _openRemoteInputAutoModePicker();
-  }
-
-  Future<void> _openRemoteInputAutoModePicker() async {
-    final layout = await _ensureRemoteInputLayout();
-    if (!mounted) {
-      return;
-    }
-    final colorScheme = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context)!;
-    final choice = await showCupertinoModalPopup<String>(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(
-          l10n.remoteInputAutoModeTitle,
-          style: TextStyle(color: colorScheme.onSurface),
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop('off'),
-            child: Text(
-              l10n.remoteInputAutoModeOff,
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop('source'),
-            child: Text(
-              l10n.remoteInputAutoModeSource,
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop('sink'),
-            child: Text(
-              l10n.remoteInputAutoModeSink,
-              style: TextStyle(color: colorScheme.onSurface),
-            ),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            l10n.cancel,
-            style: const TextStyle(color: Colors.redAccent),
-          ),
-        ),
-      ),
-    );
-    if (choice == null) {
-      return;
-    }
-    final role = choice == 'sink'
-        ? RemoteInputAutoRole.sink
-        : RemoteInputAutoRole.source;
-    await _saveRemoteInputLayout(
-      layout.copyWith(
-        autoActivate: choice != 'off',
-        autoRole: role.name,
-      ),
-    );
-  }
-
-  Future<void> _openRemoteInputLayoutEditor() async {
-    final layout = await _ensureRemoteInputLayout();
-    if (!mounted) {
-      return;
-    }
-    final updated = await Navigator.of(context).push<RemoteInputLayoutData>(
-      MaterialPageRoute(
-        builder: (context) => RemoteInputLayoutEditorScreen(
-          initialLayout: layout,
-          peerName: device.name,
-          remoteTopology: WsSvrManager().remoteDisplayTopology,
-          remoteTopologyLoader: () async {
-            final refreshProfile = WsSvrManager().requestRemoteProfileRefresh;
-            await refreshProfile();
-            return WsSvrManager().remoteDisplayTopology;
-          },
-        ),
-      ),
-    );
-    if (updated != null) {
-      await _saveRemoteInputLayout(updated);
-    }
-  }
-
-  Future<void> _restartRemoteInputSharingIfActive(
-    RemoteInputLayoutData layout,
-  ) async {
-    final coordinator = RemoteInputCoordinator.shared;
-    final state = coordinator.state;
-    if (state.role != RemoteInputRuntimeRole.source ||
-        !state.isForPeer(device.uid)) {
-      return;
-    }
-
-    final socketManager = WsSvrManager();
-    if (!socketManager.isConnected || !socketManager.supportsRemoteInput) {
-      return;
-    }
-
-    final self = await LocalSetting().instance();
-    final storedDevice = await LocalDatabase().fetchDevice(device.uid);
-    final localTrustsRemote = storedDevice?.auth == true;
-    final remoteTrustsLocal = socketManager.remoteTrustsPeer(self.uid);
-    final isMutuallyTrusted = localTrustsRemote && remoteTrustsLocal;
-    if (!isMutuallyTrusted) {
-      return;
-    }
-
-    try {
-      final sharingPlan = await _sharingPlanForLayout(
-        layout,
-        coordinator: coordinator,
-        socketManager: socketManager,
-      );
-      if (sharingPlan == null) {
-        return;
-      }
-      await coordinator.stopSharing(
-        sendControl: socketManager.sendRemoteInputControl,
-      );
-      await coordinator.startSharingToConnectedPeer(
-        sourcePeerId: self.uid,
-        sinkPeerId: device.uid,
-        sinkHost: device.host,
-        sinkPort: device.port,
-        layoutEdge: sharingPlan.layoutEdge,
-        releaseHotkey: layout.releaseHotkey,
-        isMutuallyTrusted: isMutuallyTrusted,
-        remoteCanInject: socketManager.supportsRemoteInput,
-        sendControl: socketManager.sendRemoteInputControl,
-        sourceDisplayId: sharingPlan.sourceDisplayId,
-        sourceEdge: sharingPlan.sourceEdge,
-        sourceSegmentStart: sharingPlan.sourceSegmentStart,
-        sourceSegmentEnd: sharingPlan.sourceSegmentEnd,
-        sinkDisplayId: sharingPlan.sinkDisplayId,
-        sinkEdge: sharingPlan.sinkEdge,
-        sinkSegmentStart: sharingPlan.sinkSegmentStart,
-        sinkSegmentEnd: sharingPlan.sinkSegmentEnd,
-        edgeMappings: sharingPlan.edgeMappings,
-      );
-    } catch (error) {
-      _logSettingsFailure(SettingsOperationKind.remoteInputRestart, error);
-    }
-  }
-
-  Future<_RemoteInputSharingPlan?> _sharingPlanForLayout(
-    RemoteInputLayoutData layout, {
-    required RemoteInputCoordinator coordinator,
-    required WsSvrManager socketManager,
-  }) async {
-    final savedLayout = layout.savedLayout;
-    RemoteInputResolvedLayout? resolvedTopologyLayout;
-    if (savedLayout != null && socketManager.supportsRemoteInputTopology) {
-      final remoteTopology = socketManager.remoteDisplayTopology;
-      if (remoteTopology != null) {
-        final localTopology = await coordinator.displayTopology();
-        resolvedTopologyLayout = RemoteInputLayoutGeometry.resolveSavedLayout(
-          savedLayout: savedLayout,
-          sourceTopology: localTopology,
-          sinkTopology: remoteTopology,
-          edgeTolerance: layout.edgeThresholdPx,
-        );
-      }
-    }
-
-    final legacyEdge = RemoteInputLayoutGeometry.adjacentEdge(
-      local: const RemoteInputScreenRect(
-        x: 0,
-        y: 0,
-        width: 1000,
-        height: 800,
-      ),
-      peer: RemoteInputScreenRect(
-        x: layout.x,
-        y: layout.y,
-        width: layout.width,
-        height: layout.height,
-      ),
-    );
-    final edge = resolvedTopologyLayout?.sharedSegment.sourceEdge ?? legacyEdge;
-    if (edge == null) {
-      return null;
-    }
-
-    final topologyMappings = resolvedTopologyLayout?.edgeMappings ??
-        const <RemoteInputEdgeMapping>[];
-    final sourceSegmentStart = topologyMappings.isEmpty
-        ? resolvedTopologyLayout?.sharedSegment.start ?? 0
-        : topologyMappings
-            .map((mapping) => mapping.sourceSegmentStart)
-            .reduce(math.min);
-    final sourceSegmentEnd = topologyMappings.isEmpty
-        ? resolvedTopologyLayout?.sharedSegment.end ?? 0
-        : topologyMappings
-            .map((mapping) => mapping.sourceSegmentEnd)
-            .reduce(math.max);
-
-    return _RemoteInputSharingPlan(
-      layoutEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge ?? edge,
-      sourceDisplayId: resolvedTopologyLayout?.sourceDisplay.displayId ?? '',
-      sourceEdge: resolvedTopologyLayout?.sharedSegment.sourceEdge,
-      sourceSegmentStart: sourceSegmentStart,
-      sourceSegmentEnd: sourceSegmentEnd,
-      sinkDisplayId: resolvedTopologyLayout?.sinkDisplay.displayId ?? '',
-      sinkEdge: resolvedTopologyLayout?.sharedSegment.sinkEdge,
-      sinkSegmentStart: resolvedTopologyLayout?.sinkSegmentStart ?? 0,
-      sinkSegmentEnd: resolvedTopologyLayout?.sinkSegmentEnd ?? 0,
-      edgeMappings: topologyMappings,
-    );
-  }
-}
-
-class _RemoteInputSharingPlan {
-  const _RemoteInputSharingPlan({
-    required this.layoutEdge,
-    required this.sourceDisplayId,
-    required this.sourceEdge,
-    required this.sourceSegmentStart,
-    required this.sourceSegmentEnd,
-    required this.sinkDisplayId,
-    required this.sinkEdge,
-    required this.sinkSegmentStart,
-    required this.sinkSegmentEnd,
-    required this.edgeMappings,
-  });
-
-  final RemoteInputEdge layoutEdge;
-  final String sourceDisplayId;
-  final RemoteInputEdge? sourceEdge;
-  final int sourceSegmentStart;
-  final int sourceSegmentEnd;
-  final String sinkDisplayId;
-  final RemoteInputEdge? sinkEdge;
-  final int sinkSegmentStart;
-  final int sinkSegmentEnd;
-  final List<RemoteInputEdgeMapping> edgeMappings;
 }
 
 class _DeviceSettingTile extends StatelessWidget {

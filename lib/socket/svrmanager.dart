@@ -3510,6 +3510,9 @@ class WsSvrManager {
       await resolve(true);
       return;
     }
+    if (!session.tryClaimLocalApprovalPrompt()) {
+      return;
+    }
     await _requestPairingDecision(
       session,
       sink,
@@ -4175,7 +4178,7 @@ class WsSvrManager {
         localPeerId: session.localProfile.uid,
       ).requireAccepted();
     }
-    if (message.type == MessageEnum.Text) {
+    if (message.type == MessageEnum.Text && !message.clipboard) {
       final replay = await _claimIncomingTextMessage(
         message,
         requireCurrent: requireCurrentBusiness,
@@ -4245,6 +4248,9 @@ class WsSvrManager {
                 sourcePeerId: session.remotePeerId,
               );
             }
+            requireCurrentBusiness();
+            await _ackMessage(message);
+            return;
           }
           requireCurrentBusiness();
           _dispatchToAll((event) => event.onMessage(message));
@@ -5421,6 +5427,10 @@ class WsSvrManager {
       clipboard,
       receiverOverride: peerId,
     );
+    if (clipboard) {
+      logger.i("发送剪贴板文本, uuid: ${draft.uuid}");
+      return _sendMessageData(draft, peerId: peerId);
+    }
     final database = _database;
     final retry = await _outgoingTextRetries.resolve(
       draft,

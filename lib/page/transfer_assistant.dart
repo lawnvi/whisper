@@ -7,8 +7,9 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/theme/app_theme.dart';
 
-const Key transferAssistantSearchFieldKey =
-    ValueKey<String>('transfer-assistant-search');
+const Key transferAssistantSearchFieldKey = ValueKey<String>(
+  'transfer-assistant-search',
+);
 
 Key transferAssistantMessageFavoriteKey(int messageId) =>
     ValueKey<String>('transfer-assistant-message-favorite-$messageId');
@@ -33,8 +34,8 @@ class TransferAssistantScreen extends StatefulWidget {
     required this.peerName,
     LocalDatabase? database,
     Future<void> Function(String)? copyText,
-  })  : database = database ?? LocalDatabase(),
-        copyText = copyText ?? _copyTextToClipboard;
+  }) : database = database ?? LocalDatabase(),
+       copyText = copyText ?? _copyTextToClipboard;
 
   final String peerId;
   final String peerName;
@@ -204,17 +205,19 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     }
   }
 
-  Future<void> _copy(String text) async {
+  Future<bool> _copy(String text) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       await widget.copyText(text);
       if (mounted) {
         _showSnackBar(l10n.transferAssistantCopied);
       }
+      return true;
     } catch (_) {
       if (mounted) {
         _showSnackBar(l10n.transferAssistantCopyFailed);
       }
+      return false;
     }
   }
 
@@ -227,8 +230,12 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
     return Scaffold(
+      backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
+        backgroundColor: palette.surfaceCanvas,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -239,43 +246,108 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: context.whisperPalette.textMuted,
-                    ),
+                  color: context.whisperPalette.textMuted,
+                ),
               ),
           ],
         ),
       ),
-      body: Column(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-            child: TextField(
-              key: transferAssistantSearchFieldKey,
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: l10n.transferAssistantSearchHint,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: l10n.transferAssistantClearSearch,
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged('');
-                        },
-                        icon: const Icon(Icons.clear),
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: WhisperUi.settingsMaxWidth,
+            ),
+            child: Column(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                  child: SizedBox(
+                    height: 48,
+                    child: TextField(
+                      key: transferAssistantSearchFieldKey,
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: l10n.transferAssistantSearchHint,
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: palette.textMuted,
+                        ),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: l10n.transferAssistantClearSearch,
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _onSearchChanged('');
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                        filled: true,
+                        fillColor: palette.surfaceElevated,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                        border: _searchBorder(palette.borderSubtle),
+                        enabledBorder: _searchBorder(palette.borderSubtle),
+                        focusedBorder: _searchBorder(colorScheme.primary),
                       ),
-              ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 2,
+                  child: _loading
+                      ? LinearProgressIndicator(
+                          color: colorScheme.primary,
+                          backgroundColor: Colors.transparent,
+                        )
+                      : null,
+                ),
+                Expanded(child: _buildContent(l10n)),
+              ],
             ),
           ),
-          SizedBox(
-            height: 2,
-            child: _loading ? const LinearProgressIndicator() : null,
+        ),
+      ),
+    );
+  }
+
+  OutlineInputBorder _searchBorder(Color color) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color),
+    );
+  }
+
+  Widget _buildSectionSurface(List<Widget> tiles) {
+    final palette = context.whisperPalette;
+    final children = <Widget>[];
+    for (var index = 0; index < tiles.length; index++) {
+      if (index > 0) {
+        children.add(
+          Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: palette.borderSubtle,
           ),
-          Expanded(child: _buildContent(l10n)),
-        ],
+        );
+      }
+      children.add(tiles[index]);
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(children: children),
       ),
     );
   }
@@ -319,43 +391,42 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
         message: l10n.transferAssistantNoResults,
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: _messages.length + 1,
-      separatorBuilder: (context, index) => index == 0
-          ? const SizedBox.shrink()
-          : const Divider(height: 1, indent: 16, endIndent: 16),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _SectionHeader(l10n.transferAssistantSearchResults);
-        }
-        return _buildMessageTile(_messages[index - 1], l10n);
-      },
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+      children: <Widget>[
+        _SectionHeader(l10n.transferAssistantSearchResults),
+        _buildSectionSurface(
+          _messages
+              .map((result) => _buildMessageTile(result, l10n))
+              .toList(growable: false),
+        ),
+      ],
     );
   }
 
   Widget _buildOverview(AppLocalizations l10n) {
-    final children = <Widget>[
-      _SectionHeader(l10n.transferAssistantFavorites),
-      if (_favorites.isEmpty)
-        _SectionEmpty(l10n.transferAssistantNoFavorites)
-      else
-        for (final favorite in _favorites) ...<Widget>[
-          _buildFavoriteTile(favorite, l10n),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-        ],
-      const SizedBox(height: 8),
-      _SectionHeader(l10n.transferAssistantRecent),
-      if (_messages.isEmpty)
-        _SectionEmpty(l10n.transferAssistantNoRecent)
-      else
-        for (final result in _messages) ...<Widget>[
-          _buildMessageTile(result, l10n),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-        ],
-      const SizedBox(height: 24),
-    ];
-    return ListView(children: children);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+      children: <Widget>[
+        _SectionHeader(l10n.transferAssistantFavorites),
+        _buildSectionSurface(
+          _favorites.isEmpty
+              ? <Widget>[_SectionEmpty(l10n.transferAssistantNoFavorites)]
+              : _favorites
+                    .map((favorite) => _buildFavoriteTile(favorite, l10n))
+                    .toList(growable: false),
+        ),
+        const SizedBox(height: 6),
+        _SectionHeader(l10n.transferAssistantRecent),
+        _buildSectionSurface(
+          _messages.isEmpty
+              ? <Widget>[_SectionEmpty(l10n.transferAssistantNoRecent)]
+              : _messages
+                    .map((result) => _buildMessageTile(result, l10n))
+                    .toList(growable: false),
+        ),
+      ],
+    );
   }
 
   Widget _buildMessageTile(
@@ -365,93 +436,65 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     final message = result.message;
     final isIncoming = message.sender == widget.peerId;
     final isMutating = _mutatingFavoriteIds.contains(message.id);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      title: Text(
-        message.content ?? '',
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Row(
-          children: <Widget>[
-            Text(
-              isIncoming
-                  ? l10n.transferAssistantIncoming
-                  : l10n.transferAssistantOutgoing,
-            ),
-            const SizedBox(width: 12),
-            Text(_formatTimestamp(message.timestamp)),
-          ],
+    return _AssistantTextTile(
+      title: message.content ?? '',
+      metadata: <Widget>[
+        Icon(
+          isIncoming ? Icons.south_west_rounded : Icons.north_east_rounded,
+          size: 14,
         ),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          IconButton(
-            key: transferAssistantMessageCopyKey(message.id),
-            tooltip: l10n.transferAssistantCopy,
-            onPressed: () => unawaited(_copy(message.content ?? '')),
-            icon: const Icon(Icons.copy_outlined),
+        Text(
+          isIncoming
+              ? l10n.transferAssistantIncoming
+              : l10n.transferAssistantOutgoing,
+        ),
+        Text(_formatTimestamp(message.timestamp)),
+      ],
+      actions: <Widget>[
+        _AnimatedCopyButton(
+          buttonKey: transferAssistantMessageCopyKey(message.id),
+          tooltip: l10n.transferAssistantCopy,
+          onCopy: () => _copy(message.content ?? ''),
+        ),
+        IconButton(
+          key: transferAssistantMessageFavoriteKey(message.id),
+          tooltip: result.isFavorite
+              ? l10n.transferAssistantUnfavorite
+              : l10n.transferAssistantFavorite,
+          onPressed: isMutating
+              ? null
+              : () => unawaited(_toggleMessageFavorite(result)),
+          icon: Icon(
+            result.isFavorite ? Icons.star : Icons.star_border,
+            color: result.isFavorite
+                ? Theme.of(context).colorScheme.tertiary
+                : null,
           ),
-          IconButton(
-            key: transferAssistantMessageFavoriteKey(message.id),
-            tooltip: result.isFavorite
-                ? l10n.transferAssistantUnfavorite
-                : l10n.transferAssistantFavorite,
-            onPressed: isMutating
-                ? null
-                : () => unawaited(_toggleMessageFavorite(result)),
-            icon: Icon(
-              result.isFavorite ? Icons.star : Icons.star_border,
-              color: result.isFavorite
-                  ? Theme.of(context).colorScheme.tertiary
-                  : null,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildFavoriteTile(
-    FavoriteTextData favorite,
-    AppLocalizations l10n,
-  ) {
+  Widget _buildFavoriteTile(FavoriteTextData favorite, AppLocalizations l10n) {
     final isMutating = _mutatingFavoriteIds.contains(favorite.sourceMessageId);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      title: Text(
-        favorite.content,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Text(_formatTimestamp(favorite.sourceTimestamp)),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          IconButton(
-            key: transferAssistantFavoriteCopyKey(favorite.sourceMessageId),
-            tooltip: l10n.transferAssistantCopy,
-            onPressed: () => unawaited(_copy(favorite.content)),
-            icon: const Icon(Icons.copy_outlined),
-          ),
-          IconButton(
-            key: transferAssistantFavoriteRemoveKey(favorite.sourceMessageId),
-            tooltip: l10n.transferAssistantUnfavorite,
-            onPressed:
-                isMutating ? null : () => unawaited(_removeFavorite(favorite)),
-            icon: Icon(
-              Icons.star,
-              color: Theme.of(context).colorScheme.tertiary,
-            ),
-          ),
-        ],
-      ),
+    return _AssistantTextTile(
+      title: favorite.content,
+      metadata: <Widget>[Text(_formatTimestamp(favorite.sourceTimestamp))],
+      actions: <Widget>[
+        _AnimatedCopyButton(
+          buttonKey: transferAssistantFavoriteCopyKey(favorite.sourceMessageId),
+          tooltip: l10n.transferAssistantCopy,
+          onCopy: () => _copy(favorite.content),
+        ),
+        IconButton(
+          key: transferAssistantFavoriteRemoveKey(favorite.sourceMessageId),
+          tooltip: l10n.transferAssistantUnfavorite,
+          onPressed: isMutating
+              ? null
+              : () => unawaited(_removeFavorite(favorite)),
+          icon: Icon(Icons.star, color: Theme.of(context).colorScheme.tertiary),
+        ),
+      ],
     );
   }
 
@@ -460,9 +503,9 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
       return '';
     }
     final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-    return DateFormat.yMd(Localizations.localeOf(context).toLanguageTag())
-        .add_Hm()
-        .format(dateTime);
+    return DateFormat.yMd(
+      Localizations.localeOf(context).toLanguageTag(),
+    ).add_Hm().format(dateTime);
   }
 }
 
@@ -474,12 +517,150 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+      padding: const EdgeInsets.fromLTRB(2, 16, 2, 8),
       child: Text(
         label,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+          color: context.whisperPalette.textMuted,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantTextTile extends StatelessWidget {
+  const _AssistantTextTile({
+    required this.title,
+    required this.metadata,
+    required this.actions,
+  });
+
+  final String title;
+  final List<Widget> metadata;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                IconTheme(
+                  data: IconThemeData(color: palette.textMuted, size: 14),
+                  child: DefaultTextStyle.merge(
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: palette.textMuted),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: metadata,
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Row(mainAxisSize: MainAxisSize.min, children: actions),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedCopyButton extends StatefulWidget {
+  const _AnimatedCopyButton({
+    required this.buttonKey,
+    required this.tooltip,
+    required this.onCopy,
+  });
+
+  final Key buttonKey;
+  final String tooltip;
+  final Future<bool> Function() onCopy;
+
+  @override
+  State<_AnimatedCopyButton> createState() => _AnimatedCopyButtonState();
+}
+
+class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
+  Timer? _resetTimer;
+  bool _copying = false;
+  bool _copied = false;
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleCopy() async {
+    if (_copying) {
+      return;
+    }
+    setState(() => _copying = true);
+    final copied = await widget.onCopy();
+    if (!mounted) {
+      return;
+    }
+    if (!copied) {
+      setState(() => _copying = false);
+      return;
+    }
+    HapticFeedback.selectionClick();
+    _resetTimer?.cancel();
+    setState(() {
+      _copying = false;
+      _copied = true;
+    });
+    _resetTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox.square(
+      dimension: 40,
+      child: IconButton(
+        key: widget.buttonKey,
+        tooltip: widget.tooltip,
+        onPressed: _copying ? null : _handleCopy,
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          reverseDuration: const Duration(milliseconds: 140),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(scale: animation, child: child),
+          ),
+          child: Icon(
+            _copied ? Icons.check_rounded : Icons.copy_outlined,
+            key: ValueKey<bool>(_copied),
+            color: _copied ? colorScheme.primary : null,
+          ),
+        ),
       ),
     );
   }
@@ -497,8 +678,8 @@ class _SectionEmpty extends StatelessWidget {
       child: Text(
         message,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: context.whisperPalette.textMuted,
-            ),
+          color: context.whisperPalette.textMuted,
+        ),
       ),
     );
   }
@@ -524,8 +705,8 @@ class _EmptyState extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: context.whisperPalette.textMuted,
-                  ),
+                color: context.whisperPalette.textMuted,
+              ),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_request.dart';
 
 const pairingCodeKey = Key('pairing-code');
+const pairingTitleGapKey = Key('pairing-title-gap');
 const pairingCancelKey = Key('pairing-cancel');
 const pairingRejectKey = Key('pairing-reject');
 const pairingApproveKey = Key('pairing-approve');
@@ -59,9 +60,7 @@ Future<void> showPairingDialog(
 
   final presentation = request.presentation;
   if (presentation != null) {
-    removeDismissListener = presentation.addDismissListener(
-      cancelPresentation,
-    );
+    removeDismissListener = presentation.addDismissListener(cancelPresentation);
   } else if (request.cancellation case final cancellation?) {
     cancellationSubscription = cancellation.asStream().listen((_) {
       cancelPresentation();
@@ -106,10 +105,7 @@ Future<void> showPairingDialog(
         if (cancelled) {
           scheduleMicrotask(dismiss);
         }
-        return PairingDialog(
-          request: request,
-          onResolved: dismiss,
-        );
+        return PairingDialog(request: request, onResolved: dismiss);
       },
     );
   } finally {
@@ -159,14 +155,18 @@ class _PairingDialogState extends State<PairingDialog> {
       PairingReason.legacyTrustWithoutPin => l10n.pairingLegacyTrustTitle,
     };
     final description = switch (widget.request.reason) {
-      PairingReason.newDevice =>
-        l10n.pairingNewDeviceDescription(widget.request.device.name),
-      PairingReason.identityChanged =>
-        l10n.pairingIdentityChangedDescription(widget.request.device.name),
-      PairingReason.legacyTrustWithoutPin =>
-        l10n.pairingLegacyTrustDescription(widget.request.device.name),
+      PairingReason.newDevice => l10n.pairingNewDeviceCompareCode(
+        widget.request.device.name,
+      ),
+      PairingReason.identityChanged => l10n.pairingIdentityChangedDescription(
+        widget.request.device.name,
+      ),
+      PairingReason.legacyTrustWithoutPin => l10n.pairingLegacyTrustDescription(
+        widget.request.device.name,
+      ),
     };
-    final code = '${widget.request.pairingCode.substring(0, 3)} '
+    final code =
+        '${widget.request.pairingCode.substring(0, 3)} '
         '${widget.request.pairingCode.substring(3)}';
 
     return CupertinoAlertDialog(
@@ -177,14 +177,22 @@ class _PairingDialogState extends State<PairingDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(description),
-            const SizedBox(height: 16),
+            const SizedBox(key: pairingTitleGapKey, height: 20),
             Text(
-              l10n.pairingCompareCode,
+              description,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
+            if (widget.request.reason != PairingReason.newDevice) ...[
+              const SizedBox(height: 10),
+              Text(
+                l10n.pairingCompareCode,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Semantics(
               key: pairingCodeKey,
@@ -197,24 +205,28 @@ class _PairingDialogState extends State<PairingDialog> {
                     code,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0,
-                        ),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 14),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Icon(CupertinoIcons.lock_fill, size: 16),
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: Icon(CupertinoIcons.lock_fill, size: 16),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     l10n.pairingEncryptionNotice,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],

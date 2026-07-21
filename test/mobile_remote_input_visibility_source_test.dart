@@ -3,27 +3,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('mobile client settings hide remote input entries', () {
+  test('client settings leave multi-device input layout to the workspace', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
     final clientSettings = RegExp(
       r'class _ClientSettingsScreenState[\s\S]*?class _DeviceSettingTile',
     ).firstMatch(source)!.group(0)!;
 
-    expect(clientSettings, contains('if (_canConfigureRemoteInput) {'));
-    expect(clientSettings, contains('bool get _canConfigureRemoteInput'));
-    expect(clientSettings, contains('supportsNativeRemoteInput()'));
-    expect(clientSettings,
-        contains('final showRemoteInputSettings = _canConfigureRemoteInput;'));
-    expect(
-      RegExp(r'if \(showRemoteInputSettings\)[\s\S]*remoteInputAutoModeSetting')
-          .hasMatch(clientSettings),
-      isTrue,
-    );
-    expect(
-      RegExp(r'if \(showRemoteInputSettings\)[\s\S]*remoteInputLayoutSetting')
-          .hasMatch(clientSettings),
-      isTrue,
-    );
+    expect(clientSettings, isNot(contains('_canConfigureRemoteInput')));
+    expect(clientSettings, isNot(contains('remoteInputAutoModeSetting')));
+    expect(clientSettings, isNot(contains('remoteInputLayoutSetting')));
   });
 
   test('mobile conversation header never shows remote input action', () {

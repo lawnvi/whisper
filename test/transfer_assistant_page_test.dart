@@ -96,6 +96,23 @@ void main() {
       isNot(contains(searchableMessage.id)),
     );
   });
+
+  testWidgets('copy action briefly morphs into a success check',
+      (tester) async {
+    await _pumpPage(tester, database, copiedTexts);
+
+    await tester.tap(
+      find.byKey(transferAssistantFavoriteCopyKey(favoriteMessage.id)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(copiedTexts, <String>['saved note']);
+
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(find.byIcon(Icons.copy_outlined), findsWidgets);
+  });
 }
 
 Future<void> _pumpPage(

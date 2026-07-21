@@ -291,24 +291,11 @@
   "remoteInputPeerUnsupported": "Connected device does not support keyboard and mouse sharing",
   "remoteInputRequiresMutualTrust": "Keyboard and mouse sharing requires mutual trust",
   "remoteInputPeerMustTrustThisDevice": "The peer has not trusted this device yet. Trust this device on the peer before sharing keyboard and mouse",
-  "remoteInputLayoutRequired": "Place the peer screen against this device's edge in device settings first",
+  "remoteInputLayoutRequired": "Place the peer screen against this device's edge in the keyboard and mouse workspace first",
   "remoteInputEnabledMoveToEdge": "Keyboard and mouse sharing is enabled. Move to the screen edge to control peer",
   "remoteInputFailed": "Keyboard and mouse sharing failed: {error}",
-  "remoteInputAutoModeSetting": "Keyboard and mouse sharing: {mode}",
-  "remoteInputLayoutSetting": "Screen layout: {edge}",
-  "remoteInputAutoModeTitle": "Keyboard and mouse sharing",
-  "remoteInputAutoModeOff": "Off",
-  "remoteInputAutoModeSource": "This device controls peer",
-  "remoteInputAutoModeSink": "Peer controls this device",
   "remoteInputLayoutTitle": "Screen layout",
-  "remoteInputCurrentEdge": "Current: {edge}",
-  "remoteInputLayoutSave": "Save",
-  "remoteInputSnapLeft": "Snap left",
-  "remoteInputSnapRight": "Snap right",
-  "remoteInputSnapTop": "Snap top",
-  "remoteInputSnapBottom": "Snap bottom",
   "remoteInputLocalScreen": "This device",
-  "remoteInputPeerScreen": "Peer",
   "remoteInputEdgeLeft": "Left",
   "remoteInputEdgeRight": "Right",
   "remoteInputEdgeTop": "Top",
@@ -394,6 +381,14 @@
   "pairingNewDeviceTitle": "Pair a new device",
   "pairingNewDeviceDescription": "{device} wants to establish a trusted connection",
   "@pairingNewDeviceDescription": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingNewDeviceCompareCode": "{device} wants to connect. Confirm the numbers match",
+  "@pairingNewDeviceCompareCode": {
     "placeholders": {
       "device": {
         "type": "String"
@@ -591,5 +586,9 @@
   "desktopQuickSendInvalidPath": "A file path is invalid or too long, so the new content was not added",
   "desktopQuickSendClipboardSnapshotUnavailable": "The clipboard could not be read immediately, so potentially changed content was not added",
   "desktopQuickSendTargetConflict": "Some content was already sent to another device. Select the original device to continue",
-  "desktopQuickSendTargetNeedsReselection": "The target identity changed or is no longer trusted. The content was retained; select a device again"
+  "desktopQuickSendTargetNeedsReselection": "The target identity changed or is no longer trusted. The content was retained; select a device again",
+  "chatTimestampYesterday": "Yesterday {time}",
+  "@chatTimestampYesterday": {
+    "placeholders": { "time": { "type": "String" } }
+  }
 }

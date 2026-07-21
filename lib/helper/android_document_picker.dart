@@ -38,6 +38,14 @@ abstract class AndroidDocumentPickerPlatform {
   });
 
   Future<AndroidDocumentFile?> metadata(String uri);
+
+  Future<Uint8List> loadThumbnail({
+    required String uri,
+    required int width,
+    required int height,
+  }) async => Uint8List(0);
+
+  Future<bool> openDocument(String uri) async => false;
 }
 
 class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
@@ -77,11 +85,7 @@ class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
   }) async {
     final result = await _channel.invokeMethod<Uint8List>(
       'readBytes',
-      <String, Object?>{
-        'uri': uri,
-        'offset': offset,
-        'length': length,
-      },
+      <String, Object?>{'uri': uri, 'offset': offset, 'length': length},
     );
     return result ?? Uint8List(0);
   }
@@ -96,5 +100,26 @@ class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
       return null;
     }
     return AndroidDocumentFile.fromMap(result);
+  }
+
+  @override
+  Future<Uint8List> loadThumbnail({
+    required String uri,
+    required int width,
+    required int height,
+  }) async {
+    final result = await _channel.invokeMethod<Uint8List>(
+      'loadThumbnail',
+      <String, Object?>{'uri': uri, 'width': width, 'height': height},
+    );
+    return result ?? Uint8List(0);
+  }
+
+  @override
+  Future<bool> openDocument(String uri) async {
+    return await _channel.invokeMethod<bool>('openDocument', <String, Object?>{
+          'uri': uri,
+        }) ??
+        false;
   }
 }

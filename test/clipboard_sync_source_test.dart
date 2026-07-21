@@ -33,4 +33,25 @@ void main() {
     expect(source, contains('await copyToClipboard('));
     expect(source, contains('sourcePeerId: session.remotePeerId'));
   });
+
+  test('clipboard sync text bypasses chat persistence and dispatch', () {
+    final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+
+    expect(
+      source,
+      contains('message.type == MessageEnum.Text && !message.clipboard'),
+    );
+    expect(source, contains('if (clipboard) {'));
+    expect(source, contains('return _sendMessageData(draft, peerId: peerId)'));
+    final textCase = source.substring(
+      source.indexOf('case MessageEnum.Text:'),
+      source.indexOf('case MessageEnum.Notification:'),
+    );
+    final clipboardBranch = textCase.substring(
+      textCase.indexOf('if (message.clipboard)'),
+      textCase.indexOf('_dispatchToAll'),
+    );
+    expect(clipboardBranch, contains('await _ackMessage(message)'));
+    expect(clipboardBranch, contains('return;'));
+  });
 }

@@ -3,11 +3,16 @@ package com.vireen.whisper
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.Looper
+import android.util.Size
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -75,6 +80,8 @@ class AndroidDocumentPickerPlugin :
             "pickFiles" -> pickFiles(call, result)
             "readBytes" -> readBytes(call, result)
             "metadata" -> metadata(call, result)
+            "loadThumbnail" -> loadThumbnail(call, result)
+            "openDocument" -> openDocument(call, result)
             else -> result.notImplemented()
         }
     }
@@ -176,6 +183,110 @@ class AndroidDocumentPickerPlugin :
             } catch (_: Exception) {
                 mainHandler.post { result.success(null) }
             }
+        }
+    }
+
+    private fun loadThumbnail(call: MethodCall, result: MethodChannel.Result) {
+        val uriText = call.argument<String>("uri") ?: ""
+        val width = (call.argument<Number>("width")?.toInt() ?: 1200).coerceIn(64, 2400)
+        val height = (call.argument<Number>("height")?.toInt() ?: 1200).coerceIn(64, 2400)
+        val uri = Uri.parse(uriText)
+        if (uri.scheme != "content") {
+            result.error("invalid_uri", "Thumbnail source must be a content uri", null)
+            return
+        }
+        ioExecutor.execute {
+            try {
+                val bitmap = createThumbnail(uri, width, height)
+                    ?: throw IllegalStateException("Unable to decode media thumbnail")
+                val output = ByteArrayOutputStream()
+                val format = if (bitmap.hasAlpha()) {
+                    Bitmap.CompressFormat.PNG
+                } else {
+                    Bitmap.CompressFormat.JPEG
+                }
+                bitmap.compress(format, 88, output)
+                bitmap.recycle()
+                mainHandler.post { result.success(output.toByteArray()) }
+            } catch (error: Exception) {
+                mainHandler.post { result.error("thumbnail_failed", error.message, null) }
+            }
+        }
+    }
+
+    private fun createThumbnail(uri: Uri, width: Int, height: Int): Bitmap? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return context.contentResolver.loadThumbnail(uri, Size(width, height), null)
+        }
+        val mimeType = context.contentResolver.getType(uri).orEmpty()
+        if (mimeType.startsWith("video/")) {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(context, uri)
+                retriever.frameAtTime?.let { scaleBitmapToFit(it, width, height) }
+            } finally {
+                retriever.release()
+            }
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri).use { input ->
+            BitmapFactory.decodeStream(input, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null
+        }
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= width &&
+            bounds.outHeight / (sampleSize * 2) >= height) {
+            sampleSize *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val decoded = context.contentResolver.openInputStream(uri).use { input ->
+            BitmapFactory.decodeStream(input, null, options)
+        } ?: return null
+        return scaleBitmapToFit(decoded, width, height)
+    }
+
+    private fun scaleBitmapToFit(bitmap: Bitmap, width: Int, height: Int): Bitmap {
+        val scale = minOf(
+            1f,
+            width.toFloat() / bitmap.width.toFloat(),
+            height.toFloat() / bitmap.height.toFloat(),
+        )
+        if (scale >= 1f) {
+            return bitmap
+        }
+        val scaled = Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt().coerceAtLeast(1),
+            (bitmap.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+        if (scaled !== bitmap) {
+            bitmap.recycle()
+        }
+        return scaled
+    }
+
+    private fun openDocument(call: MethodCall, result: MethodChannel.Result) {
+        val uriText = call.argument<String>("uri") ?: ""
+        val uri = Uri.parse(uriText)
+        if (uri.scheme != "content") {
+            result.success(false)
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (activity == null) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+        try {
+            (activity ?: context).startActivity(intent)
+            result.success(true)
+        } catch (_: Exception) {
+            result.success(false)
         }
     }
 

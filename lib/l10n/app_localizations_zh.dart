@@ -600,7 +600,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputPeerMustTrustThisDevice => '对端还没有信任本机，请先在对端信任本机后再共享键鼠';
 
   @override
-  String get remoteInputLayoutRequired => '请先在设备设置里把对端屏幕贴到本机边缘';
+  String get remoteInputLayoutRequired => '请先在键鼠工作区把对端屏幕贴到本机边缘';
 
   @override
   String get remoteInputEnabledMoveToEdge => '键鼠共享已启用，移动到屏幕边缘开始控制对端';
@@ -611,55 +611,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String remoteInputAutoModeSetting(String mode) {
-    return '键鼠共享自动模式：$mode';
-  }
-
-  @override
-  String remoteInputLayoutSetting(String edge) {
-    return '屏幕排列：$edge';
-  }
-
-  @override
-  String get remoteInputAutoModeTitle => '键鼠共享自动模式';
-
-  @override
-  String get remoteInputAutoModeOff => '关闭';
-
-  @override
-  String get remoteInputAutoModeSource => '本机控制对端';
-
-  @override
-  String get remoteInputAutoModeSink => '对端控制本机';
-
-  @override
   String get remoteInputLayoutTitle => '屏幕排列';
 
   @override
-  String remoteInputCurrentEdge(String edge) {
-    return '当前：$edge';
-  }
-
-  @override
-  String get remoteInputLayoutSave => '保存';
-
-  @override
-  String get remoteInputSnapLeft => '贴左';
-
-  @override
-  String get remoteInputSnapRight => '贴右';
-
-  @override
-  String get remoteInputSnapTop => '贴上';
-
-  @override
-  String get remoteInputSnapBottom => '贴下';
-
-  @override
   String get remoteInputLocalScreen => '本机';
-
-  @override
-  String get remoteInputPeerScreen => '对端';
 
   @override
   String get remoteInputEdgeLeft => '左侧';
@@ -904,6 +859,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String pairingNewDeviceDescription(String device) {
     return '$device 请求建立可信连接';
+  }
+
+  @override
+  String pairingNewDeviceCompareCode(String device) {
+    return '$device 请求连接，请确认数字一致';
   }
 
   @override
@@ -1224,4 +1184,9 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get desktopQuickSendTargetNeedsReselection =>
       '目标设备身份已变化或不再可信，内容已保留，请重新选择';
+
+  @override
+  String chatTimestampYesterday(String time) {
+    return '昨天 $time';
+  }
 }

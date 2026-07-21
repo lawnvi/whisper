@@ -25,7 +25,7 @@ void main() {
     );
 
     final toggleMethod = RegExp(
-      r'Future<void> _toggleRemoteInput[\s\S]*?Future<void> _maybeAutoStartRemoteInput',
+      r'Future<void> _toggleRemoteInput[\s\S]*?Future<RemoteInputLayoutData> _remoteInputLayoutForCurrentPeer',
     ).firstMatch(conversation)!.group(0)!;
     expect(toggleMethod, isNot(contains('isMutuallyTrusted: true')));
     expect(toggleMethod, isNot(contains('remoteCanInject: true')));
@@ -53,25 +53,10 @@ void main() {
     );
   });
 
-  test('settings remote input entry explains missing mutual trust', () {
+  test('device settings no longer own a remote input trust flow', () {
     final settings = File('lib/page/settings.dart').readAsStringSync();
 
-    expect(
-      settings,
-      isNot(contains('device.auth ? _openRemoteInputAutoModePicker : null')),
-    );
-    expect(settings, contains('_openRemoteInputAutoModePickerWithTrustPrompt'));
-    expect(
-      settings,
-      contains('showAppToast(l10n.remoteInputRequiresMutualTrust)'),
-    );
-    expect(
-      settings,
-      contains('showAppToast(l10n.remoteInputPeerMustTrustThisDevice)'),
-    );
-    expect(
-      settings,
-      contains('WsSvrManager().remotePeerTrustsPeer(device.uid, self.uid)'),
-    );
+    expect(settings, isNot(contains('_openRemoteInputAutoModePicker')));
+    expect(settings, isNot(contains('RemoteInputLayoutEditorScreen')));
   });
 }

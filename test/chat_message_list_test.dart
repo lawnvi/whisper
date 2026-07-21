@@ -17,16 +17,22 @@ void main() {
         home: Scaffold(
           body: ChatMessageList(
             buildFileMessage: (_, __) => const SizedBox.shrink(),
-            buildTextMessage: (message, _) => Padding(
+            buildTextMessage: (message, _, trailingAction) => Padding(
               padding: const EdgeInsets.all(24),
-              child: SelectableText(
-                message.content ?? '',
-                contextMenuBuilder: (context, editableTextState) {
-                  return AdaptiveTextSelectionToolbar(
-                    anchors: editableTextState.contextMenuAnchors,
-                    children: const [],
-                  );
-                },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SelectableText(
+                    message.content ?? '',
+                    contextMenuBuilder: (context, editableTextState) {
+                      return AdaptiveTextSelectionToolbar(
+                        anchors: editableTextState.contextMenuAnchors,
+                        children: const [],
+                      );
+                    },
+                  ),
+                  if (trailingAction != null) trailingAction,
+                ],
               ),
             ),
             controller: controller,
@@ -91,9 +97,15 @@ void main() {
         home: Scaffold(
           body: ChatMessageList(
             buildFileMessage: (_, __) => const SizedBox.shrink(),
-            buildTextMessage: (message, _) => Padding(
+            buildTextMessage: (message, _, trailingAction) => Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(message.content ?? ''),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(message.content ?? ''),
+                  if (trailingAction != null) trailingAction,
+                ],
+              ),
             ),
             controller: controller,
             listKey: listKey,
@@ -142,9 +154,66 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('copy icon morphs into a check and resets', (tester) async {
+    final listKey = GlobalKey<AnimatedListState>();
+    final controller = ScrollController();
+    var copied = '';
+    final message = _message(id: 8, content: 'copy me');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatMessageList(
+            buildFileMessage: (_, __) => const SizedBox.shrink(),
+            buildTextMessage: (message, _, trailingAction) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(message.content ?? ''),
+                if (trailingAction != null) trailingAction,
+              ],
+            ),
+            controller: controller,
+            listKey: listKey,
+            messages: <MessageData>[message],
+            onOpenContainingFolder: (_) {},
+            onOpenFile: (_) {},
+            onCopyText: (value) => copied = value,
+            onDeleteMessage: (_, {deleteFile = false}) async {},
+            onDeleteMessages: (_) async {},
+            selfUid: 'me',
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('message-copy-8')));
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(copied, 'copy me');
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(find.byIcon(Icons.content_copy_rounded), findsOneWidget);
+  });
+
+  test('timestamps appear only at the start of five-minute clusters', () {
+    final messages = <MessageData>[
+      _message(id: 3, content: 'newest', timestamp: 1000),
+      _message(id: 2, content: 'same cluster', timestamp: 940),
+      _message(id: 1, content: 'older cluster', timestamp: 300),
+    ];
+
+    expect(shouldShowChatTimestamp(messages, 0), isFalse);
+    expect(shouldShowChatTimestamp(messages, 1), isTrue);
+    expect(shouldShowChatTimestamp(messages, 2), isTrue);
+  });
 }
 
-MessageData _message({required int id, required String content}) {
+MessageData _message({
+  required int id,
+  required String content,
+  int? timestamp,
+}) {
   return MessageData(
     id: id,
     sender: 'peer',
@@ -155,7 +224,7 @@ MessageData _message({required int id, required String content}) {
     type: MessageEnum.Text,
     content: content,
     message: '',
-    timestamp: id,
+    timestamp: timestamp ?? id,
     uuid: 'message-$id',
     acked: true,
     path: '',

@@ -641,7 +641,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteInputLayoutRequired =>
-      'Primero coloca la pantalla del otro dispositivo contra el borde en ajustes';
+      'Primero coloca la pantalla del otro dispositivo contra el borde en el espacio de teclado y mouse';
 
   @override
   String get remoteInputEnabledMoveToEdge =>
@@ -653,55 +653,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String remoteInputAutoModeSetting(String mode) {
-    return 'Compartir teclado y mouse: $mode';
-  }
-
-  @override
-  String remoteInputLayoutSetting(String edge) {
-    return 'Distribucion de pantalla: $edge';
-  }
-
-  @override
-  String get remoteInputAutoModeTitle => 'Compartir teclado y mouse';
-
-  @override
-  String get remoteInputAutoModeOff => 'Desactivado';
-
-  @override
-  String get remoteInputAutoModeSource => 'Este dispositivo controla al otro';
-
-  @override
-  String get remoteInputAutoModeSink => 'El otro controla este dispositivo';
-
-  @override
   String get remoteInputLayoutTitle => 'Distribucion de pantalla';
 
   @override
-  String remoteInputCurrentEdge(String edge) {
-    return 'Actual: $edge';
-  }
-
-  @override
-  String get remoteInputLayoutSave => 'Guardar';
-
-  @override
-  String get remoteInputSnapLeft => 'Ajustar a la izquierda';
-
-  @override
-  String get remoteInputSnapRight => 'Ajustar a la derecha';
-
-  @override
-  String get remoteInputSnapTop => 'Ajustar arriba';
-
-  @override
-  String get remoteInputSnapBottom => 'Ajustar abajo';
-
-  @override
   String get remoteInputLocalScreen => 'Este dispositivo';
-
-  @override
-  String get remoteInputPeerScreen => 'Otro dispositivo';
 
   @override
   String get remoteInputEdgeLeft => 'Izquierda';
@@ -970,6 +925,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String pairingNewDeviceDescription(String device) {
     return '$device quiere establecer una conexión de confianza';
+  }
+
+  @override
+  String pairingNewDeviceCompareCode(String device) {
+    return '$device quiere conectarse. Confirma que los números coincidan';
   }
 
   @override
@@ -1325,4 +1285,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get desktopQuickSendTargetNeedsReselection =>
       'La identidad cambió o ya no es de confianza. El contenido se conservó; vuelve a seleccionar un dispositivo';
+
+  @override
+  String chatTimestampYesterday(String time) {
+    return 'Ayer $time';
+  }
 }

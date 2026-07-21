@@ -34,14 +34,10 @@ void main() {
     expect(shouldShowAudioShareAction, isNot(contains('isDesktop() ||')));
   });
 
-  test('client settings hide remote input for non desktop peers', () {
+  test('client settings do not own per-device remote input configuration', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
 
-    expect(source, contains('bool get _canConfigureRemoteInput'));
-    expect(source, contains("platform.contains('windows')"));
-    expect(
-      source,
-      contains('WsSvrManager().supportsRemoteInputFor(device.uid)'),
-    );
+    expect(source, isNot(contains('bool get _canConfigureRemoteInput')));
+    expect(source, isNot(contains('RemoteInputLayoutEditorScreen')));
   });
 }

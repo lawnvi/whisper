@@ -9,6 +9,7 @@ MessageData buildMessage({
   required String sender,
   required String receiver,
   required String content,
+  bool clipboard = false,
 }) {
   return MessageData(
     id: id,
@@ -16,7 +17,7 @@ MessageData buildMessage({
     sender: sender,
     receiver: receiver,
     name: '',
-    clipboard: false,
+    clipboard: clipboard,
     size: 0,
     type: MessageEnum.Text,
     content: content,
@@ -78,6 +79,15 @@ void main() {
           content: 'reply to peer',
         ),
       );
+      await database.insertMessage(
+        buildMessage(
+          id: 4,
+          sender: 'peer-a',
+          receiver: 'self-device',
+          content: 'clipboard sync artifact',
+          clipboard: true,
+        ),
+      );
 
       final latest = await database.fetchLatestMessagesByPeers([
         'self-device',
@@ -86,6 +96,32 @@ void main() {
 
       expect(latest['self-device']?.content, 'local draft');
       expect(latest['peer-a']?.content, 'reply to peer');
+    });
+
+    test('conversation history excludes legacy clipboard sync rows', () async {
+      await database.insertMessage(
+        buildMessage(
+          id: 1,
+          sender: 'peer-a',
+          receiver: 'self-device',
+          content: 'visible text',
+        ),
+      );
+      await database.insertMessage(
+        buildMessage(
+          id: 2,
+          sender: 'peer-a',
+          receiver: 'self-device',
+          content: 'hidden clipboard text',
+          clipboard: true,
+        ),
+      );
+
+      final messages = await database.fetchMessageList('peer-a', limit: 20);
+      expect(
+        messages.map((message) => message.content),
+        <String?>['visible text'],
+      );
     });
   });
 }

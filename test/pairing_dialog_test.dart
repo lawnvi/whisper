@@ -11,18 +11,18 @@ import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
 DeviceData _device() => const DeviceData(
-      id: 0,
-      uid: 'peer-a',
-      name: 'Desk PC',
-      host: '',
-      port: 0,
-      platform: 'windows',
-      isServer: false,
-      online: true,
-      clipboard: false,
-      auth: false,
-      lastTime: 0,
-    );
+  id: 0,
+  uid: 'peer-a',
+  name: 'Desk PC',
+  host: '',
+  port: 0,
+  platform: 'windows',
+  isServer: false,
+  online: true,
+  clipboard: false,
+  auth: false,
+  lastTime: 0,
+);
 
 Widget _app(PairingRequest request, ValueChanged<bool> onResolved) {
   return MaterialApp(
@@ -41,26 +41,28 @@ Widget _app(PairingRequest request, ValueChanged<bool> onResolved) {
 }
 
 void main() {
-  test('external decision dismisses the presentation before resolving',
-      () async {
-    final sessionCancellation = Completer<void>();
-    var dismissedBeforeResolve = false;
-    final decisions = <bool>[];
-    late PairingPresentationBinding presentation;
-    presentation = PairingPresentationBinding(
-      sessionCancellation: sessionCancellation.future,
-      onResolve: (allow) {
-        dismissedBeforeResolve = presentation.isDismissed;
-        decisions.add(allow);
-      },
-    );
+  test(
+    'external decision dismisses the presentation before resolving',
+    () async {
+      final sessionCancellation = Completer<void>();
+      var dismissedBeforeResolve = false;
+      final decisions = <bool>[];
+      late PairingPresentationBinding presentation;
+      presentation = PairingPresentationBinding(
+        sessionCancellation: sessionCancellation.future,
+        onResolve: (allow) {
+          dismissedBeforeResolve = presentation.isDismissed;
+          decisions.add(allow);
+        },
+      );
 
-    presentation.resolve(true);
+      presentation.resolve(true);
 
-    await expectLater(presentation.cancellation, completes);
-    expect(dismissedBeforeResolve, isTrue);
-    expect(decisions, <bool>[true]);
-  });
+      await expectLater(presentation.cancellation, completes);
+      expect(dismissedBeforeResolve, isTrue);
+      expect(decisions, <bool>[true]);
+    },
+  );
 
   test('presentation accepts only one decision', () {
     final sessionCancellation = Completer<void>();
@@ -76,17 +78,20 @@ void main() {
     expect(decisions, <bool>[true]);
   });
 
-  test('resolved dialogs detach their pending session cancellation listener',
-      () {
-    final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
+  test(
+    'resolved dialogs detach their pending session cancellation listener',
+    () {
+      final source = File('lib/widget/pairing_dialog.dart').readAsStringSync();
 
-    expect(source, contains('cancellation.asStream().listen'));
-    expect(source, contains('cancellationSubscription?.cancel()'));
-    expect(source, isNot(contains('unawaited(cancellation.then')));
-  });
+      expect(source, contains('cancellation.asStream().listen'));
+      expect(source, contains('cancellationSubscription?.cancel()'));
+      expect(source, isNot(contains('unawaited(cancellation.then')));
+    },
+  );
 
-  testWidgets('shows grouped code with an ungrouped semantic label',
-      (tester) async {
+  testWidgets('shows grouped code with an ungrouped semantic label', (
+    tester,
+  ) async {
     final request = PairingRequest(
       device: _device(),
       pairingCode: '123456',
@@ -98,11 +103,20 @@ void main() {
     expect(find.text('123 456'), findsOneWidget);
     final semantics = tester.getSemantics(find.byKey(pairingCodeKey));
     expect(semantics.label, contains('123456'));
-    expect(find.textContaining('Desk PC'), findsWidgets);
+    expect(
+      find.text('Desk PC wants to connect. Confirm the numbers match'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Desk PC wants to establish a trusted connection'),
+      findsNothing,
+    );
+    expect(tester.getSize(find.byKey(pairingTitleGapKey)).height, 20);
   });
 
-  testWidgets('identity change resolves only the first decision',
-      (tester) async {
+  testWidgets('identity change resolves only the first decision', (
+    tester,
+  ) async {
     final decisions = <bool>[];
     final request = PairingRequest(
       device: _device(),
@@ -119,10 +133,12 @@ void main() {
     await tester.tap(find.byKey(pairingApproveKey));
     expect(decisions, <bool>[false]);
     await tester.pump();
-    final reject =
-        tester.widget<CupertinoDialogAction>(find.byKey(pairingRejectKey));
-    final approve =
-        tester.widget<CupertinoDialogAction>(find.byKey(pairingApproveKey));
+    final reject = tester.widget<CupertinoDialogAction>(
+      find.byKey(pairingRejectKey),
+    );
+    final approve = tester.widget<CupertinoDialogAction>(
+      find.byKey(pairingApproveKey),
+    );
     expect(reject.onPressed, isNull);
     expect(approve.onPressed, isNull);
   });
@@ -135,13 +151,15 @@ void main() {
       mode: PairingPromptMode.responder,
     );
     await tester.pumpWidget(_app(request, (_) {}));
-    final reject =
-        tester.widget<CupertinoDialogAction>(find.byKey(pairingRejectKey));
+    final reject = tester.widget<CupertinoDialogAction>(
+      find.byKey(pairingRejectKey),
+    );
     expect(reject.isDestructiveAction, isTrue);
   });
 
-  testWidgets('repeated route decisions cannot pop the underlying page',
-      (tester) async {
+  testWidgets('repeated route decisions cannot pop the underlying page', (
+    tester,
+  ) async {
     final decisions = <bool>[];
     final request = PairingRequest(
       device: _device(),
@@ -160,10 +178,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     final shown = showPairingDialog(
@@ -182,8 +202,9 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('user decision detaches a pending session cancellation',
-      (tester) async {
+  testWidgets('user decision detaches a pending session cancellation', (
+    tester,
+  ) async {
     final cancellation = Completer<void>();
     final decisions = <bool>[];
     final request = PairingRequest(
@@ -204,10 +225,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     final shown = showPairingDialog(
@@ -227,8 +250,9 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('session cancellation dismisses only the pairing route',
-      (tester) async {
+  testWidgets('session cancellation dismisses only the pairing route', (
+    tester,
+  ) async {
     final cancellation = Completer<void>();
     final decisions = <bool>[];
     final request = PairingRequest(
@@ -249,10 +273,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     final shown = showPairingDialog(
@@ -272,8 +298,9 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('notification decision dismisses a background pairing route',
-      (tester) async {
+  testWidgets('notification decision dismisses a background pairing route', (
+    tester,
+  ) async {
     final sessionCancellation = Completer<void>();
     final decisions = <bool>[];
     late PairingPresentationBinding presentation;
@@ -300,10 +327,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     final shown = showPairingDialog(
@@ -323,8 +352,9 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('notification decision removes only the pairing route',
-      (tester) async {
+  testWidgets('notification decision removes only the pairing route', (
+    tester,
+  ) async {
     final sessionCancellation = Completer<void>();
     late BuildContext pageContext;
     late PairingPresentationBinding presentation;
@@ -358,10 +388,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     final shown = showPairingDialog(
@@ -379,8 +411,9 @@ void main() {
     expect(find.text('connected page'), findsOneWidget);
   });
 
-  testWidgets('background notification decision never creates a stale dialog',
-      (tester) async {
+  testWidgets('background notification decision never creates a stale dialog', (
+    tester,
+  ) async {
     final sessionCancellation = Completer<void>();
     final decisions = <bool>[];
     final presentation = PairingPresentationBinding(
@@ -406,10 +439,12 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          pageContext = context;
-          return const Scaffold(body: Text('underlying page'));
-        }),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('underlying page'));
+          },
+        ),
       ),
     );
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -436,8 +471,9 @@ void main() {
     expect(find.text('underlying page'), findsOneWidget);
   });
 
-  testWidgets('initiator must explicitly confirm matching codes',
-      (tester) async {
+  testWidgets('initiator must explicitly confirm matching codes', (
+    tester,
+  ) async {
     final decisions = <bool>[];
     final request = PairingRequest(
       device: _device(),

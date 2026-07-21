@@ -776,7 +776,6 @@ void main() {
           device: peer,
           deviceLoader: (_) async => peer,
           isConnected: false,
-          canConfigureRemoteInput: false,
           deleteDevice: (uid) async => deleted.add(uid),
         ),
       ),
@@ -826,7 +825,6 @@ void main() {
           device: peer,
           deviceLoader: (_) async => peer,
           isConnected: true,
-          canConfigureRemoteInput: false,
         ),
       ),
     );

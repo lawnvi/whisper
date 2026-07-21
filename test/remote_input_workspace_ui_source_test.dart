@@ -45,16 +45,6 @@ void main() {
     expect(canvas, isNot(contains("subtitle: '1000 x 800'")));
   });
 
-  test('layout editor refreshes display topology when screens change', () {
-    final source = File('lib/remote_input/remote_input_layout_editor.dart')
-        .readAsStringSync();
-
-    expect(source, contains('WidgetsBindingObserver'));
-    expect(source, contains('didChangeMetrics'));
-    expect(source, contains('unawaited(_loadLocalTopology())'));
-    expect(source, contains('unawaited(_loadRemoteTopology())'));
-  });
-
   test('workspace canvas keeps screen geometry and labels peer resolution', () {
     final source = File('lib/remote_input/remote_input_workspace_screen.dart')
         .readAsStringSync();

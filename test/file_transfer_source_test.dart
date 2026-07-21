@@ -8,8 +8,9 @@ import 'package:whisper/socket/file_transfer_source.dart';
 
 void main() {
   test('PathFileTransferSource waits for reads before closing the file', () {
-    final source =
-        File('lib/socket/file_transfer_source.dart').readAsStringSync();
+    final source = File(
+      'lib/socket/file_transfer_source.dart',
+    ).readAsStringSync();
     final readRangeStart = source.indexOf(
       'Future<Uint8List> readRange(int offset, int length) async',
     );
@@ -54,28 +55,28 @@ void main() {
     expect(proof, bytesChecksum(bytes.sublist(0, 8), algorithm: 'sha256'));
   });
 
-  test('checksum rejects a content uri that ends before its declared size',
-      () async {
-    final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
-    final source = AndroidContentUriTransferSource(
-      uri: 'content://documents/truncated',
-      expectedSize: 8,
-      picker: _FakeAndroidDocumentPicker(bytes),
-    );
+  test(
+    'checksum rejects a content uri that ends before its declared size',
+    () async {
+      final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
+      final source = AndroidContentUriTransferSource(
+        uri: 'content://documents/truncated',
+        expectedSize: 8,
+        picker: _FakeAndroidDocumentPicker(bytes),
+      );
 
-    await expectLater(
-      checksumForTransferSource(source, algorithm: 'sha256'),
-      throwsA(isA<FileSystemException>()),
-    );
-  });
+      await expectLater(
+        checksumForTransferSource(source, algorithm: 'sha256'),
+        throwsA(isA<FileSystemException>()),
+      );
+    },
+  );
 
   test('missing provider size stays unknown instead of becoming zero', () {
-    final metadata = AndroidDocumentFile.fromMap(
-      <Object?, Object?>{
-        'uri': 'content://documents/unknown',
-        'name': 'unknown.bin',
-      },
-    );
+    final metadata = AndroidDocumentFile.fromMap(<Object?, Object?>{
+      'uri': 'content://documents/unknown',
+      'name': 'unknown.bin',
+    });
 
     expect(metadata.size, -1);
   });
@@ -101,6 +102,16 @@ class _FakeAndroidDocumentPicker implements AndroidDocumentPickerPlatform {
   Future<List<AndroidDocumentFile>> pickFiles({bool allowMultiple = true}) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<Uint8List> loadThumbnail({
+    required String uri,
+    required int width,
+    required int height,
+  }) async => Uint8List(0);
+
+  @override
+  Future<bool> openDocument(String uri) async => false;
 
   @override
   Future<Uint8List> readBytes({

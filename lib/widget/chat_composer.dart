@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -12,6 +13,9 @@ import 'package:whisper/theme/app_theme.dart';
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey = ValueKey(
     'chat-composer-desktop-container',
+  );
+  static const desktopInputRegionKey = ValueKey(
+    'chat-composer-desktop-input-region',
   );
   static const attachmentButtonKey = ValueKey('chat-composer-attachment');
   static const clipboardButtonKey = ValueKey('chat-composer-clipboard');
@@ -38,7 +42,7 @@ class ChatComposer extends StatelessWidget {
   final Map<String, bool> keyPressedMap;
   final TextEditingController controller;
   final FocusNode focusNode;
-  final ClipboardImageDraft? pendingClipboardImage;
+  final List<ClipboardImageDraft> pendingClipboardImages;
   final List<ClipboardFileDraft> pendingClipboardFiles;
   final Future<void> Function() onPickFiles;
   final Future<void> Function() onSendClipboard;
@@ -46,8 +50,8 @@ class ChatComposer extends StatelessWidget {
   final Future<String?> Function()? onPasteClipboard;
   final Future<void> Function()? onSendClipboardFiles;
   final VoidCallback? onClearClipboardFiles;
-  final Future<void> Function()? onSendClipboardImage;
-  final VoidCallback? onClearClipboardImage;
+  final Future<void> Function()? onSendClipboardImages;
+  final ValueChanged<int>? onRemoveClipboardImage;
 
   const ChatComposer({
     super.key,
@@ -60,7 +64,7 @@ class ChatComposer extends StatelessWidget {
     required this.keyPressedMap,
     required this.controller,
     required this.focusNode,
-    this.pendingClipboardImage,
+    this.pendingClipboardImages = const <ClipboardImageDraft>[],
     this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
     required this.onSendClipboard,
@@ -68,8 +72,8 @@ class ChatComposer extends StatelessWidget {
     this.onPasteClipboard,
     this.onSendClipboardFiles,
     this.onClearClipboardFiles,
-    this.onSendClipboardImage,
-    this.onClearClipboardImage,
+    this.onSendClipboardImages,
+    this.onRemoveClipboardImage,
   });
 
   @override
@@ -114,46 +118,61 @@ class ChatComposer extends StatelessWidget {
             _buildClipboardFilesPreview(context),
             const SizedBox(height: 10),
           ],
-          if (_showsClipboardImagePreview) ...[
-            _buildClipboardImagePreview(context),
+          if (_showsClipboardImagesPreview) ...[
+            _buildClipboardImagesPreview(context),
             const SizedBox(height: 10),
           ],
-          Focus(
-            onKeyEvent: (_, event) => _handleKeyEvent(event),
-            child: TextField(
-              key: const ValueKey('chat-composer-textfield'),
-              controller: controller,
-              focusNode: focusNode,
-              enabled: canSend,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              minLines: 1,
-              maxLines: 5,
-              autofocus: isDesktop(),
-              autocorrect: true,
-              cursorColor: accentColor,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 16,
-                height: 1.45,
-              ),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                isDense: true,
-                filled: false,
-                fillColor: Colors.transparent,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                errorBorder: InputBorder.none,
-                focusedErrorBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                hintText: canSend
-                    ? (AppLocalizations.of(context)?.sendTips ?? '发点什么...')
-                    : (AppLocalizations.of(context)?.connectToSend ??
-                          '连接后即可发送消息'),
-                hintStyle: TextStyle(color: palette.textMuted, fontSize: 16),
+          GestureDetector(
+            key: desktopInputRegionKey,
+            behavior: HitTestBehavior.opaque,
+            onTap: canSend ? focusNode.requestFocus : null,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 58),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Focus(
+                  onKeyEvent: (_, event) => _handleKeyEvent(event),
+                  child: TextField(
+                    key: const ValueKey('chat-composer-textfield'),
+                    controller: controller,
+                    focusNode: focusNode,
+                    enabled: canSend,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    minLines: 1,
+                    maxLines: 5,
+                    autofocus: isDesktop(),
+                    autocorrect: true,
+                    cursorColor: accentColor,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 16,
+                      height: 1.45,
+                    ),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      isDense: true,
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      hintText: canSend
+                          ? (AppLocalizations.of(context)?.sendTips ??
+                                '发点什么...')
+                          : (AppLocalizations.of(context)?.connectToSend ??
+                                '连接后即可发送消息'),
+                      hintStyle: TextStyle(
+                        color: palette.textMuted,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -325,82 +344,96 @@ class ChatComposer extends StatelessWidget {
     );
   }
 
-  Widget _buildClipboardImagePreview(BuildContext context) {
+  Widget _buildClipboardImagesPreview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
-    final draft = pendingClipboardImage!;
-    return Container(
-      key: clipboardImagePreviewKey,
-      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
-      decoration: BoxDecoration(
-        color: palette.surfaceMuted.withValues(alpha: 0.56),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: Row(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        key: clipboardImagePreviewKey,
+        spacing: 12,
+        runSpacing: 12,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.memory(
-              draft.bytes,
-              width: 44,
-              height: 44,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 44,
-                height: 44,
-                color: colorScheme.surfaceContainerHighest,
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.image_outlined,
-                  color: colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
+          for (var index = 0; index < pendingClipboardImages.length; index++)
+            SizedBox(
+              key: ValueKey<String>('clipboard-image-preview-$index'),
+              width: 88,
+              height: 88,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: _buildClipboardImage(
+                        pendingClipboardImages[index],
+                        colorScheme,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: -5,
+                    right: -5,
+                    child: IconButton(
+                      key: index == 0
+                          ? clipboardImageRemoveButtonKey
+                          : ValueKey<String>(
+                              'chat-composer-clipboard-image-remove-$index',
+                            ),
+                      tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
+                      onPressed: () => onRemoveClipboardImage?.call(index),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(30, 30),
+                        maximumSize: const Size(30, 30),
+                        backgroundColor: colorScheme.surface,
+                        foregroundColor: colorScheme.onSurface,
+                        side: BorderSide(color: palette.borderSubtle),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        elevation: 2,
+                        shadowColor: Colors.black.withValues(alpha: 0.22),
+                      ),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  draft.fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _formatBytes(draft.size),
-                  style: TextStyle(color: palette.textMuted, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            key: clipboardImageRemoveButtonKey,
-            tooltip: AppLocalizations.of(context)?.delete ?? 'Delete',
-            onPressed: onClearClipboardImage,
-            style: IconButton.styleFrom(
-              minimumSize: const Size(32, 32),
-              maximumSize: const Size(32, 32),
-              foregroundColor: colorScheme.onSurfaceVariant,
-              padding: EdgeInsets.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              splashFactory: NoSplash.splashFactory,
-              overlayColor: Colors.transparent,
-            ),
-            icon: const Icon(Icons.close_rounded, size: 18),
-          ),
         ],
       ),
     );
+  }
+
+  Widget _buildClipboardImage(
+    ClipboardImageDraft draft,
+    ColorScheme colorScheme,
+  ) {
+    Widget errorBuilder(
+      BuildContext context,
+      Object error,
+      StackTrace? stackTrace,
+    ) => ColoredBox(
+      color: colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: colorScheme.onSurfaceVariant,
+          size: 24,
+        ),
+      ),
+    );
+
+    return draft.bytes.isEmpty
+        ? Image.file(
+            File(draft.path),
+            fit: BoxFit.cover,
+            errorBuilder: errorBuilder,
+          )
+        : Image.memory(
+            draft.bytes,
+            fit: BoxFit.cover,
+            errorBuilder: errorBuilder,
+          );
   }
 
   Widget _buildClipboardFilesPreview(BuildContext context) {
@@ -500,7 +533,7 @@ class ChatComposer extends StatelessWidget {
         (showsAttachmentAction ||
             _hasDraftText ||
             _canSendPendingClipboardFiles ||
-            _canSendPendingClipboardImage);
+            _canSendPendingClipboardImages);
     final backgroundColor = showsAttachmentAction
         ? Colors.transparent
         : (enabled ? accentColor : palette.surfaceMuted);
@@ -546,30 +579,30 @@ class ChatComposer extends StatelessWidget {
   bool get _showsClipboardFilesPreview =>
       isDesktopStyle && pendingClipboardFiles.isNotEmpty;
 
-  bool get _showsClipboardImagePreview =>
+  bool get _showsClipboardImagesPreview =>
       isDesktopStyle &&
-      pendingClipboardImage != null &&
+      pendingClipboardImages.isNotEmpty &&
       !_showsClipboardFilesPreview;
 
   bool get _canSendPendingClipboardFiles =>
       _showsClipboardFilesPreview && onSendClipboardFiles != null;
 
-  bool get _canSendPendingClipboardImage =>
-      _showsClipboardImagePreview && onSendClipboardImage != null;
+  bool get _canSendPendingClipboardImages =>
+      _showsClipboardImagesPreview && onSendClipboardImages != null;
 
   bool get _showsAttachmentAction =>
       !isLocalhost &&
       !_hasDraftText &&
       !_showsClipboardFilesPreview &&
-      !_showsClipboardImagePreview;
+      !_showsClipboardImagesPreview;
 
   Future<void> _handlePrimaryAction(BuildContext context) async {
     if (_canSendPendingClipboardFiles) {
       await onSendClipboardFiles!();
       return;
     }
-    if (_canSendPendingClipboardImage) {
-      await onSendClipboardImage!();
+    if (_canSendPendingClipboardImages) {
+      await onSendClipboardImages!();
       return;
     }
     if (_showsAttachmentAction) {
@@ -578,8 +611,8 @@ class ChatComposer extends StatelessWidget {
     }
 
     final snapshot = controller.value;
-    final nextText = snapshot.text.trimRight();
-    if (nextText.trim().isEmpty) {
+    final nextText = snapshot.text.trim();
+    if (nextText.isEmpty) {
       return;
     }
     await _sendTextSnapshot(snapshot, nextText);
@@ -607,16 +640,16 @@ class ChatComposer extends StatelessWidget {
           unawaited(onSendClipboardFiles!());
           return KeyEventResult.handled;
         }
-        if (_canSendPendingClipboardImage) {
-          unawaited(onSendClipboardImage!());
+        if (_canSendPendingClipboardImages) {
+          unawaited(onSendClipboardImages!());
           return KeyEventResult.handled;
         }
         if (isLoading) {
           return KeyEventResult.handled;
         }
         final snapshot = controller.value;
-        final nextText = snapshot.text.trimRight();
-        if (nextText.trim().isNotEmpty) {
+        final nextText = snapshot.text.trim();
+        if (nextText.isNotEmpty) {
           unawaited(_sendTextSnapshot(snapshot, nextText));
           return KeyEventResult.handled;
         }

@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 
@@ -67,9 +72,7 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(
-        find.text(
-          kind == MediaFileKind.audio ? '12.8 MB  68%' : '12.8 MB · 68%',
-        ),
+        find.text(kind == MediaFileKind.image ? '68%' : '12.8 MB  68%'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
@@ -118,7 +121,8 @@ void main() {
       find.byKey(const ValueKey<String>('visual-transfer-cancel')),
       findsOneWidget,
     );
-    expect(find.text('4.72 MB · 42%'), findsOneWidget);
+    expect(find.text('42%'), findsOneWidget);
+    expect(find.textContaining('4.72 MB'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -157,7 +161,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('completed video offers the system player without a filename', (
+  testWidgets('completed image does not show its file size', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 280,
+            child: MediaMessagePreview(
+              kind: MediaFileKind.image,
+              path: '/tmp/missing-example.png',
+              name: 'example.png',
+              status: '305.41 KB',
+              contentAvailable: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('305.41 KB'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('completed video uses a compact system-player attachment', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -177,8 +203,13 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.open_in_new_rounded), findsOneWidget);
-    expect(find.text('example.mp4'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('video-message-card')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    expect(find.text('example.mp4'), findsOneWidget);
+    expect(find.text('8.2 MB'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -315,4 +346,108 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected, isTrue);
   });
+
+  testWidgets('content uri image renders from an in-memory thumbnail', (
+    tester,
+  ) async {
+    final original = AndroidDocumentPicker.shared;
+    AndroidDocumentPicker.shared = _ThumbnailPicker();
+    addTearDown(() => AndroidDocumentPicker.shared = original);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 240,
+            child: MediaMessagePreview(
+              kind: MediaFileKind.image,
+              path: 'content://provider/photo/1',
+              name: 'photo.png',
+              status: '12 KB',
+              contentAvailable: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+  });
+
+  testWidgets('image viewer is a titleless modal and Escape closes it', (
+    tester,
+  ) async {
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('conversation'));
+          },
+        ),
+      ),
+    );
+
+    unawaited(
+      showMediaViewer(
+        pageContext,
+        kind: MediaFileKind.image,
+        path: '/missing/photo.png',
+        name: 'photo.png',
+        onOpenExternally: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('media-viewer-close')),
+      findsOneWidget,
+    );
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.text('photo.png'), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('conversation'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('media-viewer-close')),
+      findsNothing,
+    );
+  });
+}
+
+class _ThumbnailPicker extends AndroidDocumentPickerPlatform {
+  static final Uint8List _png = Uint8List.fromList(
+    base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    ),
+  );
+
+  @override
+  Future<Uint8List> loadThumbnail({
+    required String uri,
+    required int width,
+    required int height,
+  }) async => _png;
+
+  @override
+  Future<AndroidDocumentFile?> metadata(String uri) async => null;
+
+  @override
+  Future<bool> openDocument(String uri) async => true;
+
+  @override
+  Future<List<AndroidDocumentFile>> pickFiles({
+    bool allowMultiple = true,
+  }) async => const <AndroidDocumentFile>[];
+
+  @override
+  Future<Uint8List> readBytes({
+    required String uri,
+    required int offset,
+    required int length,
+  }) async => Uint8List(0);
 }

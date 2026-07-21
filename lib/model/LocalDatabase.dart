@@ -825,6 +825,7 @@ class LocalDatabase extends _$LocalDatabase {
             ..where(
               (t) =>
                   (t.sender.equals(uid) | t.receiver.equals(uid)) &
+                  t.clipboard.equals(false) &
                   t.id.isSmallerThanValue(beforeId),
             )
             ..orderBy([
@@ -834,7 +835,11 @@ class LocalDatabase extends _$LocalDatabase {
           .get();
     } else {
       return (select(message)
-            ..where((t) => t.sender.equals(uid) | t.receiver.equals(uid))
+            ..where(
+              (t) =>
+                  (t.sender.equals(uid) | t.receiver.equals(uid)) &
+                  t.clipboard.equals(false),
+            )
             ..orderBy([
               (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
             ])
@@ -862,6 +867,7 @@ class LocalDatabase extends _$LocalDatabase {
     final filters = <String>[
       'm.type = ?',
       '(m.sender = ? OR m.receiver = ?)',
+      'm.clipboard = 0',
       "COALESCE(m.content, '') <> ''",
     ];
     final variables = <Variable<Object>>[
@@ -986,8 +992,11 @@ class LocalDatabase extends _$LocalDatabase {
           await (select(message)
                 ..where(
                   (t) => uid == selfUid
-                      ? t.sender.equals(selfUid) & t.receiver.equals('')
-                      : t.sender.equals(uid) | t.receiver.equals(uid),
+                      ? t.sender.equals(selfUid) &
+                            t.receiver.equals('') &
+                            t.clipboard.equals(false)
+                      : (t.sender.equals(uid) | t.receiver.equals(uid)) &
+                            t.clipboard.equals(false),
                 )
                 ..orderBy([
                   (t) =>

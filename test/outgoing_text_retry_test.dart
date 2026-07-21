@@ -582,8 +582,8 @@ void main() {
       source.indexOf('case MessageEnum.Notification:'),
     );
     expect(
-      textMessageCase.indexOf('_dispatchToAll('),
-      lessThan(textMessageCase.indexOf('await _ackMessage(message)')),
+      textMessageCase.lastIndexOf('_dispatchToAll('),
+      lessThan(textMessageCase.lastIndexOf('await _ackMessage(message)')),
     );
 
     final duplicateReplayCase = source.substring(

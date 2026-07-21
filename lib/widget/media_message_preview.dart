@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' show FontFeature;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
+import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -26,6 +29,32 @@ const int _mediaPreviewCacheWidth = 1200;
 const double _mediaPreviewMinAspectRatio = 9 / 20;
 const double _mediaPreviewMaxAspectRatio = 20 / 9;
 const double _mediaPreviewMaxHeightFactor = 4 / 3;
+
+bool _isAndroidContentUri(String path) => path.startsWith('content://');
+
+final LinkedHashMap<String, Future<Uint8List>> _mediaThumbnailCache =
+    LinkedHashMap<String, Future<Uint8List>>();
+
+Future<Uint8List> _androidMediaThumbnail(
+  String uri, {
+  required int width,
+  required int height,
+}) {
+  final key = '$uri:$width:$height';
+  final cached = _mediaThumbnailCache.remove(key);
+  if (cached != null) {
+    _mediaThumbnailCache[key] = cached;
+    return cached;
+  }
+  while (_mediaThumbnailCache.length >= 24) {
+    _mediaThumbnailCache.remove(_mediaThumbnailCache.keys.first);
+  }
+  final future = AndroidDocumentPicker.shared
+      .loadThumbnail(uri: uri, width: width, height: height)
+      .catchError((Object _) => Uint8List(0));
+  _mediaThumbnailCache[key] = future;
+  return future;
+}
 
 Size mediaPreviewSizeFor({
   required double maxWidth,
@@ -131,6 +160,18 @@ class MediaMessagePreview extends StatelessWidget {
       );
     }
 
+    if (kind == MediaFileKind.video) {
+      return _VideoAttachmentPreview(
+        name: name,
+        status: status,
+        progress: progress,
+        verifying: verifying,
+        failed: failed,
+        onRetry: onRetry,
+        onCancel: onCancel,
+      );
+    }
+
     return _VisualMediaPreview(
       kind: kind,
       path: path,
@@ -196,10 +237,6 @@ class _VisualMediaPreview extends StatelessWidget {
                       path: path,
                       name: name,
                     ),
-                    MediaFileKind.video => _VideoPreview(
-                      key: ValueKey<String>('video:$path'),
-                      name: name,
-                    ),
                     _ => const SizedBox.shrink(),
                   }
                 : _MediaPlaceholder(
@@ -207,16 +244,6 @@ class _VisualMediaPreview extends StatelessWidget {
                     kind: kind,
                   ),
           ),
-          if (progress == null && !failed && !verifying)
-            Positioned(
-              left: 10,
-              right: 10,
-              bottom: 10,
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: _MediaStatusPill(text: status),
-              ),
-            ),
           if (progress != null || failed || verifying)
             Positioned.fill(
               child: _TransferStateOverlay(
@@ -256,7 +283,14 @@ class _ImagePreview extends StatefulWidget {
 class _ImagePreviewState extends State<_ImagePreview> {
   ImageStream? _stream;
   ImageStreamListener? _listener;
+  Uint8List? _contentUriBytes;
   double? _aspectRatio;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContentUriThumbnail();
+  }
 
   @override
   void didChangeDependencies() {
@@ -268,16 +302,43 @@ class _ImagePreviewState extends State<_ImagePreview> {
   void didUpdateWidget(covariant _ImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path) {
+      _contentUriBytes = null;
       _aspectRatio = null;
-      _resolveImage();
+      _loadContentUriThumbnail();
+      if (!_isAndroidContentUri(widget.path)) {
+        _resolveImage();
+      }
     }
   }
 
-  void _resolveImage() {
-    final provider = ResizeImage(
-      FileImage(File(widget.path)),
+  Future<void> _loadContentUriThumbnail() async {
+    if (!_isAndroidContentUri(widget.path)) {
+      return;
+    }
+    final path = widget.path;
+    final bytes = await _androidMediaThumbnail(
+      path,
       width: _mediaPreviewCacheWidth,
+      height: _mediaPreviewCacheWidth,
     );
+    if (!mounted || path != widget.path) {
+      return;
+    }
+    setState(() => _contentUriBytes = bytes);
+    _resolveImage();
+  }
+
+  void _resolveImage() {
+    final bytes = _contentUriBytes;
+    if (_isAndroidContentUri(widget.path) && (bytes == null || bytes.isEmpty)) {
+      return;
+    }
+    final ImageProvider provider = _isAndroidContentUri(widget.path)
+        ? MemoryImage(bytes!)
+        : ResizeImage(
+            FileImage(File(widget.path)),
+            width: _mediaPreviewCacheWidth,
+          );
     final stream = provider.resolve(createLocalImageConfiguration(context));
     if (_stream?.key == stream.key) {
       return;
@@ -318,74 +379,39 @@ class _ImagePreviewState extends State<_ImagePreview> {
   @override
   Widget build(BuildContext context) {
     final palette = context.whisperPalette;
+    final bytes = _contentUriBytes;
+    final contentUri = _isAndroidContentUri(widget.path);
+    final ImageProvider? provider = contentUri
+        ? bytes == null || bytes.isEmpty
+              ? null
+              : MemoryImage(bytes)
+        : FileImage(File(widget.path));
     return _AdaptiveVisualMediaFrame(
       frameKey: const ValueKey<String>('image-preview-frame'),
       sourceAspectRatio: _aspectRatio ?? 4 / 3,
       child: ColoredBox(
         color: palette.surfaceMuted,
-        child: Image.file(
-          File(widget.path),
-          cacheWidth: _mediaPreviewCacheWidth,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.medium,
-          semanticLabel: widget.name,
-          errorBuilder: (context, error, stackTrace) => Icon(
-            Icons.broken_image_outlined,
-            color: palette.textMuted,
-            size: 38,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoPreview extends StatelessWidget {
-  const _VideoPreview({super.key, required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
-    return Semantics(
-      label: name,
-      button: true,
-      child: _AdaptiveVisualMediaFrame(
-        frameKey: const ValueKey<String>('video-preview-frame'),
-        sourceAspectRatio: 16 / 9,
-        child: ColoredBox(
-          color: palette.surfaceMuted,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Icon(
-                Icons.movie_outlined,
-                key: const ValueKey<String>('video-placeholder'),
-                color: palette.textMuted,
-                size: 42,
-              ),
-              Center(
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.68),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.34),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.open_in_new_rounded,
-                    size: 24,
-                    color: Colors.white,
-                  ),
+        child: provider == null
+            ? Center(
+                child: bytes == null
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : Icon(
+                        Icons.broken_image_outlined,
+                        color: palette.textMuted,
+                        size: 38,
+                      ),
+              )
+            : Image(
+                image: provider,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                semanticLabel: widget.name,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.broken_image_outlined,
+                  color: palette.textMuted,
+                  size: 38,
                 ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -443,36 +469,6 @@ class _MediaPlaceholder extends StatelessWidget {
       child: ColoredBox(
         color: palette.surfaceMuted,
         child: Center(child: Icon(icon, size: 40, color: palette.textMuted)),
-      ),
-    );
-  }
-}
-
-class _MediaStatusPill extends StatelessWidget {
-  const _MediaStatusPill({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: palette.borderSubtle),
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: palette.textMuted,
-          fontSize: 11,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        ),
       ),
     );
   }
@@ -564,10 +560,9 @@ class _TransferStateOverlay extends StatelessWidget {
 }
 
 String _visualTransferStatusLabel(String status) {
-  return status.trim().replaceFirstMapped(
-    RegExp(r'\s+(\d{1,3})%$'),
-    (match) => ' · ${match.group(1)}%',
-  );
+  final trimmed = status.trim();
+  final progressMatch = RegExp(r'(\d{1,3})%$').firstMatch(trimmed);
+  return progressMatch?.group(0) ?? trimmed;
 }
 
 class _OverlayIconButton extends StatelessWidget {
@@ -595,6 +590,138 @@ class _OverlayIconButton extends StatelessWidget {
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
+    );
+  }
+}
+
+class _VideoAttachmentPreview extends StatelessWidget {
+  const _VideoAttachmentPreview({
+    required this.name,
+    required this.status,
+    required this.progress,
+    required this.verifying,
+    required this.failed,
+    required this.onRetry,
+    required this.onCancel,
+  });
+
+  final String name;
+  final String status;
+  final double? progress;
+  final bool verifying;
+  final bool failed;
+  final VoidCallback? onRetry;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final palette = context.whisperPalette;
+    final transferring = progress != null || verifying;
+    return SizedBox(
+      key: const ValueKey<String>('video-message-card'),
+      width: 248,
+      height: 72,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Row(
+          children: [
+            SizedBox.square(
+              key: const ValueKey<String>('video-message-action'),
+              dimension: 42,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.11),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: failed
+                    ? IconButton(
+                        padding: EdgeInsets.zero,
+                        tooltip: AppLocalizations.of(context)?.retry ?? '重试',
+                        onPressed: onRetry,
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          color: palette.danger,
+                          size: 22,
+                        ),
+                      )
+                    : transferring
+                    ? Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox.square(
+                            dimension: 29,
+                            child: CircularProgressIndicator(
+                              value: verifying ? null : progress?.clamp(0, 1),
+                              strokeWidth: 2.4,
+                              color: colorScheme.primary,
+                              backgroundColor: colorScheme.primary.withValues(
+                                alpha: 0.14,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.movie_outlined,
+                            color: colorScheme.primary,
+                            size: 16,
+                          ),
+                        ],
+                      )
+                    : Icon(
+                        Icons.play_arrow_rounded,
+                        color: colorScheme.primary,
+                        size: 27,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    key: const ValueKey<String>('video-message-name'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    status,
+                    key: const ValueKey<String>('video-message-meta'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: failed
+                          ? palette.danger
+                          : colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onCancel != null)
+              IconButton(
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                padding: EdgeInsets.zero,
+                tooltip: AppLocalizations.of(context)?.cancel ?? '取消',
+                onPressed: onCancel,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -799,12 +926,15 @@ Future<Duration> _cachedAudioDuration(String path) {
 Future<Duration> _extractAudioDuration(String path) async {
   final player = AudioPlayer();
   try {
-    await player.setSource(DeviceFileSource(path));
+    await player.setSource(_audioSourceFor(path));
     return await player.getDuration() ?? Duration.zero;
   } finally {
     await player.dispose();
   }
 }
+
+Source _audioSourceFor(String path) =>
+    _isAndroidContentUri(path) ? UrlSource(path) : DeviceFileSource(path);
 
 class AudioMessagePlayer extends StatefulWidget {
   const AudioMessagePlayer({
@@ -881,7 +1011,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
           }),
         ]);
         _subscriptions.addAll(attemptSubscriptions);
-        await player.play(DeviceFileSource(widget.path));
+        await player.play(_audioSourceFor(widget.path));
         final duration = await player.getDuration();
         if (mounted && duration != null && duration > Duration.zero) {
           setState(() => _duration = duration);
@@ -904,7 +1034,7 @@ class _AudioMessagePlayerState extends State<AudioMessagePlayer> {
     if (_playing) {
       await player.pause();
     } else if (player.state == PlayerState.completed) {
-      await player.play(DeviceFileSource(widget.path));
+      await player.play(_audioSourceFor(widget.path));
     } else {
       await player.resume();
     }
@@ -1274,71 +1404,117 @@ Future<void> showMediaViewer(
     onOpenExternally();
     return Future<void>.value();
   }
-  return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (context) => _MediaViewerPage(
-        kind: kind,
-        path: path,
-        name: name,
-        onOpenExternally: onOpenExternally,
-      ),
-    ),
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: AppLocalizations.of(context)?.close ?? '关闭',
+    barrierColor: Colors.black,
+    transitionDuration: const Duration(milliseconds: 180),
+    transitionBuilder: (context, animation, secondaryAnimation, child) =>
+        FadeTransition(opacity: animation, child: child),
+    pageBuilder: (context, animation, secondaryAnimation) =>
+        _FullscreenMediaViewer(kind: kind, path: path, name: name),
   );
 }
 
-class _MediaViewerPage extends StatelessWidget {
-  const _MediaViewerPage({
+class _FullscreenMediaViewer extends StatelessWidget {
+  const _FullscreenMediaViewer({
     required this.kind,
     required this.path,
     required this.name,
-    required this.onOpenExternally,
   });
 
   final MediaFileKind kind;
   final String path;
   final String name;
-  final VoidCallback onOpenExternally;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        leading: IconButton(
-          tooltip: AppLocalizations.of(context)?.close ?? '关闭',
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close_rounded),
+    void close() => Navigator.of(context).pop();
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): close,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Material(
+          color: Colors.black,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              SafeArea(child: _buildContent(context)),
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 12,
+                right: 14,
+                child: IconButton(
+                  key: const ValueKey<String>('media-viewer-close'),
+                  tooltip: AppLocalizations.of(context)?.close ?? '关闭',
+                  onPressed: close,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.46),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          IconButton(
-            tooltip: AppLocalizations.of(context)?.open ?? '打开',
-            onPressed: onOpenExternally,
-            icon: const Icon(Icons.open_in_new_rounded),
-          ),
-        ],
       ),
-      body: SafeArea(
-        child: switch (kind) {
-          MediaFileKind.image => Center(
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 5,
-              child: Image.file(File(path), fit: BoxFit.contain),
-            ),
-          ),
-          MediaFileKind.video => const SizedBox.shrink(),
-          MediaFileKind.audio => Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: AudioMessagePlayer(path: path, name: name, compact: false),
-            ),
-          ),
-          MediaFileKind.other => const SizedBox.shrink(),
-        },
+    );
+  }
+
+  Widget _buildContent(BuildContext context) => switch (kind) {
+    MediaFileKind.image => _FullscreenImage(path: path),
+    MediaFileKind.video => const SizedBox.shrink(),
+    MediaFileKind.audio => Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: AudioMessagePlayer(path: path, name: name, compact: false),
       ),
+    ),
+    MediaFileKind.other => const SizedBox.shrink(),
+  };
+}
+
+class _FullscreenImage extends StatelessWidget {
+  const _FullscreenImage({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAndroidContentUri(path)) {
+      return _buildViewer(Image.file(File(path), fit: BoxFit.contain));
+    }
+    return FutureBuilder<Uint8List>(
+      future: _androidMediaThumbnail(path, width: 2400, height: 2400),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          );
+        }
+        if (bytes.isEmpty) {
+          return const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white70,
+              size: 48,
+            ),
+          );
+        }
+        return _buildViewer(Image.memory(bytes, fit: BoxFit.contain));
+      },
+    );
+  }
+
+  Widget _buildViewer(Widget image) {
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 5,
+      child: SizedBox.expand(child: Center(child: image)),
     );
   }
 }

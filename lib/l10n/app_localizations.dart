@@ -1153,7 +1153,7 @@ abstract class AppLocalizations {
   /// No description provided for @remoteInputLayoutRequired.
   ///
   /// In zh, this message translates to:
-  /// **'请先在设备设置里把对端屏幕贴到本机边缘'**
+  /// **'请先在键鼠工作区把对端屏幕贴到本机边缘'**
   String get remoteInputLayoutRequired;
 
   /// No description provided for @remoteInputEnabledMoveToEdge.
@@ -1168,95 +1168,17 @@ abstract class AppLocalizations {
   /// **'键鼠共享失败：{error}'**
   String remoteInputFailed(String error);
 
-  /// No description provided for @remoteInputAutoModeSetting.
-  ///
-  /// In zh, this message translates to:
-  /// **'键鼠共享自动模式：{mode}'**
-  String remoteInputAutoModeSetting(String mode);
-
-  /// No description provided for @remoteInputLayoutSetting.
-  ///
-  /// In zh, this message translates to:
-  /// **'屏幕排列：{edge}'**
-  String remoteInputLayoutSetting(String edge);
-
-  /// No description provided for @remoteInputAutoModeTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'键鼠共享自动模式'**
-  String get remoteInputAutoModeTitle;
-
-  /// No description provided for @remoteInputAutoModeOff.
-  ///
-  /// In zh, this message translates to:
-  /// **'关闭'**
-  String get remoteInputAutoModeOff;
-
-  /// No description provided for @remoteInputAutoModeSource.
-  ///
-  /// In zh, this message translates to:
-  /// **'本机控制对端'**
-  String get remoteInputAutoModeSource;
-
-  /// No description provided for @remoteInputAutoModeSink.
-  ///
-  /// In zh, this message translates to:
-  /// **'对端控制本机'**
-  String get remoteInputAutoModeSink;
-
   /// No description provided for @remoteInputLayoutTitle.
   ///
   /// In zh, this message translates to:
   /// **'屏幕排列'**
   String get remoteInputLayoutTitle;
 
-  /// No description provided for @remoteInputCurrentEdge.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前：{edge}'**
-  String remoteInputCurrentEdge(String edge);
-
-  /// No description provided for @remoteInputLayoutSave.
-  ///
-  /// In zh, this message translates to:
-  /// **'保存'**
-  String get remoteInputLayoutSave;
-
-  /// No description provided for @remoteInputSnapLeft.
-  ///
-  /// In zh, this message translates to:
-  /// **'贴左'**
-  String get remoteInputSnapLeft;
-
-  /// No description provided for @remoteInputSnapRight.
-  ///
-  /// In zh, this message translates to:
-  /// **'贴右'**
-  String get remoteInputSnapRight;
-
-  /// No description provided for @remoteInputSnapTop.
-  ///
-  /// In zh, this message translates to:
-  /// **'贴上'**
-  String get remoteInputSnapTop;
-
-  /// No description provided for @remoteInputSnapBottom.
-  ///
-  /// In zh, this message translates to:
-  /// **'贴下'**
-  String get remoteInputSnapBottom;
-
   /// No description provided for @remoteInputLocalScreen.
   ///
   /// In zh, this message translates to:
   /// **'本机'**
   String get remoteInputLocalScreen;
-
-  /// No description provided for @remoteInputPeerScreen.
-  ///
-  /// In zh, this message translates to:
-  /// **'对端'**
-  String get remoteInputPeerScreen;
 
   /// No description provided for @remoteInputEdgeLeft.
   ///
@@ -1719,6 +1641,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{device} 请求建立可信连接'**
   String pairingNewDeviceDescription(String device);
+
+  /// No description provided for @pairingNewDeviceCompareCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 请求连接，请确认数字一致'**
+  String pairingNewDeviceCompareCode(String device);
 
   /// No description provided for @pairingIdentityChangedTitle.
   ///
@@ -2283,6 +2211,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'目标设备身份已变化或不再可信，内容已保留，请重新选择'**
   String get desktopQuickSendTargetNeedsReselection;
+
+  /// No description provided for @chatTimestampYesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天 {time}'**
+  String chatTimestampYesterday(String time);
 }
 
 class _AppLocalizationsDelegate

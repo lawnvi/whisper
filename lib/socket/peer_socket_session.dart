@@ -92,6 +92,7 @@ final class PeerSocketSession {
   String _localProofReason = '';
   String _remoteProofReason = '';
   bool _proofCreated = false;
+  bool _localApprovalPromptClaimed = false;
   bool _pairingCompletionClaimed = false;
   bool _authenticationApproved = false;
   bool _authenticationCommitted = false;
@@ -219,6 +220,17 @@ final class PeerSocketSession {
       return false;
     }
     _pairingCompletionClaimed = true;
+    return true;
+  }
+
+  bool tryClaimLocalApprovalPrompt() {
+    if (isClosed || !_canResolveLocalApproval || _approvalResolved) {
+      return false;
+    }
+    if (_localApprovalPromptClaimed) {
+      return false;
+    }
+    _localApprovalPromptClaimed = true;
     return true;
   }
 
