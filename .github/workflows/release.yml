@@ -95,7 +95,7 @@ jobs:
           WHISPER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
           WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
-        run: WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" script/build_and_run.sh package-macos
+        run: WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos.dmg" script/build_and_run.sh package-macos-x64
 
       - name: Build iOS IPA
         run: |
@@ -113,7 +113,7 @@ jobs:
         with:
           name: whisper-macos-ios-${{ github.run_id }}
           path: |
-            whisper-*-macos-x86_64.dmg
+            whisper-*-macos.dmg
             build/ios/iphoneos/whisper-*-ios-unsigned.ipa
           retention-days: 7
 

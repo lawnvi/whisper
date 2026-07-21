@@ -9,8 +9,9 @@ void main() {
 
     expect(
       workflow,
-      contains('script/build_and_run.sh package-macos'),
+      contains('script/build_and_run.sh package-macos-x64'),
     );
+    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos.dmg'));
     expect(
       workflow,
       contains('WHISPER_MACOS_CERTIFICATE_P12_BASE64'),
@@ -37,7 +38,7 @@ void main() {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final packageScript = File('script/build_and_run.sh').readAsStringSync();
 
-    expect(workflow, contains('script/build_and_run.sh package-macos'));
+    expect(workflow, contains('script/build_and_run.sh package-macos-x64'));
     expect(packageScript, contains(r'mkdir -p "$DMG_ROOT"'));
     expect(
       packageScript,
