@@ -15,25 +15,27 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_scroll.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
-typedef RemoteInputControlSender = void Function(
-  RemoteInputControlMessage control,
-);
-typedef RemoteInputTransportFactory = Future<RemoteInputPacketTransport>
-    Function(Uri uri);
-typedef RemoteInputKeyTranslatorFactory = RemoteInputKeyTranslator Function(
-  RemoteInputPlatformKind platform,
-);
+typedef RemoteInputControlSender =
+    void Function(RemoteInputControlMessage control);
+typedef RemoteInputTransportFactory =
+    Future<RemoteInputPacketTransport> Function(Uri uri);
+typedef RemoteInputKeyTranslatorFactory =
+    RemoteInputKeyTranslator Function(RemoteInputPlatformKind platform);
 typedef RemoteInputPlatformKindProvider = RemoteInputPlatformKind Function();
 typedef RemoteInputScrollMultiplierProvider = Future<double> Function();
+typedef RemoteClipboardPastePreparer =
+    Future<RemoteClipboardPasteResult> Function({
+      required String peerId,
+      required String sessionId,
+    });
+typedef RemoteClipboardSessionCleaner =
+    Future<void> Function({required String peerId, required String sessionId});
 
-enum RemoteInputRuntimeRole {
-  none,
-  source,
-  sink,
-}
+enum RemoteInputRuntimeRole { none, source, sink }
 
 enum RemoteInputRuntimeStatus {
   idle,
@@ -89,11 +91,11 @@ class RemoteInputRuntimeState {
   });
 
   const RemoteInputRuntimeState.idle()
-      : status = RemoteInputRuntimeStatus.idle,
-        role = RemoteInputRuntimeRole.none,
-        sessionId = '',
-        peerId = '',
-        errorMessage = '';
+    : status = RemoteInputRuntimeStatus.idle,
+      role = RemoteInputRuntimeRole.none,
+      sessionId = '',
+      peerId = '',
+      errorMessage = '';
 
   final RemoteInputRuntimeStatus status;
   final RemoteInputRuntimeRole role;
@@ -137,18 +139,24 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputKeyTranslatorFactory? keyTranslatorFactory,
     RemoteInputPlatformKindProvider? platformKindProvider,
     RemoteInputScrollMultiplierProvider? scrollMultiplierProvider,
+    RemoteClipboardPastePreparer? remoteClipboardPastePreparer,
+    RemoteClipboardSessionCleaner? remoteClipboardSessionCleaner,
     Duration nativeInjectionTimeout = const Duration(seconds: 2),
-  })  : _manager = manager ?? RemoteInputManager.shared,
-        _platform = platform ?? RemoteInputPlatform(),
-        _transportFactory = transportFactory,
-        _keyTranslatorFactory = keyTranslatorFactory ??
-            ((platform) => RemoteInputKeyTranslator(targetPlatform: platform)),
-        _platformKindProvider =
-            platformKindProvider ?? currentRemoteInputPlatformKind,
-        _scrollMultiplierProvider = scrollMultiplierProvider ??
-            LocalSetting().remoteInputScrollMultiplier,
-        _nativeInjectionTimeout = nativeInjectionTimeout,
-        assert(nativeInjectionTimeout.inMicroseconds > 0);
+  }) : _manager = manager ?? RemoteInputManager.shared,
+       _platform = platform ?? RemoteInputPlatform(),
+       _transportFactory = transportFactory,
+       _keyTranslatorFactory =
+           keyTranslatorFactory ??
+           ((platform) => RemoteInputKeyTranslator(targetPlatform: platform)),
+       _platformKindProvider =
+           platformKindProvider ?? currentRemoteInputPlatformKind,
+       _scrollMultiplierProvider =
+           scrollMultiplierProvider ??
+           LocalSetting().remoteInputScrollMultiplier,
+       _remoteClipboardPastePreparer = remoteClipboardPastePreparer,
+       _remoteClipboardSessionCleaner = remoteClipboardSessionCleaner,
+       _nativeInjectionTimeout = nativeInjectionTimeout,
+       assert(nativeInjectionTimeout.inMicroseconds > 0);
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
@@ -164,6 +172,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputPlatformKindProvider _platformKindProvider;
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
   final Duration _nativeInjectionTimeout;
+  RemoteClipboardPastePreparer? _remoteClipboardPastePreparer;
+  RemoteClipboardSessionCleaner? _remoteClipboardSessionCleaner;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
   RemoteInputPacketTransport? _transport;
@@ -192,9 +202,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
   double _scrollMultiplier = 1.0;
   RemoteInputPlatformKind _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
   RemoteInputEdgeMapping? _sinkActiveEdgeMapping;
+  final Set<RemoteInputModifierSemantic> _sinkPressedModifiers =
+      <RemoteInputModifierSemantic>{};
+  bool _suppressPasteKeyUp = false;
 
   RemoteInputRuntimeState get state => _state;
   RemoteInputPlatform get platform => _platform;
+
+  void configureRemoteClipboard({
+    required RemoteClipboardPastePreparer preparePaste,
+    required RemoteClipboardSessionCleaner clearSession,
+  }) {
+    _remoteClipboardPastePreparer = preparePaste;
+    _remoteClipboardSessionCleaner = clearSession;
+  }
 
   @visibleForTesting
   int get debugPendingInjectionItems => _retainedInjectionItems;
@@ -316,6 +337,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkSegmentStart: sinkSegmentStart,
       sinkSegmentEnd: sinkSegmentEnd,
       edgeMappings: edgeMappings,
+      remoteClipboardV1:
+          _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     _setState(
       RemoteInputRuntimeState(
@@ -384,12 +407,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
         }
         break;
       case RemoteInputControlAction.error:
-        final failureReason =
-            remoteInputFailureReasonFromWire(message.errorMessage);
-        _trace(
-          RemoteInputDiagnosticKind.controlError,
-          reason: failureReason,
+        final failureReason = remoteInputFailureReasonFromWire(
+          message.errorMessage,
         );
+        _trace(RemoteInputDiagnosticKind.controlError, reason: failureReason);
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
           await stopLocal();
@@ -449,6 +470,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _sinkEntryTravel = 0;
     _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
     _sinkActiveEdgeMapping = null;
+    _sinkPressedModifiers.clear();
+    _suppressPasteKeyUp = false;
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
@@ -463,6 +486,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _diagnosticSubscription = null;
     _transportDoneSubscription = null;
     if (current.sessionId.isNotEmpty) {
+      final clearClipboard = _remoteClipboardSessionCleaner;
+      if (clearClipboard != null && current.peerId.isNotEmpty) {
+        await clearClipboard(
+          peerId: current.peerId,
+          sessionId: current.sessionId,
+        );
+      }
       if (current.role == RemoteInputRuntimeRole.source) {
         await _platform.stopCapture(sessionId: current.sessionId);
       }
@@ -533,6 +563,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     final accept = _manager.acceptOffer(
       offer,
       sinkPlatform: _platformKindProvider().name,
+      remoteClipboardV1:
+          _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     if (accept.action == RemoteInputControlAction.error) {
       _trace(
@@ -682,8 +714,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _latestSinkActivationSequence = 0;
     _sinkPacketTraceCount = 0;
     _sinkEntryTravel = 0;
-    _sinkActiveEdgeMapping =
-        message.edgeMappings.isNotEmpty ? message.edgeMappings.first : null;
+    _sinkActiveEdgeMapping = message.edgeMappings.isNotEmpty
+        ? message.edgeMappings.first
+        : null;
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         if (release.reason == 'edge') {
@@ -757,10 +790,15 @@ class RemoteInputCoordinator extends ChangeNotifier {
         scrollMultiplier: _scrollMultiplier,
         fallbackSourcePlatform: _sinkSourcePlatform,
       );
-      final translated = _keyTranslator?.translateFrame(scrollNormalized) ??
-          <RemoteInputPacketFrame>[
-            scrollNormalized,
-          ];
+      final translated =
+          _keyTranslator?.translateFrame(scrollNormalized) ??
+          <RemoteInputPacketFrame>[scrollNormalized];
+      final intercepted = _interceptRemoteClipboardPaste(
+        translated,
+        peerId: message.sourcePeerId,
+        sessionId: message.sessionId,
+        targetPlatform: targetPlatform,
+      );
       if (_shouldTracePackets && _sinkPacketTraceCount < _packetTraceLimit) {
         _sinkPacketTraceCount++;
         _trace(
@@ -769,11 +807,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
           count: _sinkPacketTraceCount,
         );
       }
-      return _enqueueInjection(
-        message,
-        translated,
-        sendControl: sendControl,
-      );
+      if (intercepted is Future<List<RemoteInputPacketFrame>>) {
+        return intercepted.then(
+          (frames) =>
+              _enqueueInjection(message, frames, sendControl: sendControl),
+        );
+      }
+      return _enqueueInjection(message, intercepted, sendControl: sendControl);
     };
     _setState(
       RemoteInputRuntimeState(
@@ -786,9 +826,80 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _trace(RemoteInputDiagnosticKind.injectionActive);
   }
 
+  FutureOr<List<RemoteInputPacketFrame>> _interceptRemoteClipboardPaste(
+    List<RemoteInputPacketFrame> frames, {
+    required String peerId,
+    required String sessionId,
+    required RemoteInputPlatformKind targetPlatform,
+  }) {
+    if (frames.length != 1 ||
+        frames.single.eventType != RemoteInputEventType.key) {
+      return frames;
+    }
+    final payload = _keyPayload(frames.single);
+    if (payload == null) {
+      return frames;
+    }
+    final down = payload['down'] == true;
+    final modifierName = payload['modifierSemantic'];
+    if (modifierName is String) {
+      final modifier = RemoteInputModifierSemantic.values
+          .where((value) => value.name == modifierName)
+          .firstOrNull;
+      if (modifier != null) {
+        if (down) {
+          _sinkPressedModifiers.add(modifier);
+        } else {
+          _sinkPressedModifiers.remove(modifier);
+        }
+      }
+      return frames;
+    }
+    if (payload['keySemantic'] != 'keyV') {
+      return frames;
+    }
+    if (!down && _suppressPasteKeyUp) {
+      _suppressPasteKeyUp = false;
+      return const <RemoteInputPacketFrame>[];
+    }
+    final primaryModifier = targetPlatform == RemoteInputPlatformKind.macos
+        ? RemoteInputModifierSemantic.meta
+        : RemoteInputModifierSemantic.control;
+    if (!down || !_sinkPressedModifiers.contains(primaryModifier)) {
+      return frames;
+    }
+    final prepare = _remoteClipboardPastePreparer;
+    if (prepare == null) {
+      traceRemoteClipboard('paste_passthrough', reason: 'not_configured');
+      return frames;
+    }
+    traceRemoteClipboard('paste_shortcut_detected');
+    return prepare(peerId: peerId, sessionId: sessionId).then((result) {
+      traceRemoteClipboard('paste_shortcut_result', reason: result.name);
+      if (result == RemoteClipboardPasteResult.notAvailable) {
+        return frames;
+      }
+      if (result == RemoteClipboardPasteResult.failed) {
+        _suppressPasteKeyUp = true;
+        return const <RemoteInputPacketFrame>[];
+      }
+      return frames;
+    });
+  }
+
+  Map<String, dynamic>? _keyPayload(RemoteInputPacketFrame frame) {
+    try {
+      final decoded = jsonDecode(utf8.decode(frame.payload));
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool _isEarlySinkEdgeRelease(PlatformRemoteInputRelease release) {
-    final releaseSequence =
-        release.sequence > 0 ? release.sequence : _latestSinkPacketSequence;
+    final releaseSequence = release.sequence > 0
+        ? release.sequence
+        : _latestSinkPacketSequence;
     final activationSequence = release.activationSequence > 0
         ? release.activationSequence
         : _latestSinkActivationSequence;
@@ -1028,10 +1139,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return null;
     }
     return switch (next.eventType) {
-      RemoteInputEventType.mouseMove =>
-        _coalesceQueuedMouseMove(previous, next),
-      RemoteInputEventType.mouseWheel =>
-        _coalesceQueuedMouseWheel(previous, next),
+      RemoteInputEventType.mouseMove => _coalesceQueuedMouseMove(
+        previous,
+        next,
+      ),
+      RemoteInputEventType.mouseWheel => _coalesceQueuedMouseWheel(
+        previous,
+        next,
+      ),
       _ => null,
     };
   }
@@ -1047,18 +1162,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     if (previousPayload['activeStart'] == true ||
         nextPayload['activeStart'] == true ||
-        !_payloadsMatchExcept(
-          previousPayload,
-          nextPayload,
-          const <String>{'deltaX', 'deltaY', 'x', 'y'},
-        )) {
+        !_payloadsMatchExcept(previousPayload, nextPayload, const <String>{
+          'deltaX',
+          'deltaY',
+          'x',
+          'y',
+        })) {
       return null;
     }
     final mergedPayload = Map<String, dynamic>.from(nextPayload);
     mergedPayload['activeStart'] = false;
-    mergedPayload['deltaX'] = _numberPayload(previousPayload['deltaX']) +
+    mergedPayload['deltaX'] =
+        _numberPayload(previousPayload['deltaX']) +
         _numberPayload(nextPayload['deltaX']);
-    mergedPayload['deltaY'] = _numberPayload(previousPayload['deltaY']) +
+    mergedPayload['deltaY'] =
+        _numberPayload(previousPayload['deltaY']) +
         _numberPayload(nextPayload['deltaY']);
     return _copyPacketWithPayload(next, mergedPayload);
   }
@@ -1088,7 +1206,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (!previousPayload.containsKey(key) && !nextPayload.containsKey(key)) {
         continue;
       }
-      mergedPayload[key] = _numberPayload(previousPayload[key]) +
+      mergedPayload[key] =
+          _numberPayload(previousPayload[key]) +
           _numberPayload(nextPayload[key]);
       mergedAny = true;
     }
@@ -1316,7 +1435,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     if (payload == null || payload['activeStart'] != true) {
       return packet;
     }
-    final sourceEdge = _sourceEdgeForPayload(payload) ??
+    final sourceEdge =
+        _sourceEdgeForPayload(payload) ??
         message.sourceEdge ??
         message.layoutEdge;
     if (sourceEdge == null) {
@@ -1347,18 +1467,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
         : null;
     final mappedSourceCoordinate = routeEdgeUnit == null
         ? sourceCoordinate ??
-            _sourceCoordinateForPayload(
-              payload,
-              message,
-              sourceEdge: mapping.sourceEdge,
-            )
+              _sourceCoordinateForPayload(
+                payload,
+                message,
+                sourceEdge: mapping.sourceEdge,
+              )
         : null;
     if (routeEdgeUnit == null && mappedSourceCoordinate == null) {
       return packet;
     }
     _sinkActiveEdgeMapping = mapping;
     final routedPayload = Map<String, dynamic>.from(payload);
-    routedPayload['edgeUnit'] = routeEdgeUnit ??
+    routedPayload['edgeUnit'] =
+        routeEdgeUnit ??
         mapping.edgeUnitForSourceCoordinate(mappedSourceCoordinate!);
     routedPayload['routeId'] = mapping.effectiveRouteId;
     routedPayload['sinkDisplayId'] = mapping.sinkDisplayId;
@@ -1379,7 +1500,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     RemoteInputControlMessage message, {
     required RemoteInputEdge sourceEdge,
   }) {
-    final value = sourceEdge == RemoteInputEdge.left ||
+    final value =
+        sourceEdge == RemoteInputEdge.left ||
             sourceEdge == RemoteInputEdge.right
         ? payload['y']
         : payload['x'];
@@ -1388,8 +1510,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     if (message.sourceSegmentEnd > message.sourceSegmentStart &&
         payload['edgeUnit'] is num) {
-      final edgeUnit =
-          _numberPayload(payload['edgeUnit']).clamp(0, 1).toDouble();
+      final edgeUnit = _numberPayload(
+        payload['edgeUnit'],
+      ).clamp(0, 1).toDouble();
       final matchingMappings = message.edgeMappings
           .where((mapping) => mapping.sourceEdge == sourceEdge)
           .toList(growable: false);
@@ -1573,10 +1696,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     try {
       return await _scrollMultiplierProvider();
     } catch (error) {
-      _trace(
-        RemoteInputDiagnosticKind.settingFallback,
-        localError: error,
-      );
+      _trace(RemoteInputDiagnosticKind.settingFallback, localError: error);
       return 1.0;
     }
   }

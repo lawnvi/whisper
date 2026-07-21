@@ -50,6 +50,7 @@ void main() {
         releaseHotkey: 'ctrl+alt+esc',
         sourcePlatform: 'macos',
         sinkPlatform: 'windows',
+        remoteClipboardV1: true,
       );
 
       final decoded = RemoteInputControlMessage.fromJson(message.toJson());
@@ -77,6 +78,7 @@ void main() {
       expect(decoded.releaseHotkey, 'ctrl+alt+esc');
       expect(decoded.sourcePlatform, 'macos');
       expect(decoded.sinkPlatform, 'windows');
+      expect(decoded.remoteClipboardV1, isTrue);
     });
 
     test('round-trips error messages without an edge', () {
@@ -158,8 +160,9 @@ void main() {
         RemoteInputControlMessage.fromJson(accept.toJson()).transportToken,
         'input-token',
       );
-      for (final action in RemoteInputControlAction.values
-          .where((action) => action != RemoteInputControlAction.accept)) {
+      for (final action in RemoteInputControlAction.values.where(
+        (action) => action != RemoteInputControlAction.accept,
+      )) {
         final control = RemoteInputControlMessage(
           action: action,
           sessionId: 'input-1',

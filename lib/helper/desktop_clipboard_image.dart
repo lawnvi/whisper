@@ -37,25 +37,17 @@ class DesktopClipboardImageReader {
     MethodChannel channel = const MethodChannel(channelName),
     Future<Directory> Function()? tempDirectoryProvider,
     DateTime Function()? nowProvider,
-  }) : _channel = channel,
-       _tempDirectoryProvider = tempDirectoryProvider,
-       _nowProvider = nowProvider;
+  })  : _channel = channel,
+        _tempDirectoryProvider = tempDirectoryProvider,
+        _nowProvider = nowProvider;
 
   final MethodChannel _channel;
   final Future<Directory> Function()? _tempDirectoryProvider;
   final DateTime Function()? _nowProvider;
 
   Future<ClipboardImageDraft?> readImageDraft() async {
-    final Uint8List? bytes;
-    try {
-      bytes = await _channel.invokeMethod<Uint8List>('readImagePng');
-    } on MissingPluginException {
-      return null;
-    } on PlatformException {
-      return null;
-    }
-
-    if (bytes == null || bytes.isEmpty) {
+    final bytes = await readImageBytes();
+    if (bytes == null) {
       return null;
     }
 
@@ -83,6 +75,22 @@ class DesktopClipboardImageReader {
     }
   }
 
+  Future<Uint8List?> readImageBytes() async {
+    final Uint8List? bytes;
+    try {
+      bytes = await _channel.invokeMethod<Uint8List>('readImagePng');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+    return bytes;
+  }
+
   Future<String> _uniqueFileName(Directory directory) async {
     final now = _nowProvider?.call() ?? DateTime.now();
     final baseName = 'Screenshot ${_formatTimestamp(now)}';
@@ -105,6 +113,36 @@ class DesktopClipboardImageReader {
     final minute = value.minute.toString().padLeft(2, '0');
     final second = value.second.toString().padLeft(2, '0');
     return '$year-$month-$day $hour.$minute.$second';
+  }
+}
+
+class DesktopClipboardFileWriter {
+  static const channelName = DesktopClipboardImageReader.channelName;
+
+  const DesktopClipboardFileWriter({
+    MethodChannel channel = const MethodChannel(channelName),
+  }) : _channel = channel;
+
+  final MethodChannel _channel;
+
+  Future<bool> writeFilePaths(
+    List<String> paths, {
+    bool asImage = false,
+  }) async {
+    if (paths.isEmpty) {
+      return false;
+    }
+    try {
+      return await _channel.invokeMethod<bool>(
+            'writeFilePaths',
+            <String, Object?>{'paths': paths, 'asImage': asImage},
+          ) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
   }
 }
 

@@ -9,7 +9,13 @@ enum WhisperFrameType {
   fileAck(5),
   fileComplete(6),
   fileCancel(7),
-  fileError(8);
+  fileError(8),
+  clipboardOffer(9),
+  clipboardRequest(10),
+  clipboardData(11),
+  clipboardComplete(12),
+  clipboardClear(13),
+  clipboardError(14);
 
   const WhisperFrameType(this.code);
 

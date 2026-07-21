@@ -6,16 +6,11 @@ import 'package:flutter/widgets.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
-typedef RemoteInputTextShortcutHandler = FutureOr<bool> Function(
-  RemoteInputTextShortcut shortcut,
-);
+typedef RemoteInputTextShortcutHandler =
+    FutureOr<bool> Function(RemoteInputTextShortcut shortcut);
+typedef RemoteInputLocalPasteHandler = FutureOr<bool> Function();
 
-enum RemoteInputTextShortcut {
-  selectAll,
-  copy,
-  cut,
-  paste,
-}
+enum RemoteInputTextShortcut { selectAll, copy, cut, paste }
 
 bool handleRemoteInputTextShortcut(RemoteInputTextShortcut shortcut) {
   final context = primaryFocus?.context;
@@ -63,9 +58,9 @@ class RemoteInputPlatform {
   RemoteInputPlatform({
     MethodChannel? channel,
     RemoteInputTextShortcutHandler? textShortcutHandler,
-  })  : _channel = channel ?? const MethodChannel(channelName),
-        _textShortcutHandler =
-            textShortcutHandler ?? handleRemoteInputTextShortcut {
+  }) : _channel = channel ?? const MethodChannel(channelName),
+       _textShortcutHandler =
+           textShortcutHandler ?? handleRemoteInputTextShortcut {
     _channel.setMethodCallHandler(handleNativeMethodCall);
   }
 
@@ -73,6 +68,7 @@ class RemoteInputPlatform {
 
   final MethodChannel _channel;
   final RemoteInputTextShortcutHandler _textShortcutHandler;
+  RemoteInputLocalPasteHandler? _localPasteHandler;
   final StreamController<RemoteInputPacketFrame> _inputEvents =
       StreamController<RemoteInputPacketFrame>.broadcast();
   final StreamController<PlatformRemoteInputRelease> _releases =
@@ -86,6 +82,10 @@ class RemoteInputPlatform {
   Stream<PlatformRemoteInputRelease> get releases => _releases.stream;
   Stream<PlatformRemoteInputError> get errors => _errors.stream;
   Stream<PlatformRemoteInputDiagnostic> get diagnostics => _diagnostics.stream;
+
+  void configureLocalPasteHandler(RemoteInputLocalPasteHandler? handler) {
+    _localPasteHandler = handler;
+  }
 
   Future<void> startCapture({
     required String sessionId,
@@ -106,20 +106,20 @@ class RemoteInputPlatform {
       'segmentEnd': segmentEnd,
       if (edgeMappings.isNotEmpty)
         'segments': edgeMappings
-            .map((mapping) => <String, dynamic>{
-                  'displayId': mapping.sourceDisplayId,
-                  'edge': mapping.sourceEdge.name,
-                  'start': mapping.sourceSegmentStart,
-                  'end': mapping.sourceSegmentEnd,
-                  'routeId': mapping.effectiveRouteId,
-                })
+            .map(
+              (mapping) => <String, dynamic>{
+                'displayId': mapping.sourceDisplayId,
+                'edge': mapping.sourceEdge.name,
+                'start': mapping.sourceSegmentStart,
+                'end': mapping.sourceSegmentEnd,
+                'routeId': mapping.effectiveRouteId,
+              },
+            )
             .toList(),
     });
   }
 
-  Future<void> stopCapture({
-    required String sessionId,
-  }) {
+  Future<void> stopCapture({required String sessionId}) {
     return _channel.invokeMethod<void>('stopCapture', <String, dynamic>{
       'sessionId': sessionId,
     });
@@ -191,9 +191,7 @@ class RemoteInputPlatform {
     });
   }
 
-  Future<void> stopInjection({
-    required String sessionId,
-  }) {
+  Future<void> stopInjection({required String sessionId}) {
     return _channel.invokeMethod<void>('stopInjection', <String, dynamic>{
       'sessionId': sessionId,
     });
@@ -267,6 +265,14 @@ class RemoteInputPlatform {
         return false;
       }
       return Future<bool>.value(_textShortcutHandler(shortcut));
+    }
+
+    if (call.method == 'onLocalPasteShortcut') {
+      final handler = _localPasteHandler;
+      if (handler == null) {
+        return true;
+      }
+      return Future<bool>.value(handler());
     }
 
     throw MissingPluginException(

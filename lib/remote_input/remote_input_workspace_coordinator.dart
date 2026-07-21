@@ -5,41 +5,26 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
+import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
-typedef RemoteInputPeerControlSender = void Function(
-  String peerId,
-  RemoteInputControlMessage control,
-);
+typedef RemoteInputPeerControlSender =
+    void Function(String peerId, RemoteInputControlMessage control);
 typedef RemoteInputWorkspaceSessionIdFactory = String Function();
 
-enum RemoteInputWorkspaceRole {
-  idle,
-  controller,
-  controlled,
-}
+enum RemoteInputWorkspaceRole { idle, controller, controlled }
 
-enum RemoteInputWorkspaceStatus {
-  idle,
-  offering,
-  armed,
-  active,
-  failed,
-}
+enum RemoteInputWorkspaceStatus { idle, offering, armed, active, failed }
 
-enum RemoteInputWorkspaceTargetStatus {
-  offering,
-  connected,
-  failed,
-  stopped,
-}
+enum RemoteInputWorkspaceTargetStatus { offering, connected, failed, stopped }
 
 enum RemoteInputWorkspaceDiagnosticKind {
   transportClosed,
@@ -138,14 +123,14 @@ class RemoteInputWorkspaceSnapshot {
   });
 
   const RemoteInputWorkspaceSnapshot.idle()
-      : role = RemoteInputWorkspaceRole.idle,
-        status = RemoteInputWorkspaceStatus.idle,
-        workspaceSessionId = '',
-        sourcePeerId = '',
-        controllerPeerId = '',
-        activePeerId = '',
-        errorMessage = '',
-        targets = const <String, RemoteInputWorkspaceTargetSnapshot>{};
+    : role = RemoteInputWorkspaceRole.idle,
+      status = RemoteInputWorkspaceStatus.idle,
+      workspaceSessionId = '',
+      sourcePeerId = '',
+      controllerPeerId = '',
+      activePeerId = '',
+      errorMessage = '',
+      targets = const <String, RemoteInputWorkspaceTargetSnapshot>{};
 
   final RemoteInputWorkspaceRole role;
   final RemoteInputWorkspaceStatus status;
@@ -300,16 +285,17 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     RemoteInputPlatform? platform,
     RemoteInputTransportFactory? transportFactory,
     RemoteInputWorkspaceSessionIdFactory? workspaceSessionIdFactory,
-  })  : _manager = manager ?? RemoteInputManager(),
-        _platform = platform ?? RemoteInputCoordinator.shared.platform,
-        _transportFactory = transportFactory,
-        _workspaceSessionIdFactory =
-            workspaceSessionIdFactory ?? const Uuid().v4;
+  }) : _manager = manager ?? RemoteInputManager(),
+       _platform = platform ?? RemoteInputCoordinator.shared.platform,
+       _transportFactory = transportFactory,
+       _workspaceSessionIdFactory =
+           workspaceSessionIdFactory ?? const Uuid().v4;
 
   static final RemoteInputWorkspaceCoordinator shared =
       RemoteInputWorkspaceCoordinator(
-    platform: RemoteInputCoordinator.shared.platform,
-  );
+        manager: RemoteInputManager.shared,
+        platform: RemoteInputCoordinator.shared.platform,
+      );
 
   final RemoteInputManager _manager;
   final RemoteInputPlatform _platform;
@@ -338,13 +324,10 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] != '1') {
       return;
     }
-    privacyLog.event(
-      PrivacyEvent.remoteInputDiagnostic,
-      <PrivacyField, Object>{
-        PrivacyField.kind: kind,
-        if (reason != null) PrivacyField.reason: reason,
-      },
-    );
+    privacyLog.event(PrivacyEvent.remoteInputDiagnostic, <PrivacyField, Object>{
+      PrivacyField.kind: kind,
+      if (reason != null) PrivacyField.reason: reason,
+    });
   }
 
   Future<void> startControllerWorkspace({
@@ -367,8 +350,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
             : 'Peer does not support remote input',
       );
     }
-    final validation =
-        RemoteInputWorkspaceLayoutValidator.validateTargets(targets);
+    final validation = RemoteInputWorkspaceLayoutValidator.validateTargets(
+      targets,
+    );
     if (validation.hasConflict) {
       throw RemoteInputWorkspaceException(
         'Remote input target edges overlap: '
@@ -388,8 +372,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         workspaceSessionId: workspaceSessionId,
         target: target,
       );
-      final primaryMapping =
-          routedMappings.isNotEmpty ? routedMappings.first : null;
+      final primaryMapping = routedMappings.isNotEmpty
+          ? routedMappings.first
+          : null;
       final offer = _manager.createOffer(
         sourcePeerId: sourcePeerId,
         sinkPeerId: target.peerId,
@@ -408,6 +393,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
             primaryMapping?.sinkSegmentStart ?? target.sinkSegmentStart,
         sinkSegmentEnd: primaryMapping?.sinkSegmentEnd ?? target.sinkSegmentEnd,
         edgeMappings: routedMappings,
+        remoteClipboardV1:
+            currentRemoteInputPlatformKind() != RemoteInputPlatformKind.unknown,
       );
       _targets[target.peerId] = _RemoteInputWorkspaceTargetRuntime(
         request: target,
@@ -560,7 +547,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     } else {
       if (accept.transportToken.isEmpty || mediaSendKey == null) {
         throw StateError(
-            'authenticated remote input workspace context missing');
+          'authenticated remote input workspace context missing',
+        );
       }
       target.transport = await RemoteInputWebSocketPacketTransport.connect(
         uri,
@@ -636,8 +624,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
-    final failureReason =
-        remoteInputFailureReasonFromWire(message.errorMessage);
+    final failureReason = remoteInputFailureReasonFromWire(
+      message.errorMessage,
+    );
     await _releaseCaptureForActiveTargetIfNeeded(target);
     await target.transportDoneSubscription?.cancel();
     target.transportDoneSubscription = null;
@@ -658,10 +647,12 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required RemoteInputWorkspaceStatus terminalStatus,
     String errorMessage = '',
   }) async {
-    final hasConnectedTarget =
-        _targets.values.any((target) => target.snapshot.isConnected);
-    final hasLiveTarget =
-        _targets.values.any((target) => target.snapshot.isLive);
+    final hasConnectedTarget = _targets.values.any(
+      (target) => target.snapshot.isConnected,
+    );
+    final hasLiveTarget = _targets.values.any(
+      (target) => target.snapshot.isLive,
+    );
     if (!hasLiveTarget) {
       final terminalSnapshot = terminalStatus == RemoteInputWorkspaceStatus.idle
           ? const RemoteInputWorkspaceSnapshot.idle()
@@ -713,11 +704,14 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       sessionId: _snapshot.workspaceSessionId,
       edge: primaryMapping?.sourceEdge ?? primaryTarget.request.layoutEdge,
       releaseHotkey: primaryTarget.request.releaseHotkey,
-      displayId: primaryMapping?.sourceDisplayId ??
+      displayId:
+          primaryMapping?.sourceDisplayId ??
           primaryTarget.request.sourceDisplayId,
-      segmentStart: primaryMapping?.sourceSegmentStart ??
+      segmentStart:
+          primaryMapping?.sourceSegmentStart ??
           primaryTarget.request.sourceSegmentStart,
-      segmentEnd: primaryMapping?.sourceSegmentEnd ??
+      segmentEnd:
+          primaryMapping?.sourceSegmentEnd ??
           primaryTarget.request.sourceSegmentEnd,
       edgeMappings: mappings,
     );
@@ -807,9 +801,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           RemoteInputWorkspaceDiagnosticKind.platformError,
           reason: RemoteInputFailureReason.capture,
         );
-        unawaited(_disposeControllerRuntime(
-          workspaceSessionId: _snapshot.workspaceSessionId,
-        ));
+        unawaited(
+          _disposeControllerRuntime(
+            workspaceSessionId: _snapshot.workspaceSessionId,
+          ),
+        );
       }
     });
     _diagnosticSubscription ??= _platform.diagnostics.listen((diagnostic) {
@@ -915,8 +911,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String workspaceSessionId,
     required RemoteInputWorkspaceTargetRequest target,
   }) {
-    final mappings =
-        RemoteInputWorkspaceLayoutValidator._mappingsForTarget(target);
+    final mappings = RemoteInputWorkspaceLayoutValidator._mappingsForTarget(
+      target,
+    );
     return mappings
         .map(
           (mapping) => RemoteInputEdgeMapping(
@@ -944,8 +941,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   }) {
     final activePeerId =
         _targets[_snapshot.activePeerId]?.snapshot.isConnected == true
-            ? _snapshot.activePeerId
-            : '';
+        ? _snapshot.activePeerId
+        : '';
     _setSnapshot(
       _snapshot.copyWith(
         status: statusFallback,
@@ -1017,11 +1014,11 @@ class _RemoteInputWorkspaceTargetRuntime {
     required this.offer,
     required this.routedMappings,
   }) : snapshot = RemoteInputWorkspaceTargetSnapshot(
-          peerId: request.peerId,
-          peerName: request.peerName,
-          sessionId: offer.sessionId,
-          status: RemoteInputWorkspaceTargetStatus.offering,
-        );
+         peerId: request.peerId,
+         peerName: request.peerName,
+         sessionId: offer.sessionId,
+         status: RemoteInputWorkspaceTargetStatus.offering,
+       );
 
   final RemoteInputWorkspaceTargetRequest request;
   final RemoteInputControlMessage offer;

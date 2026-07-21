@@ -128,6 +128,21 @@ void main() {
     expect(script, isNot(contains("trap 'rm -rf \"\$tmpdir\"' RETURN")));
   });
 
+  test('macOS package script can cross-build an Intel-only package', () {
+    final script = File('script/build_and_run.sh').readAsStringSync();
+
+    expect(script, contains('package-macos-x64'));
+    expect(script, contains("-destination 'platform=macOS,arch=x86_64'"));
+    expect(script, contains('ARCHS=x86_64'));
+    expect(script, contains('ONLY_ACTIVE_ARCH=YES'));
+    expect(script, contains('verify_bundle_architecture'));
+    expect(script, contains('DMG_PATH="whisper-x86_64.dmg"'));
+    expect(script, contains('cleanup_macos_native_asset_staging'));
+    expect(script, contains('rm -rf build/native_assets/macos'));
+    expect(script, contains('.dart_tool/flutter_build'));
+    expect(script, contains('prepare_macos_native_asset_staging x86_64'));
+  });
+
   test('macOS package script can be launched through sh', () async {
     final result = await Process.run(
       'sh',

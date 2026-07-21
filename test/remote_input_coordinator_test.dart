@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
@@ -549,6 +550,76 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(calls.map((call) => call.method), contains('injectEvent'));
+    });
+
+    test('sink waits for remote clipboard files before injecting paste',
+        () async {
+      final manager = RemoteInputManager();
+      final pasteReady = Completer<RemoteClipboardPasteResult>();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        platformKindProvider: () => RemoteInputPlatformKind.windows,
+        remoteClipboardPastePreparer: ({required peerId, required sessionId}) {
+          expect(peerId, 'mac');
+          expect(sessionId, 'clipboard-paste');
+          return pasteReady.future;
+        },
+      );
+      const offer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'clipboard-paste',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        remoteClipboardV1: true,
+      );
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: (_) {},
+      );
+
+      await _deliverPacket(
+        manager,
+        _keyFrameBytes(
+          sessionId: 'clipboard-paste',
+          sequence: 1,
+          payload: <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'windowsKeyCode': 0x11,
+            'keyCode': 0x11,
+            'modifierSemantic': 'control',
+            'down': true,
+          },
+        ),
+      );
+      final pasteDelivery = _deliverPacket(
+        manager,
+        _keyFrameBytes(
+          sessionId: 'clipboard-paste',
+          sequence: 2,
+          payload: <String, dynamic>{
+            'sourcePlatform': 'windows',
+            'windowsKeyCode': 0x56,
+            'keyCode': 0x56,
+            'keySemantic': 'keyV',
+            'down': true,
+          },
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(calls.where((call) => call.method == 'injectEvent'), hasLength(1));
+
+      pasteReady.complete(RemoteClipboardPasteResult.prepared);
+      await pasteDelivery;
+      await Future<void>.delayed(Duration.zero);
+      expect(calls.where((call) => call.method == 'injectEvent'), hasLength(2));
     });
 
     test('sink coalesces queued mouse move packets before injection', () async {

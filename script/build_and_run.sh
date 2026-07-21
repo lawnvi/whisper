@@ -10,6 +10,8 @@ MODE="${1:-run}"
 APP_NAME="whisper"
 DEBUG_APP_BUNDLE="build/macos/Build/Products/Debug/whisper.app"
 RELEASE_APP_BUNDLE="build/macos/Build/Products/Release/whisper.app"
+X64_DERIVED_DATA="${WHISPER_MACOS_X64_DERIVED_DATA:-build/macos-x64}"
+X64_RELEASE_APP_BUNDLE="$X64_DERIVED_DATA/Build/Products/Release/whisper.app"
 DEBUG_ENTITLEMENTS="macos/Runner/DebugProfile.entitlements"
 RELEASE_ENTITLEMENTS="macos/Runner/Release.entitlements"
 SIGN_IDENTITY="${WHISPER_MACOS_SIGN_IDENTITY:-Whisper Local Development}"
@@ -27,6 +29,7 @@ DMG_ICON_SIZE=112
 DMG_APP_ICON_POSITION="{180, 170}"
 DMG_APPLICATIONS_ICON_POSITION="{420, 170}"
 TEMP_DIRS=()
+CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT=0
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -41,7 +44,44 @@ cleanup_temp_dirs() {
     rm -rf "$temp_dir"
   done
 }
-trap cleanup_temp_dirs EXIT
+
+cleanup_macos_native_asset_staging() {
+  # Flutter stages every macOS architecture at the same path. An Intel
+  # cross-build can otherwise leave x86_64 dylibs for the next arm64 build.
+  rm -rf build/native_assets/macos .dart_tool/flutter_build
+}
+
+prepare_macos_native_asset_staging() {
+  local required_arch="$1"
+  local binary
+  local architectures
+
+  if [[ ! -d build/native_assets/macos ]]; then
+    if compgen -G '.dart_tool/flutter_build/*/native_assets.json' >/dev/null; then
+      cleanup_macos_native_asset_staging
+    fi
+    return
+  fi
+
+  while IFS= read -r -d '' binary; do
+    if ! file "$binary" | grep -q 'Mach-O'; then
+      continue
+    fi
+    architectures="$(lipo -archs "$binary")"
+    if [[ " $architectures " != *" $required_arch "* ]]; then
+      cleanup_macos_native_asset_staging
+      return
+    fi
+  done < <(find build/native_assets/macos -type f -print0)
+}
+
+cleanup() {
+  cleanup_temp_dirs
+  if [[ "$CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT" == "1" ]]; then
+    cleanup_macos_native_asset_staging
+  fi
+}
+trap cleanup EXIT
 
 ensure_local_signing_identity() {
   if security find-certificate -c "$SIGN_IDENTITY" "$KEYCHAIN" >/dev/null 2>&1; then
@@ -176,6 +216,7 @@ sign_app() {
 }
 
 build_debug_app() {
+  prepare_macos_native_asset_staging "$(uname -m)"
   flutter build macos --debug
   dart script/prune_flutter_assets.dart macos \
     "$DEBUG_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
@@ -183,10 +224,52 @@ build_debug_app() {
 }
 
 build_release_app() {
+  prepare_macos_native_asset_staging "$(uname -m)"
   flutter build macos
   dart script/prune_flutter_assets.dart macos \
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   sign_app "$RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
+}
+
+verify_bundle_architecture() {
+  local app_bundle="$1"
+  local required_arch="$2"
+  local binary
+  local architectures
+
+  while IFS= read -r -d '' binary; do
+    if ! file "$binary" | grep -q 'Mach-O'; then
+      continue
+    fi
+    architectures="$(lipo -archs "$binary")"
+    if [[ " $architectures " != *" $required_arch "* ]]; then
+      echo "Missing $required_arch slice: $binary ($architectures)" >&2
+      exit 1
+    fi
+  done < <(
+    find "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Frameworks" \
+      -type f -print0
+  )
+}
+
+build_release_x64_app() {
+  CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT=1
+  prepare_macos_native_asset_staging x86_64
+  flutter build macos --release --config-only
+  xcodebuild \
+    -workspace macos/Runner.xcworkspace \
+    -scheme Runner \
+    -configuration Release \
+    -destination 'platform=macOS,arch=x86_64' \
+    -derivedDataPath "$X64_DERIVED_DATA" \
+    ARCHS=x86_64 \
+    ONLY_ACTIVE_ARCH=YES \
+    CODE_SIGNING_ALLOWED=NO \
+    build
+  dart script/prune_flutter_assets.dart macos \
+    "$X64_RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
+  verify_bundle_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
+  sign_app "$X64_RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
 }
 
 configure_dmg_finder_window() {
@@ -232,6 +315,7 @@ detach_dmg_mount() {
 }
 
 package_release_dmg() {
+  local app_bundle="${1:-$RELEASE_APP_BUNDLE}"
   local rw_dmg_path="${DMG_PATH%.dmg}-rw.dmg"
   if [[ "$rw_dmg_path" == "$DMG_PATH" ]]; then
     rw_dmg_path="${DMG_PATH}-rw.dmg"
@@ -243,7 +327,7 @@ package_release_dmg() {
 
   rm -rf "$DMG_ROOT" "$DMG_PATH" "$rw_dmg_path"
   mkdir -p "$DMG_ROOT"
-  cp -R "$RELEASE_APP_BUNDLE" "$DMG_ROOT/$DMG_APP_BUNDLE_NAME"
+  cp -R "$app_bundle" "$DMG_ROOT/$DMG_APP_BUNDLE_NAME"
   ln -s /Applications "$DMG_ROOT/Applications"
   hdiutil create -volname "Whisper" -srcfolder "$DMG_ROOT" -ov -format UDRW "$rw_dmg_path"
   hdiutil attach "$rw_dmg_path" -mountpoint "$mount_point" -nobrowse -quiet
@@ -289,8 +373,10 @@ case "$MODE" in
     /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
     ;;
   --telemetry|telemetry)
-    run_debug_app
-    /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
+    pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+    build_debug_app
+    WHISPER_REMOTE_INPUT_TRACE=1 \
+      "$DEBUG_APP_BUNDLE/Contents/MacOS/$APP_NAME"
     ;;
   --verify|verify)
     run_debug_app
@@ -299,10 +385,17 @@ case "$MODE" in
     ;;
   package-macos|--package-macos|release|--release)
     build_release_app
-    package_release_dmg
+    package_release_dmg "$RELEASE_APP_BUNDLE"
+    ;;
+  package-macos-x64|--package-macos-x64)
+    if [[ -z "${WHISPER_MACOS_DMG_PATH+x}" ]]; then
+      DMG_PATH="whisper-x86_64.dmg"
+    fi
+    build_release_x64_app
+    package_release_dmg "$X64_RELEASE_APP_BUNDLE"
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|package-macos]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|package-macos|package-macos-x64]" >&2
     exit 2
     ;;
 esac

@@ -150,6 +150,7 @@ class RemoteInputControlMessage {
     this.errorMessage = '',
     this.sourcePlatform = '',
     this.sinkPlatform = '',
+    this.remoteClipboardV1 = false,
   });
 
   final RemoteInputControlAction action;
@@ -178,6 +179,7 @@ class RemoteInputControlMessage {
   final String errorMessage;
   final String sourcePlatform;
   final String sinkPlatform;
+  final bool remoteClipboardV1;
 
   RemoteInputControlMessage withTransportToken(String token) {
     return RemoteInputControlMessage(
@@ -207,6 +209,7 @@ class RemoteInputControlMessage {
       errorMessage: errorMessage,
       sourcePlatform: sourcePlatform,
       sinkPlatform: sinkPlatform,
+      remoteClipboardV1: remoteClipboardV1,
     );
   }
 
@@ -242,6 +245,7 @@ class RemoteInputControlMessage {
         'errorMessage': errorMessage,
         if (sourcePlatform.isNotEmpty) 'sourcePlatform': sourcePlatform,
         if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
+        if (remoteClipboardV1) 'remoteClipboardV1': true,
       };
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
@@ -301,6 +305,7 @@ class RemoteInputControlMessage {
       errorMessage: json['errorMessage'] as String? ?? '',
       sourcePlatform: json['sourcePlatform'] as String? ?? '',
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
+      remoteClipboardV1: json['remoteClipboardV1'] as bool? ?? false,
     );
   }
 }

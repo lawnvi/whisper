@@ -10,8 +10,9 @@ void main() {
       source,
       contains("import 'package:whisper/helper/clipboard_sync.dart';"),
     );
-    expect(source, contains('final text = await readClipboardTextForSync();'));
-    expect(source, contains('if (text == null ||'));
+    expect(source, contains('final text = await readClipboardTextForSync('));
+    expect(source, contains('await _clipboardImageReader.readImageBytes()'));
+    expect(source, contains('if (text == null)'));
   });
 
   test('manual clipboard message send uses the text-only sync guard', () {
@@ -32,6 +33,19 @@ void main() {
 
     expect(source, contains('await copyToClipboard('));
     expect(source, contains('sourcePeerId: session.remotePeerId'));
+  });
+
+  test('remote clipboard follows connected keyboard workspace targets', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final workspace = File(
+      'lib/remote_input/remote_input_workspace_coordinator.dart',
+    ).readAsStringSync();
+
+    expect(deviceList, contains('workspace.targets.values'));
+    expect(deviceList, contains('target.isConnected'));
+    expect(deviceList, contains('workspaceTarget?.sessionId == sessionId'));
+    expect(workspace, contains('manager: RemoteInputManager.shared'));
+    expect(workspace, contains('remoteClipboardV1:'));
   });
 
   test('clipboard sync text bypasses chat persistence and dispatch', () {

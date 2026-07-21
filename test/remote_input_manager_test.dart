@@ -53,6 +53,39 @@ void main() {
       expect(received.single.sessionId, 'input-1');
     });
 
+    test('enables remote clipboard only when both input peers advertise it', () {
+      final manager = RemoteInputManager();
+      const supportedOffer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-clipboard',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        remoteClipboardV1: true,
+      );
+      const legacyOffer = RemoteInputControlMessage(
+        action: RemoteInputControlAction.offer,
+        sessionId: 'input-legacy',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+      );
+
+      final accepted = manager.acceptOffer(
+        supportedOffer,
+        remoteClipboardV1: true,
+      );
+      final legacy = manager.acceptOffer(
+        legacyOffer,
+        remoteClipboardV1: true,
+      );
+
+      expect(accepted.remoteClipboardV1, isTrue);
+      expect(manager.session('input-clipboard')?.remoteClipboardV1, isTrue);
+      expect(legacy.remoteClipboardV1, isFalse);
+      expect(manager.session('input-legacy')?.remoteClipboardV1, isFalse);
+    });
+
     test('propagates asynchronous packet handling to websocket backpressure',
         () async {
       final gate = Completer<void>();

@@ -29,9 +29,9 @@ void main() {
       );
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        return null;
-      });
+            calls.add(call);
+            return null;
+          });
     });
 
     tearDown(() {
@@ -98,21 +98,23 @@ void main() {
       ]);
     });
 
-    test('pauses capture without stopping the native capture session',
-        () async {
-      await platform.pauseCapture(
-        sessionId: 'input-1',
-        releaseSequence: 7,
-        releaseActivationSequence: 3,
-        releaseEdgeUnit: 0.625,
-      );
+    test(
+      'pauses capture without stopping the native capture session',
+      () async {
+        await platform.pauseCapture(
+          sessionId: 'input-1',
+          releaseSequence: 7,
+          releaseActivationSequence: 3,
+          releaseEdgeUnit: 0.625,
+        );
 
-      expect(calls.single.method, 'pauseCapture');
-      expect(calls.single.arguments['sessionId'], 'input-1');
-      expect(calls.single.arguments['releaseSequence'], 7);
-      expect(calls.single.arguments['releaseActivationSequence'], 3);
-      expect(calls.single.arguments['releaseEdgeUnit'], 0.625);
-    });
+        expect(calls.single.method, 'pauseCapture');
+        expect(calls.single.arguments['sessionId'], 'input-1');
+        expect(calls.single.arguments['releaseSequence'], 7);
+        expect(calls.single.arguments['releaseActivationSequence'], 3);
+        expect(calls.single.arguments['releaseEdgeUnit'], 0.625);
+      },
+    );
 
     test('pauses capture with the release source route override', () async {
       await platform.pauseCapture(
@@ -136,10 +138,7 @@ void main() {
     });
 
     test('keeps zero release edge unit for segment-start returns', () async {
-      await platform.pauseCapture(
-        sessionId: 'input-1',
-        releaseEdgeUnit: 0,
-      );
+      await platform.pauseCapture(sessionId: 'input-1', releaseEdgeUnit: 0);
 
       expect(calls.single.method, 'pauseCapture');
       expect(calls.single.arguments['releaseEdgeUnit'], 0);
@@ -177,16 +176,19 @@ void main() {
       await platform.injectEvent(event);
       await platform.stopInjection(sessionId: 'input-1');
 
-      expect(
-        calls.map((call) => call.method),
-        <String>['startInjection', 'injectEvent', 'stopInjection'],
-      );
+      expect(calls.map((call) => call.method), <String>[
+        'startInjection',
+        'injectEvent',
+        'stopInjection',
+      ]);
       expect(calls[0].arguments['displayId'], 'sink-main');
       expect(calls[0].arguments['edge'], 'left');
       expect(calls[0].arguments['segmentStart'], 0);
       expect(calls[0].arguments['segmentEnd'], 640);
-      expect((calls[0].arguments['mappings'] as List).single['routeId'],
-          'route-left');
+      expect(
+        (calls[0].arguments['mappings'] as List).single['routeId'],
+        'route-left',
+      );
       expect(calls[1].arguments['eventType'], 'key');
       expect(calls[1].arguments['payload'], Uint8List.fromList(<int>[42]));
     });
@@ -194,27 +196,27 @@ void main() {
     test('loads display topology from native method channel', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        calls.add(call);
-        if (call.method == 'getDisplayTopology') {
-          return <String, dynamic>{
-            'platform': 'macos',
-            'updatedAt': 1234,
-            'displays': <Map<String, dynamic>>[
-              <String, dynamic>{
-                'displayId': 'source-main',
-                'name': 'Built-in',
-                'x': 0,
-                'y': 0,
-                'width': 1440,
-                'height': 900,
-                'scale': 2.0,
-                'isPrimary': true,
-              },
-            ],
-          };
-        }
-        return null;
-      });
+            calls.add(call);
+            if (call.method == 'getDisplayTopology') {
+              return <String, dynamic>{
+                'platform': 'macos',
+                'updatedAt': 1234,
+                'displays': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'displayId': 'source-main',
+                    'name': 'Built-in',
+                    'x': 0,
+                    'y': 0,
+                    'width': 1440,
+                    'height': 900,
+                    'scale': 2.0,
+                    'isPrimary': true,
+                  },
+                ],
+              };
+            }
+            return null;
+          });
 
       final topology = await platform.displayTopology();
 
@@ -229,8 +231,9 @@ void main() {
       final diagnostics = <PlatformRemoteInputDiagnostic>[];
       final eventSubscription = platform.inputEvents.listen(events.add);
       final releaseSubscription = platform.releases.listen(releases.add);
-      final diagnosticSubscription =
-          platform.diagnostics.listen(diagnostics.add);
+      final diagnosticSubscription = platform.diagnostics.listen(
+        diagnostics.add,
+      );
 
       await platform.handleNativeMethodCall(
         MethodCall('onInputEvent', <String, dynamic>{
@@ -307,6 +310,23 @@ void main() {
         RemoteInputTextShortcut.paste,
       ]);
     });
+
+    test('dispatches the controller-side local paste shortcut', () async {
+      var calls = 0;
+      platform.configureLocalPasteHandler(() async {
+        calls++;
+        return false;
+      });
+
+      final shouldReplay = await platform.handleNativeMethodCall(
+        const MethodCall('onLocalPasteShortcut', <String, dynamic>{
+          'sessionId': 'workspace-1',
+        }),
+      );
+
+      expect(calls, 1);
+      expect(shouldReplay, isFalse);
+    });
   });
 
   group('RemoteInputPacketByteTransport', () {
@@ -326,7 +346,9 @@ void main() {
       transport.send(packet);
 
       expect(
-          RemoteInputPacketFrame.decode(sentBytes.single).sessionId, 'input-1');
+        RemoteInputPacketFrame.decode(sentBytes.single).sessionId,
+        'input-1',
+      );
     });
   });
 }

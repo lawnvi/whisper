@@ -59,6 +59,58 @@ FlValue* ReadFilePaths() {
   return paths;
 }
 
+bool WriteFilePaths(FlValue* arguments) {
+  if (arguments == nullptr || fl_value_get_type(arguments) != FL_VALUE_TYPE_MAP) {
+    return false;
+  }
+  FlValue* paths = fl_value_lookup_string(arguments, "paths");
+  if (paths == nullptr || fl_value_get_type(paths) != FL_VALUE_TYPE_LIST ||
+      fl_value_get_length(paths) == 0) {
+    return false;
+  }
+  g_autoptr(GPtrArray) uris = g_ptr_array_new_with_free_func(g_free);
+  for (size_t index = 0; index < fl_value_get_length(paths); index++) {
+    FlValue* value = fl_value_get_list_value(paths, index);
+    if (fl_value_get_type(value) != FL_VALUE_TYPE_STRING) {
+      return false;
+    }
+    const gchar* path = fl_value_get_string(value);
+    if (!g_file_test(path, G_FILE_TEST_EXISTS)) {
+      return false;
+    }
+    g_autoptr(GError) error = nullptr;
+    gchar* uri = g_filename_to_uri(path, nullptr, &error);
+    if (uri == nullptr) {
+      return false;
+    }
+    g_ptr_array_add(uris, uri);
+  }
+  g_ptr_array_add(uris, nullptr);
+  GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+  if (clipboard == nullptr) {
+    return false;
+  }
+  FlValue* as_image_value = fl_value_lookup_string(arguments, "asImage");
+  const bool as_image = as_image_value != nullptr &&
+                        fl_value_get_type(as_image_value) == FL_VALUE_TYPE_BOOL &&
+                        fl_value_get_bool(as_image_value);
+  if (as_image && fl_value_get_length(paths) == 1) {
+    FlValue* path_value = fl_value_get_list_value(paths, 0);
+    g_autoptr(GError) error = nullptr;
+    g_autoptr(GdkPixbuf) pixbuf =
+        gdk_pixbuf_new_from_file(fl_value_get_string(path_value), &error);
+    if (pixbuf == nullptr) {
+      return false;
+    }
+    gtk_clipboard_set_image(clipboard, pixbuf);
+  } else {
+    gtk_clipboard_set_uris(clipboard,
+                           reinterpret_cast<gchar**>(uris->pdata));
+  }
+  gtk_clipboard_store(clipboard);
+  return true;
+}
+
 void MethodCallCallback(FlMethodChannel*,
                         FlMethodCall* method_call,
                         gpointer) {
@@ -67,6 +119,14 @@ void MethodCallCallback(FlMethodChannel*,
     g_autoptr(FlValue) paths = ReadFilePaths();
     g_autoptr(FlMethodResponse) response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(paths));
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
+  if (std::strcmp(method, "writeFilePaths") == 0) {
+    const bool written = WriteFilePaths(fl_method_call_get_args(method_call));
+    g_autoptr(FlValue) value = fl_value_new_bool(written);
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
     fl_method_call_respond(method_call, response, nullptr);
     return;
   }

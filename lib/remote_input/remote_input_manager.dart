@@ -23,6 +23,7 @@ class RemoteInputSession {
     required this.layoutEdge,
     required this.releaseHotkey,
     required this.state,
+    this.remoteClipboardV1 = false,
   });
 
   final String sessionId;
@@ -31,6 +32,7 @@ class RemoteInputSession {
   final RemoteInputEdge? layoutEdge;
   final String releaseHotkey;
   final RemoteInputSessionState state;
+  final bool remoteClipboardV1;
 
   RemoteInputSession copyWith({RemoteInputSessionState? state}) {
     return RemoteInputSession(
@@ -40,6 +42,7 @@ class RemoteInputSession {
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
       state: state ?? this.state,
+      remoteClipboardV1: remoteClipboardV1,
     );
   }
 }
@@ -89,6 +92,7 @@ class RemoteInputManager {
     int sinkSegmentEnd = 0,
     List<RemoteInputEdgeMapping> edgeMappings =
         const <RemoteInputEdgeMapping>[],
+    bool remoteClipboardV1 = false,
   }) {
     final sessionId = _uuid.v4();
     _sessions[sessionId] = RemoteInputSession(
@@ -98,6 +102,7 @@ class RemoteInputManager {
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
       state: RemoteInputSessionState.offering,
+      remoteClipboardV1: remoteClipboardV1,
     );
     return RemoteInputControlMessage(
       action: RemoteInputControlAction.offer,
@@ -119,12 +124,14 @@ class RemoteInputManager {
       sinkSegmentStart: sinkSegmentStart,
       sinkSegmentEnd: sinkSegmentEnd,
       edgeMappings: edgeMappings,
+      remoteClipboardV1: remoteClipboardV1,
     );
   }
 
   RemoteInputControlMessage acceptOffer(
     RemoteInputControlMessage offer, {
     String sinkPlatform = '',
+    bool remoteClipboardV1 = false,
   }) {
     if (offer.layoutEdge == null) {
       return RemoteInputControlMessage(
@@ -142,6 +149,7 @@ class RemoteInputManager {
       layoutEdge: offer.layoutEdge,
       releaseHotkey: offer.releaseHotkey,
       state: RemoteInputSessionState.connected,
+      remoteClipboardV1: offer.remoteClipboardV1 && remoteClipboardV1,
     );
     return RemoteInputControlMessage(
       action: RemoteInputControlAction.accept,
@@ -163,6 +171,7 @@ class RemoteInputManager {
       releaseHotkey: offer.releaseHotkey,
       sourcePlatform: offer.sourcePlatform,
       sinkPlatform: sinkPlatform.isNotEmpty ? sinkPlatform : offer.sinkPlatform,
+      remoteClipboardV1: offer.remoteClipboardV1 && remoteClipboardV1,
     );
   }
 
@@ -177,6 +186,7 @@ class RemoteInputManager {
             layoutEdge: message.layoutEdge,
             releaseHotkey: message.releaseHotkey,
             state: RemoteInputSessionState.offering,
+            remoteClipboardV1: message.remoteClipboardV1,
           );
         }
         break;
@@ -192,6 +202,8 @@ class RemoteInputManager {
               ? message.releaseHotkey
               : current?.releaseHotkey ?? '',
           state: RemoteInputSessionState.connected,
+          remoteClipboardV1:
+              current?.remoteClipboardV1 == true && message.remoteClipboardV1,
         );
         break;
       case RemoteInputControlAction.release:

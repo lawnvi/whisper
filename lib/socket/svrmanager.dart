@@ -45,6 +45,7 @@ import 'package:whisper/socket/wire_message_codec.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -212,6 +213,20 @@ final class _WebSocketUpgradeRejected implements Exception {
 
   final String reason;
   final int statusCode;
+}
+
+final class _WorkspaceClipboardOrigin {
+  const _WorkspaceClipboardOrigin({
+    required this.revision,
+    required this.peerId,
+    required this.sessionId,
+    required this.offerId,
+  });
+
+  final int revision;
+  final String peerId;
+  final String sessionId;
+  final String offerId;
 }
 
 class WsSvrManager {
@@ -501,6 +516,16 @@ class WsSvrManager {
     wireMessageReplayGuard: _wireMessageReplayGuard,
     database: () => _database,
   );
+  late final RemoteClipboardTransferEngine _remoteClipboardTransfer =
+      RemoteClipboardTransferEngine(
+        sendFrame: (binding, frame) =>
+            _peerConnections.sendToAwaitedIfCurrent(binding, frame.encode()),
+        currentBinding: _peerConnections.currentBinding,
+        sessionValidator: _validateRemoteClipboardSession,
+      );
+  Future<void> _workspaceClipboardSerial = Future<void>.value();
+  _WorkspaceClipboardOrigin? _workspaceClipboardOrigin;
+  int _workspaceClipboardRevision = 0;
 
   PeerProfile? get _selectedRemoteProfile =>
       _remoteProfilesByPeerId[receiver] ?? _remoteProfile;
@@ -4074,7 +4099,8 @@ class WsSvrManager {
     if (!session.isAuthenticated && frame.type != WhisperFrameType.message) {
       throw const WireInputRejected(WireInputReason.sessionNotAuthenticated);
     }
-    if (frame.type == WhisperFrameType.fileData &&
+    if ((frame.type == WhisperFrameType.fileData ||
+            frame.type == WhisperFrameType.clipboardData) &&
         frame.payload.length > _maxFileDataPayloadBytes) {
       throw const WireInputRejected(WireInputReason.transferPayloadInvalid);
     }
@@ -4108,6 +4134,37 @@ class WsSvrManager {
             session.connectionGeneration,
           ),
         );
+        break;
+      case WhisperFrameType.clipboardOffer:
+      case WhisperFrameType.clipboardRequest:
+      case WhisperFrameType.clipboardData:
+      case WhisperFrameType.clipboardComplete:
+      case WhisperFrameType.clipboardClear:
+      case WhisperFrameType.clipboardError:
+        if (!(await LocalSetting().instance()).clipboard) {
+          return;
+        }
+        final clipboardSessionId = _remoteClipboardFrameSessionId(frame);
+        await _remoteClipboardTransfer.handleFrame(
+          TransferConnectionBinding(
+            peerId: session.remotePeerId,
+            generation: session.connectionGeneration,
+          ),
+          frame,
+        );
+        if (frame.type == WhisperFrameType.clipboardOffer &&
+            clipboardSessionId != null) {
+          await _handleWorkspaceClipboardOffer(
+            peerId: session.remotePeerId,
+            sessionId: clipboardSessionId,
+          );
+        } else if (frame.type == WhisperFrameType.clipboardClear &&
+            clipboardSessionId != null) {
+          await _handleWorkspaceClipboardClear(
+            peerId: session.remotePeerId,
+            sessionId: clipboardSessionId,
+          );
+        }
         break;
     }
   }
@@ -4241,6 +4298,11 @@ class WsSvrManager {
           );
           if (message.clipboard) {
             if ((await LocalSetting().instance()).clipboard) {
+              requireCurrentBusiness();
+              await _relayWorkspaceClipboardText(
+                message,
+                sourcePeerId: session.remotePeerId,
+              );
               requireCurrentBusiness();
               await copyToClipboard(
                 message.content ?? "",
@@ -5493,6 +5555,243 @@ class WsSvrManager {
 
   Future<bool> sendFile(String path) async {
     return sendFileTo(receiver, path);
+  }
+
+  Future<bool> publishRemoteClipboard({
+    required String peerId,
+    required String sessionId,
+    required List<RemoteClipboardLocalItem> items,
+  }) async {
+    if (!(await LocalSetting().instance()).clipboard ||
+        !await LocalSetting().clipboardAutoSync()) {
+      await _remoteClipboardTransfer.clearSession(
+        sessionId,
+        notifyPeer: true,
+        peerId: peerId,
+      );
+      return false;
+    }
+    return _remoteClipboardTransfer.publish(
+      peerId: peerId,
+      sessionId: sessionId,
+      items: items,
+    );
+  }
+
+  Future<RemoteClipboardPasteResult> prepareRemoteClipboardPaste({
+    required String peerId,
+    required String sessionId,
+  }) async {
+    if (!(await LocalSetting().instance()).clipboard ||
+        !await LocalSetting().clipboardAutoSync()) {
+      return RemoteClipboardPasteResult.notAvailable;
+    }
+    return _remoteClipboardTransfer.preparePaste(
+      peerId: peerId,
+      sessionId: sessionId,
+    );
+  }
+
+  void markLocalWorkspaceClipboard() {
+    _workspaceClipboardRevision++;
+    _workspaceClipboardOrigin = null;
+  }
+
+  Future<RemoteClipboardPasteResult> prepareLatestWorkspaceClipboardPaste() {
+    final origin = _workspaceClipboardOrigin;
+    if (origin == null) {
+      return Future<RemoteClipboardPasteResult>.value(
+        RemoteClipboardPasteResult.notAvailable,
+      );
+    }
+    final offer = _remoteClipboardTransfer.remoteOffer(
+      peerId: origin.peerId,
+      sessionId: origin.sessionId,
+    );
+    if (offer == null || offer.offerId != origin.offerId) {
+      _workspaceClipboardOrigin = null;
+      return Future<RemoteClipboardPasteResult>.value(
+        RemoteClipboardPasteResult.notAvailable,
+      );
+    }
+    return prepareRemoteClipboardPaste(
+      peerId: origin.peerId,
+      sessionId: origin.sessionId,
+    );
+  }
+
+  Future<void> clearRemoteClipboardSession({
+    required String peerId,
+    required String sessionId,
+    bool notifyPeer = false,
+  }) {
+    return _remoteClipboardTransfer.clearSession(
+      sessionId,
+      notifyPeer: notifyPeer,
+      peerId: peerId,
+    );
+  }
+
+  bool remoteClipboardOwnsPaths({
+    required String sessionId,
+    required List<String> paths,
+  }) {
+    return _remoteClipboardTransfer.ownsClipboardPaths(sessionId, paths);
+  }
+
+  bool _validateRemoteClipboardSession({
+    required String peerId,
+    required String sessionId,
+    required bool sourceIsLocal,
+  }) {
+    final inputSession = _remoteInputManager.session(sessionId);
+    final socketSession = _sessionsByPeerId[peerId];
+    if (inputSession?.state != RemoteInputSessionState.connected ||
+        inputSession?.remoteClipboardV1 != true ||
+        socketSession == null ||
+        !socketSession.isAuthenticated ||
+        _peerConnections.currentBinding(peerId)?.generation !=
+            socketSession.connectionGeneration) {
+      return false;
+    }
+    final localPeerId = socketSession.localProfile.uid;
+    final participantsMatch =
+        (inputSession!.sourcePeerId == localPeerId &&
+            inputSession.sinkPeerId == peerId) ||
+        (inputSession.sourcePeerId == peerId &&
+            inputSession.sinkPeerId == localPeerId);
+    return participantsMatch;
+  }
+
+  String? _remoteClipboardFrameSessionId(WhisperFrameV3 frame) {
+    if (frame.payload.length > 64 * 1024) {
+      return null;
+    }
+    try {
+      final value = jsonDecode(utf8.decode(frame.payload));
+      if (value is Map && value['sessionId'] is String) {
+        return value['sessionId'] as String;
+      }
+    } on Object {
+      return null;
+    }
+    return null;
+  }
+
+  Future<void> _handleWorkspaceClipboardOffer({
+    required String peerId,
+    required String sessionId,
+  }) {
+    return _serializeWorkspaceClipboard(() async {
+      final offer = _remoteClipboardTransfer.remoteOffer(
+        peerId: peerId,
+        sessionId: sessionId,
+      );
+      if (offer == null) {
+        return;
+      }
+      final workspace = RemoteInputWorkspaceCoordinator.shared.snapshot;
+      final originTarget = workspace.targets[peerId];
+      final legacy = RemoteInputCoordinator.shared.state;
+      final isWorkspaceOrigin =
+          workspace.isControllerLive &&
+          originTarget?.isConnected == true &&
+          originTarget?.sessionId == sessionId;
+      final isLegacyOrigin =
+          legacy.role == RemoteInputRuntimeRole.source &&
+          legacy.peerId == peerId &&
+          legacy.sessionId == sessionId;
+      if (!isWorkspaceOrigin && !isLegacyOrigin) {
+        return;
+      }
+      final revision = ++_workspaceClipboardRevision;
+      _workspaceClipboardOrigin = _WorkspaceClipboardOrigin(
+        revision: revision,
+        peerId: peerId,
+        sessionId: sessionId,
+        offerId: offer.offerId,
+      );
+      if (!isWorkspaceOrigin) {
+        return;
+      }
+      for (final target in workspace.targets.values) {
+        if (!target.isConnected || target.peerId == peerId) {
+          continue;
+        }
+        if (_workspaceClipboardOrigin?.revision != revision) {
+          return;
+        }
+        await _remoteClipboardTransfer.relayRemoteOffer(
+          originPeerId: peerId,
+          originSessionId: sessionId,
+          targetPeerId: target.peerId,
+          targetSessionId: target.sessionId,
+        );
+      }
+    });
+  }
+
+  Future<void> _handleWorkspaceClipboardClear({
+    required String peerId,
+    required String sessionId,
+  }) {
+    return _serializeWorkspaceClipboard(() async {
+      final origin = _workspaceClipboardOrigin;
+      if (origin == null ||
+          origin.peerId != peerId ||
+          origin.sessionId != sessionId) {
+        return;
+      }
+      _workspaceClipboardRevision++;
+      _workspaceClipboardOrigin = null;
+      final workspace = RemoteInputWorkspaceCoordinator.shared.snapshot;
+      if (!workspace.isControllerLive) {
+        return;
+      }
+      for (final target in workspace.targets.values) {
+        if (!target.isConnected || target.peerId == peerId) {
+          continue;
+        }
+        await _remoteClipboardTransfer.clearSession(
+          target.sessionId,
+          notifyPeer: true,
+          peerId: target.peerId,
+        );
+      }
+    });
+  }
+
+  Future<void> _relayWorkspaceClipboardText(
+    MessageData message, {
+    required String sourcePeerId,
+  }) async {
+    final workspace = RemoteInputWorkspaceCoordinator.shared.snapshot;
+    final source = workspace.targets[sourcePeerId];
+    if (!workspace.isControllerLive || source?.isConnected != true) {
+      return;
+    }
+    markLocalWorkspaceClipboard();
+    for (final target in workspace.targets.values) {
+      if (!target.isConnected || target.peerId == sourcePeerId) {
+        continue;
+      }
+      await _remoteClipboardTransfer.clearSession(
+        target.sessionId,
+        notifyPeer: true,
+        peerId: target.peerId,
+      );
+      await sendMessageTo(
+        target.peerId,
+        message.content ?? '',
+        clipboard: true,
+      );
+    }
+  }
+
+  Future<void> _serializeWorkspaceClipboard(Future<void> Function() action) {
+    final next = _workspaceClipboardSerial.then((_) => action());
+    _workspaceClipboardSerial = next.catchError((_) {});
+    return next;
   }
 
   Future<bool> sendFileTo(String peerId, String path, {String? messageId}) =>

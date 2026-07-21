@@ -12,6 +12,7 @@ private let privacyTraceLog = OSLog(
   subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
   category: "RemoteInput")
 private let remoteInputShortcutEventMarker: Int64 = 0x57484953504552
+private let remoteInputLocalPasteEventMarker: Int64 = 0x57484953505653
 
 private enum RemoteInputTraceEvent: String {
   case captureCompanion = "capture_companion"
@@ -192,6 +193,13 @@ final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
       result(FlutterStandardTypedData(bytes: data))
     case "readFilePaths":
       result(readFilePaths())
+    case "writeFilePaths":
+      guard let arguments = call.arguments as? [String: Any],
+            let paths = arguments["paths"] as? [String] else {
+        result(FlutterError(code: "invalid_paths", message: nil, details: nil))
+        return
+      }
+      result(writeFilePaths(paths, asImage: arguments["asImage"] as? Bool ?? false))
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -236,6 +244,26 @@ final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
     return urls?
       .filter { $0.isFileURL }
       .map { $0.path } ?? []
+  }
+
+  private func writeFilePaths(_ paths: [String], asImage: Bool) -> Bool {
+    let urls = paths.map { URL(fileURLWithPath: $0) }
+    guard !urls.isEmpty, urls.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+      return false
+    }
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    if asImage, urls.count == 1,
+       let image = NSImage(contentsOf: urls[0]),
+       let tiff = image.tiffRepresentation,
+       let bitmap = NSBitmapImageRep(data: tiff),
+       let png = bitmap.representation(using: .png, properties: [:]) {
+      let item = NSPasteboardItem()
+      item.setString(urls[0].absoluteString, forType: .fileURL)
+      item.setData(png, forType: .png)
+      return pasteboard.writeObjects([item])
+    }
+    return pasteboard.writeObjects(urls as [NSURL])
   }
 }
 
@@ -297,6 +325,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var captureRoutes: [CaptureRoute] = []
   private var releaseHotkey = "ctrl+alt+esc"
   private var captureActive = false
+  private var suppressLocalPasteKeyUp = false
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
   private var shortcutSuppressionEventTap: CFMachPort?
@@ -507,6 +536,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureRoutes = routes
     self.releaseHotkey = releaseHotkey
     captureActive = false
+    suppressLocalPasteKeyUp = false
     captureMouseButtons = 0
     sequence = 0
     captureActivationSequence = 0
@@ -555,6 +585,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureSegments = []
     captureRoutes = []
     captureActive = false
+    suppressLocalPasteKeyUp = false
     captureActivationSequence = 0
     captureMouseButtons = 0
     captureActivationEdgeUnit = nil
@@ -623,8 +654,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   fileprivate func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
-    if event.getIntegerValueField(.eventSourceUserData) ==
-        remoteInputShortcutEventMarker {
+    let eventMarker = event.getIntegerValueField(.eventSourceUserData)
+    if eventMarker == remoteInputShortcutEventMarker ||
+        eventMarker == remoteInputLocalPasteEventMarker {
       return false
     }
     guard !captureSessionId.isEmpty else {
@@ -632,6 +664,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     if isReleaseHotkey(type: type, event: event) {
       emitCaptureRelease(reason: "hotkey")
+      return true
+    }
+    if !captureActive && interceptLocalPasteShortcut(type: type, event: event) {
       return true
     }
     var activeStart = false
@@ -672,6 +707,83 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     pinCaptureCursorIfNeeded(type: type)
     return true
+  }
+
+  private func interceptLocalPasteShortcut(
+    type: CGEventType,
+    event: CGEvent
+  ) -> Bool {
+    let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+    guard keyCode == 9 else {
+      return false
+    }
+    if type == .keyUp && suppressLocalPasteKeyUp {
+      suppressLocalPasteKeyUp = false
+      return true
+    }
+    let unsupported: CGEventFlags = [.maskControl, .maskAlternate]
+    guard type == .keyDown,
+          event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+          event.flags.contains(.maskCommand),
+          event.flags.intersection(unsupported).isEmpty else {
+      return false
+    }
+    suppressLocalPasteKeyUp = true
+    let arguments: [String: Any] = ["sessionId": captureSessionId]
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        return
+      }
+      self.channel.invokeMethod(
+        "onLocalPasteShortcut",
+        arguments: arguments
+      ) { result in
+        let shouldReplay = (result as? Bool) ?? true
+        if shouldReplay {
+          self.postLocalPasteShortcut()
+        }
+      }
+    }
+    return true
+  }
+
+  private func postLocalPasteShortcut() {
+    let commandKey = CGKeyCode(55)
+    let pasteKey = CGKeyCode(9)
+    let commandFlags: CGEventFlags = [.maskCommand]
+    guard let commandDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: commandKey,
+            keyDown: true),
+          let pasteDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: pasteKey,
+            keyDown: true),
+          let pasteUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: pasteKey,
+            keyDown: false),
+          let commandUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: commandKey,
+            keyDown: false) else {
+      return
+    }
+    let events = [commandDown, pasteDown, pasteUp, commandUp]
+    for event in events {
+      event.setIntegerValueField(
+        .eventSourceUserData,
+        value: remoteInputLocalPasteEventMarker)
+    }
+    commandDown.type = .flagsChanged
+    commandDown.flags = commandFlags
+    pasteDown.flags = commandFlags
+    pasteUp.flags = commandFlags
+    commandUp.type = .flagsChanged
+    commandUp.flags = []
+    for event in events {
+      event.post(tap: .cghidEventTap)
+    }
   }
 
   private func encodePayload(
