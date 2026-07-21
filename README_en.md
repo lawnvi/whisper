@@ -33,22 +33,22 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 - **End-to-end encryption**: paired text, files, clipboard data, notifications, audio, and keyboard/mouse control use encrypted channels with visible identity and trust state.
 - **Direct multi-device connections**: one device can connect to multiple computers or phones, with visible and explicit connection state.
-- **Chat-style transfer**: send text, clipboard content, and files in conversations; view images full screen, play audio inline, open video in the system player, and select multiple messages for deletion.
+- **Chat-style transfer**: send text and files in conversations while auto-synced clipboard content stays out of history; view images full screen, play audio inline, open video in the system player, and select multiple messages for deletion.
 - **System quick send**: use the Android share sheet, desktop context menus, or a global hotkey without opening a conversation first. Desktop drafts can wait for a trusted device to reconnect; unsent Android system shares are discarded when the app restarts.
 - **QR pairing and diagnostics**: pairing codes bind the LAN endpoint to the device identity, while failures identify Wi-Fi, address, service, firewall, identity, or version problems.
-- **Transfer assistant**: send folders, search message text, save favorite snippets, and optionally enable clipboard auto-sync.
+- **Transfer assistant**: send folders, search message text, save favorite snippets, and optionally enable clipboard auto-sync without adding synced content to conversations.
 - **Streaming verification and resume**: calculate SHA-256 while receiving, normally avoiding a second full-file read at completion, and resume from the last acknowledged offset after a disconnect.
 - **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
-- **Keyboard and mouse sharing**: share one keyboard and mouse across trusted desktop devices, switching targets through screen layout and edge crossing.
+- **Keyboard and mouse sharing**: share one keyboard and mouse across multiple trusted desktops, with text, image, and file clipboard content following the workspace.
 - **Desktop experience**: tray integration, launch at startup, close to tray, reveal files in the system file manager, drag files out from desktop messages, light/dark themes, and multilingual UI.
 
-## Recent Updates
+## Recent Updates (0.0.45)
 
-- Control traffic and large-file payloads now share the same end-to-end encrypted session, with trusted-device state visible in the UI.
-- QR pairing now stays in an in-place dialog, carries both the LAN endpoint and device identity, and requires no extra password; first-time pairing still asks both devices to confirm the same code.
-- Image, video, and audio messages use dedicated media cards; images open full screen, audio plays inline, video opens in the system player, and transfer states update in place.
-- Android combines LAN listening, file transfer, and audio playback into one foreground notification and clears the receiving state when a transfer completes.
-- Long-press any message to enter multi-select mode, select all, or batch-delete chat records; local files are kept by default.
+- Multi-device keyboard and mouse workspaces now share the clipboard in both directions; the most recent copy wins, without adding text, images, or files to conversations.
+- File and image metadata syncs first, while bytes transfer only when the destination pastes; the flow follows the clipboard auto-sync setting and batch limits.
+- Conversation timestamps are grouped by interval, copy actions show success feedback, images use a title-free full-screen preview, and outgoing Android media can be viewed directly.
+- Incoming desktop connection requests bring Whisper to the foreground, with more stable pairing-code dialog transitions.
+- Legacy per-device input layout settings were removed, and macOS Caps Lock now switches the remote input method with one press.
 
 ## Connection
 
