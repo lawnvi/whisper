@@ -1535,6 +1535,7 @@ WhisperFrameV3 _controlFrame(FileTransferV3Control control) => WhisperFrameV3(
   type: switch (control.action) {
     FileTransferV3Action.ready => WhisperFrameType.fileReady,
     FileTransferV3Action.ack => WhisperFrameType.fileAck,
+    FileTransferV3Action.verify => WhisperFrameType.fileAck,
     FileTransferV3Action.complete => WhisperFrameType.fileComplete,
     FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
     FileTransferV3Action.error => WhisperFrameType.fileError,

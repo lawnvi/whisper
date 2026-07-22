@@ -63,7 +63,7 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 8;
+  static const int protocolVersion = 9;
 
   final PeerSocketRole role;
   final int connectionGeneration;

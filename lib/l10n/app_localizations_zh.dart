@@ -410,6 +410,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileTransferVerifying => '校验中';
 
   @override
+  String get fileTransferWaitingPeerVerification => '等待对端校验';
+
+  @override
   String get fileTransferFailedRetryable => '失败，可重试';
 
   @override

@@ -611,13 +611,20 @@ Future<void> _verifyReservationPlaceholder(
   final ownedBytes = await reservation._handle.read(
     reservation._ownershipToken.length,
   );
-  final pathBytes = await File(reservation.path).readAsBytes();
-  if (!_equalBytes(ownedBytes, reservation._ownershipToken) ||
-      !_equalBytes(pathBytes, reservation._ownershipToken)) {
+  if (!_equalBytes(ownedBytes, reservation._ownershipToken)) {
     throw FileSystemException(
       'download reservation ownership token changed',
       reservation.path,
     );
+  }
+  if (!Platform.isWindows) {
+    final pathBytes = await File(reservation.path).readAsBytes();
+    if (!_equalBytes(pathBytes, reservation._ownershipToken)) {
+      throw FileSystemException(
+        'download reservation ownership token changed',
+        reservation.path,
+      );
+    }
   }
 }
 
@@ -644,11 +651,25 @@ Future<void> _verifyPublishedReservation(
       reservation.path,
     );
   }
-  final digest = await _hashFilePath(
-    File(reservation.path),
+  final handleDigest = await _hashRandomAccessFile(
+    reservation._handle,
     expectedLength: expectedSize,
   );
-  if (digest != expectedSha256) {
+  if (handleDigest != expectedSha256) {
+    throw FileSystemException(
+      'published reservation content changed',
+      reservation.path,
+    );
+  }
+  // Windows byte-range locks reject a second read handle even in this process.
+  // The locked handle and stable path metadata retain ownership there; Unix
+  // additionally verifies through the path to detect a replaced directory entry.
+  if (!Platform.isWindows &&
+      await _hashFilePath(
+            File(reservation.path),
+            expectedLength: expectedSize,
+          ) !=
+          expectedSha256) {
     throw FileSystemException(
       'published reservation content changed',
       reservation.path,

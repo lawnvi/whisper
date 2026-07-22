@@ -21,6 +21,7 @@ final RegExp _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
 enum FileTransferV3Action {
   ready,
   ack,
+  verify,
   complete,
   cancel,
   error,
@@ -128,6 +129,7 @@ class FileTransferV3Control {
     required this.failureReason,
     this.resumeProofSha256 = '',
     this.resumeProofLength = 0,
+    this.checksumValue = '',
     this.protocolVersion = fileTransferV3ProtocolVersion,
   });
 
@@ -139,6 +141,7 @@ class FileTransferV3Control {
   final FileTransferFailureReason failureReason;
   final String resumeProofSha256;
   final int resumeProofLength;
+  final String checksumValue;
 
   String get errorCode => failureReason.wireCode;
   String get errorMessage => failureReason.wireCode;
@@ -153,6 +156,7 @@ class FileTransferV3Control {
         'errorMessage': failureReason.wireCode,
         'resumeProofSha256': resumeProofSha256,
         'resumeProofLength': resumeProofLength,
+        'checksumValue': checksumValue,
       };
 
   factory FileTransferV3Control.fromJson(Map<String, dynamic> json) {
@@ -165,6 +169,7 @@ class FileTransferV3Control {
     final errorMessage = json['errorMessage'];
     final resumeProofSha256 = json['resumeProofSha256'];
     final resumeProofLength = json['resumeProofLength'];
+    final checksumValue = json['checksumValue'] ?? '';
     if (protocolVersion is! int ||
         actionName is! String ||
         transferId is! String ||
@@ -173,7 +178,8 @@ class FileTransferV3Control {
         errorCode is! String ||
         errorMessage is! String ||
         resumeProofSha256 is! String ||
-        resumeProofLength is! int) {
+        resumeProofLength is! int ||
+        checksumValue is! String) {
       throw const FormatException('invalid file transfer control fields');
     }
     FileTransferV3Action action;
@@ -197,7 +203,14 @@ class FileTransferV3Control {
                 ? resumeProofSha256.isEmpty
                 : _sha256Hex.hasMatch(resumeProofSha256))
         : resumeProofLength == 0 && resumeProofSha256.isEmpty;
-    if (durableOffset < 0 || size < 0 || !proofIsValid) {
+    final checksumIsValid = action == FileTransferV3Action.verify
+        ? _sha256Hex.hasMatch(checksumValue)
+        : checksumValue.isEmpty;
+    if (durableOffset < 0 ||
+        size < 0 ||
+        !proofIsValid ||
+        !checksumIsValid ||
+        (action == FileTransferV3Action.verify && durableOffset != size)) {
       throw const FormatException('invalid file transfer resume proof');
     }
     return FileTransferV3Control(
@@ -209,6 +222,7 @@ class FileTransferV3Control {
       failureReason: failureReason,
       resumeProofSha256: resumeProofSha256,
       resumeProofLength: resumeProofLength,
+      checksumValue: checksumValue,
     );
   }
 }
@@ -222,6 +236,7 @@ final class FileTransferV3MetadataException extends FormatException {
 final class FileTransferV3Metadata {
   const FileTransferV3Metadata({
     required this.checksumValue,
+    this.checksumDeferred = false,
     this.protocolVersion = fileTransferV3ProtocolVersion,
     this.checksumAlgorithm = fileTransferV3ChecksumAlgorithm,
     this.chunkSize = fileTransferV3FramePayloadSize,
@@ -231,6 +246,7 @@ final class FileTransferV3Metadata {
   final int protocolVersion;
   final String checksumAlgorithm;
   final String checksumValue;
+  final bool checksumDeferred;
   final int chunkSize;
   final int windowSize;
 
@@ -238,6 +254,7 @@ final class FileTransferV3Metadata {
         'protocolVersion': protocolVersion,
         'checksumAlgorithm': checksumAlgorithm,
         'checksumValue': checksumValue,
+        'checksumDeferred': checksumDeferred,
         'chunkSize': chunkSize,
         'windowSize': windowSize,
       };
@@ -257,6 +274,7 @@ final class FileTransferV3Metadata {
       final protocolVersion = decoded['protocolVersion'];
       final checksumAlgorithm = decoded['checksumAlgorithm'];
       final checksumValue = decoded['checksumValue'];
+      final checksumDeferred = decoded['checksumDeferred'] ?? false;
       final chunkSize = decoded['chunkSize'];
       final windowSize = decoded['windowSize'];
       // 身份字段(协议版本、校验算法/值)精确校验;节奏字段
@@ -267,7 +285,10 @@ final class FileTransferV3Metadata {
       if (protocolVersion != fileTransferV3ProtocolVersion ||
           checksumAlgorithm != fileTransferV3ChecksumAlgorithm ||
           checksumValue is! String ||
-          !_sha256Hex.hasMatch(checksumValue) ||
+          checksumDeferred is! bool ||
+          (checksumDeferred
+              ? checksumValue.isNotEmpty
+              : !_sha256Hex.hasMatch(checksumValue)) ||
           chunkSize is! int ||
           windowSize is! int ||
           windowSize < fileTransferV3FramePayloadSize ||
@@ -279,6 +300,7 @@ final class FileTransferV3Metadata {
       }
       return FileTransferV3Metadata(
         checksumValue: checksumValue,
+        checksumDeferred: checksumDeferred,
         chunkSize: chunkSize,
         windowSize: windowSize,
       );
@@ -302,13 +324,20 @@ final class FileTransferV3Metadata {
         return null;
       }
       final checksumValue = decoded['checksumValue'];
+      final checksumDeferred = decoded['checksumDeferred'] ?? false;
       if (decoded['checksumAlgorithm'] != fileTransferV3ChecksumAlgorithm ||
           checksumValue is! String ||
-          !_sha256Hex.hasMatch(checksumValue)) {
+          checksumDeferred is! bool ||
+          (checksumDeferred
+              ? checksumValue.isNotEmpty
+              : !_sha256Hex.hasMatch(checksumValue))) {
         return null;
       }
       return jsonEncode(
-        FileTransferV3Metadata(checksumValue: checksumValue).toJson(),
+        FileTransferV3Metadata(
+          checksumValue: checksumValue,
+          checksumDeferred: checksumDeferred,
+        ).toJson(),
       );
     } catch (_) {
       return null;

@@ -4,12 +4,12 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
@@ -507,7 +507,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case FileTransferState.paused:
         return l10n.fileTransferPaused;
       case FileTransferState.verifying:
-        return l10n.fileTransferVerifying;
+        return transfer.direction == FileTransferDirection.outgoing
+            ? l10n.fileTransferWaitingPeerVerification
+            : l10n.fileTransferVerifying;
       case FileTransferState.completed:
         return formatSize(message.size);
       case FileTransferState.failed:
@@ -666,28 +668,76 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return base;
     }
 
-    return DropTarget(
-      onDragDone: (detail) => unawaited(_handleFileDrop(detail.files)),
-      onDragEntered: (detail) {},
-      onDragExited: (detail) {},
+    return DropRegion(
+      formats: const [Formats.fileUri],
+      hitTestBehavior: HitTestBehavior.opaque,
+      onDropOver: (event) {
+        final canCopy = event.session.allowedOperations.contains(
+          DropOperation.copy,
+        );
+        final hasOnlyFiles =
+            event.session.items.isNotEmpty &&
+            event.session.items.every(
+              (item) => item.canProvide(Formats.fileUri),
+            );
+        return _canSendCurrentDevice && canCopy && hasOnlyFiles
+            ? DropOperation.copy
+            : DropOperation.none;
+      },
+      onPerformDrop: (event) async {
+        final paths = await Future.wait(
+          event.session.items.map(_readDroppedFilePath),
+        );
+        if (paths.any((path) => path == null)) {
+          if (mounted) {
+            showAppToast(l10n.fileDropRejected);
+          }
+          return;
+        }
+        unawaited(_handleFileDrop(paths.cast<String>()));
+      },
       child: base,
     );
   }
 
-  Future<void> _handleFileDrop(List<DropItem> files) async {
-    if (files.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
+  Future<String?> _readDroppedFilePath(DropItem item) async {
+    final reader = item.dataReader;
+    if (reader == null) {
+      return null;
+    }
+    final completer = Completer<Uri?>();
+    void complete(Uri? value) {
+      if (!completer.isCompleted) {
+        completer.complete(value);
+      }
+    }
+
+    final progress = reader.getValue<Uri>(
+      Formats.fileUri,
+      complete,
+      onError: (_) => complete(null),
+    );
+    if (progress == null) {
+      return null;
+    }
+    final uri = await completer.future;
+    return uri?.isScheme('file') == true ? uri!.toFilePath() : null;
+  }
+
+  Future<void> _handleFileDrop(List<String> paths) async {
+    if (paths.isEmpty || _isLocalhost || !_canSendCurrentDevice) {
       return;
     }
     try {
-      for (final item in files) {
-        if (await FileSystemEntity.type(item.path, followLinks: false) !=
+      for (final path in paths) {
+        if (await FileSystemEntity.type(path, followLinks: false) !=
             FileSystemEntityType.file) {
           if (mounted) {
             showAppToast(l10n.fileDropRejected);
           }
           return;
         }
-        final sent = await socketManager.sendFileTo(device.uid, item.path);
+        final sent = await socketManager.sendFileTo(device.uid, path);
         if (!sent && mounted) {
           showAppToast(l10n.fileDropRejected);
           return;

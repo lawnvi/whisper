@@ -423,6 +423,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fileTransferVerifying => 'Verifying';
 
   @override
+  String get fileTransferWaitingPeerVerification =>
+      'Waiting for peer verification';
+
+  @override
   String get fileTransferFailedRetryable => 'Failed, retry available';
 
   @override

@@ -38,6 +38,22 @@ void main() {
     expect(await source.readRange(4, 5), <int>[4, 5, 6, 7, 8]);
   });
 
+  test('path source checksum runs off the UI isolate', () async {
+    final root = await Directory.systemTemp.createTemp('whisper-source-hash-');
+    addTearDown(() => root.delete(recursive: true));
+    final file = File('${root.path}${Platform.pathSeparator}large.bin');
+    final bytes = Uint8List.fromList(List<int>.generate(4096, (i) => i % 251));
+    await file.writeAsBytes(bytes);
+
+    final digest = await checksumForTransferSource(
+      PathFileTransferSource(file.path),
+      algorithm: 'sha256',
+      expectedLength: bytes.length,
+    );
+
+    expect(digest, bytesChecksum(bytes, algorithm: 'sha256'));
+  });
+
   test('resume proof hashes the final min(1 MiB, offset) bytes', () async {
     final bytes = Uint8List.fromList(List<int>.generate(12, (index) => index));
     final picker = _FakeAndroidDocumentPicker(bytes);

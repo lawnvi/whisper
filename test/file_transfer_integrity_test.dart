@@ -696,6 +696,100 @@ void main() {
 
   group('incoming integrity and publication', () {
     test(
+      'deferred checksum ACKs 100% before verification and publication',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'whisper-deferred-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        const transferId = 'd1234567-89ab-4cde-8fab-0123456789ab';
+        const bytes = <int>[1, 2, 3, 4];
+        final database = LocalDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final sent = <WhisperFrameV3>[];
+        final engine = _engine(
+          database,
+          sent,
+          downloadDirectory: () async => directory,
+        );
+        final offer =
+            _message(
+              transferId: transferId,
+              sender: 'peer-a',
+              receiver: 'local',
+              path: '',
+              size: bytes.length,
+            ).copyWith(
+              content: Value(
+                jsonEncode(
+                  const FileTransferV3Metadata(
+                    checksumValue: '',
+                    checksumDeferred: true,
+                  ).toJson(),
+                ),
+              ),
+            );
+
+        await engine.handleFrame(
+          _connection('peer-a'),
+          _offerFrame(offer),
+          requireCurrent: () {},
+        );
+        sent.clear();
+        await engine.handleFrame(
+          _connection('peer-a'),
+          WhisperFrameV3(
+            type: WhisperFrameType.fileData,
+            transferId: transferId,
+            offset: 0,
+            sequence: 0,
+            payload: Uint8List.fromList(bytes),
+          ),
+          requireCurrent: () {},
+        );
+
+        final ack = FileTransferV3Control.fromJson(
+          jsonDecode(utf8.decode(sent.single.payload)) as Map<String, dynamic>,
+        );
+        expect(ack.action, FileTransferV3Action.ack);
+        expect(ack.durableOffset, bytes.length);
+        expect(
+          (await database.fetchFileTransfer(transferId))?.state,
+          FileTransferState.verifying,
+        );
+        expect(
+          sent.where((frame) => frame.type == WhisperFrameType.fileComplete),
+          isEmpty,
+        );
+
+        final checksum = bytesChecksum(bytes, algorithm: 'sha256');
+        await engine.handleFrame(
+          _connection('peer-a'),
+          _controlFrame(
+            FileTransferV3Control(
+              action: FileTransferV3Action.verify,
+              transferId: transferId,
+              durableOffset: bytes.length,
+              size: bytes.length,
+              failureReason: FileTransferFailureReason.none,
+              checksumValue: checksum,
+            ),
+          ),
+          requireCurrent: () {},
+        );
+
+        expect(
+          (await database.fetchFileTransfer(transferId))?.state,
+          FileTransferState.completed,
+        );
+        expect(
+          sent.map((frame) => frame.type),
+          contains(WhisperFrameType.fileComplete),
+        );
+      },
+    );
+
+    test(
       'matching SHA publishes uniquely and commits paths before visibility',
       () async {
         const transferId = '11234567-89ab-4cde-8fab-0123456789ab';
@@ -1909,6 +2003,7 @@ WhisperFrameV3 _controlFrame(FileTransferV3Control control) => WhisperFrameV3(
   type: switch (control.action) {
     FileTransferV3Action.ready => WhisperFrameType.fileReady,
     FileTransferV3Action.ack => WhisperFrameType.fileAck,
+    FileTransferV3Action.verify => WhisperFrameType.fileAck,
     FileTransferV3Action.complete => WhisperFrameType.fileComplete,
     FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
     FileTransferV3Action.error => WhisperFrameType.fileError,

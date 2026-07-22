@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:whisper/socket/file_path_policy.dart';
@@ -201,6 +202,40 @@ void main() {
       throwsStateError,
     );
     await discardDownloadReservation(reservations.last);
+  });
+
+  test('published file metadata can be prepared while reservation is held',
+      () async {
+    final root = await Directory.systemTemp.createTemp('whisper-metadata-');
+    addTearDown(() async {
+      if (root.existsSync()) await root.delete(recursive: true);
+    });
+    final bytes = utf8.encode('verified payload');
+    final temp = File(p.join(root.path, 'verified.part'));
+    await temp.writeAsBytes(bytes);
+    final snapshot = await VerifiedTransferSnapshot.open(
+      temp,
+      expectedSize: bytes.length,
+      expectedSha256: sha256.convert(bytes).toString(),
+    );
+    final reservation = await reserveUniqueDownloadFile(root, 'report.pdf');
+    final modified = DateTime.utc(2024, 1, 2, 3, 4, 5);
+
+    try {
+      final published = await publishVerifiedSnapshot(
+        snapshot,
+        reservation,
+        preparePublishedFile: (file) => file.setLastModified(modified),
+      );
+
+      expect(
+        (await published.stat()).modified.millisecondsSinceEpoch,
+        modified.millisecondsSinceEpoch,
+      );
+    } finally {
+      await snapshot.close();
+      await discardDownloadReservation(reservation);
+    }
   });
 
   test('replacement after reservation is never overwritten or deleted',

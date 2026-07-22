@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -85,8 +86,9 @@ Future<String> checksumForTransferSource(
   required String algorithm,
   int? expectedLength,
 }) async {
-  if (source is PathFileTransferSource && expectedLength == null) {
-    return fileChecksum(source.file, algorithm: algorithm);
+  if (source is PathFileTransferSource) {
+    final path = source.file.path;
+    return Isolate.run(() => _checksumPath(path, algorithm, expectedLength));
   }
 
   final checksum = StreamingChecksum(algorithm: algorithm);
@@ -111,6 +113,20 @@ Future<String> checksumForTransferSource(
     offset += bytes.length;
   }
   return checksum.close();
+}
+
+Future<String> _checksumPath(
+  String path,
+  String algorithm,
+  int? expectedLength,
+) async {
+  final file = File(path);
+  if (expectedLength != null && await file.length() != expectedLength) {
+    throw const FileSystemException(
+      'Transfer source size does not match the declared size',
+    );
+  }
+  return fileChecksum(file, algorithm: algorithm);
 }
 
 Future<String> resumeProofHashForTransferSource(

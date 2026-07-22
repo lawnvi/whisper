@@ -644,6 +644,12 @@ abstract final class WireInputPolicy {
         WireInputReason.transferDirectionMismatch,
       );
     }
+    if (control.action == FileTransferV3Action.verify &&
+        transfer.direction != FileTransferDirection.incoming) {
+      return const WireInputValidationResult.rejected(
+        WireInputReason.transferDirectionMismatch,
+      );
+    }
     if (control.durableOffset > transfer.size) {
       return const WireInputValidationResult.rejected(
         WireInputReason.transferOffsetInvalid,
@@ -679,6 +685,7 @@ abstract final class WireInputPolicy {
     final expectedType = switch (control.action) {
       FileTransferV3Action.ready => WhisperFrameType.fileReady,
       FileTransferV3Action.ack => WhisperFrameType.fileAck,
+      FileTransferV3Action.verify => WhisperFrameType.fileAck,
       FileTransferV3Action.complete => WhisperFrameType.fileComplete,
       FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
       FileTransferV3Action.error => WhisperFrameType.fileError,

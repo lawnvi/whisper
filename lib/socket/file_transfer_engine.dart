@@ -188,6 +188,8 @@ class FileTransferEngine {
   final Map<String, int> _receivingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
+  final Map<String, Future<String>> _outgoingChecksumFutures =
+      <String, Future<String>>{};
   final Map<String, TransferConnectionBinding> _operationConnectionBindings =
       <String, TransferConnectionBinding>{};
   final Map<String, TransferConnectionBinding> _outgoingConnectionBindings =
@@ -475,24 +477,7 @@ class FileTransferEngine {
       _notify('文件名或文件大小不符合传输要求');
       return false;
     }
-    late final String checksumValue;
-    try {
-      checksumValue = await checksumForTransferSource(
-        source,
-        algorithm: fileTransferV3ChecksumAlgorithm,
-      );
-      if (await source.length() != size) {
-        throw const FileSystemException('源文件在校验期间发生变化');
-      }
-    } catch (error) {
-      _logFailure(
-        FileTransferDiagnosticKind.outgoingFailed,
-        error,
-        direction: FileTransferDirection.outgoing,
-      );
-      _notify(FileTransferFailureReason.source.wireCode);
-      return false;
-    }
+    final checksumValue = existing?.checksumValue ?? '';
     if (existing != null) {
       final associated = await _database().fetchAssociatedFileTransferMessage(
         existing,
@@ -528,6 +513,7 @@ class FileTransferEngine {
       size: size,
       fileTimestamp: timestamp,
       checksumValue: checksumValue,
+      checksumDeferred: checksumValue.isEmpty,
       messageId: messageId,
       intentEpoch: intentEpoch,
       expectedPublicKeyHash: expectedPublicKeyHash,
@@ -619,21 +605,13 @@ class FileTransferEngine {
       return false;
     }
     final source = _sourceFor(uri, size);
-    late final String checksumValue;
+    final checksumValue = existing?.checksumValue ?? '';
     try {
       if (!await source.exists()) {
         return false;
       }
       if (await source.length() != size) {
         throw const FileSystemException('文件实际大小与选择时记录的大小不一致');
-      }
-      checksumValue = await checksumForTransferSource(
-        source,
-        algorithm: fileTransferV3ChecksumAlgorithm,
-        expectedLength: size,
-      );
-      if (await source.length() != size) {
-        throw const FileSystemException('文件在校验期间发生变化');
       }
     } catch (error) {
       _logFailure(
@@ -679,6 +657,7 @@ class FileTransferEngine {
       size: size,
       fileTimestamp: fileTimestamp > 0 ? fileTimestamp : now,
       checksumValue: checksumValue,
+      checksumDeferred: checksumValue.isEmpty,
       messageId: messageId,
       intentEpoch: intentEpoch,
       expectedPublicKeyHash: expectedPublicKeyHash,
@@ -693,6 +672,7 @@ class FileTransferEngine {
     required int size,
     required int fileTimestamp,
     required String checksumValue,
+    required bool checksumDeferred,
     String? messageId,
     required int intentEpoch,
     String? expectedPublicKeyHash,
@@ -708,7 +688,10 @@ class FileTransferEngine {
           )) {
         return false;
       }
-      final metadata = FileTransferV3Metadata(checksumValue: checksumValue);
+      final metadata = FileTransferV3Metadata(
+        checksumValue: checksumValue,
+        checksumDeferred: checksumDeferred,
+      );
       final content = jsonEncode(metadata.toJson());
       final draft = _buildMessage(
         MessageEnum.File,
@@ -804,6 +787,9 @@ class FileTransferEngine {
         return false;
       }
       final message = admission.message!;
+      if (metadata.checksumDeferred) {
+        unawaited(_ensureOutgoingChecksum(admission.transfer!, message));
+      }
       _dispatchTransferData(admission.transfer!);
       _dispatchOutgoingMessage(message);
       if (_blockedOutgoingPeers.contains(peerId) ||
@@ -1605,6 +1591,7 @@ class FileTransferEngine {
     final type = switch (control.action) {
       FileTransferV3Action.ready => WhisperFrameType.fileReady,
       FileTransferV3Action.ack => WhisperFrameType.fileAck,
+      FileTransferV3Action.verify => WhisperFrameType.fileAck,
       FileTransferV3Action.complete => WhisperFrameType.fileComplete,
       FileTransferV3Action.cancel => WhisperFrameType.fileCancel,
       FileTransferV3Action.error => WhisperFrameType.fileError,
@@ -1923,7 +1910,7 @@ class FileTransferEngine {
     _receivingChecksums[updated.transferId] = checksum;
     _receivingTransferOffsets[updated.transferId] = durableOffset;
     _receivingTransferSequences[updated.transferId] = 0;
-    if (durableOffset == updated.size) {
+    if (durableOffset == updated.size && updated.checksumValue.isNotEmpty) {
       await _finalizeIncomingFileTransferV3(updated);
       return _IncomingReadyResult.retained;
     }
@@ -1974,6 +1961,12 @@ class FileTransferEngine {
       case FileTransferV3Action.ack:
         await _handleFileTransferV3Ack(control, requireCurrent: requireCurrent);
         break;
+      case FileTransferV3Action.verify:
+        await _handleFileTransferV3Verify(
+          control,
+          requireCurrent: requireCurrent,
+        );
+        break;
       case FileTransferV3Action.complete:
         await _handleFileTransferV3Complete(
           control,
@@ -2018,6 +2011,16 @@ class FileTransferEngine {
         throw const WireInputRejected(WireInputReason.sessionNotCurrent);
       }
       if (control.durableOffset <= transfer.committedBytes) {
+        if (control.durableOffset == transfer.size &&
+            transfer.checksumValue.isEmpty) {
+          final message = await _database().fetchAssociatedFileTransferMessage(
+            transfer,
+          );
+          requireCurrent();
+          if (message != null) {
+            await _sendOutgoingFileVerification(transfer, message);
+          }
+        }
         return;
       }
       throw const WireInputRejected(WireInputReason.transferOffsetInvalid);
@@ -2108,6 +2111,10 @@ class FileTransferEngine {
     );
     if (updated == null) {
       await _releaseOutgoingAndStartNext(transfer, connection: connection);
+      return;
+    }
+    if (offset >= updated.size) {
+      await _sendOutgoingFileVerification(updated, message);
       return;
     }
     await _sendFileTransferV3WindowSafely(updated, message, offset: offset);
@@ -2491,7 +2498,10 @@ class FileTransferEngine {
         lastError: '',
       );
       if (updated != null) {
-        await _finalizeIncomingFileTransferV3(updated);
+        await _sendFileTransferV3Ack(updated, durableOffset);
+        if (updated.checksumValue.isNotEmpty) {
+          await _finalizeIncomingFileTransferV3(updated);
+        }
       }
       return;
     }
@@ -2617,6 +2627,72 @@ class FileTransferEngine {
     );
   }
 
+  Future<String> _ensureOutgoingChecksum(
+    FileTransferData transfer,
+    MessageData message,
+  ) {
+    return _outgoingChecksumFutures.putIfAbsent(transfer.transferId, () async {
+      try {
+        final source = _transferSourceForMessage(message, transfer);
+        final checksum = await checksumForTransferSource(
+          source,
+          algorithm: fileTransferV3ChecksumAlgorithm,
+          expectedLength: transfer.size,
+        );
+        if (await source.length() != transfer.size) {
+          return '';
+        }
+        return checksum;
+      } catch (error) {
+        _logFailure(
+          FileTransferDiagnosticKind.outgoingFailed,
+          error,
+          direction: FileTransferDirection.outgoing,
+        );
+        return '';
+      }
+    });
+  }
+
+  Future<void> _sendOutgoingFileVerification(
+    FileTransferData transfer,
+    MessageData message,
+  ) async {
+    if (transfer.checksumValue.isNotEmpty) {
+      return;
+    }
+    final checksum = await _ensureOutgoingChecksum(transfer, message);
+    final current = await _database().fetchFileTransfer(transfer.transferId);
+    if (current == null || isTerminalFileTransferState(current.state)) {
+      return;
+    }
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(checksum)) {
+      await _failOutgoingFileTransferV3(
+        current,
+        FileTransferFailureReason.source,
+      );
+      return;
+    }
+    final sent = await _sendFileTransferV3ControlTo(
+      current.peerUid,
+      FileTransferV3Control(
+        action: FileTransferV3Action.verify,
+        transferId: current.transferId,
+        durableOffset: current.size,
+        size: current.size,
+        failureReason: FileTransferFailureReason.none,
+        checksumValue: checksum,
+      ),
+    );
+    if (!sent) {
+      await _updateTransfer(
+        current.transferId,
+        state: FileTransferState.waitingReconnect,
+        lastError: '',
+      );
+    }
+  }
+
   Future<void> _handleFileTransferV3Ack(
     FileTransferV3Control control, {
     required void Function() requireCurrent,
@@ -2658,8 +2734,18 @@ class FileTransferEngine {
       committedBytes: durableOffset,
       lastError: '',
     );
-    if (updated == null || durableOffset >= updated.size) {
+    if (updated == null) {
+      return;
+    }
+    if (durableOffset >= updated.size) {
       _outgoingWindowEndOffsets.remove(control.transferId);
+      final message = await _database().fetchAssociatedFileTransferMessage(
+        updated,
+      );
+      requireCurrent();
+      if (message != null) {
+        await _sendOutgoingFileVerification(updated, message);
+      }
       return;
     }
     final message = await _database().fetchAssociatedFileTransferMessage(
@@ -2675,6 +2761,28 @@ class FileTransferEngine {
     );
   }
 
+  Future<void> _handleFileTransferV3Verify(
+    FileTransferV3Control control, {
+    required void Function() requireCurrent,
+  }) async {
+    final transfer = await _database().fetchFileTransfer(control.transferId);
+    requireCurrent();
+    if (transfer == null ||
+        transfer.direction != FileTransferDirection.incoming ||
+        isTerminalFileTransferState(transfer.state)) {
+      return;
+    }
+    if (transfer.checksumValue.isNotEmpty ||
+        transfer.state != FileTransferState.verifying ||
+        transfer.committedBytes != transfer.size) {
+      throw const WireInputRejected(WireInputReason.transferFrameMismatch);
+    }
+    await _finalizeIncomingFileTransferV3(
+      transfer,
+      expectedChecksum: control.checksumValue,
+    );
+  }
+
   Future<void> _releaseOutgoingAndStartNext(
     FileTransferData transfer, {
     TransferConnectionBinding? connection,
@@ -2686,6 +2794,7 @@ class FileTransferEngine {
     _ackWatchdog.cancel(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
+    _outgoingChecksumFutures.remove(transfer.transferId);
     _outgoingConnectionBindings.remove(transfer.transferId);
     final released = _transferRuntime.release(
       peerId: transfer.peerUid,
@@ -2942,8 +3051,9 @@ class FileTransferEngine {
   }
 
   Future<void> _finalizeIncomingFileTransferV3(
-    FileTransferData transfer,
-  ) async {
+    FileTransferData transfer, {
+    String? expectedChecksum,
+  }) async {
     await _closeReceivingTransferFile(transfer.transferId, flush: true);
     var tempFile = await _validatedIncomingTempFile(transfer);
     VerifiedTransferSnapshot? snapshot;
@@ -2957,7 +3067,7 @@ class FileTransferEngine {
       snapshot = await VerifiedTransferSnapshot.openFromStreamingChecksum(
         tempFile,
         expectedSize: transfer.size,
-        expectedSha256: transfer.checksumValue,
+        expectedSha256: expectedChecksum ?? transfer.checksumValue,
         streamingSha256: checksum.close(),
       );
     } on FileSystemException {

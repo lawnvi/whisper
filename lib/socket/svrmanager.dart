@@ -500,7 +500,7 @@ class WsSvrManager {
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
     emitTransferUpdated: (snapshot) =>
         _dispatchToAll((event) => event.onTransferUpdated(snapshot)),
-    notify: (message) => _dispatchToAll((event) => event.onNotice(message)),
+    notify: (message) => _dispatchToPrimary((event) => event.onNotice(message)),
     remoteProfileFor: (peerId) =>
         _remoteProfilesByPeerId[peerId] ??
         (peerId == receiver ? _remoteProfile : null),

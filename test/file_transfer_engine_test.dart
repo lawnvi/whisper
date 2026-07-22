@@ -356,7 +356,7 @@ void main() {
   });
 
   test(
-    'outgoing offer hashes source while keeping its local path off wire',
+    'outgoing offer defers hashing while keeping its local path off wire',
     () async {
       final directory = await Directory.systemTemp.createTemp('whisper-send-');
       addTearDown(() => directory.delete(recursive: true));
@@ -388,16 +388,91 @@ void main() {
         wireMessage.content,
         size: wireMessage.size,
       );
-      expect(
-        metadata.checksumValue,
-        await fileChecksum(source, algorithm: 'sha256'),
-      );
+      expect(metadata.checksumDeferred, isTrue);
+      expect(metadata.checksumValue, isEmpty);
       final localMessage = await database.fetchMessageByUuid(wireMessage.uuid);
       expect(localMessage?.path, source.path);
       expect(
         (await database.fetchFileTransfer(wireMessage.uuid))?.checksumValue,
         metadata.checksumValue,
       );
+    },
+  );
+
+  test(
+    'final ACK sends the concurrently computed checksum for verification',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('whisper-send-');
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/payload.bin');
+      const bytes = <int>[1, 2, 3, 4];
+      await source.writeAsBytes(bytes);
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final frames = <WhisperFrameV3>[];
+      final engine = _engine(
+        database: database,
+        supportsV3: true,
+        buildMessage: _messageBuilder(),
+        sendBytesToPeer: (_, value) {
+          frames.add(WhisperFrameV3.decode(value as Uint8List));
+          return true;
+        },
+      );
+
+      expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+      final transferId = frames.single.transferId;
+      Future<void> sendControl(
+        FileTransferV3Control control,
+        WhisperFrameType type,
+      ) {
+        return engine.handleFrame(
+          const TransferConnectionBinding(peerId: 'peer-a', generation: 1),
+          WhisperFrameV3(
+            type: type,
+            transferId: transferId,
+            offset: control.durableOffset,
+            sequence: 0,
+            payload: Uint8List.fromList(
+              utf8.encode(jsonEncode(control.toJson())),
+            ),
+          ),
+          requireCurrent: () {},
+        );
+      }
+
+      await sendControl(
+        FileTransferV3Control(
+          action: FileTransferV3Action.ready,
+          transferId: transferId,
+          durableOffset: 0,
+          size: bytes.length,
+          failureReason: FileTransferFailureReason.none,
+        ),
+        WhisperFrameType.fileReady,
+      );
+      await sendControl(
+        FileTransferV3Control(
+          action: FileTransferV3Action.ack,
+          transferId: transferId,
+          durableOffset: bytes.length,
+          size: bytes.length,
+          failureReason: FileTransferFailureReason.none,
+        ),
+        WhisperFrameType.fileAck,
+      );
+
+      final verifyFrame = frames.lastWhere(
+        (frame) => frame.type == WhisperFrameType.fileAck,
+      );
+      final verify = FileTransferV3Control.fromJson(
+        jsonDecode(utf8.decode(verifyFrame.payload)) as Map<String, dynamic>,
+      );
+      expect(verify.action, FileTransferV3Action.verify);
+      expect(verify.checksumValue, bytesChecksum(bytes, algorithm: 'sha256'));
+      final transfer = await database.fetchFileTransfer(transferId);
+      expect(transfer?.state, FileTransferState.verifying);
+      expect(transfer?.committedBytes, bytes.length);
     },
   );
 
@@ -878,7 +953,7 @@ void main() {
   });
 
   test(
-    'delayed admission uses the current generation after recovery already ran',
+    'background hashing does not delay admission or current-generation recovery',
     () async {
       final directory = await Directory.systemTemp.createTemp('whisper-gen-');
       addTearDown(() => directory.delete(recursive: true));
@@ -916,22 +991,22 @@ void main() {
 
       final send = engine.sendFileTo('peer-a', source.path);
       await readStarted.future;
+      expect(await send, isTrue);
+      expect(sentBindings, hasLength(1));
+      expect(sentBindings.single.generation, 1);
       current = const TransferConnectionBinding(
         peerId: 'peer-a',
         generation: 2,
       );
       await engine.resumeRecoverableOutgoing();
-      expect(sentBindings, isEmpty, reason: '哈希尚未完成时还没有可恢复记录');
+      expect(sentBindings, hasLength(2));
+      expect(sentBindings.last.generation, 2);
       releaseRead.complete();
-
-      expect(await send, isTrue);
-      expect(sentBindings, hasLength(1));
-      expect(sentBindings.single.generation, 2);
     },
   );
 
   test(
-    'disconnect during hashing is durably retained without an offer',
+    'disconnect during background hashing keeps the admitted transfer durable',
     () async {
       final directory = await Directory.systemTemp.createTemp('whisper-gen-');
       addTearDown(() => directory.delete(recursive: true));
@@ -972,16 +1047,16 @@ void main() {
       releaseRead.complete();
 
       expect(await send, isTrue);
-      expect(offers, 0);
+      expect(offers, 1);
       final retained = await database.fetchRecoverableFileTransfers();
       expect(retained, hasLength(1));
-      expect(retained.single.state, FileTransferState.waitingReconnect);
+      expect(isTerminalFileTransferState(retained.single.state), isFalse);
       expect(retained.single.finalPath, source.path);
     },
   );
 
   test(
-    'identity invalidation rejects an old in-flight hashing intent',
+    'identity invalidation cancels an admitted transfer during hashing',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'whisper-identity-',
@@ -1022,8 +1097,8 @@ void main() {
       engine.allowOutgoingTransfersForPeer('peer-a');
       releaseRead.complete();
 
-      expect(await send, isFalse);
-      expect(sends, 0);
+      expect(await send, isTrue);
+      expect(sends, 1);
       expect(await database.fetchRecoverableFileTransfers(), isEmpty);
     },
   );
@@ -1057,8 +1132,6 @@ void main() {
         state: FileTransferState.canceled,
         lastError: 'identity_replaced',
       );
-      final readStarted = Completer<void>();
-      final releaseRead = Completer<void>();
       var offers = 0;
       final engine = _engine(
         database: database,
@@ -1069,24 +1142,8 @@ void main() {
           offers++;
           return true;
         },
-        transferSourceFactory: (_, __) => _MemoryTransferSource(
-          Uint8List.fromList(const <int>[7]),
-          onRead: () async {
-            if (!readStarted.isCompleted) {
-              readStarted.complete();
-            }
-            await releaseRead.future;
-          },
-        ),
       );
 
-      final send = engine.sendFileTo(
-        'peer-a',
-        source.path,
-        messageId: transferId,
-        expectedPublicKeyHash: expectedHash,
-      );
-      await readStarted.future;
       await database.commitAuthenticatedDevice(
         candidate: DeviceData(
           id: 0,
@@ -1109,7 +1166,13 @@ void main() {
         expectedPublicKey: oldPublicKey,
         requireCurrent: () {},
       );
-      releaseRead.complete();
+
+      final send = engine.sendFileTo(
+        'peer-a',
+        source.path,
+        messageId: transferId,
+        expectedPublicKeyHash: expectedHash,
+      );
 
       expect(await send, isFalse);
       expect(offers, 0);
@@ -1120,7 +1183,7 @@ void main() {
     },
   );
 
-  test('content uri stays local while its SHA-256 is sent', () async {
+  test('content uri stays local while its SHA-256 is deferred', () async {
     const uri = 'content://documents/private/item';
     final database = LocalDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -1156,13 +1219,12 @@ void main() {
     expect(wireMessage.path, isEmpty);
     expect(payload, isNot(contains(uri)));
     expect((await database.fetchMessageByUuid(wireMessage.uuid))?.path, uri);
-    expect(
-      FileTransferV3Metadata.parseOffer(
-        wireMessage.content,
-        size: 4,
-      ).checksumValue,
-      bytesChecksum(const <int>[4, 3, 2, 1], algorithm: 'sha256'),
+    final metadata = FileTransferV3Metadata.parseOffer(
+      wireMessage.content,
+      size: 4,
     );
+    expect(metadata.checksumDeferred, isTrue);
+    expect(metadata.checksumValue, isEmpty);
   });
 
   test('content uri size must exactly match fresh provider metadata', () async {

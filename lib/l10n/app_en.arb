@@ -199,6 +199,7 @@
   "fileTransferWaitingReconnect": "Waiting to reconnect {progress}%",
   "fileTransferPaused": "Paused",
   "fileTransferVerifying": "Verifying",
+  "fileTransferWaitingPeerVerification": "Waiting for peer verification",
   "fileTransferFailedRetryable": "Failed, retry available",
   "fileTransferCanceled": "Canceled",
   "audioShareCaptureConnecting": "Capture side: connecting to remote speaker",

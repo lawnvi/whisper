@@ -42,15 +42,17 @@ void main() {
       };
 
       expect(
-        () => FileTransferV3Control.fromJson(
-          <String, Object?>{...valid, 'action': 'surprise'},
-        ),
+        () => FileTransferV3Control.fromJson(<String, Object?>{
+          ...valid,
+          'action': 'surprise',
+        }),
         throwsFormatException,
       );
       expect(
-        () => FileTransferV3Control.fromJson(
-          <String, Object?>{...valid, 'durableOffset': '0'},
-        ),
+        () => FileTransferV3Control.fromJson(<String, Object?>{
+          ...valid,
+          'durableOffset': '0',
+        }),
         throwsFormatException,
       );
     });
@@ -60,18 +62,17 @@ void main() {
         required int offset,
         required String proof,
         required int proofLength,
-      }) =>
-          <String, Object?>{
-            'protocolVersion': 3,
-            'action': 'ready',
-            'transferId': 'transfer-1',
-            'durableOffset': offset,
-            'size': 2 * 1024 * 1024,
-            'errorCode': '',
-            'errorMessage': '',
-            'resumeProofSha256': proof,
-            'resumeProofLength': proofLength,
-          };
+      }) => <String, Object?>{
+        'protocolVersion': 3,
+        'action': 'ready',
+        'transferId': 'transfer-1',
+        'durableOffset': offset,
+        'size': 2 * 1024 * 1024,
+        'errorCode': '',
+        'errorMessage': '',
+        'resumeProofSha256': proof,
+        'resumeProofLength': proofLength,
+      };
 
       expect(
         FileTransferV3Control.fromJson(
@@ -103,6 +104,30 @@ void main() {
       }
     });
 
+    test('verify requires a final SHA-256 checksum', () {
+      final verify = FileTransferV3Control(
+        action: FileTransferV3Action.verify,
+        transferId: 'transfer-1',
+        durableOffset: 4,
+        size: 4,
+        failureReason: FileTransferFailureReason.none,
+        checksumValue:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      );
+
+      expect(
+        FileTransferV3Control.fromJson(verify.toJson()).checksumValue,
+        verify.checksumValue,
+      );
+      expect(
+        () => FileTransferV3Control.fromJson(<String, dynamic>{
+          ...verify.toJson(),
+          'checksumValue': '',
+        }),
+        throwsFormatException,
+      );
+    });
+
     test('accepts only closed failure codes and discards remote detail', () {
       const secret = 'token=never-log-this /Users/alice/Documents/private.txt';
       final valid = <String, Object?>{
@@ -124,9 +149,10 @@ void main() {
       expect(decoded.errorMessage, 'source');
       expect(jsonEncode(decoded.toJson()), isNot(contains(secret)));
       expect(
-        () => FileTransferV3Control.fromJson(
-          <String, Object?>{...valid, 'errorCode': 'remote says $secret'},
-        ),
+        () => FileTransferV3Control.fromJson(<String, Object?>{
+          ...valid,
+          'errorCode': 'remote says $secret',
+        }),
         throwsFormatException,
       );
     });

@@ -226,6 +226,7 @@
   "fileTransferWaitingReconnect": "Esperando reconexion {progress}%",
   "fileTransferPaused": "Pausada",
   "fileTransferVerifying": "Verificando",
+  "fileTransferWaitingPeerVerification": "Esperando verificacion del otro dispositivo",
   "fileTransferFailedRetryable": "Error, se puede reintentar",
   "fileTransferCanceled": "Cancelada",
   "audioShareCaptureConnecting": "Captura: conectando al altavoz remoto",

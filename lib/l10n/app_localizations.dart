@@ -808,6 +808,12 @@ abstract class AppLocalizations {
   /// **'校验中'**
   String get fileTransferVerifying;
 
+  /// No description provided for @fileTransferWaitingPeerVerification.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待对端校验'**
+  String get fileTransferWaitingPeerVerification;
+
   /// No description provided for @fileTransferFailedRetryable.
   ///
   /// In zh, this message translates to:

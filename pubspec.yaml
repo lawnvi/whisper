@@ -64,7 +64,6 @@ dependencies:
   crypto: ^3.0.6
   cryptography: ^2.9.0
   sodium: 4.0.2+1
-  desktop_drop: ^0.5.0
   super_drag_and_drop: ^0.9.1
   bonsoir: ^5.1.10
   flutter_swipe_action_cell: ^3.1.5

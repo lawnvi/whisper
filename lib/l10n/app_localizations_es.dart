@@ -426,6 +426,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fileTransferVerifying => 'Verificando';
 
   @override
+  String get fileTransferWaitingPeerVerification =>
+      'Esperando verificacion del otro dispositivo';
+
+  @override
   String get fileTransferFailedRetryable => 'Error, se puede reintentar';
 
   @override

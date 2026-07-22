@@ -247,6 +247,7 @@
   },
   "fileTransferPaused": "已暂停",
   "fileTransferVerifying": "校验中",
+  "fileTransferWaitingPeerVerification": "等待对端校验",
   "fileTransferFailedRetryable": "失败，可重试",
   "fileTransferCanceled": "已取消",
   "audioShareCaptureConnecting": "采集端：正在连接远端扬声器",
