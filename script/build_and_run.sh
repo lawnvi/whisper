@@ -224,10 +224,13 @@ build_debug_app() {
 }
 
 build_release_app() {
-  prepare_macos_native_asset_staging "$(uname -m)"
+  local host_arch
+  host_arch="$(uname -m)"
+  prepare_macos_native_asset_staging "$host_arch"
   flutter build macos
   dart script/prune_flutter_assets.dart macos \
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
+  verify_bundle_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
   sign_app "$RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
 }
 

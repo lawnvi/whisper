@@ -7,7 +7,8 @@ void main() {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
 
     expect(workflow, contains('PACKAGE_VERSION='));
-    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos.dmg'));
+    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos-arm64.dmg'));
+    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos-x86_64.dmg'));
     expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-ios-unsigned.ipa'));
     expect(
       workflow,
@@ -37,7 +38,7 @@ void main() {
     );
 
     expect(workflow, isNot(contains('WHISPER_MACOS_DMG_PATH: whisper.dmg')));
-    expect(workflow, isNot(contains('macos-x86_64.dmg')));
+    expect(workflow, isNot(contains(r'whisper-${PACKAGE_VERSION}-macos.dmg')));
     expect(workflow, isNot(contains('zip -r app.ipa Payload')));
     expect(
       workflow,

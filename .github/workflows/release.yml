@@ -55,7 +55,8 @@ jobs:
     name: macOS + iOS
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
     needs: verify-release-version
-    runs-on: macos-15-intel
+    # Build both native Apple Silicon and Intel packages on one ARM runner.
+    runs-on: macos-15
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -64,7 +65,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          architecture: x64
+          architecture: arm64
           cache: true
 
       - name: Disable Flutter Swift Package Manager
@@ -88,14 +89,18 @@ jobs:
           fi
           echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
 
-      - name: Build signed macOS DMG
+      - name: Build signed macOS DMGs
         env:
           WHISPER_MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
           WHISPER_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
           WHISPER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
           WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
-        run: WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos.dmg" script/build_and_run.sh package-macos-x64
+        run: |
+          WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-arm64.dmg" \
+            script/build_and_run.sh package-macos
+          WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" \
+            script/build_and_run.sh package-macos-x64
 
       - name: Build iOS IPA
         run: |
@@ -113,7 +118,8 @@ jobs:
         with:
           name: whisper-macos-ios-${{ github.run_id }}
           path: |
-            whisper-*-macos.dmg
+            whisper-*-macos-arm64.dmg
+            whisper-*-macos-x86_64.dmg
             build/ios/iphoneos/whisper-*-ios-unsigned.ipa
           retention-days: 7
 
