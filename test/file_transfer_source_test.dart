@@ -54,6 +54,29 @@ void main() {
     expect(digest, bytesChecksum(bytes, algorithm: 'sha256'));
   });
 
+  test(
+    'streaming source checksum can resume from an existing prefix',
+    () async {
+      final bytes = Uint8List.fromList(
+        List<int>.generate(32, (index) => index),
+      );
+      final source = AndroidContentUriTransferSource(
+        uri: 'content://documents/item',
+        expectedSize: bytes.length,
+        picker: _FakeAndroidDocumentPicker(bytes),
+      );
+
+      final checksum = await streamingChecksumForTransferSourcePrefix(
+        source,
+        algorithm: 'sha256',
+        end: 12,
+      );
+      checksum.add(bytes.sublist(12));
+
+      expect(checksum.close(), bytesChecksum(bytes, algorithm: 'sha256'));
+    },
+  );
+
   test('resume proof hashes the final min(1 MiB, offset) bytes', () async {
     final bytes = Uint8List.fromList(List<int>.generate(12, (index) => index));
     final picker = _FakeAndroidDocumentPicker(bytes);

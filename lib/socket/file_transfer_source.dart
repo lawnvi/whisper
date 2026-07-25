@@ -63,9 +63,7 @@ class AndroidContentUriTransferSource implements FileTransferSource {
     final metadata = await _picker.metadata(uri);
     final size = metadata?.size;
     if (size == null || size < 0) {
-      throw const FileSystemException(
-        'Transfer source size is unavailable',
-      );
+      throw const FileSystemException('Transfer source size is unavailable');
     }
     if (size != expectedSize) {
       throw const FileSystemException(
@@ -115,6 +113,37 @@ Future<String> checksumForTransferSource(
   return checksum.close();
 }
 
+Future<StreamingChecksum> streamingChecksumForTransferSourcePrefix(
+  FileTransferSource source, {
+  required String algorithm,
+  required int end,
+}) async {
+  final checksum = StreamingChecksum(algorithm: algorithm);
+  if (end <= 0) {
+    return checksum;
+  }
+  final actualLength = await source.length();
+  if (actualLength < end) {
+    throw const FileSystemException(
+      'Transfer source ended before checksum prefix',
+    );
+  }
+  var offset = 0;
+  const readSize = 1024 * 1024;
+  while (offset < end) {
+    final length = math.min(readSize, end - offset);
+    final bytes = await source.readRange(offset, length);
+    if (bytes.length != length) {
+      throw const FileSystemException(
+        'Unexpected EOF while hashing transfer source prefix',
+      );
+    }
+    checksum.add(bytes);
+    offset += bytes.length;
+  }
+  return checksum;
+}
+
 Future<String> _checksumPath(
   String path,
   String algorithm,
@@ -136,8 +165,10 @@ Future<String> resumeProofHashForTransferSource(
   if (resumeOffset <= 0) {
     return '';
   }
-  final proofLength =
-      math.min(fileTransferV3ResumeProofWindowSize, resumeOffset);
+  final proofLength = math.min(
+    fileTransferV3ResumeProofWindowSize,
+    resumeOffset,
+  );
   final proofEnd = resumeOffset;
   final proofStart = proofEnd - proofLength;
   if (source is PathFileTransferSource) {

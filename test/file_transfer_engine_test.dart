@@ -327,6 +327,31 @@ Future<String> _trustPeerIdentity(
   return identityPublicKeyHash(publicKey);
 }
 
+Future<void> _sendReady(
+  FileTransferEngine engine, {
+  required String transferId,
+  required int size,
+}) {
+  final control = FileTransferV3Control(
+    action: FileTransferV3Action.ready,
+    transferId: transferId,
+    durableOffset: 0,
+    size: size,
+    failureReason: FileTransferFailureReason.none,
+  );
+  return engine.handleFrame(
+    const TransferConnectionBinding(peerId: 'peer-a', generation: 1),
+    WhisperFrameV3(
+      type: WhisperFrameType.fileReady,
+      transferId: transferId,
+      offset: 0,
+      sequence: 0,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(control.toJson()))),
+    ),
+    requireCurrent: () {},
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -911,7 +936,7 @@ void main() {
     expect(transfer?.lastError, 'trust_revoked');
   });
 
-  test('slow source hashing does not hold the global send lock', () async {
+  test('slow streaming checksum does not hold the global send lock', () async {
     final directory = await Directory.systemTemp.createTemp('whisper-hash-');
     addTearDown(() => directory.delete(recursive: true));
     final slowFile = File('${directory.path}/slow.bin');
@@ -941,7 +966,14 @@ void main() {
       },
     );
 
-    final slowSend = engine.sendFileTo('peer-a', slowFile.path);
+    expect(await engine.sendFileTo('peer-a', slowFile.path), isTrue);
+    final slowTransfer = (await database.fetchRecoverableFileTransfers())
+        .singleWhere((item) => item.finalPath == slowFile.path);
+    final slowSend = _sendReady(
+      engine,
+      transferId: slowTransfer.transferId,
+      size: slowTransfer.size,
+    );
     await slowReadStarted.future;
     final fastResult = await engine
         .sendFileTo('peer-a', fastFile.path)
@@ -949,11 +981,11 @@ void main() {
     expect(fastResult, isTrue);
 
     releaseSlowRead.complete();
-    expect(await slowSend, isTrue);
+    await slowSend;
   });
 
   test(
-    'background hashing does not delay admission or current-generation recovery',
+    'streaming checksum does not delay admission or generation recovery',
     () async {
       final directory = await Directory.systemTemp.createTemp('whisper-gen-');
       addTearDown(() => directory.delete(recursive: true));
@@ -989,9 +1021,14 @@ void main() {
         ),
       );
 
-      final send = engine.sendFileTo('peer-a', source.path);
+      expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+      final transfer = (await database.fetchRecoverableFileTransfers()).single;
+      final send = _sendReady(
+        engine,
+        transferId: transfer.transferId,
+        size: transfer.size,
+      );
       await readStarted.future;
-      expect(await send, isTrue);
       expect(sentBindings, hasLength(1));
       expect(sentBindings.single.generation, 1);
       current = const TransferConnectionBinding(
@@ -1002,11 +1039,12 @@ void main() {
       expect(sentBindings, hasLength(2));
       expect(sentBindings.last.generation, 2);
       releaseRead.complete();
+      await send;
     },
   );
 
   test(
-    'disconnect during background hashing keeps the admitted transfer durable',
+    'disconnect during streaming checksum keeps the transfer durable',
     () async {
       final directory = await Directory.systemTemp.createTemp('whisper-gen-');
       addTearDown(() => directory.delete(recursive: true));
@@ -1041,13 +1079,20 @@ void main() {
         ),
       );
 
-      final send = engine.sendFileTo('peer-a', source.path);
+      expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+      final transfer = (await database.fetchRecoverableFileTransfers()).single;
+      final send = _sendReady(
+        engine,
+        transferId: transfer.transferId,
+        size: transfer.size,
+      );
       await readStarted.future;
       current = null;
+      final disconnect = engine.handlePeerDisconnected('peer-a');
       releaseRead.complete();
 
-      expect(await send, isTrue);
-      expect(offers, 1);
+      await Future.wait<void>(<Future<void>>[send, disconnect]);
+      expect(offers, greaterThanOrEqualTo(1));
       final retained = await database.fetchRecoverableFileTransfers();
       expect(retained, hasLength(1));
       expect(isTerminalFileTransferState(retained.single.state), isFalse);
@@ -1056,7 +1101,7 @@ void main() {
   );
 
   test(
-    'identity invalidation cancels an admitted transfer during hashing',
+    'identity invalidation cancels a transfer during streaming checksum',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'whisper-identity-',
@@ -1088,7 +1133,13 @@ void main() {
         ),
       );
 
-      final send = engine.sendFileTo('peer-a', source.path);
+      expect(await engine.sendFileTo('peer-a', source.path), isTrue);
+      final transfer = (await database.fetchRecoverableFileTransfers()).single;
+      final send = _sendReady(
+        engine,
+        transferId: transfer.transferId,
+        size: transfer.size,
+      );
       await readStarted.future;
       await engine.invalidateOutgoingTransfersForPeer(
         'peer-a',
@@ -1097,7 +1148,7 @@ void main() {
       engine.allowOutgoingTransfersForPeer('peer-a');
       releaseRead.complete();
 
-      expect(await send, isTrue);
+      await send;
       expect(sends, 1);
       expect(await database.fetchRecoverableFileTransfers(), isEmpty);
     },

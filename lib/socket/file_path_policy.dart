@@ -265,6 +265,22 @@ final class VerifiedTransferSnapshot {
         streamingSha256 != expectedSha256) {
       throw FileSystemException('transfer checksum mismatch', file.path);
     }
+    return openFromStreamingDigest(
+      file,
+      expectedSize: expectedSize,
+      streamingSha256: streamingSha256,
+    );
+  }
+
+  static Future<VerifiedTransferSnapshot> openFromStreamingDigest(
+    File file, {
+    required int expectedSize,
+    required String streamingSha256,
+  }) async {
+    if (expectedSize < 0 ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(streamingSha256)) {
+      throw const FormatException('invalid streaming snapshot metadata');
+    }
     final type = await FileSystemEntity.type(file.path, followLinks: false);
     if (type != FileSystemEntityType.file) {
       throw FileSystemException(
@@ -447,8 +463,11 @@ Future<File> publishVerifiedSnapshot(
       await snapshot._handle.setPosition(0);
       await reservation._handle.setPosition(0);
       await reservation._handle.truncate(0);
-      final digestSink = _DigestSink();
-      final input = sha256.startChunkedConversion(digestSink);
+      final reverifyContent = snapshot._verifyPathContentBeforePublishing;
+      final digestSink = reverifyContent ? _DigestSink() : null;
+      final input = digestSink == null
+          ? null
+          : sha256.startChunkedConversion(digestSink);
       var copied = 0;
       while (copied < snapshot.length) {
         final bytes = await snapshot._handle.read(
@@ -460,13 +479,14 @@ Future<File> publishVerifiedSnapshot(
             snapshot.path,
           );
         }
-        input.add(bytes);
+        input?.add(bytes);
         await reservation._handle.writeFrom(bytes);
         copied += bytes.length;
       }
-      input.close();
+      input?.close();
       if (copied != snapshot.length ||
-          digestSink.value.toString() != snapshot.sha256Value ||
+          (digestSink != null &&
+              digestSink.value.toString() != snapshot.sha256Value) ||
           await snapshot._handle.length() != snapshot.length) {
         throw FileSystemException(
           'verified transfer snapshot changed while publishing',
@@ -477,12 +497,19 @@ Future<File> publishVerifiedSnapshot(
       await snapshot._verifyStillOwnedMetadata();
       final published = File(reservation.path);
       await preparePublishedFile?.call(published);
-      await _verifyPublishedReservation(
-        reservation,
-        expectedSize: snapshot.length,
-        expectedSha256: snapshot.sha256Value,
-        requirePreviousStat: false,
-      );
+      if (reverifyContent) {
+        await _verifyPublishedReservation(
+          reservation,
+          expectedSize: snapshot.length,
+          expectedSha256: snapshot.sha256Value,
+          requirePreviousStat: false,
+        );
+      } else {
+        await _verifyPublishedReservationMetadata(
+          reservation,
+          expectedSize: snapshot.length,
+        );
+      }
       reservation._publishedSize = snapshot.length;
       reservation._publishedSha256 = snapshot.sha256Value;
       reservation._publishedStat = await published.stat();
@@ -672,6 +699,22 @@ Future<void> _verifyPublishedReservation(
           expectedSha256) {
     throw FileSystemException(
       'published reservation content changed',
+      reservation.path,
+    );
+  }
+}
+
+Future<void> _verifyPublishedReservationMetadata(
+  DownloadFileReservation reservation, {
+  required int expectedSize,
+}) async {
+  if (reservation._closed ||
+      await FileSystemEntity.type(reservation.path, followLinks: false) !=
+          FileSystemEntityType.file ||
+      await reservation._handle.length() != expectedSize ||
+      (await File(reservation.path).stat()).size != expectedSize) {
+    throw FileSystemException(
+      'published reservation ownership changed',
       reservation.path,
     );
   }

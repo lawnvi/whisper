@@ -48,6 +48,28 @@ final class _TransferOperationLaneEntry {
   int users = 0;
 }
 
+final class _OutgoingChecksumState {
+  _OutgoingChecksumState({required this.checksum, required this.offset});
+
+  final StreamingChecksum checksum;
+  int offset;
+  bool closed = false;
+
+  String finish({required int expectedOffset}) {
+    if (offset != expectedOffset) {
+      throw StateError('Outgoing checksum has not covered the whole file');
+    }
+    closed = true;
+    return checksum.close();
+  }
+
+  void dispose() {
+    if (closed) return;
+    checksum.close();
+    closed = true;
+  }
+}
+
 final class _TransferAdmissionRejected implements Exception {
   const _TransferAdmissionRejected(this.decision);
 
@@ -184,12 +206,14 @@ class FileTransferEngine {
       <String, FileTransferData>{};
   final Map<String, StreamingChecksum> _receivingChecksums =
       <String, StreamingChecksum>{};
+  final Map<String, VerifiedTransferSnapshot> _sealedIncomingSnapshots =
+      <String, VerifiedTransferSnapshot>{};
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _receivingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
-  final Map<String, Future<String>> _outgoingChecksumFutures =
-      <String, Future<String>>{};
+  final Map<String, _OutgoingChecksumState> _outgoingChecksums =
+      <String, _OutgoingChecksumState>{};
   final Map<String, TransferConnectionBinding> _operationConnectionBindings =
       <String, TransferConnectionBinding>{};
   final Map<String, TransferConnectionBinding> _outgoingConnectionBindings =
@@ -787,9 +811,6 @@ class FileTransferEngine {
         return false;
       }
       final message = admission.message!;
-      if (metadata.checksumDeferred) {
-        unawaited(_ensureOutgoingChecksum(admission.transfer!, message));
-      }
       _dispatchTransferData(admission.transfer!);
       _dispatchOutgoingMessage(message);
       if (_blockedOutgoingPeers.contains(peerId) ||
@@ -1394,6 +1415,7 @@ class FileTransferEngine {
       _ackWatchdog.cancel(transfer.transferId);
       _outgoingWindowEndOffsets.remove(transfer.transferId);
       _outgoingTransferSequences.remove(transfer.transferId);
+      _outgoingChecksums.remove(transfer.transferId)?.dispose();
       _outgoingConnectionBindings.remove(transfer.transferId);
       _transferRuntime.release(
         peerId: peerId,
@@ -1533,6 +1555,7 @@ class FileTransferEngine {
           }
           _outgoingWindowEndOffsets.remove(current.transferId);
           _outgoingTransferSequences.remove(current.transferId);
+          _outgoingChecksums.remove(current.transferId)?.dispose();
           _outgoingConnectionBindings.remove(current.transferId);
           _incomingConnectionBindings.remove(current.transferId);
           await _updateTransfer(
@@ -1907,12 +1930,16 @@ class FileTransferEngine {
       return _IncomingReadyResult.unavailable;
     }
     _receivingTransfers[updated.transferId] = updated;
-    _receivingChecksums[updated.transferId] = checksum;
     _receivingTransferOffsets[updated.transferId] = durableOffset;
     _receivingTransferSequences[updated.transferId] = 0;
-    if (durableOffset == updated.size && updated.checksumValue.isNotEmpty) {
-      await _finalizeIncomingFileTransferV3(updated);
-      return _IncomingReadyResult.retained;
+    if (durableOffset == updated.size) {
+      await _sealIncomingFileTransferV3(updated, tempFile, checksum: checksum);
+      if (updated.checksumValue.isNotEmpty) {
+        await _finalizeIncomingFileTransferV3(updated);
+        return _IncomingReadyResult.retained;
+      }
+    } else {
+      _receivingChecksums[updated.transferId] = checksum;
     }
     final sent = await _sendFileTransferV3ControlTo(
       transfer.peerUid,
@@ -2216,6 +2243,13 @@ class FileTransferEngine {
     if (cursor < durableOffset || cursor > windowEnd) {
       cursor = durableOffset;
     }
+    final checksumState = transfer.checksumValue.isEmpty
+        ? await _outgoingChecksumStateFor(
+            transfer,
+            source,
+            requiredOffset: cursor,
+          )
+        : null;
     while (cursor < windowEnd) {
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
           transfer.transferId) {
@@ -2229,6 +2263,11 @@ class FileTransferEngine {
         windowEnd - cursor,
       );
       final payload = await source.readRange(cursor, length);
+      if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
+              transfer.transferId ||
+          _outgoingConnectionBindings[transfer.transferId] != connection) {
+        return cursor;
+      }
       if (expectedWindow != null &&
           !identical(
             _ackWatchdog.currentWindow(transfer.transferId),
@@ -2253,6 +2292,15 @@ class FileTransferEngine {
       );
       if (!sent) {
         throw StateError('generation-bound transfer send failed');
+      }
+      if (checksumState != null) {
+        final payloadEnd = cursor + payload.length;
+        if (checksumState.offset == cursor) {
+          checksumState.checksum.add(payload);
+          checksumState.offset = payloadEnd;
+        } else if (checksumState.offset < payloadEnd) {
+          throw StateError('Outgoing checksum stream is not contiguous');
+        }
       }
       cursor += payload.length;
       sequence++;
@@ -2293,6 +2341,29 @@ class FileTransferEngine {
       );
     }
     return cursor;
+  }
+
+  Future<_OutgoingChecksumState> _outgoingChecksumStateFor(
+    FileTransferData transfer,
+    FileTransferSource source, {
+    required int requiredOffset,
+  }) async {
+    final existing = _outgoingChecksums[transfer.transferId];
+    if (existing != null && existing.offset >= requiredOffset) {
+      return existing;
+    }
+    existing?.dispose();
+    final checksum = await streamingChecksumForTransferSourcePrefix(
+      source,
+      algorithm: fileTransferV3ChecksumAlgorithm,
+      end: requiredOffset,
+    );
+    final state = _OutgoingChecksumState(
+      checksum: checksum,
+      offset: requiredOffset,
+    );
+    _outgoingChecksums[transfer.transferId] = state;
+    return state;
   }
 
   TransferAckWindow _publishOutgoingAckWindow({
@@ -2491,6 +2562,7 @@ class FileTransferEngine {
         transfer,
         transfer.size,
       );
+      await _sealIncomingFileTransferV3(transfer, tempFile);
       final updated = await _updateTransfer(
         transfer.transferId,
         state: FileTransferState.verifying,
@@ -2611,6 +2683,27 @@ class FileTransferEngine {
     return math.min(offset, transfer.size);
   }
 
+  Future<void> _sealIncomingFileTransferV3(
+    FileTransferData transfer,
+    File tempFile, {
+    StreamingChecksum? checksum,
+  }) async {
+    await _closeReceivingTransferFile(transfer.transferId, flush: true);
+    checksum ??= _receivingChecksums.remove(transfer.transferId);
+    checksum ??= await streamingChecksumForFilePrefix(
+      tempFile,
+      algorithm: transfer.checksumAlgorithm,
+      end: transfer.size,
+    );
+    final snapshot = await VerifiedTransferSnapshot.openFromStreamingDigest(
+      tempFile,
+      expectedSize: transfer.size,
+      streamingSha256: checksum.close(),
+    );
+    await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
+    _sealedIncomingSnapshots[transfer.transferId] = snapshot;
+  }
+
   Future<void> _sendFileTransferV3Ack(
     FileTransferData transfer,
     int durableOffset,
@@ -2627,31 +2720,29 @@ class FileTransferEngine {
     );
   }
 
-  Future<String> _ensureOutgoingChecksum(
+  Future<String> _finishOutgoingChecksum(
     FileTransferData transfer,
     MessageData message,
-  ) {
-    return _outgoingChecksumFutures.putIfAbsent(transfer.transferId, () async {
-      try {
-        final source = _transferSourceForMessage(message, transfer);
-        final checksum = await checksumForTransferSource(
-          source,
-          algorithm: fileTransferV3ChecksumAlgorithm,
-          expectedLength: transfer.size,
-        );
-        if (await source.length() != transfer.size) {
-          return '';
-        }
-        return checksum;
-      } catch (error) {
-        _logFailure(
-          FileTransferDiagnosticKind.outgoingFailed,
-          error,
-          direction: FileTransferDirection.outgoing,
-        );
+  ) async {
+    try {
+      final source = _transferSourceForMessage(message, transfer);
+      if (await source.length() != transfer.size) {
         return '';
       }
-    });
+      final state = await _outgoingChecksumStateFor(
+        transfer,
+        source,
+        requiredOffset: transfer.size,
+      );
+      return state.finish(expectedOffset: transfer.size);
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.outgoingFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
+      return '';
+    }
   }
 
   Future<void> _sendOutgoingFileVerification(
@@ -2661,7 +2752,7 @@ class FileTransferEngine {
     if (transfer.checksumValue.isNotEmpty) {
       return;
     }
-    final checksum = await _ensureOutgoingChecksum(transfer, message);
+    final checksum = await _finishOutgoingChecksum(transfer, message);
     final current = await _database().fetchFileTransfer(transfer.transferId);
     if (current == null || isTerminalFileTransferState(current.state)) {
       return;
@@ -2794,7 +2885,7 @@ class FileTransferEngine {
     _ackWatchdog.cancel(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
-    _outgoingChecksumFutures.remove(transfer.transferId);
+    _outgoingChecksums.remove(transfer.transferId)?.dispose();
     _outgoingConnectionBindings.remove(transfer.transferId);
     final released = _transferRuntime.release(
       peerId: transfer.peerUid,
@@ -3031,12 +3122,14 @@ class FileTransferEngine {
       _logFailure(FileTransferDiagnosticKind.resumeResetDeferred, error);
       _receivingTransfers.remove(transfer.transferId);
       _receivingChecksums.remove(transfer.transferId);
+      await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
       _receivingTransferOffsets.remove(transfer.transferId);
       _receivingTransferSequences.remove(transfer.transferId);
       return null;
     }
     _receivingTransfers.remove(transfer.transferId);
     _receivingChecksums.remove(transfer.transferId);
+    await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
     _receivingTransferOffsets[transfer.transferId] = 0;
     _receivingTransferSequences[transfer.transferId] = 0;
     try {
@@ -3055,22 +3148,31 @@ class FileTransferEngine {
     String? expectedChecksum,
   }) async {
     await _closeReceivingTransferFile(transfer.transferId, flush: true);
-    var tempFile = await _validatedIncomingTempFile(transfer);
+    var tempFile = File(transfer.tempPath);
     VerifiedTransferSnapshot? snapshot;
     try {
-      var checksum = _receivingChecksums.remove(transfer.transferId);
-      checksum ??= await streamingChecksumForFilePrefix(
-        tempFile,
-        algorithm: transfer.checksumAlgorithm,
-        end: transfer.size,
-      );
-      snapshot = await VerifiedTransferSnapshot.openFromStreamingChecksum(
-        tempFile,
-        expectedSize: transfer.size,
-        expectedSha256: expectedChecksum ?? transfer.checksumValue,
-        streamingSha256: checksum.close(),
-      );
+      snapshot = _sealedIncomingSnapshots.remove(transfer.transferId);
+      if (snapshot == null) {
+        tempFile = await _validatedIncomingTempFile(transfer);
+        var checksum = _receivingChecksums.remove(transfer.transferId);
+        checksum ??= await streamingChecksumForFilePrefix(
+          tempFile,
+          algorithm: transfer.checksumAlgorithm,
+          end: transfer.size,
+        );
+        snapshot = await VerifiedTransferSnapshot.openFromStreamingDigest(
+          tempFile,
+          expectedSize: transfer.size,
+          streamingSha256: checksum.close(),
+        );
+      }
+      if (snapshot.sha256Value !=
+          (expectedChecksum ?? transfer.checksumValue)) {
+        throw FileSystemException('transfer checksum mismatch', tempFile.path);
+      }
     } on FileSystemException {
+      await snapshot?.close();
+      snapshot = null;
       tempFile = await _validatedIncomingTempFile(transfer);
       if (await tempFile.exists()) {
         tempFile = await _validatedIncomingTempFile(transfer);
@@ -3507,6 +3609,7 @@ class FileTransferEngine {
     bool flush = false,
   }) async {
     await _closeReceivingTransferFile(transferId, flush: flush);
+    await _sealedIncomingSnapshots.remove(transferId)?.close();
     _receivingTransfers.remove(transferId);
     _receivingChecksums.remove(transferId)?.close();
     _receivingTransferOffsets.remove(transferId);
@@ -3539,6 +3642,10 @@ class FileTransferEngine {
 
   Future<void> _closeResumableHandles() async {
     await _closeAllReceivingTransferFiles(flush: true);
+    for (final snapshot in _sealedIncomingSnapshots.values) {
+      await snapshot.close();
+    }
+    _sealedIncomingSnapshots.clear();
     _receivingTransfers.clear();
     _receivingChecksums.clear();
     _receivingTransferOffsets.clear();
@@ -3549,6 +3656,10 @@ class FileTransferEngine {
     _incomingConnectionBindings.clear();
     _outgoingTransferSequences.clear();
     _outgoingWindowEndOffsets.clear();
+    for (final checksum in _outgoingChecksums.values) {
+      checksum.dispose();
+    }
+    _outgoingChecksums.clear();
   }
 
   /// 原 svrmanager `_resumeRecoverableOutgoingTransfers`:
