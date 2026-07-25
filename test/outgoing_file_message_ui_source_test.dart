@@ -99,6 +99,27 @@ void main() {
     expect(source, contains('l10n.fileTransferVerifying'));
   });
 
+  test('only the sender controls paused transfers', () {
+    final source = File('lib/page/conversation.dart').readAsStringSync();
+    final fileMessage = methodBody(
+      source,
+      'Widget _buildFileMessage(',
+      'void onPairing(',
+    );
+    final retryStart = fileMessage.indexOf('final showRetry =');
+    final retryEnd = fileMessage.indexOf('final showCancel', retryStart);
+    final retryPolicy = fileMessage.substring(retryStart, retryEnd);
+    final cancelEnd = fileMessage.indexOf('final colorScheme', retryEnd);
+    final cancelPolicy = fileMessage.substring(retryEnd, cancelEnd);
+
+    expect(
+      retryPolicy,
+      contains('transfer.direction == FileTransferDirection.outgoing'),
+    );
+    expect(cancelPolicy, contains('FileTransferState.paused'));
+    expect(cancelPolicy, contains('FileTransferState.waitingReconnect'));
+  });
+
   test('conversation animates visible transfer percentage text', () {
     final source = File('lib/page/conversation.dart').readAsStringSync();
     final fileStatus = methodBody(

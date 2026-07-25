@@ -3358,6 +3358,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _startServer({port}) async {
+    await socketManager.reconcileInterruptedTransfersOnStartup();
     final result = await socketManager.startServer(
       port ?? device?.port ?? 10002,
     );

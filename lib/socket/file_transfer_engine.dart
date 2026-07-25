@@ -249,6 +249,9 @@ class FileTransferEngine {
     if (transfer == null) {
       return;
     }
+    if (transfer.direction != FileTransferDirection.outgoing) {
+      return;
+    }
     final connection = _currentConnectionBinding(transfer.peerUid);
     var associatedMessage = await database.fetchAssociatedFileTransferMessage(
       transfer,
@@ -294,29 +297,6 @@ class FileTransferEngine {
       );
       return;
     }
-    if (transfer.direction == FileTransferDirection.outgoing) {
-      if (connection == null) {
-        await _updateTransfer(
-          transferId,
-          state: FileTransferState.waitingReconnect,
-          lastError: '',
-        );
-        return;
-      }
-      final sent = await _sendFileTransferV3OfferTo(
-        transfer.peerUid,
-        associatedMessage,
-        connection: connection,
-      );
-      await _updateTransfer(
-        transferId,
-        state: sent
-            ? FileTransferState.negotiating
-            : FileTransferState.waitingReconnect,
-        lastError: '',
-      );
-      return;
-    }
     if (connection == null) {
       await _updateTransfer(
         transferId,
@@ -325,12 +305,18 @@ class FileTransferEngine {
       );
       return;
     }
+    final sent = await _sendFileTransferV3OfferTo(
+      transfer.peerUid,
+      associatedMessage,
+      connection: connection,
+    );
     await _updateTransfer(
       transferId,
-      state: FileTransferState.negotiating,
+      state: sent
+          ? FileTransferState.negotiating
+          : FileTransferState.waitingReconnect,
       lastError: '',
     );
-    await _sendFileTransferV3Ready(transferId, connection: connection);
   }
 
   Future<void> cancelTransfer(String transferId) async {
@@ -354,7 +340,9 @@ class FileTransferEngine {
         if (!isTerminalFileTransferState(transfer.state)) {
           await _updateTransfer(
             transferId,
-            state: FileTransferState.canceled,
+            state: transfer.direction == FileTransferDirection.incoming
+                ? FileTransferState.paused
+                : FileTransferState.canceled,
             lastError: '',
           );
         }
@@ -1392,6 +1380,39 @@ class FileTransferEngine {
   Future<void> handlePeerDisconnected(String peerId) async {
     await _markPeerTransfersWaitingReconnect(peerId);
     _transferRuntime.clearPeer(peerId);
+  }
+
+  Future<void> reconcileInterruptedTransfersOnStartup() {
+    return _markRecoverableTransfersWaitingReconnect();
+  }
+
+  Future<void> markRecoverableTransfersPausedForPeer(String peerId) async {
+    final items = await _database().fetchRecoverableFileTransfersForPeer(
+      peerId,
+    );
+    for (final item in items) {
+      if (item.state != FileTransferState.waitingReconnect) {
+        continue;
+      }
+      final connection =
+          _currentConnectionBinding(peerId) ??
+          TransferConnectionBinding(peerId: peerId, generation: -1);
+      await _runTransferOperation<void>(
+        item.transferId,
+        connection: connection,
+        operation: () async {
+          final current = await _database().fetchFileTransfer(item.transferId);
+          if (current?.state != FileTransferState.waitingReconnect) {
+            return;
+          }
+          await _updateTransfer(
+            item.transferId,
+            state: FileTransferState.paused,
+            lastError: '',
+          );
+        },
+      );
+    }
   }
 
   Future<void> invalidateOutgoingTransfersForPeer(
@@ -2982,9 +3003,16 @@ class FileTransferEngine {
     FileTransferV3Control control, {
     required void Function() requireCurrent,
   }) async {
+    final existing = await _database().fetchFileTransfer(control.transferId);
+    requireCurrent();
+    if (existing == null) {
+      return;
+    }
     await _updateTransfer(
       control.transferId,
-      state: FileTransferState.canceled,
+      state: existing.direction == FileTransferDirection.outgoing
+          ? FileTransferState.paused
+          : FileTransferState.canceled,
       lastError: control.failureReason.wireCode,
       requireCurrent: requireCurrent,
     );
@@ -3663,7 +3691,7 @@ class FileTransferEngine {
   }
 
   /// 原 svrmanager `_resumeRecoverableOutgoingTransfers`:
-  /// 鉴权成功后重新对可恢复的 outgoing 传输发 offer。
+  /// 显式请求恢复时重新对可恢复的 outgoing 传输发 offer。
   Future<void> resumeRecoverableOutgoing() async {
     final peerIds = <String>{
       ..._connectedPeerIds(),

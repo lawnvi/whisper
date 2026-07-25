@@ -487,9 +487,58 @@ void main() {
           (await database.fetchFileTransfer(_secondId))?.state,
           FileTransferState.transferring,
         );
+        if (action == FileTransferV3Action.cancel) {
+          expect(
+            (await database.fetchFileTransfer(_firstId))?.state,
+            FileTransferState.paused,
+          );
+        }
       },
     );
   }
+
+  test('receiver cancel pauses outgoing so the sender can reoffer', () async {
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _persistOutgoing(database, _firstId, size: 1);
+    final sent = <WhisperFrameV3>[];
+    final engine = _engine(
+      database,
+      sent,
+      sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+    );
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(
+        _control(FileTransferV3Action.ready, _firstId, size: 1, offset: 0),
+      ),
+      requireCurrent: () {},
+    );
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(
+        _control(FileTransferV3Action.cancel, _firstId, size: 1, offset: 0),
+      ),
+      requireCurrent: () {},
+    );
+
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.paused,
+    );
+
+    sent.clear();
+    await engine.retryTransfer(_firstId);
+
+    expect(
+      sent.where((frame) => frame.type == WhisperFrameType.fileOffer),
+      hasLength(1),
+    );
+    expect(
+      (await database.fetchFileTransfer(_firstId))?.state,
+      FileTransferState.negotiating,
+    );
+  });
 
   test(
     'queued successor accepts a 2 MiB ACK while its window is still sending',
@@ -948,6 +997,18 @@ void main() {
 
       expect(_readyFrames(sent, _secondId), isEmpty);
       expect(_readyFrames(sent, _thirdId), hasLength(1));
+      expect(
+        sent.where((frame) => frame.type == WhisperFrameType.fileCancel),
+        hasLength(2),
+      );
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.paused,
+      );
+      expect(
+        (await database.fetchFileTransfer(_secondId))?.state,
+        FileTransferState.paused,
+      );
     },
   );
 
@@ -1110,6 +1171,66 @@ void main() {
       );
 
       expect(_dataFrames(sent, _firstId).first.offset, 2);
+    },
+  );
+
+  test(
+    'restart and reconnect expose interrupted progress for manual resume',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'whisper-incoming-reconnect-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
+      final checksum = bytesChecksum(bytes, algorithm: 'sha256');
+      final message = await database.insertMessageReturning(
+        _incomingMessage(_firstId, size: bytes.length, checksum: checksum),
+      );
+      final temp = File(await safeTransferTempPath(root, _firstId));
+      await temp.parent.create(recursive: true);
+      await temp.writeAsBytes(bytes.sublist(0, 2));
+      await database.upsertFileTransfer(
+        _incomingTransfer(
+          _firstId,
+          size: bytes.length,
+          messageRowId: message.id,
+          tempPath: temp.path,
+          committedBytes: 2,
+          checksum: checksum,
+        ).copyWith(state: FileTransferState.transferring),
+      );
+      final sent = <WhisperFrameV3>[];
+      final engine = _engine(
+        database,
+        sent,
+        downloadDirectory: () async => root,
+      );
+
+      await engine.reconcileInterruptedTransfersOnStartup();
+
+      expect(sent, isEmpty);
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.waitingReconnect,
+      );
+
+      await engine.markRecoverableTransfersPausedForPeer('peer-a');
+
+      expect(sent, isEmpty);
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.paused,
+      );
+
+      await engine.retryTransfer(_firstId);
+
+      expect(sent, isEmpty);
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.paused,
+      );
     },
   );
 

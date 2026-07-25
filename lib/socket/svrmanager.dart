@@ -439,6 +439,7 @@ class WsSvrManager {
   final PeerReconnectControllerFactory _reconnectControllerFactory;
   final LocalPeerProfileLoader? _localPeerProfileLoader;
   final bool _manageSharedCoordinators;
+  bool _interruptedTransfersReconciled = false;
   final ConnectionAuthCommitBarrier? _authCommitBarrier;
   final Duration _socketCloseTimeout;
   final Duration _mediaProofTimeout;
@@ -1187,6 +1188,14 @@ class WsSvrManager {
       _ignoreFuture(reporting, context: 'report server start result');
     }
     return operation;
+  }
+
+  Future<void> reconcileInterruptedTransfersOnStartup() async {
+    if (_interruptedTransfersReconciled) {
+      return;
+    }
+    await _transferEngine.reconcileInterruptedTransfersOnStartup();
+    _interruptedTransfersReconciled = true;
   }
 
   Future<T> _enqueueServerLifecycle<T>(Future<T> Function() operation) {
@@ -3925,8 +3934,10 @@ class WsSvrManager {
       _dispatchToAll((event) => event.afterAuth(true, storedDevice));
     }
     _ignoreFuture(
-      _transferEngine.resumeRecoverableOutgoing(),
-      context: 'resume outgoing transfers',
+      _transferEngine.markRecoverableTransfersPausedForPeer(
+        session.remotePeerId,
+      ),
+      context: 'pause recoverable peer transfers',
     );
   }
 

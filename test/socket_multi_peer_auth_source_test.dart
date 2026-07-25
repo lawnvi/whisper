@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final source = File('lib/socket/svrmanager.dart').readAsStringSync();
+  final deviceListSource = File('lib/page/deviceList.dart').readAsStringSync();
 
   String section(String startMarker, String endMarker) {
     final start = source.indexOf(startMarker);
@@ -22,6 +23,16 @@ void main() {
     );
     expect(register, contains('!session.isAuthenticationReady'));
     expect(register, contains('_sink = sink'));
+  });
+
+  test('server startup reconciles transfer states left by process exit', () {
+    const reconcile = 'reconcileInterruptedTransfersOnStartup()';
+    const start = 'socketManager.startServer(';
+    expect(
+      deviceListSource.indexOf(reconcile),
+      lessThan(deviceListSource.indexOf(start)),
+    );
+    expect(source, contains('Future<void> $reconcile'));
   });
 
   test('authenticated direct replacement cleans the old generation first', () {
@@ -254,6 +265,11 @@ void main() {
     expect(challenge, isNot(contains('afterAuth(')));
     expect(result, isNot(contains('afterAuth(')));
     expect(announce, contains('session.role == PeerSocketRole.server'));
+    expect(
+      announce,
+      contains('markRecoverableTransfersPausedForPeer('),
+    );
+    expect(announce, isNot(contains('resumeRecoverable')));
   });
 
   test('old socket cleanup removes only its own connection generation', () {

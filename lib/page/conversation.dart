@@ -2132,10 +2132,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 transfer.state == FileTransferState.canceled));
     final showRetry =
         transfer != null &&
+        transfer.direction == FileTransferDirection.outgoing &&
         (transfer.state == FileTransferState.failed ||
             transfer.state == FileTransferState.paused ||
             transfer.state == FileTransferState.waitingReconnect);
-    final showCancel = transfer != null && !_isTransferTerminal(transfer.state);
+    final showCancel =
+        transfer != null &&
+        !_isTransferTerminal(transfer.state) &&
+        (transfer.direction == FileTransferDirection.outgoing ||
+            (transfer.state != FileTransferState.paused &&
+                transfer.state != FileTransferState.waitingReconnect));
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final cardColor = isOpponent
