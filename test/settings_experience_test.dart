@@ -296,18 +296,24 @@ void main() {
 
     expect(manager.checkCount, 1);
     expect(find.text('Check for updates'), findsOneWidget);
-    expect(find.text('Version 2.5.0 is available'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('update-available-badge')),
-      findsOneWidget,
+    final versionLabel = find.text('Update available: 2.5.0');
+    final updateBadge = find.byKey(
+      const ValueKey<String>('update-available-badge'),
     );
+    expect(versionLabel, findsOneWidget);
+    expect(updateBadge, findsOneWidget);
+    expect(
+      tester.getTopLeft(updateBadge).dx - tester.getTopRight(versionLabel).dx,
+      greaterThanOrEqualTo(4),
+    );
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
 
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
     expect(find.text('Version 2.5.0 is available'), findsWidgets);
     expect(find.textContaining('You have 2.4.0'), findsOneWidget);
 
-    await tester.tap(find.text('Download and install'));
+    await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
     expect(manager.downloadCount, 1);
     expect(manager.openInstallerCount, 1);
@@ -326,7 +332,7 @@ void main() {
 
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download and install'));
+    await tester.tap(find.text('Update'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -358,7 +364,7 @@ void main() {
 
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download and install'));
+    await tester.tap(find.text('Update'));
     await tester.pumpAndSettle();
 
     expect(manager.openInstallerCount, 1);

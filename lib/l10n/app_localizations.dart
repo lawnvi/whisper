@@ -1639,7 +1639,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadAndInstallUpdate.
   ///
   /// In zh, this message translates to:
-  /// **'下载并安装'**
+  /// **'更新'**
   String get downloadAndInstallUpdate;
 
   /// No description provided for @viewRelease.

@@ -469,7 +469,7 @@
       "latestVersion": {"type": "String"}
     }
   },
-  "downloadAndInstallUpdate": "下载并安装",
+  "downloadAndInstallUpdate": "更新",
   "viewRelease": "查看 Release",
   "downloadingUpdate": "正在下载 {progress}%",
   "@downloadingUpdate": {

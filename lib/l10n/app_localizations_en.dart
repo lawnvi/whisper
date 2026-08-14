@@ -887,7 +887,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String updateAvailableVersion(String version) {
-    return 'Version $version is available';
+    return 'Update available: $version';
   }
 
   @override
@@ -908,7 +908,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadAndInstallUpdate => 'Download and install';
+  String get downloadAndInstallUpdate => 'Update';
 
   @override
   String get viewRelease => 'View release';

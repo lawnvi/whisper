@@ -399,7 +399,7 @@
     }
   },
   "checkingForUpdates": "Buscando actualizaciones…",
-  "updateAvailableVersion": "La versión {version} está disponible",
+  "updateAvailableVersion": "Actualización disponible: {version}",
   "@updateAvailableVersion": {
     "placeholders": {
       "version": {"type": "String"}
@@ -420,7 +420,7 @@
       "latestVersion": {"type": "String"}
     }
   },
-  "downloadAndInstallUpdate": "Descargar e instalar",
+  "downloadAndInstallUpdate": "Actualizar",
   "viewRelease": "Ver versión",
   "downloadingUpdate": "Descargando {progress}%",
   "@downloadingUpdate": {

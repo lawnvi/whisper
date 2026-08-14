@@ -857,7 +857,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadAndInstallUpdate => '下载并安装';
+  String get downloadAndInstallUpdate => '更新';
 
   @override
   String get viewRelease => '查看 Release';

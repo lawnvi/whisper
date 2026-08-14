@@ -372,7 +372,7 @@
     }
   },
   "checkingForUpdates": "Checking for updates…",
-  "updateAvailableVersion": "Version {version} is available",
+  "updateAvailableVersion": "Update available: {version}",
   "@updateAvailableVersion": {
     "placeholders": {
       "version": {"type": "String"}
@@ -393,7 +393,7 @@
       "latestVersion": {"type": "String"}
     }
   },
-  "downloadAndInstallUpdate": "Download and install",
+  "downloadAndInstallUpdate": "Update",
   "viewRelease": "View release",
   "downloadingUpdate": "Downloading {progress}%",
   "@downloadingUpdate": {

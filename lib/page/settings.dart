@@ -757,6 +757,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         l10n.checkForUpdates,
                         _buildUpdateLeading(isDark),
                         desc: _updateStatusLabel(l10n),
+                        subtitle: _buildUpdateStatus(l10n),
                         enabled: !_checkingForUpdates && !_downloadingUpdate,
                         onTap: _handleUpdateTap,
                         trailing: _buildUpdateTrailing(palette),
@@ -802,6 +803,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return l10n.currentVersion(_version);
   }
 
+  Widget _buildUpdateStatus(AppLocalizations l10n) {
+    final label = _updateStatusLabel(l10n);
+    if (_updateResult?.hasUpdate != true ||
+        _checkingForUpdates ||
+        _downloadingUpdate) {
+      return Text(label, softWrap: true);
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Text(label, softWrap: true),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: DecoratedBox(
+              key: const ValueKey<String>('update-available-badge'),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              child: const SizedBox.square(dimension: 7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildUpdateTrailing(WhisperPalette palette) {
     if (_checkingForUpdates || _downloadingUpdate) {
       final progress = _downloadingUpdate
@@ -825,31 +859,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+    if (_updateResult?.hasUpdate == true) {
+      return const SizedBox.shrink();
+    }
     return Icon(
-      _updateResult?.hasUpdate == true
-          ? Icons.download_rounded
-          : Icons.arrow_forward_ios,
-      size: _updateResult?.hasUpdate == true ? 20 : 14,
-      color: _updateResult?.hasUpdate == true
-          ? Theme.of(context).colorScheme.primary
-          : palette.textMuted,
+      Icons.arrow_forward_ios,
+      size: 14,
+      color: palette.textMuted,
     );
   }
 
   Widget _buildUpdateLeading(bool isDark) {
     final hasUpdate = _updateResult?.hasUpdate == true;
-    final icon = Icon(
+    return Icon(
       hasUpdate ? Icons.system_update_rounded : Icons.update_rounded,
       color: isDark ? Colors.grey[400] : CupertinoColors.systemGrey,
-    );
-    if (!hasUpdate) {
-      return icon;
-    }
-    return Badge(
-      key: const ValueKey<String>('update-available-badge'),
-      smallSize: 8,
-      backgroundColor: Theme.of(context).colorScheme.error,
-      child: icon,
     );
   }
 
