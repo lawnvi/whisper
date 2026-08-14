@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/settings.dart';
@@ -82,6 +83,8 @@ Widget _host({
   Future<void> Function(bool enabled)? syncNotificationForwardingListener,
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
+  AppUpdateManager? updateManager,
+  bool autoCheckForUpdates = true,
 }) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
@@ -111,8 +114,65 @@ Widget _host({
       syncNotificationForwardingListener: syncNotificationForwardingListener,
       refreshNotificationRegistry: refreshNotificationRegistry,
       openNotificationApps: openNotificationApps,
+      updateManager: updateManager,
+      autoCheckForUpdates: autoCheckForUpdates,
     ),
   );
+}
+
+class _FakeUpdateManager implements AppUpdateManager {
+  static final _release = AppUpdateRelease(
+    version: '2.5.0',
+    tagName: 'dev-v2.5.0',
+    channel: AppUpdateChannel.preview,
+    releaseUrl:
+        Uri.parse('https://github.com/lawnvi/whisper/releases/tag/dev-v2.5.0'),
+    notes: 'Faster and more reliable updates.',
+    publishedAt: DateTime.utc(2026, 8, 15),
+    asset: AppUpdateAsset(
+      name: 'whisper-2.5.0-macos-arm64.dmg',
+      downloadUrl: Uri.parse(
+        'https://github.com/lawnvi/whisper/releases/download/dev-v2.5.0/whisper-2.5.0-macos-arm64.dmg',
+      ),
+      size: 1024,
+    ),
+  );
+
+  int checkCount = 0;
+  int downloadCount = 0;
+  int openInstallerCount = 0;
+
+  @override
+  Future<AppUpdateCheckResult> checkForUpdate({
+    required String currentVersion,
+    bool force = false,
+  }) async {
+    checkCount += 1;
+    return AppUpdateCheckResult(
+      status: AppUpdateStatus.updateAvailable,
+      currentVersion: currentVersion,
+      release: _release,
+    );
+  }
+
+  @override
+  Future<AppUpdateDownload> downloadUpdate(
+    AppUpdateRelease release, {
+    void Function(double progress)? onProgress,
+  }) async {
+    downloadCount += 1;
+    onProgress?.call(0.5);
+    onProgress?.call(1);
+    return AppUpdateDownload(
+      release: release,
+      file: File('/tmp/whisper-test-update.dmg'),
+    );
+  }
+
+  @override
+  Future<void> openInstaller(AppUpdateDownload download) async {
+    openInstallerCount += 1;
+  }
 }
 
 Future<void> _pumpAt(
@@ -129,6 +189,8 @@ Future<void> _pumpAt(
   Future<void> Function(bool enabled)? syncNotificationForwardingListener,
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
+  AppUpdateManager? updateManager,
+  bool autoCheckForUpdates = true,
 }) async {
   tester.view
     ..physicalSize = Size(width, height)
@@ -144,6 +206,8 @@ Future<void> _pumpAt(
     syncNotificationForwardingListener: syncNotificationForwardingListener,
     refreshNotificationRegistry: refreshNotificationRegistry,
     openNotificationApps: openNotificationApps,
+    updateManager: updateManager,
+    autoCheckForUpdates: autoCheckForUpdates,
   ));
   await tester.pumpAndSettle();
 }
@@ -203,6 +267,43 @@ void main() {
       find.descendant(of: surface, matching: find.byType(Divider)),
     );
     expect(dividers, isEmpty);
+  });
+
+  testWidgets('settings checks for updates and opens the verified installer',
+      (tester) async {
+    final manager = _FakeUpdateManager();
+    await _pumpAt(
+      tester,
+      width: 720,
+      height: 1500,
+      updateManager: manager,
+    );
+
+    expect(manager.checkCount, 1);
+    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.text('Version 2.5.0 is available'), findsOneWidget);
+
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    expect(find.text('Version 2.5.0 is available'), findsWidgets);
+    expect(find.textContaining('You have 2.4.0'), findsOneWidget);
+
+    await tester.tap(find.text('Download and install'));
+    await tester.pumpAndSettle();
+    expect(manager.downloadCount, 1);
+    expect(manager.openInstallerCount, 1);
+  });
+
+  testWidgets('about row contains website and source links', (tester) async {
+    await _pumpAt(tester, width: 720, height: 1500, autoCheckForUpdates: false);
+
+    await tester.tap(find.text('About Whisper'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AboutDialog), findsOneWidget);
+    expect(find.text('Current version 2.4.0'), findsWidgets);
+    expect(find.text('Official website'), findsOneWidget);
+    expect(find.text('GitHub source code'), findsOneWidget);
   });
 
   testWidgets('settings remain usable at supported widths and 200 percent text',
@@ -318,7 +419,7 @@ void main() {
       contains('English'),
     );
     expect(
-      tester.getSemantics(_settingRow('Version')).label,
+      tester.getSemantics(_settingRow('Check for updates')).label,
       contains('2.4.0'),
     );
     semantics.dispose();

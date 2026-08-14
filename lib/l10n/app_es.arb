@@ -381,11 +381,56 @@
   "settingsSectionNotificationForwarding": "Reenvío de notificaciones",
   "settingsSectionNotificationForwardingDesc": "Gestión de notificaciones de Android y ayuda con códigos de verificación",
   "settingsSectionLanguageFiles": "Idioma y archivos",
-  "settingsSectionLanguageFilesDesc": "Idioma, carpeta de guardado e información de la aplicación",
+  "settingsSectionLanguageFilesDesc": "Idioma y carpeta de guardado",
   "settingsSaveDirectory": "Carpeta de guardado",
   "settingsChangeDirectory": "Cambiar carpeta de guardado",
   "settingsOpenDirectory": "Abrir carpeta de guardado",
   "settingsVersion": "Versión",
+  "settingsSectionAbout": "Acerca de",
+  "settingsSectionAboutDesc": "Actualizaciones e información de la aplicación",
+  "checkForUpdates": "Buscar actualizaciones",
+  "currentVersion": "Versión actual {version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "checkingForUpdates": "Buscando actualizaciones…",
+  "updateAvailableVersion": "La versión {version} está disponible",
+  "@updateAvailableVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateUpToDate": "Ya tienes la última versión",
+  "updateCheckFailed": "No se pudieron buscar actualizaciones. Inténtalo más tarde",
+  "updateAvailableTitle": "La versión {version} está disponible",
+  "@updateAvailableTitle": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateAvailableBody": "Tienes la versión {currentVersion}. La versión {latestVersion} está lista. La descarga se verificará con el hash de GitHub antes de abrirse.",
+  "@updateAvailableBody": {
+    "placeholders": {
+      "currentVersion": {"type": "String"},
+      "latestVersion": {"type": "String"}
+    }
+  },
+  "downloadAndInstallUpdate": "Descargar e instalar",
+  "viewRelease": "Ver versión",
+  "downloadingUpdate": "Descargando {progress}%",
+  "@downloadingUpdate": {
+    "placeholders": {
+      "progress": {"type": "int"}
+    }
+  },
+  "updateInstallerOpened": "La actualización verificada está lista en el instalador del sistema",
+  "updateInstallFailed": "No se pudo abrir el instalador. Inténtalo más tarde",
+  "aboutWhisper": "Acerca de Whisper",
+  "aboutWhisperDescription": "Una aplicación de colaboración en red local para tus dispositivos",
+  "officialWebsite": "Sitio web oficial",
+  "sourceCode": "Código fuente en GitHub",
   "appListSearchPlaceholder": "Buscar aplicaciones",
   "appListClearSearch": "Borrar búsqueda de aplicaciones",
   "deselectAll": "Deseleccionar todo",

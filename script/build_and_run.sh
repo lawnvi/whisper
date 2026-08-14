@@ -30,6 +30,12 @@ DMG_APP_ICON_POSITION="{180, 170}"
 DMG_APPLICATIONS_ICON_POSITION="{420, 170}"
 TEMP_DIRS=()
 CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT=0
+FLUTTER_UPDATE_ARGS=()
+if [[ -n "${WHISPER_UPDATE_CHANNEL:-}" ]]; then
+  FLUTTER_UPDATE_ARGS+=(
+    "--dart-define=WHISPER_UPDATE_CHANNEL=${WHISPER_UPDATE_CHANNEL}"
+  )
+fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -217,7 +223,7 @@ sign_app() {
 
 build_debug_app() {
   prepare_macos_native_asset_staging "$(uname -m)"
-  flutter build macos --debug
+  flutter build macos --debug "${FLUTTER_UPDATE_ARGS[@]}"
   dart script/prune_flutter_assets.dart macos \
     "$DEBUG_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   sign_app "$DEBUG_APP_BUNDLE" "$DEBUG_ENTITLEMENTS"
@@ -227,7 +233,7 @@ build_release_app() {
   local host_arch
   host_arch="$(uname -m)"
   prepare_macos_native_asset_staging "$host_arch"
-  flutter build macos
+  flutter build macos "${FLUTTER_UPDATE_ARGS[@]}"
   dart script/prune_flutter_assets.dart macos \
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   verify_bundle_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
@@ -258,7 +264,7 @@ verify_bundle_architecture() {
 build_release_x64_app() {
   CLEAN_MACOS_NATIVE_ASSET_STAGING_ON_EXIT=1
   prepare_macos_native_asset_staging x86_64
-  flutter build macos --release --config-only
+  flutter build macos --release --config-only "${FLUTTER_UPDATE_ARGS[@]}"
   xcodebuild \
     -workspace macos/Runner.xcworkspace \
     -scheme Runner \

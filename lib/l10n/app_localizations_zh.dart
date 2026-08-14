@@ -795,7 +795,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionLanguageFiles => '语言与文件';
 
   @override
-  String get settingsSectionLanguageFilesDesc => '语言、保存目录和应用信息';
+  String get settingsSectionLanguageFilesDesc => '语言和文件保存目录';
 
   @override
   String get settingsSaveDirectory => '保存目录';
@@ -808,6 +808,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsVersion => '版本';
+
+  @override
+  String get settingsSectionAbout => '关于';
+
+  @override
+  String get settingsSectionAboutDesc => '版本更新和应用信息';
+
+  @override
+  String get checkForUpdates => '检查更新';
+
+  @override
+  String currentVersion(String version) {
+    return '当前版本 $version';
+  }
+
+  @override
+  String get checkingForUpdates => '正在检查更新…';
+
+  @override
+  String updateAvailableVersion(String version) {
+    return '发现新版本 $version';
+  }
+
+  @override
+  String get updateUpToDate => '已是最新版本';
+
+  @override
+  String get updateCheckFailed => '暂时无法检查更新，请稍后重试';
+
+  @override
+  String updateAvailableTitle(String version) {
+    return '发现新版本 $version';
+  }
+
+  @override
+  String updateAvailableBody(String currentVersion, String latestVersion) {
+    return '当前版本 $currentVersion，可更新到 $latestVersion。安装前会校验 GitHub 提供的文件哈希。';
+  }
+
+  @override
+  String get downloadAndInstallUpdate => '下载并安装';
+
+  @override
+  String get viewRelease => '查看 Release';
+
+  @override
+  String downloadingUpdate(int progress) {
+    return '正在下载 $progress%';
+  }
+
+  @override
+  String get updateInstallerOpened => '更新包已校验，已交给系统安装器';
+
+  @override
+  String get updateInstallFailed => '无法打开更新安装包，请稍后重试';
+
+  @override
+  String get aboutWhisper => '关于 Whisper';
+
+  @override
+  String get aboutWhisperDescription => '面向个人设备的局域网协作工具';
+
+  @override
+  String get officialWebsite => '官方网站';
+
+  @override
+  String get sourceCode => 'GitHub 源代码';
 
   @override
   String get appListSearchPlaceholder => '搜索应用';

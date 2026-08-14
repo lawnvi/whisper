@@ -845,8 +845,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionLanguageFiles => 'Language and files';
 
   @override
-  String get settingsSectionLanguageFilesDesc =>
-      'Language, save directory, and app information';
+  String get settingsSectionLanguageFilesDesc => 'Language and save directory';
 
   @override
   String get settingsSaveDirectory => 'Save directory';
@@ -859,6 +858,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsVersion => 'Version';
+
+  @override
+  String get settingsSectionAbout => 'About';
+
+  @override
+  String get settingsSectionAboutDesc => 'Updates and app information';
+
+  @override
+  String get checkForUpdates => 'Check for updates';
+
+  @override
+  String currentVersion(String version) {
+    return 'Current version $version';
+  }
+
+  @override
+  String get checkingForUpdates => 'Checking for updates…';
+
+  @override
+  String updateAvailableVersion(String version) {
+    return 'Version $version is available';
+  }
+
+  @override
+  String get updateUpToDate => 'You\'re up to date';
+
+  @override
+  String get updateCheckFailed =>
+      'Couldn\'t check for updates. Try again later';
+
+  @override
+  String updateAvailableTitle(String version) {
+    return 'Version $version is available';
+  }
+
+  @override
+  String updateAvailableBody(String currentVersion, String latestVersion) {
+    return 'You have $currentVersion. Version $latestVersion is ready. The download will be verified against GitHub\'s file digest before it opens.';
+  }
+
+  @override
+  String get downloadAndInstallUpdate => 'Download and install';
+
+  @override
+  String get viewRelease => 'View release';
+
+  @override
+  String downloadingUpdate(int progress) {
+    return 'Downloading $progress%';
+  }
+
+  @override
+  String get updateInstallerOpened =>
+      'The verified update is ready in the system installer';
+
+  @override
+  String get updateInstallFailed =>
+      'The update installer couldn\'t be opened. Try again later';
+
+  @override
+  String get aboutWhisper => 'About Whisper';
+
+  @override
+  String get aboutWhisperDescription =>
+      'A local network collaboration app for your devices';
+
+  @override
+  String get officialWebsite => 'Official website';
+
+  @override
+  String get sourceCode => 'GitHub source code';
 
   @override
   String get appListSearchPlaceholder => 'Search apps';

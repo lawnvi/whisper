@@ -855,8 +855,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsSectionLanguageFiles => 'Idioma y archivos';
 
   @override
-  String get settingsSectionLanguageFilesDesc =>
-      'Idioma, carpeta de guardado e información de la aplicación';
+  String get settingsSectionLanguageFilesDesc => 'Idioma y carpeta de guardado';
 
   @override
   String get settingsSaveDirectory => 'Carpeta de guardado';
@@ -869,6 +868,78 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsVersion => 'Versión';
+
+  @override
+  String get settingsSectionAbout => 'Acerca de';
+
+  @override
+  String get settingsSectionAboutDesc =>
+      'Actualizaciones e información de la aplicación';
+
+  @override
+  String get checkForUpdates => 'Buscar actualizaciones';
+
+  @override
+  String currentVersion(String version) {
+    return 'Versión actual $version';
+  }
+
+  @override
+  String get checkingForUpdates => 'Buscando actualizaciones…';
+
+  @override
+  String updateAvailableVersion(String version) {
+    return 'La versión $version está disponible';
+  }
+
+  @override
+  String get updateUpToDate => 'Ya tienes la última versión';
+
+  @override
+  String get updateCheckFailed =>
+      'No se pudieron buscar actualizaciones. Inténtalo más tarde';
+
+  @override
+  String updateAvailableTitle(String version) {
+    return 'La versión $version está disponible';
+  }
+
+  @override
+  String updateAvailableBody(String currentVersion, String latestVersion) {
+    return 'Tienes la versión $currentVersion. La versión $latestVersion está lista. La descarga se verificará con el hash de GitHub antes de abrirse.';
+  }
+
+  @override
+  String get downloadAndInstallUpdate => 'Descargar e instalar';
+
+  @override
+  String get viewRelease => 'Ver versión';
+
+  @override
+  String downloadingUpdate(int progress) {
+    return 'Descargando $progress%';
+  }
+
+  @override
+  String get updateInstallerOpened =>
+      'La actualización verificada está lista en el instalador del sistema';
+
+  @override
+  String get updateInstallFailed =>
+      'No se pudo abrir el instalador. Inténtalo más tarde';
+
+  @override
+  String get aboutWhisper => 'Acerca de Whisper';
+
+  @override
+  String get aboutWhisperDescription =>
+      'Una aplicación de colaboración en red local para tus dispositivos';
+
+  @override
+  String get officialWebsite => 'Sitio web oficial';
+
+  @override
+  String get sourceCode => 'Código fuente en GitHub';
 
   @override
   String get appListSearchPlaceholder => 'Buscar aplicaciones';

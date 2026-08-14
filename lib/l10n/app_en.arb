@@ -354,11 +354,56 @@
   "settingsSectionNotificationForwarding": "Notification forwarding",
   "settingsSectionNotificationForwardingDesc": "Android notification handling and verification code assistance",
   "settingsSectionLanguageFiles": "Language and files",
-  "settingsSectionLanguageFilesDesc": "Language, save directory, and app information",
+  "settingsSectionLanguageFilesDesc": "Language and save directory",
   "settingsSaveDirectory": "Save directory",
   "settingsChangeDirectory": "Change save directory",
   "settingsOpenDirectory": "Open save directory",
   "settingsVersion": "Version",
+  "settingsSectionAbout": "About",
+  "settingsSectionAboutDesc": "Updates and app information",
+  "checkForUpdates": "Check for updates",
+  "currentVersion": "Current version {version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "checkingForUpdates": "Checking for updates…",
+  "updateAvailableVersion": "Version {version} is available",
+  "@updateAvailableVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateUpToDate": "You're up to date",
+  "updateCheckFailed": "Couldn't check for updates. Try again later",
+  "updateAvailableTitle": "Version {version} is available",
+  "@updateAvailableTitle": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateAvailableBody": "You have {currentVersion}. Version {latestVersion} is ready. The download will be verified against GitHub's file digest before it opens.",
+  "@updateAvailableBody": {
+    "placeholders": {
+      "currentVersion": {"type": "String"},
+      "latestVersion": {"type": "String"}
+    }
+  },
+  "downloadAndInstallUpdate": "Download and install",
+  "viewRelease": "View release",
+  "downloadingUpdate": "Downloading {progress}%",
+  "@downloadingUpdate": {
+    "placeholders": {
+      "progress": {"type": "int"}
+    }
+  },
+  "updateInstallerOpened": "The verified update is ready in the system installer",
+  "updateInstallFailed": "The update installer couldn't be opened. Try again later",
+  "aboutWhisper": "About Whisper",
+  "aboutWhisperDescription": "A local network collaboration app for your devices",
+  "officialWebsite": "Official website",
+  "sourceCode": "GitHub source code",
   "appListSearchPlaceholder": "Search apps",
   "appListClearSearch": "Clear app search",
   "deselectAll": "Deselect all",

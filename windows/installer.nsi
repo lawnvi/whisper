@@ -57,6 +57,11 @@ VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Install"
+  ; Updating from inside Whisper leaves the running executable locked on Windows.
+  ; The user has already confirmed installation before this section begins.
+  nsExec::ExecToLog 'taskkill /IM "${APP_EXE}" /F'
+  Pop $0
+
   SetOutPath "$INSTDIR"
   File /r "${BUILD_DIR}\*.*"
 

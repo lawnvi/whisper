@@ -430,11 +430,56 @@
   "settingsSectionNotificationForwarding": "通知转发",
   "settingsSectionNotificationForwardingDesc": "Android 通知处理和验证码辅助",
   "settingsSectionLanguageFiles": "语言与文件",
-  "settingsSectionLanguageFilesDesc": "语言、保存目录和应用信息",
+  "settingsSectionLanguageFilesDesc": "语言和文件保存目录",
   "settingsSaveDirectory": "保存目录",
   "settingsChangeDirectory": "更改保存目录",
   "settingsOpenDirectory": "打开保存目录",
   "settingsVersion": "版本",
+  "settingsSectionAbout": "关于",
+  "settingsSectionAboutDesc": "版本更新和应用信息",
+  "checkForUpdates": "检查更新",
+  "currentVersion": "当前版本 {version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "checkingForUpdates": "正在检查更新…",
+  "updateAvailableVersion": "发现新版本 {version}",
+  "@updateAvailableVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateUpToDate": "已是最新版本",
+  "updateCheckFailed": "暂时无法检查更新，请稍后重试",
+  "updateAvailableTitle": "发现新版本 {version}",
+  "@updateAvailableTitle": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateAvailableBody": "当前版本 {currentVersion}，可更新到 {latestVersion}。安装前会校验 GitHub 提供的文件哈希。",
+  "@updateAvailableBody": {
+    "placeholders": {
+      "currentVersion": {"type": "String"},
+      "latestVersion": {"type": "String"}
+    }
+  },
+  "downloadAndInstallUpdate": "下载并安装",
+  "viewRelease": "查看 Release",
+  "downloadingUpdate": "正在下载 {progress}%",
+  "@downloadingUpdate": {
+    "placeholders": {
+      "progress": {"type": "int"}
+    }
+  },
+  "updateInstallerOpened": "更新包已校验，已交给系统安装器",
+  "updateInstallFailed": "无法打开更新安装包，请稍后重试",
+  "aboutWhisper": "关于 Whisper",
+  "aboutWhisperDescription": "面向个人设备的局域网协作工具",
+  "officialWebsite": "官方网站",
+  "sourceCode": "GitHub 源代码",
   "appListSearchPlaceholder": "搜索应用",
   "appListClearSearch": "清除应用搜索",
   "deselectAll": "取消全选",

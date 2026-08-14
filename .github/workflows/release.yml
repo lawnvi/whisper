@@ -88,7 +88,13 @@ jobs:
           else
             PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
           fi
+          if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
+            UPDATE_CHANNEL="stable"
+          else
+            UPDATE_CHANNEL="preview"
+          fi
           echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "UPDATE_CHANNEL=$UPDATE_CHANNEL" >> $GITHUB_ENV
 
       - name: Build signed macOS DMGs
         env:
@@ -98,14 +104,16 @@ jobs:
           WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
           WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
         run: |
-          WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-arm64.dmg" \
+          WHISPER_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
+            WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-arm64.dmg" \
             script/build_and_run.sh package-macos
-          WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" \
+          WHISPER_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
+            WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" \
             script/build_and_run.sh package-macos-x64
 
       - name: Build iOS IPA
         run: |
-          flutter build ios --no-codesign --no-pub
+          flutter build ios --no-codesign --no-pub --dart-define=WHISPER_UPDATE_CHANNEL=$UPDATE_CHANNEL
           dart script/prune_flutter_assets.dart ios build/ios/iphoneos/Runner.app/Frameworks/App.framework/flutter_assets
           cd build/ios/iphoneos
           mkdir Payload
@@ -162,8 +170,10 @@ jobs:
           } else {
             $version = "0.0.${{ github.run_number }}"
           }
+          $channel = if ("${{ github.ref_name }}".StartsWith("release-v")) { "stable" } else { "preview" }
           "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "UPDATE_CHANNEL=$channel" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify NSIS
         run: |
@@ -175,7 +185,7 @@ jobs:
       - name: Build Windows app
         run: |
           flutter config --enable-windows-desktop
-          flutter build windows --no-pub
+          flutter build windows --no-pub --dart-define=WHISPER_UPDATE_CHANNEL=$env:UPDATE_CHANNEL
           if ($LASTEXITCODE -ne 0) {
             throw "flutter build windows failed with exit code $LASTEXITCODE"
           }
@@ -278,13 +288,19 @@ jobs:
           else
             PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
           fi
+          if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
+            UPDATE_CHANNEL="stable"
+          else
+            UPDATE_CHANNEL="preview"
+          fi
           echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "UPDATE_CHANNEL=$UPDATE_CHANNEL" >> $GITHUB_ENV
 
       - name: Build Linux app
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: |
           flutter config --enable-linux-desktop
-          flutter build linux --no-pub
+          flutter build linux --no-pub --dart-define=WHISPER_UPDATE_CHANNEL=$UPDATE_CHANNEL
 
       - name: Build DEB package
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
@@ -343,8 +359,8 @@ jobs:
       - name: Build Android release APKs
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
         run: |
-          flutter build apk --no-pub
-          flutter build apk --split-per-abi --no-pub
+          flutter build apk --no-pub --dart-define=WHISPER_UPDATE_CHANNEL=$UPDATE_CHANNEL
+          flutter build apk --split-per-abi --no-pub --dart-define=WHISPER_UPDATE_CHANNEL=$UPDATE_CHANNEL
 
       - name: Verify Android package size pruning
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}

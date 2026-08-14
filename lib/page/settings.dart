@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
+import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
@@ -34,6 +36,8 @@ enum SettingsOperationKind {
   notificationUpdate,
   notificationRestore,
   notificationRead,
+  updateCheck,
+  updateInstall,
 }
 
 void _logSettingsFailure(SettingsOperationKind kind, Object error) {
@@ -135,6 +139,8 @@ class SettingsScreen extends StatefulWidget {
     this.syncNotificationForwardingListener,
     this.refreshNotificationRegistry,
     this.openNotificationApps,
+    this.updateManager,
+    this.autoCheckForUpdates = true,
   });
 
   final SettingsPresentationLoader? presentationLoader;
@@ -148,6 +154,8 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function(bool enabled)? syncNotificationForwardingListener;
   final Future<void> Function()? refreshNotificationRegistry;
   final Future<void> Function()? openNotificationApps;
+  final AppUpdateManager? updateManager;
+  final bool autoCheckForUpdates;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -181,12 +189,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isMobilePlatform = false;
   int _notificationAppCount = 0;
   bool _notificationForwardingBusy = false;
+  bool _checkingForUpdates = false;
+  bool _downloadingUpdate = false;
+  double _updateDownloadProgress = 0;
+  AppUpdateCheckResult? _updateResult;
   int _presentationLoadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _refreshDevice(showLoading: true);
+    unawaited(_initialize());
+  }
+
+  AppUpdateManager get _updateManager =>
+      widget.updateManager ?? AppUpdateService.shared;
+
+  Future<void> _initialize() async {
+    await _refreshDevice(showLoading: true);
+    if (widget.autoCheckForUpdates &&
+        (widget.presentationLoader == null || widget.updateManager != null)) {
+      unawaited(_checkForUpdates(silent: true));
+    }
   }
 
   Future<bool> _loadLaunchAtStartup() async {
@@ -722,23 +745,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       _buildSaveDirectoryItem(l10n),
+                    ],
+                  ),
+                  _buildSettingsSection(
+                    l10n.settingsSectionAbout,
+                    l10n.settingsSectionAboutDesc,
+                    [
                       _buildSettingItem(
-                        l10n.settingsVersion,
+                        l10n.checkForUpdates,
                         Icon(
-                          Icons.copyright,
+                          _updateResult?.hasUpdate == true
+                              ? Icons.system_update_rounded
+                              : Icons.update_rounded,
                           color: isDark
                               ? Colors.grey[400]
                               : CupertinoColors.systemGrey,
                         ),
-                        desc: _version,
-                        onTap: () async {
-                          final toLaunch = Uri(
-                            scheme: 'https',
-                            host: 'whisper.127014.xyz',
-                            path: '/${locale.languageCode}',
-                          );
-                          await _launchInBrowser(toLaunch);
-                        },
+                        desc: _updateStatusLabel(l10n),
+                        enabled: !_checkingForUpdates && !_downloadingUpdate,
+                        onTap: _handleUpdateTap,
+                        trailing: _buildUpdateTrailing(palette),
+                      ),
+                      _buildSettingItem(
+                        l10n.aboutWhisper,
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
+                        desc: l10n.aboutWhisperDescription,
+                        onTap: () => _showAboutDialog(l10n, locale),
+                        trailing: Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: palette.textMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -748,6 +790,223 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  String _updateStatusLabel(AppLocalizations l10n) {
+    if (_downloadingUpdate) {
+      return l10n.downloadingUpdate((_updateDownloadProgress * 100).round());
+    }
+    if (_checkingForUpdates) {
+      return l10n.checkingForUpdates;
+    }
+    final release = _updateResult?.release;
+    if (_updateResult?.hasUpdate == true && release != null) {
+      return l10n.updateAvailableVersion(release.version);
+    }
+    return l10n.currentVersion(_version);
+  }
+
+  Widget _buildUpdateTrailing(WhisperPalette palette) {
+    if (_checkingForUpdates || _downloadingUpdate) {
+      return const SizedBox.square(
+        dimension: 18,
+        child: CupertinoActivityIndicator(radius: 8),
+      );
+    }
+    return Icon(
+      _updateResult?.hasUpdate == true
+          ? Icons.download_rounded
+          : Icons.arrow_forward_ios,
+      size: _updateResult?.hasUpdate == true ? 20 : 14,
+      color: _updateResult?.hasUpdate == true
+          ? Theme.of(context).colorScheme.primary
+          : palette.textMuted,
+    );
+  }
+
+  Future<void> _handleUpdateTap() async {
+    final result = _updateResult?.hasUpdate == true
+        ? _updateResult
+        : await _checkForUpdates(silent: false, force: true);
+    if (!mounted || result?.hasUpdate != true || result?.release == null) {
+      return;
+    }
+    await _showUpdateAvailableDialog(result!.release!);
+  }
+
+  Future<AppUpdateCheckResult?> _checkForUpdates({
+    required bool silent,
+    bool force = false,
+  }) async {
+    if (_checkingForUpdates || _downloadingUpdate || _version.isEmpty) {
+      return _updateResult;
+    }
+    setState(() {
+      _checkingForUpdates = true;
+    });
+    try {
+      final result = await _updateManager.checkForUpdate(
+        currentVersion: _version,
+        force: force,
+      );
+      if (!mounted) {
+        return result;
+      }
+      setState(() {
+        _checkingForUpdates = false;
+        _updateResult = result;
+      });
+      if (!silent && !result.hasUpdate) {
+        showAppToast(AppLocalizations.of(context)!.updateUpToDate);
+      }
+      return result;
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.updateCheck, error);
+      if (!mounted) {
+        return null;
+      }
+      setState(() {
+        _checkingForUpdates = false;
+      });
+      if (!silent) {
+        showAppToast(AppLocalizations.of(context)!.updateCheckFailed);
+      }
+      return null;
+    }
+  }
+
+  Future<void> _showUpdateAvailableDialog(AppUpdateRelease release) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            final notes = release.notes.trim();
+            return AlertDialog(
+              title: Text(l10n.updateAvailableTitle(release.version)),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 320),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(l10n.updateAvailableBody(_version, release.version)),
+                      if (notes.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 14),
+                        Text(
+                          notes.length > 2000
+                              ? '${notes.substring(0, 2000)}…'
+                              : notes,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(
+                    release.asset == null
+                        ? l10n.viewRelease
+                        : l10n.downloadAndInstallUpdate,
+                  ),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+    if (!confirmed || !mounted) {
+      return;
+    }
+    if (release.asset == null) {
+      await _launchInBrowser(release.releaseUrl);
+      return;
+    }
+    await _downloadAndInstallUpdate(release);
+  }
+
+  Future<void> _downloadAndInstallUpdate(AppUpdateRelease release) async {
+    setState(() {
+      _downloadingUpdate = true;
+      _updateDownloadProgress = 0;
+    });
+    try {
+      final download = await _updateManager.downloadUpdate(
+        release,
+        onProgress: (progress) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _updateDownloadProgress = progress;
+          });
+        },
+      );
+      await _updateManager.openInstaller(download);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _downloadingUpdate = false;
+      });
+      showAppToast(AppLocalizations.of(context)!.updateInstallerOpened);
+    } catch (error) {
+      _logSettingsFailure(SettingsOperationKind.updateInstall, error);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _downloadingUpdate = false;
+      });
+      showAppToast(AppLocalizations.of(context)!.updateInstallFailed);
+    }
+  }
+
+  void _showAboutDialog(AppLocalizations l10n, Locale locale) {
+    showAboutDialog(
+      context: context,
+      applicationName: 'Whisper',
+      applicationVersion: l10n.currentVersion(_version),
+      applicationIcon: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.asset(
+          'assets/app_icon_round.png',
+          width: 48,
+          height: 48,
+        ),
+      ),
+      applicationLegalese: 'Copyright © 2026 lawnvi',
+      children: <Widget>[
+        const SizedBox(height: 8),
+        Text(l10n.aboutWhisperDescription),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: <Widget>[
+            TextButton.icon(
+              onPressed: () => _launchInBrowser(
+                Uri.https('whisper.127014.xyz', '/${locale.languageCode}'),
+              ),
+              icon: const Icon(Icons.language_rounded),
+              label: Text(l10n.officialWebsite),
+            ),
+            TextButton.icon(
+              onPressed: () => _launchInBrowser(
+                Uri.https('github.com', '/lawnvi/whisper'),
+              ),
+              icon: const Icon(Icons.code_rounded),
+              label: Text(l10n.sourceCode),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

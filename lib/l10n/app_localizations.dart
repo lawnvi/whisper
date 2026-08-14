@@ -1531,7 +1531,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSectionLanguageFilesDesc.
   ///
   /// In zh, this message translates to:
-  /// **'语言、保存目录和应用信息'**
+  /// **'语言和文件保存目录'**
   String get settingsSectionLanguageFilesDesc;
 
   /// No description provided for @settingsSaveDirectory.
@@ -1557,6 +1557,120 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'版本'**
   String get settingsVersion;
+
+  /// No description provided for @settingsSectionAbout.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get settingsSectionAbout;
+
+  /// No description provided for @settingsSectionAboutDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本更新和应用信息'**
+  String get settingsSectionAboutDesc;
+
+  /// No description provided for @checkForUpdates.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查更新'**
+  String get checkForUpdates;
+
+  /// No description provided for @currentVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本 {version}'**
+  String currentVersion(String version);
+
+  /// No description provided for @checkingForUpdates.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查更新…'**
+  String get checkingForUpdates;
+
+  /// No description provided for @updateAvailableVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现新版本 {version}'**
+  String updateAvailableVersion(String version);
+
+  /// No description provided for @updateUpToDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'已是最新版本'**
+  String get updateUpToDate;
+
+  /// No description provided for @updateCheckFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法检查更新，请稍后重试'**
+  String get updateCheckFailed;
+
+  /// No description provided for @updateAvailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现新版本 {version}'**
+  String updateAvailableTitle(String version);
+
+  /// No description provided for @updateAvailableBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本 {currentVersion}，可更新到 {latestVersion}。安装前会校验 GitHub 提供的文件哈希。'**
+  String updateAvailableBody(String currentVersion, String latestVersion);
+
+  /// No description provided for @downloadAndInstallUpdate.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载并安装'**
+  String get downloadAndInstallUpdate;
+
+  /// No description provided for @viewRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 Release'**
+  String get viewRelease;
+
+  /// No description provided for @downloadingUpdate.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在下载 {progress}%'**
+  String downloadingUpdate(int progress);
+
+  /// No description provided for @updateInstallerOpened.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新包已校验，已交给系统安装器'**
+  String get updateInstallerOpened;
+
+  /// No description provided for @updateInstallFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开更新安装包，请稍后重试'**
+  String get updateInstallFailed;
+
+  /// No description provided for @aboutWhisper.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于 Whisper'**
+  String get aboutWhisper;
+
+  /// No description provided for @aboutWhisperDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'面向个人设备的局域网协作工具'**
+  String get aboutWhisperDescription;
+
+  /// No description provided for @officialWebsite.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方网站'**
+  String get officialWebsite;
+
+  /// No description provided for @sourceCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'GitHub 源代码'**
+  String get sourceCode;
 
   /// No description provided for @appListSearchPlaceholder.
   ///
