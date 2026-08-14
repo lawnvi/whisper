@@ -288,7 +288,7 @@ void main() {
       'Permission.notification.isDenied',
     );
     final storagePermission = deviceList.indexOf(
-      'Permission.manageExternalStorage.isDenied',
+      'Permission.manageExternalStorage',
     );
 
     expect(deviceList, contains('AndroidKeepAliveReason.lanServer'));
@@ -303,6 +303,8 @@ void main() {
     );
     expect(notificationPermission, greaterThanOrEqualTo(0));
     expect(notificationPermission, lessThan(storagePermission));
+    expect(deviceList, contains('sdkInt >= 30'));
+    expect(deviceList, contains(': Permission.storage'));
   });
 
   test(

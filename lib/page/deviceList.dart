@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -314,25 +315,22 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     if (Platform.isAndroid) {
       // Pairing alerts and the LAN listener foreground service both depend on
-      // notification permission. Ask before opening external storage settings.
+      // notification permission.
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
-      if (await Permission.manageExternalStorage.isDenied) {
-        await Permission.manageExternalStorage.request();
+
+      final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+      final storagePermission = sdkInt >= 30
+          ? Permission.manageExternalStorage
+          : Permission.storage;
+      if (await storagePermission.isDenied) {
+        await storagePermission.request();
       }
       initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
     } else if (Platform.isIOS) {
       await LocalNetworkPermission().ensureGranted();
-    }
-
-    var permissions = [Permission.storage];
-
-    for (var item in permissions) {
-      if (await item.isDenied) {
-        await item.request();
-      }
     }
 
     _clipboardText = await getClipboardText() ?? "";
