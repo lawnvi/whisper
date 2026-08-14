@@ -25,6 +25,7 @@ class ConnectionRequestNotificationPlugin :
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        WhisperConnectionService.ensurePhoneAccount(context)
         channel = MethodChannel(
             binding.binaryMessenger,
             "com.vireen.whisper/connection_request_notifications"
@@ -39,12 +40,23 @@ class ConnectionRequestNotificationPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "showIncoming" -> result.success(showIncoming(call))
+            "dismissIncoming" -> {
+                val notificationId = call.argument<Int>("notificationId")
+                if (notificationId == null) {
+                    result.success(false)
+                } else {
+                    WhisperConnectionService.dismissIncoming(notificationId)
+                    result.success(true)
+                }
+            }
             else -> result.notImplemented()
         }
     }
 
     private fun showIncoming(call: MethodCall): Boolean {
         val notificationId = call.argument<Int>("notificationId") ?: return false
+        val peerId = call.argument<String>("peerId")?.takeIf { it.isNotBlank() }
+            ?: return false
         val deviceName = call.argument<String>("deviceName")?.takeIf { it.isNotBlank() }
             ?: return false
         val pairingCode = call.argument<String>("pairingCode")?.takeIf { it.isNotBlank() }
@@ -76,7 +88,7 @@ class ConnectionRequestNotificationPlugin :
         )
         val caller = Person.Builder()
             .setName(deviceName)
-            .setKey(call.argument<String>("peerId"))
+            .setKey(peerId)
             .setImportant(true)
             .build()
         val style = NotificationCompat.CallStyle.forIncomingCall(
@@ -87,25 +99,37 @@ class ConnectionRequestNotificationPlugin :
             .setVerificationText(verificationText)
             .setDeclineButtonColorHint(Color.rgb(220, 38, 38))
             .setAnswerButtonColorHint(Color.rgb(22, 163, 74))
+        val openIntent = contentPendingIntent(notificationId, payload)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_whisper)
             .setContentTitle(deviceName)
             .setContentText(verificationText)
-            .setContentIntent(contentPendingIntent(notificationId, payload))
+            .setContentIntent(openIntent)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(Color.rgb(22, 163, 74))
             .setDefaults(Notification.DEFAULT_ALL)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setTimeoutAfter(TIMEOUT_MILLIS)
+        if (canUseFullScreenIntent()) {
+            builder.setFullScreenIntent(openIntent, true)
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             builder.setColorized(true)
         }
         val notification = builder.build()
 
+        WhisperConnectionService.reportIncoming(
+            context = context,
+            notificationId = notificationId,
+            peerId = peerId,
+            deviceName = deviceName,
+            answerIntent = answerIntent,
+            rejectIntent = rejectIntent,
+        )
         NotificationManagerCompat.from(context).notify(notificationId, notification)
         return true
     }
@@ -124,9 +148,18 @@ class ConnectionRequestNotificationPlugin :
                 this.description = description
                 enableVibration(true)
                 setShowBadge(true)
-                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         )
+    }
+
+    private fun canUseFullScreenIntent(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return true
+        }
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+        return manager.canUseFullScreenIntent()
     }
 
     private fun actionPendingIntent(
@@ -197,7 +230,7 @@ class ConnectionRequestNotificationPlugin :
     }
 
     companion object {
-        const val CHANNEL_ID = "whisper.connect_request"
+        const val CHANNEL_ID = "whisper.incoming_connection.v1"
         private const val TIMEOUT_MILLIS = 30_000L
         private const val SELECT_NOTIFICATION = "SELECT_NOTIFICATION"
         private const val SELECT_FOREGROUND_NOTIFICATION_ACTION =

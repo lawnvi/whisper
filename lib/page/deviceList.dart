@@ -314,12 +314,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     if (Platform.isAndroid) {
-      // Pairing alerts and the LAN listener foreground service both depend on
-      // notification permission.
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
-      }
-
       final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
       final storagePermission = sdkInt >= 30
           ? Permission.manageExternalStorage

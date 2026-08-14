@@ -31,8 +31,9 @@ PairingRequest _request({
 
 void main() {
   test('background pairing notification exposes guarded code actions', () {
-    final notifier = File('lib/helper/connection_request_notifications.dart')
-        .readAsStringSync();
+    final notifier = File(
+      'lib/helper/connection_request_notifications.dart',
+    ).readAsStringSync();
     final helper = File('lib/helper/notification.dart').readAsStringSync();
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
     final main = File('lib/main.dart').readAsStringSync();
@@ -43,9 +44,16 @@ void main() {
     final activity = File(
       'android/app/src/main/kotlin/com/vireen/whisper/MainActivity.kt',
     ).readAsStringSync();
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    final connectionService = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/'
+      'WhisperConnectionService.kt',
+    ).readAsStringSync();
 
     // notifier 核心要素
-    expect(notifier, contains("'whisper.connect_request'"));
+    expect(notifier, contains("'whisper.incoming_connection.v1'"));
     expect(notifier, contains('maybeShowForPairing'));
     expect(notifier, contains('AppLifecycleState.resumed'));
     expect(notifier, contains('onlyAlertOnce: true'));
@@ -65,8 +73,8 @@ void main() {
     expect(payloadBuilder, isNot(contains("'peerId'")));
     expect(payloadBuilder, isNot(contains("'pairingCode'")));
 
-    // Incoming first-time pairing uses the system call layout without a
-    // full-screen intent. Native actions still enter the guarded Dart router.
+    // Incoming first-time pairing uses the system call layout and can wake a
+    // locked screen. Native actions still enter the guarded Dart router.
     expect(native, contains('NotificationCompat.CallStyle.forIncomingCall'));
     expect(native, contains('.setVerificationText(verificationText)'));
     expect(native, contains('NotificationCompat.CATEGORY_CALL'));
@@ -77,17 +85,53 @@ void main() {
     expect(native, contains('"notificationId"'));
     expect(native, contains('"actionId"'));
     expect(native, contains('"payload"'));
-    expect(native, isNot(contains('setFullScreenIntent')));
-    expect(native, contains('CHANNEL_ID = "whisper.connect_request"'));
+    expect(native, contains('setFullScreenIntent(openIntent, true)'));
+    expect(native, contains('manager.canUseFullScreenIntent()'));
+    expect(native, contains('NotificationCompat.VISIBILITY_PUBLIC'));
+    expect(native, contains('Notification.VISIBILITY_PUBLIC'));
+    expect(
+      native,
+      contains('WhisperConnectionService.ensurePhoneAccount(context)'),
+    );
+    expect(native, contains('WhisperConnectionService.reportIncoming('));
+    expect(native, contains('WhisperConnectionService.dismissIncoming('));
+    expect(native, contains('CHANNEL_ID = "whisper.incoming_connection.v1"'));
     expect(notifier, contains('deleteNotificationChannel(obsoleteChannelId)'));
+    expect(notifier, contains("'whisper.connect_request'"));
     expect(notifier, contains("'whisper.connect_request.alerts.v2'"));
     expect(notifier, contains("'whisper.connect_request.calls'"));
     expect(notifier, contains("icon: 'ic_stat_whisper'"));
     expect(
       activity,
       contains(
-          'flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())'),
+        'flutterEngine.plugins.add(ConnectionRequestNotificationPlugin())',
+      ),
     );
+    expect(manifest, contains('android.permission.MANAGE_OWN_CALLS'));
+    expect(manifest, contains('android.permission.USE_FULL_SCREEN_INTENT'));
+    expect(manifest, contains('android:showWhenLocked="true"'));
+    expect(manifest, contains('android:turnScreenOn="true"'));
+    expect(
+      manifest,
+      contains('android.permission.BIND_TELECOM_CONNECTION_SERVICE'),
+    );
+    expect(connectionService, contains('PhoneAccount.CAPABILITY_SELF_MANAGED'));
+    expect(
+      connectionService,
+      contains('telecom.registerPhoneAccount(account)'),
+    );
+    expect(
+      connectionService,
+      contains('telecom.addNewIncomingCall(handle, extras)'),
+    );
+    expect(connectionService, contains('Connection.PROPERTY_SELF_MANAGED'));
+    expect(connectionService, contains('setRinging()'));
+    expect(
+      connectionService,
+      contains('mainHandler.postDelayed(timeout, TIMEOUT_MILLIS)'),
+    );
+    expect(notifier, contains('invokeMethod<void>'));
+    expect(notifier, contains("'dismissIncoming'"));
 
     // Foreground and background actions converge on the main-isolate router.
     expect(helper, contains('onDidReceiveNotificationResponse'));
@@ -103,8 +147,11 @@ void main() {
     expect(manager, contains('maybeShowForPairing'));
     expect(
       manager,
-      matches(RegExp(
-          r'_releaseIncomingAuthForSink[\s\S]{0,400}dismissForPeer\([^;]+graceMillis:\s*3000')),
+      matches(
+        RegExp(
+          r'_releaseIncomingAuthForSink[\s\S]{0,400}dismissForPeer\([^;]+graceMillis:\s*3000',
+        ),
+      ),
     );
 
     // main.dart 初始化
@@ -139,13 +186,10 @@ void main() {
       reason: PairingReason.identityChanged,
       mode: PairingPromptMode.responder,
     );
-    expect(
-      pairingNotificationActionIds(request),
-      <String>[
-        pairingRejectNotificationAction,
-        pairingViewNotificationAction,
-      ],
-    );
+    expect(pairingNotificationActionIds(request), <String>[
+      pairingRejectNotificationAction,
+      pairingViewNotificationAction,
+    ]);
     expect(pairingNotificationUsesIncomingCallStyle(request), isFalse);
   });
 
@@ -154,10 +198,9 @@ void main() {
       reason: PairingReason.newDevice,
       mode: PairingPromptMode.initiator,
     );
-    expect(
-      pairingNotificationActionIds(request),
-      <String>[pairingCancelNotificationAction],
-    );
+    expect(pairingNotificationActionIds(request), <String>[
+      pairingCancelNotificationAction,
+    ]);
     expect(pairingNotificationUsesIncomingCallStyle(request), isFalse);
   });
 

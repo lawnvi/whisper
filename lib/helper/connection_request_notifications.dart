@@ -40,8 +40,7 @@ bool? pairingNotificationDecisionForAction(String actionId) =>
     switch (actionId) {
       pairingApproveNotificationAction => true,
       pairingRejectNotificationAction ||
-      pairingCancelNotificationAction =>
-        false,
+      pairingCancelNotificationAction => false,
       _ => null,
     };
 
@@ -125,12 +124,10 @@ final class ConnectionRequestNotificationActionRouter {
 }
 
 @pragma('vm:entry-point')
-void connectionRequestNotificationTapBackground(
-  NotificationResponse response,
-) {
-  IsolateNameServer.lookupPortByName(_pairingActionPortName)?.send(
-    <Object?>[response.id, response.actionId, response.payload],
-  );
+void connectionRequestNotificationTapBackground(NotificationResponse response) {
+  IsolateNameServer.lookupPortByName(
+    _pairingActionPortName,
+  )?.send(<Object?>[response.id, response.actionId, response.payload]);
 }
 
 /// Shows a background-only pairing alert whose actions remain bound to the
@@ -143,13 +140,15 @@ class ConnectionRequestNotifier {
 
   ConnectionRequestNotifier._internal();
 
-  static const String channelId = 'whisper.connect_request';
+  static const String channelId = 'whisper.incoming_connection.v1';
   static const List<String> _obsoleteChannelIds = <String>[
+    'whisper.connect_request',
     'whisper.connect_request.alerts.v2',
     'whisper.connect_request.calls',
   ];
-  static const MethodChannel _nativeChannel =
-      MethodChannel('com.vireen.whisper/connection_request_notifications');
+  static const MethodChannel _nativeChannel = MethodChannel(
+    'com.vireen.whisper/connection_request_notifications',
+  );
   static const Uuid _uuid = Uuid();
 
   final ConnectionRequestNotificationDismissal _dismissal =
@@ -171,8 +170,10 @@ class ConnectionRequestNotifier {
     if (Platform.isAndroid) {
       _plugin = plugin;
       final l10n = resolveNotificationL10n();
-      final android = plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final android = plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       for (final obsoleteChannelId in _obsoleteChannelIds) {
         await android?.deleteNotificationChannel(obsoleteChannelId);
       }
@@ -190,7 +191,7 @@ class ConnectionRequestNotifier {
         final active = await plugin.getActiveNotifications();
         for (final notification in active) {
           if (notification.channelId == channelId && notification.id != null) {
-            await plugin.cancel(notification.id!);
+            await _cancelNotification(notification.id!);
           }
         }
       } on Object {
@@ -236,19 +237,16 @@ class ConnectionRequestNotifier {
     final body = request.isInitiator
         ? l10n.pairingInitiatorNotificationBody(request.device.name, code)
         : request.reason == PairingReason.identityChanged
-            ? l10n.pairingIdentityChangedNotificationBody(
-                request.device.name,
-                code,
-              )
-            : l10n.pairingNotificationBody(request.device.name, code);
+        ? l10n.pairingIdentityChangedNotificationBody(request.device.name, code)
+        : l10n.pairingNotificationBody(request.device.name, code);
     final fallbackTitle =
         request.isInitiator || request.reason == PairingReason.identityChanged
-            ? title
-            : request.device.name;
+        ? title
+        : request.device.name;
     final fallbackBody =
         !request.isInitiator && request.reason != PairingReason.identityChanged
-            ? l10n.pairingCodeSemantics(code)
-            : body;
+        ? l10n.pairingCodeSemantics(code)
+        : body;
     final actionIds = pairingNotificationActionIds(request);
     final token = _uuid.v4();
     final notificationId = notificationIdForToken(token);
@@ -261,26 +259,27 @@ class ConnectionRequestNotifier {
       resolve: resolve,
     );
     for (final replacedId in replacedDuringRegistration) {
-      await plugin.cancel(replacedId);
+      await _cancelNotification(replacedId);
     }
     var requestCancelled = false;
     final cancellation = request.cancellation;
     if (cancellation != null) {
-      unawaited(cancellation.whenComplete(() {
-        requestCancelled = true;
-        final notificationCancellation = _actionRouter.removeToken(token)
-            ? _plugin?.cancel(notificationId)
-            : null;
-        if (notificationCancellation != null) {
-          unawaited(notificationCancellation.catchError((_) {}));
-        }
-      }));
+      unawaited(
+        cancellation.whenComplete(() {
+          requestCancelled = true;
+          if (_actionRouter.removeToken(token)) {
+            unawaited(_cancelNotification(notificationId).catchError((_) {}));
+          }
+        }),
+      );
     }
 
     try {
-      final useIncomingCallStyle =
-          pairingNotificationUsesIncomingCallStyle(request);
-      final shownAsIncomingCall = useIncomingCallStyle &&
+      final useIncomingCallStyle = pairingNotificationUsesIncomingCallStyle(
+        request,
+      );
+      final shownAsIncomingCall =
+          useIncomingCallStyle &&
           await _showIncomingCallStyle(
             notificationId: notificationId,
             request: request,
@@ -313,12 +312,7 @@ class ConnectionRequestNotifier {
               timeoutAfter: 30000,
               styleInformation: BigTextStyleInformation(fallbackBody),
               actions: actionIds
-                  .map(
-                    (actionId) => _androidAction(
-                      actionId,
-                      l10n: l10n,
-                    ),
-                  )
+                  .map((actionId) => _androidAction(actionId, l10n: l10n))
                   .toList(growable: false),
             ),
           ),
@@ -326,10 +320,11 @@ class ConnectionRequestNotifier {
         );
       }
       if (requestCancelled) {
-        await plugin.cancel(notificationId);
+        await _cancelNotification(notificationId);
       }
     } on Object {
       _actionRouter.removeToken(token);
+      await _cancelNotification(notificationId);
       rethrow;
     }
   }
@@ -344,24 +339,22 @@ class ConnectionRequestNotifier {
     required AppLocalizations l10n,
   }) async {
     try {
-      return await _nativeChannel.invokeMethod<bool>(
-            'showIncoming',
-            <String, Object>{
-              'notificationId': notificationId,
-              'peerId': request.device.uid,
-              'deviceName': request.device.name,
-              'pairingCode': formattedCode,
-              'verificationText': l10n.pairingCodeSemantics(formattedCode),
-              'title': title,
-              'body': body,
-              'payload': payload,
-              'rejectActionId': pairingRejectNotificationAction,
-              'answerActionId': pairingApproveNotificationAction,
-              'answerShowsUserInterface': false,
-              'channelName': l10n.connectRequest,
-              'channelDescription': l10n.connectRequest,
-            },
-          ) ??
+      return await _nativeChannel
+              .invokeMethod<bool>('showIncoming', <String, Object>{
+                'notificationId': notificationId,
+                'peerId': request.device.uid,
+                'deviceName': request.device.name,
+                'pairingCode': formattedCode,
+                'verificationText': l10n.pairingCodeSemantics(formattedCode),
+                'title': title,
+                'body': body,
+                'payload': payload,
+                'rejectActionId': pairingRejectNotificationAction,
+                'answerActionId': pairingApproveNotificationAction,
+                'answerShowsUserInterface': false,
+                'channelName': l10n.connectRequest,
+                'channelDescription': l10n.connectRequest,
+              }) ??
           false;
     } on MissingPluginException {
       return false;
@@ -376,26 +369,26 @@ class ConnectionRequestNotifier {
   }) {
     return switch (actionId) {
       pairingApproveNotificationAction => AndroidNotificationAction(
-          actionId,
-          l10n.pairingApprove,
-          titleColor: const Color(0xFF16A34A),
-        ),
+        actionId,
+        l10n.pairingApprove,
+        titleColor: const Color(0xFF16A34A),
+      ),
       pairingRejectNotificationAction => AndroidNotificationAction(
-          actionId,
-          l10n.pairingReject,
-          titleColor: const Color(0xFFDC2626),
-        ),
+        actionId,
+        l10n.pairingReject,
+        titleColor: const Color(0xFFDC2626),
+      ),
       pairingCancelNotificationAction => AndroidNotificationAction(
-          actionId,
-          l10n.cancel,
-          titleColor: const Color(0xFFDC2626),
-        ),
+        actionId,
+        l10n.cancel,
+        titleColor: const Color(0xFFDC2626),
+      ),
       pairingViewNotificationAction => AndroidNotificationAction(
-          actionId,
-          l10n.pairingViewDetails,
-          showsUserInterface: true,
-          cancelNotification: false,
-        ),
+        actionId,
+        l10n.pairingViewDetails,
+        showsUserInterface: true,
+        cancelNotification: false,
+      ),
       _ => throw StateError('Unsupported pairing notification action'),
     };
   }
@@ -423,11 +416,7 @@ class ConnectionRequestNotifier {
     );
   }
 
-  void _handleAction(
-    int? notificationId,
-    String? actionId,
-    String? payload,
-  ) {
+  void _handleAction(int? notificationId, String? actionId, String? payload) {
     if (actionId == null ||
         actionId.isEmpty ||
         actionId == pairingViewNotificationAction) {
@@ -445,10 +434,7 @@ class ConnectionRequestNotifier {
     if (!handled) {
       return;
     }
-    final cancellation = _plugin?.cancel(notificationId!);
-    if (cancellation != null) {
-      unawaited(cancellation.catchError((_) {}));
-    }
+    unawaited(_cancelNotification(notificationId!).catchError((_) {}));
   }
 
   String? _tokenFromPayload(String? payload) {
@@ -467,10 +453,7 @@ class ConnectionRequestNotifier {
     }
   }
 
-  Future<void> dismissForPeer(
-    String peerId, {
-    int graceMillis = 0,
-  }) async {
+  Future<void> dismissForPeer(String peerId, {int graceMillis = 0}) async {
     final notificationIds = _actionRouter.removePeer(peerId);
     if (graceMillis > 0) {
       _dismissal.schedule(
@@ -478,10 +461,7 @@ class ConnectionRequestNotifier {
         graceMillis: graceMillis,
         onDismiss: () {
           for (final notificationId in notificationIds) {
-            final cancellation = _plugin?.cancel(notificationId);
-            if (cancellation != null) {
-              unawaited(cancellation.catchError((_) {}));
-            }
+            unawaited(_cancelNotification(notificationId).catchError((_) {}));
           }
         },
       );
@@ -489,8 +469,24 @@ class ConnectionRequestNotifier {
     }
     _dismissal.cancelPending(peerId);
     for (final notificationId in notificationIds) {
-      await _plugin?.cancel(notificationId);
+      await _cancelNotification(notificationId);
     }
+  }
+
+  Future<void> _cancelNotification(int notificationId) async {
+    if (Platform.isAndroid) {
+      try {
+        await _nativeChannel.invokeMethod<void>(
+          'dismissIncoming',
+          <String, int>{'notificationId': notificationId},
+        );
+      } on MissingPluginException {
+        // Older Android builds do not expose the self-managed call bridge.
+      } on PlatformException {
+        // Notification cleanup must still run if Telecom rejects the call.
+      }
+    }
+    await _plugin?.cancel(notificationId);
   }
 }
 

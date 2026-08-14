@@ -41,5 +41,7 @@ void main() {
       contains('android.permission.MANAGE_EXTERNAL_STORAGE'),
       reason: 'received files currently use the public Download directory',
     );
+    expect(manifest, contains('android.permission.MANAGE_OWN_CALLS'));
+    expect(manifest, contains('android.permission.USE_FULL_SCREEN_INTENT'));
   });
 }

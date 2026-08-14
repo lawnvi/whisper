@@ -284,12 +284,6 @@ void main() {
 
   test('LAN server owns Android keep alive before the first pairing', () {
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
-    final notificationPermission = deviceList.indexOf(
-      'Permission.notification.isDenied',
-    );
-    final storagePermission = deviceList.indexOf(
-      'Permission.manageExternalStorage',
-    );
 
     expect(deviceList, contains('AndroidKeepAliveReason.lanServer'));
     expect(
@@ -301,8 +295,7 @@ void main() {
         ),
       ),
     );
-    expect(notificationPermission, greaterThanOrEqualTo(0));
-    expect(notificationPermission, lessThan(storagePermission));
+    expect(deviceList, isNot(contains('Permission.notification')));
     expect(deviceList, contains('sdkInt >= 30'));
     expect(deviceList, contains(': Permission.storage'));
   });
