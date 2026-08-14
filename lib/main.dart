@@ -71,10 +71,14 @@ void main(List<String> arguments) async {
           : Colors.white,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
+      windowButtonVisibility: true,
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       // WindowOptions applies native frame values after the first theme sync.
       await _applyDesktopWindowTheme(themeMode);
+      if (Platform.isWindows) {
+        await windowManager.setMinimizable(true);
+      }
       await windowManager.show();
       await windowManager.focus();
     });

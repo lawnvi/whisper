@@ -2773,14 +2773,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
         : session.isNearby
         ? Colors.green
         : (isDark ? Colors.grey[700]! : Colors.grey[300]!);
-    return CircleAvatar(
-      radius: 24,
-      backgroundColor: background,
-      child: Text(
-        session.avatarLabel,
-        style: const TextStyle(
+    return Tooltip(
+      message: platformLabel(session.device.platform),
+      child: CircleAvatar(
+        radius: 24,
+        backgroundColor: background,
+        child: Icon(
+          platformIcon(session.device.platform),
+          size: 24,
           color: Colors.white,
-          fontWeight: FontWeight.w700,
+          semanticLabel: platformLabel(session.device.platform),
         ),
       ),
     );

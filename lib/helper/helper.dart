@@ -105,16 +105,49 @@ String formatTimestamp(int timestamp) {
   return DateFormat('yyyy/MM/dd HH:mm:ss').format(dateTime);
 }
 
-IconData platformIcon(platform) {
-  return platform.toLowerCase() == "android"
-      ? Icons.android_rounded
-      : platform.toLowerCase() == "macos"
-      ? Icons.laptop_mac_rounded
-      : platform.toLowerCase() == "ios"
-      ? Icons.apple_rounded
-      : platform.toLowerCase() == "windows"
-      ? Icons.laptop_windows_rounded
-      : Icons.laptop_rounded;
+IconData platformIcon(String platform) {
+  switch (platform.trim().toLowerCase()) {
+    case 'android':
+      return Icons.android_rounded;
+    case 'ios':
+    case 'iphone':
+    case 'ipad':
+      return Icons.apple_rounded;
+    case 'mac':
+    case 'macos':
+    case 'darwin':
+      return Icons.laptop_mac_rounded;
+    case 'windows':
+    case 'win32':
+      return Icons.window_rounded;
+    case 'linux':
+      return Icons.terminal_rounded;
+    default:
+      return Icons.devices_other_rounded;
+  }
+}
+
+String platformLabel(String platform) {
+  switch (platform.trim().toLowerCase()) {
+    case 'android':
+      return 'Android';
+    case 'ios':
+    case 'iphone':
+    case 'ipad':
+      return 'iPhone / iPad';
+    case 'mac':
+    case 'macos':
+    case 'darwin':
+      return 'Mac';
+    case 'windows':
+    case 'win32':
+      return 'Windows';
+    case 'linux':
+      return 'Linux';
+    default:
+      final value = platform.trim();
+      return value.isEmpty ? 'Unknown' : value;
+  }
 }
 
 Future<String> deviceName() async {

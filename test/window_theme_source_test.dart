@@ -47,6 +47,7 @@ void main() {
     test(
       'adds a Windows runner channel that ignores the system theme gate',
       () {
+        final mainSource = File('lib/main.dart').readAsStringSync();
         final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
         final flutterWindow = File(
           'windows/runner/flutter_window.cpp',
@@ -68,6 +69,11 @@ void main() {
         expect(plugin, contains('com.vireen.whisper/window_theme'));
         expect(plugin, contains('DwmSetWindowAttribute'));
         expect(plugin, contains('brightness == "dark"'));
+        expect(mainSource, contains('windowButtonVisibility: true'));
+        expect(
+          mainSource,
+          contains('await windowManager.setMinimizable(true)'),
+        );
 
         final setBrightness = RegExp(
           r'void SetBrightness\([\s\S]*?\n  \}',
