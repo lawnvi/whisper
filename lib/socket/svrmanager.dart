@@ -5827,7 +5827,7 @@ class WsSvrManager {
     required String expectedPublicKeyHash,
   }) async {
     try {
-      return _transferEngine.sendFileTo(
+      return await _transferEngine.sendFileTo(
         peerId,
         path,
         messageId: stableQuickSendMessageId(
@@ -5856,7 +5856,7 @@ class WsSvrManager {
     required String expectedPublicKeyHash,
   }) async {
     try {
-      return _transferEngine.sendPickedFileTo(
+      return await _transferEngine.sendPickedFileTo(
         peerId,
         item,
         messageId: stableQuickSendMessageId(

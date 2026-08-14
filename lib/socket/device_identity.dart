@@ -232,7 +232,7 @@ Future<bool> verifyDeviceSignature({
       signatureBase64Url,
       expectedLength: 64,
     );
-    return Ed25519().verify(
+    return await Ed25519().verify(
       message,
       signature: Signature(
         signatureBytes,

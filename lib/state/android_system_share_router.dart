@@ -244,7 +244,7 @@ class AndroidSystemShareRouter {
     try {
       if (event.text.isNotEmpty && !progress.textSent) {
         if (!_hasValidTargetBinding(progress)) {
-          return _invalidateTargetBinding(eventId, progress);
+          return await _invalidateTargetBinding(eventId, progress);
         }
         if (!await _sendText(progress.peerId, event)) {
           if (!_isConnected(progress.peerId)) {
@@ -263,7 +263,7 @@ class AndroidSystemShareRouter {
           );
         }
         if (!_hasValidTargetBinding(progress)) {
-          return _invalidateTargetBinding(eventId, progress);
+          return await _invalidateTargetBinding(eventId, progress);
         }
         progress.textSent = true;
         if (!await _persistProgress(eventId, progress)) {
@@ -279,7 +279,7 @@ class AndroidSystemShareRouter {
           continue;
         }
         if (!_hasValidTargetBinding(progress)) {
-          return _invalidateTargetBinding(eventId, progress);
+          return await _invalidateTargetBinding(eventId, progress);
         }
         if (!_isConnected(progress.peerId)) {
           progress.waitingForConnection = true;
@@ -307,7 +307,7 @@ class AndroidSystemShareRouter {
           );
         }
         if (!_hasValidTargetBinding(progress)) {
-          return _invalidateTargetBinding(eventId, progress);
+          return await _invalidateTargetBinding(eventId, progress);
         }
         progress.sentItemUris.add(item.uri);
         if (!await _persistProgress(eventId, progress)) {

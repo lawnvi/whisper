@@ -972,7 +972,10 @@ class DesktopQuickSendInbox extends ChangeNotifier {
             break;
           }
           if (!_hasCurrentTargetIdentity(draft, trustedIdentityHashFor)) {
-            return _clearInvalidTargetAndResult(draft, sentDrafts: sentDrafts);
+            return await _clearInvalidTargetAndResult(
+              draft,
+              sentDrafts: sentDrafts,
+            );
           }
           final fileIntentId = jsonEncode(<Object>[
             draft.id,
