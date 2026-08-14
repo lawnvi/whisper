@@ -30,39 +30,41 @@ void main() {
       expect(registry.isConnectedTo('peer-c'), isTrue);
     });
 
-    test('disconnecting one peer does not affect other connected peers',
-        () async {
-      final registry = PeerConnectionRegistry();
-      var closedB = false;
-      var closedC = false;
+    test(
+      'disconnecting one peer does not affect other connected peers',
+      () async {
+        final registry = PeerConnectionRegistry();
+        var closedB = false;
+        var closedC = false;
 
-      registry.register(
-        PeerConnection(
-          peerId: 'peer-b',
-          connectionId: 1,
-          send: (_) {},
-          close: () async {
-            closedB = true;
-          },
-        ),
-      );
-      registry.register(
-        PeerConnection(
-          peerId: 'peer-c',
-          connectionId: 2,
-          send: (_) {},
-          close: () async {
-            closedC = true;
-          },
-        ),
-      );
+        registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 1,
+            send: (_) {},
+            close: () async {
+              closedB = true;
+            },
+          ),
+        );
+        registry.register(
+          PeerConnection(
+            peerId: 'peer-c',
+            connectionId: 2,
+            send: (_) {},
+            close: () async {
+              closedC = true;
+            },
+          ),
+        );
 
-      await registry.disconnect('peer-b');
+        await registry.disconnect('peer-b');
 
-      expect(closedB, isTrue);
-      expect(closedC, isFalse);
-      expect(registry.connectedPeerIds, {'peer-c'});
-    });
+        expect(closedB, isTrue);
+        expect(closedC, isFalse);
+        expect(registry.connectedPeerIds, {'peer-c'});
+      },
+    );
 
     test('replacing a duplicate peer closes the old connection', () async {
       final registry = PeerConnectionRegistry();
@@ -99,57 +101,60 @@ void main() {
     });
 
     test(
-        'direct replacement runs old cleanup before publishing the new generation',
-        () async {
-      final registry = PeerConnectionRegistry();
-      final cleanupStarted = Completer<void>();
-      final releaseCleanup = Completer<void>();
-      final events = <String>[];
-      await registry.register(
-        PeerConnection(
-          peerId: 'peer-b',
-          connectionId: 1,
-          send: (_) {},
-          close: () async => events.add('old-close'),
-        ),
-      );
+      'direct replacement runs old cleanup before publishing the new generation',
+      () async {
+        final registry = PeerConnectionRegistry();
+        final cleanupStarted = Completer<void>();
+        final releaseCleanup = Completer<void>();
+        final events = <String>[];
+        await registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 1,
+            send: (_) {},
+            close: () async => events.add('old-close'),
+          ),
+        );
 
-      final replacementRegistration = registry.register(
-        PeerConnection(
-          peerId: 'peer-b',
-          connectionId: 2,
-          send: (_) {},
-          close: () async {},
-        ),
-        afterRemove: (binding) async {
-          expect(binding.generation, 1);
-          events.add('old-cleanup');
-          cleanupStarted.complete();
-          await releaseCleanup.future;
-          expect(registry.connection('peer-b'), isNull);
-        },
-        afterRegister: (binding) {
-          expect(binding.generation, 2);
-          expect(registry.connection('peer-b'), isNull);
-          events.add('new-register');
-        },
-      );
-      await cleanupStarted.future;
+        final replacementRegistration = registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 2,
+            send: (_) {},
+            close: () async {},
+          ),
+          afterRemove: (binding) async {
+            expect(binding.generation, 1);
+            events.add('old-cleanup');
+            cleanupStarted.complete();
+            await releaseCleanup.future;
+            expect(registry.connection('peer-b'), isNull);
+          },
+          afterRegister: (binding) {
+            expect(binding.generation, 2);
+            expect(registry.connection('peer-b'), isNull);
+            events.add('new-register');
+          },
+        );
+        await cleanupStarted.future;
 
-      expect(registry.connection('peer-b'), isNull);
-      expect(events, <String>['old-close', 'old-cleanup']);
+        expect(registry.connection('peer-b'), isNull);
+        expect(events, <String>['old-close', 'old-cleanup']);
 
-      releaseCleanup.complete();
-      await replacementRegistration;
+        releaseCleanup.complete();
+        await replacementRegistration;
 
-      expect(events, <String>['old-close', 'old-cleanup', 'new-register']);
-      expect(registry.currentBinding('peer-b')?.generation, 2);
-    });
+        expect(events, <String>['old-close', 'old-cleanup', 'new-register']);
+        expect(registry.currentBinding('peer-b')?.generation, 2);
+      },
+    );
 
     test('afterRegister failure closes the unpublished connection', () async {
       final registry = PeerConnectionRegistry();
-      const binding =
-          TransferConnectionBinding(peerId: 'peer-b', generation: 9);
+      const binding = TransferConnectionBinding(
+        peerId: 'peer-b',
+        generation: 9,
+      );
       var callbackSawPublishedConnection = false;
       var closed = false;
       Future<bool>? closeTriggeredRemoval;
@@ -194,10 +199,7 @@ void main() {
           send: (_) {},
           close: () async {
             oldCleanup = registry.removeIfCurrent(
-              const TransferConnectionBinding(
-                peerId: 'peer-b',
-                generation: 1,
-              ),
+              const TransferConnectionBinding(peerId: 'peer-b', generation: 1),
             );
           },
         ),
@@ -231,25 +233,48 @@ void main() {
 
       expect(
         await registry.removeIfCurrent(
-          const TransferConnectionBinding(
-            peerId: 'peer-b',
-            generation: 6,
-          ),
+          const TransferConnectionBinding(peerId: 'peer-b', generation: 6),
         ),
         isFalse,
       );
       expect(registry.isConnectedTo('peer-b'), isTrue);
       expect(
         await registry.removeIfCurrent(
-          const TransferConnectionBinding(
-            peerId: 'peer-b',
-            generation: 7,
-          ),
+          const TransferConnectionBinding(peerId: 'peer-b', generation: 7),
         ),
         isTrue,
       );
       expect(registry.isConnectedTo('peer-b'), isFalse);
       expect(closes, 1);
+    });
+
+    test('sendIfCurrent queues only on the matching generation', () async {
+      final registry = PeerConnectionRegistry();
+      final sent = <Object>[];
+      await registry.register(
+        PeerConnection(
+          peerId: 'peer-b',
+          connectionId: 7,
+          send: sent.add,
+          close: () async {},
+        ),
+      );
+
+      expect(
+        registry.sendIfCurrent(
+          const TransferConnectionBinding(peerId: 'peer-b', generation: 7),
+          'frame',
+        ),
+        isTrue,
+      );
+      expect(
+        registry.sendIfCurrent(
+          const TransferConnectionBinding(peerId: 'peer-b', generation: 6),
+          'stale',
+        ),
+        isFalse,
+      );
+      expect(sent, <Object>['frame']);
     });
 
     test('mismatched binding never closes or runs afterRemove', () async {
@@ -363,71 +388,79 @@ void main() {
       expect(await removal, isTrue);
     });
 
-    test('generation-bound awaited send never falls through to replacement',
-        () async {
-      final registry = PeerConnectionRegistry();
-      final sendStarted = Completer<void>();
-      final releaseSend = Completer<void>();
-      final replacementMessages = <Object>[];
-      const oldBinding =
-          TransferConnectionBinding(peerId: 'peer-b', generation: 1);
-      await registry.register(
-        PeerConnection(
+    test(
+      'generation-bound awaited send never falls through to replacement',
+      () async {
+        final registry = PeerConnectionRegistry();
+        final sendStarted = Completer<void>();
+        final releaseSend = Completer<void>();
+        final replacementMessages = <Object>[];
+        const oldBinding = TransferConnectionBinding(
           peerId: 'peer-b',
-          connectionId: 1,
-          send: (_) {},
-          sendAsync: (_) async {
-            sendStarted.complete();
-            await releaseSend.future;
-            return true;
-          },
-          close: () async {},
-        ),
-      );
+          generation: 1,
+        );
+        await registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 1,
+            send: (_) {},
+            sendAsync: (_) async {
+              sendStarted.complete();
+              await releaseSend.future;
+              return true;
+            },
+            close: () async {},
+          ),
+        );
 
-      final send = registry.sendToAwaitedIfCurrent(oldBinding, 'payload');
-      await sendStarted.future;
-      await registry.register(
-        PeerConnection(
+        final send = registry.sendToAwaitedIfCurrent(oldBinding, 'payload');
+        await sendStarted.future;
+        await registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 2,
+            send: replacementMessages.add,
+            close: () async {},
+          ),
+        );
+        releaseSend.complete();
+
+        expect(await send, isFalse);
+        expect(replacementMessages, isEmpty);
+        expect(registry.currentBinding('peer-b')?.generation, 2);
+      },
+    );
+
+    test(
+      'close-triggered onDone removal is a no-op without deadlock',
+      () async {
+        final registry = PeerConnectionRegistry();
+        const oldBinding = TransferConnectionBinding(
           peerId: 'peer-b',
-          connectionId: 2,
-          send: replacementMessages.add,
-          close: () async {},
-        ),
-      );
-      releaseSend.complete();
+          generation: 1,
+        );
+        await registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 1,
+            send: (_) {},
+            close: () async {
+              expect(await registry.removeIfCurrent(oldBinding), isFalse);
+            },
+          ),
+        );
 
-      expect(await send, isFalse);
-      expect(replacementMessages, isEmpty);
-      expect(registry.currentBinding('peer-b')?.generation, 2);
-    });
+        await registry.register(
+          PeerConnection(
+            peerId: 'peer-b',
+            connectionId: 2,
+            send: (_) {},
+            close: () async {},
+          ),
+        );
 
-    test('close-triggered onDone removal is a no-op without deadlock',
-        () async {
-      final registry = PeerConnectionRegistry();
-      const oldBinding =
-          TransferConnectionBinding(peerId: 'peer-b', generation: 1);
-      await registry.register(
-        PeerConnection(
-          peerId: 'peer-b',
-          connectionId: 1,
-          send: (_) {},
-          close: () async {
-            expect(await registry.removeIfCurrent(oldBinding), isFalse);
-          },
-        ),
-      );
-
-      await registry.register(
-        PeerConnection(
-          peerId: 'peer-b',
-          connectionId: 2,
-          send: (_) {},
-          close: () async {},
-        ),
-      );
-
-      expect(registry.isCurrent('peer-b', 2), isTrue);
-    });
+        expect(registry.isCurrent('peer-b', 2), isTrue);
+      },
+    );
   });
 }

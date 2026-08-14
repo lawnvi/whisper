@@ -26,6 +26,63 @@ void main() {
       expect(decoded.size, 64 * 1024 * 1024);
       expect(decoded.resumeProofLength, fileTransferV3ResumeProofWindowSize);
       expect(decoded.resumeProofSha256, ready.resumeProofSha256);
+      expect(decoded.hasFlowParameters, isFalse);
+    });
+
+    test('round-trips negotiated flow parameters on ready', () {
+      const ready = FileTransferV3Control(
+        action: FileTransferV3Action.ready,
+        transferId: 'transfer-1',
+        durableOffset: 0,
+        size: 64 * 1024 * 1024,
+        failureReason: FileTransferFailureReason.none,
+        chunkSize: fileTransferV3FramePayloadSize,
+        ackIntervalSize: fileTransferV3AckIntervalSize,
+        windowSize: fileTransferV3WindowSize,
+      );
+
+      final decoded = FileTransferV3Control.fromJson(ready.toJson());
+
+      expect(decoded.hasFlowParameters, isTrue);
+      expect(decoded.chunkSize, fileTransferV3FramePayloadSize);
+      expect(decoded.ackIntervalSize, fileTransferV3AckIntervalSize);
+      expect(decoded.windowSize, fileTransferV3WindowSize);
+    });
+
+    test('rejects partial, invalid, or misplaced flow parameters', () {
+      const ready = FileTransferV3Control(
+        action: FileTransferV3Action.ready,
+        transferId: 'transfer-1',
+        durableOffset: 0,
+        size: 64 * 1024 * 1024,
+        failureReason: FileTransferFailureReason.none,
+      );
+      final valid = ready.toJson();
+
+      for (final invalid in <Map<String, dynamic>>[
+        <String, dynamic>{
+          ...valid,
+          'chunkSize': fileTransferV3FramePayloadSize,
+        },
+        <String, dynamic>{
+          ...valid,
+          'chunkSize': fileTransferV3FramePayloadSize,
+          'ackIntervalSize': fileTransferV3AckIntervalSize,
+          'windowSize': fileTransferV3WindowSize - 1,
+        },
+        <String, dynamic>{
+          ...valid,
+          'action': 'ack',
+          'chunkSize': fileTransferV3FramePayloadSize,
+          'ackIntervalSize': fileTransferV3AckIntervalSize,
+          'windowSize': fileTransferV3WindowSize,
+        },
+      ]) {
+        expect(
+          () => FileTransferV3Control.fromJson(invalid),
+          throwsFormatException,
+        );
+      }
     });
 
     test('rejects unknown actions and malformed numeric fields', () {
@@ -159,17 +216,54 @@ void main() {
   });
 
   group('FileTransferV3Parameters', () {
-    test('uses 512KiB frames, 2MiB acks, and a 4MiB send window', () {
-      expect(fileTransferV3FramePayloadSize, 512 * 1024);
-      expect(fileTransferV3AckIntervalSize, 2 * 1024 * 1024);
-      // 发送窗口必须不超过接收端 BoundedReceiveQueue 的 8MiB 预算,
-      // 否则整窗在途帧会直接触发接收侧 overflow 断联。
-      expect(fileTransferV3WindowSize, 4 * 1024 * 1024);
-      expect(fileTransferV3WindowSize, lessThan(8 * 1024 * 1024));
+    test('uses 4MiB frames, 32MiB acks, and a 64MiB send window', () {
+      expect(fileTransferV3FramePayloadSize, 4 * 1024 * 1024);
+      expect(fileTransferV3AckIntervalSize, 32 * 1024 * 1024);
+      expect(fileTransferV3WindowSize, 64 * 1024 * 1024);
       expect(
         fileTransferV3AckIntervalSize,
         lessThanOrEqualTo(fileTransferV3WindowSize),
       );
+    });
+
+    test('negotiates desktop, mobile, and legacy transfer rhythms', () {
+      const modernOffer = FileTransferV3Metadata(
+        checksumValue:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        maxChunkSize: fileTransferV3FramePayloadSize,
+        maxWindowSize: fileTransferV3WindowSize,
+      );
+
+      final desktop = selectFileTransferV3FlowParameters(
+        offer: modernOffer,
+        localLimits: FileTransferV3FlowParameters.desktop,
+      );
+      expect(desktop.chunkSize, fileTransferV3FramePayloadSize);
+      expect(desktop.ackIntervalSize, fileTransferV3AckIntervalSize);
+      expect(desktop.windowSize, fileTransferV3WindowSize);
+      expect(desktop.negotiated, isTrue);
+
+      final mobile = selectFileTransferV3FlowParameters(
+        offer: modernOffer,
+        localLimits: FileTransferV3FlowParameters.mobile,
+      );
+      expect(mobile.chunkSize, fileTransferV3MobileFramePayloadSize);
+      expect(mobile.ackIntervalSize, fileTransferV3MobileAckIntervalSize);
+      expect(mobile.windowSize, fileTransferV3MobileWindowSize);
+      expect(mobile.negotiated, isTrue);
+
+      const legacyOffer = FileTransferV3Metadata(
+        checksumValue:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      );
+      final legacy = selectFileTransferV3FlowParameters(
+        offer: legacyOffer,
+        localLimits: FileTransferV3FlowParameters.desktop,
+      );
+      expect(legacy.chunkSize, fileTransferV3LegacyFramePayloadSize);
+      expect(legacy.ackIntervalSize, fileTransferV3LegacyAckIntervalSize);
+      expect(legacy.windowSize, fileTransferV3LegacyWindowSize);
+      expect(legacy.negotiated, isFalse);
     });
   });
 }

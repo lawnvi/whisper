@@ -14,6 +14,32 @@ final class AuthenticatedFrameException implements Exception {
   String toString() => 'AuthenticatedFrameException($code)';
 }
 
+/// Owns a transport frame whose plaintext area can be filled in place before
+/// authenticated encryption. This avoids copying large file frames through an
+/// intermediate plaintext allocation.
+final class AuthenticatedPayloadBuffer {
+  AuthenticatedPayloadBuffer._(this.bytes, int payloadLength)
+    : payload = Uint8List.sublistView(
+        bytes,
+        AuthenticatedFrameCodec.headerLength,
+        AuthenticatedFrameCodec.headerLength + payloadLength,
+      );
+
+  factory AuthenticatedPayloadBuffer.allocate(int payloadLength) {
+    if (payloadLength < 0) {
+      throw ArgumentError.value(payloadLength, 'payloadLength');
+    }
+    return AuthenticatedPayloadBuffer._(
+      Uint8List(AuthenticatedFrameCodec.overheadBytes + payloadLength),
+      payloadLength,
+    );
+  }
+
+  final Uint8List bytes;
+  final Uint8List payload;
+  bool _encoded = false;
+}
+
 final class AuthenticatedFrameCodec {
   AuthenticatedFrameCodec._({
     required WhisperAeadKey sendKey,
@@ -74,9 +100,9 @@ final class AuthenticatedFrameCodec {
     }
   }
 
-  static const int _headerLength = 16;
+  static const int headerLength = 16;
   static const int _tagLength = 16;
-  static const int overheadBytes = _headerLength + _tagLength;
+  static const int overheadBytes = headerLength + _tagLength;
   static final Uint8List _magic = Uint8List.fromList(ascii.encode('WAE1'));
   static final Uint8List _aeadDomain = Uint8List.fromList(
     ascii.encode('whisper-frame-aead-v1'),
@@ -102,33 +128,49 @@ final class AuthenticatedFrameCodec {
   }
 
   Future<Uint8List> _encode(Uint8List payload) async {
+    final buffer = AuthenticatedPayloadBuffer.allocate(payload.length);
+    buffer.payload.setAll(0, payload);
+    return _encodeBuffer(buffer);
+  }
+
+  Future<Uint8List> encodeBuffer(AuthenticatedPayloadBuffer buffer) {
+    return _sendLock.synchronized(() async {
+      return _encodeBuffer(buffer);
+    });
+  }
+
+  Uint8List _encodeBuffer(AuthenticatedPayloadBuffer buffer) {
     if (_closed) {
       throw const AuthenticatedFrameException('codec_closed');
     }
-    if (payload.length > maxPayloadBytes) {
+    if (buffer.payload.length > maxPayloadBytes) {
       throw const AuthenticatedFrameException('payload_too_large');
+    }
+    if (buffer._encoded) {
+      throw const AuthenticatedFrameException('payload_already_encoded');
     }
     if (_lastSentSequence >= 0x7fffffffffffffff) {
       throw const AuthenticatedFrameException('sequence_exhausted');
     }
     final sequence = _lastSentSequence + 1;
-    final header = _buildHeader(sequence, payload.length);
+    final header = _buildHeader(sequence, buffer.payload.length);
     final nonce = _nonceFor(sequence);
-    final secretBox = _sendKey.encrypt(
-      message: payload,
+    buffer.bytes.setRange(0, headerLength, header);
+    final cipherText = buffer.payload;
+    final mac = Uint8List.sublistView(
+      buffer.bytes,
+      headerLength + buffer.payload.length,
+    );
+    _sendKey.encryptInto(
+      message: buffer.payload,
+      cipherText: cipherText,
+      mac: mac,
       nonce: nonce,
       additionalData: _buildAad(header),
     );
-    if (secretBox.cipherText.length != payload.length ||
-        secretBox.mac.length != _tagLength) {
-      throw const AuthenticatedFrameException('invalid_cipher_output');
-    }
-    final frame = BytesBuilder(copy: false)
-      ..add(header)
-      ..add(secretBox.cipherText)
-      ..add(secretBox.mac);
+    buffer._encoded = true;
     _lastSentSequence = sequence;
-    return frame.takeBytes();
+    return buffer.bytes;
   }
 
   Future<Uint8List> decode(Uint8List frame) {
@@ -147,7 +189,7 @@ final class AuthenticatedFrameCodec {
     if (!_constantTimeEquals(frame.sublist(0, 4), _magic)) {
       throw const AuthenticatedFrameException('invalid_magic');
     }
-    final header = ByteData.sublistView(frame, 4, _headerLength);
+    final header = ByteData.sublistView(frame, 4, headerLength);
     final sequence = header.getUint64(0);
     final payloadLength = header.getUint32(8);
     if (payloadLength > maxPayloadBytes) {
@@ -163,10 +205,10 @@ final class AuthenticatedFrameCodec {
 
     final cipherText = Uint8List.sublistView(
       frame,
-      _headerLength,
-      _headerLength + payloadLength,
+      headerLength,
+      headerLength + payloadLength,
     );
-    final tag = Uint8List.sublistView(frame, _headerLength + payloadLength);
+    final tag = Uint8List.sublistView(frame, headerLength + payloadLength);
     final Uint8List clearText;
     try {
       clearText = _receiveKey.decrypt(
@@ -174,7 +216,7 @@ final class AuthenticatedFrameCodec {
         mac: tag,
         nonce: _nonceFor(sequence),
         additionalData: _buildAad(
-          Uint8List.sublistView(frame, 0, _headerLength),
+          Uint8List.sublistView(frame, 0, headerLength),
         ),
       );
     } on WhisperAeadAuthenticationException {
@@ -197,7 +239,7 @@ final class AuthenticatedFrameCodec {
   }
 
   static Uint8List _buildHeader(int sequence, int payloadLength) {
-    final header = Uint8List(_headerLength);
+    final header = Uint8List(headerLength);
     header.setRange(0, _magic.length, _magic);
     ByteData.sublistView(header)
       ..setUint64(4, sequence)

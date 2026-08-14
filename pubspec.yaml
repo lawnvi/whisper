@@ -63,6 +63,7 @@ dependencies:
   open_dir: ^0.0.2+1
   crypto: ^3.0.6
   cryptography: ^2.9.0
+  ffi: ^2.1.4
   sodium: 4.0.2+1
   super_drag_and_drop: ^0.9.1
   bonsoir: ^5.1.10

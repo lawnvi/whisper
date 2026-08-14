@@ -2,30 +2,71 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 const int fileTransferV3ProtocolVersion = 3;
-const int fileTransferV3FramePayloadSize = 512 * 1024;
-const int fileTransferV3AckIntervalSize = 2 * 1024 * 1024;
-// 发送窗口必须小于接收端 BoundedReceiveQueue 的 8MiB 预算:整窗未确认帧
-// 全部在途时也只应触发接收侧 pause/resume,绝不能触发 overflow 断联。
-const int fileTransferV3WindowSize = 4 * 1024 * 1024;
-// 接收端对 offer 声明的发送窗口做有界区间校验(而非与本端常量精确相等):
-// 升级改变本端窗口常量后,旧版本对端或本端 DB 里升级前创建的 offer 仍可
-// 续传。上界容忍历史最大的 16MiB 窗口并留出余量;接收侧背压是优雅
-// pause,更大的声明窗口只会更早触发 pause/resume,不会 overflow 断联。
-const int fileTransferV3MaxOfferWindowSize = 32 * 1024 * 1024;
+const int fileTransferV3LegacyFramePayloadSize = 512 * 1024;
+const int fileTransferV3LegacyAckIntervalSize = 2 * 1024 * 1024;
+const int fileTransferV3LegacyWindowSize = 4 * 1024 * 1024;
+const int fileTransferV3FramePayloadSize = 4 * 1024 * 1024;
+const int fileTransferV3AckIntervalSize = 32 * 1024 * 1024;
+const int fileTransferV3WindowSize = 64 * 1024 * 1024;
+const int fileTransferV3MaxOfferWindowSize = 64 * 1024 * 1024;
+const int fileTransferV3MobileFramePayloadSize = 1024 * 1024;
+const int fileTransferV3MobileAckIntervalSize = 8 * 1024 * 1024;
+const int fileTransferV3MobileWindowSize = 16 * 1024 * 1024;
 const int fileTransferV3ResumeProofWindowSize = 1024 * 1024;
 const int fileTransferV3MaxFileSize = 100 * 1024 * 1024 * 1024;
 const String fileTransferV3ChecksumAlgorithm = 'sha256';
 
 final RegExp _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
 
-enum FileTransferV3Action {
-  ready,
-  ack,
-  verify,
-  complete,
-  cancel,
-  error,
+final class FileTransferV3FlowParameters {
+  const FileTransferV3FlowParameters({
+    required this.chunkSize,
+    required this.ackIntervalSize,
+    required this.windowSize,
+    this.negotiated = false,
+  });
+
+  static const legacy = FileTransferV3FlowParameters(
+    chunkSize: fileTransferV3LegacyFramePayloadSize,
+    ackIntervalSize: fileTransferV3LegacyAckIntervalSize,
+    windowSize: fileTransferV3LegacyWindowSize,
+  );
+
+  static const desktop = FileTransferV3FlowParameters(
+    chunkSize: fileTransferV3FramePayloadSize,
+    ackIntervalSize: fileTransferV3AckIntervalSize,
+    windowSize: fileTransferV3WindowSize,
+  );
+
+  static const mobile = FileTransferV3FlowParameters(
+    chunkSize: fileTransferV3MobileFramePayloadSize,
+    ackIntervalSize: fileTransferV3MobileAckIntervalSize,
+    windowSize: fileTransferV3MobileWindowSize,
+  );
+
+  final int chunkSize;
+  final int ackIntervalSize;
+  final int windowSize;
+  final bool negotiated;
 }
+
+bool isValidFileTransferV3FlowParameters({
+  required int chunkSize,
+  required int ackIntervalSize,
+  required int windowSize,
+}) {
+  return chunkSize >= fileTransferV3LegacyFramePayloadSize &&
+      chunkSize <= fileTransferV3FramePayloadSize &&
+      chunkSize % fileTransferV3LegacyFramePayloadSize == 0 &&
+      windowSize >= chunkSize &&
+      windowSize <= fileTransferV3MaxOfferWindowSize &&
+      windowSize % chunkSize == 0 &&
+      ackIntervalSize >= chunkSize &&
+      ackIntervalSize <= windowSize &&
+      ackIntervalSize % chunkSize == 0;
+}
+
+enum FileTransferV3Action { ready, ack, verify, complete, cancel, error }
 
 enum FileTransferFailureReason {
   none,
@@ -50,28 +91,27 @@ enum FileTransferFailureReason {
 
 extension FileTransferFailureReasonWire on FileTransferFailureReason {
   String get wireCode => switch (this) {
-        FileTransferFailureReason.none => '',
-        FileTransferFailureReason.invalidSize => 'invalid_size',
-        FileTransferFailureReason.invalidPath => 'invalid_path',
-        FileTransferFailureReason.invalidName => 'invalid_name',
-        FileTransferFailureReason.invalidMetadata => 'invalid_metadata',
-        FileTransferFailureReason.messageMissing => 'message_missing',
-        FileTransferFailureReason.queueFull => 'queue_full',
-        FileTransferFailureReason.storage => 'storage',
-        FileTransferFailureReason.source => 'source',
-        FileTransferFailureReason.receiver => 'receiver',
-        FileTransferFailureReason.resumeProofMismatch =>
-          'resume_proof_mismatch',
-        FileTransferFailureReason.integrity => 'integrity',
-        FileTransferFailureReason.messageDeleted => 'message_deleted',
-        FileTransferFailureReason.deviceCleared => 'device_cleared',
-        FileTransferFailureReason.messageAssociationUnresolved =>
-          'message_association_unresolved',
-        FileTransferFailureReason.messageAssociationConflict =>
-          'message_association_conflict',
-        FileTransferFailureReason.staleQueue => 'stale_queue',
-        FileTransferFailureReason.remoteFailure => 'remote_failure',
-      };
+    FileTransferFailureReason.none => '',
+    FileTransferFailureReason.invalidSize => 'invalid_size',
+    FileTransferFailureReason.invalidPath => 'invalid_path',
+    FileTransferFailureReason.invalidName => 'invalid_name',
+    FileTransferFailureReason.invalidMetadata => 'invalid_metadata',
+    FileTransferFailureReason.messageMissing => 'message_missing',
+    FileTransferFailureReason.queueFull => 'queue_full',
+    FileTransferFailureReason.storage => 'storage',
+    FileTransferFailureReason.source => 'source',
+    FileTransferFailureReason.receiver => 'receiver',
+    FileTransferFailureReason.resumeProofMismatch => 'resume_proof_mismatch',
+    FileTransferFailureReason.integrity => 'integrity',
+    FileTransferFailureReason.messageDeleted => 'message_deleted',
+    FileTransferFailureReason.deviceCleared => 'device_cleared',
+    FileTransferFailureReason.messageAssociationUnresolved =>
+      'message_association_unresolved',
+    FileTransferFailureReason.messageAssociationConflict =>
+      'message_association_conflict',
+    FileTransferFailureReason.staleQueue => 'stale_queue',
+    FileTransferFailureReason.remoteFailure => 'remote_failure',
+  };
 }
 
 const Set<String> fileTransferFailureWireCodes = <String>{
@@ -130,6 +170,9 @@ class FileTransferV3Control {
     this.resumeProofSha256 = '',
     this.resumeProofLength = 0,
     this.checksumValue = '',
+    this.chunkSize = 0,
+    this.ackIntervalSize = 0,
+    this.windowSize = 0,
     this.protocolVersion = fileTransferV3ProtocolVersion,
   });
 
@@ -142,22 +185,32 @@ class FileTransferV3Control {
   final String resumeProofSha256;
   final int resumeProofLength;
   final String checksumValue;
+  final int chunkSize;
+  final int ackIntervalSize;
+  final int windowSize;
+
+  bool get hasFlowParameters => chunkSize > 0;
 
   String get errorCode => failureReason.wireCode;
   String get errorMessage => failureReason.wireCode;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'protocolVersion': protocolVersion,
-        'action': action.name,
-        'transferId': transferId,
-        'durableOffset': durableOffset,
-        'size': size,
-        'errorCode': failureReason.wireCode,
-        'errorMessage': failureReason.wireCode,
-        'resumeProofSha256': resumeProofSha256,
-        'resumeProofLength': resumeProofLength,
-        'checksumValue': checksumValue,
-      };
+    'protocolVersion': protocolVersion,
+    'action': action.name,
+    'transferId': transferId,
+    'durableOffset': durableOffset,
+    'size': size,
+    'errorCode': failureReason.wireCode,
+    'errorMessage': failureReason.wireCode,
+    'resumeProofSha256': resumeProofSha256,
+    'resumeProofLength': resumeProofLength,
+    'checksumValue': checksumValue,
+    if (hasFlowParameters) ...<String, int>{
+      'chunkSize': chunkSize,
+      'ackIntervalSize': ackIntervalSize,
+      'windowSize': windowSize,
+    },
+  };
 
   factory FileTransferV3Control.fromJson(Map<String, dynamic> json) {
     final protocolVersion = json['protocolVersion'];
@@ -170,6 +223,9 @@ class FileTransferV3Control {
     final resumeProofSha256 = json['resumeProofSha256'];
     final resumeProofLength = json['resumeProofLength'];
     final checksumValue = json['checksumValue'] ?? '';
+    final chunkSize = json['chunkSize'] ?? 0;
+    final ackIntervalSize = json['ackIntervalSize'] ?? 0;
+    final windowSize = json['windowSize'] ?? 0;
     if (protocolVersion is! int ||
         actionName is! String ||
         transferId is! String ||
@@ -179,7 +235,10 @@ class FileTransferV3Control {
         errorMessage is! String ||
         resumeProofSha256 is! String ||
         resumeProofLength is! int ||
-        checksumValue is! String) {
+        checksumValue is! String ||
+        chunkSize is! int ||
+        ackIntervalSize is! int ||
+        windowSize is! int) {
       throw const FormatException('invalid file transfer control fields');
     }
     FileTransferV3Action action;
@@ -199,17 +258,28 @@ class FileTransferV3Control {
         : math.min(fileTransferV3ResumeProofWindowSize, durableOffset);
     final proofIsValid = action == FileTransferV3Action.ready
         ? resumeProofLength == expectedProofLength &&
-            (expectedProofLength == 0
-                ? resumeProofSha256.isEmpty
-                : _sha256Hex.hasMatch(resumeProofSha256))
+              (expectedProofLength == 0
+                  ? resumeProofSha256.isEmpty
+                  : _sha256Hex.hasMatch(resumeProofSha256))
         : resumeProofLength == 0 && resumeProofSha256.isEmpty;
     final checksumIsValid = action == FileTransferV3Action.verify
         ? _sha256Hex.hasMatch(checksumValue)
         : checksumValue.isEmpty;
+    final hasAnyFlowParameter =
+        chunkSize != 0 || ackIntervalSize != 0 || windowSize != 0;
+    final flowIsValid =
+        !hasAnyFlowParameter ||
+        (action == FileTransferV3Action.ready &&
+            isValidFileTransferV3FlowParameters(
+              chunkSize: chunkSize,
+              ackIntervalSize: ackIntervalSize,
+              windowSize: windowSize,
+            ));
     if (durableOffset < 0 ||
         size < 0 ||
         !proofIsValid ||
         !checksumIsValid ||
+        !flowIsValid ||
         (action == FileTransferV3Action.verify && durableOffset != size)) {
       throw const FormatException('invalid file transfer resume proof');
     }
@@ -223,6 +293,9 @@ class FileTransferV3Control {
       resumeProofSha256: resumeProofSha256,
       resumeProofLength: resumeProofLength,
       checksumValue: checksumValue,
+      chunkSize: chunkSize,
+      ackIntervalSize: ackIntervalSize,
+      windowSize: windowSize,
     );
   }
 }
@@ -239,8 +312,10 @@ final class FileTransferV3Metadata {
     this.checksumDeferred = false,
     this.protocolVersion = fileTransferV3ProtocolVersion,
     this.checksumAlgorithm = fileTransferV3ChecksumAlgorithm,
-    this.chunkSize = fileTransferV3FramePayloadSize,
-    this.windowSize = fileTransferV3WindowSize,
+    this.chunkSize = fileTransferV3LegacyFramePayloadSize,
+    this.windowSize = fileTransferV3LegacyWindowSize,
+    this.maxChunkSize,
+    this.maxWindowSize,
   });
 
   final int protocolVersion;
@@ -249,15 +324,24 @@ final class FileTransferV3Metadata {
   final bool checksumDeferred;
   final int chunkSize;
   final int windowSize;
+  final int? maxChunkSize;
+  final int? maxWindowSize;
+
+  bool get supportsFlowNegotiation =>
+      maxChunkSize != null && maxWindowSize != null;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'protocolVersion': protocolVersion,
-        'checksumAlgorithm': checksumAlgorithm,
-        'checksumValue': checksumValue,
-        'checksumDeferred': checksumDeferred,
-        'chunkSize': chunkSize,
-        'windowSize': windowSize,
-      };
+    'protocolVersion': protocolVersion,
+    'checksumAlgorithm': checksumAlgorithm,
+    'checksumValue': checksumValue,
+    'checksumDeferred': checksumDeferred,
+    'chunkSize': chunkSize,
+    'windowSize': windowSize,
+    if (supportsFlowNegotiation) ...<String, int>{
+      'maxChunkSize': maxChunkSize!,
+      'maxWindowSize': maxWindowSize!,
+    },
+  };
 
   static FileTransferV3Metadata parseOffer(
     String? content, {
@@ -277,11 +361,11 @@ final class FileTransferV3Metadata {
       final checksumDeferred = decoded['checksumDeferred'] ?? false;
       final chunkSize = decoded['chunkSize'];
       final windowSize = decoded['windowSize'];
-      // 身份字段(协议版本、校验算法/值)精确校验;节奏字段
-      // (chunkSize/windowSize)只做安全区间校验:窗口落在
-      // [一帧, fileTransferV3MaxOfferWindowSize] 且为帧长整数倍,
-      // chunk 为正且不超过窗口。避免升级改动节奏常量后,
-      // 升级前中断的传输被 invalid_metadata 永久拒绝。
+      final hasMaxChunkSize = decoded.containsKey('maxChunkSize');
+      final hasMaxWindowSize = decoded.containsKey('maxWindowSize');
+      final maxChunkSize = decoded['maxChunkSize'];
+      final maxWindowSize = decoded['maxWindowSize'];
+      final hasCompleteFlowExtension = hasMaxChunkSize && hasMaxWindowSize;
       if (protocolVersion != fileTransferV3ProtocolVersion ||
           checksumAlgorithm != fileTransferV3ChecksumAlgorithm ||
           checksumValue is! String ||
@@ -291,11 +375,22 @@ final class FileTransferV3Metadata {
               : !_sha256Hex.hasMatch(checksumValue)) ||
           chunkSize is! int ||
           windowSize is! int ||
-          windowSize < fileTransferV3FramePayloadSize ||
+          windowSize < fileTransferV3LegacyFramePayloadSize ||
           windowSize > fileTransferV3MaxOfferWindowSize ||
-          windowSize % fileTransferV3FramePayloadSize != 0 ||
+          windowSize % fileTransferV3LegacyFramePayloadSize != 0 ||
           chunkSize < 1 ||
-          chunkSize > windowSize) {
+          chunkSize > fileTransferV3FramePayloadSize ||
+          chunkSize > windowSize ||
+          hasMaxChunkSize != hasMaxWindowSize ||
+          (hasCompleteFlowExtension &&
+              (maxChunkSize is! int ||
+                  maxWindowSize is! int ||
+                  maxChunkSize < chunkSize ||
+                  maxChunkSize > fileTransferV3FramePayloadSize ||
+                  maxChunkSize % fileTransferV3LegacyFramePayloadSize != 0 ||
+                  maxWindowSize < windowSize ||
+                  maxWindowSize > fileTransferV3MaxOfferWindowSize ||
+                  maxWindowSize % maxChunkSize != 0))) {
         throw const FileTransferV3MetadataException('invalid_metadata');
       }
       return FileTransferV3Metadata(
@@ -303,6 +398,8 @@ final class FileTransferV3Metadata {
         checksumDeferred: checksumDeferred,
         chunkSize: chunkSize,
         windowSize: windowSize,
+        maxChunkSize: hasCompleteFlowExtension ? maxChunkSize as int : null,
+        maxWindowSize: hasCompleteFlowExtension ? maxWindowSize as int : null,
       );
     } on FileTransferV3MetadataException {
       rethrow;
@@ -310,37 +407,37 @@ final class FileTransferV3Metadata {
       throw const FileTransferV3MetadataException('invalid_metadata');
     }
   }
+}
 
-  /// 发送端续传/重发 offer 时,用当前协议节奏常量重建 offer 元数据:
-  /// 身份字段(校验算法与校验值)原样保留,chunkSize/windowSize 等节奏
-  /// 字段刷新为本端当前常量。DB 里存的 offer content 是创建时序列化的,
-  /// 升级改动节奏常量后原样重发会被旧校验规则的对端拒绝。
-  ///
-  /// content 不可解析或缺少身份字段时返回 null,调用方应原样重发。
-  static String? refreshOfferContent(String? content) {
-    try {
-      final decoded = jsonDecode(content ?? '');
-      if (decoded is! Map<String, dynamic>) {
-        return null;
-      }
-      final checksumValue = decoded['checksumValue'];
-      final checksumDeferred = decoded['checksumDeferred'] ?? false;
-      if (decoded['checksumAlgorithm'] != fileTransferV3ChecksumAlgorithm ||
-          checksumValue is! String ||
-          checksumDeferred is! bool ||
-          (checksumDeferred
-              ? checksumValue.isNotEmpty
-              : !_sha256Hex.hasMatch(checksumValue))) {
-        return null;
-      }
-      return jsonEncode(
-        FileTransferV3Metadata(
-          checksumValue: checksumValue,
-          checksumDeferred: checksumDeferred,
-        ).toJson(),
-      );
-    } catch (_) {
-      return null;
-    }
+FileTransferV3FlowParameters selectFileTransferV3FlowParameters({
+  required FileTransferV3Metadata offer,
+  required FileTransferV3FlowParameters localLimits,
+}) {
+  if (!offer.supportsFlowNegotiation) {
+    final chunkSize = offer.chunkSize;
+    final windowSize = offer.windowSize;
+    final ackIntervalSize = math.min(
+      windowSize,
+      math.max(fileTransferV3LegacyAckIntervalSize, chunkSize),
+    );
+    return FileTransferV3FlowParameters(
+      chunkSize: chunkSize,
+      ackIntervalSize: ackIntervalSize,
+      windowSize: windowSize,
+    );
   }
+  final chunkSize = math.min(localLimits.chunkSize, offer.maxChunkSize!);
+  final maximumWindow = math.min(localLimits.windowSize, offer.maxWindowSize!);
+  final windowSize = maximumWindow - (maximumWindow % chunkSize);
+  final maximumAck = math.min(localLimits.ackIntervalSize, windowSize);
+  final ackIntervalSize = math.max(
+    chunkSize,
+    maximumAck - (maximumAck % chunkSize),
+  );
+  return FileTransferV3FlowParameters(
+    chunkSize: chunkSize,
+    ackIntervalSize: ackIntervalSize,
+    windowSize: windowSize,
+    negotiated: true,
+  );
 }

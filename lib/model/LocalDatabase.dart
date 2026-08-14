@@ -2016,6 +2016,15 @@ LazyDatabase _openConnection() {
     // Explicitly tell it about the correct temporary directory.
     sqlite3.tempDirectory = cachebase;
 
-    return NativeDatabase.createInBackground(file);
+    return NativeDatabase.createInBackground(
+      file,
+      setup: configureWhisperDatabase,
+    );
   });
+}
+
+void configureWhisperDatabase(Database database) {
+  database
+    ..execute('PRAGMA journal_mode = WAL;')
+    ..execute('PRAGMA synchronous = NORMAL;');
 }

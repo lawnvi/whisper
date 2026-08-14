@@ -168,6 +168,54 @@ void main() {
   );
 
   test(
+    'READY negotiation controls the outgoing chunk and window sizes',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const size = 10 * 1024 * 1024;
+      final content = jsonEncode(
+        FileTransferV3Metadata(
+          checksumValue: '0' * 64,
+          maxChunkSize: fileTransferV3FramePayloadSize,
+          maxWindowSize: fileTransferV3WindowSize,
+        ).toJson(),
+      );
+      await _persistOutgoing(database, _firstId, size: size, content: content);
+      final sent = <WhisperFrameV3>[];
+      final engine = _engine(
+        database,
+        sent,
+        sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+      );
+
+      await engine.handleFrame(
+        _binding,
+        _controlFrame(
+          FileTransferV3Control(
+            action: FileTransferV3Action.ready,
+            transferId: _firstId,
+            durableOffset: 0,
+            size: size,
+            failureReason: FileTransferFailureReason.none,
+            chunkSize: fileTransferV3MobileFramePayloadSize,
+            ackIntervalSize: 4 * 1024 * 1024,
+            windowSize: 8 * 1024 * 1024,
+          ),
+        ),
+        requireCurrent: () {},
+      );
+
+      final data = _dataFrames(sent, _firstId).toList(growable: false);
+      expect(data, hasLength(8));
+      expect(
+        data.map((frame) => frame.payload.length),
+        everyElement(fileTransferV3MobileFramePayloadSize),
+      );
+      expect(data.last.offset + data.last.payload.length, 8 * 1024 * 1024);
+    },
+  );
+
+  test(
     'duplicate READY at the current offset preserves the in-flight window',
     () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -389,6 +437,63 @@ void main() {
     },
   );
 
+  test('receiver advertises flow parameters only for modern offers', () async {
+    final root = await Directory.systemTemp.createTemp('whisper-flow-ready-');
+    addTearDown(() => root.delete(recursive: true));
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final sent = <WhisperFrameV3>[];
+    final engine = _engine(database, sent, downloadDirectory: () async => root);
+    final checksum = bytesChecksum(const <int>[1], algorithm: 'sha256');
+    final legacyOffer = _incomingMessage(_firstId, size: 1, checksum: checksum);
+
+    await engine.handleFrame(
+      _binding,
+      _offerFrame(legacyOffer),
+      requireCurrent: () {},
+    );
+    final legacyReady = FileTransferV3Control.fromJson(
+      jsonDecode(utf8.decode(_readyFrames(sent, _firstId).single.payload))
+          as Map<String, dynamic>,
+    );
+    expect(legacyReady.hasFlowParameters, isFalse);
+
+    await engine.handleFrame(
+      _binding,
+      _controlFrame(
+        _control(FileTransferV3Action.cancel, _firstId, size: 1, offset: 0),
+      ),
+      requireCurrent: () {},
+    );
+
+    sent.clear();
+    final modernOffer = _incomingMessage(_secondId, size: 1, checksum: checksum)
+        .copyWith(
+          content: Value(
+            jsonEncode(
+              FileTransferV3Metadata(
+                checksumValue: checksum,
+                maxChunkSize: fileTransferV3FramePayloadSize,
+                maxWindowSize: fileTransferV3WindowSize,
+              ).toJson(),
+            ),
+          ),
+        );
+    await engine.handleFrame(
+      _binding,
+      _offerFrame(modernOffer),
+      requireCurrent: () {},
+    );
+    final modernReady = FileTransferV3Control.fromJson(
+      jsonDecode(utf8.decode(_readyFrames(sent, _secondId).single.payload))
+          as Map<String, dynamic>,
+    );
+    expect(modernReady.hasFlowParameters, isTrue);
+    expect(modernReady.chunkSize, fileTransferV3FramePayloadSize);
+    expect(modernReady.ackIntervalSize, fileTransferV3AckIntervalSize);
+    expect(modernReady.windowSize, fileTransferV3WindowSize);
+  });
+
   test(
     'local active cancel skips a canceled queued id and starts one successor',
     () async {
@@ -541,7 +646,7 @@ void main() {
   });
 
   test(
-    'queued successor accepts a 2 MiB ACK while its window is still sending',
+    'queued successor accepts an ACK while its window is still sending',
     () async {
       const successorSize = fileTransferV3AckIntervalSize + 1;
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
@@ -619,19 +724,18 @@ void main() {
       expect(await ackResult!.timeout(const Duration(seconds: 1)), isNull);
       final successorData = _dataFrames(sent, _secondId).toList();
       expect(successorData.map((frame) => frame.offset), <int>[
-        0,
-        fileTransferV3FramePayloadSize,
-        fileTransferV3FramePayloadSize * 2,
-        fileTransferV3FramePayloadSize * 3,
+        for (
+          var offset = 0;
+          offset < fileTransferV3AckIntervalSize;
+          offset += fileTransferV3FramePayloadSize
+        )
+          offset,
         fileTransferV3AckIntervalSize,
       ]);
-      expect(successorData.map((frame) => frame.sequence), <int>[
-        0,
-        1,
-        2,
-        3,
-        4,
-      ]);
+      expect(
+        successorData.map((frame) => frame.sequence),
+        List<int>.generate(successorData.length, (index) => index),
+      );
       expect(
         (await database.fetchFileTransfer(_secondId))?.committedBytes,
         fileTransferV3AckIntervalSize,
@@ -1234,69 +1338,66 @@ void main() {
     },
   );
 
-  test(
-    're-sent offer refreshes legacy rhythm metadata to current constants',
-    () async {
-      final database = LocalDatabase.forTesting(NativeDatabase.memory());
-      addTearDown(database.close);
-      final checksum = 'ab' * 32;
-      // 升级前(16MiB 发送窗口)创建并中断的传输:DB 里的 offer content
-      // 仍是旧节奏常量;续传重发时必须用当前常量重建节奏字段,
-      // 身份字段(校验和)保持不变,否则对端 parseOffer 永久拒绝。
-      final legacyContent = jsonEncode(<String, Object>{
-        'protocolVersion': fileTransferV3ProtocolVersion,
-        'checksumAlgorithm': fileTransferV3ChecksumAlgorithm,
-        'checksumValue': checksum,
-        'chunkSize': fileTransferV3FramePayloadSize,
-        'windowSize': 16 * 1024 * 1024,
-      });
-      final message = await database.insertMessageReturning(
-        _outgoingMessage(
-          _firstId,
-          size: 4,
-        ).copyWith(content: Value<String?>(legacyContent)),
-      );
-      await database.upsertFileTransfer(
-        _outgoingTransfer(
-          _firstId,
-          size: 4,
-          messageRowId: message.id,
-        ).copyWith(state: FileTransferState.waitingReconnect),
-      );
-      final sent = <WhisperFrameV3>[];
-      final engine = _engine(
-        database,
-        sent,
-        sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
-      );
+  test('re-sent offer preserves its persisted transfer identity', () async {
+    final database = LocalDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final checksum = 'ab' * 32;
+    // Offer metadata is part of the idempotent message identity. Resuming an
+    // older transfer must not rewrite it, or the receiver can reject the
+    // same transfer id as conflicting content.
+    final legacyContent = jsonEncode(<String, Object>{
+      'protocolVersion': fileTransferV3ProtocolVersion,
+      'checksumAlgorithm': fileTransferV3ChecksumAlgorithm,
+      'checksumValue': checksum,
+      'chunkSize': fileTransferV3FramePayloadSize,
+      'windowSize': 16 * 1024 * 1024,
+    });
+    final message = await database.insertMessageReturning(
+      _outgoingMessage(
+        _firstId,
+        size: 4,
+      ).copyWith(content: Value<String?>(legacyContent)),
+    );
+    await database.upsertFileTransfer(
+      _outgoingTransfer(
+        _firstId,
+        size: 4,
+        messageRowId: message.id,
+      ).copyWith(state: FileTransferState.waitingReconnect),
+    );
+    final sent = <WhisperFrameV3>[];
+    final engine = _engine(
+      database,
+      sent,
+      sourceFactory: (_, expectedSize) => _SizedSource(expectedSize),
+    );
 
-      await engine.resumeRecoverableOutgoing();
+    await engine.resumeRecoverableOutgoing();
 
-      final offer = sent.singleWhere(
-        (frame) => frame.type == WhisperFrameType.fileOffer,
-      );
-      final wire = decodeWireMessage(
-        jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
-      );
-      final refreshed = jsonDecode(wire.content ?? '') as Map<String, dynamic>;
-      expect(refreshed['checksumValue'], checksum);
-      expect(refreshed['chunkSize'], fileTransferV3FramePayloadSize);
-      expect(refreshed['windowSize'], fileTransferV3WindowSize);
-      final metadata = FileTransferV3Metadata.parseOffer(
-        wire.content,
-        size: wire.size,
-      );
-      expect(metadata.checksumValue, checksum);
-    },
-  );
+    final offer = sent.singleWhere(
+      (frame) => frame.type == WhisperFrameType.fileOffer,
+    );
+    final wire = decodeWireMessage(
+      jsonDecode(utf8.decode(offer.payload)) as Map<String, dynamic>,
+    );
+    final persisted = jsonDecode(wire.content ?? '') as Map<String, dynamic>;
+    expect(persisted['checksumValue'], checksum);
+    expect(persisted['chunkSize'], fileTransferV3FramePayloadSize);
+    expect(persisted['windowSize'], 16 * 1024 * 1024);
+    final metadata = FileTransferV3Metadata.parseOffer(
+      wire.content,
+      size: wire.size,
+    );
+    expect(metadata.checksumValue, checksum);
+  });
 
   test(
     'retry offer without parsable metadata keeps the stored content',
     () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
-      // 内容不可解析(测试夹具的 '{}')时按原样重发,不得丢帧或抛错。
-      await _persistOutgoing(database, _firstId, size: 4);
+      // 内容不可解析时按原样重发,不得丢帧或抛错。
+      await _persistOutgoing(database, _firstId, size: 4, content: '{}');
       await database.updateFileTransfer(
         _firstId,
         state: const Value(FileTransferState.waitingReconnect),
@@ -1537,9 +1638,12 @@ Future<void> _persistOutgoing(
   LocalDatabase database,
   String id, {
   required int size,
+  String? content,
 }) async {
   final message = await database.insertMessageReturning(
-    _outgoingMessage(id, size: size),
+    _outgoingMessage(id, size: size).copyWith(
+      content: content == null ? const Value.absent() : Value(content),
+    ),
   );
   await database.upsertFileTransfer(
     _outgoingTransfer(id, size: size, messageRowId: message.id),
@@ -1554,7 +1658,13 @@ MessageData _outgoingMessage(String id, {required int size}) => MessageData(
   clipboard: false,
   size: size,
   type: MessageEnum.File,
-  content: '{}',
+  content: jsonEncode(
+    FileTransferV3Metadata(
+      checksumValue: '0' * 64,
+      chunkSize: fileTransferV3FramePayloadSize,
+      windowSize: fileTransferV3WindowSize,
+    ).toJson(),
+  ),
   message: '',
   timestamp: 1,
   uuid: id,
@@ -1576,7 +1686,13 @@ MessageData _incomingMessage(
   clipboard: false,
   size: size,
   type: MessageEnum.File,
-  content: jsonEncode(FileTransferV3Metadata(checksumValue: checksum).toJson()),
+  content: jsonEncode(
+    FileTransferV3Metadata(
+      checksumValue: checksum,
+      chunkSize: fileTransferV3FramePayloadSize,
+      windowSize: fileTransferV3WindowSize,
+    ).toJson(),
+  ),
   message: '',
   timestamp: 1,
   uuid: id,

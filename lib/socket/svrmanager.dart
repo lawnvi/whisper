@@ -234,10 +234,11 @@ class WsSvrManager {
   static const Duration _clientHeartbeatInterval = Duration(seconds: 15);
   static const Duration _manualPreemptWaitTimeout = Duration(seconds: 3);
   static const int _maxPreAuthMessageBytes = 256 * 1024;
-  static const int _maxAuthenticatedMessageBytes = 1024 * 1024;
+  static const int _maxFileDataPayloadBytes = fileTransferV3FramePayloadSize;
+  static const int _maxAuthenticatedMessageBytes =
+      _maxFileDataPayloadBytes + WhisperFrameV3.headerLength;
   static const int _authenticatedFrameOverhead =
       AuthenticatedFrameCodec.overheadBytes;
-  static const int _maxFileDataPayloadBytes = 512 * 1024;
   static final Set<String> _audioControlActions = AudioControlAction.values
       .map((action) => action.name)
       .toSet();
@@ -498,6 +499,7 @@ class WsSvrManager {
       }
     },
     sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
+    enqueueBytesToConnection: _peerConnections.sendIfCurrent,
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
     emitTransferUpdated: (snapshot) =>
         _dispatchToAll((event) => event.onTransferUpdated(snapshot)),
@@ -1082,6 +1084,7 @@ class WsSvrManager {
     session.attachTransport(
       subscription: subscription,
       addStream: sink.addStream,
+      add: sink.add,
       admissionLease: admissionLease,
       onOverflow: () {
         session.close();
@@ -3070,7 +3073,8 @@ class WsSvrManager {
     bool rawAuth = false,
   }) async {
     final session = _sessionsBySink[sink];
-    final bytes = _outgoingBytes(message);
+    final buffered = message is AuthenticatedPayloadBuffer ? message : null;
+    final bytes = buffered?.payload ?? _outgoingBytes(message);
     if (session == null || bytes == null) {
       await _closeSocketSink(sink);
       return false;
@@ -3084,16 +3088,23 @@ class WsSvrManager {
       return false;
     }
     if (rawAuth) {
+      if (buffered != null) {
+        return false;
+      }
       return session.enqueueOutgoing(bytes, byteLength: bytes.length);
     }
     if (!session.isAuthenticated) {
       await _closeSocketSink(sink);
       return false;
     }
-    return session.enqueueAuthenticatedOutgoing(
-      bytes,
-      byteLength: bytes.length + _authenticatedFrameOverhead,
-    );
+    final byteLength = bytes.length + _authenticatedFrameOverhead;
+    if (buffered != null) {
+      return session.enqueueAuthenticatedBuffer(
+        buffered,
+        byteLength: byteLength,
+      );
+    }
+    return session.enqueueAuthenticatedOutgoing(bytes, byteLength: byteLength);
   }
 
   Uint8List? _outgoingBytes(Object message) {

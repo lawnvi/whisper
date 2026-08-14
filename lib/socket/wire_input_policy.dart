@@ -33,18 +33,18 @@ abstract final class WireInputReason {
 
 final class WireInputValidationResult {
   const WireInputValidationResult.accepted()
-      : isAccepted = true,
-        isIgnored = false,
-        reason = '';
+    : isAccepted = true,
+      isIgnored = false,
+      reason = '';
 
   const WireInputValidationResult.ignored()
-      : isAccepted = false,
-        isIgnored = true,
-        reason = '';
+    : isAccepted = false,
+      isIgnored = true,
+      reason = '';
 
   const WireInputValidationResult.rejected(this.reason)
-      : isAccepted = false,
-        isIgnored = false;
+    : isAccepted = false,
+      isIgnored = false;
 
   final bool isAccepted;
   final bool isIgnored;
@@ -57,28 +57,23 @@ final class WireInputValidationResult {
   }
 }
 
-enum FileDataDisposition {
-  accepted,
-  duplicate,
-  ignoredTerminal,
-  rejected,
-}
+enum FileDataDisposition { accepted, duplicate, ignoredTerminal, rejected }
 
 final class FileDataValidationResult {
   const FileDataValidationResult.accepted()
-      : disposition = FileDataDisposition.accepted,
-        reason = '';
+    : disposition = FileDataDisposition.accepted,
+      reason = '';
 
   const FileDataValidationResult.duplicate()
-      : disposition = FileDataDisposition.duplicate,
-        reason = '';
+    : disposition = FileDataDisposition.duplicate,
+      reason = '';
 
   const FileDataValidationResult.ignored()
-      : disposition = FileDataDisposition.ignoredTerminal,
-        reason = '';
+    : disposition = FileDataDisposition.ignoredTerminal,
+      reason = '';
 
   const FileDataValidationResult.rejected(this.reason)
-      : disposition = FileDataDisposition.rejected;
+    : disposition = FileDataDisposition.rejected;
 
   final FileDataDisposition disposition;
   final String reason;
@@ -96,12 +91,12 @@ final class FileDataValidationResult {
 
 final class WireAcknowledgementValidationResult {
   const WireAcknowledgementValidationResult.accepted(this.original)
-      : isAccepted = true,
-        reason = '';
+    : isAccepted = true,
+      reason = '';
 
   const WireAcknowledgementValidationResult.rejected(this.reason)
-      : isAccepted = false,
-        original = null;
+    : isAccepted = false,
+      original = null;
 
   final bool isAccepted;
   final String reason;
@@ -152,10 +147,7 @@ final class WireControlSessionRegistry {
 
   int get length => _bindings.length;
 
-  bool forget({
-    required String namespace,
-    required String sessionId,
-  }) {
+  bool forget({required String namespace, required String sessionId}) {
     if (namespace.isEmpty || sessionId.isEmpty) {
       return false;
     }
@@ -217,8 +209,9 @@ final class WireControlSessionRegistry {
       return const WireInputValidationResult.accepted();
     }
 
-    final sourceMustBeAuthenticated =
-        reverseInitialDirection ? !isIncoming : isIncoming;
+    final sourceMustBeAuthenticated = reverseInitialDirection
+        ? !isIncoming
+        : isIncoming;
     final hasExpectedOfferDirection = sourceMustBeAuthenticated
         ? sourcePeerId == authenticatedPeerId && sinkPeerId == localPeerId
         : sourcePeerId == localPeerId && sinkPeerId == authenticatedPeerId;
@@ -340,9 +333,7 @@ abstract final class WireInputPolicy {
     return const WireInputValidationResult.accepted();
   }
 
-  static WireInputValidationResult validateMessageFrame(
-    WhisperFrameV3 frame,
-  ) {
+  static WireInputValidationResult validateMessageFrame(WhisperFrameV3 frame) {
     if (frame.type != WhisperFrameType.message ||
         frame.transferId.isNotEmpty ||
         frame.offset != 0 ||
@@ -371,8 +362,7 @@ abstract final class WireInputPolicy {
       MessageEnum.Notification ||
       MessageEnum.AudioControl ||
       MessageEnum.RemoteInputControl ||
-      MessageEnum.AudioGroupControl =>
-        true,
+      MessageEnum.AudioGroupControl => true,
       MessageEnum.File => allowFileOffer,
       _ => false,
     };
@@ -411,9 +401,7 @@ abstract final class WireInputPolicy {
       localPeerId: localPeerId,
     );
     if (!messageResult.isAccepted) {
-      return WireAcknowledgementValidationResult.rejected(
-        messageResult.reason,
-      );
+      return WireAcknowledgementValidationResult.rejected(messageResult.reason);
     }
     if (acknowledgement.type != MessageEnum.Ack || !acknowledgement.acked) {
       return const WireAcknowledgementValidationResult.rejected(
@@ -459,9 +447,7 @@ abstract final class WireInputPolicy {
     if (acknowledgement.type != MessageEnum.Ack || !acknowledgement.acked) {
       throw const WireInputRejected(WireInputReason.ackOriginalMismatch);
     }
-    final candidates = await database.fetchMessagesByUuid(
-      acknowledgement.uuid,
-    );
+    final candidates = await database.fetchMessagesByUuid(acknowledgement.uuid);
     requireCurrent?.call();
     if (candidates.isEmpty) {
       return null;
@@ -540,6 +526,7 @@ abstract final class WireInputPolicy {
     required int expectedOffset,
     required int expectedSequence,
     required bool isActive,
+    int maxPayloadSize = fileTransferV3FramePayloadSize,
   }) {
     if (!isCanonicalTransferId(frame.transferId) ||
         frame.transferId != transfer.transferId) {
@@ -573,8 +560,7 @@ abstract final class WireInputPolicy {
         WireInputReason.transferOffsetInvalid,
       );
     }
-    if (frame.payload.isEmpty ||
-        frame.payload.length > fileTransferV3FramePayloadSize) {
+    if (frame.payload.isEmpty || frame.payload.length > maxPayloadSize) {
       return const FileDataValidationResult.rejected(
         WireInputReason.transferPayloadInvalid,
       );

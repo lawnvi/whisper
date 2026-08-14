@@ -2863,7 +2863,6 @@ class RemoteInputPlugin {
     input_capture_disabled_signal_id_ = 0;
     input_capture_zones_changed_signal_id_ = 0;
     if (input_capture_ei_ != nullptr) {
-      ei_disconnect(input_capture_ei_);
       input_capture_ei_ = ei_unref(input_capture_ei_);
     }
     if (input_capture_connection_ != nullptr) {
@@ -3341,7 +3340,6 @@ class RemoteInputPlugin {
     }
     ResetPortalDeviceStateLocked();
     if (portal_ei_ != nullptr) {
-      ei_disconnect(portal_ei_);
       portal_ei_ = ei_unref(portal_ei_);
     }
     if (portal_connection_ != nullptr) {

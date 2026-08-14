@@ -20,35 +20,36 @@ enum _OutboundPolicy { failClosed, dropOldest, remoteInput }
 final class BoundedOutboundQueue {
   BoundedOutboundQueue._({
     required Future<void> Function(Stream<Object>) addStream,
+    void Function(Object)? add,
     required _OutboundPolicy policy,
     required this.maxItems,
     required this.maxBytes,
     required this.writerTimeout,
     this.onOverflow,
-  })  : _addStream = addStream,
-        _policy = policy {
-    if (maxItems <= 0 ||
-        maxBytes <= 0 ||
-        writerTimeout <= Duration.zero) {
+  }) : _addStream = addStream,
+       _add = add,
+       _policy = policy {
+    if (maxItems <= 0 || maxBytes <= 0 || writerTimeout <= Duration.zero) {
       throw ArgumentError('outbound queue limits must be positive');
     }
   }
 
   factory BoundedOutboundQueue.chat({
     required Future<void> Function(Stream<Object>) addStream,
+    void Function(Object)? add,
     int maxItems = 64,
     int maxBytes = 8 * 1024 * 1024,
     Duration writerTimeout = const Duration(seconds: 15),
     void Function()? onOverflow,
-  }) =>
-      BoundedOutboundQueue._(
-        addStream: addStream,
-        policy: _OutboundPolicy.failClosed,
-        maxItems: maxItems,
-        maxBytes: maxBytes,
-        writerTimeout: writerTimeout,
-        onOverflow: onOverflow,
-      );
+  }) => BoundedOutboundQueue._(
+    addStream: addStream,
+    add: add,
+    policy: _OutboundPolicy.failClosed,
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    writerTimeout: writerTimeout,
+    onOverflow: onOverflow,
+  );
 
   factory BoundedOutboundQueue.audio({
     required Future<void> Function(Stream<Object>) addStream,
@@ -56,15 +57,14 @@ final class BoundedOutboundQueue {
     int maxBytes = 512 * 1024,
     Duration writerTimeout = const Duration(seconds: 2),
     void Function()? onOverflow,
-  }) =>
-      BoundedOutboundQueue._(
-        addStream: addStream,
-        policy: _OutboundPolicy.dropOldest,
-        maxItems: maxItems,
-        maxBytes: maxBytes,
-        writerTimeout: writerTimeout,
-        onOverflow: onOverflow,
-      );
+  }) => BoundedOutboundQueue._(
+    addStream: addStream,
+    policy: _OutboundPolicy.dropOldest,
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    writerTimeout: writerTimeout,
+    onOverflow: onOverflow,
+  );
 
   factory BoundedOutboundQueue.remoteInput({
     required Future<void> Function(Stream<Object>) addStream,
@@ -72,17 +72,17 @@ final class BoundedOutboundQueue {
     int maxBytes = 256 * 1024,
     Duration writerTimeout = const Duration(seconds: 2),
     void Function()? onOverflow,
-  }) =>
-      BoundedOutboundQueue._(
-        addStream: addStream,
-        policy: _OutboundPolicy.remoteInput,
-        maxItems: maxItems,
-        maxBytes: maxBytes,
-        writerTimeout: writerTimeout,
-        onOverflow: onOverflow,
-      );
+  }) => BoundedOutboundQueue._(
+    addStream: addStream,
+    policy: _OutboundPolicy.remoteInput,
+    maxItems: maxItems,
+    maxBytes: maxBytes,
+    writerTimeout: writerTimeout,
+    onOverflow: onOverflow,
+  );
 
   final Future<void> Function(Stream<Object>) _addStream;
+  final void Function(Object)? _add;
   final _OutboundPolicy _policy;
   final int maxItems;
   final int maxBytes;
@@ -155,8 +155,9 @@ final class BoundedOutboundQueue {
     }
 
     if (_policy == _OutboundPolicy.remoteInput && _isCoalescible(kind)) {
-      final stale =
-          _waiting.where((item) => item.kind == kind).toList(growable: false);
+      final stale = _waiting
+          .where((item) => item.kind == kind)
+          .toList(growable: false);
       for (final item in stale) {
         _waiting.remove(item);
         _drop(item);
@@ -235,9 +236,7 @@ final class BoundedOutboundQueue {
       _active = item;
       final attempt = ++_writerAttempt;
       try {
-        await _addStream(
-          Stream<Object>.fromFuture(item.produce()),
-        ).timeout(writerTimeout);
+        await _write(item).timeout(writerTimeout);
         if (!_isCurrentWriter(item, attempt)) {
           return;
         }
@@ -252,10 +251,17 @@ final class BoundedOutboundQueue {
     }
   }
 
+  Future<void> _write(_OutboundItem item) async {
+    final add = _add;
+    if (add != null) {
+      add(await item.produce());
+      return;
+    }
+    await _addStream(Stream<Object>.fromFuture(item.produce()));
+  }
+
   bool _isCurrentWriter(_OutboundItem item, int attempt) {
-    return !_terminal &&
-        attempt == _writerAttempt &&
-        identical(_active, item);
+    return !_terminal && attempt == _writerAttempt && identical(_active, item);
   }
 
   void _finishActive(_OutboundItem item, OutboundQueueResult result) {

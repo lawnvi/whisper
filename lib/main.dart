@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
+import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
@@ -33,7 +34,9 @@ enum AppDiagnosticKind { desktopWindowTheme }
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
-  WhisperAead.installNativeAcceleration(await SodiumInit.init());
+  final sodium = await SodiumInit.init();
+  WhisperAead.installNativeAcceleration(sodium);
+  StreamingChecksum.installNativeSha256Acceleration();
 
   if (!isMobile()) {
     await DesktopQuickSendInbox.shared.initialize(initialArguments: arguments);

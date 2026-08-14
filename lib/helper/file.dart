@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/native_streaming_sha256.dart';
 import 'package:whisper/helper/privacy_log.dart';
 
 enum FileOperationKind {
@@ -23,10 +24,8 @@ enum FileOperationState { failed }
 
 enum DesktopFileManagerPlatform { macOS, windows, linux }
 
-typedef FileManagerProcessRunner = Future<ProcessResult> Function(
-  String executable,
-  List<String> arguments,
-);
+typedef FileManagerProcessRunner =
+    Future<ProcessResult> Function(String executable, List<String> arguments);
 
 class FileManagerCommand {
   const FileManagerCommand(this.executable, this.arguments);
@@ -37,8 +36,9 @@ class FileManagerCommand {
 
 const _androidDirChannel = MethodChannel("com.vireen.whisper/android_dir");
 const _iosDirChannel = MethodChannel("com.vireen.whisper/ios_dir");
-const _desktopFileManagerChannel =
-    MethodChannel('com.vireen.whisper/file_manager');
+const _desktopFileManagerChannel = MethodChannel(
+  'com.vireen.whisper/file_manager',
+);
 
 bool hasEnoughStorageForFile({
   required int fileSize,
@@ -68,16 +68,14 @@ Future<int?> availableBytesForPath(String path) async {
 
   try {
     if (Platform.isAndroid) {
-      return await _androidDirChannel.invokeMethod<int>(
-        'availableBytes',
-        {'path': path},
-      );
+      return await _androidDirChannel.invokeMethod<int>('availableBytes', {
+        'path': path,
+      });
     }
     if (Platform.isIOS) {
-      return await _iosDirChannel.invokeMethod<int>(
-        'availableBytes',
-        {'path': path},
-      );
+      return await _iosDirChannel.invokeMethod<int>('availableBytes', {
+        'path': path,
+      });
     }
     if (Platform.isWindows) {
       return await _availableBytesOnWindows(path);
@@ -86,10 +84,7 @@ Future<int?> availableBytesForPath(String path) async {
       return await _availableBytesFromDf(path);
     }
   } catch (error) {
-    _logFileOperation(
-      FileOperationKind.storageQuery,
-      error: error,
-    );
+    _logFileOperation(FileOperationKind.storageQuery, error: error);
   }
 
   return null;
@@ -101,15 +96,9 @@ Future<void> notifyFileVisibleToAndroidPickers(String path) async {
   }
 
   try {
-    await _androidDirChannel.invokeMethod<void>(
-      'scanFile',
-      {'path': path},
-    );
+    await _androidDirChannel.invokeMethod<void>('scanFile', {'path': path});
   } catch (error) {
-    _logFileOperation(
-      FileOperationKind.pickerScan,
-      error: error,
-    );
+    _logFileOperation(FileOperationKind.pickerScan, error: error);
   }
 }
 
@@ -134,10 +123,7 @@ Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
       await notifyFileVisibleToAndroidPickers(entity.path);
     }
   } catch (error) {
-    _logFileOperation(
-      FileOperationKind.pickerScan,
-      error: error,
-    );
+    _logFileOperation(FileOperationKind.pickerScan, error: error);
   }
 }
 
@@ -267,15 +253,14 @@ Future<bool> revealFileInFileManager(
       }
     } catch (error) {
       // Older builds do not have the native channel; keep the command fallback.
-      _logFileOperation(
-        FileOperationKind.platformChannel,
-        error: error,
-      );
+      _logFileOperation(FileOperationKind.platformChannel, error: error);
     }
   }
 
-  for (final command
-      in fileManagerRevealCommands(resolvedPlatform, targetPath)) {
+  for (final command in fileManagerRevealCommands(
+    resolvedPlatform,
+    targetPath,
+  )) {
     try {
       final result = await processRunner(command.executable, command.arguments);
       if (result.exitCode == 0) {
@@ -286,10 +271,7 @@ Future<bool> revealFileInFileManager(
         exitCode: result.exitCode,
       );
     } catch (error) {
-      _logFileOperation(
-        FileOperationKind.fileManagerReveal,
-        error: error,
-      );
+      _logFileOperation(FileOperationKind.fileManagerReveal, error: error);
     }
   }
 
@@ -317,50 +299,80 @@ Hash _checksumHash(String algorithm) {
     'md5' => md5,
     'sha256' => sha256,
     'none' => throw ArgumentError.value(
-        algorithm,
-        'algorithm',
-        'Checksum disabled',
-      ),
+      algorithm,
+      'algorithm',
+      'Checksum disabled',
+    ),
     _ => throw ArgumentError.value(
-        algorithm,
-        'algorithm',
-        'Unsupported checksum algorithm',
-      ),
+      algorithm,
+      'algorithm',
+      'Unsupported checksum algorithm',
+    ),
   };
 }
 
-String bytesChecksum(
-  List<int> bytes, {
-  String algorithm = 'sha256',
-}) {
+String bytesChecksum(List<int> bytes, {String algorithm = 'sha256'}) {
   return _checksumHash(algorithm).convert(bytes).toString();
 }
 
 class StreamingChecksum {
-  StreamingChecksum({
-    String algorithm = 'sha256',
-  })  : _digestSink = _DigestSink(),
-        _closed = false {
-    _inputSink = _checksumHash(algorithm).startChunkedConversion(_digestSink);
+  StreamingChecksum({String algorithm = 'sha256'})
+    : _native = algorithm == 'sha256' && _nativeSha256Enabled
+          ? NativeStreamingSha256()
+          : null,
+      _digestSink = _DigestSink(),
+      _closed = false {
+    if (_native == null) {
+      _inputSink = _checksumHash(algorithm).startChunkedConversion(_digestSink);
+    }
   }
 
+  static bool _nativeSha256Enabled = false;
+
+  static void installNativeSha256Acceleration() {
+    final probe = NativeStreamingSha256();
+    if (probe.close() !=
+        'e3b0c44298fc1c149afbf4c8996fb924'
+            '27ae41e4649b934ca495991b7852b855') {
+      throw StateError('Native SHA-256 self-test failed');
+    }
+    _nativeSha256Enabled = true;
+  }
+
+  final NativeStreamingSha256? _native;
   final _DigestSink _digestSink;
-  late final ByteConversionSink _inputSink;
+  ByteConversionSink? _inputSink;
   bool _closed;
+  String? _value;
 
   void add(List<int> bytes) {
     if (_closed) {
       throw StateError('Cannot add bytes after checksum is closed');
     }
-    _inputSink.add(bytes);
+    final native = _native;
+    if (native != null) {
+      native.add(bytes);
+    } else {
+      _inputSink!.add(bytes);
+    }
   }
 
   String close() {
-    if (!_closed) {
-      _inputSink.close();
-      _closed = true;
+    final existing = _value;
+    if (existing != null) {
+      return existing;
     }
-    return _digestSink.value.toString();
+    final native = _native;
+    final String value;
+    if (native != null) {
+      value = native.close();
+    } else {
+      _inputSink!.close();
+      value = _digestSink.value.toString();
+    }
+    _closed = true;
+    _value = value;
+    return value;
   }
 }
 
@@ -495,10 +507,7 @@ Future<bool> openAndroidDir(String path) async {
   try {
     await _androidDirChannel.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (error) {
-    _logFileOperation(
-      FileOperationKind.platformChannel,
-      error: error,
-    );
+    _logFileOperation(FileOperationKind.platformChannel, error: error);
   }
   return result;
 }
@@ -508,10 +517,7 @@ Future<String> openIosDir(String path) async {
   try {
     await _iosDirChannel.invokeMethod('openFolder', {'path': path});
   } on PlatformException catch (error) {
-    _logFileOperation(
-      FileOperationKind.platformChannel,
-      error: error,
-    );
+    _logFileOperation(FileOperationKind.platformChannel, error: error);
   }
   return result;
 }
@@ -550,20 +556,19 @@ Future<int?> _availableBytesFromDf(String path) async {
 
 Future<int?> _availableBytesOnWindows(String path) async {
   final root = p.rootPrefix(path);
-  final drive =
-      root.replaceAll('\\', '').replaceAll('/', '').replaceAll(':', '');
+  final drive = root
+      .replaceAll('\\', '')
+      .replaceAll('/', '')
+      .replaceAll(':', '');
   if (drive.isEmpty) {
     return null;
   }
 
-  final result = await Process.run(
-    'powershell',
-    [
-      '-NoProfile',
-      '-Command',
-      "(Get-PSDrive -Name '$drive').Free",
-    ],
-  );
+  final result = await Process.run('powershell', [
+    '-NoProfile',
+    '-Command',
+    "(Get-PSDrive -Name '$drive').Free",
+  ]);
   if (result.exitCode != 0) {
     _logFileOperation(
       FileOperationKind.storageQuery,
@@ -575,18 +580,11 @@ Future<int?> _availableBytesOnWindows(String path) async {
   return int.tryParse(result.stdout.toString().trim());
 }
 
-void _logFileOperation(
-  FileOperationKind kind, {
-  Object? error,
-  int? exitCode,
-}) {
-  privacyLog.event(
-    PrivacyEvent.localOperation,
-    <PrivacyField, Object>{
-      PrivacyField.kind: kind,
-      PrivacyField.state: FileOperationState.failed,
-      if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
-      if (exitCode != null) PrivacyField.exitCode: exitCode,
-    },
-  );
+void _logFileOperation(FileOperationKind kind, {Object? error, int? exitCode}) {
+  privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+    PrivacyField.kind: kind,
+    PrivacyField.state: FileOperationState.failed,
+    if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
+    if (exitCode != null) PrivacyField.exitCode: exitCode,
+  });
 }

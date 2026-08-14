@@ -67,9 +67,27 @@ class WhisperFrameV3 {
 
   Uint8List encode() {
     final bytes = Uint8List(headerLength + payload.length);
-    final view = ByteData.sublistView(bytes);
+    writeHeaderInto(bytes);
+    bytes.setRange(headerLength, bytes.length, payload);
+    return bytes;
+  }
+
+  void writeHeaderInto(Uint8List bytes, {int destinationOffset = 0}) {
+    if (destinationOffset < 0 ||
+        bytes.length - destinationOffset < headerLength + payload.length) {
+      throw RangeError('Whisper frame destination is too small');
+    }
+    final view = ByteData.sublistView(
+      bytes,
+      destinationOffset,
+      destinationOffset + headerLength,
+    );
     final magicBytes = ascii.encode(magic);
-    bytes.setRange(0, magicBytes.length, magicBytes);
+    bytes.setRange(
+      destinationOffset,
+      destinationOffset + magicBytes.length,
+      magicBytes,
+    );
     view
       ..setUint8(4, version)
       ..setUint8(5, type.code)
@@ -80,9 +98,11 @@ class WhisperFrameV3 {
       ..setUint32(24, sequence)
       ..setUint32(28, 0);
     final idBytes = transferIdBytes;
-    bytes.setRange(32, 32 + idBytes.length, idBytes);
-    bytes.setRange(headerLength, bytes.length, payload);
-    return bytes;
+    bytes.setRange(
+      destinationOffset + 32,
+      destinationOffset + 32 + idBytes.length,
+      idBytes,
+    );
   }
 
   factory WhisperFrameV3.decode(Uint8List bytes) {

@@ -11,10 +11,12 @@ import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/parallel_streaming_checksum.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
@@ -51,11 +53,11 @@ final class _TransferOperationLaneEntry {
 final class _OutgoingChecksumState {
   _OutgoingChecksumState({required this.checksum, required this.offset});
 
-  final StreamingChecksum checksum;
+  final ParallelStreamingChecksum checksum;
   int offset;
   bool closed = false;
 
-  String finish({required int expectedOffset}) {
+  Future<String> finish({required int expectedOffset}) async {
     if (offset != expectedOffset) {
       throw StateError('Outgoing checksum has not covered the whole file');
     }
@@ -63,10 +65,46 @@ final class _OutgoingChecksumState {
     return checksum.close();
   }
 
-  void dispose() {
+  Future<void> dispose() async {
     if (closed) return;
-    checksum.close();
     closed = true;
+    await checksum.dispose();
+  }
+}
+
+final class _IncomingWritePipeline {
+  _IncomingWritePipeline({required this.writtenOffset});
+
+  Future<void> _tail = Future<void>.value();
+  Object? _error;
+  StackTrace? _stackTrace;
+  int writtenOffset;
+
+  void add(
+    RandomAccessFile writer,
+    Uint8List payload, {
+    required int endOffset,
+  }) {
+    _tail = _tail.then((_) async {
+      if (_error != null) {
+        return;
+      }
+      try {
+        await writer.writeFrom(payload);
+        writtenOffset = endOffset;
+      } catch (error, stackTrace) {
+        _error = error;
+        _stackTrace = stackTrace;
+      }
+    });
+  }
+
+  Future<void> drain() async {
+    await _tail;
+    final error = _error;
+    if (error != null) {
+      Error.throwWithStackTrace(error, _stackTrace ?? StackTrace.current);
+    }
   }
 }
 
@@ -92,6 +130,51 @@ Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
 }
 
+Future<ParallelStreamingChecksum> _parallelChecksumForFilePrefix(
+  File file, {
+  required String algorithm,
+  required int end,
+}) async {
+  final checksum = await ParallelStreamingChecksum.start(algorithm: algorithm);
+  try {
+    if (end > 0) {
+      await for (final chunk in file.openRead(0, end)) {
+        checksum.add(chunk);
+      }
+    }
+    return checksum;
+  } catch (_) {
+    await checksum.dispose();
+    rethrow;
+  }
+}
+
+Future<ParallelStreamingChecksum> _parallelChecksumForSourcePrefix(
+  FileTransferSource source, {
+  required String algorithm,
+  required int end,
+}) async {
+  final checksum = await ParallelStreamingChecksum.start(algorithm: algorithm);
+  try {
+    var offset = 0;
+    while (offset < end) {
+      final length = math.min(1024 * 1024, end - offset);
+      final bytes = await source.readRange(offset, length);
+      if (bytes.length != length) {
+        throw const FileSystemException(
+          'Unexpected EOF while hashing transfer source prefix',
+        );
+      }
+      checksum.add(bytes);
+      offset += bytes.length;
+    }
+    return checksum;
+  } catch (_) {
+    await checksum.dispose();
+    rethrow;
+  }
+}
+
 /// V3 文件传输引擎:从 WsSvrManager 机械抽离的发送/接收/断点恢复栈。
 /// 与 socket 层的全部交互经构造注入的回调完成,不直接持有连接对象。
 class FileTransferEngine {
@@ -105,6 +188,8 @@ class FileTransferEngine {
       Object bytes,
     )
     sendBytesToConnection,
+    bool Function(TransferConnectionBinding connection, Object bytes)?
+    enqueueBytesToConnection,
     required FutureOr<bool> Function(TransferConnectionBinding connection)
     markPeerUnresponsive,
     TransferAckWatchdog? ackWatchdog,
@@ -127,11 +212,13 @@ class FileTransferEngine {
     Future<void> Function(String path)? notifyFileVisible,
     Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
     PrivacyLog? privacyLogger,
+    FileTransferV3FlowParameters? flowLimits,
     LocalDatabase Function() database = LocalDatabase.new,
   }) : _currentConnectionBinding = currentConnectionBinding,
        _authenticatedIdentityHashForConnection =
            authenticatedIdentityHashForConnection,
        _sendBytesToConnection = sendBytesToConnection,
+       _enqueueBytesToConnection = enqueueBytesToConnection,
        _markPeerUnresponsive = markPeerUnresponsive,
        _ownsAckWatchdog = ackWatchdog == null,
        _ackWatchdog = ackWatchdog ?? TransferAckWatchdog(),
@@ -156,11 +243,17 @@ class FileTransferEngine {
        _setPublishedFileTimestamp =
            setPublishedFileTimestamp ?? _setFileLastModified,
        _privacyLogger = privacyLogger ?? privacyLog,
+       _flowLimits =
+           flowLimits ??
+           ((Platform.isAndroid || Platform.isIOS)
+               ? FileTransferV3FlowParameters.mobile
+               : FileTransferV3FlowParameters.desktop),
        _database = database;
 
   static const int defaultTransferChunkSize = fileTransferV3FramePayloadSize;
   static const String defaultTransferChecksumAlgorithm =
       fileTransferV3ChecksumAlgorithm;
+  static const int _progressDispatchIntervalMs = 100;
 
   final TransferConnectionBinding? Function(String peerId)
   _currentConnectionBinding;
@@ -171,6 +264,8 @@ class FileTransferEngine {
     Object bytes,
   )
   _sendBytesToConnection;
+  final bool Function(TransferConnectionBinding connection, Object bytes)?
+  _enqueueBytesToConnection;
   final FutureOr<bool> Function(TransferConnectionBinding connection)
   _markPeerUnresponsive;
   final bool _ownsAckWatchdog;
@@ -195,6 +290,7 @@ class FileTransferEngine {
   final Future<void> Function(File file, int timestamp)
   _setPublishedFileTimestamp;
   final PrivacyLog _privacyLogger;
+  final FileTransferV3FlowParameters _flowLimits;
   final LocalDatabase Function() _database;
 
   final _sendFileLock = Lock();
@@ -202,18 +298,27 @@ class FileTransferEngine {
   final Map<String, IOSink> _receivingTransferSinks = <String, IOSink>{};
   final Map<String, RandomAccessFile> _receivingTransferWritersV3 =
       <String, RandomAccessFile>{};
+  final Map<String, _IncomingWritePipeline> _receivingWritePipelines =
+      <String, _IncomingWritePipeline>{};
   final Map<String, FileTransferData> _receivingTransfers =
       <String, FileTransferData>{};
-  final Map<String, StreamingChecksum> _receivingChecksums =
-      <String, StreamingChecksum>{};
+  final Map<String, ParallelStreamingChecksum> _receivingChecksums =
+      <String, ParallelStreamingChecksum>{};
   final Map<String, VerifiedTransferSnapshot> _sealedIncomingSnapshots =
       <String, VerifiedTransferSnapshot>{};
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _receivingTransferSequences = <String, int>{};
+  final Map<String, int> _incomingProgressDispatchTimes = <String, int>{};
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
+  final Map<String, FileTransferV3FlowParameters> _outgoingFlows =
+      <String, FileTransferV3FlowParameters>{};
+  final Map<String, FileTransferV3FlowParameters> _incomingFlows =
+      <String, FileTransferV3FlowParameters>{};
   final Map<String, _OutgoingChecksumState> _outgoingChecksums =
       <String, _OutgoingChecksumState>{};
+  final Map<String, FileTransferSource> _outgoingTransferSources =
+      <String, FileTransferSource>{};
   final Map<String, TransferConnectionBinding> _operationConnectionBindings =
       <String, TransferConnectionBinding>{};
   final Map<String, TransferConnectionBinding> _outgoingConnectionBindings =
@@ -703,6 +808,8 @@ class FileTransferEngine {
       final metadata = FileTransferV3Metadata(
         checksumValue: checksumValue,
         checksumDeferred: checksumDeferred,
+        maxChunkSize: _flowLimits.chunkSize,
+        maxWindowSize: _flowLimits.windowSize,
       );
       final content = jsonEncode(metadata.toJson());
       final draft = _buildMessage(
@@ -1294,6 +1401,9 @@ class FileTransferEngine {
           authenticatedPeerId: authenticatedPeerId,
           expectedOffset: expectedOffset,
           expectedSequence: expectedSequence,
+          maxPayloadSize:
+              _incomingFlows[transfer.transferId]?.chunkSize ??
+              fileTransferV3LegacyFramePayloadSize,
           isActive:
               _transferRuntime.activeIncomingFor(transfer.peerUid) ==
               transfer.transferId,
@@ -1436,7 +1546,8 @@ class FileTransferEngine {
       _ackWatchdog.cancel(transfer.transferId);
       _outgoingWindowEndOffsets.remove(transfer.transferId);
       _outgoingTransferSequences.remove(transfer.transferId);
-      _outgoingChecksums.remove(transfer.transferId)?.dispose();
+      await _outgoingChecksums.remove(transfer.transferId)?.dispose();
+      await _closeOutgoingTransferSource(transfer.transferId);
       _outgoingConnectionBindings.remove(transfer.transferId);
       _transferRuntime.release(
         peerId: peerId,
@@ -1576,7 +1687,10 @@ class FileTransferEngine {
           }
           _outgoingWindowEndOffsets.remove(current.transferId);
           _outgoingTransferSequences.remove(current.transferId);
-          _outgoingChecksums.remove(current.transferId)?.dispose();
+          _outgoingFlows.remove(current.transferId);
+          _incomingFlows.remove(current.transferId);
+          await _outgoingChecksums.remove(current.transferId)?.dispose();
+          await _closeOutgoingTransferSource(current.transferId);
           _outgoingConnectionBindings.remove(current.transferId);
           _incomingConnectionBindings.remove(current.transferId);
           await _updateTransfer(
@@ -1597,12 +1711,7 @@ class FileTransferEngine {
     _ackWatchdog.cancel(message.uuid);
     _outgoingTransferSequences[message.uuid] = 0;
     _outgoingWindowEndOffsets.remove(message.uuid);
-    // DB 里的 offer content 是创建时序列化的:重发/续传前把节奏字段
-    // (chunkSize/windowSize)刷新为当前常量,身份字段(校验和)保持,
-    // 否则升级前中断的传输会被对端以 invalid_metadata 永久拒绝。
-    final refreshedContent = FileTransferV3Metadata.refreshOfferContent(
-      message.content,
-    );
+    _outgoingFlows.remove(message.uuid);
     return _sendFileTransferV3FrameTo(
       peerId,
       WhisperFrameV3(
@@ -1611,16 +1720,7 @@ class FileTransferEngine {
         offset: 0,
         sequence: 0,
         payload: Uint8List.fromList(
-          utf8.encode(
-            encodeWireMessage(
-              message.copyWith(
-                path: '',
-                content: refreshedContent == null
-                    ? const Value.absent()
-                    : Value<String?>(refreshedContent),
-              ),
-            ),
-          ),
+          utf8.encode(encodeWireMessage(message.copyWith(path: ''))),
         ),
       ),
       connection: connection,
@@ -1669,7 +1769,23 @@ class FileTransferEngine {
     if (connection.peerId != peerId) {
       return false;
     }
-    return _sendBytesToConnection(connection, frame.encode());
+    final bytes = frame.encode();
+    return _sendBytesToConnection(connection, bytes);
+  }
+
+  Future<bool> _sendPreparedFileTransferV3FrameTo(
+    String peerId,
+    AuthenticatedPayloadBuffer buffer, {
+    required TransferConnectionBinding connection,
+  }) async {
+    if (connection.peerId != peerId) {
+      return false;
+    }
+    final enqueue = _enqueueBytesToConnection;
+    if (enqueue != null) {
+      return enqueue(connection, buffer);
+    }
+    return _sendBytesToConnection(connection, buffer.payload);
   }
 
   bool _isSessionCurrent(void Function() requireCurrent) {
@@ -1730,6 +1846,14 @@ class FileTransferEngine {
     required bool isNewMessage,
     required void Function() requireCurrent,
   }) async {
+    final metadata = FileTransferV3Metadata.parseOffer(
+      message.content,
+      size: message.size,
+    );
+    _incomingFlows[transfer.transferId] = selectFileTransferV3FlowParameters(
+      offer: metadata,
+      localLimits: _flowLimits,
+    );
     if (isTerminalFileTransferState(transfer.state)) {
       requireCurrent();
       await _ackMessage(message);
@@ -1880,6 +2004,27 @@ class FileTransferEngine {
     if (transfer == null || isTerminalFileTransferState(transfer.state)) {
       return _IncomingReadyResult.unavailable;
     }
+    var flow = _incomingFlows[transfer.transferId];
+    if (flow == null) {
+      final message = await _database().fetchAssociatedFileTransferMessage(
+        transfer,
+      );
+      if (message == null) {
+        return _IncomingReadyResult.unavailable;
+      }
+      try {
+        flow = selectFileTransferV3FlowParameters(
+          offer: FileTransferV3Metadata.parseOffer(
+            message.content,
+            size: message.size,
+          ),
+          localLimits: _flowLimits,
+        );
+      } on FileTransferV3MetadataException {
+        return _IncomingReadyResult.unavailable;
+      }
+      _incomingFlows[transfer.transferId] = flow;
+    }
     connection ??= _incomingConnectionBindings[transfer.transferId];
     if (connection != null) {
       _incomingConnectionBindings[transfer.transferId] = connection;
@@ -1915,7 +2060,7 @@ class FileTransferEngine {
       await tempFile.writeAsBytes(const <int>[], flush: true);
     }
     tempFile = await _validatedIncomingTempFile(transfer);
-    final checksum = await streamingChecksumForFilePrefix(
+    final checksum = await _parallelChecksumForFilePrefix(
       tempFile,
       algorithm: transfer.checksumAlgorithm,
       end: durableOffset,
@@ -1942,7 +2087,7 @@ class FileTransferEngine {
     );
     requireCurrent?.call();
     if (updated == null) {
-      checksum.close();
+      await checksum.dispose();
       await _releaseFailedIncomingReadyAttempt(
         transfer,
         connection: connection,
@@ -1975,6 +2120,9 @@ class FileTransferEngine {
           fileTransferV3ResumeProofWindowSize,
           durableOffset,
         ),
+        chunkSize: flow.negotiated ? flow.chunkSize : 0,
+        ackIntervalSize: flow.negotiated ? flow.ackIntervalSize : 0,
+        windowSize: flow.negotiated ? flow.windowSize : 0,
       ),
       connection: connection,
     );
@@ -2081,6 +2229,33 @@ class FileTransferEngine {
     if (message == null) {
       return;
     }
+    final offer = FileTransferV3Metadata.parseOffer(
+      message.content,
+      size: message.size,
+    );
+    late final FileTransferV3FlowParameters flow;
+    if (control.hasFlowParameters) {
+      if (!offer.supportsFlowNegotiation ||
+          control.chunkSize > offer.maxChunkSize! ||
+          control.windowSize > offer.maxWindowSize!) {
+        throw const WireInputRejected(WireInputReason.transferPayloadInvalid);
+      }
+      flow = FileTransferV3FlowParameters(
+        chunkSize: control.chunkSize,
+        ackIntervalSize: control.ackIntervalSize,
+        windowSize: control.windowSize,
+      );
+    } else {
+      flow = FileTransferV3FlowParameters(
+        chunkSize: offer.chunkSize,
+        ackIntervalSize: math.min(
+          offer.windowSize,
+          math.max(fileTransferV3LegacyAckIntervalSize, offer.chunkSize),
+        ),
+        windowSize: offer.windowSize,
+      );
+    }
+    _outgoingFlows[transfer.transferId] = flow;
     final source = _transferSourceForMessage(message, transfer);
     late final bool sourceIsValid;
     try {
@@ -2253,11 +2428,11 @@ class FileTransferEngine {
       return null;
     }
     final source = _transferSourceForMessage(message, transfer);
+    final flow =
+        _outgoingFlows[transfer.transferId] ??
+        FileTransferV3FlowParameters.legacy;
     final durableOffset = offset;
-    final windowEnd = math.min(
-      transfer.size,
-      durableOffset + fileTransferV3WindowSize,
-    );
+    final windowEnd = math.min(transfer.size, durableOffset + flow.windowSize);
     var sequence = _outgoingTransferSequences[transfer.transferId] ?? 0;
     var cursor =
         _outgoingWindowEndOffsets[transfer.transferId] ?? durableOffset;
@@ -2279,11 +2454,21 @@ class FileTransferEngine {
       final expectedWindow = armWatchdog
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
-      final length = math.min(
-        fileTransferV3FramePayloadSize,
-        windowEnd - cursor,
+      final length = math.min(flow.chunkSize, windowEnd - cursor);
+      final buffer = AuthenticatedPayloadBuffer.allocate(
+        WhisperFrameV3.headerLength + length,
       );
-      final payload = await source.readRange(cursor, length);
+      final payload = Uint8List.sublistView(
+        buffer.payload,
+        WhisperFrameV3.headerLength,
+      );
+      final readLength = await readTransferSourceRangeInto(
+        source,
+        payload,
+        destinationOffset: 0,
+        sourceOffset: cursor,
+        length: length,
+      );
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
               transfer.transferId ||
           _outgoingConnectionBindings[transfer.transferId] != connection) {
@@ -2296,24 +2481,19 @@ class FileTransferEngine {
           )) {
         return cursor;
       }
-      if (payload.length != length) {
+      if (readLength != length) {
         throw const FileSystemException(
           'Unexpected EOF while reading transfer frame',
         );
       }
-      final sent = await _sendFileTransferV3FrameTo(
-        transfer.peerUid,
-        WhisperFrameV3(
-          type: WhisperFrameType.fileData,
-          transferId: transfer.transferId,
-          offset: cursor,
-          sequence: sequence,
-          payload: payload,
-        ),
+      final frame = WhisperFrameV3(
+        type: WhisperFrameType.fileData,
+        transferId: transfer.transferId,
+        offset: cursor,
+        sequence: sequence,
+        payload: payload,
       );
-      if (!sent) {
-        throw StateError('generation-bound transfer send failed');
-      }
+      frame.writeHeaderInto(buffer.payload);
       if (checksumState != null) {
         final payloadEnd = cursor + payload.length;
         if (checksumState.offset == cursor) {
@@ -2322,6 +2502,14 @@ class FileTransferEngine {
         } else if (checksumState.offset < payloadEnd) {
           throw StateError('Outgoing checksum stream is not contiguous');
         }
+      }
+      final sent = await _sendPreparedFileTransferV3FrameTo(
+        transfer.peerUid,
+        buffer,
+        connection: connection,
+      );
+      if (!sent) {
+        throw StateError('generation-bound transfer send failed');
       }
       cursor += payload.length;
       sequence++;
@@ -2373,10 +2561,10 @@ class FileTransferEngine {
     if (existing != null && existing.offset >= requiredOffset) {
       return existing;
     }
-    existing?.dispose();
-    final checksum = await streamingChecksumForTransferSourcePrefix(
+    await existing?.dispose();
+    final checksum = await _parallelChecksumForSourcePrefix(
       source,
-      algorithm: fileTransferV3ChecksumAlgorithm,
+      algorithm: transfer.checksumAlgorithm,
       end: requiredOffset,
     );
     final state = _OutgoingChecksumState(
@@ -2517,17 +2705,18 @@ class FileTransferEngine {
       return;
     }
 
-    var tempFile = await _validatedIncomingTempFile(transfer);
-    var transitionStarted = false;
-    if (!await tempFile.exists()) {
-      tempFile = await _validatedIncomingTempFile(transfer);
-      await tempFile.parent.create(recursive: true);
-      tempFile = await _validatedIncomingTempFile(transfer);
-      await tempFile.create(exclusive: true);
-      transitionStarted = true;
-    }
     var writer = _receivingTransferWritersV3[transfer.transferId];
+    var tempFile = File(transfer.tempPath);
     if (writer == null) {
+      tempFile = await _validatedIncomingTempFile(transfer);
+      var transitionStarted = false;
+      if (!await tempFile.exists()) {
+        tempFile = await _validatedIncomingTempFile(transfer);
+        await tempFile.parent.create(recursive: true);
+        tempFile = await _validatedIncomingTempFile(transfer);
+        await tempFile.create(exclusive: true);
+        transitionStarted = true;
+      }
       tempFile = await _validatedIncomingTempFile(transfer);
       final currentLength = await tempFile.length();
       if (!transitionStarted) {
@@ -2550,6 +2739,9 @@ class FileTransferEngine {
       final openedWriter = await tempFile.open(mode: FileMode.writeOnlyAppend);
       writer = openedWriter;
       _receivingTransferWritersV3[transfer.transferId] = writer;
+      _receivingWritePipelines[transfer.transferId] = _IncomingWritePipeline(
+        writtenOffset: frame.offset,
+      );
       _receivingTransfers[transfer.transferId] = transfer;
       _receivingTransferOffsets[transfer.transferId] = frame.offset;
     }
@@ -2557,7 +2749,7 @@ class FileTransferEngine {
     var checksum = _receivingChecksums[transfer.transferId];
     if (checksum == null) {
       tempFile = await _validatedIncomingTempFile(transfer);
-      checksum = await streamingChecksumForFilePrefix(
+      checksum = await _parallelChecksumForFilePrefix(
         tempFile,
         algorithm: transfer.checksumAlgorithm,
         end: frame.offset,
@@ -2565,10 +2757,13 @@ class FileTransferEngine {
       requireCurrent();
       _receivingChecksums[transfer.transferId] = checksum;
     }
-    await _validatedIncomingTempFile(transfer);
-    await writer.writeFrom(frame.payload);
-    checksum.add(frame.payload);
+    final writePipeline = _receivingWritePipelines.putIfAbsent(
+      transfer.transferId,
+      () => _IncomingWritePipeline(writtenOffset: frame.offset),
+    );
     final committedBytes = frame.offset + frame.payload.length;
+    writePipeline.add(writer, frame.payload, endOffset: committedBytes);
+    checksum.add(frame.payload);
     _receivingTransferOffsets[transfer.transferId] = committedBytes;
     _dispatchTransferProgress(
       transfer,
@@ -2579,6 +2774,7 @@ class FileTransferEngine {
     );
 
     if (committedBytes >= transfer.size) {
+      tempFile = await _validatedIncomingTempFile(transfer);
       final durableOffset = await _flushIncomingFileTransferV3(
         transfer,
         transfer.size,
@@ -2599,8 +2795,10 @@ class FileTransferEngine {
       return;
     }
 
-    if (committedBytes - transfer.committedBytes >=
-        fileTransferV3AckIntervalSize) {
+    final ackInterval =
+        _incomingFlows[transfer.transferId]?.ackIntervalSize ??
+        fileTransferV3LegacyAckIntervalSize;
+    if (committedBytes - transfer.committedBytes >= ackInterval) {
       final durableOffset = await _flushIncomingFileTransferV3(
         transfer,
         committedBytes,
@@ -2671,6 +2869,14 @@ class FileTransferEngine {
     required int committedBytes,
     required FileTransferState state,
   }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final previous = _incomingProgressDispatchTimes[transfer.transferId];
+    if (state == FileTransferState.transferring &&
+        previous != null &&
+        now - previous < _progressDispatchIntervalMs) {
+      return;
+    }
+    _incomingProgressDispatchTimes[transfer.transferId] = now;
     _emitTransferUpdated(
       TransferSnapshot(
         transferId: transfer.transferId,
@@ -2683,7 +2889,7 @@ class FileTransferEngine {
         size: transfer.size,
         committedBytes: committedBytes,
         lastError: transfer.lastError,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
+        updatedAt: now,
       ),
     );
   }
@@ -2694,6 +2900,7 @@ class FileTransferEngine {
   ) async {
     final writer = _receivingTransferWritersV3[transfer.transferId];
     if (writer != null) {
+      await _receivingWritePipelines[transfer.transferId]?.drain();
       await writer.flush();
       return math.min(offset, transfer.size);
     }
@@ -2707,11 +2914,11 @@ class FileTransferEngine {
   Future<void> _sealIncomingFileTransferV3(
     FileTransferData transfer,
     File tempFile, {
-    StreamingChecksum? checksum,
+    ParallelStreamingChecksum? checksum,
   }) async {
     await _closeReceivingTransferFile(transfer.transferId, flush: true);
     checksum ??= _receivingChecksums.remove(transfer.transferId);
-    checksum ??= await streamingChecksumForFilePrefix(
+    checksum ??= await _parallelChecksumForFilePrefix(
       tempFile,
       algorithm: transfer.checksumAlgorithm,
       end: transfer.size,
@@ -2719,7 +2926,7 @@ class FileTransferEngine {
     final snapshot = await VerifiedTransferSnapshot.openFromStreamingDigest(
       tempFile,
       expectedSize: transfer.size,
-      streamingSha256: checksum.close(),
+      streamingSha256: await checksum.close(),
     );
     await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
     _sealedIncomingSnapshots[transfer.transferId] = snapshot;
@@ -2755,7 +2962,7 @@ class FileTransferEngine {
         source,
         requiredOffset: transfer.size,
       );
-      return state.finish(expectedOffset: transfer.size);
+      return await state.finish(expectedOffset: transfer.size);
     } catch (error) {
       _logFailure(
         FileTransferDiagnosticKind.outgoingFailed,
@@ -2906,7 +3113,9 @@ class FileTransferEngine {
     _ackWatchdog.cancel(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
-    _outgoingChecksums.remove(transfer.transferId)?.dispose();
+    _outgoingFlows.remove(transfer.transferId);
+    await _outgoingChecksums.remove(transfer.transferId)?.dispose();
+    await _closeOutgoingTransferSource(transfer.transferId);
     _outgoingConnectionBindings.remove(transfer.transferId);
     final released = _transferRuntime.release(
       peerId: transfer.peerUid,
@@ -3149,14 +3358,14 @@ class FileTransferEngine {
     } on FileSystemException catch (error) {
       _logFailure(FileTransferDiagnosticKind.resumeResetDeferred, error);
       _receivingTransfers.remove(transfer.transferId);
-      _receivingChecksums.remove(transfer.transferId);
+      await _receivingChecksums.remove(transfer.transferId)?.dispose();
       await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
       _receivingTransferOffsets.remove(transfer.transferId);
       _receivingTransferSequences.remove(transfer.transferId);
       return null;
     }
     _receivingTransfers.remove(transfer.transferId);
-    _receivingChecksums.remove(transfer.transferId);
+    await _receivingChecksums.remove(transfer.transferId)?.dispose();
     await _sealedIncomingSnapshots.remove(transfer.transferId)?.close();
     _receivingTransferOffsets[transfer.transferId] = 0;
     _receivingTransferSequences[transfer.transferId] = 0;
@@ -3183,7 +3392,7 @@ class FileTransferEngine {
       if (snapshot == null) {
         tempFile = await _validatedIncomingTempFile(transfer);
         var checksum = _receivingChecksums.remove(transfer.transferId);
-        checksum ??= await streamingChecksumForFilePrefix(
+        checksum ??= await _parallelChecksumForFilePrefix(
           tempFile,
           algorithm: transfer.checksumAlgorithm,
           end: transfer.size,
@@ -3191,7 +3400,7 @@ class FileTransferEngine {
         snapshot = await VerifiedTransferSnapshot.openFromStreamingDigest(
           tempFile,
           expectedSize: transfer.size,
-          streamingSha256: checksum.close(),
+          streamingSha256: await checksum.close(),
         );
       }
       if (snapshot.sha256Value !=
@@ -3325,7 +3534,17 @@ class FileTransferEngine {
     MessageData message,
     FileTransferData transfer,
   ) {
-    return _sourceFor(message.path, transfer.size);
+    return _outgoingTransferSources.putIfAbsent(
+      transfer.transferId,
+      () => _sourceFor(message.path, transfer.size),
+    );
+  }
+
+  Future<void> _closeOutgoingTransferSource(String transferId) async {
+    final source = _outgoingTransferSources.remove(transferId);
+    if (source != null) {
+      await closeTransferSource(source);
+    }
   }
 
   Future<File> _validatedIncomingTempFile(FileTransferData transfer) async {
@@ -3598,11 +3817,16 @@ class FileTransferEngine {
     bool flush = false,
   }) async {
     final writer = _receivingTransferWritersV3.remove(transferId);
+    final writePipeline = _receivingWritePipelines.remove(transferId);
     if (writer != null) {
-      if (flush) {
-        await writer.flush();
+      try {
+        await writePipeline?.drain();
+        if (flush) {
+          await writer.flush();
+        }
+      } finally {
+        await writer.close();
       }
-      await writer.close();
     }
     final sink = _receivingTransferSinks.remove(transferId);
     if (sink != null) {
@@ -3614,13 +3838,12 @@ class FileTransferEngine {
   }
 
   Future<void> _closeAllReceivingTransferFiles({bool flush = false}) async {
-    final writers = _receivingTransferWritersV3.values.toList(growable: false);
-    _receivingTransferWritersV3.clear();
-    for (final writer in writers) {
-      if (flush) {
-        await writer.flush();
-      }
-      await writer.close();
+    final transferIds = <String>{
+      ..._receivingTransferWritersV3.keys,
+      ..._receivingWritePipelines.keys,
+    };
+    for (final transferId in transferIds) {
+      await _closeReceivingTransferFile(transferId, flush: flush);
     }
     final sinks = _receivingTransferSinks.values.toList(growable: false);
     _receivingTransferSinks.clear();
@@ -3639,9 +3862,11 @@ class FileTransferEngine {
     await _closeReceivingTransferFile(transferId, flush: flush);
     await _sealedIncomingSnapshots.remove(transferId)?.close();
     _receivingTransfers.remove(transferId);
-    _receivingChecksums.remove(transferId)?.close();
+    await _receivingChecksums.remove(transferId)?.dispose();
     _receivingTransferOffsets.remove(transferId);
     _receivingTransferSequences.remove(transferId);
+    _incomingProgressDispatchTimes.remove(transferId);
+    _incomingFlows.remove(transferId);
   }
 
   Future<void> _releaseIncomingAndStartNext(
@@ -3675,19 +3900,31 @@ class FileTransferEngine {
     }
     _sealedIncomingSnapshots.clear();
     _receivingTransfers.clear();
+    for (final checksum in _receivingChecksums.values) {
+      await checksum.dispose();
+    }
     _receivingChecksums.clear();
     _receivingTransferOffsets.clear();
     _receivingTransferSequences.clear();
+    _incomingProgressDispatchTimes.clear();
     _receivingTransferWritersV3.clear();
+    _receivingWritePipelines.clear();
     _transferRuntime.clearAll();
     _outgoingConnectionBindings.clear();
     _incomingConnectionBindings.clear();
     _outgoingTransferSequences.clear();
     _outgoingWindowEndOffsets.clear();
+    _outgoingFlows.clear();
+    _incomingFlows.clear();
     for (final checksum in _outgoingChecksums.values) {
-      checksum.dispose();
+      await checksum.dispose();
     }
     _outgoingChecksums.clear();
+    final sources = _outgoingTransferSources.values.toList(growable: false);
+    _outgoingTransferSources.clear();
+    for (final source in sources) {
+      await closeTransferSource(source);
+    }
   }
 
   /// 原 svrmanager `_resumeRecoverableOutgoingTransfers`:

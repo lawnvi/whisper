@@ -36,10 +36,8 @@ class PeerConnectionSnapshot {
 
   int get generation => connectionId;
 
-  TransferConnectionBinding get binding => TransferConnectionBinding(
-        peerId: peerId,
-        generation: connectionId,
-      );
+  TransferConnectionBinding get binding =>
+      TransferConnectionBinding(peerId: peerId, generation: connectionId);
 }
 
 class PeerConnection {
@@ -49,9 +47,9 @@ class PeerConnection {
     required PeerMessageSender send,
     PeerMessageAsyncSender? sendAsync,
     required PeerConnectionCloser close,
-  })  : _send = send,
-        _sendAsync = sendAsync,
-        _close = close;
+  }) : _send = send,
+       _sendAsync = sendAsync,
+       _close = close;
 
   final String peerId;
   final int connectionId;
@@ -63,10 +61,10 @@ class PeerConnection {
   bool get isConnected => !_isClosed;
 
   PeerConnectionSnapshot get snapshot => PeerConnectionSnapshot(
-        peerId: peerId,
-        connectionId: connectionId,
-        isConnected: isConnected,
-      );
+    peerId: peerId,
+    connectionId: connectionId,
+    isConnected: isConnected,
+  );
 
   bool send(Object message) {
     if (_isClosed) {
@@ -209,6 +207,18 @@ class PeerConnectionRegistry {
         connection.isConnected;
   }
 
+  bool sendIfCurrent(TransferConnectionBinding binding, Object message) {
+    final connection = _connections[binding.peerId];
+    if (connection == null || connection.connectionId != binding.generation) {
+      return false;
+    }
+    final accepted = connection.send(message);
+    return accepted &&
+        identical(_connections[binding.peerId], connection) &&
+        connection.connectionId == binding.generation &&
+        connection.isConnected;
+  }
+
   Future<bool> sendTargetedOrDefault({
     required String? peerId,
     required Object message,
@@ -272,13 +282,8 @@ class PeerConnectionRegistry {
   }
 
   Future<void> disconnectAll() async {
-    final peerIds = <String>{
-      ..._connections.keys,
-      ..._lifecycleTails.keys,
-    };
-    await Future.wait(
-      peerIds.map((peerId) => disconnectCurrent(peerId)),
-    );
+    final peerIds = <String>{..._connections.keys, ..._lifecycleTails.keys};
+    await Future.wait(peerIds.map((peerId) => disconnectCurrent(peerId)));
   }
 
   Future<void> _closeConnection(PeerConnection connection) async {
@@ -294,10 +299,7 @@ class PeerConnectionRegistry {
     }
   }
 
-  Future<T> _serializePeer<T>(
-    String peerId,
-    FutureOr<T> Function() operation,
-  ) {
+  Future<T> _serializePeer<T>(String peerId, FutureOr<T> Function() operation) {
     final previous = _lifecycleTails[peerId];
     final Future<T> result;
     if (previous == null) {
@@ -305,16 +307,15 @@ class PeerConnectionRegistry {
     } else {
       result = previous.then<T>((_) => operation());
     }
-    final tail = result.then<void>(
-      (_) {},
-      onError: (_, __) {},
-    );
+    final tail = result.then<void>((_) {}, onError: (_, __) {});
     _lifecycleTails[peerId] = tail;
-    unawaited(tail.whenComplete(() {
-      if (identical(_lifecycleTails[peerId], tail)) {
-        _lifecycleTails.remove(peerId);
-      }
-    }));
+    unawaited(
+      tail.whenComplete(() {
+        if (identical(_lifecycleTails[peerId], tail)) {
+          _lifecycleTails.remove(peerId);
+        }
+      }),
+    );
     return result;
   }
 }

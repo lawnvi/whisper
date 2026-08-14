@@ -96,7 +96,7 @@ void main() {
     );
 
     expect(sendWindow, contains('WhisperFrameType.fileData'));
-    expect(sendWindow, contains('fileTransferV3FramePayloadSize'));
+    expect(sendWindow, contains('flow.chunkSize'));
     expect(sendWindow, isNot(contains('payloadInNextFrame')));
     expect(sendWindow, isNot(contains('TransferChunkFrame(')));
   });
@@ -116,7 +116,7 @@ void main() {
       'Future<void> _releaseOutgoingAndStartNext',
     );
 
-    expect(sendWindow, contains('durableOffset + fileTransferV3WindowSize'));
+    expect(sendWindow, contains('durableOffset + flow.windowSize'));
     expect(
       sendWindow,
       contains('_outgoingWindowEndOffsets[transfer.transferId] ??'),
@@ -143,6 +143,26 @@ void main() {
     );
   });
 
+  test('v3 outgoing file data uses an in-place authenticated buffer', () {
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
+    final sendWindow = methodBody(
+      source,
+      'Future<int?> _sendFileTransferV3Window(',
+      'Future<_OutgoingChecksumState> _outgoingChecksumStateFor',
+    );
+
+    expect(sendWindow, contains('AuthenticatedPayloadBuffer.allocate('));
+    expect(sendWindow, contains('readTransferSourceRangeInto('));
+    expect(sendWindow, contains('_sendPreparedFileTransferV3FrameTo('));
+    expect(sendWindow, isNot(contains('source.readRange(cursor, length)')));
+    expect(
+      sendWindow.indexOf('checksumState.checksum.add(payload)'),
+      lessThan(sendWindow.indexOf('_sendPreparedFileTransferV3FrameTo(')),
+    );
+  });
+
   test('v3 incoming file data acks before the full send window', () {
     final source = File(
       'lib/socket/file_transfer_engine.dart',
@@ -153,9 +173,9 @@ void main() {
       'Future<void> _handleIncomingFileTransferV3Error',
     );
 
-    expect(handleData, contains('fileTransferV3AckIntervalSize'));
+    expect(handleData, contains('ackIntervalSize'));
     expect(
-      handleData.indexOf('fileTransferV3AckIntervalSize'),
+      handleData.indexOf('ackIntervalSize'),
       lessThan(handleData.lastIndexOf('_sendFileTransferV3Ack(')),
     );
     expect(handleData, isNot(contains('>= fileTransferV3WindowSize')));
@@ -202,7 +222,7 @@ void main() {
     expect(handleComplete, contains('await _releaseOutgoingAndStartNext('));
   });
 
-  test('v3 incoming file data uses awaited random access writes', () {
+  test('v3 incoming file data pipelines writes and drains before ACK', () {
     final source = File(
       'lib/socket/file_transfer_engine.dart',
     ).readAsStringSync();
@@ -213,7 +233,8 @@ void main() {
     );
 
     expect(source, contains('_receivingTransferWritersV3'));
-    expect(handleData, contains('await writer.writeFrom(frame.payload)'));
+    expect(handleData, contains('writePipeline.add('));
+    expect(source, contains('await _receivingWritePipelines['));
     expect(handleData, isNot(contains('openWrite(mode: FileMode.append)')));
   });
 

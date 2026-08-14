@@ -7,22 +7,32 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 
 void main() {
-  test('PathFileTransferSource waits for reads before closing the file', () {
-    final source = File(
-      'lib/socket/file_transfer_source.dart',
-    ).readAsStringSync();
-    final readRangeStart = source.indexOf(
-      'Future<Uint8List> readRange(int offset, int length) async',
-    );
-    expect(readRangeStart, isNonNegative);
-    final pathSource = source.substring(
-      readRangeStart,
-      source.indexOf('class AndroidContentUriTransferSource', readRangeStart),
-    );
+  test(
+    'PathFileTransferSource reads directly into a reusable buffer',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'whisper-source-read-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final file = File('${root.path}${Platform.pathSeparator}source.bin');
+      await file.writeAsBytes(List<int>.generate(32, (index) => index));
+      final source = PathFileTransferSource(file.path);
+      addTearDown(source.close);
+      final destination = Uint8List(12)..fillRange(0, 12, 0xff);
 
-    expect(pathSource, contains('return await reader.read(length);'));
-    expect(pathSource, isNot(contains('return reader.read(length);')));
-  });
+      final first = await source.readRange(4, 4);
+      final second = await source.readRangeInto(
+        destination,
+        destinationOffset: 3,
+        sourceOffset: 12,
+        length: 5,
+      );
+
+      expect(first, <int>[4, 5, 6, 7]);
+      expect(second, 5);
+      expect(destination.sublist(3, 8), <int>[12, 13, 14, 15, 16]);
+    },
+  );
 
   test('AndroidContentUriTransferSource reads content uri ranges', () async {
     final bytes = Uint8List.fromList(List<int>.generate(16, (index) => index));

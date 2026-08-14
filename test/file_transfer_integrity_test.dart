@@ -50,6 +50,32 @@ void main() {
       }
     });
 
+    test('accepts old offers and modern flow negotiation extensions', () {
+      final legacy = FileTransferV3Metadata.parseOffer(
+        jsonEncode(<String, Object>{
+          ...validJson(),
+          'chunkSize': fileTransferV3LegacyFramePayloadSize,
+          'windowSize': fileTransferV3LegacyWindowSize,
+        }),
+        size: 1,
+      );
+      expect(legacy.supportsFlowNegotiation, isFalse);
+
+      final modern = FileTransferV3Metadata.parseOffer(
+        jsonEncode(<String, Object>{
+          ...validJson(),
+          'chunkSize': fileTransferV3LegacyFramePayloadSize,
+          'windowSize': fileTransferV3LegacyWindowSize,
+          'maxChunkSize': fileTransferV3FramePayloadSize,
+          'maxWindowSize': fileTransferV3WindowSize,
+        }),
+        size: 1,
+      );
+      expect(modern.supportsFlowNegotiation, isTrue);
+      expect(modern.maxChunkSize, fileTransferV3FramePayloadSize);
+      expect(modern.maxWindowSize, fileTransferV3WindowSize);
+    });
+
     test('accepts bounded rhythm values from other protocol generations', () {
       // 节奏字段(chunkSize/windowSize)做有界区间校验,不与本端当前常量
       // 精确相等绑定:升级把 16MiB 窗口降到 4MiB 后,DB 里旧 offer 原样
@@ -172,6 +198,23 @@ void main() {
           json: <String, Object>{
             ...validJson(),
             'windowSize': '$fileTransferV3WindowSize',
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'maxChunkSize': fileTransferV3FramePayloadSize,
+          },
+          reason: 'invalid_metadata',
+        ),
+        (
+          size: 1,
+          json: <String, Object>{
+            ...validJson(),
+            'maxChunkSize': fileTransferV3FramePayloadSize,
+            'maxWindowSize': fileTransferV3WindowSize - 1,
           },
           reason: 'invalid_metadata',
         ),

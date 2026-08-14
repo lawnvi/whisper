@@ -240,6 +240,7 @@ final class PeerSocketSession {
   void attachTransport({
     required StreamSubscription<dynamic> subscription,
     required Future<void> Function(Stream<Object>) addStream,
+    void Function(Object)? add,
     AdmissionLease? admissionLease,
     required void Function() onOverflow,
   }) {
@@ -251,12 +252,15 @@ final class PeerSocketSession {
     _subscription = subscription;
     _admissionLease = admissionLease;
     _inboundQueue = BoundedReceiveQueue(
+      maxBytes: 128 * 1024 * 1024,
       onPause: subscription.pause,
       onResume: subscription.resume,
       onOverflow: onOverflow,
     );
     _outboundQueue = BoundedOutboundQueue.chat(
       addStream: addStream,
+      add: add,
+      maxBytes: 128 * 1024 * 1024,
       onOverflow: onOverflow,
     );
   }
@@ -286,6 +290,20 @@ final class PeerSocketSession {
       return Future<bool>.value(false);
     }
     return queue.addLazy(() => encodeOutgoing(payload), byteLength: byteLength);
+  }
+
+  Future<bool> enqueueAuthenticatedBuffer(
+    AuthenticatedPayloadBuffer buffer, {
+    required int byteLength,
+  }) {
+    final queue = _outboundQueue;
+    if (queue == null) {
+      return Future<bool>.value(false);
+    }
+    return queue.addLazy(
+      () => encodeOutgoingBuffer(buffer),
+      byteLength: byteLength,
+    );
   }
 
   void markTransportAuthenticated() {
@@ -318,6 +336,16 @@ final class PeerSocketSession {
   }
 
   Future<Uint8List> encodeOutgoing(Uint8List payload) {
+    return _serializeOutgoingCodec((codec) => codec.encode(payload));
+  }
+
+  Future<Uint8List> encodeOutgoingBuffer(AuthenticatedPayloadBuffer buffer) {
+    return _serializeOutgoingCodec((codec) => codec.encodeBuffer(buffer));
+  }
+
+  Future<Uint8List> _serializeOutgoingCodec(
+    Future<Uint8List> Function(AuthenticatedFrameCodec codec) encode,
+  ) {
     final completer = Completer<Uint8List>();
     _sendChain = _sendChain
         .then((_) async {
@@ -326,7 +354,7 @@ final class PeerSocketSession {
           }
           completer.complete(
             await _continueAfter(
-              _codec!.encode(payload),
+              encode(_codec!),
               PeerSocketPhase.authenticated,
             ),
           );

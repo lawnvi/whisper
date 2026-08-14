@@ -382,8 +382,23 @@ final class AuthenticatedMediaPacketEncoder {
       sequence: sequence,
       payloadLength: payload.length,
     );
-    final secretBox = _packetKey.encrypt(
+    final encoded = Uint8List(
+      AuthenticatedMediaPacketEnvelope.overheadBytes + payload.length,
+    );
+    encoded.setRange(0, header.length, header);
+    final mac = Uint8List.sublistView(
+      encoded,
+      AuthenticatedMediaPacketEnvelope.tagOffset,
+      AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
+    final cipherText = Uint8List.sublistView(
+      encoded,
+      AuthenticatedMediaPacketEnvelope.overheadBytes,
+    );
+    _packetKey.encryptInto(
       message: payload,
+      cipherText: cipherText,
+      mac: mac,
       nonce: _mediaPacketNonce(sequence),
       additionalData: _mediaPacketAad(
         route: route,
@@ -391,20 +406,6 @@ final class AuthenticatedMediaPacketEncoder {
         sessionId: sessionId,
         header: header,
       ),
-    );
-    final encoded = Uint8List(
-      AuthenticatedMediaPacketEnvelope.overheadBytes + payload.length,
-    );
-    encoded.setRange(0, header.length, header);
-    encoded.setRange(
-      AuthenticatedMediaPacketEnvelope.tagOffset,
-      AuthenticatedMediaPacketEnvelope.overheadBytes,
-      secretBox.mac,
-    );
-    encoded.setRange(
-      AuthenticatedMediaPacketEnvelope.overheadBytes,
-      encoded.length,
-      secretBox.cipherText,
     );
     _nextSequence += 1;
     return encoded;

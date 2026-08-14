@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../helper/file.dart';
 import 'file_transfer_v3.dart';
@@ -18,10 +19,24 @@ abstract class FileTransferSource {
   Future<Uint8List> readRange(int offset, int length);
 }
 
-class PathFileTransferSource implements FileTransferSource {
+abstract interface class DirectReadFileTransferSource {
+  Future<int> readRangeInto(
+    Uint8List destination, {
+    required int destinationOffset,
+    required int sourceOffset,
+    required int length,
+  });
+
+  Future<void> close();
+}
+
+class PathFileTransferSource
+    implements FileTransferSource, DirectReadFileTransferSource {
   PathFileTransferSource(String path) : file = File(path);
 
   final File file;
+  final Lock _readerLock = Lock();
+  RandomAccessFile? _reader;
 
   @override
   Future<bool> exists() async => file.exists();
@@ -31,13 +46,74 @@ class PathFileTransferSource implements FileTransferSource {
 
   @override
   Future<Uint8List> readRange(int offset, int length) async {
-    final reader = await file.open();
-    try {
-      await reader.setPosition(offset);
-      return await reader.read(length);
-    } finally {
-      await reader.close();
+    final bytes = Uint8List(length);
+    final count = await readRangeInto(
+      bytes,
+      destinationOffset: 0,
+      sourceOffset: offset,
+      length: length,
+    );
+    if (count == length) {
+      return bytes;
     }
+    return Uint8List.sublistView(bytes, 0, count);
+  }
+
+  @override
+  Future<int> readRangeInto(
+    Uint8List destination, {
+    required int destinationOffset,
+    required int sourceOffset,
+    required int length,
+  }) {
+    return _readerLock.synchronized(() async {
+      final reader = _reader ??= await file.open();
+      await reader.setPosition(sourceOffset);
+      return reader.readInto(
+        destination,
+        destinationOffset,
+        destinationOffset + length,
+      );
+    });
+  }
+
+  @override
+  Future<void> close() {
+    return _readerLock.synchronized(() async {
+      final reader = _reader;
+      _reader = null;
+      await reader?.close();
+    });
+  }
+}
+
+Future<int> readTransferSourceRangeInto(
+  FileTransferSource source,
+  Uint8List destination, {
+  required int destinationOffset,
+  required int sourceOffset,
+  required int length,
+}) async {
+  if (source is DirectReadFileTransferSource) {
+    return (source as DirectReadFileTransferSource).readRangeInto(
+      destination,
+      destinationOffset: destinationOffset,
+      sourceOffset: sourceOffset,
+      length: length,
+    );
+  }
+  final bytes = await source.readRange(sourceOffset, length);
+  destination.setRange(
+    destinationOffset,
+    destinationOffset + bytes.length,
+    bytes,
+  );
+  return bytes.length;
+}
+
+Future<void> closeTransferSource(FileTransferSource source) async {
+  if (source is DirectReadFileTransferSource) {
+    await (source as DirectReadFileTransferSource).close();
   }
 }
 

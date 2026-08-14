@@ -4,61 +4,98 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/socket/authenticated_frame.dart';
 
-SecretKey _key(int start) => SecretKey(
-      List<int>.generate(32, (index) => (start + index) & 0xff),
-    );
+SecretKey _key(int start) =>
+    SecretKey(List<int>.generate(32, (index) => (start + index) & 0xff));
 
 void main() {
-  test('directional codecs encrypt and exchange payloads in strict sequence',
-      () async {
-    final client = await AuthenticatedFrameCodec.create(
-      sendKey: _key(0),
-      receiveKey: _key(32),
-    );
-    final server = await AuthenticatedFrameCodec.create(
-      sendKey: _key(32),
-      receiveKey: _key(0),
-    );
+  test(
+    'directional codecs encrypt and exchange payloads in strict sequence',
+    () async {
+      final client = await AuthenticatedFrameCodec.create(
+        sendKey: _key(0),
+        receiveKey: _key(32),
+      );
+      final server = await AuthenticatedFrameCodec.create(
+        sendKey: _key(32),
+        receiveKey: _key(0),
+      );
 
-    final first = await client.encode(Uint8List.fromList(<int>[1, 2, 3]));
-    final second = await client.encode(Uint8List.fromList(<int>[4, 5]));
+      final first = await client.encode(Uint8List.fromList(<int>[1, 2, 3]));
+      final second = await client.encode(Uint8List.fromList(<int>[4, 5]));
 
-    expect(first.sublist(16, 19), isNot(orderedEquals(<int>[1, 2, 3])));
-    expect(String.fromCharCodes(first.sublist(0, 4)), 'WAE1');
-    expect(await server.decode(first), orderedEquals(<int>[1, 2, 3]));
-    expect(await server.decode(second), orderedEquals(<int>[4, 5]));
-    expect(client.lastSentSequence, 2);
-    expect(server.lastReceivedSequence, 2);
-  });
+      expect(first.sublist(16, 19), isNot(orderedEquals(<int>[1, 2, 3])));
+      expect(String.fromCharCodes(first.sublist(0, 4)), 'WAE1');
+      expect(await server.decode(first), orderedEquals(<int>[1, 2, 3]));
+      expect(await server.decode(second), orderedEquals(<int>[4, 5]));
+      expect(client.lastSentSequence, 2);
+      expect(server.lastReceivedSequence, 2);
+    },
+  );
 
-  test('rejects ciphertext and tag tampering without consuming sequence',
-      () async {
-    final sender = await AuthenticatedFrameCodec.create(
-      sendKey: _key(0),
-      receiveKey: _key(32),
-    );
-    final receiver = await AuthenticatedFrameCodec.create(
-      sendKey: _key(32),
-      receiveKey: _key(0),
-    );
-    final frame = await sender.encode(Uint8List.fromList(<int>[7, 8, 9]));
-    final tamperedPayload = Uint8List.fromList(frame)..[18] ^= 0xff;
+  test(
+    'in-place payload buffer preserves the authenticated wire format',
+    () async {
+      final sender = await AuthenticatedFrameCodec.create(
+        sendKey: _key(0),
+        receiveKey: _key(32),
+      );
+      final receiver = await AuthenticatedFrameCodec.create(
+        sendKey: _key(32),
+        receiveKey: _key(0),
+      );
+      final buffer = AuthenticatedPayloadBuffer.allocate(1024 * 1024);
+      for (var index = 0; index < buffer.payload.length; index += 1) {
+        buffer.payload[index] = index & 0xff;
+      }
+      final expected = Uint8List.fromList(buffer.payload);
 
-    await expectLater(
-      receiver.decode(tamperedPayload),
-      throwsA(isA<AuthenticatedFrameException>()),
-    );
-    expect(receiver.lastReceivedSequence, 0);
-    expect(await receiver.decode(frame), orderedEquals(<int>[7, 8, 9]));
+      final frame = await sender.encodeBuffer(buffer);
 
-    final second = await sender.encode(Uint8List.fromList(<int>[10]));
-    final tamperedMac = Uint8List.fromList(second)..[second.length - 1] ^= 1;
-    await expectLater(
-      receiver.decode(tamperedMac),
-      throwsA(isA<AuthenticatedFrameException>()),
-    );
-    expect(receiver.lastReceivedSequence, 1);
-  });
+      expect(identical(frame, buffer.bytes), isTrue);
+      expect(await receiver.decode(frame), orderedEquals(expected));
+      await expectLater(
+        sender.encodeBuffer(buffer),
+        throwsA(
+          isA<AuthenticatedFrameException>().having(
+            (error) => error.code,
+            'code',
+            'payload_already_encoded',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'rejects ciphertext and tag tampering without consuming sequence',
+    () async {
+      final sender = await AuthenticatedFrameCodec.create(
+        sendKey: _key(0),
+        receiveKey: _key(32),
+      );
+      final receiver = await AuthenticatedFrameCodec.create(
+        sendKey: _key(32),
+        receiveKey: _key(0),
+      );
+      final frame = await sender.encode(Uint8List.fromList(<int>[7, 8, 9]));
+      final tamperedPayload = Uint8List.fromList(frame)..[18] ^= 0xff;
+
+      await expectLater(
+        receiver.decode(tamperedPayload),
+        throwsA(isA<AuthenticatedFrameException>()),
+      );
+      expect(receiver.lastReceivedSequence, 0);
+      expect(await receiver.decode(frame), orderedEquals(<int>[7, 8, 9]));
+
+      final second = await sender.encode(Uint8List.fromList(<int>[10]));
+      final tamperedMac = Uint8List.fromList(second)..[second.length - 1] ^= 1;
+      await expectLater(
+        receiver.decode(tamperedMac),
+        throwsA(isA<AuthenticatedFrameException>()),
+      );
+      expect(receiver.lastReceivedSequence, 1);
+    },
+  );
 
   test('rejects replay, gaps, and the reverse direction key', () async {
     final client = await AuthenticatedFrameCodec.create(
@@ -109,8 +146,7 @@ void main() {
       (await AuthenticatedFrameCodec.create(
         sendKey: _key(0),
         receiveKey: _key(0),
-      ))
-          .decode(malformed),
+      )).decode(malformed),
       throwsA(isA<AuthenticatedFrameException>()),
     );
   });
@@ -132,7 +168,9 @@ void main() {
         .toList(growable: false);
 
     expect(
-        sequences, orderedEquals(List<int>.generate(20, (index) => index + 1)));
+      sequences,
+      orderedEquals(List<int>.generate(20, (index) => index + 1)),
+    );
     expect(codec.lastSentSequence, 20);
   });
 
@@ -150,10 +188,7 @@ void main() {
     final accepted = await Future.wait(
       List<Future<bool>>.generate(
         2,
-        (_) => receiver.decode(frame).then(
-              (_) => true,
-              onError: (_) => false,
-            ),
+        (_) => receiver.decode(frame).then((_) => true, onError: (_) => false),
       ),
     );
 
