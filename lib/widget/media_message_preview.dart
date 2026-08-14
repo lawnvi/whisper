@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'dart:ui' show FontFeature;
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
@@ -1417,7 +1418,7 @@ Future<void> showMediaViewer(
   );
 }
 
-class _FullscreenMediaViewer extends StatelessWidget {
+class _FullscreenMediaViewer extends StatefulWidget {
   const _FullscreenMediaViewer({
     required this.kind,
     required this.path,
@@ -1429,8 +1430,37 @@ class _FullscreenMediaViewer extends StatelessWidget {
   final String name;
 
   @override
+  State<_FullscreenMediaViewer> createState() =>
+      _FullscreenMediaViewerState();
+}
+
+class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
+  bool get _usesImmersiveMode =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_usesImmersiveMode) {
+      unawaited(
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_usesImmersiveMode) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     void close() => Navigator.of(context).pop();
+    final safeTop = MediaQuery.viewPaddingOf(context).top;
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.escape): close,
@@ -1442,9 +1472,9 @@ class _FullscreenMediaViewer extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              SafeArea(child: _buildContent(context)),
+              _buildContent(context),
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 12,
+                top: math.max(12, safeTop + 8),
                 right: 14,
                 child: IconButton(
                   key: const ValueKey<String>('media-viewer-close'),
@@ -1464,13 +1494,17 @@ class _FullscreenMediaViewer extends StatelessWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context) => switch (kind) {
-    MediaFileKind.image => _FullscreenImage(path: path),
+  Widget _buildContent(BuildContext context) => switch (widget.kind) {
+    MediaFileKind.image => _FullscreenImage(path: widget.path),
     MediaFileKind.video => const SizedBox.shrink(),
     MediaFileKind.audio => Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
-        child: AudioMessagePlayer(path: path, name: name, compact: false),
+        child: AudioMessagePlayer(
+          path: widget.path,
+          name: widget.name,
+          compact: false,
+        ),
       ),
     ),
     MediaFileKind.other => const SizedBox.shrink(),
@@ -1512,9 +1546,10 @@ class _FullscreenImage extends StatelessWidget {
 
   Widget _buildViewer(Widget image) {
     return InteractiveViewer(
+      key: const ValueKey<String>('fullscreen-image-viewer'),
       minScale: 0.5,
       maxScale: 5,
-      child: SizedBox.expand(child: Center(child: image)),
+      child: SizedBox.expand(child: image),
     );
   }
 }

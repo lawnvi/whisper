@@ -417,6 +417,50 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('mobile image viewer uses the full screen behind system insets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            padding: const EdgeInsets.only(top: 44, bottom: 34),
+            viewPadding: const EdgeInsets.only(top: 44, bottom: 34),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('conversation'));
+          },
+        ),
+      ),
+    );
+
+    unawaited(
+      showMediaViewer(
+        pageContext,
+        kind: MediaFileKind.image,
+        path: '/missing/photo.png',
+        name: 'photo.png',
+        onOpenExternally: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final viewer = find.byKey(
+      const ValueKey<String>('fullscreen-image-viewer'),
+    );
+    expect(tester.getSize(viewer), const Size(390, 844));
+    expect(tester.getSize(find.byType(Image).last), const Size(390, 844));
+  });
 }
 
 class _ThumbnailPicker extends AndroidDocumentPickerPlatform {
