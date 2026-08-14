@@ -1795,7 +1795,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const app_settings.SettingsScreen(),
+                  builder: (context) => app_settings.SettingsScreen(
+                    exitForUpdate: _shutdownAndDestroyWindow,
+                  ),
                 ),
               );
               _refreshDevice();
@@ -2077,7 +2079,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const app_settings.SettingsScreen(),
+                    builder: (context) => app_settings.SettingsScreen(
+                      exitForUpdate: _shutdownAndDestroyWindow,
+                    ),
                   ),
                 );
                 _refreshDevice();

@@ -84,6 +84,7 @@ Widget _host({
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
   AppUpdateManager? updateManager,
+  Future<void> Function()? exitForUpdate,
   bool autoCheckForUpdates = true,
 }) {
   return MaterialApp(
@@ -115,12 +116,17 @@ Widget _host({
       refreshNotificationRegistry: refreshNotificationRegistry,
       openNotificationApps: openNotificationApps,
       updateManager: updateManager,
+      exitForUpdate: exitForUpdate,
       autoCheckForUpdates: autoCheckForUpdates,
     ),
   );
 }
 
 class _FakeUpdateManager implements AppUpdateManager {
+  _FakeUpdateManager({
+    this.installDisposition = AppUpdateInstallDisposition.keepRunning,
+  });
+
   static final _release = AppUpdateRelease(
     version: '2.5.0',
     tagName: 'dev-v2.5.0',
@@ -141,6 +147,7 @@ class _FakeUpdateManager implements AppUpdateManager {
   int checkCount = 0;
   int downloadCount = 0;
   int openInstallerCount = 0;
+  final AppUpdateInstallDisposition installDisposition;
 
   @override
   Future<AppUpdateCheckResult> checkForUpdate({
@@ -170,8 +177,11 @@ class _FakeUpdateManager implements AppUpdateManager {
   }
 
   @override
-  Future<void> openInstaller(AppUpdateDownload download) async {
+  Future<AppUpdateInstallDisposition> openInstaller(
+    AppUpdateDownload download,
+  ) async {
     openInstallerCount += 1;
+    return installDisposition;
   }
 }
 
@@ -190,6 +200,7 @@ Future<void> _pumpAt(
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
   AppUpdateManager? updateManager,
+  Future<void> Function()? exitForUpdate,
   bool autoCheckForUpdates = true,
 }) async {
   tester.view
@@ -207,6 +218,7 @@ Future<void> _pumpAt(
     refreshNotificationRegistry: refreshNotificationRegistry,
     openNotificationApps: openNotificationApps,
     updateManager: updateManager,
+    exitForUpdate: exitForUpdate,
     autoCheckForUpdates: autoCheckForUpdates,
   ));
   await tester.pumpAndSettle();
@@ -292,6 +304,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(manager.downloadCount, 1);
     expect(manager.openInstallerCount, 1);
+  });
+
+  testWidgets('desktop update exits through the application shutdown callback',
+      (tester) async {
+    final manager = _FakeUpdateManager(
+      installDisposition: AppUpdateInstallDisposition.exitApplication,
+    );
+    var exitCount = 0;
+    await _pumpAt(
+      tester,
+      width: 720,
+      height: 1500,
+      updateManager: manager,
+      exitForUpdate: () async {
+        exitCount += 1;
+      },
+    );
+
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download and install'));
+    await tester.pumpAndSettle();
+
+    expect(manager.openInstallerCount, 1);
+    expect(exitCount, 1);
   });
 
   testWidgets('about row contains website and source links', (tester) async {

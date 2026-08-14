@@ -26,6 +26,8 @@ enum AppUpdatePlatform { android, ios, macos, windows, linux, unsupported }
 
 enum AppUpdateStatus { upToDate, updateAvailable }
 
+enum AppUpdateInstallDisposition { keepRunning, exitApplication }
+
 class AppUpdateException implements Exception {
   const AppUpdateException(this.message);
 
@@ -101,7 +103,9 @@ abstract interface class AppUpdateManager {
     void Function(double progress)? onProgress,
   });
 
-  Future<void> openInstaller(AppUpdateDownload download);
+  Future<AppUpdateInstallDisposition> openInstaller(
+    AppUpdateDownload download,
+  );
 }
 
 class AppUpdateService implements AppUpdateManager {
@@ -309,7 +313,9 @@ class AppUpdateService implements AppUpdateManager {
   }
 
   @override
-  Future<void> openInstaller(AppUpdateDownload download) async {
+  Future<AppUpdateInstallDisposition> openInstaller(
+    AppUpdateDownload download,
+  ) async {
     if (platform == AppUpdatePlatform.android) {
       var permission = await Permission.requestInstallPackages.status;
       if (!permission.isGranted) {
@@ -335,7 +341,18 @@ class AppUpdateService implements AppUpdateManager {
     if (result.type != ResultType.done) {
       throw AppUpdateException(result.message);
     }
+    return installDispositionForPlatform(platform);
   }
+}
+
+AppUpdateInstallDisposition installDispositionForPlatform(
+  AppUpdatePlatform platform,
+) {
+  final shouldExit = platform == AppUpdatePlatform.macos ||
+      platform == AppUpdatePlatform.windows;
+  return shouldExit
+      ? AppUpdateInstallDisposition.exitApplication
+      : AppUpdateInstallDisposition.keepRunning;
 }
 
 AppUpdateChannel configuredAppUpdateChannel() {

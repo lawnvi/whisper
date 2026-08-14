@@ -166,4 +166,26 @@ void main() {
     expect(compareAppVersions('1.0.0', '0.99.99'), greaterThan(0));
     expect(compareAppVersions('v2.4.0+12', '2.4.0'), 0);
   });
+
+  test('only Windows and macOS exit after launching an installer', () {
+    expect(
+      installDispositionForPlatform(AppUpdatePlatform.windows),
+      AppUpdateInstallDisposition.exitApplication,
+    );
+    expect(
+      installDispositionForPlatform(AppUpdatePlatform.macos),
+      AppUpdateInstallDisposition.exitApplication,
+    );
+    for (final platform in <AppUpdatePlatform>[
+      AppUpdatePlatform.linux,
+      AppUpdatePlatform.android,
+      AppUpdatePlatform.ios,
+      AppUpdatePlatform.unsupported,
+    ]) {
+      expect(
+        installDispositionForPlatform(platform),
+        AppUpdateInstallDisposition.keepRunning,
+      );
+    }
+  });
 }

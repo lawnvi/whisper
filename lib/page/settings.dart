@@ -140,6 +140,7 @@ class SettingsScreen extends StatefulWidget {
     this.refreshNotificationRegistry,
     this.openNotificationApps,
     this.updateManager,
+    this.exitForUpdate,
     this.autoCheckForUpdates = true,
   });
 
@@ -155,6 +156,7 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? refreshNotificationRegistry;
   final Future<void> Function()? openNotificationApps;
   final AppUpdateManager? updateManager;
+  final Future<void> Function()? exitForUpdate;
   final bool autoCheckForUpdates;
 
   @override
@@ -949,13 +951,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           });
         },
       );
-      await _updateManager.openInstaller(download);
+      final disposition = await _updateManager.openInstaller(download);
       if (!mounted) {
         return;
       }
       setState(() {
         _downloadingUpdate = false;
       });
+      if (disposition == AppUpdateInstallDisposition.exitApplication &&
+          widget.exitForUpdate != null) {
+        await widget.exitForUpdate!();
+        return;
+      }
       showAppToast(AppLocalizations.of(context)!.updateInstallerOpened);
     } catch (error) {
       _logSettingsFailure(SettingsOperationKind.updateInstall, error);
