@@ -30,6 +30,13 @@ void main() {
     expect(conversation, contains('if (trailingAction != null)'));
   });
 
+  test('disconnected conversation header prioritizes the peer endpoint', () {
+    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+
+    expect(conversation, contains("return '\${device.host}:\${device.port}';"));
+    expect(conversation, isNot(contains('String _connectionStatusText()')));
+  });
+
   test('android content uri media previews without creating a local copy', () {
     final conversation = File('lib/page/conversation.dart').readAsStringSync();
     final picker = File(

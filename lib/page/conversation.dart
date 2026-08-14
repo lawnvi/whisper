@@ -1148,24 +1148,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
     return l10n.remoteInputStart;
   }
 
-  String _connectionStatusText() {
-    final l10n = AppLocalizations.of(context);
-    if (_isConnectedSession) {
-      return l10n?.connectedNow ?? '当前已连接';
-    }
-    if (device.around == true) {
-      return l10n?.nearbyAvailable ?? '附近可连接';
-    }
-    return l10n?.noMessagesYet ?? '还没有消息';
-  }
-
   String _connectionDetailText() {
     if (_isConnectedSession) {
       return device.auth && device.identityPublicKey.isNotEmpty
           ? l10n.e2eeTrustedConnection
           : l10n.e2eeEncryptedConnection;
     }
-    return '${_connectionStatusText()} · ${device.host}:${device.port}';
+    return '${device.host}:${device.port}';
   }
 
   Widget _buildComposer(bool isDark) {
