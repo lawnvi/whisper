@@ -12,6 +12,8 @@ void main() {
       'android.permission.READ_CLIPBOARD',
       'android.permission.WRITE_CLIPBOARD',
       'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+      'android.permission.READ_PHONE_NUMBERS',
+      'android.permission.READ_PHONE_STATE',
     ]) {
       expect(manifest, isNot(contains(permission)));
     }
@@ -41,7 +43,18 @@ void main() {
       contains('android.permission.MANAGE_EXTERNAL_STORAGE'),
       reason: 'received files currently use the public Download directory',
     );
-    expect(manifest, contains('android.permission.MANAGE_OWN_CALLS'));
-    expect(manifest, contains('android.permission.USE_FULL_SCREEN_INTENT'));
+    for (final phonePermission in <String>[
+      'android.permission.MANAGE_OWN_CALLS',
+      'android.permission.CALL_PHONE',
+      'android.permission.READ_CALL_LOG',
+      'android.permission.WRITE_CALL_LOG',
+      'android.permission.READ_PHONE_STATE',
+    ]) {
+      expect(manifest, isNot(contains(phonePermission)));
+    }
+    expect(
+      manifest,
+      isNot(contains('android.permission.USE_FULL_SCREEN_INTENT')),
+    );
   });
 }

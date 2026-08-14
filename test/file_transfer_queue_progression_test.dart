@@ -1074,7 +1074,7 @@ void main() {
   }
 
   test(
-    'queued incoming cancel leaves active and skips to the next valid item',
+    'queued incoming cancel terminates items and starts the next valid item',
     () async {
       final root = await Directory.systemTemp.createTemp('whisper-incoming-');
       addTearDown(() => root.delete(recursive: true));
@@ -1107,11 +1107,15 @@ void main() {
       );
       expect(
         (await database.fetchFileTransfer(_firstId))?.state,
-        FileTransferState.paused,
+        FileTransferState.canceled,
       );
       expect(
         (await database.fetchFileTransfer(_secondId))?.state,
-        FileTransferState.paused,
+        FileTransferState.canceled,
+      );
+      expect(
+        await File(await safeTransferTempPath(root, _firstId)).exists(),
+        isFalse,
       );
     },
   );

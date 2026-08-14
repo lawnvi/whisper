@@ -445,9 +445,7 @@ class FileTransferEngine {
         if (!isTerminalFileTransferState(transfer.state)) {
           await _updateTransfer(
             transferId,
-            state: transfer.direction == FileTransferDirection.incoming
-                ? FileTransferState.paused
-                : FileTransferState.canceled,
+            state: FileTransferState.canceled,
             lastError: '',
           );
         }
@@ -472,6 +470,7 @@ class FileTransferEngine {
               flush: true,
               connection: connection,
             );
+            await _deleteCanceledIncomingTempFile(transfer);
           } else {
             await _releaseOutgoingAndStartNext(
               transfer,
@@ -3235,6 +3234,7 @@ class FileTransferEngine {
         flush: true,
         connection: _operationConnectionBindings[control.transferId],
       );
+      await _deleteCanceledIncomingTempFile(transfer);
     } else {
       await _releaseOutgoingAndStartNext(
         transfer,
@@ -3889,6 +3889,27 @@ class FileTransferEngine {
       await _startNextQueuedIncomingTransfer(
         peerId: transfer.peerUid,
         connection: connection,
+      );
+    }
+  }
+
+  Future<void> _deleteCanceledIncomingTempFile(
+    FileTransferData transfer,
+  ) async {
+    if (transfer.tempPath.isEmpty) {
+      return;
+    }
+    try {
+      var tempFile = await _validatedIncomingTempFile(transfer);
+      if (await tempFile.exists()) {
+        tempFile = await _validatedIncomingTempFile(transfer);
+        await tempFile.delete();
+      }
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.temporaryFileCleanupFailed,
+        error,
+        direction: FileTransferDirection.incoming,
       );
     }
   }

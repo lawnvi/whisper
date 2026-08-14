@@ -120,18 +120,20 @@ void main() {
     );
   });
 
-  test('transfer-first notification retains media session controls', () {
+  test('active audio wins while paused audio yields to file transfer', () {
     final unified = File(
       'android/app/src/main/kotlin/com/vireen/whisper/'
       'UnifiedForegroundNotification.kt',
     ).readAsStringSync();
 
+    final activeMediaStart = unified.indexOf('media?.takeIf(::isActiveMedia)');
     final transferStart = unified.indexOf('transfer?.let');
     final mediaOnlyStart = unified.indexOf(
       'media?.let { state ->',
       transferStart,
     );
-    expect(transferStart, greaterThanOrEqualTo(0));
+    expect(activeMediaStart, greaterThanOrEqualTo(0));
+    expect(transferStart, greaterThan(activeMediaStart));
     expect(mediaOnlyStart, greaterThan(transferStart));
     final transferBranch = unified.substring(transferStart, mediaOnlyStart);
     expect(transferBranch, contains('media?.let { mediaState ->'));
@@ -145,6 +147,8 @@ void main() {
       transferBranch,
       contains('builder.setProgress(100, progress, false)'),
     );
+    expect(unified, contains('private fun isActiveMedia(state: MediaState)'));
+    expect(unified, contains('return buildMediaNotification(context, state)'));
 
     final controlsStart = unified.indexOf('private fun addMediaControls');
     final controlsEnd = unified.indexOf(

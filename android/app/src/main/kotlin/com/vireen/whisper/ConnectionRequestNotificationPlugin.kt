@@ -4,14 +4,24 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.Person
 import com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -25,7 +35,7 @@ class ConnectionRequestNotificationPlugin :
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
-        WhisperConnectionService.ensurePhoneAccount(context)
+        removeObsoletePhoneAccounts()
         channel = MethodChannel(
             binding.binaryMessenger,
             "com.vireen.whisper/connection_request_notifications"
@@ -39,13 +49,20 @@ class ConnectionRequestNotificationPlugin :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "showIncoming" -> result.success(showIncoming(call))
-            "dismissIncoming" -> {
+            "showConnectionAlert" -> {
+                val shown = try {
+                    showConnectionAlert(call)
+                } catch (_: RuntimeException) {
+                    false
+                }
+                result.success(shown)
+            }
+            "dismissConnectionAlert" -> {
                 val notificationId = call.argument<Int>("notificationId")
                 if (notificationId == null) {
                     result.success(false)
                 } else {
-                    WhisperConnectionService.dismissIncoming(notificationId)
+                    NotificationManagerCompat.from(context).cancel(notificationId)
                     result.success(true)
                 }
             }
@@ -53,15 +70,14 @@ class ConnectionRequestNotificationPlugin :
         }
     }
 
-    private fun showIncoming(call: MethodCall): Boolean {
+    private fun showConnectionAlert(call: MethodCall): Boolean {
         val notificationId = call.argument<Int>("notificationId") ?: return false
-        val peerId = call.argument<String>("peerId")?.takeIf { it.isNotBlank() }
-            ?: return false
+        if (call.argument<String>("peerId").isNullOrBlank()) return false
         val deviceName = call.argument<String>("deviceName")?.takeIf { it.isNotBlank() }
             ?: return false
-        val pairingCode = call.argument<String>("pairingCode")?.takeIf { it.isNotBlank() }
-            ?: return false
-        val verificationText = call.argument<String>("verificationText") ?: pairingCode
+        val platform = call.argument<String>("platform").orEmpty()
+        val verificationText = call.argument<String>("verificationText")
+            ?.takeIf { it.isNotBlank() } ?: return false
         val title = call.argument<String>("title") ?: deviceName
         val payload = call.argument<String>("payload") ?: return false
         val rejectActionId = call.argument<String>("rejectActionId") ?: return false
@@ -86,52 +102,73 @@ class ConnectionRequestNotificationPlugin :
             payload = payload,
             showsUserInterface = answerShowsUserInterface,
         )
-        val caller = Person.Builder()
-            .setName(deviceName)
-            .setKey(peerId)
-            .setImportant(true)
-            .build()
-        val style = NotificationCompat.CallStyle.forIncomingCall(
-            caller,
+        val style = NotificationCompat.BigTextStyle()
+            .setBigContentTitle(deviceName)
+            .bigText(verificationText)
+            .setSummaryText(title)
+        val rejectAction = NotificationCompat.Action.Builder(
+            0,
+            context.getString(R.string.connection_alert_reject_action),
             rejectIntent,
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_DELETE)
+            .build()
+        val answerAction = NotificationCompat.Action.Builder(
+            0,
+            context.getString(R.string.connection_alert_accept_action),
             answerIntent,
         )
-            .setVerificationText(verificationText)
-            .setDeclineButtonColorHint(Color.rgb(220, 38, 38))
-            .setAnswerButtonColorHint(Color.rgb(22, 163, 74))
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(answerShowsUserInterface)
+            .build()
         val openIntent = contentPendingIntent(notificationId, payload)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_whisper)
+            .setLargeIcon(deviceAvatar(platform))
             .setContentTitle(deviceName)
             .setContentText(verificationText)
+            .setSubText(title)
+            .setTicker("$deviceName · $verificationText")
             .setContentIntent(openIntent)
             .setStyle(style)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setColor(Color.rgb(22, 163, 74))
-            .setDefaults(Notification.DEFAULT_ALL)
+            .setColor(BRAND_BLUE)
+            .setColorized(false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setTimeoutAfter(TIMEOUT_MILLIS)
-        if (canUseFullScreenIntent()) {
-            builder.setFullScreenIntent(openIntent, true)
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            builder.setColorized(true)
+            .addAction(rejectAction)
+            .addAction(answerAction)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder
+                .setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+                .setVibrate(VIBRATION_PATTERN)
         }
         val notification = builder.build()
 
-        WhisperConnectionService.reportIncoming(
-            context = context,
-            notificationId = notificationId,
-            peerId = peerId,
-            deviceName = deviceName,
-            answerIntent = answerIntent,
-            rejectIntent = rejectIntent,
+        return try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            wakeScreenForAlert()
+            true
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun wakeScreenForAlert() {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (powerManager.isInteractive) {
+            return
+        }
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "$TAG:connection-alert",
         )
-        NotificationManagerCompat.from(context).notify(notificationId, notification)
-        return true
+        // Only reveal the lock-screen notification; never keep the display awake.
+        wakeLock.acquire(SCREEN_WAKE_MILLIS)
     }
 
     private fun ensureChannel(name: String, description: String) {
@@ -139,6 +176,10 @@ class ConnectionRequestNotificationPlugin :
             return
         }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
@@ -146,20 +187,72 @@ class ConnectionRequestNotificationPlugin :
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 this.description = description
+                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, audioAttributes)
                 enableVibration(true)
-                setShowBadge(true)
+                setVibrationPattern(VIBRATION_PATTERN)
+                enableLights(true)
+                lightColor = BRAND_BLUE
+                setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
         )
     }
 
-    private fun canUseFullScreenIntent(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            return true
+    private fun removeObsoletePhoneAccounts() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return
         }
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE)
-            as NotificationManager
-        return manager.canUseFullScreenIntent()
+        val telecom = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        for ((serviceClass, accountId) in OBSOLETE_PHONE_ACCOUNTS) {
+            try {
+                telecom.unregisterPhoneAccount(
+                    PhoneAccountHandle(
+                        ComponentName(context.packageName, serviceClass),
+                        accountId,
+                    ),
+                )
+            } catch (_: RuntimeException) {
+                // Upgrade cleanup is best-effort and never blocks notifications.
+            }
+        }
+    }
+
+    private fun deviceAvatar(platform: String): Bitmap {
+        val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = BRAND_BLUE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(64f, 64f, 60f, paint)
+        paint.apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 8f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        when (platform.lowercase()) {
+            "android", "ios" -> {
+                canvas.drawRoundRect(RectF(43f, 25f, 85f, 103f), 8f, 8f, paint)
+                canvas.drawCircle(64f, 91f, 2f, paint)
+            }
+            "macos", "windows", "linux" -> {
+                canvas.drawRoundRect(RectF(27f, 31f, 101f, 82f), 7f, 7f, paint)
+                canvas.drawLine(22f, 96f, 106f, 96f, paint)
+            }
+            else -> {
+                paint.apply {
+                    style = Paint.Style.FILL
+                    textAlign = Paint.Align.CENTER
+                    textSize = 54f
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                canvas.drawText("W", 64f, 83f, paint)
+            }
+        }
+        return bitmap
     }
 
     private fun actionPendingIntent(
@@ -230,8 +323,26 @@ class ConnectionRequestNotificationPlugin :
     }
 
     companion object {
-        const val CHANNEL_ID = "whisper.incoming_connection.v1"
+        const val CHANNEL_ID = "whisper.incoming_connection.v3"
+        private const val TAG = "WhisperPairingAlert"
         private const val TIMEOUT_MILLIS = 30_000L
+        private const val SCREEN_WAKE_MILLIS = 5_000L
+        private const val BRAND_BLUE = 0xFF2563EB.toInt()
+        private val VIBRATION_PATTERN = longArrayOf(0L, 160L, 90L, 160L)
+        private val OBSOLETE_PHONE_ACCOUNTS = listOf(
+            Pair(
+                "com.vireen.whisper.PairingConnectionService",
+                "whisper_pairing_alerts_v2",
+            ),
+            Pair(
+                "com.vireen.whisper.WhisperConnectionService",
+                "whisper_system_connection_requests_v1",
+            ),
+            Pair(
+                "com.vireen.whisper.WhisperConnectionService",
+                "whisper_connection_requests",
+            ),
+        )
         private const val SELECT_NOTIFICATION = "SELECT_NOTIFICATION"
         private const val SELECT_FOREGROUND_NOTIFICATION_ACTION =
             "SELECT_FOREGROUND_NOTIFICATION"

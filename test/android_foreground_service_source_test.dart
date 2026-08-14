@@ -201,9 +201,17 @@ void main() {
       );
     }
 
+    final activeMediaPriority = unified.indexOf(
+      'media?.takeIf(::isActiveMedia)',
+    );
     final transferPriority = unified.indexOf('transfer?.let');
-    final mediaPriority = unified.indexOf('media?.let');
+    final mediaPriority = unified.indexOf(
+      'media?.let { state ->',
+      transferPriority,
+    );
     final keepAlivePriority = unified.indexOf('keepAlive?.let');
+    expect(activeMediaPriority, greaterThanOrEqualTo(0));
+    expect(transferPriority, greaterThan(activeMediaPriority));
     expect(transferPriority, greaterThanOrEqualTo(0));
     expect(mediaPriority, greaterThan(transferPriority));
     expect(keepAlivePriority, greaterThan(mediaPriority));
@@ -284,6 +292,12 @@ void main() {
 
   test('LAN server owns Android keep alive before the first pairing', () {
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final notificationPermission = deviceList.indexOf(
+      'Permission.notification.isDenied',
+    );
+    final storagePermission = deviceList.indexOf(
+      'Permission.manageExternalStorage',
+    );
 
     expect(deviceList, contains('AndroidKeepAliveReason.lanServer'));
     expect(
@@ -295,7 +309,8 @@ void main() {
         ),
       ),
     );
-    expect(deviceList, isNot(contains('Permission.notification')));
+    expect(notificationPermission, greaterThanOrEqualTo(0));
+    expect(notificationPermission, lessThan(storagePermission));
     expect(deviceList, contains('sdkInt >= 30'));
     expect(deviceList, contains(': Permission.storage'));
   });

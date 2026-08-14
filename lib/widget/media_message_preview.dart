@@ -26,7 +26,8 @@ const Set<String> _previewableImageMimeTypes = <String>{
   'image/vnd.wap.wbmp',
 };
 
-const int _mediaPreviewCacheWidth = 1200;
+const int _mediaPreviewCacheWidth = 2400;
+const int _maxOriginalImageBytes = 128 * 1024 * 1024;
 const double _mediaPreviewMinAspectRatio = 9 / 20;
 const double _mediaPreviewMaxAspectRatio = 20 / 9;
 const double _mediaPreviewMaxHeightFactor = 4 / 3;
@@ -55,6 +56,30 @@ Future<Uint8List> _androidMediaThumbnail(
       .catchError((Object _) => Uint8List(0));
   _mediaThumbnailCache[key] = future;
   return future;
+}
+
+Future<Uint8List> _androidFullResolutionImage(String uri) async {
+  try {
+    final metadata = await AndroidDocumentPicker.shared.metadata(uri);
+    final size = metadata?.size ?? -1;
+    if (size > 0 && size <= _maxOriginalImageBytes) {
+      final bytes = await AndroidDocumentPicker.shared.readBytes(
+        uri: uri,
+        offset: 0,
+        length: size,
+      );
+      if (bytes.isNotEmpty) {
+        return bytes;
+      }
+    }
+  } on Object {
+    // Providers may not expose a stable size or seekable descriptor.
+  }
+  return _androidMediaThumbnail(
+    uri,
+    width: _mediaPreviewCacheWidth,
+    height: _mediaPreviewCacheWidth,
+  );
 }
 
 Size mediaPreviewSizeFor({
@@ -405,7 +430,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
             : Image(
                 image: provider,
                 fit: BoxFit.cover,
-                filterQuality: FilterQuality.medium,
+                filterQuality: FilterQuality.high,
                 semanticLabel: widget.name,
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.broken_image_outlined,
@@ -1430,8 +1455,7 @@ class _FullscreenMediaViewer extends StatefulWidget {
   final String name;
 
   @override
-  State<_FullscreenMediaViewer> createState() =>
-      _FullscreenMediaViewerState();
+  State<_FullscreenMediaViewer> createState() => _FullscreenMediaViewerState();
 }
 
 class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
@@ -1511,18 +1535,51 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
   };
 }
 
-class _FullscreenImage extends StatelessWidget {
+class _FullscreenImage extends StatefulWidget {
   const _FullscreenImage({required this.path});
 
   final String path;
 
   @override
+  State<_FullscreenImage> createState() => _FullscreenImageState();
+}
+
+class _FullscreenImageState extends State<_FullscreenImage> {
+  Future<Uint8List>? _contentUriBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContentUri();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FullscreenImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path) {
+      _loadContentUri();
+    }
+  }
+
+  void _loadContentUri() {
+    _contentUriBytes = _isAndroidContentUri(widget.path)
+        ? _androidFullResolutionImage(widget.path)
+        : null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (!_isAndroidContentUri(path)) {
-      return _buildViewer(Image.file(File(path), fit: BoxFit.contain));
+    if (!_isAndroidContentUri(widget.path)) {
+      return _buildViewer(
+        Image.file(
+          File(widget.path),
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+        ),
+      );
     }
     return FutureBuilder<Uint8List>(
-      future: _androidMediaThumbnail(path, width: 2400, height: 2400),
+      future: _contentUriBytes,
       builder: (context, snapshot) {
         final bytes = snapshot.data;
         if (bytes == null) {
@@ -1539,7 +1596,13 @@ class _FullscreenImage extends StatelessWidget {
             ),
           );
         }
-        return _buildViewer(Image.memory(bytes, fit: BoxFit.contain));
+        return _buildViewer(
+          Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
+        );
       },
     );
   }

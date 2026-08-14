@@ -1,3 +1,5 @@
 <resources>
+    <string name="connection_alert_accept_action">Numbers match</string>
+    <string name="connection_alert_reject_action">Decline</string>
     <string name="notification_listener_label">Whisper Notification Forwarding</string>
 </resources>

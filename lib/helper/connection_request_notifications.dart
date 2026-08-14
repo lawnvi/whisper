@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
@@ -47,7 +48,7 @@ bool? pairingNotificationDecisionForAction(String actionId) =>
 String formatPairingNotificationCode(String code) =>
     code.length == 6 ? '${code.substring(0, 3)} ${code.substring(3)}' : code;
 
-bool pairingNotificationUsesIncomingCallStyle(PairingRequest request) =>
+bool pairingNotificationUsesProminentAlert(PairingRequest request) =>
     !request.isInitiator && request.reason != PairingReason.identityChanged;
 
 final class ConnectionRequestNotificationActionRouter {
@@ -140,8 +141,10 @@ class ConnectionRequestNotifier {
 
   ConnectionRequestNotifier._internal();
 
-  static const String channelId = 'whisper.incoming_connection.v1';
+  static const String channelId = 'whisper.incoming_connection.v3';
   static const List<String> _obsoleteChannelIds = <String>[
+    'whisper.incoming_connection.v2',
+    'whisper.incoming_connection.v1',
     'whisper.connect_request',
     'whisper.connect_request.alerts.v2',
     'whisper.connect_request.calls',
@@ -185,6 +188,10 @@ class ConnectionRequestNotifier {
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
+          vibrationPattern: Int64List.fromList(<int>[0, 160, 90, 160]),
+          showBadge: false,
+          enableLights: true,
+          ledColor: const Color(0xFF2563EB),
         ),
       );
       try {
@@ -275,21 +282,18 @@ class ConnectionRequestNotifier {
     }
 
     try {
-      final useIncomingCallStyle = pairingNotificationUsesIncomingCallStyle(
-        request,
-      );
-      final shownAsIncomingCall =
-          useIncomingCallStyle &&
-          await _showIncomingCallStyle(
+      final useProminentAlert = pairingNotificationUsesProminentAlert(request);
+      final shownAsProminentAlert =
+          useProminentAlert &&
+          await _showProminentConnectionAlert(
             notificationId: notificationId,
             request: request,
             title: title,
-            body: body,
             formattedCode: code,
             payload: payload,
             l10n: l10n,
           );
-      if (!shownAsIncomingCall) {
+      if (!shownAsProminentAlert) {
         await plugin.show(
           notificationId,
           fallbackTitle,
@@ -308,7 +312,7 @@ class ConnectionRequestNotifier {
               autoCancel: false,
               ongoing: true,
               onlyAlertOnce: true,
-              visibility: NotificationVisibility.private,
+              visibility: NotificationVisibility.public,
               timeoutAfter: 30000,
               styleInformation: BigTextStyleInformation(fallbackBody),
               actions: actionIds
@@ -329,29 +333,27 @@ class ConnectionRequestNotifier {
     }
   }
 
-  Future<bool> _showIncomingCallStyle({
+  Future<bool> _showProminentConnectionAlert({
     required int notificationId,
     required PairingRequest request,
     required String title,
-    required String body,
     required String formattedCode,
     required String payload,
     required AppLocalizations l10n,
   }) async {
     try {
       return await _nativeChannel
-              .invokeMethod<bool>('showIncoming', <String, Object>{
+              .invokeMethod<bool>('showConnectionAlert', <String, Object>{
                 'notificationId': notificationId,
                 'peerId': request.device.uid,
                 'deviceName': request.device.name,
-                'pairingCode': formattedCode,
+                'platform': request.device.platform,
                 'verificationText': l10n.pairingCodeSemantics(formattedCode),
                 'title': title,
-                'body': body,
                 'payload': payload,
                 'rejectActionId': pairingRejectNotificationAction,
                 'answerActionId': pairingApproveNotificationAction,
-                'answerShowsUserInterface': false,
+                'answerShowsUserInterface': true,
                 'channelName': l10n.connectRequest,
                 'channelDescription': l10n.connectRequest,
               }) ??
@@ -477,13 +479,13 @@ class ConnectionRequestNotifier {
     if (Platform.isAndroid) {
       try {
         await _nativeChannel.invokeMethod<void>(
-          'dismissIncoming',
+          'dismissConnectionAlert',
           <String, int>{'notificationId': notificationId},
         );
       } on MissingPluginException {
-        // Older Android builds do not expose the self-managed call bridge.
+        // Older Android builds only have the notification fallback.
       } on PlatformException {
-        // Notification cleanup must still run if Telecom rejects the call.
+        // Always continue with local notification cleanup.
       }
     }
     await _plugin?.cancel(notificationId);

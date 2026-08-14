@@ -1,0 +1,4 @@
+<resources>
+    <string name="connection_alert_accept_action">数字一致</string>
+    <string name="connection_alert_reject_action">拒绝</string>
+</resources>

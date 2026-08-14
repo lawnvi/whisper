@@ -195,6 +195,10 @@ object UnifiedForegroundNotification {
 
     private fun buildCurrent(context: Context): Notification? {
         ensureChannel(context)
+        media?.takeIf(::isActiveMedia)?.let { state ->
+            return buildMediaNotification(context, state)
+        }
+
         transfer?.let { state ->
             val builder = baseBuilder(context, state.title, state.text)
                 .setOngoing(true)
@@ -219,13 +223,7 @@ object UnifiedForegroundNotification {
         }
 
         media?.let { state ->
-            val builder = baseBuilder(context, state.title, state.subtitle)
-                .setOngoing(
-                    state.state == MediaPlaybackService.STATE_PLAYING ||
-                    state.state == MediaPlaybackService.STATE_BUFFERING,
-                )
-            addMediaControls(context, builder, state)
-            return builder.build()
+            return buildMediaNotification(context, state)
         }
 
         keepAlive?.let { state ->
@@ -239,6 +237,17 @@ object UnifiedForegroundNotification {
             return builder.build()
         }
         return null
+    }
+
+    private fun isActiveMedia(state: MediaState): Boolean =
+        state.state == MediaPlaybackService.STATE_PLAYING ||
+            state.state == MediaPlaybackService.STATE_BUFFERING
+
+    private fun buildMediaNotification(context: Context, state: MediaState): Notification {
+        val builder = baseBuilder(context, state.title, state.subtitle)
+            .setOngoing(isActiveMedia(state))
+        addMediaControls(context, builder, state)
+        return builder.build()
     }
 
     private fun addMediaControls(

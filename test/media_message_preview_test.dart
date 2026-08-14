@@ -351,7 +351,8 @@ void main() {
     tester,
   ) async {
     final original = AndroidDocumentPicker.shared;
-    AndroidDocumentPicker.shared = _ThumbnailPicker();
+    final picker = _ThumbnailPicker();
+    AndroidDocumentPicker.shared = picker;
     addTearDown(() => AndroidDocumentPicker.shared = original);
 
     await tester.pumpWidget(
@@ -374,6 +375,42 @@ void main() {
 
     expect(find.byType(Image), findsOneWidget);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    expect(picker.requestedWidth, 2400);
+  });
+
+  testWidgets('content uri fullscreen image reads the original bytes', (
+    tester,
+  ) async {
+    final original = AndroidDocumentPicker.shared;
+    final picker = _OriginalImagePicker();
+    AndroidDocumentPicker.shared = picker;
+    addTearDown(() => AndroidDocumentPicker.shared = original);
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('conversation'));
+          },
+        ),
+      ),
+    );
+
+    unawaited(
+      showMediaViewer(
+        pageContext,
+        kind: MediaFileKind.image,
+        path: 'content://provider/photo/original',
+        name: 'original.png',
+        onOpenExternally: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(picker.readCount, 1);
+    expect(picker.thumbnailCount, 0);
+    expect(find.byType(Image), findsOneWidget);
   });
 
   testWidgets('image viewer is a titleless modal and Escape closes it', (
@@ -469,13 +506,17 @@ class _ThumbnailPicker extends AndroidDocumentPickerPlatform {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     ),
   );
+  int? requestedWidth;
 
   @override
   Future<Uint8List> loadThumbnail({
     required String uri,
     required int width,
     required int height,
-  }) async => _png;
+  }) async {
+    requestedWidth = width;
+    return _png;
+  }
 
   @override
   Future<AndroidDocumentFile?> metadata(String uri) async => null;
@@ -494,4 +535,47 @@ class _ThumbnailPicker extends AndroidDocumentPickerPlatform {
     required int offset,
     required int length,
   }) async => Uint8List(0);
+}
+
+class _OriginalImagePicker extends AndroidDocumentPickerPlatform {
+  int readCount = 0;
+  int thumbnailCount = 0;
+
+  @override
+  Future<AndroidDocumentFile?> metadata(String uri) async =>
+      AndroidDocumentFile(
+        uri: uri,
+        name: 'original.png',
+        size: _ThumbnailPicker._png.length,
+        mimeType: 'image/png',
+        lastModified: 0,
+      );
+
+  @override
+  Future<Uint8List> readBytes({
+    required String uri,
+    required int offset,
+    required int length,
+  }) async {
+    readCount += 1;
+    return _ThumbnailPicker._png;
+  }
+
+  @override
+  Future<Uint8List> loadThumbnail({
+    required String uri,
+    required int width,
+    required int height,
+  }) async {
+    thumbnailCount += 1;
+    return _ThumbnailPicker._png;
+  }
+
+  @override
+  Future<bool> openDocument(String uri) async => true;
+
+  @override
+  Future<List<AndroidDocumentFile>> pickFiles({
+    bool allowMultiple = true,
+  }) async => const <AndroidDocumentFile>[];
 }

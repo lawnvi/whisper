@@ -314,6 +314,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     if (Platform.isAndroid) {
+      // Pairing alerts, transfer progress, and background-service status all
+      // use Android notifications while Whisper is not visible.
+      if (await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
+
       final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
       final storagePermission = sdkInt >= 30
           ? Permission.manageExternalStorage

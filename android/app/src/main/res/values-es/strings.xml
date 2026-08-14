@@ -1,0 +1,4 @@
+<resources>
+    <string name="connection_alert_accept_action">Coinciden</string>
+    <string name="connection_alert_reject_action">Rechazar</string>
+</resources>
