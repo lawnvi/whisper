@@ -755,14 +755,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     [
                       _buildSettingItem(
                         l10n.checkForUpdates,
-                        Icon(
-                          _updateResult?.hasUpdate == true
-                              ? Icons.system_update_rounded
-                              : Icons.update_rounded,
-                          color: isDark
-                              ? Colors.grey[400]
-                              : CupertinoColors.systemGrey,
-                        ),
+                        _buildUpdateLeading(isDark),
                         desc: _updateStatusLabel(l10n),
                         enabled: !_checkingForUpdates && !_downloadingUpdate,
                         onTap: _handleUpdateTap,
@@ -811,9 +804,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildUpdateTrailing(WhisperPalette palette) {
     if (_checkingForUpdates || _downloadingUpdate) {
-      return const SizedBox.square(
-        dimension: 18,
-        child: CupertinoActivityIndicator(radius: 8),
+      final progress = _downloadingUpdate
+          ? _updateDownloadProgress.clamp(0.0, 1.0)
+          : null;
+      return SizedBox.square(
+        dimension: 22,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: progress ?? 0),
+          duration: const Duration(milliseconds: 180),
+          builder: (context, value, child) => CircularProgressIndicator(
+            key: const ValueKey<String>('update-progress-indicator'),
+            value: progress == null ? null : value,
+            strokeWidth: 2.2,
+            strokeCap: StrokeCap.round,
+            color: Theme.of(context).colorScheme.primary,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.12),
+          ),
+        ),
       );
     }
     return Icon(
@@ -824,6 +833,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       color: _updateResult?.hasUpdate == true
           ? Theme.of(context).colorScheme.primary
           : palette.textMuted,
+    );
+  }
+
+  Widget _buildUpdateLeading(bool isDark) {
+    final hasUpdate = _updateResult?.hasUpdate == true;
+    final icon = Icon(
+      hasUpdate ? Icons.system_update_rounded : Icons.update_rounded,
+      color: isDark ? Colors.grey[400] : CupertinoColors.systemGrey,
+    );
+    if (!hasUpdate) {
+      return icon;
+    }
+    return Badge(
+      key: const ValueKey<String>('update-available-badge'),
+      smallSize: 8,
+      backgroundColor: Theme.of(context).colorScheme.error,
+      child: icon,
     );
   }
 
@@ -977,18 +1003,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showAboutDialog(AppLocalizations l10n, Locale locale) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      _showCompactAboutDialog(l10n, locale);
+      return;
+    }
     showAboutDialog(
       context: context,
       applicationName: 'Whisper',
       applicationVersion: l10n.currentVersion(_version),
-      applicationIcon: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Image.asset(
-          'assets/app_icon_round.png',
-          width: 48,
-          height: 48,
-        ),
-      ),
+      applicationIcon: _buildAboutIcon(48),
       applicationLegalese: 'Copyright © 2026 lawnvi',
       children: <Widget>[
         const SizedBox(height: 8),
@@ -1014,6 +1037,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  void _showCompactAboutDialog(AppLocalizations l10n, Locale locale) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+        final materialL10n = MaterialLocalizations.of(dialogContext);
+        return AlertDialog(
+          key: const ValueKey<String>('compact-about-dialog'),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          title: Row(
+            children: <Widget>[
+              _buildAboutIcon(44),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Whisper',
+                      style: Theme.of(dialogContext).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      l10n.currentVersion(_version),
+                      style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text(l10n.aboutWhisperDescription),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Copyright © 2026 lawnvi',
+                    style: Theme.of(dialogContext)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildAboutLink(
+                    label: l10n.officialWebsite,
+                    icon: Icons.language_rounded,
+                    onPressed: () => _launchInBrowser(
+                      Uri.https(
+                        'whisper.127014.xyz',
+                        '/${locale.languageCode}',
+                      ),
+                    ),
+                  ),
+                  _buildAboutLink(
+                    label: l10n.sourceCode,
+                    icon: Icons.code_rounded,
+                    onPressed: () => _launchInBrowser(
+                      Uri.https('github.com', '/lawnvi/whisper'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => showLicensePage(
+                context: dialogContext,
+                applicationName: 'Whisper',
+                applicationVersion: l10n.currentVersion(_version),
+                applicationIcon: _buildAboutIcon(48),
+                applicationLegalese: 'Copyright © 2026 lawnvi',
+              ),
+              child: Text(materialL10n.viewLicensesButtonLabel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(materialL10n.closeButtonLabel),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAboutIcon(double size) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        'assets/app_icon_round.png',
+        width: size,
+        height: size,
+      ),
+    );
+  }
+
+  Widget _buildAboutLink({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        minimumSize: const Size(0, 42),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
     );
   }
 
@@ -1401,7 +1552,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSettingItem(
     String title,
-    Icon icon, {
+    Widget icon, {
     Widget? trailing,
     GestureTapCallback? onTap,
     String desc = '',
@@ -1460,7 +1611,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: <Widget>[
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Icon(icon.icon, color: palette.textMuted),
+                    child: icon is Icon
+                        ? Icon(icon.icon, color: palette.textMuted)
+                        : IconTheme.merge(
+                            data: IconThemeData(color: palette.textMuted),
+                            child: icon,
+                          ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(

@@ -122,6 +122,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       const DesktopClipboardImageReader();
   final DesktopClipboardFileReader _clipboardFileReader =
       const DesktopClipboardFileReader();
+  final DesktopClipboardFileWriter _clipboardFileWriter =
+      const DesktopClipboardFileWriter();
   final ConnectionAttemptTracker _connectionAttempts =
       ConnectionAttemptTracker();
   DeviceData device;
@@ -523,6 +525,21 @@ class _SendMessageScreen extends State<SendMessageScreen>
     await socketManager.retryTransfer(transferId);
   }
 
+  Future<void> _copyMessageFile(MessageData message) async {
+    final transfer = _transferForMessage(message);
+    final path = _effectiveMessagePath(message, transfer);
+    if (!_canDragFileMessage(message, transfer)) {
+      showAppToast(l10n.fileCopyFailed);
+      return;
+    }
+    final kind = mediaFileKindFor(name: message.name, path: path);
+    final copied = await _clipboardFileWriter.writeFilePaths(
+      <String>[path],
+      asImage: kind == MediaFileKind.image,
+    );
+    showAppToast(copied ? l10n.fileCopied : l10n.fileCopyFailed);
+  }
+
   Future<void> _cancelTransfer(String transferId) async {
     await socketManager.cancelTransfer(transferId);
   }
@@ -636,6 +653,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             onOpenContainingFolder: (path) => openDir(path, parent: true),
             onOpenFile: _openMessageFile,
             onCopyText: copyToClipboard,
+            onCopyFile: _copyMessageFile,
             onDeleteMessage: (message, {deleteFile = false}) async {
               if (deleteFile) {
                 await _deleteMessageFileIfExists(message);

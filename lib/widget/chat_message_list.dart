@@ -26,6 +26,7 @@ class ChatMessageList extends StatefulWidget {
   final void Function(String path) onOpenContainingFolder;
   final void Function(MessageData message) onOpenFile;
   final void Function(String content) onCopyText;
+  final Future<void> Function(MessageData message)? onCopyFile;
   final Future<void> Function(MessageData message, {bool deleteFile})
   onDeleteMessage;
   final Future<void> Function(List<MessageData> messages) onDeleteMessages;
@@ -42,6 +43,7 @@ class ChatMessageList extends StatefulWidget {
     required this.onOpenContainingFolder,
     required this.onOpenFile,
     required this.onCopyText,
+    this.onCopyFile,
     required this.onDeleteMessage,
     required this.onDeleteMessages,
     this.onSelectionModeChanged,
@@ -275,6 +277,12 @@ class _ChatMessageListState extends State<ChatMessageList> {
               _copyMessage(message);
             }
           },
+        ),
+      if (isFile && isDesktop() && widget.onCopyFile != null)
+        ContextMenuActionItem(
+          label: localizations?.copyFile ?? '复制文件',
+          icon: Icons.file_copy_outlined,
+          onSelected: () => unawaited(widget.onCopyFile!(message)),
         ),
       ContextMenuActionItem(
         label: localizations?.selectMessages ?? '多选',

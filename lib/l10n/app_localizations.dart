@@ -604,6 +604,24 @@ abstract class AppLocalizations {
   /// **'复制消息'**
   String get copyMessage;
 
+  /// No description provided for @copyFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制文件'**
+  String get copyFile;
+
+  /// No description provided for @fileCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件已复制'**
+  String get fileCopied;
+
+  /// No description provided for @fileCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法复制文件'**
+  String get fileCopyFailed;
+
   /// No description provided for @themeMode.
   ///
   /// In zh, this message translates to:

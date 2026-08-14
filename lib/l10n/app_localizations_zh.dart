@@ -301,6 +301,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyMessage => '复制消息';
 
   @override
+  String get copyFile => '复制文件';
+
+  @override
+  String get fileCopied => '文件已复制';
+
+  @override
+  String get fileCopyFailed => '无法复制文件';
+
+  @override
   String get themeMode => '主题模式';
 
   @override

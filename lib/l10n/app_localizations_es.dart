@@ -309,6 +309,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get copyMessage => 'Copiar contenido del mensaje';
 
   @override
+  String get copyFile => 'Copiar archivo';
+
+  @override
+  String get fileCopied => 'Archivo copiado';
+
+  @override
+  String get fileCopyFailed => 'No se pudo copiar el archivo';
+
+  @override
   String get themeMode => 'Modo de tema';
 
   @override

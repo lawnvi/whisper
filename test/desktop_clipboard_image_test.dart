@@ -147,4 +147,29 @@ void main() {
       },
     );
   });
+
+  test('DesktopClipboardFileWriter exposes image files to the system clipboard',
+      () async {
+    const channel = MethodChannel('test_desktop_clipboard_writer');
+    MethodCall? receivedCall;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          receivedCall = call;
+          return true;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    final written = await const DesktopClipboardFileWriter(channel: channel)
+        .writeFilePaths(<String>['/tmp/received-image.jpg'], asImage: true);
+
+    expect(written, isTrue);
+    expect(receivedCall?.method, 'writeFilePaths');
+    expect(receivedCall?.arguments, <String, Object?>{
+      'paths': <String>['/tmp/received-image.jpg'],
+      'asImage': true,
+    });
+  });
 }

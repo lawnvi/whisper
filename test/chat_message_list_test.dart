@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -153,6 +154,67 @@ void main() {
       find.byKey(const ValueKey('message-selection-toolbar')),
       findsNothing,
     );
+  });
+
+  testWidgets('file message context menu copies the received file', (
+    tester,
+  ) async {
+    final listKey = GlobalKey<AnimatedListState>();
+    final controller = ScrollController();
+    MessageData? copiedFile;
+    const message = MessageData(
+      id: 7,
+      sender: 'peer',
+      receiver: 'me',
+      name: 'received-image.jpg',
+      clipboard: false,
+      size: 128,
+      type: MessageEnum.File,
+      content: '',
+      message: '',
+      timestamp: 7,
+      uuid: 'file-message-7',
+      acked: true,
+      path: '/tmp/received-image.jpg',
+      md5: '',
+      fileTimestamp: 0,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.macOS),
+        home: Scaffold(
+          body: ChatMessageList(
+            buildFileMessage: (_, __) => const Text('received image'),
+            buildTextMessage: (_, __, ___) => const SizedBox.shrink(),
+            controller: controller,
+            listKey: listKey,
+            messages: const <MessageData>[message],
+            onOpenContainingFolder: (_) {},
+            onOpenFile: (_) {},
+            onCopyText: (_) {},
+            onCopyFile: (value) async {
+              copiedFile = value;
+            },
+            onDeleteMessage: (_, {deleteFile = false}) async {},
+            onDeleteMessages: (_) async {},
+            selfUid: 'me',
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.text('received image'),
+      buttons: kSecondaryMouseButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('复制文件'), findsOneWidget);
+
+    await tester.tap(find.text('复制文件'));
+    await tester.pumpAndSettle();
+    expect(copiedFile?.id, 7);
   });
 
   testWidgets('copy icon morphs into a check and resets', (tester) async {

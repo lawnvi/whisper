@@ -125,6 +125,7 @@ Widget _host({
 class _FakeUpdateManager implements AppUpdateManager {
   _FakeUpdateManager({
     this.installDisposition = AppUpdateInstallDisposition.keepRunning,
+    this.downloadGate,
   });
 
   static final _release = AppUpdateRelease(
@@ -148,6 +149,7 @@ class _FakeUpdateManager implements AppUpdateManager {
   int downloadCount = 0;
   int openInstallerCount = 0;
   final AppUpdateInstallDisposition installDisposition;
+  final Completer<void>? downloadGate;
 
   @override
   Future<AppUpdateCheckResult> checkForUpdate({
@@ -169,6 +171,7 @@ class _FakeUpdateManager implements AppUpdateManager {
   }) async {
     downloadCount += 1;
     onProgress?.call(0.5);
+    await downloadGate?.future;
     onProgress?.call(1);
     return AppUpdateDownload(
       release: release,
@@ -294,6 +297,10 @@ void main() {
     expect(manager.checkCount, 1);
     expect(find.text('Check for updates'), findsOneWidget);
     expect(find.text('Version 2.5.0 is available'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('update-available-badge')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
@@ -304,6 +311,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(manager.downloadCount, 1);
     expect(manager.openInstallerCount, 1);
+  });
+
+  testWidgets('update download uses a compact determinate progress ring',
+      (tester) async {
+    final gate = Completer<void>();
+    final manager = _FakeUpdateManager(downloadGate: gate);
+    await _pumpAt(
+      tester,
+      width: 720,
+      height: 1500,
+      updateManager: manager,
+    );
+
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download and install'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final indicator = tester.widget<CircularProgressIndicator>(
+      find.byKey(const ValueKey<String>('update-progress-indicator')),
+    );
+    expect(indicator.value, closeTo(0.5, 0.01));
+    expect(indicator.strokeCap, StrokeCap.round);
+
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('desktop update exits through the application shutdown callback',
@@ -341,6 +375,33 @@ void main() {
     expect(find.text('Current version 2.4.0'), findsWidgets);
     expect(find.text('Official website'), findsOneWidget);
     expect(find.text('GitHub source code'), findsOneWidget);
+  });
+
+  testWidgets('mobile about dialog uses the compact responsive layout',
+      (tester) async {
+    await _pumpAt(
+      tester,
+      width: 390,
+      height: 844,
+      autoCheckForUpdates: false,
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('About Whisper'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('About Whisper'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('compact-about-dialog')),
+      findsOneWidget,
+    );
+    expect(find.byType(AboutDialog), findsNothing);
+    expect(find.text('Official website'), findsOneWidget);
+    expect(find.text('GitHub source code'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('settings remain usable at supported widths and 200 percent text',
