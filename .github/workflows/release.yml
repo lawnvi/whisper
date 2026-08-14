@@ -64,6 +64,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.0'
           channel: stable
           architecture: arm64
           cache: true
@@ -138,6 +139,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.0'
           channel: stable
           cache: true
           pub-cache-path: ${{ env.PUB_CACHE }}
@@ -249,6 +251,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.0'
           channel: stable
           architecture: x64
           cache: true

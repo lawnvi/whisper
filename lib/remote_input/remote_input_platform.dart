@@ -46,11 +46,13 @@ bool _invokeRemoteInputTextIntent<T extends Intent>(
   BuildContext context,
   T intent,
 ) {
-  final handler = Actions.handler<T>(context, intent);
-  if (handler == null) {
+  // Actions.handler lost the concrete intent lookup in newer Flutter versions.
+  // Supplying the runtime intent keeps this compatible across toolchains.
+  final action = Actions.maybeFind<Intent>(context, intent: intent);
+  if (action == null) {
     return false;
   }
-  handler();
+  Actions.maybeInvoke<Intent>(context, intent);
   return true;
 }
 
