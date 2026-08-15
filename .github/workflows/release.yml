@@ -15,9 +15,14 @@ on:
         options:
           - all
           - macos
+          - macos-intel
           - windows
           - linux
           - android
+      version:
+        description: Version used for a manually rebuilt package (for example 0.0.47)
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -129,7 +134,7 @@ jobs:
 
   build-on-macos-intel:
     name: macOS Intel
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' || inputs.target == 'macos-intel' }}
     needs: verify-release-version
     # Build and link every x86_64 Flutter/native artifact on an actual Intel host.
     runs-on: macos-15-intel
@@ -155,12 +160,20 @@ jobs:
         run: pod install --project-directory=macos
 
       - name: Set release version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
             PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          elif [[ -n "$REQUESTED_VERSION" ]]; then
+            PACKAGE_VERSION="$REQUESTED_VERSION"
           else
             PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid package version: $PACKAGE_VERSION" >&2
+            exit 1
           fi
           if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
             UPDATE_CHANNEL="stable"

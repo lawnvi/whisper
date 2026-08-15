@@ -172,6 +172,11 @@ void main() {
       ),
     );
     expect(workflow, contains('script/build_and_run.sh package-macos'));
+    expect(workflow, contains('inputs.target == \'macos-intel\''));
+    expect(workflow, contains(r'REQUESTED_VERSION: ${{ inputs.version }}'));
+    expect(workflow, contains(r'elif [[ -n "$REQUESTED_VERSION" ]]'));
+    expect(workflow, contains(r'PACKAGE_VERSION="$REQUESTED_VERSION"'));
+    expect(workflow, contains(r'^[0-9]+\.[0-9]+\.[0-9]+$'));
   });
 
   test('macOS package script can be launched through sh', () async {
