@@ -66,4 +66,21 @@ void main() {
     expect(workflow, contains('overwrite_files: true'));
     expect(releaseActions.length, 1);
   });
+
+  test('a manually rebuilt Intel package can update its dev release', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+
+    expect(workflow, contains('publish:'));
+    expect(workflow, contains("inputs.target == 'macos-intel'"));
+    expect(workflow, contains('inputs.publish'));
+    expect(workflow, contains("inputs.version != ''"));
+    expect(
+      workflow,
+      contains("format('dev-v{0}', inputs.version)"),
+    );
+    expect(
+      workflow,
+      contains("needs.build-on-macos-intel.result == 'success'"),
+    );
+  });
 }
