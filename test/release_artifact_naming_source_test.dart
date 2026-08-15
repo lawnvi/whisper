@@ -3,6 +3,16 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('CI and release jobs use published stable Flutter versions', () {
+    final ci = File('.github/workflows/ci.yml').readAsStringSync();
+    final release = File('.github/workflows/release.yml').readAsStringSync();
+
+    expect(ci, contains("flutter-version: '3.44.9'"));
+    expect(release, contains("flutter-version: '3.44.9'"));
+    expect(ci, isNot(contains("flutter-version: '3.47.0'")));
+    expect(release, isNot(contains("flutter-version: '3.47.0'")));
+  });
+
   test('release workflow publishes normalized artifact file names', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
 
