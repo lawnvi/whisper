@@ -151,8 +151,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           # Flutter 3.47's Metal renderer corrupts frames on Intel UHD 630.
-          # Keep Intel packages on the last engine verified on real x86 hardware.
-          flutter-version: '3.41.7'
+          # Keep Intel packages on the stable engine verified on real x86 hardware.
+          flutter-version: '3.44.9'
           channel: stable
           architecture: x64
           cache: true

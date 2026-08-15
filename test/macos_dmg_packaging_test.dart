@@ -10,7 +10,7 @@ void main() {
     expect(workflow, contains('architecture: arm64'));
     expect(workflow, contains('runs-on: macos-15-intel'));
     expect(workflow, contains('architecture: x64'));
-    expect(workflow, contains("flutter-version: '3.41.7'"));
+    expect(workflow, contains("flutter-version: '3.44.9'"));
     expect(workflow, contains('script/build_and_run.sh package-macos\n'));
     expect(
       workflow,
