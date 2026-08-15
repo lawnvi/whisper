@@ -3,24 +3,23 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'release workflow builds signed ARM and Intel DMGs on one ARM runner',
-    () {
-      final workflow = File('.github/workflows/release.yml').readAsStringSync();
+  test('release workflow builds signed DMGs on matching native runners', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
 
-      expect(workflow, contains('runs-on: macos-15'));
-      expect(workflow, contains('architecture: arm64'));
-      expect(workflow, contains('script/build_and_run.sh package-macos\n'));
-      expect(workflow, contains('script/build_and_run.sh package-macos-x64'));
-      expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos-arm64.dmg'));
-      expect(
-        workflow,
-        contains(r'whisper-${PACKAGE_VERSION}-macos-x86_64.dmg'),
-      );
-      expect(workflow, contains('WHISPER_MACOS_CERTIFICATE_P12_BASE64'));
-      expect(workflow, contains('WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"'));
-    },
-  );
+    expect(workflow, contains('runs-on: macos-15'));
+    expect(workflow, contains('architecture: arm64'));
+    expect(workflow, contains('runs-on: macos-15-intel'));
+    expect(workflow, contains('architecture: x64'));
+    expect(workflow, contains('script/build_and_run.sh package-macos\n'));
+    expect(
+      workflow,
+      isNot(contains('script/build_and_run.sh package-macos-x64')),
+    );
+    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos-arm64.dmg'));
+    expect(workflow, contains(r'whisper-${PACKAGE_VERSION}-macos-x86_64.dmg'));
+    expect(workflow, contains('WHISPER_MACOS_CERTIFICATE_P12_BASE64'));
+    expect(workflow, contains('WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"'));
+  });
 
   test(
     'release workflow disables experimental Flutter Swift Package Manager',
@@ -44,7 +43,7 @@ void main() {
     final packageScript = File('script/build_and_run.sh').readAsStringSync();
 
     expect(workflow, contains('script/build_and_run.sh package-macos'));
-    expect(workflow, contains('script/build_and_run.sh package-macos-x64'));
+    expect(workflow, contains('build-on-macos-intel:'));
     expect(packageScript, contains(r'mkdir -p "$DMG_ROOT"'));
     expect(
       packageScript,
@@ -158,6 +157,21 @@ void main() {
     expect(script, contains('rm -rf build/native_assets/macos'));
     expect(script, contains('.dart_tool/flutter_build'));
     expect(script, contains('prepare_macos_native_asset_staging x86_64'));
+  });
+
+  test('release workflow builds the Intel package on an Intel runner', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+
+    expect(workflow, contains('build-on-macos-intel:'));
+    expect(workflow, contains('runs-on: macos-15-intel'));
+    expect(workflow, contains('architecture: x64'));
+    expect(
+      workflow,
+      contains(
+        r'WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg"',
+      ),
+    );
+    expect(workflow, contains('script/build_and_run.sh package-macos'));
   });
 
   test('macOS package script can be launched through sh', () async {

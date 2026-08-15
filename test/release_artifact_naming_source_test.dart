@@ -59,6 +59,7 @@ void main() {
     expect(workflow, contains('uses: actions/download-artifact@v4'));
     expect(workflow, contains('merge-multiple: true'));
     expect(workflow, contains('      - build-on-macos'));
+    expect(workflow, contains('      - build-on-macos-intel'));
     expect(workflow, contains('      - build-on-windows'));
     expect(workflow, contains('      - build-on-linux'));
     expect(workflow, contains('files: release-assets/**/*'));

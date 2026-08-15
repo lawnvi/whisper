@@ -52,10 +52,9 @@ jobs:
           fi
 
   build-on-macos:
-    name: macOS + iOS
+    name: macOS Apple Silicon + iOS
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
     needs: verify-release-version
-    # Build both native Apple Silicon and Intel packages on one ARM runner.
     runs-on: macos-15
     steps:
       - name: Check out code
@@ -107,9 +106,6 @@ jobs:
           WHISPER_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
             WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-arm64.dmg" \
             script/build_and_run.sh package-macos
-          WHISPER_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
-            WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" \
-            script/build_and_run.sh package-macos-x64
 
       - name: Build iOS IPA
         run: |
@@ -128,8 +124,69 @@ jobs:
           name: whisper-macos-ios-${{ github.run_id }}
           path: |
             whisper-*-macos-arm64.dmg
-            whisper-*-macos-x86_64.dmg
             build/ios/iphoneos/whisper-*-ios-unsigned.ipa
+          retention-days: 7
+
+  build-on-macos-intel:
+    name: macOS Intel
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
+    needs: verify-release-version
+    # Build and link every x86_64 Flutter/native artifact on an actual Intel host.
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          architecture: x64
+          cache: true
+
+      - name: Disable Flutter Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=macos
+
+      - name: Set release version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
+            PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          else
+            PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
+            UPDATE_CHANNEL="stable"
+          else
+            UPDATE_CHANNEL="preview"
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "UPDATE_CHANNEL=$UPDATE_CHANNEL" >> $GITHUB_ENV
+
+      - name: Build signed Intel macOS DMG
+        env:
+          WHISPER_MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          WHISPER_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          WHISPER_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          WHISPER_MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"
+        run: |
+          WHISPER_UPDATE_CHANNEL="$UPDATE_CHANNEL" \
+            WHISPER_MACOS_DMG_PATH="whisper-${PACKAGE_VERSION}-macos-x86_64.dmg" \
+            script/build_and_run.sh package-macos
+
+      - name: Upload Intel macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-macos-intel-${{ github.run_id }}
+          path: whisper-*-macos-x86_64.dmg
           retention-days: 7
 
   build-on-windows:
@@ -395,6 +452,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs:
       - build-on-macos
+      - build-on-macos-intel
       - build-on-windows
       - build-on-linux
     runs-on: ubuntu-22.04
