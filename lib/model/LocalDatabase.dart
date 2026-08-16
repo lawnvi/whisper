@@ -1999,9 +1999,7 @@ extension RemoteInputLayoutDataAutoRoleX on RemoteInputLayoutData {
 LazyDatabase _openConnection() {
   // the LazyDatabase util lets us find the right location for the file async.
   return LazyDatabase(() async {
-    // put the database file, called db.sqlite here, into the documents folder
-    // for your app.
-    final dbFolder = await getApplicationDocumentsDirectory();
+    final dbFolder = await _databaseDirectory();
     final file = File('${dbFolder.path}/db.sqlite');
 
     // Also work around limitations on old Android versions
@@ -2021,6 +2019,22 @@ LazyDatabase _openConnection() {
       setup: configureWhisperDatabase,
     );
   });
+}
+
+Future<Directory> _databaseDirectory() async {
+  if (Platform.isMacOS) {
+    final home = Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      final legacyDirectory = Directory(
+        '$home/Library/Containers/com.vireen.whisper/Data/Documents',
+      );
+      if (await File('${legacyDirectory.path}/db.sqlite').exists()) {
+        return legacyDirectory;
+      }
+    }
+    return getApplicationSupportDirectory();
+  }
+  return getApplicationDocumentsDirectory();
 }
 
 void configureWhisperDatabase(Database database) {

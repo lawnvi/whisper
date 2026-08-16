@@ -19,13 +19,15 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.macos,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'windows',
-        'keyCode': 0x11,
-        'windowsKeyCode': 0x11,
-        'macKeyCode': 59,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'windows',
+          'keyCode': 0x11,
+          'windowsKeyCode': 0x11,
+          'macKeyCode': 59,
+          'down': true,
+        }),
+      );
 
       expect(translated, hasLength(1));
       final payload = _payload(translated.single);
@@ -42,13 +44,15 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.macos,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'windows',
-        'keyCode': 0x5B,
-        'windowsKeyCode': 0x5B,
-        'macKeyCode': 55,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'windows',
+          'keyCode': 0x5B,
+          'windowsKeyCode': 0x5B,
+          'macKeyCode': 55,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['modifierSemantic'], 'meta');
@@ -63,13 +67,15 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.windows,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'macos',
-        'keyCode': 55,
-        'macKeyCode': 55,
-        'windowsKeyCode': 0x11,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'macos',
+          'keyCode': 55,
+          'macKeyCode': 55,
+          'windowsKeyCode': 0x11,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['modifierSemantic'], 'meta');
@@ -79,17 +85,44 @@ void main() {
       expect(payload['linuxKeyCode'], 125);
     });
 
+    test('preserves native macOS Caps Lock companion metadata', () {
+      final translator = RemoteInputKeyTranslator(
+        targetPlatform: RemoteInputPlatformKind.macos,
+      );
+
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'macos',
+          'keyCode': 57,
+          'macKeyCode': 57,
+          'modifierSemantic': 'capsLock',
+          'macCapsLockKeyCode': 255,
+          'macCapsLockFlags': 256,
+          'down': false,
+        }),
+      );
+
+      final payload = _payload(translated.single);
+      expect(payload['modifierSemantic'], 'capsLock');
+      expect(payload['macKeyCode'], 57);
+      expect(payload['macCapsLockKeyCode'], 255);
+      expect(payload['macCapsLockFlags'], 256);
+      expect(payload['down'], isFalse);
+    });
+
     test('maps Linux Control to macOS Control', () {
       final translator = RemoteInputKeyTranslator(
         targetPlatform: RemoteInputPlatformKind.macos,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'linux',
-        'keyCode': 29,
-        'linuxKeyCode': 29,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'linux',
+          'keyCode': 29,
+          'linuxKeyCode': 29,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['modifierSemantic'], 'control');
@@ -103,13 +136,15 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.linux,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'macos',
-        'keyCode': 8,
-        'macKeyCode': 8,
-        'windowsKeyCode': 0x43,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'macos',
+          'keyCode': 8,
+          'macKeyCode': 8,
+          'windowsKeyCode': 0x43,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['keySemantic'], 'keyC');
@@ -124,13 +159,15 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.linux,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'macos',
-        'keyCode': 31,
-        'macKeyCode': 31,
-        'windowsKeyCode': 0x4F,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'macos',
+          'keyCode': 31,
+          'macKeyCode': 31,
+          'windowsKeyCode': 0x4F,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['keySemantic'], 'keyO');
@@ -144,12 +181,14 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.macos,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'sourcePlatform': 'windows',
-        'keyCode': 0xBF,
-        'windowsKeyCode': 0xBF,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{
+          'sourcePlatform': 'windows',
+          'keyCode': 0xBF,
+          'windowsKeyCode': 0xBF,
+          'down': true,
+        }),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['keySemantic'], 'slash');
@@ -164,10 +203,9 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.macos,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'keyCode': 0x41,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{'keyCode': 0x41, 'down': true}),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['keySemantic'], 'keyA');
@@ -182,10 +220,9 @@ void main() {
         targetPlatform: RemoteInputPlatformKind.windows,
       );
 
-      final translated = translator.translateFrame(_keyFrame(<String, dynamic>{
-        'keyCode': 8,
-        'down': true,
-      }));
+      final translated = translator.translateFrame(
+        _keyFrame(<String, dynamic>{'keyCode': 8, 'down': true}),
+      );
 
       final payload = _payload(translated.single);
       expect(payload['keySemantic'], 'keyC');
