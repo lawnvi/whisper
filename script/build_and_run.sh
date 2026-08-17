@@ -14,6 +14,7 @@ X64_DERIVED_DATA="${WHISPER_MACOS_X64_DERIVED_DATA:-build/macos-x64}"
 X64_RELEASE_APP_BUNDLE="$X64_DERIVED_DATA/Build/Products/Release/whisper.app"
 DEBUG_ENTITLEMENTS="macos/Runner/DebugProfile.entitlements"
 RELEASE_ENTITLEMENTS="macos/Runner/Release.entitlements"
+INTEL_VIRTUAL_HID_ENTITLEMENTS="macos/Runner/IntelVirtualHID.entitlements"
 SIGN_IDENTITY="${WHISPER_MACOS_SIGN_IDENTITY:-Whisper Local Development}"
 RESOLVED_SIGN_IDENTITY=""
 KEYCHAIN="${WHISPER_MACOS_KEYCHAIN:-${HOME}/Library/Keychains/login.keychain-db}"
@@ -222,22 +223,34 @@ sign_app() {
 }
 
 build_debug_app() {
-  prepare_macos_native_asset_staging "$(uname -m)"
+  local host_arch
+  local entitlements
+  host_arch="$(uname -m)"
+  entitlements="$DEBUG_ENTITLEMENTS"
+  if [[ "$host_arch" == "x86_64" ]]; then
+    entitlements="$INTEL_VIRTUAL_HID_ENTITLEMENTS"
+  fi
+  prepare_macos_native_asset_staging "$host_arch"
   flutter build macos --debug "${FLUTTER_UPDATE_ARGS[@]}"
   dart script/prune_flutter_assets.dart macos \
     "$DEBUG_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
-  sign_app "$DEBUG_APP_BUNDLE" "$DEBUG_ENTITLEMENTS"
+  sign_app "$DEBUG_APP_BUNDLE" "$entitlements"
 }
 
 build_release_app() {
   local host_arch
+  local entitlements
   host_arch="$(uname -m)"
+  entitlements="$RELEASE_ENTITLEMENTS"
+  if [[ "$host_arch" == "x86_64" ]]; then
+    entitlements="$INTEL_VIRTUAL_HID_ENTITLEMENTS"
+  fi
   prepare_macos_native_asset_staging "$host_arch"
   flutter build macos "${FLUTTER_UPDATE_ARGS[@]}"
   dart script/prune_flutter_assets.dart macos \
     "$RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   verify_bundle_architecture "$RELEASE_APP_BUNDLE" "$host_arch"
-  sign_app "$RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
+  sign_app "$RELEASE_APP_BUNDLE" "$entitlements"
 }
 
 verify_bundle_architecture() {
@@ -278,7 +291,7 @@ build_release_x64_app() {
   dart script/prune_flutter_assets.dart macos \
     "$X64_RELEASE_APP_BUNDLE/Contents/Frameworks/App.framework/Versions/A/Resources/flutter_assets"
   verify_bundle_architecture "$X64_RELEASE_APP_BUNDLE" x86_64
-  sign_app "$X64_RELEASE_APP_BUNDLE" "$RELEASE_ENTITLEMENTS"
+  sign_app "$X64_RELEASE_APP_BUNDLE" "$INTEL_VIRTUAL_HID_ENTITLEMENTS"
 }
 
 configure_dmg_finder_window() {

@@ -1687,6 +1687,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func postVirtualCapsLockTap() {
     ensureVirtualKeyboardDevice()
     guard let device = virtualKeyboardDevice else {
+      postSyntheticCapsLockTap()
       return
     }
     postVirtualKeyboardReport(
@@ -1701,7 +1702,28 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       self.postVirtualKeyboardReport(
         device: device,
         report: [UInt8](repeating: 0, count: 8),
-        event: .virtualCapsUp)
+      event: .virtualCapsUp)
+    }
+  }
+
+  private func postSyntheticCapsLockTap() {
+    guard let downEvent = CGEvent(
+      keyboardEventSource: keyboardEventSource,
+      virtualKey: CGKeyCode(57),
+      keyDown: true),
+      let upEvent = CGEvent(
+        keyboardEventSource: keyboardEventSource,
+        virtualKey: CGKeyCode(57),
+        keyDown: false) else {
+      return
+    }
+    downEvent.type = .flagsChanged
+    downEvent.flags = injectedModifierFlags.union(.maskAlphaShift)
+    upEvent.type = .flagsChanged
+    upEvent.flags = injectedModifierFlags
+    downEvent.post(tap: .cghidEventTap)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+      upEvent.post(tap: .cghidEventTap)
     }
   }
 

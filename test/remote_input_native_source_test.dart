@@ -365,7 +365,7 @@ void main() {
         expect(entitlements, isNot(contains('com.apple.security.app-sandbox')));
         expect(
           entitlements,
-          contains('com.apple.developer.hid.virtual.device'),
+          isNot(contains('com.apple.developer.hid.virtual.device')),
         );
         expect(
           entitlements,
@@ -380,6 +380,24 @@ void main() {
           isNot(contains('com.apple.security.temporary-exception.sbpl')),
         );
       }
+
+      final intelEntitlements = File(
+        'macos/Runner/IntelVirtualHID.entitlements',
+      ).readAsStringSync();
+      expect(
+        intelEntitlements,
+        contains('com.apple.developer.hid.virtual.device'),
+      );
+      final buildScript = File('script/build_and_run.sh').readAsStringSync();
+      expect(buildScript, contains('INTEL_VIRTUAL_HID_ENTITLEMENTS='));
+      expect(
+        buildScript,
+        contains(
+          r'sign_app "$X64_RELEASE_APP_BUNDLE" '
+          r'"$INTEL_VIRTUAL_HID_ENTITLEMENTS"',
+        ),
+      );
+      expect(source, contains('postSyntheticCapsLockTap()'));
     });
 
     test('keeps existing macOS data when leaving App Sandbox', () {
