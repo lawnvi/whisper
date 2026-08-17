@@ -13,6 +13,7 @@ import window_manager
 private let privacyTraceLog = OSLog(
   subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
   category: "RemoteInput")
+private let remoteInputShortcutEventMarker: Int64 = 0x57484953504552
 private let remoteInputLocalPasteEventMarker: Int64 = 0x57484953505653
 private let sandboxPreferencesMigrationKey =
   "WHISPER_SANDBOX_PREFERENCES_MIGRATED_V1"
@@ -58,6 +59,8 @@ private enum RemoteInputTraceEvent: String {
   case injectionReleased = "injection_released"
   case injectionStarted = "injection_started"
   case injectionStopped = "injection_stopped"
+  case shortcutFiltered = "shortcut_filtered"
+  case shortcutPosted = "shortcut_posted"
   case virtualCapsDown = "virtual_caps_down"
   case virtualCapsUp = "virtual_caps_up"
   case virtualKeyboardActivated = "virtual_keyboard_activated"
@@ -364,10 +367,13 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var suppressLocalPasteKeyUp = false
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
+  private var shortcutSuppressionEventTap: CFMachPort?
+  private var shortcutSuppressionRunLoopSource: CFRunLoopSource?
   private var sequence = 0
   private var captureActivationSequence = 0
   private var captureCursorHidden = false
   private var captureMouseButtons = 0
+  private var lastCapturedPrimaryCapsLockTimestamp: CGEventTimestamp = 0
   private var injectedMouseButtons = 0
   private var injectedMousePoint: CGPoint?
   private var injectedMouseEnteredInterior = false
@@ -388,6 +394,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private let virtualKeyboardQueue = DispatchQueue(
     label: "com.vireen.whisper.virtual-keyboard")
   private var suppressedAppCommandShortcutKeyCodes: [Int] = []
+  private var lastInjectedPrimaryCapsLockTimeMicros: Int64 = 0
   private let keyboardEventSource = CGEventSource(stateID: .hidSystemState)
   private var injectionDiagnosticCount = 0
 
@@ -499,6 +506,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       injectedModifierFlags = []
       ensureVirtualKeyboardDevice()
       suppressedAppCommandShortcutKeyCodes = []
+      lastInjectedPrimaryCapsLockTimeMicros = 0
       injectionDiagnosticCount = 0
       injectionSessionId = sessionId
       injectionDisplayId = args["displayId"] as? String ?? ""
@@ -578,6 +586,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     sequence = 0
     captureActivationSequence = 0
     captureActivationEdgeUnit = nil
+    lastCapturedPrimaryCapsLockTimestamp = 0
 
     let userInfo = Unmanaged.passUnretained(self).toOpaque()
     guard let tap = CGEvent.tapCreate(
@@ -624,6 +633,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureActivationSequence = 0
     captureMouseButtons = 0
     captureActivationEdgeUnit = nil
+    lastCapturedPrimaryCapsLockTimestamp = 0
     showCaptureCursorIfNeeded()
   }
 
@@ -634,11 +644,13 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     releaseInjectedMouseButtons()
     releaseInjectedKeys()
     releaseCommonModifierKeys()
+    stopShortcutSuppressionTap()
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
     resetInjectedClickState()
     injectedModifierFlags = []
     suppressedAppCommandShortcutKeyCodes = []
+    lastInjectedPrimaryCapsLockTimeMicros = 0
     injectionDiagnosticCount = 0
     injectionSessionId = ""
     injectionDisplayId = ""
@@ -685,7 +697,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
 
   fileprivate func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
     let eventMarker = event.getIntegerValueField(.eventSourceUserData)
-    if eventMarker == remoteInputLocalPasteEventMarker {
+    if eventMarker == remoteInputShortcutEventMarker ||
+        eventMarker == remoteInputLocalPasteEventMarker {
       return false
     }
     guard !captureSessionId.isEmpty else {
@@ -880,6 +893,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           (rawMacKeyCode == 57 || rawMacKeyCode == 255) {
         traceRemoteInput(.captureSignal, count: rawMacKeyCode)
       }
+      if shouldSkipCapturedCapsLockCompanionEvent(
+          type: type,
+          rawKeyCode: rawMacKeyCode,
+          timestamp: event.timestamp) {
+        return nil
+      }
       let macKeyCode = normalizedCapturedMacKeyCode(
         type: type,
         rawKeyCode: rawMacKeyCode)
@@ -1062,6 +1081,11 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           : intValue(data["macCapsLockKeyCode"])
         let sourcePlatform = (data["sourcePlatform"] as? String)?.lowercased() ?? ""
         let isMacCapsToggle = sourcePlatform == "macos" || sourcePlatform == "mac"
+        if isMacCapsToggle && shouldSkipInjectedCapsLockCompanionEvent(
+            rawKeyCode: rawCapsLockKeyCode,
+            timestampMicros: timestampMicros) {
+          return
+        }
         traceRemoteInput(.injectionSignal, count: rawCapsLockKeyCode)
         if down || isMacCapsToggle {
           postVirtualCapsLockTap()
@@ -1557,6 +1581,34 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return rawKeyCode
   }
 
+  private func shouldSkipCapturedCapsLockCompanionEvent(
+    type: CGEventType,
+    rawKeyCode: Int,
+    timestamp: CGEventTimestamp
+  ) -> Bool {
+    guard type == .flagsChanged else {
+      return false
+    }
+    if rawKeyCode == 57 {
+      lastCapturedPrimaryCapsLockTimestamp = timestamp
+      return false
+    }
+    guard rawKeyCode == 255 else {
+      return false
+    }
+    let primaryTimestamp = lastCapturedPrimaryCapsLockTimestamp
+    lastCapturedPrimaryCapsLockTimestamp = 0
+    guard primaryTimestamp > 0,
+          timestamp >= primaryTimestamp,
+          timestamp - primaryTimestamp <= 250_000_000 else {
+      return false
+    }
+    traceRemoteInput(
+      .captureCompanion,
+      count: Int((timestamp - primaryTimestamp) / 1_000_000))
+    return true
+  }
+
   private func modifierFlag(forMacKeyCode keyCode: Int) -> CGEventFlags? {
     switch keyCode {
     case 54, 55:
@@ -1645,6 +1697,32 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return nativeKeyCode == 57 || semantic == "capsLock"
   }
 
+  private func shouldSkipInjectedCapsLockCompanionEvent(
+    rawKeyCode: Int,
+    timestampMicros: Int64
+  ) -> Bool {
+    let eventTimeMicros =
+      timestampMicros > 0 ? timestampMicros : currentTimeMicros()
+    if rawKeyCode == 57 {
+      lastInjectedPrimaryCapsLockTimeMicros = eventTimeMicros
+      return false
+    }
+    guard rawKeyCode == 255 else {
+      return false
+    }
+    let primaryTimeMicros = lastInjectedPrimaryCapsLockTimeMicros
+    lastInjectedPrimaryCapsLockTimeMicros = 0
+    guard primaryTimeMicros > 0,
+          eventTimeMicros >= primaryTimeMicros,
+          eventTimeMicros - primaryTimeMicros <= 250_000 else {
+      return false
+    }
+    traceRemoteInput(
+      .injectionCompanion,
+      count: Int((eventTimeMicros - primaryTimeMicros) / 1_000))
+    return true
+  }
+
   private func ensureVirtualKeyboardDevice() {
     guard virtualKeyboardDevice == nil else {
       return
@@ -1687,7 +1765,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func postVirtualCapsLockTap() {
     ensureVirtualKeyboardDevice()
     guard let device = virtualKeyboardDevice else {
-      postSyntheticCapsLockTap()
+      if !postInputSourceShortcut() {
+        postSyntheticCapsLockTap()
+      }
       return
     }
     postVirtualKeyboardReport(
@@ -1704,6 +1784,89 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         report: [UInt8](repeating: 0, count: 8),
       event: .virtualCapsUp)
     }
+  }
+
+  private func postInputSourceShortcut() -> Bool {
+    guard ensureShortcutSuppressionTap() else {
+      return false
+    }
+    let controlKey = CGKeyCode(59)
+    let spaceKey = CGKeyCode(49)
+    let controlFlags: CGEventFlags = [.maskControl]
+    guard let controlDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: controlKey,
+            keyDown: true),
+          let spaceDown = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: spaceKey,
+            keyDown: true),
+          let spaceUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: spaceKey,
+            keyDown: false),
+          let controlUp = CGEvent(
+            keyboardEventSource: keyboardEventSource,
+            virtualKey: controlKey,
+            keyDown: false) else {
+      return false
+    }
+
+    let events = [controlDown, spaceDown, spaceUp, controlUp]
+    for event in events {
+      event.setIntegerValueField(
+        .eventSourceUserData,
+        value: remoteInputShortcutEventMarker)
+    }
+    controlDown.type = .flagsChanged
+    controlDown.flags = controlFlags
+    spaceDown.flags = controlFlags
+    spaceUp.flags = controlFlags
+    controlUp.type = .flagsChanged
+    controlUp.flags = []
+
+    controlDown.post(tap: .cghidEventTap)
+    spaceDown.post(tap: .cghidEventTap)
+    spaceUp.post(tap: .cghidEventTap)
+    controlUp.post(tap: .cghidEventTap)
+    traceRemoteInput(.shortcutPosted)
+    return true
+  }
+
+  private func ensureShortcutSuppressionTap() -> Bool {
+    if let tap = shortcutSuppressionEventTap {
+      CGEvent.tapEnable(tap: tap, enable: true)
+      return true
+    }
+    let mask = remoteInputEventMask(for: .keyDown) |
+      remoteInputEventMask(for: .keyUp) |
+      remoteInputEventMask(for: .flagsChanged)
+    guard let tap = CGEvent.tapCreate(
+      tap: .cgAnnotatedSessionEventTap,
+      place: .headInsertEventTap,
+      options: .defaultTap,
+      eventsOfInterest: mask,
+      callback: remoteInputShortcutSuppressionCallback,
+      userInfo: nil) else {
+      return false
+    }
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    shortcutSuppressionEventTap = tap
+    shortcutSuppressionRunLoopSource = source
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    return true
+  }
+
+  private func stopShortcutSuppressionTap() {
+    if let source = shortcutSuppressionRunLoopSource {
+      CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+    }
+    if let tap = shortcutSuppressionEventTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
+    }
+    shortcutSuppressionRunLoopSource = nil
+    shortcutSuppressionEventTap = nil
   }
 
   private func postSyntheticCapsLockTap() {
@@ -2764,6 +2927,16 @@ private let remoteInputEventCallback: CGEventTapCallBack = {
   return plugin.handleEvent(type: type, event: event)
     ? nil
     : Unmanaged.passUnretained(event)
+}
+
+private let remoteInputShortcutSuppressionCallback: CGEventTapCallBack = {
+  _, type, event, _ in
+  if event.getIntegerValueField(.eventSourceUserData) ==
+      remoteInputShortcutEventMarker {
+    traceRemoteInput(.shortcutFiltered, count: Int(type.rawValue))
+    return nil
+  }
+  return Unmanaged.passUnretained(event)
 }
 
 final class AudioSharePlugin: NSObject, FlutterPlugin {

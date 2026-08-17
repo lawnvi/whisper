@@ -355,7 +355,20 @@ void main() {
       expect(source, contains('IOHIDUserDeviceSetDispatchQueue'));
       expect(source, contains('IOHIDUserDeviceActivate'));
       expect(source, isNot(contains('TISSelectInputSource')));
-      expect(source, isNot(contains('let spaceKey = CGKeyCode(49)')));
+      expect(source, contains('postInputSourceShortcut()'));
+      expect(source, contains('let spaceKey = CGKeyCode(49)'));
+      expect(source, contains('remoteInputShortcutEventMarker'));
+      expect(source, contains('remoteInputShortcutSuppressionCallback'));
+      final capsPosting = RegExp(
+        r'private func postVirtualCapsLockTap\(\)[\s\S]*?\n  private func postInputSourceShortcut',
+      ).firstMatch(source)!.group(0)!;
+      expect(capsPosting, contains('ensureVirtualKeyboardDevice()'));
+      expect(capsPosting, contains('guard let device = virtualKeyboardDevice'));
+      expect(capsPosting, contains('if !postInputSourceShortcut()'));
+      expect(
+        capsPosting.indexOf('guard let device = virtualKeyboardDevice'),
+        lessThan(capsPosting.indexOf('postInputSourceShortcut()')),
+      );
 
       for (final path in <String>[
         'macos/Runner/DebugProfile.entitlements',
@@ -417,7 +430,7 @@ void main() {
       expect(databaseSource, contains('getApplicationSupportDirectory()'));
     });
 
-    test('treats every macOS Caps Lock flags change as a toggle action', () {
+    test('coalesces the Apple Silicon 57 to 255 Caps companion pair', () {
       expect(source, contains('normalizedCapturedMacKeyCode'));
       expect(source, contains('rawKeyCode == 255'));
       expect(source, contains('return 57'));
@@ -431,17 +444,23 @@ void main() {
         ),
       );
       expect(source, contains('? true'));
-      expect(source, isNot(contains('lastCapturedCapsLockRawKeyCode')));
-      expect(source, isNot(contains('lastCapturedCapsLockTimestamp')));
+      expect(source, contains('lastCapturedPrimaryCapsLockTimestamp'));
+      expect(source, contains('shouldSkipCapturedCapsLockCompanionEvent'));
+      final coalescing = RegExp(
+        r'private func shouldSkipCapturedCapsLockCompanionEvent\([\s\S]*?\n  private func modifierFlag',
+      ).firstMatch(source)!.group(0)!;
+      expect(coalescing, contains('if rawKeyCode == 57'));
+      expect(coalescing, contains('guard rawKeyCode == 255'));
       expect(
-        source,
-        isNot(contains('shouldSkipCapturedCapsLockCompanionEvent')),
+        coalescing,
+        contains('timestamp - primaryTimestamp <= 250_000_000'),
       );
+      expect(coalescing, contains('.captureCompanion'));
     });
 
-    test('posts one virtual HID Caps Lock tap per remote press', () {
-      expect(source, isNot(contains('lastInjectedCapsLockTimeMicros')));
-      expect(source, isNot(contains('shouldHandleInjectedCapsLock')));
+    test('deduplicates legacy payloads before posting one remote Caps tap', () {
+      expect(source, contains('lastInjectedPrimaryCapsLockTimeMicros'));
+      expect(source, contains('shouldSkipInjectedCapsLockCompanionEvent'));
       expect(source, contains('down || isMacCapsToggle'));
       expect(source, contains('sourcePlatform == "macos"'));
       expect(source, contains('postVirtualCapsLockTap()'));
@@ -449,6 +468,10 @@ void main() {
       expect(source, contains('deadline: .now() + 0.08'));
       expect(source, contains('IOHIDUserDeviceHandleReportWithTimeStamp'));
       expect(source, contains('[UInt8](repeating: 0, count: 8)'));
+      expect(
+        source,
+        contains('eventTimeMicros - primaryTimeMicros <= 250_000'),
+      );
       expect(source, isNot(contains('selectInputSourceForRemoteCapsLock')));
       expect(source, isNot(contains('postInputSourceRefreshEvent')));
     });
