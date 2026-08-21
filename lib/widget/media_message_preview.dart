@@ -16,6 +16,14 @@ import 'package:whisper/theme/app_theme.dart';
 
 enum MediaFileKind { image, video, audio, other }
 
+@immutable
+class MediaViewerImage {
+  const MediaViewerImage({required this.path, required this.name});
+
+  final String path;
+  final String name;
+}
+
 const Set<String> _previewableImageMimeTypes = <String>{
   'image/jpeg',
   'image/png',
@@ -1425,11 +1433,23 @@ Future<void> showMediaViewer(
   required String path,
   required String name,
   required VoidCallback onOpenExternally,
+  List<MediaViewerImage>? imageGallery,
+  int initialImageIndex = 0,
 }) {
   if (kind == MediaFileKind.video) {
     onOpenExternally();
     return Future<void>.value();
   }
+  final resolvedImageGallery = kind == MediaFileKind.image
+      ? List<MediaViewerImage>.unmodifiable(
+          imageGallery?.isNotEmpty == true
+              ? imageGallery!
+              : <MediaViewerImage>[MediaViewerImage(path: path, name: name)],
+        )
+      : const <MediaViewerImage>[];
+  final resolvedInitialImageIndex = resolvedImageGallery.isEmpty
+      ? 0
+      : initialImageIndex.clamp(0, resolvedImageGallery.length - 1);
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -1439,7 +1459,13 @@ Future<void> showMediaViewer(
     transitionBuilder: (context, animation, secondaryAnimation, child) =>
         FadeTransition(opacity: animation, child: child),
     pageBuilder: (context, animation, secondaryAnimation) =>
-        _FullscreenMediaViewer(kind: kind, path: path, name: name),
+        _FullscreenMediaViewer(
+          kind: kind,
+          path: path,
+          name: name,
+          imageGallery: resolvedImageGallery,
+          initialImageIndex: resolvedInitialImageIndex,
+        ),
   );
 }
 
@@ -1448,24 +1474,37 @@ class _FullscreenMediaViewer extends StatefulWidget {
     required this.kind,
     required this.path,
     required this.name,
+    required this.imageGallery,
+    required this.initialImageIndex,
   });
 
   final MediaFileKind kind;
   final String path;
   final String name;
+  final List<MediaViewerImage> imageGallery;
+  final int initialImageIndex;
 
   @override
   State<_FullscreenMediaViewer> createState() => _FullscreenMediaViewerState();
 }
 
 class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
+  late final PageController _imagePageController;
+  final Set<int> _zoomedImages = <int>{};
+  late int _currentImageIndex;
+
   bool get _usesImmersiveMode =>
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
 
+  bool get _hasMultipleImages =>
+      widget.kind == MediaFileKind.image && widget.imageGallery.length > 1;
+
   @override
   void initState() {
     super.initState();
+    _currentImageIndex = widget.initialImageIndex;
+    _imagePageController = PageController(initialPage: _currentImageIndex);
     if (_usesImmersiveMode) {
       unawaited(
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
@@ -1475,6 +1514,7 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
 
   @override
   void dispose() {
+    _imagePageController.dispose();
     if (_usesImmersiveMode) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     }
@@ -1488,6 +1528,10 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.escape): close,
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+            _changeImage(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+            _changeImage(1),
       },
       child: Focus(
         autofocus: true,
@@ -1518,8 +1562,32 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
     );
   }
 
+  void _changeImage(int offset) {
+    if (!_hasMultipleImages || !_imagePageController.hasClients) {
+      return;
+    }
+    final index = _currentImageIndex + offset;
+    if (index < 0 || index >= widget.imageGallery.length) {
+      return;
+    }
+    _imagePageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutQuart,
+    );
+  }
+
   Widget _buildContent(BuildContext context) => switch (widget.kind) {
-    MediaFileKind.image => _FullscreenImage(path: widget.path),
+    MediaFileKind.image => PageView.builder(
+      key: const ValueKey<String>('media-viewer-gallery'),
+      controller: _imagePageController,
+      itemCount: widget.imageGallery.length,
+      physics: _zoomedImages.contains(_currentImageIndex)
+          ? const NeverScrollableScrollPhysics()
+          : null,
+      onPageChanged: (index) => setState(() => _currentImageIndex = index),
+      itemBuilder: (context, index) => _buildImagePage(index),
+    ),
     MediaFileKind.video => const SizedBox.shrink(),
     MediaFileKind.audio => Center(
       child: ConstrainedBox(
@@ -1533,12 +1601,51 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
     ),
     MediaFileKind.other => const SizedBox.shrink(),
   };
+
+  Widget _buildImagePage(int index) {
+    final image = widget.imageGallery[index];
+    return AnimatedBuilder(
+      animation: _imagePageController,
+      child: RepaintBoundary(
+        child: _FullscreenImage(
+          path: image.path,
+          name: image.name,
+          onZoomChanged: (zoomed) => _handleImageZoomChanged(index, zoomed),
+        ),
+      ),
+      builder: (context, child) {
+        final page = _imagePageController.hasClients
+            ? _imagePageController.page ?? _currentImageIndex.toDouble()
+            : _currentImageIndex.toDouble();
+        final distance = (page - index).abs().clamp(0.0, 1.0);
+        return Opacity(
+          opacity: 1 - distance * 0.16,
+          child: Transform.scale(scale: 1 - distance * 0.025, child: child),
+        );
+      },
+    );
+  }
+
+  void _handleImageZoomChanged(int index, bool zoomed) {
+    final changed = zoomed
+        ? _zoomedImages.add(index)
+        : _zoomedImages.remove(index);
+    if (changed && index == _currentImageIndex) {
+      setState(() {});
+    }
+  }
 }
 
 class _FullscreenImage extends StatefulWidget {
-  const _FullscreenImage({required this.path});
+  const _FullscreenImage({
+    required this.path,
+    required this.name,
+    required this.onZoomChanged,
+  });
 
   final String path;
+  final String name;
+  final ValueChanged<bool> onZoomChanged;
 
   @override
   State<_FullscreenImage> createState() => _FullscreenImageState();
@@ -1546,25 +1653,38 @@ class _FullscreenImage extends StatefulWidget {
 
 class _FullscreenImageState extends State<_FullscreenImage> {
   Future<Uint8List>? _contentUriBytes;
+  final TransformationController _transformationController =
+      TransformationController();
+  bool _zoomed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadContentUri();
+    _transformationController.addListener(_handleTransformationChanged);
+    if (_isAndroidContentUri(widget.path)) {
+      _contentUriBytes = _androidFullResolutionImage(widget.path);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.onZoomChanged(false);
+      }
+    });
   }
 
   @override
-  void didUpdateWidget(covariant _FullscreenImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path) {
-      _loadContentUri();
-    }
+  void dispose() {
+    _transformationController.removeListener(_handleTransformationChanged);
+    _transformationController.dispose();
+    super.dispose();
   }
 
-  void _loadContentUri() {
-    _contentUriBytes = _isAndroidContentUri(widget.path)
-        ? _androidFullResolutionImage(widget.path)
-        : null;
+  void _handleTransformationChanged() {
+    final zoomed = _transformationController.value.getMaxScaleOnAxis() > 1.01;
+    if (_zoomed == zoomed) {
+      return;
+    }
+    _zoomed = zoomed;
+    widget.onZoomChanged(zoomed);
   }
 
   @override
@@ -1575,6 +1695,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
           File(widget.path),
           fit: BoxFit.contain,
           filterQuality: FilterQuality.high,
+          semanticLabel: widget.name,
         ),
       );
     }
@@ -1601,6 +1722,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
             bytes,
             fit: BoxFit.contain,
             filterQuality: FilterQuality.high,
+            semanticLabel: widget.name,
           ),
         );
       },
@@ -1610,6 +1732,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
   Widget _buildViewer(Widget image) {
     return InteractiveViewer(
       key: const ValueKey<String>('fullscreen-image-viewer'),
+      transformationController: _transformationController,
       minScale: 0.5,
       maxScale: 5,
       child: SizedBox.expand(child: image),

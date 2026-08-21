@@ -2161,15 +2161,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
     final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
     if (mediaKind != MediaFileKind.other) {
-      final hasLocalFile =
-          messagePath.isNotEmpty &&
-          (messagePath.startsWith('content://') ||
-              File(messagePath).existsSync());
-      final contentAvailable =
-          hasLocalFile &&
-          (transfer == null ||
-              transfer.direction == FileTransferDirection.outgoing ||
-              transfer.state == FileTransferState.completed);
+      final contentAvailable = _isMediaContentAvailable(
+        messagePath,
+        transfer,
+      );
       return _buildMediaMessage(
         message: message,
         transfer: transfer,
@@ -2362,12 +2357,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       return;
     }
+    final gallery = kind == MediaFileKind.image
+        ? _imageGalleryFor(message)
+        : null;
     unawaited(
       showMediaViewer(
         context,
         kind: kind,
         path: path,
         name: message.name,
+        imageGallery: gallery?.images,
+        initialImageIndex: gallery?.initialIndex ?? 0,
         onOpenExternally: () {
           if (isAndroidContentUri) {
             unawaited(AndroidDocumentPicker.shared.openDocument(path));
@@ -2377,6 +2377,55 @@ class _SendMessageScreen extends State<SendMessageScreen>
         },
       ),
     );
+  }
+
+  ({List<MediaViewerImage> images, int initialIndex}) _imageGalleryFor(
+    MessageData selectedMessage,
+  ) {
+    final images = <MediaViewerImage>[];
+    var initialIndex = -1;
+    for (final message in messageList.reversed) {
+      if (message.type != MessageEnum.File) {
+        continue;
+      }
+      final transfer = _transferForMessage(message);
+      final path = _effectiveMessagePath(message, transfer);
+      if (mediaFileKindFor(name: message.name, path: path) !=
+              MediaFileKind.image ||
+          !_isMediaContentAvailable(path, transfer)) {
+        continue;
+      }
+      final isSelectedMessage =
+          identical(message, selectedMessage) ||
+          (selectedMessage.uuid.isNotEmpty &&
+              message.uuid == selectedMessage.uuid) ||
+          (selectedMessage.id > 0 && message.id == selectedMessage.id);
+      if (isSelectedMessage) {
+        initialIndex = images.length;
+      }
+      images.add(MediaViewerImage(path: path, name: message.name));
+    }
+
+    if (initialIndex < 0) {
+      initialIndex = images.length;
+      images.add(
+        MediaViewerImage(
+          path: _effectiveMessagePath(selectedMessage),
+          name: selectedMessage.name,
+        ),
+      );
+    }
+    return (images: images, initialIndex: initialIndex);
+  }
+
+  bool _isMediaContentAvailable(String path, TransferSnapshot? transfer) {
+    final hasLocalFile =
+        path.isNotEmpty &&
+        (path.startsWith('content://') || File(path).existsSync());
+    return hasLocalFile &&
+        (transfer == null ||
+            transfer.direction == FileTransferDirection.outgoing ||
+            transfer.state == FileTransferState.completed);
   }
 
   @override

@@ -455,6 +455,54 @@ void main() {
     );
   });
 
+  testWidgets('image viewer swipes between conversation images', (
+    tester,
+  ) async {
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: Text('conversation'));
+          },
+        ),
+      ),
+    );
+
+    unawaited(
+      showMediaViewer(
+        pageContext,
+        kind: MediaFileKind.image,
+        path: '/missing/two.png',
+        name: 'two.png',
+        imageGallery: const <MediaViewerImage>[
+          MediaViewerImage(path: '/missing/one.png', name: 'one.png'),
+          MediaViewerImage(path: '/missing/two.png', name: 'two.png'),
+          MediaViewerImage(path: '/missing/three.png', name: 'three.png'),
+        ],
+        initialImageIndex: 1,
+        onOpenExternally: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gallery = tester.widget<PageView>(
+      find.byKey(const ValueKey<String>('media-viewer-gallery')),
+    );
+    expect(gallery.controller?.page, 1);
+    await tester.drag(
+      find.byKey(const ValueKey<String>('media-viewer-gallery')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(gallery.controller?.page, 2);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(gallery.controller?.page, 1);
+  });
+
   testWidgets('mobile image viewer uses the full screen behind system insets', (
     tester,
   ) async {
