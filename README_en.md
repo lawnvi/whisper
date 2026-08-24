@@ -6,8 +6,10 @@
 
 [中文](./README.md)
 
-> A LAN collaboration app for personal devices. Whisper creates an end-to-end encrypted local connection between your computers and phones to send text, files, notifications, audio, and keyboard/mouse input.
+> A LAN collaboration app for personal devices. Whisper uses a paired, encrypted local connection between your computers and phones to send text, files, notifications, audio, and keyboard/mouse input.
 > This project is not related to OpenAI's Whisper speech recognition model.
+
+> Android 10 and later do not allow background apps to read new clipboard content copied in another app. Whisper's Android foreground service keeps the LAN connection alive but cannot bypass this platform restriction; copied text is synchronized after Whisper returns to the foreground.
 
 ## Download
 
@@ -31,24 +33,25 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 
 ## Features
 
-- **End-to-end encryption**: paired text, files, clipboard data, notifications, audio, and keyboard/mouse control use encrypted channels with visible identity and trust state.
+- **Encrypted transfers**: paired text, files, clipboard data, notifications, audio, and keyboard/mouse control use authenticated encrypted direct channels with visible identity and trust state.
 - **Direct multi-device connections**: one device can connect to multiple computers or phones, with visible and explicit connection state.
 - **Chat-style transfer**: send text and files in conversations while auto-synced clipboard content stays out of history; view images full screen, play audio inline, open video in the system player, and select multiple messages for deletion.
 - **System quick send**: use the Android share sheet, desktop context menus, or a global hotkey without opening a conversation first. Desktop drafts can wait for a trusted device to reconnect; unsent Android system shares are discarded when the app restarts.
 - **QR pairing and diagnostics**: pairing codes bind the LAN endpoint to the device identity, while failures identify Wi-Fi, address, service, firewall, identity, or version problems.
-- **Transfer assistant**: send folders, search message text, save favorite snippets, and optionally enable clipboard auto-sync without adding synced content to conversations.
+- **Transfer assistant**: search, save, and copy historical text without adding auto-synced clipboard content to conversations.
+- **Controlled clipboard sync**: auto-sync is off by default. Regular sessions send to the current trusted device, while a multi-device keyboard/mouse workspace syncs its connected members. Desktop apps can watch while Whisper is running, while Android 10 and later can only read new clipboard content when Whisper is in the foreground.
 - **Streaming verification and resume**: calculate SHA-256 while receiving, normally avoiding a second full-file read at completion, and resume from the last acknowledged offset after a disconnect.
 - **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
 - **Keyboard and mouse sharing**: share one keyboard and mouse across multiple trusted desktops, with text, image, and file clipboard content following the workspace.
 - **Desktop experience**: tray integration, launch at startup, close to tray, reveal files in the system file manager, drag files out from desktop messages, light/dark themes, and multilingual UI.
 
-## Recent Updates (0.0.45)
+## Recent Updates (0.0.48)
 
-- Multi-device keyboard and mouse workspaces now share the clipboard in both directions; the most recent copy wins, without adding text, images, or files to conversations.
-- File and image metadata syncs first, while bytes transfer only when the destination pastes; the flow follows the clipboard auto-sync setting and batch limits.
-- Conversation timestamps are grouped by interval, copy actions show success feedback, images use a title-free full-screen preview, and outgoing Android media can be viewed directly.
-- Incoming desktop connection requests bring Whisper to the foreground, with more stable pairing-code dialog transitions.
-- Legacy per-device input layout settings were removed, and macOS Caps Lock now switches the remote input method with one press.
+- LAN file-transfer throughput is higher, and large-file SHA-256 verification follows the receive stream to reduce the wait after transfer.
+- Interrupted transfers are resumed manually by the sender, while the receiver only shows the interrupted state to avoid conflicting actions.
+- GitHub-powered in-app updates are available, and desktop builds exit safely before installing an update.
+- macOS provides separate Apple silicon and Intel packages, with fixes for cross-architecture startup and remote Caps Lock switching.
+- Mobile full-screen image previews and image transitions are smoother, and Android only posts an extra connection-request alert on the lock screen.
 
 ## Connection
 
@@ -118,6 +121,12 @@ Open a conversation with a connected device, type text directly, or use the atta
 
 On Android, choose Whisper directly from the system share sheet. On desktop, use the file context-menu entry or press `Cmd+Option+V` on macOS and `Ctrl+Alt+V` on Windows/Linux to quick-send the current clipboard content.
 
+### Automatically Sync the Clipboard
+
+Clipboard auto-sync is off by default. Regular sessions send to the current connected, trusted device; a multi-device keyboard/mouse workspace syncs its connected members, with the most recent copy taking precedence. Synchronized text is not stored in conversation history. Desktop builds can watch text while Whisper remains running. Image and file clipboard sharing is limited to desktop keyboard/mouse workspaces and follows per-file and batch size limits.
+
+Android currently synchronizes text clipboard content only. Under the [Android 10 clipboard privacy restriction](https://developer.android.com/about/versions/10/privacy/changes#clipboard-data), Whisper cannot read content copied in another app while Whisper is in the background. The foreground-service notification only keeps the LAN connection and receiving path alive. Whisper checks the clipboard and sends changes after it returns to the foreground.
+
 ### Share System Audio
 
 On desktop, open audio sharing from the device tools area and choose one or more connected devices that support audio playback. Multi-device playback supports basic synchronization and channel roles, but it is not a professional audio system.
@@ -134,7 +143,7 @@ After granting notification listener permission on Android, choose which apps to
 
 | Platform | Status |
 | --- | --- |
-| Android | Primary mobile platform, with system sharing, QR pairing, media previews, one unified foreground notification, notification listening, and audio playback. |
+| Android | Primary mobile platform, with system sharing, QR pairing, media previews, one unified foreground notification, notification listening, audio playback, and foreground text clipboard sync. Android 10 and later cannot read new clipboard content in the background. |
 | macOS | Primary desktop validation platform, with system services and global quick send, tray support, file drag-out, audio sharing, keyboard/mouse sharing, and packaging scripts. |
 | Windows | Desktop target with native integration for windows, single-instance behavior, audio, and keyboard/mouse sharing. |
 | Linux | Desktop target. Discovery depends on Avahi, system audio sharing uses PulseAudio or PipeWire Pulse, message audio playback uses GStreamer, and keyboard/mouse sharing currently focuses on X11. |
@@ -142,7 +151,7 @@ After granting notification listener permission on Android, choose which apps to
 
 ## Boundaries and Security
 
-- Paired application data uses end-to-end encryption based on X25519 session keys and XChaCha20-Poly1305. LAN discovery and connection metadata remain visible, local databases and staged files are not encrypted at rest, and the implementation has not received an independent cryptographic audit.
+- Authenticated direct sessions use X25519 session keys and XChaCha20-Poly1305 to protect application data. LAN discovery and connection metadata remain visible, local databases and staged files are not encrypted at rest, and the implementation has not received an independent cryptographic audit.
 - Whisper does not provide public relays, hub forwarding, or transitive trust.
 - Files, audio, and keyboard/mouse input all require connection and capability negotiation; they are not designed as silent background control paths.
 - Keyboard/mouse sharing is for nearby personal devices, not unattended remote control.
