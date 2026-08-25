@@ -338,6 +338,15 @@ void main() {
     test('maps Windows Caps Lock to macOS Caps Lock in native fallback', () {
       expect(source, contains('case VK_CAPITAL: return 57;'));
     });
+
+    test('retains fractional touchpad scroll before Windows injection', () {
+      expect(source, contains('ConsumeInjectedScrollDelta'));
+      expect(source, contains('injected_scroll_remainder_x_'));
+      expect(source, contains('injected_scroll_remainder_y_'));
+      expect(source, contains('FlushInjectedScrollRemainder'));
+      expect(source, contains('JsonNumber(json, "scrollPhase")'));
+      expect(source, contains('JsonNumber(json, "momentumPhase")'));
+    });
   });
 
   group('macOS remote input native source', () {
@@ -847,8 +856,31 @@ void main() {
       expect(source, contains('scrollWheelEventPointDeltaAxis1'));
       expect(source, contains('scrollWheelEventPointDeltaAxis2'));
       expect(source, contains('scrollWheelEventIsContinuous'));
+      expect(source, contains('NSEvent(cgEvent: event)'));
+      expect(source, contains('hasPreciseScrollingDeltas'));
+      expect(source, contains(r'Double($0.scrollingDeltaX)'));
+      expect(source, contains(r'Double($0.scrollingDeltaY)'));
+      expect(source, contains('scrollWheelEventFixedPtDeltaAxis1'));
+      expect(source, contains('scrollWheelEventFixedPtDeltaAxis2'));
+      expect(source, contains('scrollWheelEventScrollPhase'));
+      expect(source, contains('scrollWheelEventMomentumPhase'));
       expect(source, contains('"pointDeltaY"'));
       expect(source, contains('"isContinuous"'));
     });
+
+    test(
+      'injects native line and pixel scrolling without losing fractions',
+      () {
+        expect(source, contains('private func postInjectedScrollEvent'));
+        expect(source, contains('consumeInjectedScrollDelta'));
+        expect(source, contains('injectedScrollRemainderX'));
+        expect(source, contains('injectedScrollRemainderY'));
+        expect(source, contains('let unit: CGScrollEventUnit'));
+        expect(source, contains('isPixel ? .pixel : .line'));
+        expect(source, contains('.scrollWheelEventFixedPtDeltaAxis1'));
+        expect(source, contains('.scrollWheelEventScrollPhase'));
+        expect(source, contains('.scrollWheelEventMomentumPhase'));
+      },
+    );
   });
 }

@@ -195,8 +195,10 @@ final class BoundedOutboundQueue {
   }
 
   bool _isCoalescible(OutboundPacketKind kind) {
-    return kind == OutboundPacketKind.mouseMove ||
-        kind == OutboundPacketKind.scroll;
+    // Mouse movement packets contain an absolute position fallback, while
+    // scroll packets are purely relative and must never be replaced without
+    // first accumulating their deltas and gesture phases.
+    return kind == OutboundPacketKind.mouseMove;
   }
 
   void _drop(_OutboundItem item) {

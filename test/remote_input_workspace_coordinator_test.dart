@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -56,6 +57,7 @@ void main() {
             return transport;
           },
           workspaceSessionIdFactory: () => 'workspace-1',
+          platformKindProvider: () => RemoteInputPlatformKind.macos,
         );
 
         await coordinator.startControllerWorkspace(
@@ -85,6 +87,8 @@ void main() {
         final offerC = sentControls['peer-c']!.single;
         expect(offerB.remoteClipboardV1, isTrue);
         expect(offerC.remoteClipboardV1, isTrue);
+        expect(offerB.sourcePlatform, 'macos');
+        expect(offerC.sourcePlatform, 'macos');
         await coordinator.handleControlMessage(
           RemoteInputControlMessage(
             action: RemoteInputControlAction.accept,
@@ -173,6 +177,44 @@ void main() {
           offerC.sessionId,
         );
         expect(coordinator.snapshot.activePeerId, 'peer-c');
+
+        await platform.handleNativeMethodCall(
+          MethodCall('onInputEvent', <String, dynamic>{
+            'sessionId': 'workspace-1',
+            'sequence': 3,
+            'timestampMicros': 3,
+            'eventType': 'mouseWheel',
+            'payload': Uint8List.fromList(
+              utf8.encode(
+                jsonEncode(<String, dynamic>{
+                  'sourcePlatform': 'macos',
+                  'deltaX': 0,
+                  'deltaY': 1,
+                  'pointDeltaX': 0,
+                  'pointDeltaY': 1,
+                  'preciseDeltaX': 0.0,
+                  'preciseDeltaY': 0.25,
+                  'isPrecise': true,
+                  'isContinuous': true,
+                  'scrollPhase': 2,
+                  'momentumPhase': 0,
+                }),
+              ),
+            ),
+          }),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final scrollPayload =
+            jsonDecode(
+                  utf8.decode(
+                    transports['peer-c.local']!.sentPackets.last.payload,
+                  ),
+                )
+                as Map<String, dynamic>;
+        expect(scrollPayload['scrollUnit'], 'pixel');
+        expect(scrollPayload['scrollDeltaY'], 0.25);
+        expect(scrollPayload['scrollPhase'], 2);
       },
     );
 

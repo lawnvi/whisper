@@ -15,6 +15,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_input_scroll.dart';
 import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
@@ -321,11 +322,14 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     RemoteInputPlatform? platform,
     RemoteInputTransportFactory? transportFactory,
     RemoteInputWorkspaceSessionIdFactory? workspaceSessionIdFactory,
+    RemoteInputPlatformKindProvider? platformKindProvider,
   }) : _manager = manager ?? RemoteInputManager(),
        _platform = platform ?? RemoteInputCoordinator.shared.platform,
        _transportFactory = transportFactory,
        _workspaceSessionIdFactory =
-           workspaceSessionIdFactory ?? const Uuid().v4;
+           workspaceSessionIdFactory ?? const Uuid().v4,
+       _platformKindProvider =
+           platformKindProvider ?? currentRemoteInputPlatformKind;
 
   static final RemoteInputWorkspaceCoordinator shared =
       RemoteInputWorkspaceCoordinator(
@@ -337,6 +341,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   final RemoteInputPlatform _platform;
   final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputWorkspaceSessionIdFactory _workspaceSessionIdFactory;
+  final RemoteInputPlatformKindProvider _platformKindProvider;
 
   RemoteInputWorkspaceSnapshot _snapshot =
       const RemoteInputWorkspaceSnapshot.idle();
@@ -455,6 +460,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         sinkPeerId: target.peerId,
         layoutEdge: primaryMapping?.sourceEdge ?? target.layoutEdge,
         releaseHotkey: target.releaseHotkey,
+        sourcePlatform: _platformKindProvider().name,
         sourceDisplayId:
             primaryInjectionMapping?.sourceDisplayId ?? target.sourceDisplayId,
         sourceEdge: primaryInjectionMapping?.sourceEdge ?? target.sourceEdge,
@@ -474,7 +480,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
             primaryInjectionMapping?.sinkSegmentEnd ?? target.sinkSegmentEnd,
         edgeMappings: injectionMappings,
         remoteClipboardV1:
-            currentRemoteInputPlatformKind() != RemoteInputPlatformKind.unknown,
+            _platformKindProvider() != RemoteInputPlatformKind.unknown,
       );
       _targets[target.peerId] = _RemoteInputWorkspaceTargetRuntime(
         request: target,
@@ -1264,7 +1270,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         _snapshot.role != RemoteInputWorkspaceRole.controller) {
       return;
     }
-    unawaited(_enqueueRouting(() => _routeInputEvent(event)));
+    final annotated = RemoteInputScrollNormalizer.annotateSourceFrame(
+      event,
+      sourcePlatform: _platformKindProvider(),
+    );
+    unawaited(_enqueueRouting(() => _routeInputEvent(annotated)));
   }
 
   Future<void> _routeInputEvent(RemoteInputPacketFrame event) async {
@@ -1548,6 +1558,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       sinkPeerId: target.peerId,
       layoutEdge: primary?.sourceEdge ?? target.layoutEdge,
       releaseHotkey: target.releaseHotkey,
+      sourcePlatform: _platformKindProvider().name,
       sourceDisplayId: primary?.sourceDisplayId ?? target.sourceDisplayId,
       sourceEdge: primary?.sourceEdge ?? target.sourceEdge,
       sourceSegmentStart:
@@ -1559,7 +1570,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       sinkSegmentEnd: primary?.sinkSegmentEnd ?? target.sinkSegmentEnd,
       edgeMappings: injectionMappings,
       remoteClipboardV1:
-          currentRemoteInputPlatformKind() != RemoteInputPlatformKind.unknown,
+          _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     return _RemoteInputWorkspaceTargetRuntime(
       request: target,

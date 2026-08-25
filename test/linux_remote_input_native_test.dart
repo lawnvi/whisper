@@ -318,5 +318,19 @@ void main() {
         lessThan(plugin.indexOf('XOpenDisplay(nullptr)')),
       );
     });
+
+    test(
+      'accumulates precise scroll deltas before discrete Linux injection',
+      () {
+        final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+
+        expect(plugin, contains('InjectMouseWheelLocked'));
+        expect(plugin, contains('injected_scroll_remainder_x_'));
+        expect(plugin, contains('injected_scroll_remainder_y_'));
+        expect(plugin, contains('std::trunc(injected_scroll_remainder_x_'));
+        expect(plugin, contains('JsonNumber(json, "scrollPhase")'));
+        expect(plugin, contains('JsonNumber(json, "momentumPhase")'));
+      },
+    );
   });
 }

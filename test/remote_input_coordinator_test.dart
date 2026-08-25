@@ -802,7 +802,8 @@ void main() {
         utf8.decode(wheelArguments['payload'] as Uint8List),
       ) as Map<String, dynamic>;
       expect(payload['scrollDeltaY'], 2);
-      expect(payload['deltaY'], 240);
+      expect(payload['deltaY'], 2);
+      expect(payload['targetScrollUnit'], 'wheel');
     });
 
     test('sink normalizes legacy wheel packets before injection', () async {
@@ -860,8 +861,8 @@ void main() {
 
       expect(payload['scrollUnit'], 'wheel');
       expect(payload['scrollDeltaY'], 1);
-      expect(payload['deltaY'], 240);
-      expect(payload['targetScrollUnit'], 'pixel');
+      expect(payload['deltaY'], 2);
+      expect(payload['targetScrollUnit'], 'wheel');
     });
 
     test('rejects a competing offer while a local session is live', () async {

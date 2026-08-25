@@ -378,6 +378,8 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var injectedMouseButtons = 0
   private var injectedMousePoint: CGPoint?
   private var injectedMouseEnteredInterior = false
+  private var injectedScrollRemainderX: CGFloat = 0
+  private var injectedScrollRemainderY: CGFloat = 0
   private var injectedLastClickButton = -1
   private var injectedLastClickTimeMicros: Int64 = 0
   private var injectedLastClickPoint = CGPoint.zero
@@ -503,6 +505,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       releaseCommonModifierKeys()
       injectedMousePoint = nil
       injectedMouseEnteredInterior = false
+      resetInjectedScrollState()
       resetInjectedClickState()
       injectedModifierFlags = []
       ensureVirtualKeyboardDevice()
@@ -663,6 +666,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     stopShortcutSuppressionTap()
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
+    resetInjectedScrollState()
     resetInjectedClickState()
     injectedModifierFlags = []
     suppressedAppCommandShortcutKeyCodes = []
@@ -900,15 +904,37 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           event.getIntegerValueField(.mouseEventClickState))
       ]
     case "mouseWheel":
+      let nativeScrollEvent = NSEvent(cgEvent: event)
+      let isPrecise = nativeScrollEvent?.hasPreciseScrollingDeltas ??
+        (event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0)
+      let fixedDeltaX = event.getDoubleValueField(
+        .scrollWheelEventFixedPtDeltaAxis2)
+      let fixedDeltaY = event.getDoubleValueField(
+        .scrollWheelEventFixedPtDeltaAxis1)
+      // AppKit's scrolling delta is the value local applications consume
+      // after macOS applies the device's acceleration curve.
+      let appKitDeltaX = nativeScrollEvent.map { Double($0.scrollingDeltaX) }
+      let appKitDeltaY = nativeScrollEvent.map { Double($0.scrollingDeltaY) }
+      let preciseDeltaX = isPrecise
+        ? appKitDeltaX ?? fixedDeltaX
+        : fixedDeltaX
+      let preciseDeltaY = isPrecise
+        ? appKitDeltaY ?? fixedDeltaY
+        : fixedDeltaY
       payload = [
         "sourcePlatform": "macos",
         "deltaX": event.getIntegerValueField(.scrollWheelEventDeltaAxis2),
         "deltaY": event.getIntegerValueField(.scrollWheelEventDeltaAxis1),
         "pointDeltaX": event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2),
         "pointDeltaY": event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1),
-        "fixedDeltaX": event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2),
-        "fixedDeltaY": event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1),
-        "isContinuous": event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
+        "fixedDeltaX": fixedDeltaX,
+        "fixedDeltaY": fixedDeltaY,
+        "preciseDeltaX": preciseDeltaX,
+        "preciseDeltaY": preciseDeltaY,
+        "isPrecise": isPrecise,
+        "isContinuous": event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+        "scrollPhase": event.getIntegerValueField(.scrollWheelEventScrollPhase),
+        "momentumPhase": event.getIntegerValueField(.scrollWheelEventMomentumPhase)
       ]
     case "key":
       let rawMacKeyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
@@ -1089,9 +1115,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       setInjectedMouseButton(buttonValue, down: down)
       injectedMousePoint = point
     case "mouseWheel":
-      let deltaX = Int32(intValue(data["deltaX"]))
-      let deltaY = Int32(intValue(data["deltaY"]))
-      CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: deltaY, wheel2: deltaX, wheel3: 0)?.post(tap: .cghidEventTap)
+      postInjectedScrollEvent(data)
     case "key":
       let nativeKeyCode = nativeMacKeyCode(data)
       let keyCode = CGKeyCode(nativeKeyCode)
@@ -1147,6 +1171,86 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return CGFloat(value)
     }
     return 0
+  }
+
+  private func postInjectedScrollEvent(_ data: [String: Any]) {
+    let deltaX = doubleValue(data["deltaX"])
+    let deltaY = doubleValue(data["deltaY"])
+    let scrollPhase = intValue(data["scrollPhase"])
+    let momentumPhase = intValue(data["momentumPhase"])
+    let isPixel = (data["targetScrollUnit"] as? String ?? "pixel") == "pixel"
+    var emittedX = consumeInjectedScrollDelta(
+      deltaX,
+      remainder: &injectedScrollRemainderX)
+    var emittedY = consumeInjectedScrollDelta(
+      deltaY,
+      remainder: &injectedScrollRemainderY)
+    let isEnding = scrollPhase == 4 || scrollPhase == 8 || momentumPhase == 3
+    if isEnding {
+      emittedX += flushInjectedScrollRemainder(&injectedScrollRemainderX)
+      emittedY += flushInjectedScrollRemainder(&injectedScrollRemainderY)
+    }
+    guard emittedX != 0 || emittedY != 0 || scrollPhase != 0 || momentumPhase != 0 else {
+      return
+    }
+    let unit: CGScrollEventUnit = isPixel ? .pixel : .line
+    guard let scrollEvent = CGEvent(
+      scrollWheelEvent2Source: nil,
+      units: unit,
+      wheelCount: 2,
+      wheel1: Int32(clamping: emittedY),
+      wheel2: Int32(clamping: emittedX),
+      wheel3: 0
+    ) else {
+      return
+    }
+    if isPixel {
+      scrollEvent.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+      scrollEvent.setDoubleValueField(
+        .scrollWheelEventFixedPtDeltaAxis1,
+        value: Double(deltaY))
+      scrollEvent.setDoubleValueField(
+        .scrollWheelEventFixedPtDeltaAxis2,
+        value: Double(deltaX))
+      scrollEvent.setIntegerValueField(
+        .scrollWheelEventPointDeltaAxis1,
+        value: Int64(emittedY))
+      scrollEvent.setIntegerValueField(
+        .scrollWheelEventPointDeltaAxis2,
+        value: Int64(emittedX))
+    }
+    if scrollPhase != 0 {
+      scrollEvent.setIntegerValueField(
+        .scrollWheelEventScrollPhase,
+        value: Int64(scrollPhase))
+    }
+    if momentumPhase != 0 {
+      scrollEvent.setIntegerValueField(
+        .scrollWheelEventMomentumPhase,
+        value: Int64(momentumPhase))
+    }
+    scrollEvent.post(tap: .cghidEventTap)
+  }
+
+  private func consumeInjectedScrollDelta(
+    _ delta: CGFloat,
+    remainder: inout CGFloat
+  ) -> Int {
+    remainder += delta
+    let integral = remainder.rounded(.towardZero)
+    remainder -= integral
+    return Int(integral)
+  }
+
+  private func flushInjectedScrollRemainder(_ remainder: inout CGFloat) -> Int {
+    let integral = Int(remainder.rounded())
+    remainder = 0
+    return integral
+  }
+
+  private func resetInjectedScrollState() {
+    injectedScrollRemainderX = 0
+    injectedScrollRemainderY = 0
   }
 
   private func captureSegments(from value: Any?) -> [(start: CGFloat, end: CGFloat)] {
@@ -2882,6 +2986,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     releaseCommonModifierKeys()
     injectedMousePoint = nil
     injectedMouseEnteredInterior = false
+    resetInjectedScrollState()
     resetInjectedClickState()
     emitRelease(
       sessionId: sessionId,

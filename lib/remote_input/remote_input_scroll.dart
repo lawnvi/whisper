@@ -68,7 +68,10 @@ class RemoteInputScrollNormalizer {
             ? fallbackSourcePlatform
             : declaredSourcePlatform;
     final semantic =
-        _semanticFromPayload(data) ?? _legacySemantic(data, sourcePlatform);
+        _semanticFromPayload(data) ??
+        (sourcePlatform == RemoteInputPlatformKind.unknown
+            ? _legacySemantic(data, sourcePlatform)
+            : _capturedSemantic(data, sourcePlatform));
     if (semantic == null) {
       return frame;
     }
@@ -88,8 +91,10 @@ class RemoteInputScrollNormalizer {
       'scrollDeltaY': semantic.deltaY,
       'scrollMultiplier': multiplier,
       'targetScrollUnit': target.unit.name,
-      'deltaX': _roundDelta(target.deltaX),
-      'deltaY': _roundDelta(target.deltaY),
+      // Native injectors retain fractional remainders so precise touchpad
+      // movement is neither exaggerated nor lost between packets.
+      'deltaX': target.deltaX,
+      'deltaY': target.deltaY,
     });
   }
 
@@ -117,12 +122,25 @@ class RemoteInputScrollNormalizer {
       case RemoteInputPlatformKind.macos:
         final pointX = _numberValue(data['pointDeltaX']) ?? 0;
         final pointY = _numberValue(data['pointDeltaY']) ?? 0;
-        final isContinuous = _boolValue(data['isContinuous']);
-        if (isContinuous || pointX != 0 || pointY != 0) {
+        final fixedX = _numberValue(data['fixedDeltaX']) ?? pointX;
+        final fixedY = _numberValue(data['fixedDeltaY']) ?? pointY;
+        final declaredPreciseX = _numberValue(data['preciseDeltaX']) ?? fixedX;
+        final declaredPreciseY = _numberValue(data['preciseDeltaY']) ?? fixedY;
+        final preciseX = declaredPreciseX == 0 && pointX != 0
+            ? pointX
+            : declaredPreciseX;
+        final preciseY = declaredPreciseY == 0 && pointY != 0
+            ? pointY
+            : declaredPreciseY;
+        final declaresPrecision =
+            data.containsKey('isPrecise') || data.containsKey('isContinuous');
+        final isPrecise =
+            _boolValue(data['isPrecise']) || _boolValue(data['isContinuous']);
+        if (isPrecise || (!declaresPrecision && (pointX != 0 || pointY != 0))) {
           return _ScrollDelta(
             unit: RemoteInputScrollUnit.pixel,
-            deltaX: pointX,
-            deltaY: pointY,
+            deltaX: preciseX,
+            deltaY: preciseY,
           );
         }
         return _ScrollDelta(
@@ -197,9 +215,9 @@ class RemoteInputScrollNormalizer {
     switch (targetPlatform) {
       case RemoteInputPlatformKind.macos:
         return _ScrollDelta(
-          unit: RemoteInputScrollUnit.pixel,
-          deltaX: _toMacPixels(scaledX, semantic.unit),
-          deltaY: _toMacPixels(scaledY, semantic.unit),
+          unit: semantic.unit,
+          deltaX: scaledX,
+          deltaY: scaledY,
         );
       case RemoteInputPlatformKind.windows:
       case RemoteInputPlatformKind.linux:
@@ -217,15 +235,6 @@ class RemoteInputScrollNormalizer {
     }
   }
 
-  static double _toMacPixels(double delta, RemoteInputScrollUnit unit) {
-    switch (unit) {
-      case RemoteInputScrollUnit.wheel:
-        return delta * macosPixelsPerWheelTick;
-      case RemoteInputScrollUnit.pixel:
-        return delta;
-    }
-  }
-
   static double _toWheelDelta(double delta, RemoteInputScrollUnit unit) {
     switch (unit) {
       case RemoteInputScrollUnit.wheel:
@@ -233,17 +242,6 @@ class RemoteInputScrollNormalizer {
       case RemoteInputScrollUnit.pixel:
         return delta * (wheelDelta / macosPixelsPerWheelTick);
     }
-  }
-
-  static int _roundDelta(double value) {
-    if (value == 0) {
-      return 0;
-    }
-    final rounded = value.round();
-    if (rounded != 0) {
-      return rounded;
-    }
-    return value > 0 ? 1 : -1;
   }
 
   static String _sourcePlatformName(

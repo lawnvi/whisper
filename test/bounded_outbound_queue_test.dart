@@ -139,6 +139,41 @@ void main() {
     },
   );
 
+  test('remote input preserves every relative scroll packet', () async {
+    final firstGate = Completer<void>();
+    final writer = _RecordingStreamWriter()..blockFirst = firstGate;
+    final queue = BoundedOutboundQueue.remoteInput(
+      addStream: writer.addStream,
+      maxItems: 4,
+      maxBytes: 16,
+    );
+
+    final active = queue.add(
+      'key-down',
+      byteLength: 4,
+      kind: OutboundPacketKind.key,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final firstScroll = queue.add(
+      'scroll-1',
+      byteLength: 4,
+      kind: OutboundPacketKind.scroll,
+    );
+    final secondScroll = queue.add(
+      'scroll-2',
+      byteLength: 4,
+      kind: OutboundPacketKind.scroll,
+    );
+
+    firstGate.complete();
+    expect(await active, isTrue);
+    expect(await firstScroll, isTrue);
+    expect(await secondScroll, isTrue);
+    await queue.closeAndDrain();
+    expect(writer.sent, ['key-down', 'scroll-1', 'scroll-2']);
+    expect(queue.droppedItems, 0);
+  });
+
   test(
     'writer failure becomes a false enqueue result and signals once',
     () async {

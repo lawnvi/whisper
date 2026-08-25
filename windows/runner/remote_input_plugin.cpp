@@ -1076,6 +1076,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       ReleaseCommonModifierKeys();
       injection_session_id_ = *session_id;
       injected_cursor_entered_interior_ = false;
+      ResetInjectedScrollState();
       const auto* display_id = args == nullptr
                                    ? nullptr
                                    : GetMapValue<std::string>(*args, "displayId");
@@ -1252,6 +1253,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseCommonModifierKeys();
     injection_session_id_.clear();
     injected_cursor_entered_interior_ = false;
+    ResetInjectedScrollState();
     injection_display_id_.clear();
     injection_edge_.clear();
     injection_route_id_.clear();
@@ -2123,6 +2125,24 @@ class RemoteInputPlugin : public flutter::Plugin {
     SendInput(1, &input, sizeof(INPUT));
   }
 
+  int ConsumeInjectedScrollDelta(double delta, double* remainder) {
+    *remainder += delta;
+    const double integral = std::trunc(*remainder);
+    *remainder -= integral;
+    return static_cast<int>(integral);
+  }
+
+  int FlushInjectedScrollRemainder(double* remainder) {
+    const int integral = static_cast<int>(std::round(*remainder));
+    *remainder = 0;
+    return integral;
+  }
+
+  void ResetInjectedScrollState() {
+    injected_scroll_remainder_x_ = 0;
+    injected_scroll_remainder_y_ = 0;
+  }
+
   void SendMouseButton(int button, bool down) {
     INPUT input = MouseButtonInput(button, down);
     SendInput(1, &input, sizeof(INPUT));
@@ -2412,8 +2432,20 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
 
     if (event_type == "mouseWheel") {
-      const int delta_y = static_cast<int>(std::round(JsonNumber(json, "deltaY").value_or(0)));
-      const int delta_x = static_cast<int>(std::round(JsonNumber(json, "deltaX").value_or(0)));
+      int delta_y = ConsumeInjectedScrollDelta(
+          JsonNumber(json, "deltaY").value_or(0),
+          &injected_scroll_remainder_y_);
+      int delta_x = ConsumeInjectedScrollDelta(
+          JsonNumber(json, "deltaX").value_or(0),
+          &injected_scroll_remainder_x_);
+      const int scroll_phase = static_cast<int>(
+          JsonNumber(json, "scrollPhase").value_or(0));
+      const int momentum_phase = static_cast<int>(
+          JsonNumber(json, "momentumPhase").value_or(0));
+      if (scroll_phase == 4 || scroll_phase == 8 || momentum_phase == 3) {
+        delta_x += FlushInjectedScrollRemainder(&injected_scroll_remainder_x_);
+        delta_y += FlushInjectedScrollRemainder(&injected_scroll_remainder_y_);
+      }
       if (delta_y != 0) {
         INPUT input = {};
         input.type = INPUT_MOUSE;
@@ -2642,6 +2674,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   int injected_buttons_ = 0;
   int pending_injected_buttons_ = 0;
   bool injected_cursor_entered_interior_ = false;
+  double injected_scroll_remainder_x_ = 0;
+  double injected_scroll_remainder_y_ = 0;
   std::vector<WORD> injected_keys_;
   std::optional<POINT> last_hook_mouse_point_;
   std::optional<double> capture_activation_edge_unit_;

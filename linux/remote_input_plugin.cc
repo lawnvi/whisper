@@ -2951,6 +2951,8 @@ class RemoteInputPlugin {
     injection_route_id_.clear();
     injection_routes_ = routes;
     injected_cursor_entered_interior_ = false;
+    injected_scroll_remainder_x_ = 0;
+    injected_scroll_remainder_y_ = 0;
     has_injected_cursor_position_ = false;
     injected_cursor_x_ = 0;
     injected_cursor_y_ = 0;
@@ -3038,6 +3040,8 @@ class RemoteInputPlugin {
     injection_route_id_.clear();
     injection_routes_ = routes;
     injected_cursor_entered_interior_ = false;
+    injected_scroll_remainder_x_ = 0;
+    injected_scroll_remainder_y_ = 0;
     has_injected_cursor_position_ = false;
     injected_cursor_x_ = 0;
     injected_cursor_y_ = 0;
@@ -3409,6 +3413,8 @@ class RemoteInputPlugin {
     injection_segment_ = EdgeSegment{};
     injection_routes_.clear();
     injected_cursor_entered_interior_ = false;
+    injected_scroll_remainder_x_ = 0;
+    injected_scroll_remainder_y_ = 0;
     has_injected_cursor_position_ = false;
     injected_cursor_x_ = 0;
     injected_cursor_y_ = 0;
@@ -3451,11 +3457,7 @@ class RemoteInputPlugin {
       return;
     }
     if (event_type == "mouseWheel") {
-      const int delta_x =
-          static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
-      const int delta_y =
-          static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
-      SendMouseWheelLocked(delta_x, delta_y);
+      InjectMouseWheelLocked(json);
       XFlush(injection_display_);
       return;
     }
@@ -3490,11 +3492,7 @@ class RemoteInputPlugin {
       return;
     }
     if (event_type == "mouseWheel") {
-      const int delta_x =
-          static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
-      const int delta_y =
-          static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
-      SendPortalMouseWheelLocked(delta_x, delta_y);
+      InjectMouseWheelLocked(json);
       return;
     }
     if (event_type == "key") {
@@ -4958,6 +4956,36 @@ class RemoteInputPlugin {
     }
   }
 
+  void InjectMouseWheelLocked(const std::string& json) {
+    injected_scroll_remainder_x_ += JsonNumber(json, "deltaX");
+    injected_scroll_remainder_y_ += JsonNumber(json, "deltaY");
+    int delta_x = static_cast<int>(
+                      std::trunc(injected_scroll_remainder_x_ / 120.0)) *
+                  120;
+    int delta_y = static_cast<int>(
+                      std::trunc(injected_scroll_remainder_y_ / 120.0)) *
+                  120;
+    injected_scroll_remainder_x_ -= delta_x;
+    injected_scroll_remainder_y_ -= delta_y;
+    const int scroll_phase =
+        static_cast<int>(std::lround(JsonNumber(json, "scrollPhase")));
+    const int momentum_phase =
+        static_cast<int>(std::lround(JsonNumber(json, "momentumPhase")));
+    if (scroll_phase == 4 || scroll_phase == 8 || momentum_phase == 3) {
+      delta_x += static_cast<int>(
+                     std::round(injected_scroll_remainder_x_ / 120.0)) *
+                 120;
+      delta_y += static_cast<int>(
+                     std::round(injected_scroll_remainder_y_ / 120.0)) *
+                 120;
+      injected_scroll_remainder_x_ = 0;
+      injected_scroll_remainder_y_ = 0;
+    }
+    if (delta_x != 0 || delta_y != 0) {
+      SendMouseWheelLocked(delta_x, delta_y);
+    }
+  }
+
   void SendKeyboardKeyLocked(int x_keycode, bool down) {
     if (x_keycode <= 0) {
       return;
@@ -5201,6 +5229,8 @@ class RemoteInputPlugin {
   EdgeSegment injection_segment_;
   std::vector<InjectionRoute> injection_routes_;
   bool injected_cursor_entered_interior_ = false;
+  double injected_scroll_remainder_x_ = 0;
+  double injected_scroll_remainder_y_ = 0;
   bool has_injected_cursor_position_ = false;
   int injected_cursor_x_ = 0;
   int injected_cursor_y_ = 0;

@@ -1221,6 +1221,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       'scrollDeltaY',
       'pointDeltaX',
       'pointDeltaY',
+      'fixedDeltaX',
+      'fixedDeltaY',
+      'preciseDeltaX',
+      'preciseDeltaY',
     };
     if (previousPayload == null ||
         nextPayload == null ||
