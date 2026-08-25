@@ -10,6 +10,46 @@ import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 
+Future<Finder> _openImageGallery(
+  WidgetTester tester, {
+  int imageCount = 6,
+  int initialIndex = 0,
+}) async {
+  late BuildContext pageContext;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) {
+          pageContext = context;
+          return const Scaffold(body: Text('conversation'));
+        },
+      ),
+    ),
+  );
+  final images = List<MediaViewerImage>.generate(
+    imageCount,
+    (index) =>
+        MediaViewerImage(path: '/missing/$index.png', name: '$index.png'),
+  );
+  unawaited(
+    showMediaViewer(
+      pageContext,
+      kind: MediaFileKind.image,
+      path: images[initialIndex].path,
+      name: images[initialIndex].name,
+      imageGallery: images,
+      initialImageIndex: initialIndex,
+      onOpenExternally: () {},
+    ),
+  );
+  await tester.pumpAndSettle();
+  return find.byKey(const ValueKey<String>('media-viewer-gallery'));
+}
+
+double _galleryPage(WidgetTester tester, Finder gallery) {
+  return tester.widget<PageView>(gallery).controller!.page!;
+}
+
 void main() {
   test('media previews avoid bundled video decoder libraries', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
@@ -501,6 +541,78 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(gallery.controller?.page, 1);
+  });
+
+  testWidgets('image viewer accepts consecutive flings before settling', (
+    tester,
+  ) async {
+    final gallery = await _openImageGallery(tester, initialIndex: 2);
+    await tester.fling(gallery, const Offset(-640, 0), 3200);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.fling(gallery, const Offset(-640, 0), 3200);
+    await tester.pumpAndSettle();
+    expect(_galleryPage(tester, gallery), 4);
+  });
+
+  testWidgets('trackpad swipes advance and reverse one page each', (
+    tester,
+  ) async {
+    final gallery = await _openImageGallery(tester, initialIndex: 2);
+    await tester.trackpadFling(gallery, const Offset(-300, 0), 1800);
+    await tester.pumpAndSettle();
+    expect(_galleryPage(tester, gallery), 3);
+    await tester.trackpadFling(gallery, const Offset(-300, 0), 1800);
+    await tester.pumpAndSettle();
+    expect(_galleryPage(tester, gallery), 4);
+    await tester.trackpadFling(gallery, const Offset(600, 0), 3600);
+    await tester.pumpAndSettle();
+    expect(_galleryPage(tester, gallery), 3);
+  });
+
+  testWidgets('image gallery rebounds at its outer edge', (tester) async {
+    final gallery = await _openImageGallery(
+      tester,
+      imageCount: 3,
+      initialIndex: 2,
+    );
+    final gesture = await tester.startGesture(tester.getCenter(gallery));
+    await gesture.moveBy(const Offset(-120, 0));
+    await gesture.moveBy(const Offset(-80, 0));
+    await tester.pump();
+    final position = tester.widget<PageView>(gallery).controller!.position;
+    expect(position.pixels, greaterThan(position.maxScrollExtent));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(_galleryPage(tester, gallery), 2);
+  });
+
+  testWidgets('unzoomed image leaves one-finger gestures to the gallery', (
+    tester,
+  ) async {
+    final gallery = await _openImageGallery(tester, imageCount: 1);
+
+    final gateFinder = find.byKey(
+      const ValueKey<String>('fullscreen-image-gesture-gate'),
+    );
+    expect(tester.widget<IgnorePointer>(gateFinder).ignoring, isTrue);
+    expect(
+      tester.widget<PageView>(gallery).physics,
+      isNot(isA<NeverScrollableScrollPhysics>()),
+    );
+
+    final interaction = find.byKey(
+      const ValueKey<String>('fullscreen-image-interaction'),
+    );
+    await tester.tap(interaction);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tap(interaction);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<IgnorePointer>(gateFinder).ignoring, isFalse);
+    expect(
+      tester.widget<PageView>(gallery).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
   });
 
   testWidgets('mobile image viewer uses the full screen behind system insets', (

@@ -1582,9 +1582,10 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
       key: const ValueKey<String>('media-viewer-gallery'),
       controller: _imagePageController,
       itemCount: widget.imageGallery.length,
+      allowImplicitScrolling: true,
       physics: _zoomedImages.contains(_currentImageIndex)
           ? const NeverScrollableScrollPhysics()
-          : null,
+          : const BouncingScrollPhysics(),
       onPageChanged: (index) => setState(() => _currentImageIndex = index),
       itemBuilder: (context, index) => _buildImagePage(index),
     ),
@@ -1604,25 +1605,12 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
 
   Widget _buildImagePage(int index) {
     final image = widget.imageGallery[index];
-    return AnimatedBuilder(
-      animation: _imagePageController,
-      child: RepaintBoundary(
-        child: _FullscreenImage(
-          path: image.path,
-          name: image.name,
-          onZoomChanged: (zoomed) => _handleImageZoomChanged(index, zoomed),
-        ),
+    return RepaintBoundary(
+      child: _FullscreenImage(
+        path: image.path,
+        name: image.name,
+        onZoomChanged: (zoomed) => _handleImageZoomChanged(index, zoomed),
       ),
-      builder: (context, child) {
-        final page = _imagePageController.hasClients
-            ? _imagePageController.page ?? _currentImageIndex.toDouble()
-            : _currentImageIndex.toDouble();
-        final distance = (page - index).abs().clamp(0.0, 1.0);
-        return Opacity(
-          opacity: 1 - distance * 0.16,
-          child: Transform.scale(scale: 1 - distance * 0.025, child: child),
-        );
-      },
     );
   }
 
@@ -1655,6 +1643,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
   Future<Uint8List>? _contentUriBytes;
   final TransformationController _transformationController =
       TransformationController();
+  Offset? _doubleTapPosition;
   bool _zoomed = false;
 
   @override
@@ -1683,8 +1672,25 @@ class _FullscreenImageState extends State<_FullscreenImage> {
     if (_zoomed == zoomed) {
       return;
     }
-    _zoomed = zoomed;
+    setState(() => _zoomed = zoomed);
     widget.onZoomChanged(zoomed);
+  }
+
+  void _handleDoubleTapDown(TapDownDetails details) {
+    _doubleTapPosition = details.localPosition;
+  }
+
+  void _handleDoubleTap() {
+    _transformationController.value = _zoomed
+        ? Matrix4.identity()
+        : _zoomMatrixAt(_doubleTapPosition ?? Offset.zero);
+  }
+
+  Matrix4 _zoomMatrixAt(Offset position) {
+    const scale = 2.5;
+    return Matrix4.identity()
+      ..translate(-position.dx * (scale - 1), -position.dy * (scale - 1))
+      ..scale(scale);
   }
 
   @override
@@ -1694,7 +1700,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
         Image.file(
           File(widget.path),
           fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
+          filterQuality: FilterQuality.medium,
           semanticLabel: widget.name,
         ),
       );
@@ -1721,7 +1727,7 @@ class _FullscreenImageState extends State<_FullscreenImage> {
           Image.memory(
             bytes,
             fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
+            filterQuality: FilterQuality.medium,
             semanticLabel: widget.name,
           ),
         );
@@ -1730,12 +1736,22 @@ class _FullscreenImageState extends State<_FullscreenImage> {
   }
 
   Widget _buildViewer(Widget image) {
-    return InteractiveViewer(
-      key: const ValueKey<String>('fullscreen-image-viewer'),
-      transformationController: _transformationController,
-      minScale: 0.5,
-      maxScale: 5,
-      child: SizedBox.expand(child: image),
+    return GestureDetector(
+      key: const ValueKey<String>('fullscreen-image-interaction'),
+      behavior: HitTestBehavior.opaque,
+      onDoubleTapDown: _handleDoubleTapDown,
+      onDoubleTap: _handleDoubleTap,
+      child: IgnorePointer(
+        key: const ValueKey<String>('fullscreen-image-gesture-gate'),
+        ignoring: !_zoomed,
+        child: InteractiveViewer(
+          key: const ValueKey<String>('fullscreen-image-viewer'),
+          transformationController: _transformationController,
+          minScale: 1,
+          maxScale: 5,
+          child: SizedBox.expand(child: image),
+        ),
+      ),
     );
   }
 }
