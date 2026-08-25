@@ -13,7 +13,7 @@
 
 ## Download
 
-[Download the latest release](https://github.com/lawnvi/whisper/releases/latest)
+[Download the latest release](https://github.com/lawnvi/whisper/releases/latest) · [View release notes](https://github.com/lawnvi/whisper/releases)
 
 ## What It Solves
 
@@ -44,14 +44,6 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 - **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
 - **Keyboard and mouse sharing**: share one keyboard and mouse across multiple trusted desktops, with text, image, and file clipboard content following the workspace.
 - **Desktop experience**: tray integration, launch at startup, close to tray, reveal files in the system file manager, drag files out from desktop messages, light/dark themes, and multilingual UI.
-
-## Recent Updates (0.0.48)
-
-- LAN file-transfer throughput is higher, and large-file SHA-256 verification follows the receive stream to reduce the wait after transfer.
-- Interrupted transfers are resumed manually by the sender, while the receiver only shows the interrupted state to avoid conflicting actions.
-- GitHub-powered in-app updates are available, and desktop builds exit safely before installing an update.
-- macOS provides separate Apple silicon and Intel packages, with fixes for cross-architecture startup and remote Caps Lock switching.
-- Mobile full-screen image previews and image transitions are smoother, and Android only posts an extra connection-request alert on the lock screen.
 
 ## Connection
 

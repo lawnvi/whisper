@@ -59,7 +59,7 @@ void main() {
     expect(workflow, isNot(contains('build/app/outputs/flutter-apk/*.apk')));
   });
 
-  test('release assets are published once after every platform build', () {
+  test('release assets are published once for each release trigger', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final releaseActions = RegExp(
       'uses: softprops/action-gh-release@v2',
@@ -74,7 +74,9 @@ void main() {
     expect(workflow, contains('      - build-on-linux'));
     expect(workflow, contains('files: release-assets/**/*'));
     expect(workflow, contains('overwrite_files: true'));
-    expect(releaseActions.length, 1);
+    expect(releaseActions.length, 2);
+    expect(workflow, contains('name: Publish tagged release'));
+    expect(workflow, contains('name: Update manually rebuilt release asset'));
   });
 
   test('a manually rebuilt Intel package can update its dev release', () {
@@ -84,10 +86,7 @@ void main() {
     expect(workflow, contains("inputs.target == 'macos-intel'"));
     expect(workflow, contains('inputs.publish'));
     expect(workflow, contains("inputs.version != ''"));
-    expect(
-      workflow,
-      contains("format('dev-v{0}', inputs.version)"),
-    );
+    expect(workflow, contains("format('dev-v{0}', inputs.version)"));
     expect(
       workflow,
       contains("needs.build-on-macos-intel.result == 'success'"),
