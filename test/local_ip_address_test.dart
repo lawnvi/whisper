@@ -21,6 +21,12 @@ void main() {
     expect(Ipv4AddressPolicy.isLinkLocal('169.254.255.8'), isFalse);
   });
 
+  test('recognizes the IPv4 benchmarking range used by fake-IP DNS', () {
+    expect(Ipv4AddressPolicy.isBenchmarking('198.18.0.0'), isTrue);
+    expect(Ipv4AddressPolicy.isBenchmarking('198.19.255.255'), isTrue);
+    expect(Ipv4AddressPolicy.isBenchmarking('198.20.0.1'), isFalse);
+  });
+
   test('prefers RFC1918, then other unicast, then IPv4 link-local', () {
     expect(
       selectLocalIpv4Address(<LocalIpv4Candidate>[
@@ -59,6 +65,30 @@ void main() {
         (address: '169.254.37.25', interfaceName: 'en0'),
       ]),
       '169.254.37.25',
+    );
+  });
+
+  test('benchmark addresses stay last when a tunnel has a generic name', () {
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (address: '198.18.0.1', interfaceName: 'Meta'),
+        (address: '100.64.0.8', interfaceName: 'Ethernet'),
+      ]),
+      '100.64.0.8',
+    );
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (address: '198.18.0.1', interfaceName: 'Meta'),
+        (address: '169.254.37.25', interfaceName: 'Ethernet'),
+      ]),
+      '169.254.37.25',
+    );
+    expect(
+      selectLocalIpv4Address(<LocalIpv4Candidate>[
+        (address: '198.18.0.1', interfaceName: 'Meta'),
+        (address: '172.17.0.1', interfaceName: 'docker0'),
+      ]),
+      '172.17.0.1',
     );
   });
 

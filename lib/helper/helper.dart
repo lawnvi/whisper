@@ -258,6 +258,9 @@ int _localIpv4CandidateScore(LocalIpv4Candidate candidate) {
   if (!Ipv4AddressPolicy.isUsableUnicast(address)) {
     return -1;
   }
+  if (Ipv4AddressPolicy.isBenchmarking(address)) {
+    return 0;
+  }
 
   // Physical LAN interfaces outrank Docker, VPN, and tunnel addresses. A
   // virtual address remains a fallback for uncommon but valid configurations.

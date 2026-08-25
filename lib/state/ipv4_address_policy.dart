@@ -38,6 +38,13 @@ final class Ipv4AddressPolicy {
         octets[2] <= 254;
   }
 
+  static bool isBenchmarking(String address) {
+    final octets = parseCanonical(address);
+    if (octets == null) return false;
+    // RFC 2544 reserves 198.18.0.0/15 for inter-network benchmarking.
+    return octets[0] == 198 && (octets[1] == 18 || octets[1] == 19);
+  }
+
   static bool isUsableUnicast(String address) {
     final octets = parseCanonical(address);
     return octets != null && _isUsableUnicastOctets(octets);

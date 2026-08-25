@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:whisper/state/ipv4_address_policy.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 
 typedef DiscoveryAddressLookup =
     Future<List<InternetAddress>> Function(String host);
 
-/// Converts an mDNS hostname to a numeric endpoint without trusting a TXT
-/// address that was not part of the resolver result.
+/// Converts an mDNS service target to a numeric endpoint.
+///
+/// TXT addresses normally need to match the resolved service target. A valid
+/// numeric TXT address is used as a fallback when `.local` resolution fails or
+/// system DNS returns only benchmark fake-IP answers.
 Future<String?> resolveDiscoveryEndpointHost({
   required String? resolvedHost,
   required String? advertisedHost,
@@ -24,12 +28,19 @@ Future<String?> resolveDiscoveryEndpointHost({
     return normalizedResolved;
   }
 
+  final advertised = _normalizeEndpointHost(advertisedHost, port);
+  final advertisedFallback =
+      advertised != null &&
+          _isNumericHost(advertised) &&
+          !Ipv4AddressPolicy.isBenchmarking(advertised)
+      ? advertised
+      : null;
   final resolver = lookup ?? InternetAddress.lookup;
   final List<InternetAddress> addresses;
   try {
     addresses = await resolver(normalizedResolved).timeout(timeout);
   } on Object {
-    return normalizedResolved;
+    return advertisedFallback ?? normalizedResolved;
   }
 
   final ipv4 = <String>[];
@@ -45,10 +56,24 @@ Future<String?> resolveDiscoveryEndpointHost({
     }
   }
 
-  final advertised = _normalizeEndpointHost(advertisedHost, port);
   if (advertised != null &&
       (ipv4.contains(advertised) || ipv6.contains(advertised))) {
     return advertised;
+  }
+
+  final nonBenchmarkIpv4 = ipv4
+      .where((address) => !Ipv4AddressPolicy.isBenchmarking(address))
+      .toList(growable: false);
+  if (advertisedFallback != null &&
+      ipv4.isNotEmpty &&
+      nonBenchmarkIpv4.isEmpty) {
+    // 198.18.0.0/15 is reserved for benchmarking and is also commonly used
+    // by proxy fake-IP DNS. In that case the .local lookup did not provide a
+    // usable mDNS address, so fall back to Whisper's numeric TXT endpoint.
+    return advertisedFallback;
+  }
+  if (nonBenchmarkIpv4.isNotEmpty) {
+    return nonBenchmarkIpv4.first;
   }
   if (ipv4.isNotEmpty) {
     return ipv4.first;
@@ -56,7 +81,7 @@ Future<String?> resolveDiscoveryEndpointHost({
   if (ipv6.isNotEmpty) {
     return ipv6.first;
   }
-  return normalizedResolved;
+  return advertisedFallback ?? normalizedResolved;
 }
 
 String? _normalizeEndpointHost(String? host, int port) {
