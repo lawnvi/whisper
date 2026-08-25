@@ -18,6 +18,7 @@ Future<PeerSocketSession> _session({
   String intendedPkh = '',
   Duration timeout = const Duration(seconds: 30),
   void Function()? onTimeout,
+  int negotiatedProtocolVersion = PeerSocketSession.protocolVersion,
 }) async {
   final identitySeed = Uint8List.fromList(
     List<int>.generate(32, (i) => seedStart + i),
@@ -34,7 +35,10 @@ Future<PeerSocketSession> _session({
       name: role == PeerSocketRole.client ? 'Client A' : 'Server B',
       platform: role == PeerSocketRole.client ? 'macos' : 'windows',
       protocolVersion: PeerSocketSession.protocolVersion,
-      capabilities: const PeerCapabilities(fileTransferV3: true),
+      capabilities: const PeerCapabilities(
+        fileTransferV3: true,
+        remoteInputWorkspaceGraphV1: true,
+      ),
     ),
     localEphemeralKeyPair: await X25519().newKeyPairFromSeed(ephemeralSeed),
     localNonce: Uint8List.fromList(
@@ -44,6 +48,7 @@ Future<PeerSocketSession> _session({
     intendedPublicKeyHash: intendedPkh,
     handshakeTimeout: timeout,
     onTimeout: onTimeout,
+    negotiatedProtocolVersion: negotiatedProtocolVersion,
   );
 }
 
@@ -172,6 +177,44 @@ void main() {
       ),
     );
     expect(server.isClosed, isTrue);
+  });
+
+  test('protocol 10 server negotiates a legacy protocol 9 handshake', () async {
+    final server = await _session(
+      role: PeerSocketRole.server,
+      generation: 1,
+      seedStart: 32,
+    );
+    final client = await _session(
+      role: PeerSocketRole.client,
+      generation: 2,
+      seedStart: 0,
+      negotiatedProtocolVersion: PeerSocketSession.minimumProtocolVersion,
+    );
+    addTearDown(client.close);
+    addTearDown(server.close);
+
+    final hello = await client.createHello();
+    final helloCapabilities = hello.profile!['capabilities']! as Map;
+    expect(hello.protocolVersion, 9);
+    expect(helloCapabilities, isNot(contains('remoteInputWorkspaceGraphV1')));
+
+    final challenge = await server.receiveHello(hello);
+    final challengeCapabilities = challenge.profile!['capabilities']! as Map;
+    expect(challenge.protocolVersion, 9);
+    expect(
+      challengeCapabilities,
+      isNot(contains('remoteInputWorkspaceGraphV1')),
+    );
+
+    await client.receiveChallenge(challenge);
+    expect(client.remoteProfile!.protocolVersion, 9);
+    expect(server.remoteProfile!.protocolVersion, 9);
+    expect(client.remoteProfile!.capabilities.fileTransferV3, isTrue);
+    expect(
+      client.remoteProfile!.capabilities.remoteInputWorkspaceGraphV1,
+      isFalse,
+    );
   });
 
   test('full handshake enables inverse directional AEAD codecs', () async {

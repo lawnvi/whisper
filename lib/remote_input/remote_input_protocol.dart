@@ -5,22 +5,16 @@ import 'package:whisper/socket/framed_packet_codec.dart';
 enum RemoteInputControlAction {
   offer,
   accept,
+  routes,
   release,
   reject,
   stop,
   error,
 }
 
-enum RemoteInputTransport {
-  websocket,
-}
+enum RemoteInputTransport { websocket }
 
-enum RemoteInputEdge {
-  left,
-  right,
-  top,
-  bottom,
-}
+enum RemoteInputEdge { left, right, top, bottom }
 
 enum RemoteInputEventType {
   mouseMove,
@@ -88,16 +82,16 @@ class RemoteInputEdgeMapping {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'routeId': effectiveRouteId,
-        'sourceDisplayId': sourceDisplayId,
-        'sourceEdge': sourceEdge.name,
-        'sourceSegmentStart': sourceSegmentStart,
-        'sourceSegmentEnd': sourceSegmentEnd,
-        'sinkDisplayId': sinkDisplayId,
-        'sinkEdge': sinkEdge.name,
-        'sinkSegmentStart': sinkSegmentStart,
-        'sinkSegmentEnd': sinkSegmentEnd,
-      };
+    'routeId': effectiveRouteId,
+    'sourceDisplayId': sourceDisplayId,
+    'sourceEdge': sourceEdge.name,
+    'sourceSegmentStart': sourceSegmentStart,
+    'sourceSegmentEnd': sourceSegmentEnd,
+    'sinkDisplayId': sinkDisplayId,
+    'sinkEdge': sinkEdge.name,
+    'sinkSegmentStart': sinkSegmentStart,
+    'sinkSegmentEnd': sinkSegmentEnd,
+  };
 
   factory RemoteInputEdgeMapping.fromJson(Map<String, dynamic> json) {
     return RemoteInputEdgeMapping(
@@ -151,6 +145,7 @@ class RemoteInputControlMessage {
     this.sourcePlatform = '',
     this.sinkPlatform = '',
     this.remoteClipboardV1 = false,
+    this.workspaceRevision = 0,
   });
 
   final RemoteInputControlAction action;
@@ -180,6 +175,7 @@ class RemoteInputControlMessage {
   final String sourcePlatform;
   final String sinkPlatform;
   final bool remoteClipboardV1;
+  final int workspaceRevision;
 
   RemoteInputControlMessage withTransportToken(String token) {
     return RemoteInputControlMessage(
@@ -210,43 +206,43 @@ class RemoteInputControlMessage {
       sourcePlatform: sourcePlatform,
       sinkPlatform: sinkPlatform,
       remoteClipboardV1: remoteClipboardV1,
+      workspaceRevision: workspaceRevision,
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'action': action.name,
-        'sessionId': sessionId,
-        'sourcePeerId': sourcePeerId,
-        'sinkPeerId': sinkPeerId,
-        'transport': transport.name,
-        'path': path,
-        if (action == RemoteInputControlAction.accept &&
-            transportToken.isNotEmpty)
-          'transportToken': transportToken,
-        if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
-        if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
-        if (sourceEdge != null) 'sourceEdge': sourceEdge!.name,
-        if (sourceSegmentStart != 0) 'sourceSegmentStart': sourceSegmentStart,
-        if (sourceSegmentEnd != 0) 'sourceSegmentEnd': sourceSegmentEnd,
-        if (sinkDisplayId.isNotEmpty) 'sinkDisplayId': sinkDisplayId,
-        if (sinkEdge != null) 'sinkEdge': sinkEdge!.name,
-        if (sinkSegmentStart != 0) 'sinkSegmentStart': sinkSegmentStart,
-        if (sinkSegmentEnd != 0) 'sinkSegmentEnd': sinkSegmentEnd,
-        if (edgeMappings.isNotEmpty)
-          'edgeMappings':
-              edgeMappings.map((mapping) => mapping.toJson()).toList(),
-        if (routeId.isNotEmpty) 'routeId': routeId,
-        'releaseHotkey': releaseHotkey,
-        'releaseReason': releaseReason,
-        'releaseSequence': releaseSequence,
-        'releaseActivationSequence': releaseActivationSequence,
-        if (releaseEdgeUnit != 0 || action == RemoteInputControlAction.release)
-          'releaseEdgeUnit': releaseEdgeUnit,
-        'errorMessage': errorMessage,
-        if (sourcePlatform.isNotEmpty) 'sourcePlatform': sourcePlatform,
-        if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
-        if (remoteClipboardV1) 'remoteClipboardV1': true,
-      };
+    'action': action.name,
+    'sessionId': sessionId,
+    'sourcePeerId': sourcePeerId,
+    'sinkPeerId': sinkPeerId,
+    'transport': transport.name,
+    'path': path,
+    if (action == RemoteInputControlAction.accept && transportToken.isNotEmpty)
+      'transportToken': transportToken,
+    if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
+    if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
+    if (sourceEdge != null) 'sourceEdge': sourceEdge!.name,
+    if (sourceSegmentStart != 0) 'sourceSegmentStart': sourceSegmentStart,
+    if (sourceSegmentEnd != 0) 'sourceSegmentEnd': sourceSegmentEnd,
+    if (sinkDisplayId.isNotEmpty) 'sinkDisplayId': sinkDisplayId,
+    if (sinkEdge != null) 'sinkEdge': sinkEdge!.name,
+    if (sinkSegmentStart != 0) 'sinkSegmentStart': sinkSegmentStart,
+    if (sinkSegmentEnd != 0) 'sinkSegmentEnd': sinkSegmentEnd,
+    if (edgeMappings.isNotEmpty)
+      'edgeMappings': edgeMappings.map((mapping) => mapping.toJson()).toList(),
+    if (routeId.isNotEmpty) 'routeId': routeId,
+    'releaseHotkey': releaseHotkey,
+    'releaseReason': releaseReason,
+    'releaseSequence': releaseSequence,
+    'releaseActivationSequence': releaseActivationSequence,
+    if (releaseEdgeUnit != 0 || action == RemoteInputControlAction.release)
+      'releaseEdgeUnit': releaseEdgeUnit,
+    'errorMessage': errorMessage,
+    if (sourcePlatform.isNotEmpty) 'sourcePlatform': sourcePlatform,
+    if (sinkPlatform.isNotEmpty) 'sinkPlatform': sinkPlatform,
+    if (remoteClipboardV1) 'remoteClipboardV1': true,
+    if (workspaceRevision > 0) 'workspaceRevision': workspaceRevision,
+  };
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
     return RemoteInputControlMessage(
@@ -288,13 +284,18 @@ class RemoteInputControlMessage {
       sinkSegmentEnd: intJson(json['sinkSegmentEnd']),
       edgeMappings: (json['edgeMappings'] as List<dynamic>? ?? const [])
           .whereType<Map>()
-          .map((item) =>
-              RemoteInputEdgeMapping.fromJson(Map<String, dynamic>.from(item)))
-          .where((mapping) =>
-              mapping.sourceDisplayId.isNotEmpty &&
-              mapping.sinkDisplayId.isNotEmpty &&
-              mapping.sourceSegmentEnd > mapping.sourceSegmentStart &&
-              mapping.sinkSegmentEnd > mapping.sinkSegmentStart)
+          .map(
+            (item) => RemoteInputEdgeMapping.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .where(
+            (mapping) =>
+                mapping.sourceDisplayId.isNotEmpty &&
+                mapping.sinkDisplayId.isNotEmpty &&
+                mapping.sourceSegmentEnd > mapping.sourceSegmentStart &&
+                mapping.sinkSegmentEnd > mapping.sinkSegmentStart,
+          )
           .toList(growable: false),
       routeId: json['routeId'] as String? ?? '',
       releaseHotkey: json['releaseHotkey'] as String? ?? '',
@@ -306,6 +307,7 @@ class RemoteInputControlMessage {
       sourcePlatform: json['sourcePlatform'] as String? ?? '',
       sinkPlatform: json['sinkPlatform'] as String? ?? '',
       remoteClipboardV1: json['remoteClipboardV1'] as bool? ?? false,
+      workspaceRevision: intJson(json['workspaceRevision']),
     );
   }
 }

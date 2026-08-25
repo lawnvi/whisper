@@ -193,6 +193,36 @@ void main() {
       expect(calls[1].arguments['payload'], Uint8List.fromList(<int>[42]));
     });
 
+    test('updates and clears injection routes without restarting', () async {
+      await platform.updateInjectionRoutes(
+        sessionId: 'input-1',
+        edgeMappings: const <RemoteInputEdgeMapping>[
+          RemoteInputEdgeMapping(
+            routeId: 'route-next',
+            sourceDisplayId: 'other-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 600,
+            sinkDisplayId: 'sink-main',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 600,
+          ),
+        ],
+      );
+      await platform.updateInjectionRoutes(
+        sessionId: 'input-1',
+        edgeMappings: const <RemoteInputEdgeMapping>[],
+      );
+
+      expect(calls.map((call) => call.method), <String>[
+        'updateInjectionRoutes',
+        'updateInjectionRoutes',
+      ]);
+      expect((calls.first.arguments['mappings'] as List), hasLength(1));
+      expect((calls.last.arguments['mappings'] as List), isEmpty);
+    });
+
     test('loads display topology from native method channel', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {

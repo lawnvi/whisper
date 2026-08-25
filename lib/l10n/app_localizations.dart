@@ -1312,6 +1312,24 @@ abstract class AppLocalizations {
   /// **'边缘重叠'**
   String get remoteInputWorkspaceConflict;
 
+  /// No description provided for @remoteInputWorkspaceReachable.
+  ///
+  /// In zh, this message translates to:
+  /// **'可达'**
+  String get remoteInputWorkspaceReachable;
+
+  /// No description provided for @remoteInputWorkspaceDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接到工作区'**
+  String get remoteInputWorkspaceDisconnected;
+
+  /// No description provided for @remoteInputWorkspaceUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持工作区路由'**
+  String get remoteInputWorkspaceUnsupported;
+
   /// No description provided for @remoteInputWorkspaceTargetIdle.
   ///
   /// In zh, this message translates to:

@@ -10,7 +10,7 @@ class WirePeerProfile {
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 9,
+    this.protocolVersion = 10,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -31,37 +31,45 @@ class WirePeerProfile {
   final PeerCapabilities capabilities;
   final RemoteInputTopology? displayTopology;
 
+  WirePeerProfile forProtocolVersion(int version) => WirePeerProfile(
+    uid: uid,
+    name: name,
+    platform: platform,
+    protocolVersion: version,
+    capabilities: capabilities,
+    displayTopology: displayTopology,
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
-        'uid': uid,
-        'name': name,
-        'platform': platform,
-        'protocolVersion': protocolVersion,
-        'capabilities': capabilities.toJson(),
-        if (displayTopology != null)
-          'displayTopology': displayTopology!.toJson(),
-      };
+    'uid': uid,
+    'name': name,
+    'platform': platform,
+    'protocolVersion': protocolVersion,
+    'capabilities': capabilities.toWireJson(protocolVersion),
+    if (displayTopology != null) 'displayTopology': displayTopology!.toJson(),
+  };
 
   String toJsonString() => jsonEncode(toJson());
 
   Uint8List canonicalDigest() => Uint8List.fromList(
-        sha256.convert(utf8.encode(_canonicalJson(toJson()))).bytes,
-      );
+    sha256.convert(utf8.encode(_canonicalJson(toJson()))).bytes,
+  );
 
   DeviceData toDeviceData({String host = '', int port = 0}) => DeviceData(
-        id: 0,
-        uid: uid,
-        name: name,
-        host: host,
-        port: port,
-        password: '',
-        platform: platform,
-        isServer: false,
-        online: true,
-        clipboard: false,
-        auth: false,
-        lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        around: true,
-      );
+    id: 0,
+    uid: uid,
+    name: name,
+    host: host,
+    port: port,
+    password: '',
+    platform: platform,
+    isServer: false,
+    online: true,
+    clipboard: false,
+    auth: false,
+    lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    around: true,
+  );
 
   factory WirePeerProfile.fromJson(Map<String, Object?> json) {
     if (json.keys.any((key) => !_allowedKeys.contains(key))) {
@@ -93,7 +101,10 @@ class WirePeerProfile {
       name: name,
       platform: platform,
       protocolVersion: protocolVersion,
-      capabilities: PeerCapabilities.fromWireJson(capabilitiesJson),
+      capabilities: PeerCapabilities.fromWireJson(
+        capabilitiesJson,
+        protocolVersion: protocolVersion,
+      ),
       displayTopology: topology,
     );
   }
@@ -112,13 +123,13 @@ class WirePeerProfile {
 
   @override
   int get hashCode => Object.hash(
-        uid,
-        name,
-        platform,
-        protocolVersion,
-        _canonicalJson(capabilities.toJson()),
-        _canonicalJson(displayTopology?.toJson()),
-      );
+    uid,
+    name,
+    platform,
+    protocolVersion,
+    _canonicalJson(capabilities.toJson()),
+    _canonicalJson(displayTopology?.toJson()),
+  );
 }
 
 class PeerProfile {
@@ -127,7 +138,7 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 9,
+    this.protocolVersion = 10,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -199,13 +210,13 @@ class PeerProfile {
   }
 
   WirePeerProfile toWireProfile() => WirePeerProfile(
-        uid: device.uid,
-        name: device.name,
-        platform: device.platform,
-        protocolVersion: protocolVersion,
-        capabilities: capabilities,
-        displayTopology: displayTopology,
-      );
+    uid: device.uid,
+    name: device.name,
+    platform: device.platform,
+    protocolVersion: protocolVersion,
+    capabilities: capabilities,
+    displayTopology: displayTopology,
+  );
 }
 
 RemoteInputTopology? _topologyFromJson(Object? value) {
@@ -284,16 +295,18 @@ RemoteInputTopology _wireTopologyFromJson(Object? value) {
     if (isPrimary) {
       primaryCount += 1;
     }
-    displays.add(RemoteInputDisplay(
-      displayId: displayId,
-      name: name,
-      x: x,
-      y: y,
-      width: width,
-      height: height,
-      scale: scaleValue.toDouble(),
-      isPrimary: isPrimary,
-    ));
+    displays.add(
+      RemoteInputDisplay(
+        displayId: displayId,
+        name: name,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        scale: scaleValue.toDouble(),
+        isPrimary: isPrimary,
+      ),
+    );
   }
   if (primaryCount != 1) {
     throw const FormatException('Wire topology must have one primary display');
@@ -345,6 +358,7 @@ class PeerCapabilities {
     this.remoteInputSourceV1 = false,
     this.remoteInputSinkV1 = false,
     this.remoteInputTopologyV1 = false,
+    this.remoteInputWorkspaceGraphV1 = false,
     this.audioGroupSourceV1 = false,
     this.audioGroupSinkV1 = false,
     this.audioGroupRejoinV1 = false,
@@ -358,6 +372,7 @@ class PeerCapabilities {
   final bool remoteInputSourceV1;
   final bool remoteInputSinkV1;
   final bool remoteInputTopologyV1;
+  final bool remoteInputWorkspaceGraphV1;
   final bool audioGroupSourceV1;
   final bool audioGroupSinkV1;
   final bool audioGroupRejoinV1;
@@ -372,12 +387,21 @@ class PeerCapabilities {
       'remoteInputSourceV1': remoteInputSourceV1,
       'remoteInputSinkV1': remoteInputSinkV1,
       'remoteInputTopologyV1': remoteInputTopologyV1,
+      'remoteInputWorkspaceGraphV1': remoteInputWorkspaceGraphV1,
       'audioGroupSourceV1': audioGroupSourceV1,
       'audioGroupSinkV1': audioGroupSinkV1,
       'audioGroupRejoinV1': audioGroupRejoinV1,
       'audioSyncClockV1': audioSyncClockV1,
       'audioChannelRoleV1': audioChannelRoleV1,
     };
+  }
+
+  Map<String, dynamic> toWireJson(int protocolVersion) {
+    final json = toJson();
+    if (protocolVersion < 10) {
+      json.remove('remoteInputWorkspaceGraphV1');
+    }
+    return json;
   }
 
   factory PeerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -388,6 +412,8 @@ class PeerCapabilities {
       remoteInputSourceV1: json['remoteInputSourceV1'] as bool? ?? false,
       remoteInputSinkV1: json['remoteInputSinkV1'] as bool? ?? false,
       remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
+      remoteInputWorkspaceGraphV1:
+          json['remoteInputWorkspaceGraphV1'] as bool? ?? false,
       audioGroupSourceV1: json['audioGroupSourceV1'] as bool? ?? false,
       audioGroupSinkV1: json['audioGroupSinkV1'] as bool? ?? false,
       audioGroupRejoinV1: json['audioGroupRejoinV1'] as bool? ?? false,
@@ -396,8 +422,11 @@ class PeerCapabilities {
     );
   }
 
-  factory PeerCapabilities.fromWireJson(Map<String, dynamic> json) {
-    const allowed = <String>{
+  factory PeerCapabilities.fromWireJson(
+    Map<String, dynamic> json, {
+    int protocolVersion = 10,
+  }) {
+    const legacyAllowed = <String>{
       'fileTransferV3',
       'systemAudioSourceV1',
       'speakerSinkV1',
@@ -410,6 +439,10 @@ class PeerCapabilities {
       'audioSyncClockV1',
       'audioChannelRoleV1',
     };
+    const workspaceGraphV1 = <String>{'remoteInputWorkspaceGraphV1'};
+    final allowed = protocolVersion >= 10
+        ? legacyAllowed.union(workspaceGraphV1)
+        : legacyAllowed;
     if (json.keys.any((key) => !allowed.contains(key)) ||
         json.values.any((value) => value is! bool)) {
       throw const FormatException('Invalid wire capabilities');
@@ -439,8 +472,7 @@ String _canonicalJson(Object? value) {
         throw const FormatException('Canonical map keys must be strings');
       }
       return key;
-    }).toList()
-      ..sort();
+    }).toList()..sort();
     return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(value[key])}').join(',')}}';
   }
   if (value is List) {

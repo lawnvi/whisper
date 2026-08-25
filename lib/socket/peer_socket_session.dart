@@ -42,13 +42,15 @@ final class PeerSocketSession {
     required this.connectionGeneration,
     required this.localIdentity,
     required this.localProfile,
+    required int negotiatedProtocolVersion,
     required KeyPair localEphemeralKeyPair,
     required Uint8List localNonce,
     required this.intendedPeerId,
     required this.intendedPublicKeyHash,
     required Duration handshakeTimeout,
     required void Function()? onTimeout,
-  }) : _localEphemeralKeyPair = localEphemeralKeyPair,
+  }) : _negotiatedProtocolVersion = negotiatedProtocolVersion,
+       _localEphemeralKeyPair = localEphemeralKeyPair,
        _localNonce = Uint8List.fromList(localNonce),
        phase = role == PeerSocketRole.server
            ? PeerSocketPhase.awaitingHello
@@ -63,12 +65,17 @@ final class PeerSocketSession {
     });
   }
 
-  static const int protocolVersion = 9;
+  static const int protocolVersion = 10;
+  static const int minimumProtocolVersion = 9;
+
+  static bool _supportsProtocolVersion(int version) =>
+      version >= minimumProtocolVersion && version <= protocolVersion;
 
   final PeerSocketRole role;
   final int connectionGeneration;
   final DeviceIdentity localIdentity;
-  final WirePeerProfile localProfile;
+  WirePeerProfile localProfile;
+  int _negotiatedProtocolVersion;
   final KeyPair _localEphemeralKeyPair;
   final Uint8List _localNonce;
   final String intendedPeerId;
@@ -115,13 +122,14 @@ final class PeerSocketSession {
     Uint8List? localNonce,
     String intendedPeerId = '',
     String intendedPublicKeyHash = '',
+    int negotiatedProtocolVersion = protocolVersion,
     Duration handshakeTimeout = const Duration(seconds: 30),
     void Function()? onTimeout,
   }) async {
-    if (localProfile.protocolVersion != protocolVersion) {
+    if (!_supportsProtocolVersion(negotiatedProtocolVersion)) {
       throw ArgumentError.value(
-        localProfile.protocolVersion,
-        'localProfile.protocolVersion',
+        negotiatedProtocolVersion,
+        'negotiatedProtocolVersion',
       );
     }
     final nonce = localNonce ?? _secureNonce();
@@ -132,7 +140,8 @@ final class PeerSocketSession {
       role: role,
       connectionGeneration: connectionGeneration,
       localIdentity: localIdentity,
-      localProfile: localProfile,
+      localProfile: localProfile.forProtocolVersion(negotiatedProtocolVersion),
+      negotiatedProtocolVersion: negotiatedProtocolVersion,
       localEphemeralKeyPair:
           localEphemeralKeyPair ??
           await AuthSessionKeys.generateEphemeralKeyPair(),
@@ -381,7 +390,7 @@ final class PeerSocketSession {
       PeerSocketPhase.awaitingChallenge,
     );
     return AuthEnvelope.hello(
-      protocolVersion: protocolVersion,
+      protocolVersion: _negotiatedProtocolVersion,
       peerId: localProfile.uid,
       identityPublicKey: localIdentity.publicKeyBase64Url,
       ephemeralPublicKey: publicKey,
@@ -401,6 +410,7 @@ final class PeerSocketSession {
   }) async {
     _require(PeerSocketRole.server, PeerSocketPhase.awaitingHello);
     try {
+      _selectIncomingProtocol(hello.protocolVersion);
       _requireEnvelope(hello, AuthAction.hello);
       if (hello.intendedPeerId != null &&
           hello.intendedPeerId!.isNotEmpty &&
@@ -452,7 +462,7 @@ final class PeerSocketSession {
       _transcript = transcript;
       _transition(PeerSocketPhase.awaitingHello, PeerSocketPhase.awaitingProof);
       return AuthEnvelope.challenge(
-        protocolVersion: protocolVersion,
+        protocolVersion: _negotiatedProtocolVersion,
         peerId: localProfile.uid,
         identityPublicKey: localIdentity.publicKeyBase64Url,
         ephemeralPublicKey: localEphemeralPublicKey,
@@ -565,7 +575,7 @@ final class PeerSocketSession {
       expectedPhase,
     );
     return AuthEnvelope.proof(
-      protocolVersion: protocolVersion,
+      protocolVersion: _negotiatedProtocolVersion,
       peerId: localProfile.uid,
       nonce: encodeAuthBase64Url(_localNonce),
       peerNonce: encodeAuthBase64Url(_remoteNonce!),
@@ -638,7 +648,7 @@ final class PeerSocketSession {
       expectedPhase,
     );
     return AuthEnvelope.approval(
-      protocolVersion: protocolVersion,
+      protocolVersion: _negotiatedProtocolVersion,
       peerId: localProfile.uid,
       nonce: encodeAuthBase64Url(_localNonce),
       peerNonce: encodeAuthBase64Url(_remoteNonce!),
@@ -747,7 +757,7 @@ final class PeerSocketSession {
       PeerSocketPhase.awaitingLocalApproval,
     );
     final result = AuthEnvelope.result(
-      protocolVersion: protocolVersion,
+      protocolVersion: _negotiatedProtocolVersion,
       peerId: localProfile.uid,
       nonce: encodeAuthBase64Url(_localNonce),
       peerNonce: encodeAuthBase64Url(_remoteNonce!),
@@ -969,7 +979,7 @@ final class PeerSocketSession {
       return _fail('missing_profile');
     }
     final profile = WirePeerProfile.fromJson(profileJson);
-    if (profile.protocolVersion != protocolVersion) {
+    if (profile.protocolVersion != _negotiatedProtocolVersion) {
       return _fail('upgrade_required');
     }
     final claimedDigest = decodeAuthBase64Url(
@@ -995,7 +1005,7 @@ final class PeerSocketSession {
     required bool serverPairingRequired,
   }) async {
     return AuthTranscript(
-      protocolVersion: protocolVersion,
+      protocolVersion: _negotiatedProtocolVersion,
       clientPeerId: clientProfile.uid,
       serverPeerId: serverProfile.uid,
       clientIdentityPublicKey: decodeAuthBase64Url(
@@ -1055,13 +1065,21 @@ final class PeerSocketSession {
 
   void _requireEnvelope(AuthEnvelope envelope, AuthAction action) {
     if (envelope.action != action ||
-        envelope.protocolVersion != protocolVersion) {
+        envelope.protocolVersion != _negotiatedProtocolVersion) {
       _fail<void>(
-        envelope.protocolVersion == protocolVersion
+        envelope.protocolVersion == _negotiatedProtocolVersion
             ? 'unexpected_action'
             : 'upgrade_required',
       );
     }
+  }
+
+  void _selectIncomingProtocol(int version) {
+    if (!_supportsProtocolVersion(version)) {
+      _fail<void>('upgrade_required');
+    }
+    _negotiatedProtocolVersion = version;
+    localProfile = localProfile.forProtocolVersion(version);
   }
 
   Never _fail<T>(String code) {

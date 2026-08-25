@@ -175,6 +175,14 @@ final class _PendingOutgoingConnection {
   ConnectionAttemptReason cancellationReason =
       ConnectionAttemptReason.requestCancelled;
 
+  void resetTransportForProtocolRetry() {
+    channel = null;
+    transportRequest = null;
+    session = null;
+    isReady = false;
+    _sinkCloseGuard = null;
+  }
+
   Future<void> cancel({
     ConnectionAttemptReason reason = ConnectionAttemptReason.requestCancelled,
   }) {
@@ -638,6 +646,14 @@ class WsSvrManager {
         profile?.displayTopology?.isNotEmpty == true;
   }
 
+  bool supportsRemoteInputWorkspaceGraphFor(String peerId) {
+    final profile =
+        _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    return supportsRemoteInputTopologyFor(peerId) &&
+        profile?.capabilities.remoteInputWorkspaceGraphV1 == true;
+  }
+
   RemoteInputTopology? remoteDisplayTopologyFor(String peerId) {
     final profile =
         _remoteProfilesByPeerId[peerId] ??
@@ -1015,6 +1031,7 @@ class WsSvrManager {
     required PeerSocketRole role,
     String intendedPeerId = '',
     String intendedPublicKeyHash = '',
+    int protocolVersion = PeerSocketSession.protocolVersion,
   }) async {
     late PeerSocketSession session;
     session = await PeerSocketSession.create(
@@ -1024,6 +1041,7 @@ class WsSvrManager {
       localProfile: (await _localPeerProfile()).toWireProfile(),
       intendedPeerId: intendedPeerId,
       intendedPublicKeyHash: intendedPublicKeyHash,
+      negotiatedProtocolVersion: protocolVersion,
       onTimeout: () {
         if (!identical(_sessionsBySink[sink], session)) {
           return;
@@ -2338,6 +2356,28 @@ class WsSvrManager {
   Future<ConnectionAttemptResult> _connectToServer(
     _PendingOutgoingConnection attempt,
   ) async {
+    final current = await _connectToServerVersion(
+      attempt,
+      PeerSocketSession.protocolVersion,
+    );
+    final shouldRetryLegacy =
+        current.reason == ConnectionAttemptReason.protocolMismatch ||
+        (current.reason == ConnectionAttemptReason.transportClosed &&
+            attempt.session?.remoteProfile == null);
+    if (!shouldRetryLegacy || attempt.isCancelled) {
+      return current;
+    }
+    attempt.resetTransportForProtocolRetry();
+    return _connectToServerVersion(
+      attempt,
+      PeerSocketSession.minimumProtocolVersion,
+    );
+  }
+
+  Future<ConnectionAttemptResult> _connectToServerVersion(
+    _PendingOutgoingConnection attempt,
+    int protocolVersion,
+  ) async {
     final request = attempt.request;
     if (!_acceptingOutgoingConnections) {
       return ConnectionAttemptResult.cancelled(
@@ -2387,6 +2427,7 @@ class WsSvrManager {
         role: PeerSocketRole.client,
         intendedPeerId: request.expectedPeerId,
         intendedPublicKeyHash: request.expectedPublicKeyHash,
+        protocolVersion: protocolVersion,
       );
       attempt.session = session;
       if (attempt.isCancelled) {
@@ -2401,6 +2442,7 @@ class WsSvrManager {
       }
       if (!authResult.allow) {
         await _closeSocketSink(channelSink);
+        await _handlePeerSocketDoneQueued(channelSink);
         return _connectionFailureResult(request, authResult.message);
       }
       final peerId = session.remotePeerId;
@@ -3941,6 +3983,24 @@ class WsSvrManager {
     _completeSocketAuth(sink, true, '');
     _deletedPeerDiscoverySuppressions.remove(storedDevice.uid);
     _dispatchToAll((event) => event.onConnect());
+    if (_manageSharedCoordinators) {
+      _ignoreFuture(
+        RemoteInputWorkspaceCoordinator.shared.handlePeerReconnected(
+          peerId: storedDevice.uid,
+          host: storedDevice.host,
+          port: storedDevice.port,
+          isMutuallyTrusted:
+              storedDevice.auth &&
+              storedDevice.identityPublicKey.isNotEmpty &&
+              storedDevice.identityPublicKey == session.remoteIdentityPublicKey,
+          remoteCanInject: supportsRemoteInputWorkspaceGraphFor(
+            storedDevice.uid,
+          ),
+          sendControlTo: sendRemoteInputControlTo,
+        ),
+        context: 'restore remote input workspace peer',
+      );
+    }
     if (session.role == PeerSocketRole.server) {
       _dispatchToAll((event) => event.afterAuth(true, storedDevice));
     }
@@ -4746,6 +4806,7 @@ class WsSvrManager {
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
         remoteInputTopologyV1: hasTopology,
+        remoteInputWorkspaceGraphV1: hasTopology,
         audioGroupSourceV1: supportsNativeSystemAudio(),
         audioGroupSinkV1: true,
         audioGroupRejoinV1: true,

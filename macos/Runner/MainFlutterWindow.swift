@@ -364,6 +364,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private var captureRoutes: [CaptureRoute] = []
   private var releaseHotkey = "ctrl+alt+esc"
   private var captureActive = false
+  private var captureRequiresInteriorRearm = false
   private var suppressLocalPasteKeyUp = false
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
@@ -520,6 +521,19 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       emitDiagnostic(event: .injectionStarted)
       result(nil)
 
+    case "updateInjectionRoutes":
+      guard let args = call.arguments as? [String: Any],
+            let sessionId = args["sessionId"] as? String,
+            sessionId == injectionSessionId else {
+        result(FlutterError(
+          code: "bad-arguments",
+          message: "updateInjectionRoutes requires the active sessionId",
+          details: nil))
+        return
+      }
+      injectionRoutes = injectionRoutes(from: args["mappings"])
+      result(nil)
+
     case "injectEvent":
       guard let args = call.arguments as? [String: Any],
             let sessionId = args["sessionId"] as? String,
@@ -581,6 +595,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureRoutes = routes
     self.releaseHotkey = releaseHotkey
     captureActive = false
+    captureRequiresInteriorRearm = false
     suppressLocalPasteKeyUp = false
     captureMouseButtons = 0
     sequence = 0
@@ -629,6 +644,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     captureSegments = []
     captureRoutes = []
     captureActive = false
+    captureRequiresInteriorRearm = false
     suppressLocalPasteKeyUp = false
     captureActivationSequence = 0
     captureMouseButtons = 0
@@ -681,6 +697,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return
     }
     captureActive = false
+    captureRequiresInteriorRearm = true
     captureActivationSequence = 0
     captureMouseButtons = 0
     if !edge.isEmpty {
@@ -713,6 +730,12 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     }
     var activeStart = false
     if !captureActive {
+      if captureRequiresInteriorRearm {
+        if captureRearmMotion(type: type, event: event) {
+          captureRequiresInteriorRearm = false
+        }
+        return false
+      }
       guard let crossing = captureActivationCrossing(type: type, event: event) else {
         return false
       }
@@ -989,7 +1012,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         injectedMousePoint ??
         CGEvent(source: nil)?.location ??
         fallbackPoint
-      if entryPoint == nil && injectedMouseEnteredInterior {
+      if entryPoint == nil && injectedMouseEnteredInterior && injectedMouseButtons == 0 {
         if let releaseRoute = reverseInjectionSourceEdgeUnit(
           currentPoint: currentPoint,
           deltaX: deltaX,
@@ -2522,6 +2545,27 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       moveCaptureCursorToLocalEdge()
     default:
       break
+    }
+  }
+
+  private func captureRearmMotion(type: CGEventType, event: CGEvent) -> Bool {
+    switch type {
+    case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+      let bounds = captureBounds()
+      let horizontalDistance = min(32, max(4, bounds.width / 4))
+      let verticalDistance = min(32, max(4, bounds.height / 4))
+      switch captureEdge {
+      case "left":
+        return event.location.x >= bounds.minX + horizontalDistance
+      case "top":
+        return event.location.y >= bounds.minY + verticalDistance
+      case "bottom":
+        return event.location.y <= bounds.maxY - verticalDistance
+      default:
+        return event.location.x <= bounds.maxX - horizontalDistance
+      }
+    default:
+      return false
     }
   }
 

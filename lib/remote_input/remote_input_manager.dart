@@ -207,6 +207,7 @@ class RemoteInputManager {
         );
         break;
       case RemoteInputControlAction.release:
+      case RemoteInputControlAction.routes:
         break;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:

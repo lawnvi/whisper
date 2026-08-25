@@ -899,6 +899,12 @@ class RemoteInputPlugin : public flutter::Plugin {
       delta_y = point.y - last_hook_mouse_point_->y;
     }
     last_hook_mouse_point_ = point;
+    if (!capture_active_ && capture_requires_interior_rearm_) {
+      if (wparam == WM_MOUSEMOVE && CaptureCursorEnteredInterior(point)) {
+        capture_requires_interior_rearm_ = false;
+      }
+      return false;
+    }
     if (!capture_active_ && wparam != WM_MOUSEMOVE) {
       return false;
     }
@@ -921,6 +927,10 @@ class RemoteInputPlugin : public flutter::Plugin {
       return true;
     }
     if (!capture_active_) {
+      if (capture_requires_interior_rearm_) {
+        EmitInactiveEventDiagnostic(down, up);
+        return false;
+      }
       POINT point = {};
       const bool has_cursor = GetCursorPos(&point) == TRUE;
       const bool at_edge = has_cursor && IsCursorAtCaptureEdge(point);
@@ -1085,6 +1095,20 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
 
+    if (method == "updateInjectionRoutes") {
+      const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+      const auto* session_id =
+          args == nullptr ? nullptr : GetMapValue<std::string>(*args, "sessionId");
+      if (session_id == nullptr || *session_id != injection_session_id_) {
+        result->Error("bad-arguments",
+                      "updateInjectionRoutes requires the active sessionId");
+        return;
+      }
+      injection_routes_ = GetMapInjectionRoutes(*args, "mappings");
+      result->Success();
+      return;
+    }
+
     if (method == "injectEvent") {
       const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
       const auto* session_id =
@@ -1136,6 +1160,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_routes_ = std::move(routes);
     release_hotkey_ = std::move(release_hotkey);
     capture_active_ = false;
+    capture_requires_interior_rearm_ = false;
     pending_active_start_ = false;
     capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
@@ -1177,6 +1202,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     capture_segments_.clear();
     capture_routes_.clear();
     capture_active_ = false;
+    capture_requires_interior_rearm_ = false;
     pending_active_start_ = false;
     capture_activation_sequence_ = 0;
     capture_buttons_ = 0;
@@ -1207,8 +1233,8 @@ class RemoteInputPlugin : public flutter::Plugin {
             CaptureRoute{release_route_id, release_display_id, release_edge,
                          release_segment});
       }
-      MoveCaptureCursorToLocalEdge(release_edge_unit);
       capture_active_ = false;
+      capture_requires_interior_rearm_ = true;
       pending_active_start_ = false;
       capture_activation_sequence_ = 0;
       capture_buttons_ = 0;
@@ -1216,6 +1242,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       capture_activation_edge_unit_.reset();
       event_diagnostic_count_ = 0;
       inactive_event_diagnostic_count_ = 0;
+      MoveCaptureCursorToLocalEdge(release_edge_unit);
     }
   }
 
@@ -1745,6 +1772,21 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
     ApplyCaptureRoute(route.value());
     return true;
+  }
+
+  bool CaptureCursorEnteredInterior(POINT point) const {
+    const ScreenArea area = CaptureArea();
+    constexpr int distance = 32;
+    if (capture_edge_ == "left") {
+      return point.x >= area.left + std::min(distance, area.width() / 4);
+    }
+    if (capture_edge_ == "top") {
+      return point.y >= area.top + std::min(distance, area.height() / 4);
+    }
+    if (capture_edge_ == "bottom") {
+      return point.y <= area.bottom - std::min(distance, area.height() / 4);
+    }
+    return point.x <= area.right - std::min(distance, area.width() / 4);
   }
 
   void ApplyCaptureRoute(const CaptureRoute& route) {
@@ -2307,7 +2349,8 @@ class RemoteInputPlugin : public flutter::Plugin {
       const int delta_y = static_cast<int>(std::round(JsonNumber(json, "deltaY").value_or(0)));
       POINT current = CurrentCursorPoint();
       const auto routed_edge_unit =
-          !JsonBool(json, "activeStart") && injected_cursor_entered_interior_
+          !JsonBool(json, "activeStart") && injected_cursor_entered_interior_ &&
+                  injected_buttons_ == 0 && pending_injected_buttons_ == 0
               ? ReverseInjectionSourceEdgeUnit(current, delta_x, delta_y)
               : std::nullopt;
       if (routed_edge_unit.has_value()) {
@@ -2591,6 +2634,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::vector<InjectionRoute> injection_routes_;
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
+  bool capture_requires_interior_rearm_ = false;
   bool pending_active_start_ = false;
   int capture_buttons_ = 0;
   int event_diagnostic_count_ = 0;

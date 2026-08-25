@@ -11,33 +11,32 @@ void main() {
 
     expect(remoteInputSection, isNot(contains('remoteInputAutoModeSetting')));
     expect(remoteInputSection, isNot(contains('remoteInputLayoutSetting')));
-    expect(remoteInputSection,
-        isNot(contains('RemoteInputLayoutEditorScreen')));
     expect(
-        remoteInputSection, isNot(contains('AppLocalizations.of(context)?')));
+      remoteInputSection,
+      isNot(contains('RemoteInputLayoutEditorScreen')),
+    );
+    expect(
+      remoteInputSection,
+      isNot(contains('AppLocalizations.of(context)?')),
+    );
     expect(remoteInputSection, contains('SF Pro Display'));
     expect(remoteInputSection, contains('GestureDetector('));
   });
 
   test('multi-device input workspace labels use AppLocalizations', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
 
-    for (final text in [
-      '屏幕排列',
-      '本机',
-      '左侧',
-      '右侧',
-      '上方',
-      '下方',
-      '未贴边',
-    ]) {
+    for (final text in ['屏幕排列', '本机', '左侧', '右侧', '上方', '下方', '未贴边']) {
       expect(source, isNot(contains("'$text'")));
       expect(source, isNot(contains('"$text"')));
     }
 
     expect(source, contains('l10n.remoteInputLayoutTitle'));
     expect(source, contains('remoteInputLocalScreen'));
-    expect(source, contains('l10n.remoteInputEdgeLeft'));
+    expect(source, contains('l10n.remoteInputWorkspaceReachable'));
+    expect(source, contains('l10n.remoteInputWorkspaceDisconnected'));
+    expect(source, contains('l10n.remoteInputWorkspaceUnsupported'));
   });
 }

@@ -33,19 +33,7 @@ void main() {
           'ReleaseCommonModifierKeys();\n    capture_session_id_.clear();',
         ),
       );
-      expect(
-        source,
-        contains(
-          'ReleaseCommonModifierKeys();\n'
-          '      if (!release_edge.empty()) {\n'
-          '        ApplyCaptureRoute(\n'
-          '            CaptureRoute{release_route_id, release_display_id, release_edge,\n'
-          '                         release_segment});\n'
-          '      }\n'
-          '      MoveCaptureCursorToLocalEdge(release_edge_unit);\n'
-          '      capture_active_ = false;',
-        ),
-      );
+      expect(source, contains('capture_requires_interior_rearm_ = true;'));
     });
 
     test('pins the local cursor to the capture edge when pausing', () {
@@ -105,6 +93,26 @@ void main() {
       ).firstMatch(source)!.group(0)!;
       expect(rawMouse, contains('const bool has_button_or_wheel'));
       expect(rawMouse, contains('!has_button_or_wheel'));
+    });
+
+    test('requires local interior movement before rearming an edge', () {
+      final lowLevelMouse = RegExp(
+        r'bool HandleLowLevelMouse\([\s\S]*?\n  bool HandleLowLevelKeyboard',
+      ).firstMatch(source)!.group(0)!;
+      final pauseCapture = RegExp(
+        r'void PauseCapture\([\s\S]*?\n  void StopInjection',
+      ).firstMatch(source)!.group(0)!;
+
+      expect(source, contains('capture_requires_interior_rearm_'));
+      expect(source, contains('CaptureCursorEnteredInterior'));
+      expect(
+        pauseCapture,
+        contains('capture_requires_interior_rearm_ = true;'),
+      );
+      expect(
+        lowLevelMouse.indexOf('capture_requires_interior_rearm_'),
+        lessThan(lowLevelMouse.indexOf('IsEdgeActivation')),
+      );
     });
 
     test(
@@ -342,6 +350,23 @@ void main() {
     test('posts modifier keys as flagsChanged events', () {
       expect(source, contains('keyEvent.type = .flagsChanged'));
       expect(source, contains('isInjectedModifierKey(Int(keyCode))'));
+    });
+
+    test('requires local interior movement before rearming an edge', () {
+      final handleEvent = RegExp(
+        r'fileprivate func handleEvent\([\s\S]*?\n  private func interceptLocalPasteShortcut',
+      ).firstMatch(source)!.group(0)!;
+      final pauseCapture = RegExp(
+        r'private func pauseCapture\([\s\S]*?\n  fileprivate func handleEvent',
+      ).firstMatch(source)!.group(0)!;
+
+      expect(source, contains('captureRequiresInteriorRearm'));
+      expect(source, contains('captureRearmMotion'));
+      expect(pauseCapture, contains('captureRequiresInteriorRearm = true'));
+      expect(
+        handleEvent.indexOf('captureRequiresInteriorRearm'),
+        lessThan(handleEvent.indexOf('captureActivationCrossing')),
+      );
     });
 
     test('creates a virtual HID keyboard for hardware-like Caps Lock', () {

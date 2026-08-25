@@ -173,6 +173,17 @@ class RemoteInputPlatform {
     });
   }
 
+  Future<void> updateInjectionRoutes({
+    required String sessionId,
+    required List<RemoteInputEdgeMapping> edgeMappings,
+  }) {
+    return _channel
+        .invokeMethod<void>('updateInjectionRoutes', <String, dynamic>{
+          'sessionId': sessionId,
+          'mappings': edgeMappings.map((mapping) => mapping.toJson()).toList(),
+        });
+  }
+
   Future<RemoteInputTopology> displayTopology() async {
     final result = await _channel.invokeMapMethod<String, dynamic>(
       'getDisplayTopology',

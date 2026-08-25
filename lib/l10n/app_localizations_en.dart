@@ -721,6 +721,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteInputWorkspaceConflict => 'Edge overlap';
 
   @override
+  String get remoteInputWorkspaceReachable => 'Reachable';
+
+  @override
+  String get remoteInputWorkspaceDisconnected =>
+      'Not connected to the workspace';
+
+  @override
+  String get remoteInputWorkspaceUnsupported =>
+      'Workspace routing is not supported';
+
+  @override
   String get remoteInputWorkspaceTargetIdle => 'Not enabled';
 
   @override

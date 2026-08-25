@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
 
 typedef RemoteInputPeerControlSender =
@@ -52,6 +54,7 @@ class RemoteInputWorkspaceTargetRequest {
     this.sinkSegmentStart = 0,
     this.sinkSegmentEnd = 0,
     this.edgeMappings = const <RemoteInputEdgeMapping>[],
+    this.injectionMappings = const <RemoteInputEdgeMapping>[],
   });
 
   final String peerId;
@@ -72,6 +75,39 @@ class RemoteInputWorkspaceTargetRequest {
   final int sinkSegmentStart;
   final int sinkSegmentEnd;
   final List<RemoteInputEdgeMapping> edgeMappings;
+  final List<RemoteInputEdgeMapping> injectionMappings;
+
+  RemoteInputWorkspaceTargetRequest copyWith({
+    String? peerName,
+    String? host,
+    int? port,
+    bool? isMutuallyTrusted,
+    bool? remoteCanInject,
+    List<RemoteInputEdgeMapping>? edgeMappings,
+    List<RemoteInputEdgeMapping>? injectionMappings,
+  }) {
+    return RemoteInputWorkspaceTargetRequest(
+      peerId: peerId,
+      peerName: peerName ?? this.peerName,
+      host: host ?? this.host,
+      port: port ?? this.port,
+      layoutEdge: layoutEdge,
+      releaseHotkey: releaseHotkey,
+      isMutuallyTrusted: isMutuallyTrusted ?? this.isMutuallyTrusted,
+      remoteCanInject: remoteCanInject ?? this.remoteCanInject,
+      path: path,
+      sourceDisplayId: sourceDisplayId,
+      sourceEdge: sourceEdge,
+      sourceSegmentStart: sourceSegmentStart,
+      sourceSegmentEnd: sourceSegmentEnd,
+      sinkDisplayId: sinkDisplayId,
+      sinkEdge: sinkEdge,
+      sinkSegmentStart: sinkSegmentStart,
+      sinkSegmentEnd: sinkSegmentEnd,
+      edgeMappings: edgeMappings ?? this.edgeMappings,
+      injectionMappings: injectionMappings ?? this.injectionMappings,
+    );
+  }
 }
 
 class RemoteInputWorkspaceTargetSnapshot {
@@ -311,6 +347,20 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   StreamSubscription<PlatformRemoteInputError>? _errorSubscription;
   StreamSubscription<PlatformRemoteInputDiagnostic>? _diagnosticSubscription;
   RemoteInputPeerControlSender? _sendControlTo;
+  final Map<String, RemoteInputWorkspaceRoute> _workspaceRoutesByRuntimeId =
+      <String, RemoteInputWorkspaceRoute>{};
+  final Map<String, String> _reverseRuntimeRouteIds = <String, String>{};
+  final Set<String> _onlinePeerIds = <String>{};
+  List<RemoteInputWorkspaceRoute> _workspaceRoutes =
+      const <RemoteInputWorkspaceRoute>[];
+  final Map<String, RemoteInputPacketFrame> _pressedKeyFrames =
+      <String, RemoteInputPacketFrame>{};
+  Future<void> _routingSerial = Future<void>.value();
+  int _latestSourceSequence = 0;
+  int _nextRoutedSequence = 0;
+  int _activeSourceActivationSequence = 0;
+  int _workspaceRevision = 0;
+  String _sourcePeerId = '';
 
   RemoteInputWorkspaceSnapshot get snapshot => _snapshot;
 
@@ -334,6 +384,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required String sourcePeerId,
     required List<RemoteInputWorkspaceTargetRequest> targets,
     required RemoteInputPeerControlSender sendControlTo,
+    List<RemoteInputWorkspaceRoute> workspaceRoutes =
+        const <RemoteInputWorkspaceRoute>[],
   }) async {
     if (targets.isEmpty) {
       throw const RemoteInputWorkspaceException(
@@ -366,33 +418,61 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     final workspaceSessionId = _workspaceSessionIdFactory();
     _sendControlTo = sendControlTo;
     _targets.clear();
+    _onlinePeerIds
+      ..clear()
+      ..addAll(targets.map((target) => target.peerId));
+    _workspaceRoutes = List<RemoteInputWorkspaceRoute>.unmodifiable(
+      workspaceRoutes,
+    );
+    _workspaceRoutesByRuntimeId.clear();
+    _reverseRuntimeRouteIds.clear();
+    _pressedKeyFrames.clear();
+    _routingSerial = Future<void>.value();
+    _latestSourceSequence = 0;
+    _nextRoutedSequence = 0;
+    _activeSourceActivationSequence = 0;
+    _workspaceRevision = 1;
+    _sourcePeerId = sourcePeerId;
+    _indexWorkspaceRoutes(workspaceSessionId, _effectiveWorkspaceRoutes());
     final snapshots = <String, RemoteInputWorkspaceTargetSnapshot>{};
     for (final target in targets) {
-      final routedMappings = _routedMappings(
-        workspaceSessionId: workspaceSessionId,
-        target: target,
+      final routedMappings = _captureMappingsForTarget(
+        workspaceSessionId,
+        target,
       );
       final primaryMapping = routedMappings.isNotEmpty
           ? routedMappings.first
           : null;
+      final injectionMappings = _injectionMappingsForTarget(
+        workspaceSessionId,
+        target,
+      );
+      final primaryInjectionMapping = injectionMappings.isNotEmpty
+          ? injectionMappings.first
+          : primaryMapping;
       final offer = _manager.createOffer(
         sourcePeerId: sourcePeerId,
         sinkPeerId: target.peerId,
         layoutEdge: primaryMapping?.sourceEdge ?? target.layoutEdge,
         releaseHotkey: target.releaseHotkey,
         sourceDisplayId:
-            primaryMapping?.sourceDisplayId ?? target.sourceDisplayId,
-        sourceEdge: primaryMapping?.sourceEdge ?? target.sourceEdge,
+            primaryInjectionMapping?.sourceDisplayId ?? target.sourceDisplayId,
+        sourceEdge: primaryInjectionMapping?.sourceEdge ?? target.sourceEdge,
         sourceSegmentStart:
-            primaryMapping?.sourceSegmentStart ?? target.sourceSegmentStart,
+            primaryInjectionMapping?.sourceSegmentStart ??
+            target.sourceSegmentStart,
         sourceSegmentEnd:
-            primaryMapping?.sourceSegmentEnd ?? target.sourceSegmentEnd,
-        sinkDisplayId: primaryMapping?.sinkDisplayId ?? target.sinkDisplayId,
-        sinkEdge: primaryMapping?.sinkEdge ?? target.sinkEdge,
+            primaryInjectionMapping?.sourceSegmentEnd ??
+            target.sourceSegmentEnd,
+        sinkDisplayId:
+            primaryInjectionMapping?.sinkDisplayId ?? target.sinkDisplayId,
+        sinkEdge: primaryInjectionMapping?.sinkEdge ?? target.sinkEdge,
         sinkSegmentStart:
-            primaryMapping?.sinkSegmentStart ?? target.sinkSegmentStart,
-        sinkSegmentEnd: primaryMapping?.sinkSegmentEnd ?? target.sinkSegmentEnd,
-        edgeMappings: routedMappings,
+            primaryInjectionMapping?.sinkSegmentStart ??
+            target.sinkSegmentStart,
+        sinkSegmentEnd:
+            primaryInjectionMapping?.sinkSegmentEnd ?? target.sinkSegmentEnd,
+        edgeMappings: injectionMappings,
         remoteClipboardV1:
             currentRemoteInputPlatformKind() != RemoteInputPlatformKind.unknown,
       );
@@ -400,6 +480,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         request: target,
         offer: offer,
         routedMappings: routedMappings,
+        injectionMappings: injectionMappings,
       );
       snapshots[target.peerId] = RemoteInputWorkspaceTargetSnapshot(
         peerId: target.peerId,
@@ -418,6 +499,84 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         targets: snapshots,
       ),
     );
+  }
+
+  Future<bool> updateControllerWorkspaceRoutes({
+    required List<RemoteInputWorkspaceTargetRequest> targets,
+    required List<RemoteInputWorkspaceRoute> workspaceRoutes,
+    required RemoteInputPeerControlSender sendControlTo,
+  }) async {
+    if (!_snapshot.isControllerLive) {
+      return false;
+    }
+    final invalidTarget = targets.where((target) {
+      return !target.isMutuallyTrusted || !target.remoteCanInject;
+    }).firstOrNull;
+    if (invalidTarget != null) {
+      return false;
+    }
+
+    final workspaceSessionId = _snapshot.workspaceSessionId;
+    _workspaceRevision += 1;
+    _workspaceRoutes = List<RemoteInputWorkspaceRoute>.unmodifiable(
+      workspaceRoutes,
+    );
+    final requestedByPeer = <String, RemoteInputWorkspaceTargetRequest>{
+      for (final target in targets) target.peerId: target,
+    };
+    final removedPeerIds = _targets.keys
+        .where((peerId) => !requestedByPeer.containsKey(peerId))
+        .toList(growable: false);
+    for (final peerId in removedPeerIds) {
+      final runtime = _targets.remove(peerId)!;
+      _onlinePeerIds.remove(peerId);
+      if (runtime.snapshot.isLive) {
+        sendControlTo(
+          peerId,
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.stop,
+            sessionId: runtime.offer.sessionId,
+            sourcePeerId: runtime.offer.sourcePeerId,
+            sinkPeerId: runtime.offer.sinkPeerId,
+          ),
+        );
+      }
+      await runtime.transportDoneSubscription?.cancel();
+      await runtime.transport?.close();
+      _manager.stopSession(runtime.offer.sessionId);
+    }
+    _onlinePeerIds.addAll(requestedByPeer.keys);
+    _workspaceRoutesByRuntimeId.clear();
+    _reverseRuntimeRouteIds.clear();
+    _indexWorkspaceRoutes(workspaceSessionId, _effectiveWorkspaceRoutes());
+
+    for (final target in targets) {
+      var runtime = _targets[target.peerId];
+      if (runtime == null) {
+        runtime = _createTargetRuntime(
+          sourcePeerId: _snapshot.sourcePeerId,
+          workspaceSessionId: workspaceSessionId,
+          target: target,
+        );
+        _targets[target.peerId] = runtime;
+        sendControlTo(target.peerId, runtime.offer);
+        continue;
+      }
+      final captureMappings = _captureMappingsForTarget(
+        workspaceSessionId,
+        target,
+      );
+      final injectionMappings = _injectionMappingsForTarget(
+        workspaceSessionId,
+        target,
+      );
+      runtime
+        ..request = target
+        ..routedMappings = captureMappings
+        ..injectionMappings = injectionMappings;
+    }
+    await _reconcileWorkspaceGraph(sendControlTo: sendControlTo);
+    return true;
   }
 
   Future<bool> handleIncomingOfferIfBusy(
@@ -462,7 +621,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           mediaSendKey: mediaSendKey,
         );
       case RemoteInputControlAction.release:
-        return _handleRelease(message);
+        return _enqueueRouting(() => _handleRelease(message));
+      case RemoteInputControlAction.routes:
+        return false;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
         return _handleStopOrReject(message);
@@ -482,11 +643,57 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return;
     }
+    _onlinePeerIds.remove(peerId);
     await _closeControllerTarget(
       target,
       terminalStatus: RemoteInputWorkspaceStatus.idle,
       errorMessage: RemoteInputFailureReason.transport.name,
     );
+  }
+
+  Future<void> handlePeerReconnected({
+    required String peerId,
+    required String host,
+    required int port,
+    required bool isMutuallyTrusted,
+    required bool remoteCanInject,
+    required RemoteInputPeerControlSender sendControlTo,
+  }) async {
+    if (!_snapshot.isControllerLive ||
+        _workspaceRoutes.isEmpty ||
+        !_targets.containsKey(peerId) ||
+        !isMutuallyTrusted ||
+        !remoteCanInject) {
+      return;
+    }
+    _sendControlTo = sendControlTo;
+    _onlinePeerIds.add(peerId);
+    final existing = _targets[peerId]!;
+    existing.request = existing.request.copyWith(
+      host: host,
+      port: port,
+      isMutuallyTrusted: isMutuallyTrusted,
+      remoteCanInject: remoteCanInject,
+    );
+    await _reconcileWorkspaceGraph(sendControlTo: sendControlTo);
+    final reachable = _reachableWorkspacePeerIds();
+    for (final entry in _targets.entries.toList(growable: false)) {
+      final runtime = entry.value;
+      if (!_onlinePeerIds.contains(entry.key) ||
+          !reachable.contains(entry.key) ||
+          runtime.snapshot.isLive ||
+          runtime.snapshot.isConnected) {
+        continue;
+      }
+      final replacement = _createTargetRuntime(
+        sourcePeerId: _sourcePeerId,
+        workspaceSessionId: _snapshot.workspaceSessionId,
+        target: runtime.request,
+      );
+      _targets[entry.key] = replacement;
+      sendControlTo(entry.key, replacement.offer);
+    }
+    _publishTargets(statusFallback: RemoteInputWorkspaceStatus.offering);
   }
 
   Future<void> stopControllerWorkspace({
@@ -574,21 +781,133 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         message.releaseReason != 'edge') {
       return false;
     }
+    if (_snapshot.activePeerId != target.request.peerId) {
+      return false;
+    }
+    if (message.releaseActivationSequence > 0 &&
+        target.targetActivationSequence > 0 &&
+        message.releaseActivationSequence != target.targetActivationSequence) {
+      return false;
+    }
+    final sourceActivationSequence = target.sourceActivationSequence > 0
+        ? target.sourceActivationSequence
+        : _activeSourceActivationSequence;
+    final route = _workspaceRoutesByRuntimeId[message.routeId];
+    if (route != null && route.sinkPeerId == target.request.peerId) {
+      return _handleWorkspaceRouteRelease(
+        message,
+        route,
+        activeTarget: target,
+        sourceActivationSequence: sourceActivationSequence,
+      );
+    }
+    // A delayed release can reference a route removed by a live layout update.
+    // Keep the controller's last valid local route instead of applying the
+    // controlled device's display coordinates to the controller.
     await _platform.pauseCapture(
       sessionId: _snapshot.workspaceSessionId,
-      releaseSequence: message.releaseSequence,
-      releaseActivationSequence: message.releaseActivationSequence,
+      releaseSequence: _latestSourceSequence,
+      releaseActivationSequence: sourceActivationSequence,
       releaseEdgeUnit: message.releaseEdgeUnit,
-      displayId: message.sourceDisplayId,
-      edge: message.sourceEdge,
-      segmentStart: message.sourceSegmentStart,
-      segmentEnd: message.sourceSegmentEnd,
-      routeId: message.routeId,
     );
+    _clearActiveCaptureRoute(target);
     _setSnapshot(
       _snapshot.copyWith(
         status: RemoteInputWorkspaceStatus.armed,
         activePeerId: '',
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _handleWorkspaceRouteRelease(
+    RemoteInputControlMessage message,
+    RemoteInputWorkspaceRoute incomingRoute, {
+    required _RemoteInputWorkspaceTargetRuntime activeTarget,
+    required int sourceActivationSequence,
+  }) async {
+    final nextPeerId = incomingRoute.sourcePeerId;
+    if (nextPeerId == _snapshot.sourcePeerId) {
+      final mapping = incomingRoute.mapping;
+      await _platform.pauseCapture(
+        sessionId: _snapshot.workspaceSessionId,
+        releaseSequence: _latestSourceSequence,
+        releaseActivationSequence: sourceActivationSequence,
+        releaseEdgeUnit: message.releaseEdgeUnit,
+        displayId: mapping.sourceDisplayId,
+        edge: mapping.sourceEdge,
+        segmentStart: mapping.sourceSegmentStart,
+        segmentEnd: mapping.sourceSegmentEnd,
+        routeId: message.routeId,
+      );
+      _clearActiveCaptureRoute(activeTarget);
+      _setSnapshot(
+        _snapshot.copyWith(
+          status: RemoteInputWorkspaceStatus.armed,
+          activePeerId: '',
+        ),
+      );
+      return true;
+    }
+
+    final nextTarget = _targets[nextPeerId];
+    final reverseRouteId = _reverseRuntimeRouteIds[message.routeId];
+    if (nextTarget?.snapshot.isConnected != true ||
+        nextTarget?.transport == null ||
+        reverseRouteId == null) {
+      await _platform.pauseCapture(
+        sessionId: _snapshot.workspaceSessionId,
+        releaseSequence: _latestSourceSequence,
+        releaseActivationSequence: sourceActivationSequence,
+      );
+      _clearActiveCaptureRoute(activeTarget);
+      _setSnapshot(
+        _snapshot.copyWith(
+          status: RemoteInputWorkspaceStatus.armed,
+          activePeerId: '',
+        ),
+      );
+      return true;
+    }
+
+    final reverseRoute = _workspaceRoutesByRuntimeId[reverseRouteId]!;
+    final mapping = reverseRoute.mapping;
+    final routedActivationSequence = _sendRoutedPacket(
+      nextTarget!,
+      RemoteInputPacketFrame(
+        sessionId: nextTarget.offer.sessionId,
+        sequence: 0,
+        timestampMicros: DateTime.now().microsecondsSinceEpoch,
+        eventType: RemoteInputEventType.mouseMove,
+        payload: Uint8List.fromList(
+          utf8.encode(
+            jsonEncode(<String, Object>{
+              'activeStart': true,
+              'routeId': reverseRouteId,
+              'edge': mapping.sourceEdge.name,
+              'edgeUnit': message.releaseEdgeUnit.clamp(0, 1),
+              'deltaX': 0,
+              'deltaY': 0,
+              'buttons': 0,
+            }),
+          ),
+        ),
+      ),
+    );
+    _clearTargetActivation(activeTarget);
+    _recordActiveCaptureRoute(
+      nextTarget,
+      targetActivationSequence: routedActivationSequence,
+      sourceActivationSequence: sourceActivationSequence,
+    );
+    for (final pressed in _pressedKeyFrames.values) {
+      _sendRoutedPacket(nextTarget, pressed);
+    }
+    _setSnapshot(
+      _snapshot.copyWith(
+        status: RemoteInputWorkspaceStatus.active,
+        activePeerId: nextPeerId,
+        targets: _snapshotTargets(),
       ),
     );
     return true;
@@ -647,6 +966,13 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required RemoteInputWorkspaceStatus terminalStatus,
     String errorMessage = '',
   }) async {
+    if (_workspaceRoutes.isNotEmpty) {
+      await _reconcileWorkspaceGraph(
+        sendControlTo: _sendControlTo,
+        errorMessage: errorMessage,
+      );
+      return;
+    }
     final hasConnectedTarget = _targets.values.any(
       (target) => target.snapshot.isConnected,
     );
@@ -683,6 +1009,124 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     await _refreshCapture();
     _publishTargets(
       statusFallback: RemoteInputWorkspaceStatus.armed,
+      errorMessage: errorMessage,
+    );
+  }
+
+  Set<String> _reachableWorkspacePeerIds() {
+    final reachable = <String>{_sourcePeerId};
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final route in _workspaceRoutes) {
+        if (reachable.contains(route.sourcePeerId) &&
+            _onlinePeerIds.contains(route.sinkPeerId) &&
+            reachable.add(route.sinkPeerId)) {
+          changed = true;
+        }
+      }
+    }
+    return reachable;
+  }
+
+  Future<void> _reconcileWorkspaceGraph({
+    RemoteInputPeerControlSender? sendControlTo,
+    String errorMessage = '',
+  }) async {
+    if (!_snapshot.isControllerLive || _workspaceRoutes.isEmpty) {
+      return;
+    }
+    final reachable = _reachableWorkspacePeerIds();
+    if (_snapshot.activePeerId.isNotEmpty &&
+        !reachable.contains(_snapshot.activePeerId)) {
+      await _platform.pauseCapture(sessionId: _snapshot.workspaceSessionId);
+      _snapshot = _snapshot.copyWith(activePeerId: '');
+    }
+    for (final target in _targets.values) {
+      if (reachable.contains(target.request.peerId) ||
+          !target.snapshot.isLive) {
+        continue;
+      }
+      if (sendControlTo != null) {
+        sendControlTo(
+          target.request.peerId,
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.stop,
+            sessionId: target.offer.sessionId,
+            sourcePeerId: target.offer.sourcePeerId,
+            sinkPeerId: target.offer.sinkPeerId,
+          ),
+        );
+      }
+      await target.transportDoneSubscription?.cancel();
+      target.transportDoneSubscription = null;
+      await target.transport?.close();
+      target.transport = null;
+      _manager.stopSession(target.offer.sessionId);
+      target.snapshot = target.snapshot.copyWith(
+        status: RemoteInputWorkspaceTargetStatus.stopped,
+        errorMessage: RemoteInputFailureReason.transport.name,
+      );
+    }
+
+    _workspaceRevision += 1;
+    _workspaceRoutesByRuntimeId.clear();
+    _reverseRuntimeRouteIds.clear();
+    _indexWorkspaceRoutes(
+      _snapshot.workspaceSessionId,
+      _effectiveWorkspaceRoutes(),
+    );
+    for (final target in _targets.values) {
+      target.routedMappings = _captureMappingsForTarget(
+        _snapshot.workspaceSessionId,
+        target.request,
+      );
+      target.injectionMappings = _injectionMappingsForTarget(
+        _snapshot.workspaceSessionId,
+        target.request,
+      );
+      if (!target.snapshot.isConnected || sendControlTo == null) {
+        continue;
+      }
+      final primary = target.injectionMappings.firstOrNull;
+      sendControlTo(
+        target.request.peerId,
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.routes,
+          sessionId: target.offer.sessionId,
+          sourcePeerId: target.offer.sourcePeerId,
+          sinkPeerId: target.offer.sinkPeerId,
+          layoutEdge: primary?.sourceEdge ?? target.offer.layoutEdge,
+          sourceDisplayId:
+              primary?.sourceDisplayId ?? target.offer.sourceDisplayId,
+          sourceEdge: primary?.sourceEdge ?? target.offer.sourceEdge,
+          sourceSegmentStart:
+              primary?.sourceSegmentStart ?? target.offer.sourceSegmentStart,
+          sourceSegmentEnd:
+              primary?.sourceSegmentEnd ?? target.offer.sourceSegmentEnd,
+          sinkDisplayId: primary?.sinkDisplayId ?? target.offer.sinkDisplayId,
+          sinkEdge: primary?.sinkEdge ?? target.offer.sinkEdge,
+          sinkSegmentStart:
+              primary?.sinkSegmentStart ?? target.offer.sinkSegmentStart,
+          sinkSegmentEnd:
+              primary?.sinkSegmentEnd ?? target.offer.sinkSegmentEnd,
+          edgeMappings: target.injectionMappings,
+          workspaceRevision: _workspaceRevision,
+        ),
+      );
+    }
+    final connected = _targets.values.any(
+      (target) => target.snapshot.isConnected,
+    );
+    if (connected) {
+      await _refreshCapture();
+    } else {
+      await _platform.stopCapture(sessionId: _snapshot.workspaceSessionId);
+    }
+    _publishTargets(
+      statusFallback: connected
+          ? RemoteInputWorkspaceStatus.armed
+          : RemoteInputWorkspaceStatus.offering,
       errorMessage: errorMessage,
     );
   }
@@ -820,19 +1264,29 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         _snapshot.role != RemoteInputWorkspaceRole.controller) {
       return;
     }
+    unawaited(_enqueueRouting(() => _routeInputEvent(event)));
+  }
+
+  Future<void> _routeInputEvent(RemoteInputPacketFrame event) async {
+    if (event.sessionId != _snapshot.workspaceSessionId ||
+        _snapshot.role != RemoteInputWorkspaceRole.controller) {
+      return;
+    }
+    _latestSourceSequence = math.max(_latestSourceSequence, event.sequence);
+    _trackPressedKey(event);
     final target = _targetForPacket(event);
     if (target == null || target.transport == null) {
       return;
     }
-    final routed = RemoteInputPacketFrame(
-      sessionId: target.offer.sessionId,
-      sequence: event.sequence,
-      timestampMicros: event.timestampMicros,
-      eventType: event.eventType,
-      payload: event.payload,
-    );
-    target.transport!.send(routed);
     final isActiveStart = _isActivationStartPacket(event);
+    final routedSequence = _sendRoutedPacket(target, event);
+    if (isActiveStart) {
+      _recordActiveCaptureRoute(
+        target,
+        targetActivationSequence: routedSequence,
+        sourceActivationSequence: event.sequence,
+      );
+    }
     if (isActiveStart || _snapshot.status == RemoteInputWorkspaceStatus.armed) {
       _setSnapshot(
         _snapshot.copyWith(
@@ -841,6 +1295,90 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           targets: _snapshotTargets(),
         ),
       );
+    }
+  }
+
+  Future<T> _enqueueRouting<T>(FutureOr<T> Function() operation) {
+    final completer = Completer<T>();
+    _routingSerial = _routingSerial.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  int _sendRoutedPacket(
+    _RemoteInputWorkspaceTargetRuntime target,
+    RemoteInputPacketFrame packet,
+  ) {
+    final transport = target.transport;
+    if (transport == null) {
+      return 0;
+    }
+    _nextRoutedSequence += 1;
+    transport.send(
+      RemoteInputPacketFrame(
+        sessionId: target.offer.sessionId,
+        sequence: _nextRoutedSequence,
+        timestampMicros: packet.timestampMicros,
+        eventType: packet.eventType,
+        payload: packet.payload,
+      ),
+    );
+    return _nextRoutedSequence;
+  }
+
+  void _clearActiveCaptureRoute(_RemoteInputWorkspaceTargetRuntime? target) {
+    _clearTargetActivation(target);
+    _activeSourceActivationSequence = 0;
+  }
+
+  void _recordActiveCaptureRoute(
+    _RemoteInputWorkspaceTargetRuntime target, {
+    required int targetActivationSequence,
+    required int sourceActivationSequence,
+  }) {
+    // Routed packets and native capture each maintain their own sequence.
+    target
+      ..targetActivationSequence = targetActivationSequence
+      ..sourceActivationSequence = sourceActivationSequence;
+    _activeSourceActivationSequence = sourceActivationSequence;
+  }
+
+  void _clearTargetActivation(_RemoteInputWorkspaceTargetRuntime? target) {
+    target
+      ?..targetActivationSequence = 0
+      ..sourceActivationSequence = 0;
+  }
+
+  void _trackPressedKey(RemoteInputPacketFrame packet) {
+    if (packet.eventType != RemoteInputEventType.key) {
+      return;
+    }
+    final payload = _jsonPayload(packet);
+    if (payload == null || payload['down'] is! bool) {
+      return;
+    }
+    final semantic = payload['modifierSemantic'] ?? payload['keySemantic'];
+    if (semantic == RemoteInputModifierSemantic.capsLock.name) {
+      return;
+    }
+    final identity = semantic?.toString().isNotEmpty == true
+        ? semantic.toString()
+        : <Object?>[
+            payload['sourcePlatform'],
+            payload['macKeyCode'],
+            payload['windowsScanCode'],
+            payload['linuxKeyCode'],
+            payload['keyCode'],
+          ].join('|');
+    if (payload['down'] == true) {
+      _pressedKeyFrames[identity] = packet;
+    } else {
+      _pressedKeyFrames.remove(identity);
     }
   }
 
@@ -914,12 +1452,134 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     final mappings = RemoteInputWorkspaceLayoutValidator._mappingsForTarget(
       target,
     );
+    return _routedMappingsFor(
+      workspaceSessionId: workspaceSessionId,
+      peerId: target.peerId,
+      mappings: mappings,
+    );
+  }
+
+  List<RemoteInputWorkspaceRoute> _effectiveWorkspaceRoutes() {
+    if (_workspaceRoutes.isEmpty) {
+      return const <RemoteInputWorkspaceRoute>[];
+    }
+    final reachable = <String>{_sourcePeerId};
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final route in _workspaceRoutes) {
+        if (reachable.contains(route.sourcePeerId) &&
+            _onlinePeerIds.contains(route.sinkPeerId) &&
+            reachable.add(route.sinkPeerId)) {
+          changed = true;
+        }
+      }
+    }
+    return _workspaceRoutes
+        .where(
+          (route) =>
+              reachable.contains(route.sourcePeerId) &&
+              reachable.contains(route.sinkPeerId),
+        )
+        .toList(growable: false);
+  }
+
+  List<RemoteInputEdgeMapping> _captureMappingsForTarget(
+    String workspaceSessionId,
+    RemoteInputWorkspaceTargetRequest target,
+  ) {
+    if (_workspaceRoutes.isEmpty) {
+      return _routedMappings(
+        workspaceSessionId: workspaceSessionId,
+        target: target,
+      );
+    }
+    final mappings = _effectiveWorkspaceRoutes()
+        .where(
+          (route) =>
+              route.sourcePeerId == _sourcePeerId &&
+              route.sinkPeerId == target.peerId,
+        )
+        .map((route) => route.mapping)
+        .toList(growable: false);
+    return _routedMappingsFor(
+      workspaceSessionId: workspaceSessionId,
+      peerId: target.peerId,
+      mappings: mappings,
+    );
+  }
+
+  List<RemoteInputEdgeMapping> _injectionMappingsForTarget(
+    String workspaceSessionId,
+    RemoteInputWorkspaceTargetRequest target,
+  ) {
+    final mappings = _workspaceRoutes.isEmpty
+        ? (target.injectionMappings.isEmpty
+              ? target.edgeMappings
+              : target.injectionMappings)
+        : _effectiveWorkspaceRoutes()
+              .where((route) => route.sinkPeerId == target.peerId)
+              .map((route) => route.mapping)
+              .toList(growable: false);
+    return _routedMappingsFor(
+      workspaceSessionId: workspaceSessionId,
+      peerId: target.peerId,
+      mappings: mappings,
+    );
+  }
+
+  _RemoteInputWorkspaceTargetRuntime _createTargetRuntime({
+    required String sourcePeerId,
+    required String workspaceSessionId,
+    required RemoteInputWorkspaceTargetRequest target,
+  }) {
+    final captureMappings = _captureMappingsForTarget(
+      workspaceSessionId,
+      target,
+    );
+    final injectionMappings = _injectionMappingsForTarget(
+      workspaceSessionId,
+      target,
+    );
+    final primary =
+        injectionMappings.firstOrNull ?? captureMappings.firstOrNull;
+    final offer = _manager.createOffer(
+      sourcePeerId: sourcePeerId,
+      sinkPeerId: target.peerId,
+      layoutEdge: primary?.sourceEdge ?? target.layoutEdge,
+      releaseHotkey: target.releaseHotkey,
+      sourceDisplayId: primary?.sourceDisplayId ?? target.sourceDisplayId,
+      sourceEdge: primary?.sourceEdge ?? target.sourceEdge,
+      sourceSegmentStart:
+          primary?.sourceSegmentStart ?? target.sourceSegmentStart,
+      sourceSegmentEnd: primary?.sourceSegmentEnd ?? target.sourceSegmentEnd,
+      sinkDisplayId: primary?.sinkDisplayId ?? target.sinkDisplayId,
+      sinkEdge: primary?.sinkEdge ?? target.sinkEdge,
+      sinkSegmentStart: primary?.sinkSegmentStart ?? target.sinkSegmentStart,
+      sinkSegmentEnd: primary?.sinkSegmentEnd ?? target.sinkSegmentEnd,
+      edgeMappings: injectionMappings,
+      remoteClipboardV1:
+          currentRemoteInputPlatformKind() != RemoteInputPlatformKind.unknown,
+    );
+    return _RemoteInputWorkspaceTargetRuntime(
+      request: target,
+      offer: offer,
+      routedMappings: captureMappings,
+      injectionMappings: injectionMappings,
+    );
+  }
+
+  List<RemoteInputEdgeMapping> _routedMappingsFor({
+    required String workspaceSessionId,
+    required String peerId,
+    required List<RemoteInputEdgeMapping> mappings,
+  }) {
     return mappings
         .map(
           (mapping) => RemoteInputEdgeMapping(
             routeId: [
               workspaceSessionId,
-              target.peerId,
+              peerId,
               mapping.effectiveRouteId,
             ].join('|'),
             sourceDisplayId: mapping.sourceDisplayId,
@@ -933,6 +1593,31 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           ),
         )
         .toList(growable: false);
+  }
+
+  void _indexWorkspaceRoutes(
+    String workspaceSessionId,
+    List<RemoteInputWorkspaceRoute> routes,
+  ) {
+    String runtimeId(RemoteInputWorkspaceRoute route) =>
+        <String>[workspaceSessionId, route.sinkPeerId, route.routeId].join('|');
+
+    for (final route in routes) {
+      _workspaceRoutesByRuntimeId[runtimeId(route)] = route;
+    }
+    for (final route in routes) {
+      final reverse = routes.where((candidate) {
+        return candidate.sourcePeerId == route.sinkPeerId &&
+            candidate.sinkPeerId == route.sourcePeerId &&
+            candidate.mapping.sourceDisplayId == route.mapping.sinkDisplayId &&
+            candidate.mapping.sinkDisplayId == route.mapping.sourceDisplayId &&
+            candidate.mapping.sourceEdge == route.mapping.sinkEdge &&
+            candidate.mapping.sinkEdge == route.mapping.sourceEdge;
+      }).firstOrNull;
+      if (reverse != null) {
+        _reverseRuntimeRouteIds[runtimeId(route)] = runtimeId(reverse);
+      }
+    }
   }
 
   void _publishTargets({
@@ -981,6 +1666,16 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       _manager.stopSession(target.offer.sessionId);
     }
     _targets.clear();
+    _onlinePeerIds.clear();
+    _workspaceRoutes = const <RemoteInputWorkspaceRoute>[];
+    _workspaceRoutesByRuntimeId.clear();
+    _reverseRuntimeRouteIds.clear();
+    _pressedKeyFrames.clear();
+    _latestSourceSequence = 0;
+    _nextRoutedSequence = 0;
+    _activeSourceActivationSequence = 0;
+    _workspaceRevision = 0;
+    _sourcePeerId = '';
     _sendControlTo = null;
   }
 
@@ -1013,6 +1708,7 @@ class _RemoteInputWorkspaceTargetRuntime {
     required this.request,
     required this.offer,
     required this.routedMappings,
+    required this.injectionMappings,
   }) : snapshot = RemoteInputWorkspaceTargetSnapshot(
          peerId: request.peerId,
          peerName: request.peerName,
@@ -1020,10 +1716,13 @@ class _RemoteInputWorkspaceTargetRuntime {
          status: RemoteInputWorkspaceTargetStatus.offering,
        );
 
-  final RemoteInputWorkspaceTargetRequest request;
-  final RemoteInputControlMessage offer;
-  final List<RemoteInputEdgeMapping> routedMappings;
+  RemoteInputWorkspaceTargetRequest request;
+  RemoteInputControlMessage offer;
+  List<RemoteInputEdgeMapping> routedMappings;
+  List<RemoteInputEdgeMapping> injectionMappings;
   RemoteInputWorkspaceTargetSnapshot snapshot;
   RemoteInputPacketTransport? transport;
   StreamSubscription<void>? transportDoneSubscription;
+  int targetActivationSequence = 0;
+  int sourceActivationSequence = 0;
 }

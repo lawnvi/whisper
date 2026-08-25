@@ -14,36 +14,65 @@ void main() {
     );
   });
 
+  test('workspace graph capability roundtrips', () {
+    const caps = PeerCapabilities(remoteInputWorkspaceGraphV1: true);
+
+    final decoded = PeerCapabilities.fromWireJson(caps.toJson());
+
+    expect(decoded.remoteInputWorkspaceGraphV1, isTrue);
+  });
+
+  test('legacy wire profiles omit capabilities unknown to protocol 9', () {
+    const profile = WirePeerProfile(
+      uid: 'peer-a',
+      name: 'Peer A',
+      platform: 'windows',
+      capabilities: PeerCapabilities(
+        fileTransferV3: true,
+        remoteInputWorkspaceGraphV1: true,
+      ),
+    );
+
+    final legacy = profile.forProtocolVersion(9);
+    final capabilities = legacy.toJson()['capabilities']! as Map;
+    expect(capabilities['fileTransferV3'], isTrue);
+    expect(capabilities, isNot(contains('remoteInputWorkspaceGraphV1')));
+
+    final decoded = WirePeerProfile.fromJson(legacy.toJson());
+    expect(decoded.protocolVersion, 9);
+    expect(decoded.capabilities.fileTransferV3, isTrue);
+    expect(decoded.capabilities.remoteInputWorkspaceGraphV1, isFalse);
+  });
+
   group('wire display topology validation', () {
     Map<String, Object?> profileWith(Object? topology) => <String, Object?>{
-          'uid': 'peer-a',
-          'name': 'Peer A',
-          'platform': 'macos',
-          'protocolVersion': 5,
-          'capabilities': const PeerCapabilities().toJson(),
-          'displayTopology': topology,
-        };
+      'uid': 'peer-a',
+      'name': 'Peer A',
+      'platform': 'macos',
+      'protocolVersion': 5,
+      'capabilities': const PeerCapabilities().toWireJson(5),
+      'displayTopology': topology,
+    };
 
     Map<String, Object?> display({
       String id = 'primary',
       bool primary = true,
-    }) =>
-        <String, Object?>{
-          'displayId': id,
-          'name': 'Display',
-          'x': 0,
-          'y': 0,
-          'width': 1920,
-          'height': 1080,
-          'scale': 2.0,
-          'isPrimary': primary,
-        };
+    }) => <String, Object?>{
+      'displayId': id,
+      'name': 'Display',
+      'x': 0,
+      'y': 0,
+      'width': 1920,
+      'height': 1080,
+      'scale': 2.0,
+      'isPrimary': primary,
+    };
 
     Map<String, Object?> topology(List<Object?> displays) => <String, Object?>{
-          'platform': 'macos',
-          'displays': displays,
-          'updatedAt': 1,
-        };
+      'platform': 'macos',
+      'displays': displays,
+      'updatedAt': 1,
+    };
 
     test('accepts a bounded topology and preserves the business model', () {
       final parsed = WirePeerProfile.fromJson(
@@ -83,28 +112,24 @@ void main() {
     test('rejects duplicate ids and invalid primary display counts', () {
       expect(
         () => WirePeerProfile.fromJson(
-          profileWith(topology(<Object?>[
-            display(),
-            display(),
-          ])),
+          profileWith(topology(<Object?>[display(), display()])),
         ),
         throwsFormatException,
       );
       expect(
         () => WirePeerProfile.fromJson(
-          profileWith(topology(<Object?>[
-            display(id: 'a', primary: false),
-            display(id: 'b', primary: false),
-          ])),
+          profileWith(
+            topology(<Object?>[
+              display(id: 'a', primary: false),
+              display(id: 'b', primary: false),
+            ]),
+          ),
         ),
         throwsFormatException,
       );
       expect(
         () => WirePeerProfile.fromJson(
-          profileWith(topology(<Object?>[
-            display(id: 'a'),
-            display(id: 'b'),
-          ])),
+          profileWith(topology(<Object?>[display(id: 'a'), display(id: 'b')])),
         ),
         throwsFormatException,
       );
@@ -134,10 +159,7 @@ void main() {
     test('business topology parser remains tolerant outside the wire path', () {
       final topology = RemoteInputTopology.fromJson(<String, dynamic>{
         'displays': <Object?>[
-          <String, Object?>{
-            'displayId': 'fallback',
-            'width': 'invalid',
-          },
+          <String, Object?>{'displayId': 'fallback', 'width': 'invalid'},
         ],
       });
 

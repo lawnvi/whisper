@@ -1849,6 +1849,19 @@ class RemoteInputPlugin {
       return;
     }
 
+    if (std::strcmp(method, "updateInjectionRoutes") == 0) {
+      const std::string session_id = StringValue(args, "sessionId");
+      std::lock_guard<std::mutex> lock(injection_mutex_);
+      if (session_id.empty() || session_id != injection_session_id_) {
+        RespondError(method_call, "bad-arguments",
+                     "updateInjectionRoutes requires the active sessionId");
+        return;
+      }
+      injection_routes_ = InjectionRoutesValue(args, "mappings");
+      RespondSuccess(method_call);
+      return;
+    }
+
     if (std::strcmp(method, "injectEvent") == 0) {
       const std::string session_id = StringValue(args, "sessionId");
       const std::string event_type = StringValue(args, "eventType");
@@ -3504,7 +3517,8 @@ class RemoteInputPlugin {
     InjectedCursorPositionLocked(&current_x, &current_y, &mask);
     const bool active_start = JsonBool(json, "activeStart");
     Maybe<InjectionReleaseRoute> routed_release;
-    if (!active_start && injected_cursor_entered_interior_) {
+    if (!active_start && injected_cursor_entered_interior_ &&
+        injected_buttons_ == 0) {
       routed_release =
           ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
                                          delta_y);
@@ -3710,6 +3724,7 @@ class RemoteInputPlugin {
     Cursor hidden_cursor =
         show_source_cursor ? None : CreateHiddenCursor(display, root);
     bool active = false;
+    bool requires_interior_rearm = false;
     bool pointer_grabbed = false;
     bool keyboard_grabbed = false;
     bool pending_active_start = false;
@@ -3735,6 +3750,7 @@ class RemoteInputPlugin {
                               &active_route_id, &active_display_id,
                               &active_edge, &active_segment, &bounds,
                               &center_x, &center_y, &active,
+                              &requires_interior_rearm,
                               &pointer_grabbed, &keyboard_grabbed,
                               &pending_active_start, &capture_buttons,
                               &has_last)) {
@@ -3751,6 +3767,13 @@ class RemoteInputPlugin {
           last_x = x;
           last_y = y;
           has_last = true;
+          if (requires_interior_rearm) {
+            if (CaptureCursorEnteredInterior(bounds, active_edge, x, y)) {
+              requires_interior_rearm = false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(8));
+            continue;
+          }
           const DoublePoint previous_point{
               static_cast<double>(x - delta_x),
               static_cast<double>(y - delta_y),
@@ -3777,6 +3800,7 @@ class RemoteInputPlugin {
               break;
             }
             active = true;
+            requires_interior_rearm = false;
             pending_active_start = true;
             activation_sequence = sequence + 1;
             capture_buttons = ButtonsMask(mask);
@@ -3938,6 +3962,7 @@ class RemoteInputPlugin {
                            int* center_x,
                            int* center_y,
                            bool* active,
+                           bool* requires_interior_rearm,
                            bool* pointer_grabbed,
                            bool* keyboard_grabbed,
                            bool* pending_active_start,
@@ -3992,6 +4017,7 @@ class RemoteInputPlugin {
                                  *active_edge, *active_segment,
                                  release_edge_unit);
     *active = false;
+    *requires_interior_rearm = true;
     *pending_active_start = false;
     *capture_buttons = 0;
     *has_last = false;
@@ -4307,6 +4333,23 @@ class RemoteInputPlugin {
            y >= bounds.bottom() - kCaptureRecenterMargin;
   }
 
+  bool CaptureCursorEnteredInterior(const ScreenBounds& bounds,
+                                    const std::string& edge,
+                                    int x,
+                                    int y) const {
+    constexpr int distance = 32;
+    if (edge == "left") {
+      return x >= bounds.left + std::min(distance, bounds.width / 4);
+    }
+    if (edge == "top") {
+      return y >= bounds.top + std::min(distance, bounds.height / 4);
+    }
+    if (edge == "bottom") {
+      return y <= bounds.bottom() - std::min(distance, bounds.height / 4);
+    }
+    return x <= bounds.right() - std::min(distance, bounds.width / 4);
+  }
+
   void WarpPointer(Display* display, Window root, int x, int y) const {
     XWarpPointer(display, None, root, 0, 0, 0, 0, x, y);
     XFlush(display);
@@ -4541,7 +4584,8 @@ class RemoteInputPlugin {
       TraceRemoteInput(RemoteInputTraceEvent::kInjectedEvent);
     }
     Maybe<InjectionReleaseRoute> routed_release;
-    if (!active_start && injected_cursor_entered_interior_) {
+    if (!active_start && injected_cursor_entered_interior_ &&
+        injected_buttons_ == 0) {
       routed_release =
           ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
                                          delta_y);

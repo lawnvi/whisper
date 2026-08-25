@@ -12,19 +12,21 @@ void main() {
   });
 
   test(
-      'embedded conversation no longer exposes the single peer remote input action',
-      () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final shouldShowRemoteInputAction = RegExp(
-      r'bool get _shouldShowRemoteInputAction \{[\s\S]*?\n  \}',
-    ).firstMatch(source)!.group(0)!;
+    'embedded conversation no longer exposes the single peer remote input action',
+    () {
+      final source = File('lib/page/conversation.dart').readAsStringSync();
+      final shouldShowRemoteInputAction = RegExp(
+        r'bool get _shouldShowRemoteInputAction \{[\s\S]*?\n  \}',
+      ).firstMatch(source)!.group(0)!;
 
-    expect(shouldShowRemoteInputAction, contains('!widget.embedded'));
-  });
+      expect(shouldShowRemoteInputAction, contains('!widget.embedded'));
+    },
+  );
 
   test('workspace canvas uses live local display topology', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
     final canvas = RegExp(
       r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
     ).firstMatch(source)!.group(0)!;
@@ -39,15 +41,19 @@ void main() {
     expect(canvas, contains('_localDisplays'));
     expect(
       canvas,
-      isNot(contains(
-          'const local = RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800);')),
+      isNot(
+        contains(
+          'const local = RemoteInputScreenRect(x: 0, y: 0, width: 1000, height: 800);',
+        ),
+      ),
     );
     expect(canvas, isNot(contains("subtitle: '1000 x 800'")));
   });
 
   test('workspace canvas keeps screen geometry and labels peer resolution', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
     final canvas = RegExp(
       r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
     ).firstMatch(source)!.group(0)!;
@@ -66,76 +72,74 @@ void main() {
     expect(source, contains('showSubtitle'));
   });
 
-  test('workspace canvas renders remote topology displays as a draggable group',
-      () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
-    final canvas = RegExp(
-      r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
-    ).firstMatch(source)!.group(0)!;
-    final peerBlock = RegExp(
-      r'Widget _buildPeerScreenBlock\([\s\S]*?Widget _buildDetailsPanel',
+  test(
+    'workspace canvas renders remote topology displays as a draggable group',
+    () {
+      final source = File(
+        'lib/remote_input/remote_input_workspace_screen.dart',
+      ).readAsStringSync();
+      final canvas = RegExp(
+        r'Widget _buildScreenCanvas\([\s\S]*?Widget _buildPeerScreenBlock',
+      ).firstMatch(source)!.group(0)!;
+      final peerBlock = RegExp(
+        r'Widget _buildPeerScreenBlock\([\s\S]*?Widget _buildDetailsPanel',
+      ).firstMatch(source)!.group(0)!;
+
+      expect(source, contains('_peerDisplaysForLayout'));
+      expect(source, contains('_peerLayoutBounds'));
+      expect(source, contains('placeSinkTopologyInBounds'));
+      expect(canvas, contains('_peerDisplaysForLayout(device, layout)'));
+      expect(peerBlock, contains('for (final display in displays)'));
+      expect(peerBlock, contains('_displaySizeLabel(display)'));
+      expect(peerBlock, contains('onPanStart:'));
+      expect(peerBlock, contains('_updateDraggedLayout'));
+      expect(peerBlock, isNot(contains('width: size.width,')));
+    },
+  );
+
+  test('workspace drag previews nearby magnetic targets', () {
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
+    final dragUpdate = RegExp(
+      r'void _updateDraggedLayout\([\s\S]*?void _clearDragState',
     ).firstMatch(source)!.group(0)!;
 
-    expect(source, contains('_peerDisplaysForLayout'));
-    expect(source, contains('_peerLayoutBounds'));
-    expect(source, contains('placeSinkTopologyInBounds'));
-    expect(canvas, contains('_peerDisplaysForLayout(device, layout)'));
-    expect(peerBlock, contains('for (final display in displays)'));
-    expect(peerBlock, contains('_displaySizeLabel(display)'));
-    expect(peerBlock, contains('final currentLayout'));
-    expect(peerBlock, contains('currentLayout.copyWith'));
-    expect(peerBlock, isNot(contains('width: size.width,')));
+    expect(source, contains('RemoteInputWorkspaceSnapper.snap'));
+    expect(source, contains('_workspaceNodeForDevice'));
+    expect(dragUpdate, contains('_localWorkspaceNode(controllerPeerId)'));
+    expect(dragUpdate, contains('for (final other in _devices)'));
+    expect(dragUpdate, contains('canvasScale: _canvasScale'));
   });
 
-  test('workspace snapping and labels can target any local display', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
-    final snapAndSave = RegExp(
-      r'Future<void> _snapAndSaveLayout\([\s\S]*?RemoteInputScreenRect _boundsFor',
-    ).firstMatch(source)!.group(0)!;
-    final legacyPlan = RegExp(
-      r'_WorkspaceSharingPlan\? _legacySharingPlan\([\s\S]*?Future<void> _snapAndSaveLayout',
-    ).firstMatch(source)!.group(0)!;
-    final edgeLabel = RegExp(
-      r'String _edgeLabelForLayout\([\s\S]*?String _peerScreenSubtitle',
+  test('workspace drag magnetizes every selected screen before saving', () {
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
+    final magnetize = RegExp(
+      r'Future<bool> _magnetizeSelectedLayouts\([\s\S]*?Future<void> _snapAndSaveLayout',
     ).firstMatch(source)!.group(0)!;
 
-    expect(source, contains('_snapToNearestLocalDisplay'));
-    expect(source, contains('_isLocalOuterEdge'));
-    expect(source, contains('_legacySharingPlanForDisplay'));
-    expect(snapAndSave, contains('_snapToNearestLocalDisplay(layout)'));
-    expect(snapAndSave, isNot(contains('local: _localPrimaryRect')));
-    expect(legacyPlan, contains('for (final display in topology.displays)'));
-    expect(edgeLabel, contains('_legacySharingPlan(layout)'));
-    expect(edgeLabel, isNot(contains('local: _localPrimaryRect')));
+    expect(magnetize, contains('RemoteInputWorkspaceMagnetizer.connectAll'));
+    expect(magnetize, contains('layoutVersion: 3'));
+    expect(magnetize, contains("layoutJson: ''"));
+    expect(magnetize, contains('LocalDatabase().upsertRemoteInputLayout'));
   });
 
-  test('workspace drag keeps topology layout json in sync', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
-    final snapAndSave = RegExp(
-      r'Future<void> _snapAndSaveLayout\([\s\S]*?RemoteInputScreenRect _snapToNearestLocalDisplay',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(source, contains('_layoutJsonForSnappedLayout'));
-    expect(source, contains('savedLayoutForTranslatedSinkTopology'));
-    expect(snapAndSave, contains('final updatedLayoutJson'));
-    expect(snapAndSave, contains('layoutJson: updatedLayoutJson'));
-  });
-
-  test('workspace screen restores live controller targets as selected', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
+  test('workspace screen restores online and offline controller targets', () {
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
     final loadWorkspace = RegExp(
       r'Future<void> _loadWorkspace\(\) async \{[\s\S]*?Future<RemoteInputLayoutData> _ensureLayout',
     ).firstMatch(source)!.group(0)!;
 
     expect(loadWorkspace, contains('final workspaceSnapshot'));
-    expect(loadWorkspace, contains('workspaceSnapshot.liveTargetPeerIds'));
-    expect(loadWorkspace, contains('final connectedLiveTargetPeerIds'));
+    expect(loadWorkspace, contains('workspaceSnapshot.targets.keys'));
+    expect(loadWorkspace, contains('final desiredTargetPeerIds'));
+    expect(loadWorkspace, contains('LocalDatabase().fetchDevice(peerId)'));
     expect(loadWorkspace, contains('_selectedPeerIds'));
-    expect(loadWorkspace, contains('addAll(connectedLiveTargetPeerIds)'));
+    expect(loadWorkspace, contains('addAll(desiredTargetPeerIds)'));
     expect(loadWorkspace, contains('activePeerId'));
   });
 
@@ -156,14 +160,17 @@ void main() {
   });
 
   test('workspace screen blocks center their labels', () {
-    final source = File('lib/remote_input/remote_input_workspace_screen.dart')
-        .readAsStringSync();
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
     final screenBlock = RegExp(
       r'class _ScreenBlock extends StatelessWidget \{[\s\S]*?class _DetailRow',
     ).firstMatch(source)!.group(0)!;
 
     expect(
-        screenBlock, contains('crossAxisAlignment: CrossAxisAlignment.center'));
+      screenBlock,
+      contains('crossAxisAlignment: CrossAxisAlignment.center'),
+    );
     expect(screenBlock, contains('alignment: Alignment.center'));
     expect(screenBlock, contains('textAlign: TextAlign.center'));
   });

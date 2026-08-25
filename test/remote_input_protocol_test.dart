@@ -146,6 +146,35 @@ void main() {
       expect(decoded.releaseEdgeUnit, 0);
     });
 
+    test('round-trips workspace route revisions', () {
+      const message = RemoteInputControlMessage(
+        action: RemoteInputControlAction.routes,
+        sessionId: 'input-1',
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        workspaceRevision: 7,
+        edgeMappings: <RemoteInputEdgeMapping>[
+          RemoteInputEdgeMapping(
+            routeId: 'linux-to-win',
+            sourceDisplayId: 'linux-main',
+            sourceEdge: RemoteInputEdge.right,
+            sourceSegmentStart: 0,
+            sourceSegmentEnd: 800,
+            sinkDisplayId: 'win-main',
+            sinkEdge: RemoteInputEdge.left,
+            sinkSegmentStart: 0,
+            sinkSegmentEnd: 800,
+          ),
+        ],
+      );
+
+      final decoded = RemoteInputControlMessage.fromJson(message.toJson());
+
+      expect(decoded.action, RemoteInputControlAction.routes);
+      expect(decoded.workspaceRevision, 7);
+      expect(decoded.edgeMappings.single.routeId, 'linux-to-win');
+    });
+
     test('serializes a transport token only for a successful accept', () {
       const accept = RemoteInputControlMessage(
         action: RemoteInputControlAction.accept,

@@ -683,6 +683,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputWorkspaceConflict => '边缘重叠';
 
   @override
+  String get remoteInputWorkspaceReachable => '可达';
+
+  @override
+  String get remoteInputWorkspaceDisconnected => '未连接到工作区';
+
+  @override
+  String get remoteInputWorkspaceUnsupported => '不支持工作区路由';
+
+  @override
   String get remoteInputWorkspaceTargetIdle => '未启用';
 
   @override

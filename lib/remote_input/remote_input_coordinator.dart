@@ -202,6 +202,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   double _scrollMultiplier = 1.0;
   RemoteInputPlatformKind _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
   RemoteInputEdgeMapping? _sinkActiveEdgeMapping;
+  RemoteInputControlMessage? _sinkControlMessage;
   final Set<RemoteInputModifierSemantic> _sinkPressedModifiers =
       <RemoteInputModifierSemantic>{};
   bool _suppressPasteKeyUp = false;
@@ -395,6 +396,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
       case RemoteInputControlAction.release:
         await _handleRelease(message);
         break;
+      case RemoteInputControlAction.routes:
+        await _handleRoutes(message);
+        break;
       case RemoteInputControlAction.stop:
       case RemoteInputControlAction.reject:
         _trace(
@@ -426,6 +430,25 @@ class RemoteInputCoordinator extends ChangeNotifier {
         }
         break;
     }
+  }
+
+  Future<void> _handleRoutes(RemoteInputControlMessage message) async {
+    final current = _sinkControlMessage;
+    if (_state.role != RemoteInputRuntimeRole.sink ||
+        _state.sessionId != message.sessionId ||
+        current == null ||
+        message.sourcePeerId != current.sourcePeerId ||
+        message.sinkPeerId != current.sinkPeerId ||
+        message.workspaceRevision <= current.workspaceRevision) {
+      return;
+    }
+    await _platform.updateInjectionRoutes(
+      sessionId: message.sessionId,
+      edgeMappings: message.edgeMappings,
+    );
+    _sinkControlMessage = message;
+    _sinkActiveEdgeMapping = message.edgeMappings.firstOrNull;
+    _manager.handleControlMessage(message);
   }
 
   Future<void> stopSharing({
@@ -470,6 +493,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _sinkEntryTravel = 0;
     _sinkSourcePlatform = RemoteInputPlatformKind.unknown;
     _sinkActiveEdgeMapping = null;
+    _sinkControlMessage = null;
     _sinkPressedModifiers.clear();
     _suppressPasteKeyUp = false;
     if (_manager.onPacket != null) {
@@ -717,8 +741,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _sinkActiveEdgeMapping = message.edgeMappings.isNotEmpty
         ? message.edgeMappings.first
         : null;
+    _sinkControlMessage = message;
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
+        final routing = _sinkControlMessage ?? message;
         if (release.reason == 'edge') {
           if (_isEarlySinkEdgeRelease(release)) {
             _trace(RemoteInputDiagnosticKind.earlyReleaseIgnored);
@@ -740,7 +766,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
               releaseEdgeUnit: _sourceReleaseEdgeUnit(
                 sinkEdgeUnit: release.edgeUnit,
                 sourceEdgeUnit: release.sourceEdgeUnit,
-                message: message,
+                message: routing,
                 routeId: release.routeId,
               ),
               sourceDisplayId: release.sourceDisplayId,
@@ -771,7 +797,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     });
     _beginInjectionQueue(message.sessionId);
     _manager.onPacket = (packet) {
-      final routedPacket = _routeSinkActiveStartPacket(packet, message);
+      final routing = _sinkControlMessage ?? message;
+      final routedPacket = _routeSinkActiveStartPacket(packet, routing);
       if (packet.sessionId == message.sessionId &&
           packet.sequence > _latestSinkPacketSequence) {
         _latestSinkPacketSequence = packet.sequence;
@@ -782,7 +809,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _sinkEntryTravel = 0;
       } else if (packet.sessionId == message.sessionId &&
           _latestSinkActivationSequence > 0) {
-        _sinkEntryTravel += _sinkEntryDelta(packet, message.layoutEdge);
+        _sinkEntryTravel += _sinkEntryDelta(packet, routing.layoutEdge);
       }
       final scrollNormalized = RemoteInputScrollNormalizer.normalizeForTarget(
         routedPacket,

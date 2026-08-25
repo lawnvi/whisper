@@ -727,6 +727,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get remoteInputWorkspaceConflict => 'Bordes superpuestos';
 
   @override
+  String get remoteInputWorkspaceReachable => 'Accesible';
+
+  @override
+  String get remoteInputWorkspaceDisconnected =>
+      'No conectado al espacio de trabajo';
+
+  @override
+  String get remoteInputWorkspaceUnsupported =>
+      'No admite rutas del espacio de trabajo';
+
+  @override
   String get remoteInputWorkspaceTargetIdle => 'No activado';
 
   @override
