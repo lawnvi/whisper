@@ -18,9 +18,9 @@ void main() {
     expect(discovery, contains('await db.upsertDevice(visibleDevice)'));
     expect(discovery, contains('if (!isLost)'));
     expect(discovery, contains('svr is ResolvedBonsoirService'));
-    expect(discovery, contains('resolvedHost?.isNotEmpty == true'));
-    expect(discovery, contains('host = PeerEndpoint('));
-    expect(discovery, contains('host: host'));
+    expect(discovery, contains('await resolveDiscoveryEndpointHost('));
+    expect(discovery, contains('resolvedHost: resolvedHost'));
+    expect(discovery, contains('advertisedHost: host'));
     expect(discovery, contains('port: port'));
   });
 

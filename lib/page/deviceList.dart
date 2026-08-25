@@ -49,6 +49,7 @@ import 'package:whisper/state/chat_session_list.dart';
 import 'package:whisper/state/connection_diagnostic.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/connection_attempt.dart';
+import 'package:whisper/state/discovery_endpoint_resolver.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/discovery_service_presence.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
@@ -1413,18 +1414,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
             final resolvedHost = svr is ResolvedBonsoirService
                 ? svr.host
                 : null;
-            var host = resolvedHost?.isNotEmpty == true
-                ? resolvedHost
-                : svr.attributes["host"];
+            var host = svr.attributes["host"];
             final port =
                 int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
             if (!isLost) {
-              try {
-                host = PeerEndpoint(
-                  host: host ?? '',
-                  port: port,
-                ).host;
-              } on ArgumentError {
+              host = await resolveDiscoveryEndpointHost(
+                resolvedHost: resolvedHost,
+                advertisedHost: host,
+                port: port,
+              );
+              if (host == null) {
                 _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
                 return;
               }
