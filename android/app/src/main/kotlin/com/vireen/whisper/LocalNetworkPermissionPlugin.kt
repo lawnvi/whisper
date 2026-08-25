@@ -6,7 +6,6 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
-import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
@@ -111,27 +110,31 @@ class LocalNetworkPermissionPlugin :
             activeNetwork?.let(::add)
             addAll(manager.allNetworks.filterNot { it == activeNetwork })
         }
-        return networks.firstNotNullOfOrNull { network ->
-            currentLanAddress(manager, network)
+        for (network in networks) {
+            val capabilities = manager.getNetworkCapabilities(network) ?: continue
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            ) {
+                continue
+            }
+            val candidates = manager.getLinkProperties(network)?.linkAddresses
+                ?.asSequence()
+                ?.map { it.address }
+                ?.filterIsInstance<Inet4Address>()
+                ?.filterNot { it.isLoopbackAddress }
+                ?.toList()
+                .orEmpty()
+            selectLanIpv4Address(candidates)?.let { return it.hostAddress }
         }
+        return null
     }
 
-    private fun currentLanAddress(
-        manager: ConnectivityManager,
-        network: Network,
-    ): String? {
-        val capabilities = manager.getNetworkCapabilities(network) ?: return null
-        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-        ) {
-            return null
-        }
-        return manager.getLinkProperties(network)?.linkAddresses
-            ?.asSequence()
-            ?.map { it.address }
-            ?.filterIsInstance<Inet4Address>()
-            ?.firstOrNull { !it.isLoopbackAddress && isPrivateLanIpv4(it) }
-            ?.hostAddress
+    private fun selectLanIpv4Address(candidates: List<Inet4Address>): Inet4Address? {
+        return candidates.firstOrNull(::isPrivateLanIpv4)
+            ?: candidates.firstOrNull {
+                isUsableUnicastIpv4(it) && !isLinkLocalLanIpv4(it)
+            }
+            ?: candidates.firstOrNull(::isLinkLocalLanIpv4)
     }
 
     private fun isPrivateLanIpv4(address: Inet4Address): Boolean {
@@ -139,6 +142,19 @@ class LocalNetworkPermissionPlugin :
         return octets[0] == 10 ||
             (octets[0] == 172 && octets[1] in 16..31) ||
             (octets[0] == 192 && octets[1] == 168)
+    }
+
+    private fun isLinkLocalLanIpv4(address: Inet4Address): Boolean {
+        val octets = address.address.map { it.toInt() and 0xff }
+        return octets[0] == 169 && octets[1] == 254 && octets[2] in 1..254
+    }
+
+    private fun isUsableUnicastIpv4(address: Inet4Address): Boolean {
+        val octets = address.address.map { it.toInt() and 0xff }
+        val isLinkLocalReserved = octets[0] == 169 && octets[1] == 254 &&
+            (octets[2] == 0 || octets[2] == 255)
+        return octets[0] != 0 && octets[0] != 127 && octets[0] < 224 &&
+            !isLinkLocalReserved
     }
 
     private fun ensureGranted(

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:whisper/state/ipv4_address_policy.dart';
 
 /// A validated resolved endpoint shared by chat, audio, and remote input.
 final class PeerEndpoint {
@@ -62,13 +63,13 @@ final class PeerEndpoint {
     final normalized =
         (hadTrailingDot ? host.substring(0, host.length - 1) : host)
             .toLowerCase();
-    final ipv4 = _parseCanonicalIpv4(normalized);
+    final ipv4 = Ipv4AddressPolicy.parseCanonical(normalized);
     if (ipv4 != null) {
-      if (!_isPrivateIpv4(ipv4)) {
+      if (!Ipv4AddressPolicy.isUsableUnicast(normalized)) {
         throw ArgumentError.value(
           host,
           'host',
-          'must be an RFC1918 address',
+          'must be a usable unicast IPv4 address',
         );
       }
       return normalized;
@@ -132,33 +133,6 @@ final class PeerEndpoint {
 
     final normalizedAddress = address.toLowerCase();
     return zone == null ? normalizedAddress : '$normalizedAddress%$zone';
-  }
-
-  static List<int>? _parseCanonicalIpv4(String host) {
-    final parts = host.split('.');
-    if (parts.length != 4) {
-      return null;
-    }
-    final octets = <int>[];
-    for (final part in parts) {
-      if (part.isEmpty ||
-          !RegExp(r'^\d{1,3}$').hasMatch(part) ||
-          (part.length > 1 && part.startsWith('0'))) {
-        return null;
-      }
-      final octet = int.parse(part);
-      if (octet > 255) {
-        return null;
-      }
-      octets.add(octet);
-    }
-    return octets;
-  }
-
-  static bool _isPrivateIpv4(List<int> octets) {
-    return octets[0] == 10 ||
-        (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
-        (octets[0] == 192 && octets[1] == 168);
   }
 
   @override

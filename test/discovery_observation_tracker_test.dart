@@ -14,7 +14,7 @@ Map<String, String> _txt(String pkh, {String? version}) => <String, String>{
 };
 
 void main() {
-  test('accepts only strict private TXT and resolved SRV endpoints', () {
+  test('accepts only strict TXT and resolved unicast SRV endpoints', () {
     final tracker = DiscoveryObservationTracker()..start();
     final handle = tracker.found(
       serviceName: 'whisper-00000000',
@@ -34,7 +34,7 @@ void main() {
       tracker.resolve(
         handle,
         attributes: _txt(_pkh(1)),
-        host: '8.8.8.8',
+        host: '224.0.0.251',
         port: 10002,
       ),
       isFalse,
@@ -56,6 +56,28 @@ void main() {
     expect(tracker.candidates.single.isProtocolCompatible, isTrue);
     expect(tracker.candidates.single.endpoint.host, 'peer.local');
     expect(tracker.candidates.single.endpoint.port, 10002);
+  });
+
+  test('accepts non-RFC1918 unicast endpoints resolved through mDNS', () {
+    for (final host in <String>['100.64.0.8', '203.0.113.8']) {
+      final tracker = DiscoveryObservationTracker()..start();
+      final handle = tracker.found(
+        serviceName: 'whisper-custom-subnet',
+        serviceType: '_whisper._tcp',
+      );
+
+      expect(
+        tracker.resolve(
+          handle,
+          attributes: _txt(_pkh(7)),
+          host: host,
+          port: 10002,
+        ),
+        isTrue,
+        reason: host,
+      );
+      expect(tracker.candidates.single.endpoint.host, host);
+    }
   });
 
   test('retains a valid candidate advertising another protocol version', () {

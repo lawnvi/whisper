@@ -85,6 +85,10 @@ void main() {
     expect(plugin, contains('ConnectivityManager'));
     expect(plugin, contains('NetworkCapabilities.TRANSPORT_WIFI'));
     expect(plugin, contains('currentLanAddress'));
+    expect(plugin, contains('selectLanIpv4Address'));
+    expect(plugin, contains('isLinkLocalLanIpv4'));
+    expect(plugin, contains('isUsableUnicastIpv4'));
+    expect(plugin, contains('octets[0] == 169 && octets[1] == 254'));
   });
 
   test('iOS ATS is a dictionary and Bonjour declares the Whisper service', () {

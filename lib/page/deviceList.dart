@@ -1410,9 +1410,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
               uid = advertisedUid;
               _discoveryPresence.resolved(serviceKey: serviceKey, peerId: uid);
             }
-            final host = svr.attributes["host"];
+            final resolvedHost = svr is ResolvedBonsoirService
+                ? svr.host
+                : null;
+            var host = resolvedHost?.isNotEmpty == true
+                ? resolvedHost
+                : svr.attributes["host"];
             final port =
                 int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
+            if (!isLost) {
+              try {
+                host = PeerEndpoint(
+                  host: host ?? '',
+                  port: port,
+                ).host;
+              } on ArgumentError {
+                _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
+                return;
+              }
+            }
             final name = svr.attributes["name"];
             final platform = svr.attributes["platform"];
             _logDiscovery(

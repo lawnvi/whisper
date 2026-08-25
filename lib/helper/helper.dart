@@ -11,6 +11,7 @@ import 'package:whisper/helper/clipboard_write_suppression.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
+import 'package:whisper/state/ipv4_address_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -210,46 +211,94 @@ Future<bool> isLocalhost(String address) async {
 Future<String> getLocalIpAddress() async {
   if (Platform.isAndroid) {
     final nativeAddress = await LocalNetworkPermission().currentLanAddress();
-    if (nativeAddress != null && isPrivateLanIpv4(nativeAddress)) {
+    if (nativeAddress != null &&
+        Ipv4AddressPolicy.isUsableUnicast(nativeAddress)) {
       return nativeAddress;
     }
   }
 
   try {
-    for (var interface in await NetworkInterface.list()) {
+    final candidates = <LocalIpv4Candidate>[];
+    for (final interface in await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLinkLocal: true,
+    )) {
       for (var addr in interface.addresses) {
-        if (!addr.isLoopback &&
-            addr.type == InternetAddressType.IPv4 &&
-            isPrivateLanIpv4(addr.address)) {
-          return addr.address;
+        if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+          candidates.add((
+            address: addr.address,
+            interfaceName: interface.name,
+          ));
         }
       }
     }
+    return selectLocalIpv4Address(candidates) ?? '127.0.0.1';
   } on SocketException {
     return '127.0.0.1';
   }
-  return '127.0.0.1';
 }
 
-bool isPrivateLanIpv4(String address) {
-  final parts = address.split('.');
-  if (parts.length != 4) {
-    return false;
-  }
-  final octets = <int>[];
-  for (final part in parts) {
-    if (!RegExp(r'^(0|[1-9][0-9]{0,2})$').hasMatch(part)) {
-      return false;
+typedef LocalIpv4Candidate = ({String address, String interfaceName});
+
+String? selectLocalIpv4Address(Iterable<LocalIpv4Candidate> candidates) {
+  LocalIpv4Candidate? best;
+  var bestScore = -1;
+  for (final candidate in candidates) {
+    final score = _localIpv4CandidateScore(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
     }
-    final value = int.parse(part);
-    if (value > 255) {
-      return false;
-    }
-    octets.add(value);
   }
-  return octets[0] == 10 ||
-      (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
-      (octets[0] == 192 && octets[1] == 168);
+  return best?.address;
+}
+
+int _localIpv4CandidateScore(LocalIpv4Candidate candidate) {
+  final address = candidate.address;
+  if (!Ipv4AddressPolicy.isUsableUnicast(address)) {
+    return -1;
+  }
+
+  // Physical LAN interfaces outrank Docker, VPN, and tunnel addresses. A
+  // virtual address remains a fallback for uncommon but valid configurations.
+  final interfaceScore = _isLikelyVirtualInterface(candidate.interfaceName)
+      ? 0
+      : 100;
+  final addressScore = Ipv4AddressPolicy.isPrivate(address)
+      ? 30
+      : Ipv4AddressPolicy.isLinkLocal(address)
+      ? 10
+      : 20;
+  return interfaceScore + addressScore;
+}
+
+bool _isLikelyVirtualInterface(String name) {
+  final normalized = name.toLowerCase();
+  const prefixes = <String>[
+    'docker',
+    'br-',
+    'virbr',
+    'veth',
+    'vmnet',
+    'vboxnet',
+    'utun',
+    'tun',
+    'tap',
+    'wg',
+    'tailscale',
+    'zt',
+    'ppp',
+    'ipsec',
+    'gif',
+    'stf',
+    'awdl',
+    'llw',
+    'anpi',
+    'bridge',
+  ];
+  const markers = <String>['virtual', 'vmware', 'hyper-v', 'vpn'];
+  return prefixes.any(normalized.startsWith) ||
+      markers.any(normalized.contains);
 }
 
 Future<String?> getClipboardText() async {

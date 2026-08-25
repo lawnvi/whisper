@@ -30,18 +30,41 @@ void main() {
       }
     });
 
-    test('rejects non-private, special, and disguised IPv4 addresses', () {
+    test('accepts usable IPv4 link-local addresses for direct cables', () {
       for (final host in <String>[
-        '0.1.2.3',
-        '127.0.0.1',
-        '127.1',
-        '2130706433',
-        '169.254.1.2',
+        '169.254.1.0',
+        '169.254.37.25',
+        '169.254.254.255',
+      ]) {
+        final endpoint = PeerEndpoint(host: host, port: 10004);
+        expect(endpoint.chatUri.host, host);
+      }
+    });
+
+    test('accepts canonical unicast IPv4 addresses for manual connections', () {
+      for (final host in <String>[
         '8.8.8.8',
         '100.64.0.1',
         '172.15.255.254',
         '172.32.0.1',
+        '198.18.0.1',
+        '203.0.113.1',
+      ]) {
+        expect(PeerEndpoint(host: host, port: 10004).host, host);
+      }
+    });
+
+    test('rejects unsafe, special, and disguised IPv4 addresses', () {
+      for (final host in <String>[
+        '0.0.0.0',
+        '0.1.2.3',
+        '127.0.0.1',
+        '127.1',
+        '2130706433',
+        '169.254.0.255',
+        '169.254.255.1',
         '224.0.0.251',
+        '240.0.0.1',
         '255.255.255.255',
         '192.168.001.1',
       ]) {
