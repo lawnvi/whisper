@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ColorSpace
+import android.graphics.ImageDecoder
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -215,17 +217,36 @@ class AndroidDocumentPickerPlugin :
     }
 
     private fun createThumbnail(uri: Uri, width: Int, height: Int): Bitmap? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return context.contentResolver.loadThumbnail(uri, Size(width, height), null)
-        }
         val mimeType = context.contentResolver.getType(uri).orEmpty()
         if (mimeType.startsWith("video/")) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                return context.contentResolver.loadThumbnail(uri, Size(width, height), null)
+            }
             val retriever = MediaMetadataRetriever()
             return try {
                 retriever.setDataSource(context, uri)
                 retriever.frameAtTime?.let { scaleBitmapToFit(it, width, height) }
             } finally {
                 retriever.release()
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return ImageDecoder.decodeBitmap(
+                ImageDecoder.createSource(context.contentResolver, uri),
+            ) { decoder, info, _ ->
+                val sourceWidth = info.size.width
+                val sourceHeight = info.size.height
+                val scale = minOf(
+                    1f,
+                    width.toFloat() / sourceWidth.toFloat(),
+                    height.toFloat() / sourceHeight.toFloat(),
+                )
+                decoder.setTargetSize(
+                    (sourceWidth * scale).toInt().coerceAtLeast(1),
+                    (sourceHeight * scale).toInt().coerceAtLeast(1),
+                )
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
             }
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

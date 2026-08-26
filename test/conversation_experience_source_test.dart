@@ -48,6 +48,8 @@ void main() {
     expect(conversation, isNot(contains('padding: const EdgeInsets.all(1)')));
     expect(conversation, contains('AndroidDocumentPicker.shared.openDocument'));
     expect(picker, contains('contentResolver.loadThumbnail'));
+    expect(picker, contains('ImageDecoder.createSource'));
+    expect(picker, contains('ColorSpace.Named.SRGB'));
     expect(picker, contains('MediaMetadataRetriever'));
     expect(picker, isNot(contains('FileOutputStream')));
   });
