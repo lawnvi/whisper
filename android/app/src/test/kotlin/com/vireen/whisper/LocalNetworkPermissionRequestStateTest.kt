@@ -9,20 +9,17 @@ import org.junit.Test
 
 class LocalNetworkPermissionRequestStateTest {
     @Test
-    fun requiredPermissionMatchesAndroid16CompatAndAndroid17Enforcement() {
-        assertNull(requiredLocalNetworkPermission(sdkInt = 35, android16CompatTest = true))
-        assertNull(requiredLocalNetworkPermission(sdkInt = 36, android16CompatTest = false))
+    fun requiredPermissionOnlyAppliesToAppsTargetingAndroid17() {
+        assertNull(requiredLocalNetworkPermission(sdkInt = 32, targetSdkInt = 36))
+        assertNull(requiredLocalNetworkPermission(sdkInt = 33, targetSdkInt = 36))
+        assertNull(requiredLocalNetworkPermission(sdkInt = 37, targetSdkInt = 36))
         assertEquals(
-            "android.permission.NEARBY_WIFI_DEVICES",
-            requiredLocalNetworkPermission(sdkInt = 36, android16CompatTest = true),
+            "android.permission.ACCESS_LOCAL_NETWORK",
+            requiredLocalNetworkPermission(sdkInt = 37, targetSdkInt = 37),
         )
         assertEquals(
             "android.permission.ACCESS_LOCAL_NETWORK",
-            requiredLocalNetworkPermission(sdkInt = 37, android16CompatTest = false),
-        )
-        assertEquals(
-            "android.permission.ACCESS_LOCAL_NETWORK",
-            requiredLocalNetworkPermission(sdkInt = 40, android16CompatTest = false),
+            requiredLocalNetworkPermission(sdkInt = 40, targetSdkInt = 37),
         )
     }
 

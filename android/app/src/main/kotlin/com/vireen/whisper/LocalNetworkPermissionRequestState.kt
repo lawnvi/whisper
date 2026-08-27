@@ -2,13 +2,11 @@ package com.vireen.whisper
 
 internal fun requiredLocalNetworkPermission(
     sdkInt: Int,
-    android16CompatTest: Boolean,
-    nearbyWifiDevicesPermission: String = "android.permission.NEARBY_WIFI_DEVICES",
+    targetSdkInt: Int,
     accessLocalNetworkPermission: String = "android.permission.ACCESS_LOCAL_NETWORK",
 ): String? {
     return when {
-        sdkInt >= 37 -> accessLocalNetworkPermission
-        sdkInt == 36 && android16CompatTest -> nearbyWifiDevicesPermission
+        sdkInt >= 37 && targetSdkInt >= 37 -> accessLocalNetworkPermission
         else -> null
     }
 }

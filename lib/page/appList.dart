@@ -4,12 +4,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
+import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
 typedef AppListLoader = Future<AppListPresentation> Function();
+typedef AppListPermissionRequester = Future<bool> Function();
 
 typedef AppSelectionWriter = Future<void> Function({
   required List<String> packages,
@@ -33,10 +35,12 @@ class AppListScreen extends StatefulWidget {
     super.key,
     this.loader,
     this.selectionWriter,
+    this.permissionRequester,
   });
 
   final AppListLoader? loader;
   final AppSelectionWriter? selectionWriter;
+  final AppListPermissionRequester? permissionRequester;
 
   @override
   State<AppListScreen> createState() => _AppListScreenState();
@@ -139,6 +143,12 @@ class _AppListScreenState extends State<AppListScreen> {
       _loadFailed = false;
     });
     try {
+      final hasPermission = await (widget.permissionRequester ??
+              AndroidPrivacyPermission.requestInstalledApps)
+          .call();
+      if (!hasPermission) {
+        throw StateError('Installed apps permission was not granted');
+      }
       final presentation =
           await (widget.loader ?? _loadDefaultPresentation).call();
       if (!mounted) {

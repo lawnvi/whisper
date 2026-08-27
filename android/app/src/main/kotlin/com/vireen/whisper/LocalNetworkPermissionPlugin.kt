@@ -1,6 +1,5 @@
 package com.vireen.whisper
 
-import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.content.Context
@@ -93,10 +92,9 @@ class LocalNetworkPermissionPlugin :
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        val android16CompatTest = call.argument<Boolean>(ARG_COMPAT_TEST) ?: false
         when (call.method) {
-            "ensureGranted" -> ensureGranted(android16CompatTest, result)
-            "currentStatus" -> result.success(currentStatus(android16CompatTest))
+            "ensureGranted" -> ensureGranted(result)
+            "currentStatus" -> result.success(currentStatus())
             "currentLanAddress" -> result.success(currentLanAddress())
             else -> result.notImplemented()
         }
@@ -157,11 +155,8 @@ class LocalNetworkPermissionPlugin :
             !isLinkLocalReserved
     }
 
-    private fun ensureGranted(
-        android16CompatTest: Boolean,
-        result: MethodChannel.Result,
-    ) {
-        val permission = observeRequiredPermission(android16CompatTest)
+    private fun ensureGranted(result: MethodChannel.Result) {
+        val permission = observeRequiredPermission()
         if (permission == null) {
             result.success(NativeLocalNetworkPermissionStatus.GRANTED.wireValue)
             return
@@ -225,23 +220,22 @@ class LocalNetworkPermissionPlugin :
         }
     }
 
-    private fun currentStatus(android16CompatTest: Boolean): String {
-        val permission = observeRequiredPermission(android16CompatTest)
+    private fun currentStatus(): String {
+        val permission = observeRequiredPermission()
             ?: return NativeLocalNetworkPermissionStatus.GRANTED.wireValue
         return permissionStatus(permission).wireValue
     }
 
-    private fun observeRequiredPermission(android16CompatTest: Boolean): String? {
-        return requiredPermission(android16CompatTest)?.also { permission ->
+    private fun observeRequiredPermission(): String? {
+        return requiredPermission()?.also { permission ->
             observedPermission = permission
         }
     }
 
-    private fun requiredPermission(android16CompatTest: Boolean): String? {
+    private fun requiredPermission(): String? {
         return requiredLocalNetworkPermission(
             sdkInt = Build.VERSION.SDK_INT,
-            android16CompatTest = android16CompatTest,
-            nearbyWifiDevicesPermission = Manifest.permission.NEARBY_WIFI_DEVICES,
+            targetSdkInt = context.applicationInfo.targetSdkVersion,
             accessLocalNetworkPermission = ACCESS_LOCAL_NETWORK_PERMISSION,
         )
     }
@@ -299,7 +293,7 @@ class LocalNetworkPermissionPlugin :
     }
 
     private fun emitCurrentPermissionStatus() {
-        val permission = observedPermission ?: requiredPermission(android16CompatTest = false)
+        val permission = observedPermission ?: requiredPermission()
         val status = if (permission == null) {
             NativeLocalNetworkPermissionStatus.GRANTED
         } else {
@@ -330,7 +324,6 @@ class LocalNetworkPermissionPlugin :
         const val CHANNEL_NAME = "com.vireen.whisper/local_network_permission"
         const val EVENT_CHANNEL_NAME =
             "com.vireen.whisper/local_network_permission/events"
-        const val ARG_COMPAT_TEST = "android16CompatTest"
         const val ACCESS_LOCAL_NETWORK_PERMISSION =
             "android.permission.ACCESS_LOCAL_NETWORK"
     }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:ui';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart';
@@ -94,6 +95,42 @@ enum DiscoveryDiagnosticKind {
   serviceLost,
 }
 
+const String _androidNotificationPortName =
+    'whisper.android.notification.forwarding';
+ReceivePort? _androidNotificationReceivePort;
+StreamSubscription<dynamic>? _androidNotificationSubscription;
+
+@pragma('vm:entry-point')
+void androidNotificationListenerCallback(NotificationEvent event) {
+  IsolateNameServer.lookupPortByName(_androidNotificationPortName)?.send(event);
+}
+
+Future<void> _forwardAndroidNotification(NotificationEvent event) async {
+  final forwardingEnabled = await LocalSetting().isListenAndroid();
+  if (!forwardingEnabled) {
+    privacyLog.event(PrivacyEvent.notificationForwarded, <PrivacyField, Object>{
+      PrivacyField.allowed: false,
+    });
+    return;
+  }
+  final selectedApps = await LocalSetting().listenAppNotifyList();
+  final socketManager = WsSvrManager();
+  final allowed =
+      socketManager.isConnected &&
+      filterNotification(event) &&
+      selectedApps.containsKey(event.packageName);
+  privacyLog.event(PrivacyEvent.notificationForwarded, <PrivacyField, Object>{
+    PrivacyField.allowed: allowed,
+  });
+  if (allowed) {
+    await socketManager.sendNotification(
+      event.packageName,
+      event.title,
+      event.text,
+    );
+  }
+}
+
 void _logDeviceListFailure(DeviceListOperationKind kind, Object error) {
   privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
     PrivacyField.kind: kind,
@@ -140,10 +177,6 @@ class DeviceListScreen extends StatefulWidget {
 
   @override
   _DeviceListScreen createState() => _DeviceListScreen();
-
-  static void setListenApps() {
-    _DeviceListScreen.setListenApps();
-  }
 }
 
 class _DeviceListScreen extends State<DeviceListScreen>
@@ -189,7 +222,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   );
   final DiscoveryServicePresenceTracker _discoveryPresence =
       DiscoveryServicePresenceTracker();
-  static var listenApps = {};
+  late final Future<void> _localNetworkPermissionBootstrap;
   var _clipboardText = "";
   var _clipboardSyncGeneration = 0;
   final DesktopClipboardFileReader _clipboardFileReader =
@@ -232,7 +265,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // }
     WidgetsBinding.instance.addObserver(this);
     _setDesktopWindow();
-    _requestPermission();
+    _localNetworkPermissionBootstrap = _requestLocalNetworkPermission();
+    unawaited(_requestPermission());
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
     _audioCoordinator.addListener(_handleDesktopAudioChanged);
     _audioGroupCoordinator.addListener(_handleDesktopAudioChanged);
@@ -331,38 +365,48 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (await storagePermission.isDenied) {
         await storagePermission.request();
       }
-      initPlatformState();
+      await initPlatformState();
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
-    } else if (Platform.isIOS) {
-      await LocalNetworkPermission().ensureGranted();
     }
 
     _clipboardText = await getClipboardText() ?? "";
   }
 
-  static void setListenApps() async {
-    listenApps = await LocalSetting().listenAppNotifyList();
-  }
-
-  @pragma('vm:entry-point')
-  static void _callback(NotificationEvent evt) {
-    var soc = WsSvrManager();
-    final allowed =
-        soc.isConnected &&
-        filterNotification(evt) &&
-        listenApps.containsKey(evt.packageName);
-    privacyLog.event(PrivacyEvent.notificationForwarded, <PrivacyField, Object>{
-      PrivacyField.allowed: allowed,
-    });
-    if (allowed) {
-      soc.sendNotification(evt.packageName, evt.title, evt.text);
+  Future<void> _requestLocalNetworkPermission() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      await LocalNetworkPermission().ensureGranted();
     }
   }
 
   Future<void> initPlatformState() async {
-    // register the static to handle the events
-    NotificationsListener.initialize(callbackHandle: _callback);
-    // NotificationsListener.receivePort?.listen((evt) => _callback(evt));
+    if (_androidNotificationReceivePort == null) {
+      IsolateNameServer.removePortNameMapping(_androidNotificationPortName);
+      final receivePort = ReceivePort();
+      if (IsolateNameServer.registerPortWithName(
+        receivePort.sendPort,
+        _androidNotificationPortName,
+      )) {
+        _androidNotificationReceivePort = receivePort;
+        _androidNotificationSubscription = receivePort.listen((event) {
+          if (event is NotificationEvent) {
+            unawaited(_forwardAndroidNotification(event));
+          }
+        });
+      } else {
+        receivePort.close();
+      }
+    }
+    await NotificationsListener.initialize(
+      callbackHandle: androidNotificationListenerCallback,
+    );
+    if (!await LocalSetting().isListenAndroid()) {
+      return;
+    }
+    if (!await hasAndroidNotificationListenerPermission()) {
+      await LocalSetting().setAndroidListen(false);
+      return;
+    }
+    await startAndroidListening(requestPermission: false);
   }
 
   Future<void> _setDesktopWindow() async {
@@ -1594,6 +1638,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _refreshDevice({isFirst = false}) async {
+    if (isFirst) {
+      await _localNetworkPermissionBootstrap;
+      if (!mounted) {
+        return;
+      }
+    }
     var temp = await LocalSetting().instance();
     if (isFirst) {
       await db.clearDeviceDiscoveryPresence();
@@ -1697,7 +1747,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     if (isFirst && !_isDiscovering) {
       _discoverService();
-      setListenApps();
     }
   }
 

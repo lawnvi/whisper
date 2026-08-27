@@ -59,6 +59,7 @@ Widget _host({
   Locale locale = const Locale('en'),
   double textScale = 1,
   AppSelectionWriter? selectionWriter,
+  AppListPermissionRequester? permissionRequester,
 }) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
@@ -78,6 +79,7 @@ Widget _host({
     ),
     home: AppListScreen(
       loader: loader,
+      permissionRequester: permissionRequester ?? () async => true,
       selectionWriter: selectionWriter ??
           ({required packages, required add, clear = false}) async {},
     ),
@@ -144,6 +146,44 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
+    expect(find.text('Mail'), findsOneWidget);
+  });
+
+  testWidgets('app permission is requested before loading installed apps',
+      (tester) async {
+    var permissionRequests = 0;
+    var loads = 0;
+    tester.view
+      ..physicalSize = const Size(390, 900)
+      ..devicePixelRatio = 1;
+    await tester.pumpWidget(
+      _host(
+        permissionRequester: () async {
+          permissionRequests += 1;
+          return permissionRequests > 1;
+        },
+        loader: () async {
+          loads += 1;
+          return const AppListPresentation(
+            apps: <AppInfo>[_mail],
+            selectedPackages: <String>{},
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(permissionRequests, 1);
+    expect(loads, 0);
+    expect(
+      find.byKey(const ValueKey<String>('failed-app-list')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(permissionRequests, 2);
+    expect(loads, 1);
     expect(find.text('Mail'), findsOneWidget);
   });
 

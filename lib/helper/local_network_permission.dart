@@ -42,22 +42,12 @@ final class LocalNetworkPermission {
     );
   }
 
-  Future<LocalNetworkPermissionStatus> ensureGranted({
-    bool android16CompatTest = false,
-  }) {
-    return _status(
-      method: 'ensureGranted',
-      android16CompatTest: android16CompatTest,
-    );
+  Future<LocalNetworkPermissionStatus> ensureGranted() {
+    return _status(method: 'ensureGranted');
   }
 
-  Future<LocalNetworkPermissionStatus> currentStatus({
-    bool android16CompatTest = false,
-  }) {
-    return _status(
-      method: 'currentStatus',
-      android16CompatTest: android16CompatTest,
-    );
+  Future<LocalNetworkPermissionStatus> currentStatus() {
+    return _status(method: 'currentStatus');
   }
 
   Future<String?> currentLanAddress() async {
@@ -76,10 +66,7 @@ final class LocalNetworkPermission {
     }
   }
 
-  Future<LocalNetworkPermissionStatus> _status({
-    required String method,
-    required bool android16CompatTest,
-  }) async {
+  Future<LocalNetworkPermissionStatus> _status({required String method}) async {
     if (_targetPlatform == TargetPlatform.macOS ||
         (_targetPlatform == TargetPlatform.iOS && method == 'currentStatus')) {
       return LocalNetworkPermissionStatus.unknown;
@@ -90,10 +77,7 @@ final class LocalNetworkPermission {
     }
 
     try {
-      final status = await _channel.invokeMethod<String>(
-        method,
-        <String, Object?>{'android16CompatTest': android16CompatTest},
-      );
+      final status = await _channel.invokeMethod<String>(method);
       return _parseStatus(status);
     } on PlatformException catch (error) {
       return switch (error.code) {

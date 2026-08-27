@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show SemanticsAction, SemanticsFlag;
+import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -83,6 +83,7 @@ Widget _host({
   Future<void> Function(bool enabled)? syncNotificationForwardingListener,
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
+  void Function(String message)? showMessage,
   AppUpdateManager? updateManager,
   Future<void> Function()? exitForUpdate,
   bool autoCheckForUpdates = true,
@@ -115,6 +116,7 @@ Widget _host({
       syncNotificationForwardingListener: syncNotificationForwardingListener,
       refreshNotificationRegistry: refreshNotificationRegistry,
       openNotificationApps: openNotificationApps,
+      showMessage: showMessage,
       updateManager: updateManager,
       exitForUpdate: exitForUpdate,
       autoCheckForUpdates: autoCheckForUpdates,
@@ -202,6 +204,7 @@ Future<void> _pumpAt(
   Future<void> Function(bool enabled)? syncNotificationForwardingListener,
   Future<void> Function()? refreshNotificationRegistry,
   Future<void> Function()? openNotificationApps,
+  void Function(String message)? showMessage,
   AppUpdateManager? updateManager,
   Future<void> Function()? exitForUpdate,
   bool autoCheckForUpdates = true,
@@ -220,6 +223,7 @@ Future<void> _pumpAt(
     syncNotificationForwardingListener: syncNotificationForwardingListener,
     refreshNotificationRegistry: refreshNotificationRegistry,
     openNotificationApps: openNotificationApps,
+    showMessage: showMessage,
     updateManager: updateManager,
     exitForUpdate: exitForUpdate,
     autoCheckForUpdates: autoCheckForUpdates,
@@ -633,6 +637,7 @@ void main() {
     var refreshes = 0;
     final writes = <bool>[];
     final listenerStates = <bool>[];
+    final messages = <String>[];
     await _pumpAt(
       tester,
       width: 760,
@@ -651,6 +656,7 @@ void main() {
           throw StateError('registry refresh failed');
         }
       },
+      showMessage: messages.add,
     );
     await tester.scrollUntilVisible(
       find.text('Mobile integration'),
@@ -671,14 +677,14 @@ void main() {
       tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isToggled),
       isTrue,
     );
-    expect(
-      find.text('Notification forwarding could not be updated'),
-      findsOneWidget,
-    );
+    expect(messages, <String>[
+      'Notification forwarding could not be updated',
+    ]);
   });
 
   testWidgets('notification forwarding rolls back and reports update failure',
       (tester) async {
+    final messages = <String>[];
     await _pumpAt(
       tester,
       width: 760,
@@ -686,6 +692,7 @@ void main() {
       updateNotificationForwarding: (_) async {
         throw StateError('persistence failed');
       },
+      showMessage: messages.add,
     );
     await tester.scrollUntilVisible(
       find.text('Mobile integration'),
@@ -707,15 +714,72 @@ void main() {
       tester.getSemantics(forwarding).hasFlag(SemanticsFlag.isEnabled),
       isTrue,
     );
+    expect(messages, <String>['Notification forwarding could not be updated']);
+  });
+
+  testWidgets('notification forwarding stays off when listener access is denied',
+      (tester) async {
+    const disabled = SettingsPresentation(
+      device: _device,
+      saveDirectoryPath: '/storage/emulated/0/Download',
+      version: '2.4.0',
+      closeToTray: false,
+      copyVerificationCode: true,
+      listenAndroidNotifications: false,
+      ignoreAndroidNotifications: false,
+      autoConnect: true,
+      launchAtStartup: false,
+      androidBackgroundKeepAlive: true,
+      audioSharePlaybackGain: 1.0,
+      remoteInputScrollMultiplier: 1.0,
+      themeMode: ThemeMode.system,
+      isAndroid: true,
+      isDesktop: false,
+      isMobile: true,
+    );
+    final writes = <bool>[];
+    final listenerStates = <bool>[];
+    await _pumpAt(
+      tester,
+      width: 760,
+      presentation: disabled,
+      writeNotificationForwarding: (enabled) async => writes.add(enabled),
+      readNotificationForwarding: () async => false,
+      syncNotificationForwardingListener: (enabled) async {
+        listenerStates.add(enabled);
+        if (enabled) {
+          throw StateError('permission denied');
+        }
+      },
+      refreshNotificationRegistry: () async {},
+    );
+    await tester.scrollUntilVisible(
+      find.text('Forward Android Notifications'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
+    await tester.pump();
+    await tester.tap(_settingRow('Forward Android Notifications'));
+    await tester.pumpAndSettle();
+
+    expect(listenerStates, <bool>[true, false]);
+    expect(writes, <bool>[false]);
     expect(
-      find.text('Notification forwarding could not be updated'),
-      findsOneWidget,
+      tester
+          .widget<CupertinoSwitch>(
+            find.descendant(
+              of: _settingRow('Forward Android Notifications'),
+              matching: find.byType(CupertinoSwitch),
+            ),
+          )
+          .value,
+      isFalse,
     );
   });
 
-  testWidgets('notification app navigation explains its disabled state',
+  testWidgets('notification app navigation is hidden while forwarding is off',
       (tester) async {
-    final semantics = tester.ensureSemantics();
     final disabled = SettingsPresentation(
       device: _androidPresentation.device,
       saveDirectoryPath: _androidPresentation.saveDirectoryPath,
@@ -746,13 +810,7 @@ void main() {
     );
     await tester.pump();
 
-    final apps = _settingRow('Notification apps');
-    final node = tester.getSemantics(apps);
-    expect(node.label,
-        contains('Enable notification forwarding to choose applications'));
-    expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse);
-    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
-    semantics.dispose();
+    expect(find.text('Notification apps'), findsNothing);
   });
 
   testWidgets('settings loader failure can retry without platform services',

@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
+import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/notification_l10n.dart';
 
@@ -92,24 +93,20 @@ class NotificationHelper {
   }
 }
 
-Future<void> startAndroidListening() async {
+Future<bool> startAndroidListening({bool requestPermission = true}) async {
   var hasPermission = (await NotificationsListener.hasPermission) ?? false;
+  if (!hasPermission && requestPermission) {
+    hasPermission =
+        await AndroidPrivacyPermission.requestNotificationListener();
+  }
   if (!hasPermission) {
-    NotificationsListener.openPermissionSettings();
-    return;
+    return false;
   }
-  var isRunning = (await NotificationsListener.isRunning) ?? false;
-
-  if (!isRunning) {
-    await NotificationsListener.startService(
-        foreground: false,
-        title: "Listener Running",
-        description: "Welcome to having me");
-  }
+  return true;
 }
 
-Future<void> stopAndroidListening() async {
-  await NotificationsListener.stopService();
+Future<bool> hasAndroidNotificationListenerPermission() async {
+  return (await NotificationsListener.hasPermission) ?? false;
 }
 
 bool filterNotification(NotificationEvent event) {

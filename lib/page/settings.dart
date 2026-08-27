@@ -139,6 +139,7 @@ class SettingsScreen extends StatefulWidget {
     this.syncNotificationForwardingListener,
     this.refreshNotificationRegistry,
     this.openNotificationApps,
+    this.showMessage,
     this.updateManager,
     this.exitForUpdate,
     this.autoCheckForUpdates = true,
@@ -155,6 +156,7 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function(bool enabled)? syncNotificationForwardingListener;
   final Future<void> Function()? refreshNotificationRegistry;
   final Future<void> Function()? openNotificationApps;
+  final void Function(String message)? showMessage;
   final AppUpdateManager? updateManager;
   final Future<void> Function()? exitForUpdate;
   final bool autoCheckForUpdates;
@@ -232,7 +234,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final packageInfo = await PackageInfo.fromPlatform();
     final closeToTray = await LocalSetting().isClose2Tray();
     final copyVerify = await LocalSetting().copyVerify();
-    final listenAndroid = await LocalSetting().isListenAndroid();
+    var listenAndroid = await LocalSetting().isListenAndroid();
+    if (Platform.isAndroid && listenAndroid) {
+      final hasListenerAccess =
+          await hasAndroidNotificationListenerPermission();
+      if (!hasListenerAccess) {
+        listenAndroid = false;
+        await LocalSetting().setAndroidListen(false);
+      }
+    }
     final ignoreAndroid = await LocalSetting().ignoreAndroidNotification();
     final autoConnect = await LocalSetting().autoConnectEnabled();
     final clipboardAutoSync = await LocalSetting().clipboardAutoSync();
@@ -661,27 +671,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 : _updateNotificationForwarding,
                           ),
                         ),
-                        _buildSettingItem(
-                          l10n.notificationApps,
-                          Icon(
-                            Icons.apps_rounded,
-                            color: isDark
-                                ? Colors.grey[400]
-                                : CupertinoColors.systemGrey,
+                        if (_listenAndroid)
+                          _buildSettingItem(
+                            l10n.notificationApps,
+                            Icon(
+                              Icons.apps_rounded,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : CupertinoColors.systemGrey,
+                            ),
+                            desc: l10n.notificationAppsSelected(
+                              _notificationAppCount,
+                            ),
+                            enabled: !_notificationForwardingBusy,
+                            onTap: _openNotificationApps,
+                            trailing: Icon(
+                              Icons.chevron_right_rounded,
+                              color: palette.textMuted,
+                            ),
                           ),
-                          desc: _listenAndroid
-                              ? l10n.notificationAppsSelected(
-                                  _notificationAppCount,
-                                )
-                              : l10n.notificationAppsDisabled,
-                          enabled:
-                              _listenAndroid && !_notificationForwardingBusy,
-                          onTap: _openNotificationApps,
-                          trailing: Icon(
-                            Icons.chevron_right_rounded,
-                            color: palette.textMuted,
-                          ),
-                        ),
                       ],
                     ),
                   _buildSettingsSection(
@@ -1228,13 +1236,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _listenAndroid = trustedValue;
         _notificationForwardingBusy = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.notificationForwardingUpdateFailed,
-          ),
-        ),
-      );
+      final message =
+          AppLocalizations.of(context)!.notificationForwardingUpdateFailed;
+      final showMessage = widget.showMessage;
+      if (showMessage != null) {
+        showMessage(message);
+      } else {
+        showAppToast(message);
+      }
     }
   }
 
@@ -1245,8 +1254,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _syncAndroidNotificationListener;
     final refresh = widget.refreshNotificationRegistry ??
         NotificationAppRegistry.instance.refresh;
-    await write(enabled);
-    await sync(enabled);
+    if (enabled) {
+      await sync(true);
+      await write(true);
+    } else {
+      await write(false);
+      await sync(false);
+    }
     await refresh();
   }
 
@@ -1267,13 +1281,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _syncAndroidNotificationListener(bool enabled) async {
-    if (!Platform.isAndroid || !WsSvrManager().isConnected) {
+    if (!Platform.isAndroid) {
       return;
     }
     if (enabled) {
-      await startAndroidListening();
-    } else {
-      await stopAndroidListening();
+      if (!await startAndroidListening()) {
+        throw StateError('Notification listener permission was not granted');
+      }
     }
   }
 

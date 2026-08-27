@@ -19,7 +19,7 @@ void main() {
   });
 
   test(
-    'maps every Android native status and forwards compat test mode',
+    'maps every Android native permission status',
     () async {
       var response = 'granted';
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -39,23 +39,12 @@ void main() {
         'unknown': LocalNetworkPermissionStatus.unknown,
       }.entries) {
         response = entry.key;
-        expect(
-          await permission.ensureGranted(android16CompatTest: true),
-          entry.value,
-        );
+        expect(await permission.ensureGranted(), entry.value);
       }
 
       expect(calls, hasLength(4));
       expect(calls.every((call) => call.method == 'ensureGranted'), isTrue);
-      expect(
-        calls.every(
-          (call) =>
-              (call.arguments
-                  as Map<Object?, Object?>)['android16CompatTest'] ==
-              true,
-        ),
-        isTrue,
-      );
+      expect(calls.every((call) => call.arguments == null), isTrue);
     },
   );
 

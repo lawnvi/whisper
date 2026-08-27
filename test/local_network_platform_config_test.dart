@@ -7,7 +7,7 @@ void main() {
       'android/app/src/main/kotlin/com/vireen/whisper/LocalNetworkPermissionPlugin.kt';
 
   test(
-    'Android manifest declares LAN permissions without location expansion',
+    'Android target 36 relies on implicit LAN access without nearby prompts',
     () {
       final manifest = File(
         'android/app/src/main/AndroidManifest.xml',
@@ -20,13 +20,14 @@ void main() {
         manifest,
         contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'),
       );
-      expect(manifest, contains('android.permission.NEARBY_WIFI_DEVICES'));
-      expect(manifest, contains('android:maxSdkVersion="36"'));
       expect(
         manifest,
-        contains('android:usesPermissionFlags="neverForLocation"'),
+        isNot(contains('android.permission.NEARBY_WIFI_DEVICES')),
       );
-      expect(manifest, contains('android.permission.ACCESS_LOCAL_NETWORK'));
+      expect(
+        manifest,
+        isNot(contains('android.permission.ACCESS_LOCAL_NETWORK')),
+      );
       expect(
         manifest,
         isNot(contains('android.permission.ACCESS_FINE_LOCATION')),
@@ -38,7 +39,29 @@ void main() {
     },
   );
 
-  test('Android permission plugin covers normal, compat, and API 37 paths', () {
+  test('Android manifest gates app-list access and excludes unused access', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+
+    expect(manifest, contains('com.android.permission.GET_INSTALLED_APPS'));
+    expect(manifest, contains('android.permission.QUERY_ALL_PACKAGES'));
+    final permissionPlugin = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/AndroidPrivacyPermissionPlugin.kt',
+    ).readAsStringSync();
+    expect(permissionPlugin, contains('requestInstalledApps'));
+    expect(permissionPlugin, contains('com.lbe.security.miui'));
+    expect(permissionPlugin, contains('ActivityCompat.requestPermissions'));
+    for (final unusedPermission in <String>[
+      'android.permission.SET_WALLPAPER',
+      'android.permission.SET_WALLPAPER_HINTS',
+      'android.permission.USE_FULL_SCREEN_INTENT',
+    ]) {
+      expect(manifest, isNot(contains(unusedPermission)));
+    }
+  });
+
+  test('Android permission plugin gates runtime access on target API 37', () {
     final plugin = File(pluginPath).readAsStringSync();
     final requestState = File(
       'android/app/src/main/kotlin/com/vireen/whisper/LocalNetworkPermissionRequestState.kt',
@@ -58,11 +81,13 @@ void main() {
       contains('override fun onActivityResumed(activity: Activity)'),
     );
     expect(plugin, contains('emitCurrentPermissionStatus()'));
-    expect(plugin, contains('android16CompatTest'));
-    expect(requestState, contains('sdkInt >= 37'));
-    expect(requestState, contains('sdkInt == 36 && android16CompatTest'));
+    expect(requestState, contains('sdkInt >= 37 && targetSdkInt >= 37'));
     expect(plugin, contains('android.permission.ACCESS_LOCAL_NETWORK'));
-    expect(plugin, contains('Manifest.permission.NEARBY_WIFI_DEVICES'));
+    expect(plugin, isNot(contains('Manifest.permission.NEARBY_WIFI_DEVICES')));
+    expect(
+      plugin,
+      contains('targetSdkInt = context.applicationInfo.targetSdkVersion'),
+    );
     expect(plugin, contains('LocalNetworkPermissionRequestState'));
     expect(plugin, contains('state.enqueue(permission, result)'));
     expect(plugin, contains('state.hasPendingRequest'));
@@ -128,6 +153,12 @@ void main() {
 
     final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
     expect(deviceList, isNot(contains('Permission.location')));
+    expect(
+      deviceList,
+      contains('Future<void> _requestLocalNetworkPermission()'),
+    );
+    expect(deviceList, contains('await LocalNetworkPermission().ensureGranted()'));
+    expect(deviceList, contains('await _localNetworkPermissionBootstrap'));
 
     final entitlements = File(
       'ios/Runner/Runner.entitlements',

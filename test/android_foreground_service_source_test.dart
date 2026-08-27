@@ -345,4 +345,85 @@ void main() {
       expect(strings, contains('<string name="notification_listener_label">'));
     },
   );
+
+  test('notification listener callback returns events to the main isolate', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+
+    expect(
+      deviceList,
+      matches(
+        RegExp(
+          r"@pragma\('vm:entry-point'\)\s+"
+          r'void androidNotificationListenerCallback\(NotificationEvent event\)',
+        ),
+      ),
+    );
+    expect(
+      deviceList,
+      contains(
+        'IsolateNameServer.lookupPortByName(_androidNotificationPortName)',
+      ),
+    );
+    expect(deviceList, contains('final receivePort = ReceivePort();'));
+    expect(deviceList, contains('await LocalSetting().listenAppNotifyList()'));
+    expect(
+      deviceList,
+      contains('callbackHandle: androidNotificationListenerCallback'),
+    );
+  });
+
+  test('enabling notification forwarding requests access before pairing', () {
+    final settings = File('lib/page/settings.dart').readAsStringSync();
+    final helper = File('lib/helper/notification.dart').readAsStringSync();
+    final start = settings.indexOf(
+      'Future<void> _syncAndroidNotificationListener(bool enabled)',
+    );
+    final end = settings.indexOf('Future<void> _openNotificationApps()', start);
+    final method = settings.substring(start, end);
+
+    expect(method, contains('if (!Platform.isAndroid)'));
+    expect(method, isNot(contains('isConnected')));
+    expect(method, contains('await startAndroidListening()'));
+    expect(method, isNot(contains('stopAndroidListening()')));
+    expect(
+      helper,
+      contains('AndroidPrivacyPermission.requestNotificationListener()'),
+    );
+    expect(
+      method,
+      contains("throw StateError('Notification listener permission"),
+    );
+
+    final activity = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/MainActivity.kt',
+    ).readAsStringSync();
+    final permissionPlugin = File(
+      'android/app/src/main/kotlin/com/vireen/whisper/AndroidPrivacyPermissionPlugin.kt',
+    ).readAsStringSync();
+    expect(activity, contains('AndroidPrivacyPermissionPlugin()'));
+    expect(
+      permissionPlugin,
+      contains('ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS'),
+    );
+    expect(permissionPlugin, contains('hasNotificationListenerPermission()'));
+    expect(
+      settings,
+      contains('await hasAndroidNotificationListenerPermission()'),
+    );
+    expect(settings, contains('await LocalSetting().setAndroidListen(false)'));
+  });
+
+  test(
+    'enabled notification forwarding resumes without prompting on startup',
+    () {
+      final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+
+      expect(deviceList, contains('await LocalSetting().isListenAndroid()'));
+      expect(deviceList, contains('final forwardingEnabled ='));
+      expect(
+        deviceList,
+        contains('await startAndroidListening(requestPermission: false)'),
+      );
+    },
+  );
 }
