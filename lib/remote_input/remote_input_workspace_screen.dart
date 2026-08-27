@@ -204,22 +204,13 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
     final workspaceSnapshot = _workspaceCoordinator.snapshot;
     final devices = <DeviceData>[...connectedDevices];
-    if (workspaceSnapshot.isControllerLive) {
-      final knownIds = devices.map((device) => device.uid).toSet();
-      for (final peerId in workspaceSnapshot.targets.keys) {
-        if (knownIds.add(peerId)) {
-          final stored = await LocalDatabase().fetchDevice(peerId);
-          if (stored != null) {
-            devices.add(stored);
-          }
-        }
-      }
-    }
     final connectedDeviceIds = connectedDevices
         .map((device) => device.uid)
         .toSet();
     final desiredTargetPeerIds = workspaceSnapshot.isControllerLive
-        ? workspaceSnapshot.targets.keys.toList(growable: false)
+        ? workspaceSnapshot.targets.keys
+              .where(connectedDeviceIds.contains)
+              .toList(growable: false)
         : const <String>[];
     final nextLayouts = <String, RemoteInputLayoutData>{};
     for (var index = 0; index < devices.length; index++) {

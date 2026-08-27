@@ -126,7 +126,7 @@ void main() {
     expect(magnetize, contains('LocalDatabase().upsertRemoteInputLayout'));
   });
 
-  test('workspace screen restores online and offline controller targets', () {
+  test('workspace screen only restores connected controller targets', () {
     final source = File(
       'lib/remote_input/remote_input_workspace_screen.dart',
     ).readAsStringSync();
@@ -137,7 +137,11 @@ void main() {
     expect(loadWorkspace, contains('final workspaceSnapshot'));
     expect(loadWorkspace, contains('workspaceSnapshot.targets.keys'));
     expect(loadWorkspace, contains('final desiredTargetPeerIds'));
-    expect(loadWorkspace, contains('LocalDatabase().fetchDevice(peerId)'));
+    expect(loadWorkspace, contains('.where(connectedDeviceIds.contains)'));
+    expect(
+      loadWorkspace,
+      isNot(contains('LocalDatabase().fetchDevice(peerId)')),
+    );
     expect(loadWorkspace, contains('_selectedPeerIds'));
     expect(loadWorkspace, contains('addAll(desiredTargetPeerIds)'));
     expect(loadWorkspace, contains('activePeerId'));
