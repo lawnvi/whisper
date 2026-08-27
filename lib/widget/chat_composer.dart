@@ -181,15 +181,12 @@ class ChatComposer extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (clipboardEnabled)
-                _buildUtilityActionButton(
-                  context,
+                _ClipboardActionButton(
                   key: clipboardButtonKey,
-                  icon: Icons.content_copy_rounded,
                   enabled: canSend && !isLoading,
                   onPressed: onSendClipboard,
                   buttonSize: 26,
                   iconSize: 15,
-                  outlined: false,
                 ),
               const Spacer(),
               _buildPrimaryActionButton(
@@ -276,15 +273,12 @@ class ChatComposer extends StatelessWidget {
             Row(
               children: [
                 if (clipboardEnabled)
-                  _buildUtilityActionButton(
-                    context,
+                  _ClipboardActionButton(
                     key: clipboardButtonKey,
-                    icon: Icons.content_copy_rounded,
                     enabled: canSend && !isLoading,
                     onPressed: onSendClipboard,
                     buttonSize: 28,
                     iconSize: 18,
-                    outlined: false,
                   ),
                 const Spacer(),
                 _buildPrimaryActionButton(
@@ -298,49 +292,6 @@ class ChatComposer extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildUtilityActionButton(
-    BuildContext context, {
-    required Key key,
-    required IconData icon,
-    required bool enabled,
-    required Future<void> Function() onPressed,
-    required double buttonSize,
-    required double iconSize,
-    required bool outlined,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final outlinedBorderColor = palette.borderSubtle;
-    final disabledFillColor = palette.surfaceMuted;
-    return IconButton(
-      key: key,
-      onPressed: enabled ? () => onPressed() : null,
-      style: IconButton.styleFrom(
-        minimumSize: Size(buttonSize, buttonSize),
-        maximumSize: Size(buttonSize, buttonSize),
-        backgroundColor: outlined
-            ? (enabled
-                  ? palette.surfaceElevated
-                  : disabledFillColor.withValues(alpha: 0.65))
-            : Colors.transparent,
-        foregroundColor: enabled
-            ? colorScheme.onSurfaceVariant
-            : colorScheme.outline,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(outlined ? 16 : buttonSize / 2),
-          side: outlined
-              ? BorderSide(color: outlinedBorderColor)
-              : BorderSide.none,
-        ),
-        padding: EdgeInsets.zero,
-        elevation: 0,
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: Colors.transparent,
-      ),
-      icon: Icon(icon, size: iconSize),
     );
   }
 
@@ -714,5 +665,83 @@ class ChatComposer extends StatelessWidget {
     }
     final mb = kb / 1024;
     return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
+  }
+}
+
+class _ClipboardActionButton extends StatefulWidget {
+  final bool enabled;
+  final Future<void> Function() onPressed;
+  final double buttonSize;
+  final double iconSize;
+
+  const _ClipboardActionButton({
+    super.key,
+    required this.enabled,
+    required this.onPressed,
+    required this.buttonSize,
+    required this.iconSize,
+  });
+
+  @override
+  State<_ClipboardActionButton> createState() => _ClipboardActionButtonState();
+}
+
+class _ClipboardActionButtonState extends State<_ClipboardActionButton> {
+  Timer? _resetTimer;
+  bool _showConfirmation = false;
+
+  void _handlePressed() {
+    if (!widget.enabled) {
+      return;
+    }
+    setState(() => _showConfirmation = true);
+    HapticFeedback.selectionClick();
+    unawaited(widget.onPressed());
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) {
+        setState(() => _showConfirmation = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return IconButton(
+      onPressed: widget.enabled ? _handlePressed : null,
+      style: IconButton.styleFrom(
+        minimumSize: Size(widget.buttonSize, widget.buttonSize),
+        maximumSize: Size(widget.buttonSize, widget.buttonSize),
+        backgroundColor: Colors.transparent,
+        foregroundColor: widget.enabled
+            ? colorScheme.onSurfaceVariant
+            : colorScheme.outline,
+        padding: EdgeInsets.zero,
+        elevation: 0,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: Colors.transparent,
+      ),
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        reverseDuration: const Duration(milliseconds: 140),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: animation, child: child),
+        ),
+        child: Icon(
+          _showConfirmation ? Icons.check_rounded : Icons.content_copy_rounded,
+          key: ValueKey<bool>(_showConfirmation),
+          size: widget.iconSize,
+          color: _showConfirmation ? colorScheme.primary : null,
+        ),
+      ),
+    );
   }
 }

@@ -58,6 +58,43 @@ void main() {
     },
   );
 
+  testWidgets('clipboard action morphs into a check after tapping', (
+    tester,
+  ) async {
+    var sentClipboard = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatComposer(
+            clipboardEnabled: true,
+            isInputEmpty: true,
+            isLoading: false,
+            isLocalhost: false,
+            canSend: true,
+            isDesktopStyle: true,
+            keyPressedMap: const <String, bool>{},
+            controller: TextEditingController(),
+            focusNode: FocusNode(),
+            onPickFiles: () async {},
+            onSendClipboard: () async {
+              sentClipboard++;
+            },
+            onSendText: (_) async => true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(ChatComposer.clipboardButtonKey));
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(sentClipboard, 1);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.byIcon(Icons.content_copy_rounded), findsOneWidget);
+  });
+
   testWidgets('desktop composer swaps to send action when text exists', (
     tester,
   ) async {
