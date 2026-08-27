@@ -656,11 +656,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required RemoteInputControlSender sendControl,
     Uint8List? mediaSendKey,
   }) async {
-    _manager.handleControlMessage(accept);
-    if (accept.sourcePeerId != localPeerId) {
+    final current = _state;
+    if (accept.sourcePeerId != localPeerId ||
+        current.role != RemoteInputRuntimeRole.source ||
+        current.status != RemoteInputRuntimeStatus.offering ||
+        current.sessionId != accept.sessionId ||
+        current.peerId != accept.sinkPeerId) {
       _trace(RemoteInputDiagnosticKind.offerIgnored);
       return;
     }
+    _manager.handleControlMessage(accept);
     try {
       _trace(RemoteInputDiagnosticKind.captureStarting);
       await _startCapture(

@@ -104,6 +104,53 @@ void main() {
           RemoteInputEventType.mouseMove);
     });
 
+    test('source ignores a delayed accept after sharing stops', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final coordinator = RemoteInputCoordinator(
+        manager: RemoteInputManager(),
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      await coordinator.startSharingToConnectedPeer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        sinkHost: 'win.local',
+        sinkPort: 10002,
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+        isMutuallyTrusted: true,
+        remoteCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      final offer = sentControls.single;
+      await coordinator.stopSharing(sendControl: sentControls.add);
+      calls.clear();
+
+      await coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: offer.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'win',
+          layoutEdge: RemoteInputEdge.right,
+          releaseHotkey: 'ctrl+alt+esc',
+          transportToken: 'input-token',
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'win.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        mediaSendKey: mediaKey,
+        sendControl: sentControls.add,
+      );
+
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+      expect(calls.map((call) => call.method), isNot(contains('startCapture')));
+    });
+
     test('source sends a stop control when native capture hotkey is released',
         () async {
       final transport = _FakeRemoteInputTransport();
