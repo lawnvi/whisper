@@ -2023,18 +2023,70 @@ LazyDatabase _openConnection() {
 
 Future<Directory> _databaseDirectory() async {
   if (Platform.isMacOS) {
+    final currentDirectory = await getApplicationSupportDirectory();
+    final currentDatabase = File('${currentDirectory.path}/db.sqlite');
+    if (await currentDatabase.exists()) {
+      return currentDirectory;
+    }
     final home = Platform.environment['HOME'];
     if (home != null && home.isNotEmpty) {
       final legacyDirectory = Directory(
         '$home/Library/Containers/com.vireen.whisper/Data/Documents',
       );
-      if (await File('${legacyDirectory.path}/db.sqlite').exists()) {
+      final legacyDatabase = File('${legacyDirectory.path}/db.sqlite');
+      if (await migrateLegacyMacOSDatabase(
+        legacyDatabase: legacyDatabase,
+        destinationDirectory: currentDirectory,
+      )) {
+        return currentDirectory;
+      }
+      if (await legacyDatabase.exists()) {
         return legacyDirectory;
       }
     }
-    return getApplicationSupportDirectory();
+    return currentDirectory;
   }
   return getApplicationDocumentsDirectory();
+}
+
+Future<bool> migrateLegacyMacOSDatabase({
+  required File legacyDatabase,
+  required Directory destinationDirectory,
+}) async {
+  final destination = File('${destinationDirectory.path}/db.sqlite');
+  if (await destination.exists()) {
+    return true;
+  }
+  if (!await legacyDatabase.exists()) {
+    return false;
+  }
+
+  await destinationDirectory.create(recursive: true);
+  final temporary = File('${destination.path}.migrating');
+  Database? source;
+  Database? target;
+  try {
+    if (await temporary.exists()) {
+      await temporary.delete();
+    }
+    source = sqlite3.open(legacyDatabase.path, mode: OpenMode.readOnly);
+    target = sqlite3.open(temporary.path);
+    await source.backup(target, nPage: -1).drain<void>();
+    target.dispose();
+    target = null;
+    source.dispose();
+    source = null;
+    await temporary.rename(destination.path);
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    target?.dispose();
+    source?.dispose();
+    if (await temporary.exists()) {
+      await temporary.delete();
+    }
+  }
 }
 
 void configureWhisperDatabase(Database database) {

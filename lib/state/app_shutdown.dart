@@ -8,8 +8,18 @@ class AppShutdownCoordinator {
   }
 
   Future<void> _runSteps(List<AppShutdownStep> steps) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
     for (final step in steps) {
-      await step();
+      try {
+        await step();
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 }

@@ -17,6 +17,14 @@ void main() {
     expect(conversation, contains('revealDesktopWindowForAttention()'));
   });
 
+  test('desktop app closes resources before accepting system exit', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+
+    expect(deviceList, contains('with WidgetsBindingObserver'));
+    expect(deviceList, contains('Future<AppExitResponse> didRequestAppExit()'));
+    expect(deviceList, contains('await _shutdownDesktopResources()'));
+  });
+
   test('server presents only one pairing prompt per socket session', () {
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
 

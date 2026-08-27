@@ -79,6 +79,7 @@ enum DeviceListOperationKind {
   temporaryFileCleanup,
   androidSystemShareCleanup,
   audioToggle,
+  desktopShutdown,
   socketDialog,
   serverStart,
 }
@@ -146,6 +147,7 @@ class DeviceListScreen extends StatefulWidget {
 }
 
 class _DeviceListScreen extends State<DeviceListScreen>
+    with WidgetsBindingObserver
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
   static const double _desktopToolbarGap = 10;
@@ -228,6 +230,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     //     (Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
     //   initSystemTray();
     // }
+    WidgetsBinding.instance.addObserver(this);
     _setDesktopWindow();
     _requestPermission();
     _desktopSearchFocusNode.addListener(_handleDesktopSearchFocusChanged);
@@ -473,6 +476,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   void dispose() {
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _connectionAttempts.cancelAll();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
@@ -502,6 +506,22 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // stop watch
     unawaited(clipboardWatcher.stop());
     super.dispose();
+  }
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    if (isDesktop()) {
+      try {
+        await _shutdownDesktopResources();
+      } catch (error) {
+        privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+          PrivacyField.kind: DeviceListOperationKind.desktopShutdown,
+          PrivacyField.success: false,
+          PrivacyField.errorType: privacyLog.errorType(error),
+        });
+      }
+    }
+    return AppExitResponse.exit;
   }
 
   Future<void> _stopClipboardWatcher() async {

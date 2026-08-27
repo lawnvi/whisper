@@ -462,6 +462,8 @@ void main() {
         contains(r'$home/Library/Containers/com.vireen.whisper/Data/Documents'),
       );
       expect(databaseSource, contains('getApplicationSupportDirectory()'));
+      expect(databaseSource, contains('migrateLegacyMacOSDatabase'));
+      expect(databaseSource, contains('source.backup(target'));
     });
 
     test('coalesces the Apple Silicon 57 to 255 Caps companion pair', () {
