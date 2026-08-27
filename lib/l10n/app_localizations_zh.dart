@@ -1277,4 +1277,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatTimestampYesterday(String time) {
     return '昨天 $time';
   }
+
+  @override
+  String get messageLinkOpenFailed => '无法打开此链接';
 }

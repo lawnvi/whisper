@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
@@ -43,6 +44,7 @@ import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
 import 'package:whisper/widget/media_message_preview.dart';
+import 'package:whisper/widget/message_link_text.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
 import '../helper/file.dart';
@@ -64,6 +66,7 @@ enum ConversationOperationKind {
   audioToggle,
   remoteInputToggle,
   sendText,
+  openLink,
 }
 
 enum ConversationRemoteInputDiagnostic { toggleStarted }
@@ -2059,6 +2062,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final receivedBubbleColor = palette.messageIncoming;
     final receivedBorderColor = palette.borderSubtle;
     final sentBubbleColor = palette.messageOutgoing;
+    final textStyle = TextStyle(
+      color: colorScheme.onSurface,
+      fontSize: isDesktop() ? 16.5 : 16,
+      height: 1.55,
+    );
+    final linkStyle = textStyle.copyWith(
+      color: colorScheme.primary,
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+      decorationColor: colorScheme.primary.withValues(alpha: 0.55),
+    );
 
     return Container(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
@@ -2082,20 +2096,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Flexible(
-                child: SelectableText(
-                  content,
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontSize: isDesktop() ? 16.5 : 16,
-                    height: 1.55,
-                  ),
+                child: MessageLinkText(
+                  text: content,
+                  style: textStyle,
+                  linkStyle: linkStyle,
+                  linksEnabled: !_messageSelectionActive,
+                  onOpen: _openMessageLink,
                   textAlign: TextAlign.left,
-                  contextMenuBuilder: (context, editableTextState) {
-                    return AdaptiveTextSelectionToolbar(
-                      anchors: editableTextState.contextMenuAnchors,
-                      children: const [],
-                    );
-                  },
                 ),
               ),
               if (trailingAction != null) ...[
@@ -2107,6 +2114,20 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _openMessageLink(Uri uri) async {
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        showAppToast(AppLocalizations.of(context)!.messageLinkOpenFailed);
+      }
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.openLink, error);
+      if (mounted) {
+        showAppToast(AppLocalizations.of(context)!.messageLinkOpenFailed);
+      }
+    }
   }
 
   Widget _buildFileMessage(MessageData message, bool isOpponent) {

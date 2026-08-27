@@ -669,5 +669,6 @@
   "chatTimestampYesterday": "Ayer {time}",
   "@chatTimestampYesterday": {
     "placeholders": { "time": { "type": "String" } }
-  }
+  },
+  "messageLinkOpenFailed": "No se pudo abrir este enlace"
 }

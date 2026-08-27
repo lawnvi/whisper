@@ -718,5 +718,6 @@
   "chatTimestampYesterday": "昨天 {time}",
   "@chatTimestampYesterday": {
     "placeholders": { "time": { "type": "String" } }
-  }
+  },
+  "messageLinkOpenFailed": "无法打开此链接"
 }

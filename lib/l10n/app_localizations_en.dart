@@ -1365,4 +1365,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String chatTimestampYesterday(String time) {
     return 'Yesterday $time';
   }
+
+  @override
+  String get messageLinkOpenFailed => 'Could not open this link';
 }

@@ -2373,6 +2373,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'昨天 {time}'**
   String chatTimestampYesterday(String time);
+
+  /// No description provided for @messageLinkOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开此链接'**
+  String get messageLinkOpenFailed;
 }
 
 class _AppLocalizationsDelegate
