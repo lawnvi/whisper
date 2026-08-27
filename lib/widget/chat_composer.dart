@@ -584,6 +584,9 @@ class ChatComposer extends StatelessWidget {
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
       keyPressedMap[LogicalKeyboardKey.enter.keyLabel] = event is KeyDownEvent;
+      if (_hasActiveComposition) {
+        return KeyEventResult.ignored;
+      }
       if (event is KeyDownEvent &&
           (keyPressedMap[LogicalKeyboardKey.shift.keyLabel] != true ||
               isMobile())) {
@@ -607,6 +610,11 @@ class ChatComposer extends StatelessWidget {
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  bool get _hasActiveComposition {
+    final composing = controller.value.composing;
+    return composing.isValid && !composing.isCollapsed;
   }
 
   bool _isPasteShortcut(KeyEvent event) {
