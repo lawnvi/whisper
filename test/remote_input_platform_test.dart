@@ -322,6 +322,8 @@ void main() {
         'copy': RemoteInputTextShortcut.copy,
         'cut': RemoteInputTextShortcut.cut,
         'paste': RemoteInputTextShortcut.paste,
+        'undo': RemoteInputTextShortcut.undo,
+        'redo': RemoteInputTextShortcut.redo,
       }.entries) {
         final handled = await platform.handleNativeMethodCall(
           MethodCall('onTextShortcut', <String, dynamic>{
@@ -338,6 +340,8 @@ void main() {
         RemoteInputTextShortcut.copy,
         RemoteInputTextShortcut.cut,
         RemoteInputTextShortcut.paste,
+        RemoteInputTextShortcut.undo,
+        RemoteInputTextShortcut.redo,
       ]);
     });
 

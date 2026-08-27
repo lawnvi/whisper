@@ -34,5 +34,39 @@ void main() {
       expect(controller.selection.baseOffset, 0);
       expect(controller.selection.extentOffset, controller.text.length);
     });
+
+    testWidgets('undo and redo target the current focused EditableText', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TextField(controller: controller, focusNode: focusNode),
+          ),
+        ),
+      );
+      focusNode.requestFocus();
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'first');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.enterText(find.byType(TextField), 'first second');
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(
+        handleRemoteInputTextShortcut(RemoteInputTextShortcut.undo),
+        isTrue,
+      );
+      expect(controller.text, 'first');
+      expect(
+        handleRemoteInputTextShortcut(RemoteInputTextShortcut.redo),
+        isTrue,
+      );
+      expect(controller.text, 'first second');
+    });
   });
 }

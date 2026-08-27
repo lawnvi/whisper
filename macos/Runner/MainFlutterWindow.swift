@@ -1778,16 +1778,19 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return true
     }
 
-    let unsupportedModifiers: CGEventFlags = [
-      .maskShift,
-      .maskControl,
-      .maskAlternate,
-    ]
+    let usesCommand = injectedModifierFlags.contains(.maskCommand)
+      && !injectedModifierFlags.contains(.maskControl)
+    let usesControlForUndo = key == 6
+      && injectedModifierFlags.contains(.maskControl)
+      && !injectedModifierFlags.contains(.maskCommand)
     guard down,
           NSApp.isActive,
-          injectedModifierFlags.contains(.maskCommand),
-          injectedModifierFlags.intersection(unsupportedModifiers).isEmpty,
-          let shortcut = appCommandTextShortcut(for: key) else {
+          usesCommand || usesControlForUndo,
+          !injectedModifierFlags.contains(.maskAlternate),
+          let shortcut = appCommandTextShortcut(
+            for: key,
+            shift: injectedModifierFlags.contains(.maskShift)
+          ) else {
       return false
     }
 
@@ -1796,16 +1799,18 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     return true
   }
 
-  private func appCommandTextShortcut(for keyCode: Int) -> String? {
+  private func appCommandTextShortcut(for keyCode: Int, shift: Bool) -> String? {
     switch keyCode {
     case 0:
-      return "selectAll"
+      return shift ? nil : "selectAll"
     case 8:
-      return "copy"
+      return shift ? nil : "copy"
     case 7:
-      return "cut"
+      return shift ? nil : "cut"
     case 9:
-      return "paste"
+      return shift ? nil : "paste"
+    case 6:
+      return shift ? "redo" : "undo"
     default:
       return nil
     }

@@ -626,6 +626,11 @@ void main() {
         expect(source, contains('"copy"'));
         expect(source, contains('"cut"'));
         expect(source, contains('"paste"'));
+        expect(source, contains('"undo"'));
+        expect(source, contains('"redo"'));
+        expect(source, contains('case 6:'));
+        expect(source, contains('return shift ? "redo" : "undo"'));
+        expect(source, contains('usesControlForUndo'));
 
         final injectEvent = RegExp(
           r'private func injectEvent\([\s\S]*?\n  private func payloadData',

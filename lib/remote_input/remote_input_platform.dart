@@ -10,7 +10,7 @@ typedef RemoteInputTextShortcutHandler =
     FutureOr<bool> Function(RemoteInputTextShortcut shortcut);
 typedef RemoteInputLocalPasteHandler = FutureOr<bool> Function();
 
-enum RemoteInputTextShortcut { selectAll, copy, cut, paste }
+enum RemoteInputTextShortcut { selectAll, copy, cut, paste, undo, redo }
 
 bool handleRemoteInputTextShortcut(RemoteInputTextShortcut shortcut) {
   final context = primaryFocus?.context;
@@ -38,6 +38,16 @@ bool handleRemoteInputTextShortcut(RemoteInputTextShortcut shortcut) {
       return _invokeRemoteInputTextIntent(
         context,
         const PasteTextIntent(SelectionChangedCause.keyboard),
+      );
+    case RemoteInputTextShortcut.undo:
+      return _invokeRemoteInputTextIntent(
+        context,
+        const UndoTextIntent(SelectionChangedCause.keyboard),
+      );
+    case RemoteInputTextShortcut.redo:
+      return _invokeRemoteInputTextIntent(
+        context,
+        const RedoTextIntent(SelectionChangedCause.keyboard),
       );
   }
 }
