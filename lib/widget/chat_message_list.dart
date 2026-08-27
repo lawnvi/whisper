@@ -157,6 +157,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
               key: widget.listKey,
               controller: widget.controller,
               initialItemCount: widget.messages.length,
+              padding: const EdgeInsets.only(bottom: 12),
               reverse: true,
               shrinkWrap: true,
               itemBuilder: _buildMessage,

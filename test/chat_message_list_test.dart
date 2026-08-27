@@ -6,6 +6,34 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 
 void main() {
+  testWidgets('keeps breathing room below the newest message', (tester) async {
+    final listKey = GlobalKey<AnimatedListState>();
+    final controller = ScrollController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatMessageList(
+            buildFileMessage: (_, __) => const SizedBox.shrink(),
+            buildTextMessage: (message, _, __) => Text(message.content ?? ''),
+            controller: controller,
+            listKey: listKey,
+            messages: <MessageData>[_message(id: 1, content: 'latest')],
+            onOpenContainingFolder: (_) {},
+            onOpenFile: (_) {},
+            onCopyText: (_) {},
+            onDeleteMessage: (_, {deleteFile = false}) async {},
+            onDeleteMessages: (_) async {},
+            selfUid: 'me',
+          ),
+        ),
+      ),
+    );
+
+    final list = tester.widget<AnimatedList>(find.byType(AnimatedList));
+    expect(list.padding, const EdgeInsets.only(bottom: 12));
+  });
+
   testWidgets('long pressing a text message opens message actions', (
     tester,
   ) async {
