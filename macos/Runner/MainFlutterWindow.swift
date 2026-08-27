@@ -798,7 +798,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       return false
     }
     suppressLocalPasteKeyUp = true
-    let arguments: [String: Any] = ["sessionId": captureSessionId]
+    let arguments: [String: Any] = [
+      "sessionId": captureSessionId,
+      "appActive": NSApp.isActive,
+    ]
     DispatchQueue.main.async { [weak self] in
       guard let self = self else {
         return

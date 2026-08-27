@@ -56,6 +56,7 @@ void main() {
     ).readAsStringSync();
 
     expect(mac, contains('onLocalPasteShortcut'));
+    expect(mac, contains('"appActive": NSApp.isActive'));
     expect(mac, contains('postLocalPasteShortcut'));
     expect(mac, contains('remoteInputLocalPasteEventMarker'));
     expect(platform, contains('configureLocalPasteHandler'));

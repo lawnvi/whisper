@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
@@ -360,6 +361,62 @@ void main() {
 
       expect(calls, 1);
       expect(shouldReplay, isFalse);
+    });
+
+    testWidgets('pastes directly into the focused controller Flutter field', (
+      tester,
+    ) async {
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: TextField(focusNode: focusNode)),
+        ),
+      );
+      focusNode.requestFocus();
+      await tester.pump();
+      platform.configureLocalPasteHandler(() async => true);
+
+      final shouldReplay = await platform.handleNativeMethodCall(
+        const MethodCall('onLocalPasteShortcut', <String, dynamic>{
+          'sessionId': 'workspace-1',
+          'appActive': true,
+        }),
+      );
+
+      expect(shouldReplay, isFalse);
+      expect(textShortcuts, <RemoteInputTextShortcut>[
+        RemoteInputTextShortcut.paste,
+      ]);
+    });
+
+    test('replays local paste without a focused Flutter field', () async {
+      platform.configureLocalPasteHandler(() async => true);
+
+      final shouldReplay = await platform.handleNativeMethodCall(
+        const MethodCall('onLocalPasteShortcut', <String, dynamic>{
+          'sessionId': 'workspace-1',
+          'appActive': true,
+        }),
+      );
+
+      expect(shouldReplay, isTrue);
+      expect(textShortcuts, isEmpty);
+    });
+
+    test('replays local paste when the controller app is not active',
+        () async {
+      platform.configureLocalPasteHandler(() async => true);
+
+      final shouldReplay = await platform.handleNativeMethodCall(
+        const MethodCall('onLocalPasteShortcut', <String, dynamic>{
+          'sessionId': 'workspace-1',
+          'appActive': false,
+        }),
+      );
+
+      expect(shouldReplay, isTrue);
+      expect(textShortcuts, isEmpty);
     });
   });
 

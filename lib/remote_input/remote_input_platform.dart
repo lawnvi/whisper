@@ -66,6 +66,16 @@ bool _invokeRemoteInputTextIntent<T extends Intent>(
   return true;
 }
 
+bool _hasFocusedEditableText() {
+  final focus = primaryFocus;
+  final context = focus?.context;
+  if (focus?.hasFocus != true || context == null || !context.mounted) {
+    return false;
+  }
+  final editable = context.findAncestorWidgetOfExactType<EditableText>();
+  return editable != null && !editable.readOnly;
+}
+
 class RemoteInputPlatform {
   RemoteInputPlatform({
     MethodChannel? channel,
@@ -291,11 +301,24 @@ class RemoteInputPlatform {
     }
 
     if (call.method == 'onLocalPasteShortcut') {
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
       final handler = _localPasteHandler;
-      if (handler == null) {
+      final shouldReplay = handler == null
+          ? true
+          : await Future<bool>.value(handler());
+      if (!shouldReplay) {
+        return false;
+      }
+      if (arguments['appActive'] != true) {
         return true;
       }
-      return Future<bool>.value(handler());
+      if (!_hasFocusedEditableText()) {
+        return shouldReplay;
+      }
+      final handled = await Future<bool>.value(
+        _textShortcutHandler(RemoteInputTextShortcut.paste),
+      );
+      return !handled;
     }
 
     throw MissingPluginException(
