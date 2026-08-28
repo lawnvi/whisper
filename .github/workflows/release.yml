@@ -358,12 +358,20 @@ jobs:
           sudo apt-get install -y desktop-file-utils libfuse2
 
       - name: Set release version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
             PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          elif [[ -n "$REQUESTED_VERSION" ]]; then
+            PACKAGE_VERSION="$REQUESTED_VERSION"
           else
             PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid package version: $PACKAGE_VERSION" >&2
+            exit 1
           fi
           if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
             UPDATE_CHANNEL="stable"
@@ -483,9 +491,17 @@ jobs:
           (
             github.event_name == 'workflow_dispatch' &&
             inputs.publish &&
-            inputs.target == 'macos-intel' &&
             inputs.version != '' &&
-            needs.build-on-macos-intel.result == 'success'
+            (
+              (
+                inputs.target == 'macos-intel' &&
+                needs.build-on-macos-intel.result == 'success'
+              ) ||
+              (
+                inputs.target == 'android' &&
+                needs.build-on-linux.result == 'success'
+              )
+            )
           )
         )
       }}
@@ -525,13 +541,18 @@ jobs:
           fail_on_unmatched_files: true
           files: release-assets/**/*
 
-      - name: Update manually rebuilt release asset
+      - name: Verify manually rebuilt release exists
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: gh release view "dev-v${REQUESTED_VERSION}" --repo "${{ github.repository }}" >/dev/null
+
+      - name: Replace manually rebuilt release asset
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ format('dev-v{0}', inputs.version) }}
-          name: ${{ format('dev-v{0}', inputs.version) }}
-          prerelease: true
           overwrite_files: true
           fail_on_unmatched_files: true
           files: release-assets/**/*
