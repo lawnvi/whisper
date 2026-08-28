@@ -252,6 +252,8 @@ class _VisualMediaPreview extends StatelessWidget {
     final duration = reduceMotion
         ? Duration.zero
         : const Duration(milliseconds: 180);
+    final unavailable =
+        failed && onRetry == null && progress == null && !verifying;
     return AnimatedSize(
       duration: duration,
       curve: Curves.easeOutCubic,
@@ -278,7 +280,7 @@ class _VisualMediaPreview extends StatelessWidget {
                     kind: kind,
                   ),
           ),
-          if (progress != null || failed || verifying)
+          if (!unavailable && (progress != null || failed || verifying))
             Positioned.fill(
               child: _TransferStateOverlay(
                 progress: progress ?? 0,
