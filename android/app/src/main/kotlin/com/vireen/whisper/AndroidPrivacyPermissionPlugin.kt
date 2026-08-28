@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -71,6 +72,7 @@ class AndroidPrivacyPermissionPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "requestNotificationListener" -> requestNotificationListener(result)
+            "rebindNotificationListener" -> rebindNotificationListener(result)
             "requestInstalledApps" -> requestInstalledApps(result)
             else -> result.notImplemented()
         }
@@ -89,7 +91,7 @@ class AndroidPrivacyPermissionPlugin :
         notificationResult = result
         val component = ComponentName(
             binding.applicationContext,
-            "im.zoe.labs.flutter_notification_listener.NotificationsHandlerService",
+            NOTIFICATION_LISTENER_SERVICE,
         )
         val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
             .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component.flattenToString())
@@ -111,6 +113,19 @@ class AndroidPrivacyPermissionPlugin :
     private fun hasNotificationListenerPermission(): Boolean {
         return NotificationManagerCompat.getEnabledListenerPackages(binding.applicationContext)
             .contains(binding.applicationContext.packageName)
+    }
+
+    private fun rebindNotificationListener(result: MethodChannel.Result) {
+        if (!hasNotificationListenerPermission()) {
+            result.success(false)
+            return
+        }
+        val component = ComponentName(
+            binding.applicationContext,
+            NOTIFICATION_LISTENER_SERVICE,
+        )
+        NotificationListenerService.requestRebind(component)
+        result.success(true)
     }
 
     private fun requestInstalledApps(result: MethodChannel.Result) {
@@ -185,6 +200,8 @@ class AndroidPrivacyPermissionPlugin :
         const val CHANNEL_NAME = "whisper/android_privacy_permissions"
         const val INSTALLED_APPS_PERMISSION = "com.android.permission.GET_INSTALLED_APPS"
         const val MIUI_PERMISSION_CONTROLLER = "com.lbe.security.miui"
+        const val NOTIFICATION_LISTENER_SERVICE =
+            "im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
         const val NOTIFICATION_LISTENER_REQUEST = 7401
         const val INSTALLED_APPS_REQUEST = 7402
     }

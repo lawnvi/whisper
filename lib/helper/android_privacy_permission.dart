@@ -17,6 +17,14 @@ class AndroidPrivacyPermission {
         false;
   }
 
+  static Future<bool> rebindNotificationListener() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    return await _channel.invokeMethod<bool>('rebindNotificationListener') ??
+        false;
+  }
+
   static Future<bool> requestInstalledApps() async {
     if (!Platform.isAndroid) {
       return true;

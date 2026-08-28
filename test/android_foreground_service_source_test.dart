@@ -365,7 +365,14 @@ void main() {
       ),
     );
     expect(deviceList, contains('final receivePort = ReceivePort();'));
-    expect(deviceList, contains('await LocalSetting().listenAppNotifyList()'));
+    expect(
+      deviceList,
+      contains('NotificationAppRegistry.instance.containsPackage'),
+    );
+    expect(
+      deviceList,
+      contains('await NotificationAppRegistry.instance.refresh()'),
+    );
     expect(
       deviceList,
       contains('callbackHandle: androidNotificationListenerCallback'),
@@ -406,6 +413,14 @@ void main() {
       contains('ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS'),
     );
     expect(permissionPlugin, contains('hasNotificationListenerPermission()'));
+    expect(
+      permissionPlugin,
+      contains('NotificationListenerService.requestRebind(component)'),
+    );
+    expect(
+      helper,
+      contains('AndroidPrivacyPermission.rebindNotificationListener()'),
+    );
     expect(
       settings,
       contains('await hasAndroidNotificationListenerPermission()'),

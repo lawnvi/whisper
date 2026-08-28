@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
-import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
@@ -102,7 +101,10 @@ Future<bool> startAndroidListening({bool requestPermission = true}) async {
   if (!hasPermission) {
     return false;
   }
-  return true;
+  if ((await NotificationsListener.isRunning) ?? false) {
+    return true;
+  }
+  return AndroidPrivacyPermission.rebindNotificationListener();
 }
 
 Future<bool> hasAndroidNotificationListenerPermission() async {
@@ -141,19 +143,14 @@ Future<String> appName(String? package) async {
   if (package == null) {
     return "通知";
   }
-
-  if (Platform.isAndroid) {
-    // 好像可以获取到app的apk路径
-    List<AppInfo> apps = await InstalledApps.getInstalledApps(
-      excludeSystemApps: false,
-      withIcon: true,
-    );
-    for (var item in apps) {
-      if (item.packageName == package) {
-        return item.name;
-      }
-    }
+  final cached = androidPackage[package];
+  if (cached != null) {
+    return cached;
   }
-
+  if (Platform.isAndroid) {
+    final resolved = (await InstalledApps.getAppInfo(package))?.name ?? "通知";
+    androidPackage[package] = resolved;
+    return resolved;
+  }
   return pkg2name(package);
 }

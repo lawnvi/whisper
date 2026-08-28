@@ -54,6 +54,7 @@ import 'package:whisper/state/discovery_endpoint_resolver.dart';
 import 'package:whisper/state/discovery_resolve_limiter.dart';
 import 'package:whisper/state/discovery_service_presence.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/state/pairing_request.dart';
@@ -113,12 +114,11 @@ Future<void> _forwardAndroidNotification(NotificationEvent event) async {
     });
     return;
   }
-  final selectedApps = await LocalSetting().listenAppNotifyList();
   final socketManager = WsSvrManager();
   final allowed =
       socketManager.isConnected &&
       filterNotification(event) &&
-      selectedApps.containsKey(event.packageName);
+      NotificationAppRegistry.instance.containsPackage(event.packageName);
   privacyLog.event(PrivacyEvent.notificationForwarded, <PrivacyField, Object>{
     PrivacyField.allowed: allowed,
   });
@@ -379,6 +379,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> initPlatformState() async {
+    await NotificationAppRegistry.instance.refresh();
     if (_androidNotificationReceivePort == null) {
       IsolateNameServer.removePortNameMapping(_androidNotificationPortName);
       final receivePort = ReceivePort();
