@@ -15,6 +15,13 @@
 
 [下载最新版本](https://github.com/lawnvi/whisper/releases/latest) · [查看版本更新说明](https://github.com/lawnvi/whisper/releases)
 
+> **Ubuntu 26.04 临时说明：** 当前 `0.0.50` 的 DEB 安装包未声明 `libjsoncpp26` 依赖，因此无法正常完成安装。源码中的打包配置已经修复，将随下个版本发布；在此之前请改用 AppImage：
+
+```bash
+chmod +x whisper-0.0.50-linux-x86_64.AppImage
+./whisper-0.0.50-linux-x86_64.AppImage
+```
+
 ## 解决什么问题
 
 Whisper 解决的是一个很日常但反复出现的问题：自己的电脑、手机、备用机都在身边，却仍然要靠聊天软件、网盘或数据线来搬一点文本、文件或声音。

@@ -15,6 +15,13 @@
 
 [Download the latest release](https://github.com/lawnvi/whisper/releases/latest) · [View release notes](https://github.com/lawnvi/whisper/releases)
 
+> **Temporary note for Ubuntu 26.04:** The `0.0.50` DEB package does not declare the `libjsoncpp26` dependency, so installation cannot complete normally. The packaging configuration has been fixed in source and will be included in the next release. Until then, use the AppImage:
+
+```bash
+chmod +x whisper-0.0.50-linux-x86_64.AppImage
+./whisper-0.0.50-linux-x86_64.AppImage
+```
+
 ## What It Solves
 
 Whisper is built for a small but frequent problem: your computers, phones, and spare devices are right next to you, yet moving a bit of text, a file, or audio still often means using a chat app, cloud drive, or cable.
