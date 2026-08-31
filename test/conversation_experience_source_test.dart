@@ -25,6 +25,24 @@ void main() {
     expect(deviceList, contains('await _shutdownDesktopResources()'));
   });
 
+  test('Windows close-to-tray cancels the exit request before cleanup', () {
+    final deviceList = File('lib/page/deviceList.dart').readAsStringSync();
+    final exitHandler = RegExp(
+      r'Future<AppExitResponse> didRequestAppExit\(\) async \{[\s\S]*?\n  \}',
+    ).firstMatch(deviceList)!.group(0)!;
+
+    final hideIndex = exitHandler.indexOf('await windowManager.hide();');
+    final cancelIndex = exitHandler.indexOf('return AppExitResponse.cancel;');
+    final cleanupIndex = exitHandler.indexOf(
+      'await _shutdownDesktopResources();',
+    );
+
+    expect(exitHandler, contains('Platform.isWindows'));
+    expect(hideIndex, greaterThanOrEqualTo(0));
+    expect(cancelIndex, greaterThan(hideIndex));
+    expect(cleanupIndex, greaterThan(cancelIndex));
+  });
+
   test('server presents only one pairing prompt per socket session', () {
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
 

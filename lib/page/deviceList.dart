@@ -557,6 +557,16 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<AppExitResponse> didRequestAppExit() async {
     if (isDesktop()) {
       try {
+        // Windows sends the first close request through this callback before
+        // window_manager receives the replayed close event. Handle
+        // close-to-tray here so that the tray and desktop services are not
+        // torn down before the window is hidden.
+        if (Platform.isWindows &&
+            await LocalSetting().isClose2Tray() &&
+            await windowManager.isPreventClose()) {
+          await windowManager.hide();
+          return AppExitResponse.cancel;
+        }
         await _shutdownDesktopResources();
       } catch (error) {
         privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
