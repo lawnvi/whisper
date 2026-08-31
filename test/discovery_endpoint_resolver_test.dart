@@ -21,6 +21,46 @@ void main() {
     expect(lookupCount, 0);
   });
 
+  test(
+    'prefers advertised IPv4 over a numeric link-local IPv6 result',
+    () async {
+      var lookupCount = 0;
+
+      final host = await resolveDiscoveryEndpointHost(
+        resolvedHost: 'fe80::1c7e:5825:60ff:e377%13',
+        advertisedHost: '192.168.31.148',
+        port: 10002,
+        lookup: (host) async {
+          lookupCount += 1;
+          return <InternetAddress>[];
+        },
+      );
+
+      expect(host, '192.168.31.148');
+      expect(lookupCount, 0);
+    },
+  );
+
+  test('keeps numeric IPv6 when no advertised IPv4 is available', () async {
+    final host = await resolveDiscoveryEndpointHost(
+      resolvedHost: 'fe80::1%13',
+      advertisedHost: null,
+      port: 10002,
+    );
+
+    expect(host, 'fe80::1%13');
+  });
+
+  test('falls back from a numeric fake-IP result to advertised IPv4', () async {
+    final host = await resolveDiscoveryEndpointHost(
+      resolvedHost: '198.18.0.14',
+      advertisedHost: '192.168.31.148',
+      port: 10002,
+    );
+
+    expect(host, '192.168.31.148');
+  });
+
   test('turns an mDNS hostname into its advertised verified IPv4', () async {
     final host = await resolveDiscoveryEndpointHost(
       resolvedHost: 'macbook-air.local.',

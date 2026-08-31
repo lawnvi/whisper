@@ -10,8 +10,10 @@ typedef DiscoveryAddressLookup =
 /// Converts an mDNS service target to a numeric endpoint.
 ///
 /// TXT addresses normally need to match the resolved service target. A valid
-/// numeric TXT address is used as a fallback when `.local` resolution fails or
-/// system DNS returns only benchmark fake-IP answers.
+/// numeric IPv4 TXT address is used as a fallback when `.local` resolution
+/// fails, resolves to IPv6, or system DNS returns only benchmark fake-IP
+/// answers. Discovery must not select an address the IPv4 chat server cannot
+/// accept.
 Future<String?> resolveDiscoveryEndpointHost({
   required String? resolvedHost,
   required String? advertisedHost,
@@ -24,17 +26,30 @@ Future<String?> resolveDiscoveryEndpointHost({
     hasResolvedHost ? resolvedHost! : advertisedHost,
     port,
   );
-  if (normalizedResolved == null || _isNumericHost(normalizedResolved)) {
-    return normalizedResolved;
-  }
-
   final advertised = _normalizeEndpointHost(advertisedHost, port);
   final advertisedFallback =
       advertised != null &&
-          _isNumericHost(advertised) &&
+          _isIpv4Host(advertised) &&
           !Ipv4AddressPolicy.isBenchmarking(advertised)
       ? advertised
       : null;
+  if (normalizedResolved == null) {
+    return null;
+  }
+  if (_isNumericHost(normalizedResolved)) {
+    // Whisper currently listens on IPv4. Some Bonjour implementations return
+    // a scoped link-local IPv6 address even though the peer advertises the
+    // IPv4 endpoint that its chat server actually accepts.
+    if (!_isIpv4Host(normalizedResolved) && advertisedFallback != null) {
+      return advertisedFallback;
+    }
+    if (Ipv4AddressPolicy.isBenchmarking(normalizedResolved) &&
+        advertisedFallback != null) {
+      return advertisedFallback;
+    }
+    return normalizedResolved;
+  }
+
   final resolver = lookup ?? InternetAddress.lookup;
   final List<InternetAddress> addresses;
   try {
@@ -100,3 +115,6 @@ bool _isNumericHost(String host) {
   final address = zoneSeparator == -1 ? host : host.substring(0, zoneSeparator);
   return InternetAddress.tryParse(address) != null;
 }
+
+bool _isIpv4Host(String host) =>
+    InternetAddress.tryParse(host)?.type == InternetAddressType.IPv4;

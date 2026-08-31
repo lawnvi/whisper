@@ -1125,8 +1125,10 @@ class WsSvrManager {
   Future<void> _attachIncomingSocket(
     WebSocketChannel webSocket,
     AdmissionLease admissionLease,
+    String remoteHost,
   ) async {
     final sink = webSocket.sink;
+    _endpointsBySink[sink] = (host: remoteHost, port: 0);
     try {
       final session = await _createSocketSession(
         sink: sink,
@@ -1139,6 +1141,7 @@ class WsSvrManager {
         asServer: true,
       );
     } catch (_) {
+      _endpointsBySink.remove(sink);
       admissionLease.close();
       _completeSocketAuth(sink, false, 'session_setup_failed');
       await _closeSocketSink(sink);
@@ -1149,10 +1152,12 @@ class WsSvrManager {
     WebSocketChannel webSocket,
     AdmissionLease admissionLease,
     Completer<void> pendingUpgrade,
+    String remoteHost,
   ) {
     final attachment = _attachIncomingSocket(
       webSocket,
       admissionLease,
+      remoteHost,
     ).whenComplete(() => _completePendingSocketAttachment(pendingUpgrade));
     _ignoreFuture(attachment, context: 'attach incoming websocket');
   }
@@ -1372,6 +1377,8 @@ class WsSvrManager {
           request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
       final remoteAddress =
           connectionInfo?.remoteAddress ?? request.requestedUri.host;
+      final remoteHost =
+          connectionInfo?.remoteAddress.address ?? request.requestedUri.host;
       final rateRejection = _admission.tryUpgrade(
         remoteAddress,
         DateTime.now(),
@@ -1453,7 +1460,12 @@ class WsSvrManager {
       _pendingSocketAttachments.add(pendingUpgrade.future);
       final chatHandler = webSocketHandler(
         (WebSocketChannel webSocket) {
-          _trackIncomingSocketAttachment(webSocket, lease, pendingUpgrade);
+          _trackIncomingSocketAttachment(
+            webSocket,
+            lease,
+            pendingUpgrade,
+            remoteHost,
+          );
         },
         allowedOrigins: const <String>[],
         pingInterval: _serverPingInterval,
@@ -1622,6 +1634,28 @@ class WsSvrManager {
     _reconnectControllerFor(
       peerId,
     ).updateTarget(target, accelerate: accelerate);
+    final currentProfile =
+        _remoteProfilesByPeerId[peerId] ??
+        (peerId == receiver ? _remoteProfile : null);
+    if (currentProfile != null &&
+        (currentProfile.device.host != target.host ||
+            currentProfile.device.port != target.port)) {
+      _setRemoteProfile(
+        PeerProfile(
+          device: currentProfile.device.copyWith(
+            host: target.host,
+            port: target.port,
+          ),
+          trustedPeerIds: currentProfile.trustedPeerIds,
+          autoApproveNewDevices: currentProfile.autoApproveNewDevices,
+          autoConnectEnabled: currentProfile.autoConnectEnabled,
+          protocolVersion: currentProfile.protocolVersion,
+          capabilities: currentProfile.capabilities,
+          displayTopology: currentProfile.displayTopology,
+        ),
+        peerId: peerId,
+      );
+    }
   }
 
   void scheduleReconnect(String peerId, String host, int port) {

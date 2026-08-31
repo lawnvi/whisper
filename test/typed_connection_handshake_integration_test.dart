@@ -77,6 +77,27 @@ void main() {
     },
   );
 
+  test('incoming connection replaces a stale stored peer host', () async {
+    final harness = await _HandshakeHarness.start();
+    await harness.database.upsertDevice(
+      _profile(
+        'client-peer',
+      ).device.copyWith(host: 'fe80::1c7e:5825:60ff:e377%13'),
+    );
+
+    final result = await harness.connect('observed-incoming-host');
+
+    expect(result.isAuthenticated, isTrue);
+    expect(
+      (await harness.database.fetchDevice('client-peer'))?.host,
+      InternetAddress.loopbackIPv4.address,
+    );
+    expect(
+      harness.server.remoteProfileFor('client-peer')?.device.host,
+      InternetAddress.loopbackIPv4.address,
+    );
+  });
+
   test('new-device pairing completes only after both peers confirm', () async {
     final receivedActions = <AuthAction>[];
     final clientEvents = _BlockingPairingEvents();
@@ -477,6 +498,44 @@ void main() {
     expect(harness.server.isConnectedTo('client-peer'), isTrue);
     expect(harness.serverReconnects.activeTimerCount, 0);
   });
+
+  test(
+    'discovery endpoint refresh survives a later profile heartbeat',
+    () async {
+      final harness = await _HandshakeHarness.start();
+      final connected = await harness.connect('endpoint-refresh-heartbeat');
+      expect(connected.isAuthenticated, isTrue);
+      harness.client.selectPeer('server-peer');
+
+      harness.client.updateReconnectEndpoint(
+        'server-peer',
+        '192.168.31.148',
+        10002,
+      );
+      expect(
+        harness.client.remoteProfileFor('server-peer')?.device.host,
+        '192.168.31.148',
+      );
+
+      await harness.server.debugSendProfileHeartbeatTo('client-peer');
+      for (var attempt = 0; attempt < 100; attempt += 1) {
+        final stored = await harness.database.fetchDevice('server-peer');
+        if (stored?.host == '192.168.31.148') {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      expect(
+        (await harness.database.fetchDevice('server-peer'))?.host,
+        '192.168.31.148',
+      );
+      expect(
+        harness.client.remoteProfileFor('server-peer')?.device.host,
+        '192.168.31.148',
+      );
+    },
+  );
 
   test(
     'watchdog removal schedules reconnect for the authenticated peer',
