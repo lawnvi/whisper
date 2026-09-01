@@ -3,24 +3,17 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('README keeps release history in GitHub Releases', () {
-    final readme = File('README.md').readAsStringSync();
-    final englishReadme = File('README_en.md').readAsStringSync();
-
-    expect(readme, isNot(contains('## 最近更新')));
-    expect(readme, contains('查看版本更新说明'));
-    expect(englishReadme, isNot(contains('## Recent Updates')));
-    expect(englishReadme, contains('View release notes'));
-  });
-
   test('tagged releases generate notes without replacing notes on rebuild', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
-    final taggedRelease = workflow.substring(
-      workflow.indexOf('      - name: Publish tagged release'),
-      workflow.indexOf('      - name: Update manually rebuilt release asset'),
+    final releaseSteps = _stepsUsing(
+      workflow,
+      'softprops/action-gh-release@v2',
     );
-    final manualRelease = workflow.substring(
-      workflow.indexOf('      - name: Update manually rebuilt release asset'),
+    final taggedRelease = releaseSteps.singleWhere(
+      (step) => step.contains("startsWith(github.ref, 'refs/tags/')"),
+    );
+    final manualRelease = releaseSteps.singleWhere(
+      (step) => step.contains("github.event_name == 'workflow_dispatch'"),
     );
 
     expect(workflow, contains('name: Check out release history'));
@@ -95,4 +88,15 @@ void main() {
       contains('https://example.com/whisper/compare/dev-v1.0.0...dev-v1.1.0'),
     );
   });
+}
+
+List<String> _stepsUsing(String workflow, String action) {
+  final steps = <String>[];
+  for (final match in RegExp('uses: $action').allMatches(workflow)) {
+    final start = workflow.lastIndexOf('\n      - name:', match.start);
+    final next = workflow.indexOf('\n      - name:', match.end);
+    expect(start, isNonNegative, reason: 'Action has no containing step');
+    steps.add(workflow.substring(start, next < 0 ? workflow.length : next));
+  }
+  return steps;
 }

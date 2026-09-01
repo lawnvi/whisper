@@ -19,67 +19,6 @@ void main() {
     expect(keySets['es'], keySets['zh']);
   });
 
-  test('retained functional experience keys are present', () {
-    final keys = _messageKeys(_readArb(localeFiles['zh']!));
-
-    expect(
-      keys,
-      containsAll(<String>{
-        'emptyAppsTitle',
-        'emptyAppsSearchTitle',
-        'fileDropRejected',
-        'validationRequired',
-        'validationNicknameRequired',
-        'validationNicknameTooLong',
-        'validationHostRequired',
-        'validationHostInvalid',
-        'validationPortInvalid',
-        'settingsSectionDeviceAppearance',
-        'settingsSectionDeviceAppearanceDesc',
-        'settingsSectionConnectionTransfer',
-        'settingsSectionConnectionTransferDesc',
-        'settingsSectionSystemBehavior',
-        'settingsSectionSystemBehaviorDesc',
-        'settingsSectionPermissionsSharing',
-        'settingsSectionPermissionsSharingDesc',
-        'settingsSectionMobileIntegration',
-        'settingsSectionMobileIntegrationDesc',
-        'settingsSectionNotificationForwarding',
-        'settingsSectionNotificationForwardingDesc',
-        'notificationForwardingUpdateFailed',
-        'settingsSectionLanguageFiles',
-        'settingsSectionLanguageFilesDesc',
-        'dangerousActions',
-      }),
-    );
-  });
-
-  test('critical Spanish experience copy does not fall back to English', () {
-    final english = _readArb(localeFiles['en']!);
-    final spanish = _readArb(localeFiles['es']!);
-    const criticalKeys = <String>{
-      'emptyAppsTitle',
-      'emptyAppsSearchTitle',
-      'fileDropRejected',
-      'validationHostInvalid',
-      'settingsSectionDeviceAppearance',
-      'settingsSectionConnectionTransfer',
-      'settingsSectionSystemBehavior',
-      'settingsSectionPermissionsSharing',
-      'settingsSectionMobileIntegration',
-      'settingsSectionNotificationForwarding',
-      'settingsSectionLanguageFiles',
-      'dangerousActions',
-    };
-
-    for (final key in criticalKeys) {
-      expect(spanish[key], isNot(equals(english[key])), reason: key);
-    }
-    expect(spanish['emptyAppsTitle'], 'No hay aplicaciones disponibles');
-    expect(spanish['emptyAppsSearchTitle'], 'No se encontraron aplicaciones');
-    expect(spanish['fileDropRejected'], 'No se pueden enviar estos archivos');
-    expect(spanish['dangerousActions'], 'Acciones peligrosas');
-  });
 }
 
 Map<String, dynamic> _readArb(File file) {

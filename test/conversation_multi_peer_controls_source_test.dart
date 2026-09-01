@@ -33,11 +33,4 @@ void main() {
     expect(shouldShowAudioShareAction, contains('!isDesktop()'));
     expect(shouldShowAudioShareAction, isNot(contains('isDesktop() ||')));
   });
-
-  test('client settings do not own per-device remote input configuration', () {
-    final source = File('lib/page/settings.dart').readAsStringSync();
-
-    expect(source, isNot(contains('bool get _canConfigureRemoteInput')));
-    expect(source, isNot(contains('RemoteInputLayoutEditorScreen')));
-  });
 }

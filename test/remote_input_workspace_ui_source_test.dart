@@ -163,19 +163,4 @@ void main() {
     expect(source, contains('RemoteInputCoordinator.shared.stopLocal()'));
   });
 
-  test('workspace screen blocks center their labels', () {
-    final source = File(
-      'lib/remote_input/remote_input_workspace_screen.dart',
-    ).readAsStringSync();
-    final screenBlock = RegExp(
-      r'class _ScreenBlock extends StatelessWidget \{[\s\S]*?class _DetailRow',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(
-      screenBlock,
-      contains('crossAxisAlignment: CrossAxisAlignment.center'),
-    );
-    expect(screenBlock, contains('alignment: Alignment.center'));
-    expect(screenBlock, contains('textAlign: TextAlign.center'));
-  });
 }

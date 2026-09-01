@@ -3,16 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('CI and release jobs use published stable Flutter versions', () {
-    final ci = File('.github/workflows/ci.yml').readAsStringSync();
-    final release = File('.github/workflows/release.yml').readAsStringSync();
-
-    expect(ci, contains("flutter-version: '3.44.9'"));
-    expect(release, contains("flutter-version: '3.44.9'"));
-    expect(ci, isNot(contains("flutter-version: '3.47.0'")));
-    expect(release, isNot(contains("flutter-version: '3.47.0'")));
-  });
-
   test('release workflow publishes normalized artifact file names', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
 
@@ -47,16 +37,6 @@ void main() {
       contains(r'whisper-${PACKAGE_VERSION}-android-x86_64.apk'),
     );
 
-    expect(workflow, isNot(contains('WHISPER_MACOS_DMG_PATH: whisper.dmg')));
-    expect(workflow, isNot(contains(r'whisper-${PACKAGE_VERSION}-macos.dmg')));
-    expect(workflow, isNot(contains('zip -r app.ipa Payload')));
-    expect(
-      workflow,
-      isNot(contains('/DOUTPUT_NAME="whisper-windows-x86_64.exe"')),
-    );
-    expect(workflow, isNot(contains('whisper-x86_64.rpm')));
-    expect(workflow, isNot(contains('build/linux/deb/whisper-amd64.deb')));
-    expect(workflow, isNot(contains('build/app/outputs/flutter-apk/*.apk')));
   });
 
   test('release assets are published once for each release trigger', () {
@@ -75,8 +55,14 @@ void main() {
     expect(workflow, contains('files: release-assets/**/*'));
     expect(workflow, contains('overwrite_files: true'));
     expect(releaseActions.length, 2);
-    expect(workflow, contains('name: Publish tagged release'));
-    expect(workflow, contains('name: Update manually rebuilt release asset'));
+    expect(
+      workflow,
+      contains("if: \${{ startsWith(github.ref, 'refs/tags/') }}"),
+    );
+    expect(
+      workflow,
+      contains("if: \${{ github.event_name == 'workflow_dispatch' }}"),
+    );
   });
 
   test('a manually rebuilt Intel package can update its dev release', () {

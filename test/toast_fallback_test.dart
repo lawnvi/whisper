@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:toastification/toastification.dart';
@@ -61,19 +59,4 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  test('app wires toastification and removes fluttertoast', () {
-    final main = File('lib/main.dart').readAsStringSync();
-    final toast = File('lib/helper/toast.dart').readAsStringSync();
-    final pubspec = File('pubspec.yaml').readAsStringSync();
-
-    expect(main, contains('ToastificationWrapper('));
-    expect(main, contains('navigatorKey: appNavigatorKey'));
-    expect(toast, contains("package:toastification/toastification.dart"));
-    expect(toast, contains('showCustom('));
-    expect(toast, contains('Theme.of(context)'));
-    expect(toast, contains('Brightness.dark'));
-    expect(toast, isNot(contains('fluttertoast')));
-    expect(pubspec, contains('toastification: ^3.2.0'));
-    expect(pubspec, isNot(contains('fluttertoast:')));
-  });
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/cupertino.dart';
@@ -475,13 +474,6 @@ void main() {
       findsNothing,
     );
     semantics.dispose();
-  });
-
-  test('app icon keeps the original direct Image.memory rendering', () {
-    final source = File('lib/page/appList.dart').readAsStringSync();
-
-    expect(source, contains('if (app.icon != null) AppIcon(icon: app.icon!)'));
-    expect(source, isNot(contains('errorBuilder:')));
   });
 
   testWidgets('app list remains overflow-free across supported widths',

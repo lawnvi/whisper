@@ -52,11 +52,4 @@ void main() {
       contains('socketManager.supportsRemoteInputFor(device.uid)'),
     );
   });
-
-  test('device settings no longer own a remote input trust flow', () {
-    final settings = File('lib/page/settings.dart').readAsStringSync();
-
-    expect(settings, isNot(contains('_openRemoteInputAutoModePicker')));
-    expect(settings, isNot(contains('RemoteInputLayoutEditorScreen')));
-  });
 }

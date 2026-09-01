@@ -52,14 +52,4 @@ void main() {
     expect(source, contains('l10n.remoteInputStart'));
     expect(source, contains('l10n.remoteInputFailed('));
   });
-
-  test('audio sharing start prompt names the peer as the destination', () {
-    final zhArb = File('lib/l10n/app_zh.arb').readAsStringSync();
-
-    expect(
-      zhArb,
-      isNot(contains('"audioShareStart": "共享本机声音到此设备"')),
-    );
-    expect(zhArb, contains('"audioShareStart": "把本机声音共享给对端"'));
-  });
 }

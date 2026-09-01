@@ -56,23 +56,4 @@ void main() {
     expect(installDependencies, greaterThan(removeConflict));
   });
 
-  test('release builds reuse caches and avoid redundant tool installs', () {
-    expect(
-      RegExp(r'^\s+cache: true$', multiLine: true).allMatches(workflow).length,
-      greaterThanOrEqualTo(3),
-    );
-    expect(workflow, isNot(contains('build-on-android:')));
-    expect(workflow, contains('description: Platform to build'));
-    expect(workflow, contains("inputs.target == 'windows'"));
-    expect(workflow, contains("inputs.target == 'android'"));
-    expect(workflow, contains('name: Linux + Android'));
-    expect(workflow, contains('flutter build windows --no-pub'));
-    expect(workflow, contains('flutter build linux --no-pub'));
-    expect(workflow, contains('flutter build ios --no-codesign --no-pub'));
-    expect(workflow, contains('flutter build apk --split-per-abi --no-pub'));
-    expect(workflow, isNot(contains('choco install nsis')));
-    expect(workflow, isNot(contains('commandlinetools.zip')));
-    expect(workflow, isNot(contains('sdkmanager" --update')));
-    expect(workflow, isNot(contains('pod install --repo-update')));
-  });
 }

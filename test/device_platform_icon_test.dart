@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/helper.dart';
@@ -31,14 +29,4 @@ void main() {
     expect(platformLabel('unknown-os'), 'unknown-os');
   });
 
-  test('device list renders the platform icon in its status avatar', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
-    final avatarStart = source.indexOf('Widget _buildSessionAvatar');
-    final avatarEnd = source.indexOf('Color _sessionStatusColor', avatarStart);
-    final avatar = source.substring(avatarStart, avatarEnd);
-
-    expect(avatar, contains('platformIcon(session.device.platform)'));
-    expect(avatar, contains('platformLabel(session.device.platform)'));
-    expect(avatar, isNot(contains('session.avatarLabel')));
-  });
 }

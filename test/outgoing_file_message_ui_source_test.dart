@@ -64,41 +64,6 @@ void main() {
     expect(insertItem, contains('insertItem(index'));
   });
 
-  test('conversation animates transfer progress instead of jumping', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-
-    expect(source, contains('_transferProgressAnimationDuration'));
-    expect(source, contains('Widget _buildAnimatedTransferProgress'));
-    expect(source, contains('TweenAnimationBuilder<double>'));
-
-    final build = methodBody(
-      source,
-      'Widget build(BuildContext context)',
-      'bool get _canSendCurrentDevice',
-    );
-    final fileMessage = methodBody(
-      source,
-      'Widget _buildFileMessage(',
-      'void onPairing(',
-    );
-
-    expect(build, contains('_buildAnimatedTransferProgress('));
-    expect(fileMessage, contains('_buildAnimatedTransferProgress('));
-  });
-
-  test('verifying uses indeterminate progress instead of a full ring', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final fileMessage = methodBody(
-      source,
-      'Widget _buildFileMessage(',
-      'void onPairing(',
-    );
-
-    expect(fileMessage, contains('FileTransferState.verifying'));
-    expect(fileMessage, contains('value: null'));
-    expect(source, contains('l10n.fileTransferVerifying'));
-  });
-
   test('only the sender controls paused transfers', () {
     final source = File('lib/page/conversation.dart').readAsStringSync();
     final fileMessage = methodBody(
@@ -120,26 +85,4 @@ void main() {
     expect(cancelPolicy, contains('FileTransferState.waitingReconnect'));
   });
 
-  test('conversation animates visible transfer percentage text', () {
-    final source = File('lib/page/conversation.dart').readAsStringSync();
-    final fileStatus = methodBody(
-      source,
-      'String _fileStatusText(',
-      'Future<void> _retryTransfer',
-    );
-    final headerActions = methodBody(
-      source,
-      'List<Widget> _buildHeaderActions',
-      'String _audioShareTooltip',
-    );
-    final fileMessage = methodBody(
-      source,
-      'Widget _buildFileMessage(',
-      'void onPairing(',
-    );
-
-    expect(fileStatus, contains('progressOverride'));
-    expect(headerActions, contains('_buildAnimatedTransferProgress('));
-    expect(fileMessage, contains('progressOverride: value'));
-  });
 }

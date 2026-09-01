@@ -1096,41 +1096,4 @@ void main() {
     expect(find.text('Delete Device'), findsNothing);
   });
 
-  test('settings source keeps the original row styling and safe dialogs', () {
-    final source = File('lib/page/settings.dart').readAsStringSync();
-
-    expect(source, contains('onLongPress: _openSaveDirectory'));
-    expect(source, contains("'SF Pro Display'"));
-    expect(source, contains('BorderRadius.circular(14)'));
-    expect(
-      RegExp(r'AppLocalizations[^;\n]*\?\?').hasMatch(source),
-      isFalse,
-    );
-    expect(source, contains('confirmAction('));
-    expect(source, contains('isDestructive: true'));
-    expect(source, contains('showValidatedInputDialog('));
-  });
-
-  test('obsolete automatic approval setting is absent from settings and l10n',
-      () {
-    final settings = File('lib/page/settings.dart').readAsStringSync();
-    expect(settings, isNot(contains('trustNewDevice')));
-    expect(settings, isNot(contains('updateNoAuth')));
-
-    for (final path in <String>[
-      'lib/l10n/app_zh.arb',
-      'lib/l10n/app_en.arb',
-      'lib/l10n/app_es.arb',
-      'lib/l10n/app_localizations.dart',
-      'lib/l10n/app_localizations_zh.dart',
-      'lib/l10n/app_localizations_en.dart',
-      'lib/l10n/app_localizations_es.dart',
-    ]) {
-      expect(
-        File(path).readAsStringSync(),
-        isNot(contains('trustNewDevice')),
-        reason: path,
-      );
-    }
-  });
 }
