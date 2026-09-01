@@ -17,7 +17,7 @@ void main() {
       section.indexOf('if (!mounted) {'),
       lessThan(section.indexOf('AppLocalizations.of(context)')),
     );
-    expect(section, contains('final confirmed = await confirmAction('));
+    expect(section, contains('final confirmed = await app_dialogs.confirmAction('));
     expect(section, contains('await WsSvrManager().close();'));
     expect(section, contains('catch (error)'));
     expect(section, contains('if (mounted) {'));

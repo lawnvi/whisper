@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import 'glass_dialog.dart';
 
 class InputDialogField {
   const InputDialogField({
@@ -30,8 +31,8 @@ Future<List<String>?> showValidatedInputDialog(
   required String confirmButtonText,
   required String cancelButtonText,
 }) {
-  return showCupertinoDialog<List<String>>(
-    context: context,
+  return showWhisperDialog<List<String>>(
+    context,
     barrierDismissible: false,
     builder: (context) => _ValidatedInputDialog(
       title: title,
@@ -51,8 +52,8 @@ Future<bool> confirmAction(
   required String cancelButtonText,
   bool isDestructive = false,
 }) async {
-  return await showCupertinoDialog<bool>(
-        context: context,
+  return await showWhisperDialog<bool>(
+        context,
         barrierDismissible: false,
         builder: (context) => _ConfirmationDialog(
           title: title,
@@ -209,8 +210,18 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
         const SingleActivator(LogicalKeyboardKey.escape): _cancel,
         const SingleActivator(LogicalKeyboardKey.enter): _submit,
       },
-      child: CupertinoAlertDialog(
-        title: Text(widget.title),
+      child: WhisperGlassDialog(
+        constraints: const BoxConstraints(
+          minWidth: 300,
+          maxWidth: 420,
+          maxHeight: 680,
+        ),
+        title: Text(
+          widget.title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -259,19 +270,14 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
           ),
         ),
         actions: <Widget>[
-          CupertinoDialogAction(
+          WhisperDialogButton(
             onPressed: _submitting ? null : _cancel,
-            child: Text(
-              widget.cancelButtonText,
-              style: const TextStyle(color: Colors.red),
-            ),
+            label: widget.cancelButtonText,
           ),
-          CupertinoDialogAction(
+          WhisperDialogButton(
             onPressed: _submitting ? null : _submit,
-            child: Text(
-              widget.confirmButtonText,
-              style: const TextStyle(color: Colors.lightBlue),
-            ),
+            label: widget.confirmButtonText,
+            prominent: true,
           ),
         ],
       ),
@@ -313,33 +319,35 @@ class _ConfirmationDialogState extends State<_ConfirmationDialog> {
   Widget build(BuildContext context) {
     final palette = context.whisperPalette;
 
-    return CupertinoAlertDialog(
-      title: Text(widget.title),
+    return WhisperGlassDialog(
+      constraints: const BoxConstraints(
+        minWidth: 300,
+        maxWidth: 420,
+        maxHeight: 620,
+      ),
+      title: Text(
+        widget.title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+      ),
       content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SizedBox(height: 14),
-          Text(
-            widget.description,
-            style: TextStyle(color: palette.textMuted),
-          ),
+          Text(widget.description, style: TextStyle(color: palette.textMuted)),
         ],
       ),
       actions: <Widget>[
-        CupertinoDialogAction(
+        WhisperDialogButton(
           onPressed: _submitting ? null : () => _complete(false),
-          child: Text(
-            widget.cancelButtonText,
-            style: const TextStyle(color: Colors.red),
-          ),
+          label: widget.cancelButtonText,
         ),
-        CupertinoDialogAction(
+        WhisperDialogButton(
           onPressed: _submitting ? null : () => _complete(true),
-          child: Text(
-            widget.confirmButtonText,
-            style: TextStyle(
-              color: widget.isDestructive ? Colors.red : Colors.lightBlue,
-            ),
-          ),
+          label: widget.confirmButtonText,
+          prominent: true,
+          destructive: widget.isDestructive,
         ),
       ],
     );
@@ -359,36 +367,43 @@ Future<void> showLoadingDialog(
 }) async {
   final palette = context.whisperPalette;
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const SizedBox(height: 12),
-            if (isLoading) icon,
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: TextStyle(color: palette.textMuted),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          if (isLoading && showCancel)
-            CupertinoDialogAction(
-              onPressed: onCancel,
-              child: Text(
-                cancelButtonText,
-                style: const TextStyle(color: Colors.red),
+  unawaited(
+    showWhisperDialog<void>(
+      context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WhisperGlassDialog(
+          constraints: const BoxConstraints(
+            minWidth: 300,
+            maxWidth: 420,
+            maxHeight: 620,
+          ),
+          title: Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SizedBox(height: 12),
+              if (isLoading) icon,
+              const SizedBox(height: 8),
+              Text(description, style: TextStyle(color: palette.textMuted)),
+            ],
+          ),
+          actions: <Widget>[
+            if (isLoading && showCancel)
+              WhisperDialogButton(
+                onPressed: onCancel,
+                label: cancelButtonText,
+                destructive: true,
               ),
-            ),
-        ],
-      );
-    },
+          ],
+        );
+      },
+    ),
   );
   await task(onCancel);
 }

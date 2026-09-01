@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 
 class DesktopQuickSendPeer {
   const DesktopQuickSendPeer({
@@ -22,8 +23,8 @@ Future<String?> showDesktopQuickSendDialog(
   required List<DesktopQuickSendPeer> peers,
   String? initialPeerId,
 }) {
-  return showDialog<String>(
-    context: context,
+  return showWhisperDialog<String>(
+    context,
     builder: (context) => _DesktopQuickSendDialog(
       drafts: drafts,
       peers: peers,
@@ -73,7 +74,12 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
       (count, draft) => count + draft.filePaths.length,
     );
     final palette = context.whisperPalette;
-    return AlertDialog(
+    return WhisperGlassDialog(
+      constraints: const BoxConstraints(
+        minWidth: 280,
+        maxWidth: 540,
+        maxHeight: 720,
+      ),
       title: Row(
         children: [
           const Icon(Icons.outbox_rounded),
@@ -133,16 +139,17 @@ class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        WhisperDialogButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.desktopQuickSendLater),
+          label: l10n.desktopQuickSendLater,
         ),
-        FilledButton.icon(
+        WhisperDialogButton(
           onPressed: _selectedPeerId == null
               ? null
               : () => Navigator.of(context).pop(_selectedPeerId),
-          icon: const Icon(Icons.send_rounded),
-          label: Text(l10n.desktopQuickSendSend),
+          icon: Icons.send_rounded,
+          label: l10n.desktopQuickSendSend,
+          prominent: true,
         ),
       ],
     );

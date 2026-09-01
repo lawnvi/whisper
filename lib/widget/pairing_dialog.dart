@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Key, Theme;
+import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 
 const pairingCodeKey = Key('pairing-code');
 const pairingTitleGapKey = Key('pairing-title-gap');
@@ -96,8 +97,8 @@ Future<void> showPairingDialog(
   }
   bool? decision;
   try {
-    decision = await showCupertinoDialog<bool>(
-      context: context,
+    decision = await showWhisperDialog<bool>(
+      context,
       barrierDismissible: false,
       builder: (context) {
         dialogContext = context;
@@ -169,8 +170,18 @@ class _PairingDialogState extends State<PairingDialog> {
         '${widget.request.pairingCode.substring(0, 3)} '
         '${widget.request.pairingCode.substring(3)}';
 
-    return CupertinoAlertDialog(
-      title: Text(title),
+    return WhisperGlassDialog(
+      constraints: const BoxConstraints(
+        minWidth: 320,
+        maxWidth: 440,
+        maxHeight: 680,
+      ),
+      title: Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
         child: Column(
@@ -236,22 +247,23 @@ class _PairingDialogState extends State<PairingDialog> {
       ),
       actions: <Widget>[
         if (widget.request.isInitiator)
-          CupertinoDialogAction(
+          WhisperDialogButton(
             key: pairingCancelKey,
             onPressed: _resolved ? null : () => _resolve(false),
-            child: Text(l10n.cancel),
+            label: l10n.cancel,
           )
         else
-          CupertinoDialogAction(
+          WhisperDialogButton(
             key: pairingRejectKey,
-            isDestructiveAction: true,
             onPressed: _resolved ? null : () => _resolve(false),
-            child: Text(l10n.pairingReject),
+            label: l10n.pairingReject,
+            destructive: true,
           ),
-        CupertinoDialogAction(
+        WhisperDialogButton(
           key: pairingApproveKey,
           onPressed: _resolved ? null : () => _resolve(true),
-          child: Text(l10n.pairingApprove),
+          label: l10n.pairingApprove,
+          prominent: true,
         ),
       ],
     );

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/state/pairing_request.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 
 DeviceData _device() => const DeviceData(
@@ -133,10 +134,10 @@ void main() {
     await tester.tap(find.byKey(pairingApproveKey));
     expect(decisions, <bool>[false]);
     await tester.pump();
-    final reject = tester.widget<CupertinoDialogAction>(
+    final reject = tester.widget<WhisperDialogButton>(
       find.byKey(pairingRejectKey),
     );
-    final approve = tester.widget<CupertinoDialogAction>(
+    final approve = tester.widget<WhisperDialogButton>(
       find.byKey(pairingApproveKey),
     );
     expect(reject.onPressed, isNull);
@@ -151,10 +152,10 @@ void main() {
       mode: PairingPromptMode.responder,
     );
     await tester.pumpWidget(_app(request, (_) {}));
-    final reject = tester.widget<CupertinoDialogAction>(
+    final reject = tester.widget<WhisperDialogButton>(
       find.byKey(pairingRejectKey),
     );
-    expect(reject.isDestructiveAction, isTrue);
+    expect(reject.destructive, isTrue);
   });
 
   testWidgets('repeated route decisions cannot pop the underlying page', (
@@ -489,7 +490,7 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
 
     tester
-        .widget<CupertinoDialogAction>(find.byKey(pairingApproveKey))
+        .widget<WhisperDialogButton>(find.byKey(pairingApproveKey))
         .onPressed!();
     expect(decisions, <bool>[true]);
   });

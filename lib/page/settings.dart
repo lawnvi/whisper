@@ -27,6 +27,9 @@ import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
+import 'package:whisper/widget/glass_dialog.dart';
+import 'package:whisper/widget/glass_settings_slider.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -41,14 +44,11 @@ enum SettingsOperationKind {
 }
 
 void _logSettingsFailure(SettingsOperationKind kind, Object error) {
-  privacyLog.event(
-    PrivacyEvent.settingsOperation,
-    <PrivacyField, Object>{
-      PrivacyField.kind: kind,
-      PrivacyField.success: false,
-      PrivacyField.errorType: privacyLog.errorType(error),
-    },
-  );
+  privacyLog.event(PrivacyEvent.settingsOperation, <PrivacyField, Object>{
+    PrivacyField.kind: kind,
+    PrivacyField.success: false,
+    PrivacyField.errorType: privacyLog.errorType(error),
+  });
 }
 
 @immutable
@@ -95,10 +95,7 @@ class SettingsPresentation {
 }
 
 class SettingsSectionSurface extends StatelessWidget {
-  const SettingsSectionSurface({
-    super.key,
-    required this.children,
-  });
+  const SettingsSectionSurface({super.key, required this.children});
 
   final List<Widget> children;
 
@@ -247,12 +244,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final autoConnect = await LocalSetting().autoConnectEnabled();
     final clipboardAutoSync = await LocalSetting().clipboardAutoSync();
     final launchAtStartup = await _loadLaunchAtStartup();
-    final androidBackgroundKeepAlive =
-        await LocalSetting().androidBackgroundKeepAlive();
-    final audioSharePlaybackGain =
-        await LocalSetting().audioSharePlaybackGain();
-    final remoteInputScrollMultiplier =
-        await LocalSetting().remoteInputScrollMultiplier();
+    final androidBackgroundKeepAlive = await LocalSetting()
+        .androidBackgroundKeepAlive();
+    final audioSharePlaybackGain = await LocalSetting()
+        .audioSharePlaybackGain();
+    final remoteInputScrollMultiplier = await LocalSetting()
+        .remoteInputScrollMultiplier();
     final themeMode = await LocalSetting().themeMode();
     final notificationApps = await LocalSetting().listenAppNotifyList();
     return SettingsPresentation(
@@ -392,16 +389,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     [
                       _buildSettingItem(
                         l10n.themeMode,
-                        Icon(Icons.dark_mode,
-                            size: 20,
-                            color: isDark
-                                ? Colors.grey[400]
-                                : CupertinoColors.systemGrey),
+                        Icon(
+                          Icons.dark_mode,
+                          size: 20,
+                          color: isDark
+                              ? Colors.grey[400]
+                              : CupertinoColors.systemGrey,
+                        ),
                         desc: _themeMode == ThemeMode.system
                             ? l10n.followSystem
                             : _themeMode == ThemeMode.dark
-                                ? l10n.darkMode
-                                : l10n.lightMode,
+                            ? l10n.darkMode
+                            : l10n.lightMode,
                         onTap: _showThemeModeSheet,
                         trailing: Icon(
                           Icons.arrow_forward_ios,
@@ -566,9 +565,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       _buildSettingItem(
                         l10n.audioSharePlaybackGainSetting(
-                          _audioSharePlaybackGainLabel(
-                            _audioSharePlaybackGain,
-                          ),
+                          _audioSharePlaybackGainLabel(_audioSharePlaybackGain),
                         ),
                         Icon(
                           Icons.graphic_eq_rounded,
@@ -631,14 +628,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               });
                               await AndroidBackgroundKeepAliveCoordinator.shared
                                   .setEnabled(
-                                value,
-                                notification: AndroidKeepAliveNotification(
-                                  title: l10n
-                                      .androidBackgroundKeepAliveActiveTitle,
-                                  description:
-                                      l10n.androidBackgroundKeepAliveActiveDesc,
-                                ),
-                              );
+                                    value,
+                                    notification: AndroidKeepAliveNotification(
+                                      title: l10n
+                                          .androidBackgroundKeepAliveActiveTitle,
+                                      description: l10n
+                                          .androidBackgroundKeepAliveActiveDesc,
+                                    ),
+                                  );
                             },
                           ),
                         ),
@@ -870,11 +867,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_updateResult?.hasUpdate == true) {
       return const SizedBox.shrink();
     }
-    return Icon(
-      Icons.arrow_forward_ios,
-      size: 14,
-      color: palette.textMuted,
-    );
+    return Icon(Icons.arrow_forward_ios, size: 14, color: palette.textMuted);
   }
 
   Widget _buildUpdateLeading(bool isDark) {
@@ -938,14 +931,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _showUpdateAvailableDialog(AppUpdateRelease release) async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-          context: context,
+    final confirmed =
+        await showWhisperDialog<bool>(
+          context,
           builder: (dialogContext) {
             final notes = release.notes.trim();
-            return AlertDialog(
-              title: Text(l10n.updateAvailableTitle(release.version)),
+            return WhisperGlassDialog(
+              constraints: const BoxConstraints(
+                minWidth: 300,
+                maxWidth: 500,
+                maxHeight: 680,
+              ),
+              title: Text(
+                l10n.updateAvailableTitle(release.version),
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
               content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 320),
+                constraints: const BoxConstraints(
+                  maxWidth: 440,
+                  maxHeight: 320,
+                ),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -965,17 +972,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               actions: <Widget>[
-                TextButton(
+                WhisperDialogButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: Text(l10n.cancel),
+                  label: l10n.cancel,
                 ),
-                FilledButton(
+                WhisperDialogButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: Text(
-                    release.asset == null
-                        ? l10n.viewRelease
-                        : l10n.downloadAndInstallUpdate,
-                  ),
+                  label: release.asset == null
+                      ? l10n.viewRelease
+                      : l10n.downloadAndInstallUpdate,
+                  prominent: true,
                 ),
               ],
             );
@@ -1035,58 +1041,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showAboutDialog(AppLocalizations l10n, Locale locale) {
-    if (MediaQuery.sizeOf(context).width < 600) {
-      _showCompactAboutDialog(l10n, locale);
-      return;
-    }
-    showAboutDialog(
-      context: context,
-      applicationName: 'Whisper',
-      applicationVersion: l10n.currentVersion(_version),
-      applicationIcon: _buildAboutIcon(48),
-      applicationLegalese: 'Copyright © 2026 lawnvi',
-      children: <Widget>[
-        const SizedBox(height: 8),
-        Text(l10n.aboutWhisperDescription),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: <Widget>[
-            TextButton.icon(
-              onPressed: () => _launchInBrowser(
-                Uri.https('whisper.127014.xyz', '/${locale.languageCode}'),
-              ),
-              icon: const Icon(Icons.language_rounded),
-              label: Text(l10n.officialWebsite),
-            ),
-            TextButton.icon(
-              onPressed: () => _launchInBrowser(
-                Uri.https('github.com', '/lawnvi/whisper'),
-              ),
-              icon: const Icon(Icons.code_rounded),
-              label: Text(l10n.sourceCode),
-            ),
-          ],
-        ),
-      ],
-    );
+    _showCompactAboutDialog(l10n, locale);
   }
 
   void _showCompactAboutDialog(AppLocalizations l10n, Locale locale) {
-    showDialog<void>(
-      context: context,
+    showWhisperDialog<void>(
+      context,
       builder: (dialogContext) {
         final colors = Theme.of(dialogContext).colorScheme;
         final materialL10n = MaterialLocalizations.of(dialogContext);
-        return AlertDialog(
+        return WhisperGlassDialog(
           key: const ValueKey<String>('compact-about-dialog'),
+          constraints: const BoxConstraints(
+            minWidth: 300,
+            maxWidth: 440,
+            maxHeight: 680,
+          ),
           insetPadding: const EdgeInsets.symmetric(
             horizontal: 24,
             vertical: 24,
           ),
           titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
           contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          actionsPadding: const EdgeInsets.only(top: 12),
           title: Row(
             children: <Widget>[
               _buildAboutIcon(44),
@@ -1103,9 +1080,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       l10n.currentVersion(_version),
-                      style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
+                      style: Theme.of(dialogContext).textTheme.bodyMedium
+                          ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -1123,9 +1099,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 10),
                   Text(
                     'Copyright © 2026 lawnvi',
-                    style: Theme.of(dialogContext)
-                        .textTheme
-                        .bodySmall
+                    style: Theme.of(dialogContext).textTheme.bodySmall
                         ?.copyWith(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
@@ -1151,7 +1125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           actions: <Widget>[
-            TextButton(
+            WhisperDialogButton(
               onPressed: () => showLicensePage(
                 context: dialogContext,
                 applicationName: 'Whisper',
@@ -1159,11 +1133,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 applicationIcon: _buildAboutIcon(48),
                 applicationLegalese: 'Copyright © 2026 lawnvi',
               ),
-              child: Text(materialL10n.viewLicensesButtonLabel),
+              label: materialL10n.viewLicensesButtonLabel,
             ),
-            TextButton(
+            WhisperDialogButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(materialL10n.closeButtonLabel),
+              label: materialL10n.closeButtonLabel,
+              prominent: true,
             ),
           ],
         );
@@ -1187,11 +1162,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required IconData icon,
     required VoidCallback onPressed,
   }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return TextButton.icon(
-      style: TextButton.styleFrom(
+      style: ButtonStyle(
         alignment: Alignment.centerLeft,
-        minimumSize: const Size(0, 42),
-        padding: EdgeInsets.zero,
+        minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 42)),
+        padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        ),
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return colors.primary.withValues(alpha: isDark ? 0.22 : 0.16);
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return colors.primary.withValues(alpha: isDark ? 0.16 : 0.10);
+          }
+          if (states.contains(WidgetState.focused)) {
+            return colors.primary.withValues(alpha: isDark ? 0.13 : 0.08);
+          }
+          return Colors.transparent;
+        }),
+        overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
+        animationDuration: const Duration(milliseconds: 150),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return Color.lerp(colors.primary, colors.onSurface, 0.16)!;
+          }
+          return colors.primary;
+        }),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),
       onPressed: onPressed,
@@ -1236,8 +1241,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _listenAndroid = trustedValue;
         _notificationForwardingBusy = false;
       });
-      final message =
-          AppLocalizations.of(context)!.notificationForwardingUpdateFailed;
+      final message = AppLocalizations.of(
+        context,
+      )!.notificationForwardingUpdateFailed;
       final showMessage = widget.showMessage;
       if (showMessage != null) {
         showMessage(message);
@@ -1250,9 +1256,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _applyNotificationForwarding(bool enabled) async {
     final write =
         widget.writeNotificationForwarding ?? LocalSetting().setAndroidListen;
-    final sync = widget.syncNotificationForwardingListener ??
+    final sync =
+        widget.syncNotificationForwardingListener ??
         _syncAndroidNotificationListener;
-    final refresh = widget.refreshNotificationRegistry ??
+    final refresh =
+        widget.refreshNotificationRegistry ??
         NotificationAppRegistry.instance.refresh;
     if (enabled) {
       await sync(true);
@@ -1302,9 +1310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     await Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
-        builder: (context) => const AppListScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (context) => const AppListScreen()),
     );
     await NotificationAppRegistry.instance.refresh();
     final selectedApps = await LocalSetting().listenAppNotifyList();
@@ -1422,10 +1428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _launchInBrowser(Uri url) async {
-    if (!await launchUrl(
-      url,
-      mode: LaunchMode.externalApplication,
-    )) {
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       throw Exception('Could not launch $url');
     }
   }
@@ -1442,114 +1445,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showThemeModeSheet() {
-    final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    showCupertinoModalPopup(
-      context: context,
-      builder: (BuildContext context) {
-        return CupertinoActionSheet(
-          title: Text(
-            l10n.selectThemeMode,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-            ),
-          ),
-          actions: [
-            CupertinoActionSheetAction(
-              child: Text(
-                l10n.followSystem,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                ),
+    unawaited(
+      showWhisperGlassBottomSheet<void>(
+        context,
+        builder: (sheetContext) => WhisperGlassActionSheet(
+          title: Text(l10n.selectThemeMode),
+          actions: <Widget>[
+            for (final option in <(ThemeMode, String)>[
+              (ThemeMode.system, l10n.followSystem),
+              (ThemeMode.light, l10n.lightMode),
+              (ThemeMode.dark, l10n.darkMode),
+            ])
+              WhisperGlassActionSheetAction(
+                label: option.$2,
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  unawaited(_updateThemeMode(option.$1));
+                },
               ),
-              onPressed: () {
-                Navigator.pop(context);
-                _updateThemeMode(ThemeMode.system);
-              },
-            ),
-            CupertinoActionSheetAction(
-              child: Text(
-                l10n.lightMode,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-                _updateThemeMode(ThemeMode.light);
-              },
-            ),
-            CupertinoActionSheetAction(
-              child: Text(
-                l10n.darkMode,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-                _updateThemeMode(ThemeMode.dark);
-              },
-            ),
           ],
-          cancelButton: CupertinoActionSheetAction(
-            child: Text(
-              l10n.cancel,
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-            },
+          cancelButton: WhisperGlassActionSheetAction(
+            label: l10n.cancel,
+            destructive: true,
+            onPressed: () => Navigator.pop(sheetContext),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   void _showLanguageSheet() {
-    final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    showCupertinoModalPopup(
-      context: context,
-      builder: (BuildContext context) {
-        return CupertinoActionSheet(
-          title: Text(
-            l10n.selectLanguage,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-            ),
-          ),
-          actions: [
-            for (final supportedLocale in _supportedLocales)
-              CupertinoActionSheetAction(
-                child: Text(
-                  _localeLabel(
-                    context,
-                    supportedLocale.languageCode,
-                  ),
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  MyApp.setLocale(context, supportedLocale);
-                  await LocalSetting()
-                      .setLocalization(supportedLocale.languageCode);
+    unawaited(
+      showWhisperGlassBottomSheet<void>(
+        context,
+        builder: (sheetContext) => WhisperGlassActionSheet(
+          title: Text(l10n.selectLanguage),
+          actions: <Widget>[
+            for (final locale in _supportedLocales)
+              WhisperGlassActionSheetAction(
+                label: _localeLabel(sheetContext, locale.languageCode),
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  MyApp.setLocale(context, locale);
+                  unawaited(
+                    LocalSetting().setLocalization(locale.languageCode),
+                  );
                 },
               ),
           ],
-          cancelButton: CupertinoActionSheetAction(
-            child: Text(
-              l10n.cancel,
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-            },
+          cancelButton: WhisperGlassActionSheetAction(
+            label: l10n.cancel,
+            destructive: true,
+            onPressed: () => Navigator.pop(sheetContext),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1599,17 +1551,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     GestureTapCallback? onLongPress,
   }) {
     final toggle = trailing is CupertinoSwitch ? trailing : null;
-    final activate = onTap ??
+    final activate =
+        onTap ??
         (toggle?.onChanged == null
             ? null
             : () => toggle!.onChanged!.call(!toggle.value));
-    final resolvedSubtitle = subtitle ??
-        (desc.isEmpty
-            ? null
-            : Text(
-                desc,
-                softWrap: true,
-              ));
+    final resolvedSubtitle =
+        subtitle ?? (desc.isEmpty ? null : Text(desc, softWrap: true));
     final palette = context.whisperPalette;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -1668,10 +1616,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: TextStyle(
                             fontSize: 16.5,
                             color: colorScheme.onSurface,
-                            fontWeight:
-                                Platform.isWindows ? null : FontWeight.w500,
-                            fontFamily:
-                                Platform.isWindows ? null : 'SF Pro Display',
+                            fontWeight: Platform.isWindows
+                                ? null
+                                : FontWeight.w500,
+                            fontFamily: Platform.isWindows
+                                ? null
+                                : 'SF Pro Display',
                           ),
                         ),
                         if (resolvedSubtitle != null) ...<Widget>[
@@ -1680,10 +1630,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: TextStyle(
                               fontSize: 12.5,
                               color: palette.textMuted,
-                              fontWeight:
-                                  Platform.isWindows ? null : FontWeight.w400,
-                              fontFamily:
-                                  Platform.isWindows ? null : 'SF Pro Display',
+                              fontWeight: Platform.isWindows
+                                  ? null
+                                  : FontWeight.w400,
+                              fontFamily: Platform.isWindows
+                                  ? null
+                                  : 'SF Pro Display',
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -1735,44 +1687,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String _audioSharePlaybackGainLabel(double gain) {
-    return 'x${gain.toStringAsFixed(1)}';
+    return '${gain.toStringAsFixed(1)}×';
   }
 
   String _remoteInputScrollMultiplierLabel(double multiplier) {
-    return 'x${multiplier.toStringAsFixed(1)}';
+    return '${multiplier.toStringAsFixed(1)}×';
   }
 
   Future<void> _showAudioSharePlaybackGainSheet() async {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     var selectedGain = _audioSharePlaybackGain;
-    await showCupertinoModalPopup<void>(
-      context: context,
+    await showWhisperGlassBottomSheet<void>(
+      context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return CupertinoActionSheet(
-              title: Text(
-                l10n.audioSharePlaybackGainTitle,
-                style: TextStyle(color: colorScheme.onSurface),
-              ),
-              message: Column(
+            return WhisperGlassBottomSheet(
+              title: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: [
+                children: <Widget>[
+                  Icon(Icons.volume_up_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 10),
                   Text(
-                    _audioSharePlaybackGainLabel(selectedGain),
-                    style: TextStyle(
+                    l10n.audioSharePlaybackGainTitle,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colorScheme.onSurface,
-                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  CupertinoSlider(
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  WhisperSettingsSlider(
                     value: selectedGain,
-                    min: 1.0,
-                    max: 3.0,
+                    min: 1,
+                    max: 3,
                     divisions: 20,
+                    valueLabel: _audioSharePlaybackGainLabel(selectedGain),
+                    minLabel: _audioSharePlaybackGainLabel(1),
+                    maxLabel: _audioSharePlaybackGainLabel(3),
                     onChanged: (value) {
                       setModalState(() {
                         selectedGain = value;
@@ -1789,17 +1746,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       });
                     },
                   ),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.audioSharePlaybackGainDesc,
+                    style: TextStyle(color: context.whisperPalette.textMuted),
+                  ),
                 ],
               ),
-              cancelButton: CupertinoActionSheetAction(
-                child: Text(
-                  l10n.confirm,
-                  style: TextStyle(color: colorScheme.onSurface),
+              actions: <Widget>[
+                WhisperDialogButton(
+                  label: l10n.confirm,
+                  prominent: true,
+                  onPressed: () => Navigator.pop(context),
                 ),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
+              ],
             );
           },
         );
@@ -1811,33 +1771,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     var selectedMultiplier = _remoteInputScrollMultiplier;
-    await showCupertinoModalPopup<void>(
-      context: context,
+    await showWhisperGlassBottomSheet<void>(
+      context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return CupertinoActionSheet(
-              title: Text(
-                l10n.remoteInputScrollMultiplierTitle,
-                style: TextStyle(color: colorScheme.onSurface),
-              ),
-              message: Column(
+            return WhisperGlassBottomSheet(
+              title: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: [
+                children: <Widget>[
+                  Icon(Icons.mouse_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 10),
                   Text(
-                    _remoteInputScrollMultiplierLabel(selectedMultiplier),
-                    style: TextStyle(
+                    l10n.remoteInputScrollMultiplierTitle,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colorScheme.onSurface,
-                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  CupertinoSlider(
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  WhisperSettingsSlider(
                     value: selectedMultiplier,
                     min: 0.5,
-                    max: 3.0,
+                    max: 3,
                     divisions: 25,
+                    valueLabel: _remoteInputScrollMultiplierLabel(
+                      selectedMultiplier,
+                    ),
+                    minLabel: _remoteInputScrollMultiplierLabel(0.5),
+                    maxLabel: _remoteInputScrollMultiplierLabel(3),
+                    anchorValue: 1,
+                    anchorLabel: _remoteInputScrollMultiplierLabel(1),
                     onChanged: (value) {
                       setModalState(() {
                         selectedMultiplier = value;
@@ -1858,17 +1827,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       });
                     },
                   ),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.remoteInputScrollMultiplierDesc,
+                    style: TextStyle(color: context.whisperPalette.textMuted),
+                  ),
                 ],
               ),
-              cancelButton: CupertinoActionSheetAction(
-                child: Text(
-                  l10n.confirm,
-                  style: TextStyle(color: colorScheme.onSurface),
+              actions: <Widget>[
+                WhisperDialogButton(
+                  label: l10n.confirm,
+                  prominent: true,
+                  onPressed: () => Navigator.pop(context),
                 ),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
+              ],
             );
           },
         );
@@ -1964,10 +1936,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                   [
                     _DeviceSettingTile(
                       title: l10n.trust,
-                      icon: Icon(
-                        Icons.wifi_rounded,
-                        color: palette.textMuted,
-                      ),
+                      icon: Icon(Icons.wifi_rounded, color: palette.textMuted),
                       trailing: CupertinoSwitch(
                         value: device.auth,
                         onChanged: (bool value) async {
@@ -1979,15 +1948,14 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     ),
                     _DeviceSettingTile(
                       title: l10n.writeClipboard,
-                      icon: Icon(
-                        Icons.copy,
-                        color: palette.textMuted,
-                      ),
+                      icon: Icon(Icons.copy, color: palette.textMuted),
                       trailing: CupertinoSwitch(
                         value: device.clipboard,
                         onChanged: (bool value) async {
-                          await LocalDatabase()
-                              .clipboardDevice(device.uid, value);
+                          await LocalDatabase().clipboardDevice(
+                            device.uid,
+                            value,
+                          );
                           _refreshDevice();
                         },
                       ),
@@ -2026,10 +1994,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                           if (!mounted) {
                             return;
                           }
-                          Navigator.popUntil(
-                            context,
-                            (route) => route.isFirst,
-                          );
+                          Navigator.popUntil(context, (route) => route.isFirst);
                         },
                       ),
                     ],
@@ -2071,9 +2036,11 @@ class _DeviceSettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final trailingWidget = trailing;
-    final CupertinoSwitch? toggle =
-        trailingWidget is CupertinoSwitch ? trailingWidget : null;
-    final activate = onTap ??
+    final CupertinoSwitch? toggle = trailingWidget is CupertinoSwitch
+        ? trailingWidget
+        : null;
+    final activate =
+        onTap ??
         (toggle?.onChanged == null
             ? null
             : () => toggle!.onChanged!.call(!toggle.value));

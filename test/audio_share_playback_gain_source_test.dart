@@ -9,7 +9,9 @@ void main() {
     expect(settings, contains('_audioSharePlaybackGain'));
     expect(settings, contains('audioSharePlaybackGainSetting('));
     expect(settings, contains('_showAudioSharePlaybackGainSheet'));
-    expect(settings, contains('CupertinoSlider('));
+    expect(settings, contains('showWhisperGlassBottomSheet<void>('));
+    expect(settings, contains('WhisperGlassBottomSheet('));
+    expect(settings, contains('WhisperSettingsSlider('));
     expect(settings, contains('setAudioSharePlaybackGain'));
     expect(
         settings, contains('AudioShareCoordinator.shared.updatePlaybackGain'));

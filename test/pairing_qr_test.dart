@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/page/pairing_qr.dart';
 import 'package:whisper/state/pairing_invite.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 
 final _invite = PairingInvite(
   host: '192.168.1.20',
@@ -40,9 +41,10 @@ void main() {
     expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
     expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
     expect(find.byIcon(Icons.verified_user_rounded), findsOneWidget);
-    final dialog = tester.widget<Dialog>(find.byType(Dialog));
-    final shape = dialog.shape! as RoundedRectangleBorder;
-    expect(shape.borderRadius, BorderRadius.circular(24));
+    final dialog = tester.widget<WhisperGlassDialog>(
+      find.byType(WhisperGlassDialog),
+    );
+    expect(dialog.borderRadius, 26);
     expect(
       tester.getSize(
         find.byKey(const ValueKey<String>('pairing-qr-dialog-content')),

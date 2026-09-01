@@ -125,6 +125,8 @@ flutter:
   assets:
     - assets/app_icon_round.png
     - assets/app_icon.ico
+    - assets/tray_icon.png
+    - assets/tray_icon.ico
   # - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

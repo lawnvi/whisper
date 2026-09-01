@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/pairing_invite.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 
 Future<PairingInvite?> showPairingQrDialog(
   BuildContext context, {
@@ -15,8 +16,8 @@ Future<PairingInvite?> showPairingQrDialog(
   bool startWithScanner = true,
   PairingQrDialogController? controller,
 }) {
-  return showDialog<PairingInvite>(
-    context: context,
+  return showWhisperDialog<PairingInvite>(
+    context,
     builder: (context) => PairingQrDialog(
       localInvite: localInvite,
       startWithScanner: startWithScanner,
@@ -116,15 +117,15 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         : availableHeight.clamp(360.0, 420.0);
     return SafeArea(
       minimum: EdgeInsets.all(compact ? 12 : 16),
-      child: Dialog(
+      child: WhisperGlassDialog(
         insetPadding: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        backgroundColor: context.whisperPalette.surfaceElevated,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(compact ? 16 : 24),
+        borderRadius: compact ? 18 : 26,
+        constraints: BoxConstraints.tightFor(
+          width: dialogWidth,
+          height: dialogHeight,
         ),
-        child: SizedBox(
+        contentPadding: EdgeInsets.zero,
+        content: SizedBox(
           key: const ValueKey<String>('pairing-qr-dialog-content'),
           width: dialogWidth,
           height: dialogHeight,

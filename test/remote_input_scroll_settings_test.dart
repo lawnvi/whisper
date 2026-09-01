@@ -14,7 +14,9 @@ void main() {
       expect(settings, contains('_remoteInputScrollMultiplier'));
       expect(settings, contains('remoteInputScrollMultiplierSetting('));
       expect(settings, contains('_showRemoteInputScrollMultiplierSheet'));
-      expect(settings, contains('CupertinoSlider('));
+      expect(settings, contains('showWhisperGlassBottomSheet<void>('));
+      expect(settings, contains('WhisperGlassBottomSheet('));
+      expect(settings, contains('WhisperSettingsSlider('));
       expect(settings, contains('setRemoteInputScrollMultiplier'));
       expect(
         settings,

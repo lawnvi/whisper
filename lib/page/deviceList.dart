@@ -61,9 +61,10 @@ import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_dialogs.dart' show confirmAction;
+import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import '../helper/local.dart';
@@ -421,7 +422,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(
-      Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon_round.png',
+      Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png',
+      isTemplate: Platform.isMacOS,
+      iconSize: 18,
     );
 
     Menu menu = Menu(
@@ -3010,7 +3013,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _confirmRemoveDevice(DeviceData target) async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await confirmAction(
+    final confirmed = await app_dialogs.confirmAction(
       context,
       title: l10n?.deleteDeviceTitle(target.name) ?? '删除 ${target.name}',
       description: l10n?.deleteDeviceDesc ?? '删除与此设备的所有消息，不可恢复',
@@ -3238,29 +3241,47 @@ class _DeviceListScreen extends State<DeviceListScreen>
     String? description,
   }) {
     final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: Icon(
-          stage == ConnectionDiagnosticStage.identity
-              ? Icons.shield_outlined
-              : Icons.wifi_find_rounded,
-          color: Theme.of(dialogContext).colorScheme.error,
+    showWhisperDialog<void>(
+      context,
+      builder: (dialogContext) => WhisperGlassDialog(
+        constraints: const BoxConstraints(
+          minWidth: 300,
+          maxWidth: 440,
+          maxHeight: 620,
         ),
-        title: Text(l10n.connectionDiagnosticTitle),
+        title: Row(
+          children: <Widget>[
+            Icon(
+              stage == ConnectionDiagnosticStage.identity
+                  ? Icons.shield_outlined
+                  : Icons.wifi_find_rounded,
+              color: Theme.of(dialogContext).colorScheme.error,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l10n.connectionDiagnosticTitle,
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
         content: Text(description ?? _connectionDiagnosticDescription(stage)),
         actions: <Widget>[
-          TextButton(
+          WhisperDialogButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.cancel),
+            label: l10n.cancel,
           ),
           if (onRetry != null)
-            FilledButton(
+            WhisperDialogButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 unawaited(onRetry());
               },
-              child: Text(l10n.retry),
+              label: l10n.retry,
+              prominent: true,
             ),
         ],
       ),
@@ -3625,7 +3646,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     final l10n = AppLocalizations.of(context);
     try {
-      final confirmed = await confirmAction(
+      final confirmed = await app_dialogs.confirmAction(
         context,
         title: l10n?.timeoutTitle ?? "是否释放连接",
         description: l10n?.connectFailed ?? 'Connection Failed',
@@ -4063,51 +4084,20 @@ void showConfirmationDialog(
   required VoidCallback onConfirm,
   VoidCallback? onCancel,
 }) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 14),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(color: Colors.red),
-            ),
-            onPressed: () {
-              if (onCancel != null) {
-                onCancel();
-              }
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(color: Colors.lightBlue),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-              onConfirm();
-            },
-          ),
-        ],
-      );
-    },
-  );
+  unawaited(() async {
+    final confirmed = await app_dialogs.confirmAction(
+      context,
+      title: title,
+      description: description,
+      confirmButtonText: confirmButtonText,
+      cancelButtonText: cancelButtonText,
+    );
+    if (confirmed) {
+      onConfirm();
+    } else {
+      onCancel?.call();
+    }
+  }());
 }
 
 void showInputAlertDialog(
@@ -4119,83 +4109,31 @@ void showInputAlertDialog(
   required String cancelButtonText,
   required Function(List<String>) onConfirm,
 }) {
-  List<TextEditingController> controllers = [];
-  List<Widget> inputFields = [];
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  for (int i = 0; i < inputHints.length; i++) {
-    TextEditingController controller = TextEditingController(
-      text: inputHints[i].keys.first,
+  unawaited(() async {
+    final values = await app_dialogs.showValidatedInputDialog(
+      context,
+      title: title,
+      description: description,
+      fields: inputHints
+          .map((hint) {
+            final entry = hint.entries.first;
+            return app_dialogs.InputDialogField(
+              initialValue: entry.key,
+              label: entry.key,
+              keyboardType: entry.value ? TextInputType.number : null,
+              inputFormatters: entry.value
+                  ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
+                  : const <TextInputFormatter>[],
+            );
+          })
+          .toList(growable: false),
+      confirmButtonText: confirmButtonText,
+      cancelButtonText: cancelButtonText,
     );
-    controllers.add(controller);
-
-    inputFields.add(
-      Column(
-        children: [
-          const SizedBox(height: 8),
-          CupertinoTextField(
-            controller: controller,
-            placeholder: inputHints[i].keys.first,
-            style: TextStyle(color: isDark ? Colors.white : Colors.black),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[800] : Colors.white,
-              border: Border.all(
-                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            inputFormatters: inputHints[i].values.first
-                ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  showCupertinoDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          children: [
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            ...inputFields,
-          ],
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            child: Text(
-              cancelButtonText,
-              style: const TextStyle(color: Colors.red),
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            child: Text(
-              confirmButtonText,
-              style: const TextStyle(color: Colors.lightBlue),
-            ),
-            onPressed: () {
-              List<String> inputValues = controllers
-                  .map((controller) => controller.text)
-                  .toList();
-              onConfirm(inputValues);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
+    if (values != null) {
+      onConfirm(values);
+    }
+  }());
 }
 
 void showLoadingDialog(
@@ -4209,40 +4147,15 @@ void showLoadingDialog(
   required VoidCallback onCancel,
   required Function(VoidCallback onCancel) task,
 }) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            if (isLoading) icon,
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: TextStyle(
-                color: isDark ? Colors.grey[400] : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          if (isLoading && showCancel)
-            CupertinoDialogAction(
-              onPressed: onCancel,
-              child: Text(
-                cancelButtonText,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-        ],
-      );
-    },
+  await app_dialogs.showLoadingDialog(
+    context,
+    title: title,
+    description: description,
+    isLoading: isLoading,
+    icon: icon,
+    cancelButtonText: cancelButtonText,
+    showCancel: showCancel,
+    onCancel: onCancel,
+    task: task,
   );
-  await task(onCancel);
 }
