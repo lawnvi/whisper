@@ -128,11 +128,13 @@ class WhisperGlassSurface extends StatelessWidget {
     required this.borderRadius,
     required this.child,
     this.shadowOffset = const Offset(0, 18),
+    this.showTopHighlight = true,
   });
 
   final BorderRadius borderRadius;
   final Widget child;
   final Offset shadowOffset;
+  final bool showTopHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -209,27 +211,28 @@ class WhisperGlassSurface extends StatelessWidget {
             ),
             child: Stack(
               children: <Widget>[
-                Positioned(
-                  top: 0,
-                  left: 16,
-                  right: 16,
-                  child: IgnorePointer(
-                    child: Container(
-                      height: 1,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: <Color>[
-                            Colors.transparent,
-                            Colors.white.withValues(
-                              alpha: isDark ? 0.22 : 0.78,
-                            ),
-                            Colors.transparent,
-                          ],
+                if (showTopHighlight)
+                  Positioned(
+                    top: 0,
+                    left: 16,
+                    right: 16,
+                    child: IgnorePointer(
+                      child: Container(
+                        height: 1,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: <Color>[
+                              Colors.transparent,
+                              Colors.white.withValues(
+                                alpha: isDark ? 0.22 : 0.78,
+                              ),
+                              Colors.transparent,
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
                 child,
               ],
             ),

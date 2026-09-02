@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -549,6 +550,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     return WhisperGlassSurface(
       borderRadius: BorderRadius.circular(20),
       shadowOffset: const Offset(0, 8),
+      showTopHighlight: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -797,6 +799,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     return WhisperGlassSurface(
       borderRadius: BorderRadius.circular(20),
       shadowOffset: const Offset(0, 8),
+      showTopHighlight: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1109,6 +1112,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     return WhisperGlassSurface(
       borderRadius: BorderRadius.circular(20),
       shadowOffset: const Offset(0, 8),
+      showTopHighlight: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: focused == null
@@ -1919,152 +1923,167 @@ class _ScreenBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final palette = context.whisperPalette;
+    final isDark = theme.brightness == Brightness.dark;
+    final highContrast = MediaQuery.highContrastOf(context);
+    final glassGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: highContrast
+          ? [palette.surfaceElevated, palette.surfaceElevated]
+          : isDark
+          ? [
+              palette.surfaceElevated.withValues(alpha: 0.76),
+              palette.surfaceElevated.withValues(alpha: 0.60),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.70),
+              Colors.white.withValues(alpha: 0.52),
+            ],
+    );
+    final blurSigma = highContrast ? 0.0 : 18.0;
+    final borderWidth = selected || conflict ? 2.0 : 1.0;
     final borderColor = conflict
         ? palette.warning
         : selected
         ? colorScheme.primary
-        : palette.borderSubtle;
+        : highContrast
+        ? colorScheme.onSurface.withValues(alpha: 0.42)
+        : Colors.white.withValues(alpha: isDark ? 0.18 : 0.92);
     return Semantics(
       selected: selected,
       label: '$badge, $title, $subtitle',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 160),
         opacity: reachable || local ? 1 : 0.48,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            color: palette.surfaceElevated,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: borderColor,
-              width: selected || conflict ? 2 : 1,
-            ),
-            boxShadow: [
-              if (selected)
-                BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.10),
-                  blurRadius: 14,
-                  spreadRadius: -5,
-                  offset: const Offset(0, 7),
-                ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(13),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final showTitle =
-                    constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
-                final showSubtitle =
-                    constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
-                final showChrome =
-                    constraints.maxWidth >= 118 && constraints.maxHeight >= 66;
-                final horizontalPadding = constraints.maxWidth >= 96
-                    ? 12.0
-                    : 4.0;
-                final verticalPadding = constraints.maxHeight >= 64
-                    ? 10.0
-                    : 2.0;
-                if (!showTitle) {
-                  return const SizedBox.expand();
-                }
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: horizontalPadding,
-                          vertical: verticalPadding,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.center,
-                                child: Text(
-                                  title,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (showSubtitle) ...[
-                              const SizedBox(height: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                gradient: glassGradient,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor, width: borderWidth),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showTitle =
+                      constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
+                  final showSubtitle =
+                      constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
+                  final showChrome =
+                      constraints.maxWidth >= 118 &&
+                      constraints.maxHeight >= 66;
+                  final horizontalPadding = constraints.maxWidth >= 96
+                      ? 12.0
+                      : 4.0;
+                  final verticalPadding = constraints.maxHeight >= 64
+                      ? 10.0
+                      : 2.0;
+                  if (!showTitle) {
+                    return const SizedBox.expand();
+                  }
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: verticalPadding,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                               Flexible(
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.center,
                                   child: Text(
-                                    subtitle,
+                                    title,
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: palette.textMuted,
-                                      fontSize: 12,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
                               ),
+                              if (showSubtitle) ...[
+                                const SizedBox(height: 4),
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      subtitle,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: palette.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                    if (showChrome)
-                      Positioned(
-                        left: 10,
-                        top: 9,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: palette.surfaceMuted.withValues(alpha: 0.72),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            badge,
-                            style: TextStyle(
-                              color: palette.textMuted,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
+                      if (showChrome)
+                        Positioned(
+                          left: 10,
+                          top: 9,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withValues(alpha: isDark ? 0.08 : 0.045),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              badge,
+                              style: TextStyle(
+                                color: palette.textMuted,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    if (showChrome && (selected || conflict || !reachable))
-                      Positioned(
-                        right: 10,
-                        top: 9,
-                        child: Icon(
-                          conflict
-                              ? Icons.warning_amber_rounded
-                              : !reachable
-                              ? Icons.link_off_rounded
-                              : Icons.check_circle_rounded,
-                          size: 16,
-                          color: conflict
-                              ? palette.warning
-                              : !reachable
-                              ? palette.textMuted
-                              : colorScheme.primary,
+                      if (showChrome && (selected || conflict || !reachable))
+                        Positioned(
+                          right: 10,
+                          top: 9,
+                          child: Icon(
+                            conflict
+                                ? Icons.warning_amber_rounded
+                                : !reachable
+                                ? Icons.link_off_rounded
+                                : Icons.check_circle_rounded,
+                            size: 16,
+                            color: conflict
+                                ? palette.warning
+                                : !reachable
+                                ? palette.textMuted
+                                : colorScheme.primary,
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
