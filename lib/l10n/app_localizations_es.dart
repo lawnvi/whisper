@@ -703,10 +703,28 @@ class AppLocalizationsEs extends AppLocalizations {
       'No hay equipos de escritorio disponibles';
 
   @override
+  String get remoteInputWorkspaceNoTargetsHint =>
+      'Los equipos conectados y de confianza compatibles con teclado y mouse aparecerán aquí';
+
+  @override
   String get remoteInputWorkspaceSelectTargets => 'Equipos controlados';
 
   @override
   String get remoteInputWorkspaceCanvasTitle => 'Distribucion de pantalla';
+
+  @override
+  String get remoteInputWorkspaceCanvasHint =>
+      'Arrastra una pantalla remota hasta un borde de este equipo';
+
+  @override
+  String get remoteInputWorkspaceSelectTargetHint =>
+      'Selecciona al menos un equipo controlado a la izquierda';
+
+  @override
+  String get remoteInputWorkspaceLocalBadge => 'Este equipo';
+
+  @override
+  String get remoteInputWorkspaceRemoteBadge => 'Remoto';
 
   @override
   String get remoteInputWorkspaceDetailsTitle => 'Detalles del dispositivo';

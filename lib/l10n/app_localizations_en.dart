@@ -697,10 +697,28 @@ class AppLocalizationsEn extends AppLocalizations {
       'No available desktop control targets';
 
   @override
+  String get remoteInputWorkspaceNoTargetsHint =>
+      'Connected and trusted desktop targets that support keyboard and mouse control appear here';
+
+  @override
   String get remoteInputWorkspaceSelectTargets => 'Control targets';
 
   @override
   String get remoteInputWorkspaceCanvasTitle => 'Screen arrangement';
+
+  @override
+  String get remoteInputWorkspaceCanvasHint =>
+      'Drag a remote screen against an edge of this device';
+
+  @override
+  String get remoteInputWorkspaceSelectTargetHint =>
+      'Select at least one control target from the left';
+
+  @override
+  String get remoteInputWorkspaceLocalBadge => 'This device';
+
+  @override
+  String get remoteInputWorkspaceRemoteBadge => 'Remote';
 
   @override
   String get remoteInputWorkspaceDetailsTitle => 'Device details';

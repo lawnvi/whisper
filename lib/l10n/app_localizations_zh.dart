@@ -659,10 +659,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputWorkspaceNoTargets => '没有可用的桌面被控设备';
 
   @override
+  String get remoteInputWorkspaceNoTargetsHint => '连接并信任支持键鼠控制的桌面设备后会显示在这里';
+
+  @override
   String get remoteInputWorkspaceSelectTargets => '被控设备';
 
   @override
   String get remoteInputWorkspaceCanvasTitle => '屏幕排列';
+
+  @override
+  String get remoteInputWorkspaceCanvasHint => '拖动远端屏幕并贴近本机屏幕边缘';
+
+  @override
+  String get remoteInputWorkspaceSelectTargetHint => '从左侧选择至少一台被控设备';
+
+  @override
+  String get remoteInputWorkspaceLocalBadge => '本机';
+
+  @override
+  String get remoteInputWorkspaceRemoteBadge => '远端';
 
   @override
   String get remoteInputWorkspaceDetailsTitle => '设备详情';

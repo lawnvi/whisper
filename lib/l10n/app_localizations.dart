@@ -1264,6 +1264,12 @@ abstract class AppLocalizations {
   /// **'没有可用的桌面被控设备'**
   String get remoteInputWorkspaceNoTargets;
 
+  /// No description provided for @remoteInputWorkspaceNoTargetsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接并信任支持键鼠控制的桌面设备后会显示在这里'**
+  String get remoteInputWorkspaceNoTargetsHint;
+
   /// No description provided for @remoteInputWorkspaceSelectTargets.
   ///
   /// In zh, this message translates to:
@@ -1275,6 +1281,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'屏幕排列'**
   String get remoteInputWorkspaceCanvasTitle;
+
+  /// No description provided for @remoteInputWorkspaceCanvasHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖动远端屏幕并贴近本机屏幕边缘'**
+  String get remoteInputWorkspaceCanvasHint;
+
+  /// No description provided for @remoteInputWorkspaceSelectTargetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'从左侧选择至少一台被控设备'**
+  String get remoteInputWorkspaceSelectTargetHint;
+
+  /// No description provided for @remoteInputWorkspaceLocalBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机'**
+  String get remoteInputWorkspaceLocalBadge;
+
+  /// No description provided for @remoteInputWorkspaceRemoteBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端'**
+  String get remoteInputWorkspaceRemoteBadge;
 
   /// No description provided for @remoteInputWorkspaceDetailsTitle.
   ///

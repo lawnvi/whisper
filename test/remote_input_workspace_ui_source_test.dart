@@ -126,6 +126,25 @@ void main() {
     expect(magnetize, contains('LocalDatabase().upsertRemoteInputLayout'));
   });
 
+  test('workspace uses a focused responsive desktop layout', () {
+    final source = File(
+      'lib/remote_input/remote_input_workspace_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('_detailsPanelBreakpoint = 1240'));
+    expect(source, contains('LayoutBuilder('));
+    expect(source, contains('endDrawer:'));
+    expect(source, contains('WhisperGlassSurface('));
+    expect(source, contains('_WorkspaceStatusChip'));
+    expect(source, contains('_WorkspaceGridPainter'));
+    expect(source, contains('SystemMouseCursors.move'));
+    expect(source, contains('remoteInputWorkspaceLocalBadge'));
+    expect(source, contains('remoteInputWorkspaceRemoteBadge'));
+    expect(source, isNot(contains('bottomNavigationBar: _buildStatusBar')));
+    expect(source, isNot(contains('SizedBox(width: 260')));
+    expect(source, isNot(contains('SizedBox(width: 280')));
+  });
+
   test('workspace screen only restores connected controller targets', () {
     final source = File(
       'lib/remote_input/remote_input_workspace_screen.dart',
@@ -162,5 +181,4 @@ void main() {
     );
     expect(source, contains('RemoteInputCoordinator.shared.stopLocal()'));
   });
-
 }

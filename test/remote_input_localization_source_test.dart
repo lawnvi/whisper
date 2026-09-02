@@ -38,5 +38,10 @@ void main() {
     expect(source, contains('l10n.remoteInputWorkspaceReachable'));
     expect(source, contains('l10n.remoteInputWorkspaceDisconnected'));
     expect(source, contains('l10n.remoteInputWorkspaceUnsupported'));
+    expect(source, contains('l10n.remoteInputWorkspaceNoTargetsHint'));
+    expect(source, contains('l10n.remoteInputWorkspaceCanvasHint'));
+    expect(source, contains('l10n.remoteInputWorkspaceSelectTargetHint'));
+    expect(source, contains('remoteInputWorkspaceLocalBadge'));
+    expect(source, contains('remoteInputWorkspaceRemoteBadge'));
   });
 }

@@ -16,6 +16,7 @@ import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/glass_dialog.dart';
 
 enum _RemoteInputWorkspaceUiDiagnostic { startFailed }
 
@@ -36,6 +37,9 @@ class RemoteInputWorkspaceScreen extends StatefulWidget {
 
 class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     with WidgetsBindingObserver {
+  static const double _detailsPanelBreakpoint = 1240;
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final WsSvrManager _socketManager = WsSvrManager();
   final RemoteInputWorkspaceCoordinator _workspaceCoordinator =
       RemoteInputWorkspaceCoordinator.shared;
@@ -54,6 +58,12 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   Offset _dragWorkspaceOffset = Offset.zero;
   bool _loading = true;
   bool _starting = false;
+
+  DeviceData? get _focusedDevice =>
+      _devices.where((device) => device.uid == _focusedPeerId).firstOrNull;
+
+  bool get _usesDetailsDrawer =>
+      MediaQuery.sizeOf(context).width < _detailsPanelBreakpoint;
 
   @override
   void initState() {
@@ -413,79 +423,217 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final palette = context.whisperPalette;
+    final colors = Theme.of(context).colorScheme;
+    final status = _workspaceStatusPresentation(l10n);
+    final focused = _focusedDevice;
+    final useDetailsDrawer = _usesDetailsDrawer;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
-        title: Text(l10n.remoteInputWorkspaceTitle),
+        toolbarHeight: 68,
+        backgroundColor: palette.surfaceCanvas,
+        titleSpacing: 4,
+        title: Row(
+          children: [
+            Text(l10n.remoteInputWorkspaceTitle),
+            if (MediaQuery.sizeOf(context).width >= 820) ...[
+              const SizedBox(width: 14),
+              Flexible(child: _WorkspaceStatusChip(status: status)),
+            ],
+          ],
+        ),
         leading: CupertinoNavigationBarBackButton(
           onPressed: () => Navigator.of(context).pop(),
-          color: Theme.of(context).colorScheme.onSurface,
+          color: colors.onSurface,
         ),
         actions: [
-          TextButton.icon(
-            onPressed: _starting ? null : _toggleWorkspace,
-            icon: Icon(
-              _workspaceCoordinator.snapshot.isControllerLive
-                  ? Icons.stop_rounded
-                  : Icons.play_arrow_rounded,
+          if (useDetailsDrawer && focused != null)
+            IconButton(
+              tooltip: l10n.remoteInputWorkspaceDetailsTitle,
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+              icon: const Icon(Icons.info_outline_rounded),
             ),
-            label: Text(
-              _workspaceCoordinator.snapshot.isControllerLive
-                  ? l10n.remoteInputWorkspaceStop
-                  : l10n.remoteInputWorkspaceStart,
-            ),
-          ),
-          const SizedBox(width: 12),
+          _buildWorkspaceToggleButton(l10n),
+          const SizedBox(width: 16),
         ],
       ),
+      endDrawer: useDetailsDrawer && focused != null
+          ? Drawer(
+              width: math.min(360, MediaQuery.sizeOf(context).width * 0.88),
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                  child: _buildDetailsPanel(l10n),
+                ),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: _loading
             ? const Center(child: CupertinoActivityIndicator())
-            : Row(
-                children: [
-                  SizedBox(width: 260, child: _buildDevicePanel(l10n)),
-                  Expanded(child: _buildCanvasPanel(l10n)),
-                  SizedBox(width: 280, child: _buildDetailsPanel(l10n)),
-                ],
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final showDetails =
+                      constraints.maxWidth >= _detailsPanelBreakpoint &&
+                      focused != null;
+                  final devicePanelWidth = math.min(
+                    252.0,
+                    math.max(210.0, constraints.maxWidth * 0.19),
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          width: devicePanelWidth,
+                          child: _buildDevicePanel(l10n),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildCanvasPanel(l10n)),
+                        if (showDetails) ...[
+                          const SizedBox(width: 12),
+                          SizedBox(width: 288, child: _buildDetailsPanel(l10n)),
+                        ],
+                      ],
+                    ),
+                  );
+                },
               ),
       ),
-      bottomNavigationBar: _buildStatusBar(l10n),
+    );
+  }
+
+  Widget _buildWorkspaceToggleButton(AppLocalizations l10n) {
+    final palette = context.whisperPalette;
+    final isLive = _workspaceCoordinator.snapshot.isControllerLive;
+    final icon = _starting
+        ? const SizedBox.square(
+            dimension: 16,
+            child: CupertinoActivityIndicator(radius: 8),
+          )
+        : Icon(isLive ? Icons.stop_rounded : Icons.play_arrow_rounded);
+    final label = Text(
+      isLive ? l10n.remoteInputWorkspaceStop : l10n.remoteInputWorkspaceStart,
+    );
+    if (isLive) {
+      return OutlinedButton.icon(
+        onPressed: _starting ? null : _toggleWorkspace,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: palette.danger,
+          backgroundColor: palette.surfaceMuted.withValues(alpha: 0.42),
+          side: BorderSide(color: palette.borderSubtle),
+          shape: const StadiumBorder(),
+        ),
+        icon: icon,
+        label: label,
+      );
+    }
+    return FilledButton.icon(
+      onPressed: _starting ? null : _toggleWorkspace,
+      style: FilledButton.styleFrom(shape: const StadiumBorder()),
+      icon: icon,
+      label: label,
     );
   }
 
   Widget _buildDevicePanel(AppLocalizations l10n) {
     final palette = context.whisperPalette;
+    final colors = Theme.of(context).colorScheme;
     final graph = _workspaceGraph();
     final reachablePeerIds = _reachablePeerIds(graph);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        border: Border(right: BorderSide(color: palette.borderSubtle)),
-      ),
+    return WhisperGlassSurface(
+      borderRadius: BorderRadius.circular(20),
+      shadowOffset: const Offset(0, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
-            child: Text(
-              l10n.remoteInputWorkspaceSelectTargets,
-              style: Theme.of(context).textTheme.titleMedium,
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.devices_other_rounded,
+                  size: 19,
+                  color: colors.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    l10n.remoteInputWorkspaceSelectTargets,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (_devices.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.surfaceMuted.withValues(alpha: 0.62),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${_selectedPeerIds.length}/${_devices.length}',
+                      style: TextStyle(
+                        color: palette.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           Expanded(
             child: _devices.isEmpty
                 ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(
-                        l10n.remoteInputWorkspaceNoTargets,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: palette.textMuted),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: palette.surfaceMuted.withValues(
+                                alpha: 0.58,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.desktop_windows_outlined,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            l10n.remoteInputWorkspaceNoTargets,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            l10n.remoteInputWorkspaceNoTargetsHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: palette.textMuted,
+                              fontSize: 12,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                     itemCount: _devices.length,
                     itemBuilder: (context, index) {
                       final device = _devices[index];
@@ -493,52 +641,108 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                       final focused = _focusedPeerId == device.uid;
                       final snapshot =
                           _workspaceCoordinator.snapshot.targets[device.uid];
+                      final status = _workspacePeerStatusLabel(
+                        l10n,
+                        device,
+                        snapshot: snapshot,
+                        graph: graph,
+                        reachablePeerIds: reachablePeerIds,
+                      );
+                      final statusColor = _peerStatusColor(
+                        device,
+                        graph: graph,
+                        reachablePeerIds: reachablePeerIds,
+                      );
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: Material(
                           color: focused
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.08)
+                              ? palette.surfaceMuted.withValues(alpha: 0.50)
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                          child: CheckboxListTile(
-                            value: selected,
-                            onChanged: (value) {
-                              unawaited(
-                                _setDeviceSelected(
-                                  device,
-                                  selected: value == true,
-                                ),
-                              );
-                            },
-                            onFocusChange: (_) {},
-                            title: Text(
-                              device.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: BorderSide(
+                              color: focused
+                                  ? colors.primary.withValues(alpha: 0.28)
+                                  : palette.borderSubtle,
                             ),
-                            subtitle: Text(
-                              _workspacePeerStatusLabel(
-                                l10n,
-                                device,
-                                snapshot: snapshot,
-                                graph: graph,
-                                reachablePeerIds: reachablePeerIds,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            secondary: IconButton(
-                              tooltip: l10n.remoteInputWorkspaceFocusTarget,
-                              onPressed: () {
-                                setState(() {
-                                  _focusedPeerId = device.uid;
-                                });
-                              },
-                              icon: const Icon(
-                                Icons.center_focus_strong_rounded,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _focusDevice(device),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+                              child: Row(
+                                children: [
+                                  Checkbox(
+                                    value: selected,
+                                    visualDensity: VisualDensity.compact,
+                                    onChanged: (value) {
+                                      unawaited(
+                                        _setDeviceSelected(
+                                          device,
+                                          selected: value == true,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          device.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              width: 7,
+                                              height: 7,
+                                              decoration: BoxDecoration(
+                                                color: statusColor,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                status,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: palette.textMuted,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip:
+                                        l10n.remoteInputWorkspaceFocusTarget,
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () =>
+                                        _focusDevice(device, openDetails: true),
+                                    icon: Icon(
+                                      Icons.info_outline_rounded,
+                                      size: 19,
+                                      color: focused
+                                          ? colors.primary
+                                          : palette.textMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -552,60 +756,141 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
   }
 
+  void _focusDevice(DeviceData device, {bool openDetails = false}) {
+    setState(() {
+      _focusedPeerId = device.uid;
+    });
+    if (openDetails && _usesDetailsDrawer) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scaffoldKey.currentState?.openEndDrawer();
+        }
+      });
+    }
+  }
+
+  Color _peerStatusColor(
+    DeviceData device, {
+    required RemoteInputWorkspaceGraph graph,
+    required Set<String> reachablePeerIds,
+  }) {
+    final palette = context.whisperPalette;
+    if (!_socketManager.isConnectedTo(device.uid) ||
+        !reachablePeerIds.contains(device.uid)) {
+      return palette.textMuted;
+    }
+    if (!_socketManager.supportsRemoteInputWorkspaceGraphFor(device.uid) ||
+        graph.conflictingPeerIds.contains(device.uid)) {
+      return palette.warning;
+    }
+    return palette.trusted;
+  }
+
   Widget _buildCanvasPanel(AppLocalizations l10n) {
     final palette = context.whisperPalette;
+    final colors = Theme.of(context).colorScheme;
     final selectedDevices = _devices
         .where((device) => _selectedPeerIds.contains(device.uid))
         .toList(growable: false);
     final graph = _workspaceGraph();
     final reachablePeerIds = _reachablePeerIds(graph);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.remoteInputWorkspaceCanvasTitle,
-                  style: Theme.of(context).textTheme.titleMedium,
+    return WhisperGlassSurface(
+      borderRadius: BorderRadius.circular(20),
+      shadowOffset: const Offset(0, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: palette.surfaceMuted.withValues(alpha: 0.58),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.space_dashboard_outlined,
+                    size: 19,
+                    color: palette.textMuted,
+                  ),
                 ),
-              ),
-              if (graph.conflictingPeerIds.isNotEmpty)
-                Text(
-                  l10n.remoteInputWorkspaceConflict,
-                  style: const TextStyle(color: Colors.orange),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.remoteInputWorkspaceCanvasTitle,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        l10n.remoteInputWorkspaceCanvasHint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-            ],
+                if (graph.conflictingPeerIds.isNotEmpty)
+                  _WorkspaceNoticeChip(
+                    icon: Icons.warning_amber_rounded,
+                    label: l10n.remoteInputWorkspaceConflict,
+                    color: palette.warning,
+                  ),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: palette.surfaceElevated,
-                border: Border.all(color: palette.borderSubtle),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return _buildScreenCanvas(
-                      constraints,
-                      selectedDevices: selectedDevices,
-                      conflicts: graph.conflictingPeerIds,
-                      reachablePeerIds: reachablePeerIds,
-                    );
-                  },
-                ),
+          Divider(height: 1, color: palette.borderSubtle),
+          Expanded(
+            child: ColoredBox(
+              color: palette.surfaceCanvas.withValues(alpha: 0.56),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _WorkspaceGridPainter(
+                        color: palette.borderSubtle.withValues(alpha: 0.62),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return _buildScreenCanvas(
+                          constraints,
+                          selectedDevices: selectedDevices,
+                          conflicts: graph.conflictingPeerIds,
+                          reachablePeerIds: reachablePeerIds,
+                        );
+                      },
+                    ),
+                  ),
+                  if (_devices.isNotEmpty && selectedDevices.isEmpty)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: _WorkspaceNoticeChip(
+                          icon: Icons.touch_app_outlined,
+                          label: l10n.remoteInputWorkspaceSelectTargetHint,
+                          color: colors.primary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -660,6 +945,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                   ? AppLocalizations.of(context)!.remoteInputLocalScreen
                   : display.name,
               subtitle: _displaySizeLabel(display),
+              badge: AppLocalizations.of(
+                context,
+              )!.remoteInputWorkspaceLocalBadge,
               selected: false,
               conflict: false,
               local: true,
@@ -741,47 +1029,53 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       top: offset.dy,
       width: groupSize.width,
       height: groupSize.height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          unawaited(_setDeviceSelected(device, selected: true));
-        },
-        onPanStart: (_) {
-          setState(() {
-            _focusedPeerId = device.uid;
-            _selectedPeerIds.add(device.uid);
-            _draggingPeerId = device.uid;
-            _dragStartLayout = _layouts[device.uid] ?? layout;
-            _dragWorkspaceOffset = Offset.zero;
-          });
-        },
-        onPanUpdate: (details) {
-          _updateDraggedLayout(device, delta: details.delta, scale: scale);
-        },
-        onPanEnd: (_) {
-          _clearDragState();
-          unawaited(_snapAndSaveLayout(device));
-        },
-        onPanCancel: () => _cancelDraggedLayout(device),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            for (final display in displays)
-              Positioned(
-                left: (display.left - bounds.left) * scale,
-                top: (display.top - bounds.top) * scale,
-                width: math.max(1.0, display.width * scale),
-                height: math.max(1.0, display.height * scale),
-                child: _ScreenBlock(
-                  title: display.name.isEmpty ? device.name : display.name,
-                  subtitle: _displaySizeLabel(display),
-                  selected: _focusedPeerId == device.uid,
-                  conflict: conflict,
-                  local: false,
-                  reachable: reachable,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.move,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            unawaited(_setDeviceSelected(device, selected: true));
+          },
+          onPanStart: (_) {
+            setState(() {
+              _focusedPeerId = device.uid;
+              _selectedPeerIds.add(device.uid);
+              _draggingPeerId = device.uid;
+              _dragStartLayout = _layouts[device.uid] ?? layout;
+              _dragWorkspaceOffset = Offset.zero;
+            });
+          },
+          onPanUpdate: (details) {
+            _updateDraggedLayout(device, delta: details.delta, scale: scale);
+          },
+          onPanEnd: (_) {
+            _clearDragState();
+            unawaited(_snapAndSaveLayout(device));
+          },
+          onPanCancel: () => _cancelDraggedLayout(device),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (final display in displays)
+                Positioned(
+                  left: (display.left - bounds.left) * scale,
+                  top: (display.top - bounds.top) * scale,
+                  width: math.max(1.0, display.width * scale),
+                  height: math.max(1.0, display.height * scale),
+                  child: _ScreenBlock(
+                    title: display.name.isEmpty ? device.name : display.name,
+                    subtitle: _displaySizeLabel(display),
+                    badge: AppLocalizations.of(
+                      context,
+                    )!.remoteInputWorkspaceRemoteBadge,
+                    selected: _focusedPeerId == device.uid,
+                    conflict: conflict,
+                    local: false,
+                    reachable: reachable,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -789,34 +1083,79 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
 
   Widget _buildDetailsPanel(AppLocalizations l10n) {
     final palette = context.whisperPalette;
-    final focused = _devices
-        .where((device) => device.uid == _focusedPeerId)
-        .firstOrNull;
+    final colors = Theme.of(context).colorScheme;
+    final focused = _focusedDevice;
     final snapshot = focused == null
         ? null
         : _workspaceCoordinator.snapshot.targets[focused.uid];
     final graph = _workspaceGraph();
     final reachablePeerIds = _reachablePeerIds(graph);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        border: Border(left: BorderSide(color: palette.borderSubtle)),
-      ),
+    final statusLabel = focused == null
+        ? l10n.remoteInputWorkspaceNoTargets
+        : _workspacePeerStatusLabel(
+            l10n,
+            focused,
+            snapshot: snapshot,
+            graph: graph,
+            reachablePeerIds: reachablePeerIds,
+          );
+    final statusColor = focused == null
+        ? palette.textMuted
+        : _peerStatusColor(
+            focused,
+            graph: graph,
+            reachablePeerIds: reachablePeerIds,
+          );
+    return WhisperGlassSurface(
+      borderRadius: BorderRadius.circular(20),
+      shadowOffset: const Offset(0, 8),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: focused == null
-            ? Text(
-                l10n.remoteInputWorkspaceNoTargets,
-                style: TextStyle(color: palette.textMuted),
-              )
+            ? const SizedBox.shrink()
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    l10n.remoteInputWorkspaceDetailsTitle,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 19,
+                        color: colors.primary,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          l10n.remoteInputWorkspaceDetailsTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      if (_usesDetailsDrawer)
+                        IconButton(
+                          tooltip: MaterialLocalizations.of(
+                            context,
+                          ).closeButtonTooltip,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 22),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: palette.surfaceMuted.withValues(alpha: 0.58),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Icon(
+                      Icons.desktop_windows_rounded,
+                      color: palette.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Text(
                     focused.name,
                     style: Theme.of(context).textTheme.titleLarge,
@@ -824,23 +1163,67 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${focused.host}:${focused.port}',
-                    style: TextStyle(color: palette.textMuted),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _WorkspaceNoticeChip(
+                      icon: statusColor == palette.trusted
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.info_outline_rounded,
+                      label: statusLabel,
+                      color: statusColor,
+                    ),
                   ),
-                  const SizedBox(height: 18),
-                  _DetailRow(
-                    label: l10n.remoteInputLayoutTitle,
-                    value: _focusedLayoutSummary(_layouts[focused.uid]),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.surfaceMuted.withValues(alpha: 0.58),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: palette.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lan_outlined,
+                          size: 17,
+                          color: palette.textMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${focused.host}:${focused.port}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: palette.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  _DetailRow(
-                    label: l10n.remoteInputWorkspaceState,
-                    value: _workspacePeerStatusLabel(
-                      l10n,
-                      focused,
-                      snapshot: snapshot,
-                      graph: graph,
-                      reachablePeerIds: reachablePeerIds,
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+                    decoration: BoxDecoration(
+                      color: palette.surfaceMuted.withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        _DetailRow(
+                          label: l10n.remoteInputLayoutTitle,
+                          value: _focusedLayoutSummary(_layouts[focused.uid]),
+                        ),
+                        _DetailRow(
+                          label: l10n.remoteInputWorkspaceState,
+                          value: statusLabel,
+                        ),
+                      ],
                     ),
                   ),
                   const Spacer(),
@@ -863,6 +1246,12 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                           ? l10n.remoteInputWorkspaceRemoveTarget
                           : l10n.remoteInputWorkspaceAddTarget,
                     ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -870,36 +1259,40 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     );
   }
 
-  Widget _buildStatusBar(AppLocalizations l10n) {
+  _WorkspaceStatusPresentation _workspaceStatusPresentation(
+    AppLocalizations l10n,
+  ) {
     final palette = context.whisperPalette;
     final snapshot = _workspaceCoordinator.snapshot;
-    final status = switch (snapshot.status) {
-      RemoteInputWorkspaceStatus.offering =>
-        l10n.remoteInputWorkspaceStatusOffering,
-      RemoteInputWorkspaceStatus.armed => l10n.remoteInputWorkspaceStatusArmed,
-      RemoteInputWorkspaceStatus.active =>
-        l10n.remoteInputWorkspaceStatusActive(_activeTargetName()),
-      RemoteInputWorkspaceStatus.failed =>
-        l10n.remoteInputWorkspaceStatusFailed(
+    return switch (snapshot.status) {
+      RemoteInputWorkspaceStatus.offering => _WorkspaceStatusPresentation(
+        icon: Icons.hourglass_top_rounded,
+        label: l10n.remoteInputWorkspaceStatusOffering,
+        color: palette.warning,
+      ),
+      RemoteInputWorkspaceStatus.armed => _WorkspaceStatusPresentation(
+        icon: Icons.radar_rounded,
+        label: l10n.remoteInputWorkspaceStatusArmed,
+        color: palette.connected,
+      ),
+      RemoteInputWorkspaceStatus.active => _WorkspaceStatusPresentation(
+        icon: Icons.mouse_rounded,
+        label: l10n.remoteInputWorkspaceStatusActive(_activeTargetName()),
+        color: palette.trusted,
+      ),
+      RemoteInputWorkspaceStatus.failed => _WorkspaceStatusPresentation(
+        icon: Icons.error_outline_rounded,
+        label: l10n.remoteInputWorkspaceStatusFailed(
           _failureDetail(l10n, snapshot.errorMessage),
         ),
-      RemoteInputWorkspaceStatus.idle => l10n.remoteInputWorkspaceStatusIdle,
+        color: palette.danger,
+      ),
+      RemoteInputWorkspaceStatus.idle => _WorkspaceStatusPresentation(
+        icon: Icons.pause_circle_outline_rounded,
+        label: l10n.remoteInputWorkspaceStatusIdle,
+        color: palette.textMuted,
+      ),
     };
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: palette.surfaceElevated,
-        border: Border(top: BorderSide(color: palette.borderSubtle)),
-      ),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        status,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: palette.textMuted),
-      ),
-    );
   }
 
   Future<void> _toggleWorkspace() async {
@@ -1384,10 +1777,132 @@ class _WorkspaceDefaultLayoutAnchor {
   final int height;
 }
 
+class _WorkspaceStatusPresentation {
+  const _WorkspaceStatusPresentation({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+}
+
+class _WorkspaceStatusChip extends StatelessWidget {
+  const _WorkspaceStatusChip({required this.status});
+
+  final _WorkspaceStatusPresentation status;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return Tooltip(
+      message: status.label,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: palette.surfaceMuted.withValues(alpha: 0.56),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: palette.borderSubtle),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(status.icon, size: 15, color: status.color),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                status.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkspaceNoticeChip extends StatelessWidget {
+  const _WorkspaceNoticeChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 280),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: palette.borderSubtle),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: palette.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkspaceGridPainter extends CustomPainter {
+  const _WorkspaceGridPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    const spacing = 28.0;
+    for (var y = spacing / 2; y < size.height; y += spacing) {
+      for (var x = spacing / 2; x < size.width; x += spacing) {
+        canvas.drawCircle(Offset(x, y), 1, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WorkspaceGridPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
 class _ScreenBlock extends StatelessWidget {
   const _ScreenBlock({
     required this.title,
     required this.subtitle,
+    required this.badge,
     required this.selected,
     required this.conflict,
     required this.local,
@@ -1396,6 +1911,7 @@ class _ScreenBlock extends StatelessWidget {
 
   final String title;
   final String subtitle;
+  final String badge;
   final bool selected;
   final bool conflict;
   final bool local;
@@ -1406,87 +1922,151 @@ class _ScreenBlock extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final borderColor = conflict
-        ? Colors.orange
+        ? palette.warning
         : selected
         ? colorScheme.primary
         : palette.borderSubtle;
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 160),
-      opacity: reachable || local ? 1 : 0.5,
-      child: AnimatedContainer(
+    return Semantics(
+      selected: selected,
+      label: '$badge, $title, $subtitle',
+      child: AnimatedOpacity(
         duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: local
-              ? colorScheme.primary.withValues(alpha: 0.08)
-              : palette.surfaceMuted,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: selected ? 2 : 1),
-          boxShadow: [
-            if (selected)
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: 0.18),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-          ],
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showTitle =
-                constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
-            final showSubtitle =
-                constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
-            final horizontalPadding = constraints.maxWidth >= 96 ? 12.0 : 4.0;
-            final verticalPadding = constraints.maxHeight >= 64 ? 10.0 : 2.0;
-            if (!showTitle) {
-              return const SizedBox.expand();
-            }
-            return Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: verticalPadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.center,
-                      child: Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  if (showSubtitle) ...[
-                    const SizedBox(height: 4),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.center,
-                        child: Text(
-                          subtitle,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: palette.textMuted,
-                            fontSize: 12,
-                          ),
+        opacity: reachable || local ? 1 : 0.48,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: palette.surfaceElevated,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: borderColor,
+              width: selected || conflict ? 2 : 1,
+            ),
+            boxShadow: [
+              if (selected)
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.10),
+                  blurRadius: 14,
+                  spreadRadius: -5,
+                  offset: const Offset(0, 7),
+                ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showTitle =
+                    constraints.maxWidth >= 44 && constraints.maxHeight >= 22;
+                final showSubtitle =
+                    constraints.maxWidth >= 84 && constraints.maxHeight >= 48;
+                final showChrome =
+                    constraints.maxWidth >= 118 && constraints.maxHeight >= 66;
+                final horizontalPadding = constraints.maxWidth >= 96
+                    ? 12.0
+                    : 4.0;
+                final verticalPadding = constraints.maxHeight >= 64
+                    ? 10.0
+                    : 2.0;
+                if (!showTitle) {
+                  return const SizedBox.expand();
+                }
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: verticalPadding,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  title,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (showSubtitle) ...[
+                              const SizedBox(height: 4),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    subtitle,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: palette.textMuted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
+                    if (showChrome)
+                      Positioned(
+                        left: 10,
+                        top: 9,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.surfaceMuted.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              color: palette.textMuted,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (showChrome && (selected || conflict || !reachable))
+                      Positioned(
+                        right: 10,
+                        top: 9,
+                        child: Icon(
+                          conflict
+                              ? Icons.warning_amber_rounded
+                              : !reachable
+                              ? Icons.link_off_rounded
+                              : Icons.check_circle_rounded,
+                          size: 16,
+                          color: conflict
+                              ? palette.warning
+                              : !reachable
+                              ? palette.textMuted
+                              : colorScheme.primary,
+                        ),
+                      ),
                   ],
-                ],
-              ),
-            );
-          },
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
