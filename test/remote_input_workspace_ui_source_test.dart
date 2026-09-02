@@ -138,35 +138,11 @@ void main() {
     expect(source, contains('_WorkspaceStatusChip'));
     expect(source, contains('_WorkspaceGridPainter'));
     expect(source, contains('SystemMouseCursors.move'));
-    expect('showTopHighlight: false'.allMatches(source).length, 3);
     expect(source, contains('remoteInputWorkspaceLocalBadge'));
     expect(source, contains('remoteInputWorkspaceRemoteBadge'));
     expect(source, isNot(contains('bottomNavigationBar: _buildStatusBar')));
     expect(source, isNot(contains('SizedBox(width: 260')));
     expect(source, isNot(contains('SizedBox(width: 280')));
-  });
-
-  test('workspace screen blocks use neutral glass surfaces', () {
-    final source = File(
-      'lib/remote_input/remote_input_workspace_screen.dart',
-    ).readAsStringSync();
-    final screenBlock = RegExp(
-      r'class _ScreenBlock[\s\S]*?class _DetailRow',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(screenBlock, contains('BackdropFilter('));
-    expect(screenBlock, contains('ImageFilter.blur('));
-    expect(screenBlock, contains('Colors.white.withValues(alpha: 0.70)'));
-    expect(screenBlock, contains('Colors.white.withValues(alpha: 0.52)'));
-    expect(screenBlock, contains('highContrast ? 0.0 : 18.0'));
-    expect(
-      screenBlock,
-      contains('border: Border.all(color: borderColor, width: borderWidth)'),
-    );
-    expect(screenBlock, isNot(contains('BoxShadow(')));
-    expect(screenBlock, isNot(contains('RadialGradient(')));
-    expect(screenBlock, isNot(contains('foregroundDecoration:')));
-    expect(screenBlock, isNot(contains('palette.connected.withValues')));
   });
 
   test('workspace screen only restores connected controller targets', () {

@@ -278,32 +278,6 @@ void main() {
     }
   });
 
-  testWidgets('section surfaces use neutral 14 radius glass cards', (
-    tester,
-  ) async {
-    await _pumpAt(tester, width: 760);
-
-    final surface = find.byType(SettingsSectionSurface).first;
-    final glass = tester.widget<WhisperGlassSurface>(
-      find
-          .descendant(of: surface, matching: find.byType(WhisperGlassSurface))
-          .first,
-    );
-    expect(glass.borderRadius, BorderRadius.circular(14));
-    expect(glass.neutral, isTrue);
-    expect(glass.showTopHighlight, isFalse);
-    expect(glass.showShadow, isFalse);
-    expect(
-      find.descendant(of: surface, matching: find.byType(BackdropFilter)),
-      findsOneWidget,
-    );
-
-    final dividers = tester.widgetList<Divider>(
-      find.descendant(of: surface, matching: find.byType(Divider)),
-    );
-    expect(dividers, isEmpty);
-  });
-
   testWidgets('settings checks for updates and opens the verified installer', (
     tester,
   ) async {

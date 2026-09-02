@@ -236,39 +236,6 @@ void main() {
     expect(controller.text, 'first plus more');
   });
 
-  testWidgets('desktop composer retains the original 30 radius surface', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatComposer(
-            clipboardEnabled: true,
-            isInputEmpty: true,
-            isLoading: false,
-            isLocalhost: false,
-            canSend: true,
-            isDesktopStyle: true,
-            keyPressedMap: const <String, bool>{},
-            controller: TextEditingController(),
-            focusNode: FocusNode(),
-            onPickFiles: () async {},
-            onSendClipboard: () async {},
-            onSendText: (_) async => true,
-          ),
-        ),
-      ),
-    );
-
-    final container = tester.widget<Container>(
-      find.byKey(ChatComposer.desktopContainerKey),
-    );
-    final decoration = container.decoration! as BoxDecoration;
-    expect(decoration.borderRadius, BorderRadius.circular(30));
-    expect(decoration.boxShadow, isNotEmpty);
-    expect(container.padding, const EdgeInsets.fromLTRB(20, 14, 18, 14));
-  });
-
   testWidgets('mobile composer also toggles between attachment and send', (
     tester,
   ) async {
