@@ -278,19 +278,25 @@ void main() {
     }
   });
 
-  testWidgets('section surfaces retain the original 14 radius card treatment', (
+  testWidgets('section surfaces use neutral 14 radius glass cards', (
     tester,
   ) async {
     await _pumpAt(tester, width: 760);
 
     final surface = find.byType(SettingsSectionSurface).first;
-    final card = tester.widget<Card>(
-      find.descendant(of: surface, matching: find.byType(Card)).first,
+    final glass = tester.widget<WhisperGlassSurface>(
+      find
+          .descendant(of: surface, matching: find.byType(WhisperGlassSurface))
+          .first,
     );
-    final shape = card.shape! as RoundedRectangleBorder;
-    expect(shape.borderRadius, BorderRadius.circular(14));
-    expect(shape.side.style, BorderStyle.solid);
-    expect(card.elevation, 0);
+    expect(glass.borderRadius, BorderRadius.circular(14));
+    expect(glass.neutral, isTrue);
+    expect(glass.showTopHighlight, isFalse);
+    expect(glass.showShadow, isFalse);
+    expect(
+      find.descendant(of: surface, matching: find.byType(BackdropFilter)),
+      findsOneWidget,
+    );
 
     final dividers = tester.widgetList<Divider>(
       find.descendant(of: surface, matching: find.byType(Divider)),

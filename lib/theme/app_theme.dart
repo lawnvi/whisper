@@ -124,7 +124,7 @@ class AppTheme {
     borderSubtle: Color(0xFFE2E8F0),
     textMuted: Color(0xFF64748B),
     messageIncoming: Color(0xFFF8FAFC),
-    messageOutgoing: Color(0xFFEFF6FF),
+    messageOutgoing: Color(0xFFE5F0FC),
   );
 
   static const _darkPalette = WhisperPalette(
@@ -138,7 +138,7 @@ class AppTheme {
     borderSubtle: Color(0xFF242424),
     textMuted: Color(0xFF8A8F98),
     messageIncoming: Color(0xFF101010),
-    messageOutgoing: Color(0xFF181818),
+    messageOutgoing: Color(0xFF18202A),
   );
 
   static WhisperPalette fallbackPalette(Brightness brightness) {
@@ -150,7 +150,9 @@ class AppTheme {
   static final ThemeData darkTheme = _buildTheme(_darkScheme, _darkPalette);
 
   static ThemeData _buildTheme(
-      ColorScheme colorScheme, WhisperPalette palette) {
+    ColorScheme colorScheme,
+    WhisperPalette palette,
+  ) {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,

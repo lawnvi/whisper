@@ -101,16 +101,11 @@ class SettingsSectionSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      color: palette.surfaceElevated,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: palette.borderSubtle),
-      ),
+    return WhisperGlassSurface(
+      borderRadius: BorderRadius.circular(14),
+      showTopHighlight: false,
+      showShadow: false,
+      neutral: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
@@ -332,8 +327,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final horizontalPagePadding = _isMobilePlatform ? 10.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
+        backgroundColor: palette.surfaceCanvas,
         leading: MediaQuery.withNoTextScaling(
           child: CupertinoNavigationBarBackButton(
             previousPageTitle: '',
@@ -482,8 +478,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _launchAtStartup = value;
                                 });
                                 try {
-                                  await DesktopStartupManager()
-                                      .setEnabled(value);
+                                  await DesktopStartupManager().setEnabled(
+                                    value,
+                                  );
                                 } catch (error) {
                                   _logSettingsFailure(
                                     SettingsOperationKind.startupUpdate,
@@ -1901,8 +1898,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
+        backgroundColor: palette.surfaceCanvas,
         leading: MediaQuery.withNoTextScaling(
           child: CupertinoNavigationBarBackButton(
             previousPageTitle: '',

@@ -415,7 +415,7 @@ void main() {
 
     expect(find.byType(Image), findsOneWidget);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
-    expect(picker.requestedWidth, 2400);
+    expect(picker.requestedWidth, 1200);
   });
 
   testWidgets('content uri fullscreen image reads the original bytes', (

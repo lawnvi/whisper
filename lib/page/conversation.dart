@@ -43,6 +43,7 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 import 'package:whisper/widget/message_link_text.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
@@ -536,10 +537,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final kind = mediaFileKindFor(name: message.name, path: path);
-    final copied = await _clipboardFileWriter.writeFilePaths(
-      <String>[path],
-      asImage: kind == MediaFileKind.image,
-    );
+    final copied = await _clipboardFileWriter.writeFilePaths(<String>[
+      path,
+    ], asImage: kind == MediaFileKind.image);
     showAppToast(copied ? l10n.fileCopied : l10n.fileCopyFailed);
   }
 
@@ -682,7 +682,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
 
     Widget base = embedded
-        ? Material(color: colorScheme.surface, child: content)
+        ? Material(color: Colors.transparent, child: content)
         : Scaffold(appBar: _buildStandaloneAppBar(isDark), body: content);
 
     if (isMobile()) {
@@ -812,7 +812,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       height: 72,
       padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
       decoration: BoxDecoration(
-        color: palette.surfaceElevated,
+        color: Colors.transparent,
         border: Border(bottom: BorderSide(color: palette.borderSubtle)),
       ),
       child: Row(
@@ -1704,27 +1704,24 @@ class _SendMessageScreen extends State<SendMessageScreen>
                             },
                             title: Text(candidate.name),
                             subtitle: Text(candidate.platform),
-                            secondary: DropdownButton<AudioChannelRole>(
-                              value: roles[candidate.uid],
-                              underline: const SizedBox.shrink(),
-                              onChanged: isSelected
-                                  ? (role) {
-                                      if (role == null) {
-                                        return;
-                                      }
-                                      setSheetState(() {
-                                        roles[candidate.uid] = role;
-                                      });
-                                    }
-                                  : null,
-                              items: AudioChannelRole.values
-                                  .map(
-                                    (role) => DropdownMenuItem(
-                                      value: role,
-                                      child: Text(_audioGroupRoleLabel(role)),
-                                    ),
-                                  )
-                                  .toList(growable: false),
+                            secondary: WhisperGlassMenuButton<AudioChannelRole>(
+                              value:
+                                  roles[candidate.uid] ??
+                                  AudioChannelRole.stereo,
+                              enabled: isSelected,
+                              options:
+                                  <WhisperGlassMenuOption<AudioChannelRole>>[
+                                    for (final role in AudioChannelRole.values)
+                                      WhisperGlassMenuOption<AudioChannelRole>(
+                                        value: role,
+                                        label: _audioGroupRoleLabel(role),
+                                      ),
+                                  ],
+                              onChanged: (role) {
+                                setSheetState(() {
+                                  roles[candidate.uid] = role;
+                                });
+                              },
                             ),
                           );
                         },
@@ -2062,6 +2059,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final receivedBubbleColor = palette.messageIncoming;
     final receivedBorderColor = palette.borderSubtle;
     final sentBubbleColor = palette.messageOutgoing;
+    final sentBorderColor = colorScheme.primary.withValues(
+      alpha: Theme.of(context).brightness == Brightness.dark ? 0.14 : 0.08,
+    );
     final textStyle = TextStyle(
       color: colorScheme.onSurface,
       fontSize: isDesktop() ? 16.5 : 16,
@@ -2087,7 +2087,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
         decoration: BoxDecoration(
           color: isOpponent ? receivedBubbleColor : sentBubbleColor,
           borderRadius: BorderRadius.circular(18),
-          border: isOpponent ? Border.all(color: receivedBorderColor) : null,
+          border: Border.all(
+            color: isOpponent ? receivedBorderColor : sentBorderColor,
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
@@ -2182,10 +2184,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
     final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
     if (mediaKind != MediaFileKind.other) {
-      final contentAvailable = _isMediaContentAvailable(
-        messagePath,
-        transfer,
-      );
+      final contentAvailable = _isMediaContentAvailable(messagePath, transfer);
       return _buildMediaMessage(
         message: message,
         transfer: transfer,

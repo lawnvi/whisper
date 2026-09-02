@@ -129,12 +129,16 @@ class WhisperGlassSurface extends StatelessWidget {
     required this.child,
     this.shadowOffset = const Offset(0, 18),
     this.showTopHighlight = true,
+    this.showShadow = true,
+    this.neutral = false,
   });
 
   final BorderRadius borderRadius;
   final Widget child;
   final Offset shadowOffset;
   final bool showTopHighlight;
+  final bool showShadow;
+  final bool neutral;
 
   @override
   Widget build(BuildContext context) {
@@ -157,9 +161,17 @@ class WhisperGlassSurface extends StatelessWidget {
         : 0.82;
     final surface = palette.surfaceElevated.withValues(alpha: baseOpacity);
     final topTint = Color.alphaBlend(
-      colors.primary.withValues(alpha: isDark ? 0.08 : 0.045),
+      neutral
+          ? Colors.white.withValues(alpha: isDark ? 0.055 : 0.20)
+          : colors.primary.withValues(alpha: isDark ? 0.08 : 0.045),
       surface,
     );
+    final bottomTint = neutral
+        ? surface
+        : Color.alphaBlend(
+            colors.secondary.withValues(alpha: isDark ? 0.035 : 0.02),
+            surface,
+          );
     final borderColor = isDark
         ? Colors.white.withValues(alpha: highContrast ? 0.32 : 0.16)
         : const Color(0xFFFFFFFF).withValues(alpha: highContrast ? 1 : 0.88);
@@ -172,20 +184,24 @@ class WhisperGlassSurface extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.44 : 0.18),
-            blurRadius: isDesktop ? 42 : 28,
-            spreadRadius: -8,
-            offset: shadowOffset,
-          ),
-          BoxShadow(
-            color: colors.primary.withValues(alpha: isDark ? 0.08 : 0.05),
-            blurRadius: 22,
-            spreadRadius: -12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: showShadow
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.44 : 0.18),
+                  blurRadius: isDesktop ? 42 : 28,
+                  spreadRadius: -8,
+                  offset: shadowOffset,
+                ),
+                BoxShadow(
+                  color: neutral
+                      ? Colors.black.withValues(alpha: isDark ? 0.10 : 0.035)
+                      : colors.primary.withValues(alpha: isDark ? 0.08 : 0.05),
+                  blurRadius: 22,
+                  spreadRadius: -12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : const <BoxShadow>[],
       ),
       child: ClipRRect(
         borderRadius: radius,
@@ -198,14 +214,7 @@ class WhisperGlassSurface extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: <Color>[
-                  topTint,
-                  surface,
-                  Color.alphaBlend(
-                    colors.secondary.withValues(alpha: isDark ? 0.035 : 0.02),
-                    surface,
-                  ),
-                ],
+                colors: <Color>[topTint, surface, bottomTint],
                 stops: const <double>[0, 0.46, 1],
               ),
             ),

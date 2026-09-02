@@ -34,7 +34,7 @@ const Set<String> _previewableImageMimeTypes = <String>{
   'image/vnd.wap.wbmp',
 };
 
-const int _mediaPreviewCacheWidth = 2400;
+const int _mediaPreviewCacheWidth = 1200;
 const int _maxOriginalImageBytes = 128 * 1024 * 1024;
 const double _mediaPreviewMinAspectRatio = 9 / 20;
 const double _mediaPreviewMaxAspectRatio = 20 / 9;
@@ -421,7 +421,10 @@ class _ImagePreviewState extends State<_ImagePreview> {
         ? bytes == null || bytes.isEmpty
               ? null
               : MemoryImage(bytes)
-        : FileImage(File(widget.path));
+        : ResizeImage(
+            FileImage(File(widget.path)),
+            width: _mediaPreviewCacheWidth,
+          );
     return _AdaptiveVisualMediaFrame(
       frameKey: const ValueKey<String>('image-preview-frame'),
       sourceAspectRatio: _aspectRatio ?? 4 / 3,

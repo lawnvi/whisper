@@ -93,17 +93,17 @@ class WhisperGlassActionSheet extends StatelessWidget {
     );
     final radius = BorderRadius.circular(14);
 
-    return Material(
-      color: Colors.transparent,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = isCompact
-              ? constraints.maxWidth
-              : math.min(maxWidth, constraints.maxWidth * desktopWidthFactor);
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: mediaQuery.padding.bottom + (isCompact ? 0 : 8),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = isCompact
+            ? constraints.maxWidth
+            : math.min(maxWidth, constraints.maxWidth * desktopWidthFactor);
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: mediaQuery.padding.bottom + (isCompact ? 0 : 8),
+          ),
+          child: Material(
+            color: Colors.transparent,
             child: SizedBox(
               width: width,
               child: Column(
@@ -167,9 +167,9 @@ class WhisperGlassActionSheet extends StatelessWidget {
                 ],
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -275,16 +275,16 @@ class WhisperGlassBottomSheet extends StatelessWidget {
       _ => false,
     };
 
-    return Material(
-      color: Colors.transparent,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final connectsToSides =
-              isMobilePlatform || constraints.maxWidth <= maxSheetWidth + 48;
-          return Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final connectsToSides =
+            isMobilePlatform || constraints.maxWidth <= maxSheetWidth + 48;
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
+            child: Material(
+              color: Colors.transparent,
               child: SizedBox(
                 width: connectsToSides ? double.infinity : maxSheetWidth,
                 child: ConstrainedBox(
@@ -353,9 +353,214 @@ class WhisperGlassBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class WhisperGlassMenuOption<T> {
+  const WhisperGlassMenuOption({required this.value, required this.label});
+
+  final T value;
+  final String label;
+}
+
+class WhisperGlassMenuButton<T> extends StatelessWidget {
+  const WhisperGlassMenuButton({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.enabled = true,
+    this.minimumMenuWidth = 132,
+  });
+
+  final T value;
+  final List<WhisperGlassMenuOption<T>> options;
+  final ValueChanged<T> onChanged;
+  final bool enabled;
+  final double minimumMenuWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final palette = context.whisperPalette;
+    final isDark = theme.brightness == Brightness.dark;
+    final currentLabel = options
+        .where((option) => option.value == value)
+        .map((option) => option.label)
+        .firstOrNull;
+    final menuRadius = BorderRadius.circular(12);
+
+    return MenuAnchor(
+      useRootOverlay: true,
+      consumeOutsideTap: true,
+      clipBehavior: Clip.none,
+      style: MenuStyle(
+        padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+          EdgeInsets.zero,
+        ),
+        minimumSize: WidgetStatePropertyAll<Size>(Size(minimumMenuWidth, 0)),
+        backgroundColor: const WidgetStatePropertyAll<Color>(
+          Colors.transparent,
+        ),
+        surfaceTintColor: const WidgetStatePropertyAll<Color>(
+          Colors.transparent,
+        ),
+        shadowColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        elevation: const WidgetStatePropertyAll<double>(0),
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(borderRadius: menuRadius),
+        ),
+        visualDensity: VisualDensity.compact,
       ),
+      menuChildren: <Widget>[
+        WhisperGlassSurface(
+          borderRadius: menuRadius,
+          shadowOffset: const Offset(0, 8),
+          neutral: true,
+          child: SizedBox(
+            width: minimumMenuWidth,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  for (var index = 0; index < options.length; index += 1)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      child: MenuItemButton(
+                        onPressed: enabled
+                            ? () => onChanged(options[index].value)
+                            : null,
+                        closeOnActivate: true,
+                        leadingIcon: options[index].value == value
+                            ? Icon(
+                                Icons.check_rounded,
+                                size: 16,
+                                color: colors.primary,
+                              )
+                            : const SizedBox(width: 16),
+                        style: ButtonStyle(
+                          minimumSize: WidgetStatePropertyAll<Size>(
+                            Size(minimumMenuWidth - 10, 34),
+                          ),
+                          padding:
+                              const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+                                EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                          foregroundColor: WidgetStatePropertyAll<Color>(
+                            colors.onSurface,
+                          ),
+                          textStyle: WidgetStatePropertyAll<TextStyle>(
+                            theme.textTheme.bodyMedium!.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          backgroundColor:
+                              WidgetStateProperty.resolveWith<Color>((states) {
+                                if (states.contains(WidgetState.pressed)) {
+                                  return colors.onSurface.withValues(
+                                    alpha: isDark ? 0.17 : 0.09,
+                                  );
+                                }
+                                if (states.contains(WidgetState.hovered) ||
+                                    states.contains(WidgetState.focused)) {
+                                  return colors.onSurface.withValues(
+                                    alpha: isDark ? 0.12 : 0.06,
+                                  );
+                                }
+                                if (options[index].value == value) {
+                                  return colors.primary.withValues(
+                                    alpha: isDark ? 0.16 : 0.075,
+                                  );
+                                }
+                                return Colors.transparent;
+                              }),
+                          overlayColor: const WidgetStatePropertyAll<Color>(
+                            Colors.transparent,
+                          ),
+                          shape: WidgetStatePropertyAll<OutlinedBorder>(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          animationDuration: const Duration(milliseconds: 100),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: Text(options[index].label),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+      builder: (context, controller, child) {
+        return TextButton(
+          onPressed: enabled
+              ? () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                }
+              : null,
+          style: ButtonStyle(
+            minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 32)),
+            padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+              EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            ),
+            foregroundColor: WidgetStatePropertyAll<Color>(
+              enabled ? colors.onSurface : palette.textMuted,
+            ),
+            backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+              if (states.contains(WidgetState.pressed)) {
+                return colors.onSurface.withValues(alpha: isDark ? 0.17 : 0.09);
+              }
+              if (states.contains(WidgetState.hovered) || controller.isOpen) {
+                return colors.onSurface.withValues(
+                  alpha: isDark ? 0.12 : 0.065,
+                );
+              }
+              return palette.surfaceMuted.withValues(
+                alpha: isDark ? 0.42 : 0.50,
+              );
+            }),
+            overlayColor: const WidgetStatePropertyAll<Color>(
+              Colors.transparent,
+            ),
+            shape: WidgetStatePropertyAll<OutlinedBorder>(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+            ),
+            textStyle: WidgetStatePropertyAll<TextStyle>(
+              theme.textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.w500),
+            ),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(currentLabel ?? ''),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: controller.isOpen ? 0.5 : 0,
+                duration: const Duration(milliseconds: 120),
+                child: const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

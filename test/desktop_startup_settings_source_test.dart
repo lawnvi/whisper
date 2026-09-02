@@ -6,15 +6,17 @@ void main() {
   test('desktop launch at startup setting is localized and desktop-only', () {
     final source = File('lib/page/settings.dart').readAsStringSync();
 
-    expect(source,
-        contains("import 'package:whisper/helper/desktop_startup.dart';"));
+    expect(
+      source,
+      contains("import 'package:whisper/helper/desktop_startup.dart';"),
+    );
     expect(source, contains("import 'package:whisper/helper/toast.dart';"));
     expect(source, contains('bool _launchAtStartup = false;'));
     expect(source, contains('DesktopStartupManager().isEnabled()'));
     expect(
       source,
       matches(
-        RegExp(r'DesktopStartupManager\(\)\s*\.setEnabled\(value\)'),
+        RegExp(r'DesktopStartupManager\(\)\s*\.setEnabled\(\s*value\s*,?\s*\)'),
       ),
     );
     expect(source, contains('l10n.launchAtStartup'));

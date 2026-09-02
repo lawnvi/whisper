@@ -64,6 +64,7 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
@@ -1919,31 +1920,41 @@ class _DeviceListScreen extends State<DeviceListScreen>
       body: SafeArea(
         child: Row(
           children: [
-            Container(
+            SizedBox(
               width: 340,
-              decoration: BoxDecoration(
-                color: palette.surfaceElevated,
-                border: Border(right: BorderSide(color: palette.borderSubtle)),
-              ),
-              child: Column(
-                children: [
-                  _buildDesktopSidebarToolbar(),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                      itemCount: visibleSessions.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final session = visibleSessions[index];
-                        return _buildDesktopSessionTile(
-                          session,
-                          selected:
-                              session.device.uid == _selectedDesktopPeerId,
-                        );
-                      },
-                    ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: palette.surfaceCanvas,
+                  border: Border(
+                    right: BorderSide(color: palette.borderSubtle),
                   ),
-                ],
+                ),
+                child: Column(
+                  children: [
+                    _buildDesktopSidebarToolbar(),
+                    Expanded(
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                          itemCount: visibleSessions.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final session = visibleSessions[index];
+                            return _buildDesktopSessionTile(
+                              session,
+                              selected:
+                                  session.device.uid == _selectedDesktopPeerId,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -2473,127 +2484,124 @@ class _DeviceListScreen extends State<DeviceListScreen>
                       : AudioChannelRole.stereo)),
     };
     final l10n = AppLocalizations.of(context)!;
-    return showModalBottomSheet<_AudioGroupSetupResult>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
+    return showWhisperGlassBottomSheet<_AudioGroupSetupResult>(
+      context,
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setSheetState) {
+          builder: (sheetContext, setSheetState) {
             final selectedCount = selected.values
                 .where((value) => value)
                 .length;
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      l10n.audioGroupSelectSinks,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Flexible(
-                      child: AnimatedBuilder(
-                        animation: _audioGroupCoordinator,
-                        builder: (context, _) {
-                          return ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: candidates.length,
-                            itemBuilder: (context, index) {
-                              final candidate = candidates[index];
-                              final isSelected =
-                                  selected[candidate.uid] ?? false;
-                              return CheckboxListTile(
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                                value: isSelected,
-                                onChanged: (value) {
-                                  setSheetState(() {
-                                    selected[candidate.uid] = value ?? false;
-                                  });
-                                },
-                                title: _buildAudioGroupDeviceTitle(candidate),
-                                subtitle: _buildAudioGroupSinkSubtitle(
-                                  candidate,
-                                ),
-                                secondary: DropdownButton<AudioChannelRole>(
-                                  value: roles[candidate.uid],
-                                  underline: const SizedBox.shrink(),
-                                  isDense: true,
-                                  onChanged: isSelected
-                                      ? (role) {
-                                          if (role == null) {
-                                            return;
-                                          }
-                                          setSheetState(() {
-                                            roles[candidate.uid] = role;
-                                          });
-                                        }
-                                      : null,
-                                  items: AudioChannelRole.values
-                                      .map(
-                                        (role) => DropdownMenuItem(
-                                          value: role,
-                                          child: Text(
-                                            _audioGroupRoleLabel(role),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(growable: false),
-                                ),
-                              );
-                            },
+            final applyLabel = applyingActiveConfig
+                ? l10n.audioGroupApply
+                : selectedCount > 1
+                ? l10n.audioGroupStart
+                : l10n.audioShareStart;
+            return WhisperGlassBottomSheet(
+              maxSheetWidth: 680,
+              maxContentWidth: 600,
+              title: Text(l10n.audioGroupSelectSinks),
+              content: AnimatedBuilder(
+                animation: _audioGroupCoordinator,
+                builder: (context, _) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      for (var index = 0; index < candidates.length; index += 1)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == candidates.length - 1 ? 0 : 8,
+                          ),
+                          child: WhisperGlassSurface(
+                            borderRadius: BorderRadius.circular(14),
+                            showTopHighlight: false,
+                            showShadow: false,
+                            neutral: true,
+                            child: CheckboxListTile(
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              value: selected[candidates[index].uid] ?? false,
+                              onChanged: (value) {
+                                setSheetState(() {
+                                  selected[candidates[index].uid] =
+                                      value ?? false;
+                                });
+                              },
+                              title: _buildAudioGroupDeviceTitle(
+                                candidates[index],
+                              ),
+                              subtitle: _buildAudioGroupSinkSubtitle(
+                                candidates[index],
+                              ),
+                              secondary:
+                                  WhisperGlassMenuButton<AudioChannelRole>(
+                                    value:
+                                        roles[candidates[index].uid] ??
+                                        AudioChannelRole.stereo,
+                                    enabled:
+                                        selected[candidates[index].uid] == true,
+                                    options:
+                                        <
+                                          WhisperGlassMenuOption<
+                                            AudioChannelRole
+                                          >
+                                        >[
+                                          for (final role
+                                              in AudioChannelRole.values)
+                                            WhisperGlassMenuOption<
+                                              AudioChannelRole
+                                            >(
+                                              value: role,
+                                              label: _audioGroupRoleLabel(role),
+                                            ),
+                                        ],
+                                    onChanged: (role) {
+                                      setSheetState(() {
+                                        roles[candidates[index].uid] = role;
+                                      });
+                                    },
+                                  ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              actions: <Widget>[
+                if (allowStop)
+                  WhisperDialogButton(
+                    label: l10n.audioGroupStop,
+                    icon: Icons.stop_rounded,
+                    destructive: true,
+                    onPressed: () => Navigator.of(
+                      sheetContext,
+                    ).pop(const _AudioGroupSetupResult.stop()),
+                  ),
+                WhisperDialogButton(
+                  label: applyLabel,
+                  icon: Icons.spatial_audio_off_rounded,
+                  prominent: true,
+                  onPressed: selectedCount == 0
+                      ? null
+                      : () {
+                          Navigator.of(sheetContext).pop(
+                            _AudioGroupSetupResult.apply(
+                              <String, AudioChannelRole>{
+                                for (final candidate in candidates)
+                                  if (selected[candidate.uid] == true)
+                                    candidate.uid:
+                                        roles[candidate.uid] ??
+                                        AudioChannelRole.stereo,
+                              },
+                            ),
                           );
                         },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (allowStop) ...[
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(
-                            context,
-                          ).pop(const _AudioGroupSetupResult.stop());
-                        },
-                        icon: const Icon(Icons.stop_rounded),
-                        label: Text(l10n.audioGroupStop),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    FilledButton.icon(
-                      onPressed: selectedCount == 0
-                          ? null
-                          : () {
-                              Navigator.of(context).pop(
-                                _AudioGroupSetupResult.apply(
-                                  <String, AudioChannelRole>{
-                                    for (final candidate in candidates)
-                                      if (selected[candidate.uid] == true)
-                                        candidate.uid:
-                                            roles[candidate.uid] ??
-                                            AudioChannelRole.stereo,
-                                  },
-                                ),
-                              );
-                            },
-                      icon: const Icon(Icons.spatial_audio_off_rounded),
-                      label: Text(
-                        applyingActiveConfig
-                            ? l10n.audioGroupApply
-                            : selectedCount > 1
-                            ? l10n.audioGroupStart
-                            : l10n.audioShareStart,
-                      ),
-                    ),
-                  ],
                 ),
-              ),
+              ],
             );
           },
         );
@@ -2706,10 +2714,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Widget _buildDesktopPlaceholder(bool isDark) {
-    final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     return Container(
-      color: colorScheme.surface,
+      color: Colors.transparent,
       alignment: Alignment.center,
       child: Text(
         AppLocalizations.of(context)?.selectConversationPlaceholder ??

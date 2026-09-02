@@ -30,17 +30,22 @@ void main() {
         'macos/Runner/MainFlutterWindow.swift',
       ).readAsStringSync();
 
-      expect(mainSource, contains('brightness == Brightness.dark'));
-      expect(mainSource, contains('Colors.black'));
-      expect(mainSource, contains('Colors.white'));
+      expect(
+        mainSource,
+        contains('AppTheme.fallbackPalette(brightness).surfaceCanvas'),
+      );
+      expect(mainSource, contains('backgroundColor: windowBackground'));
+      expect(
+        mainSource,
+        contains("'backgroundColor': windowBackground.toARGB32()"),
+      );
       expect(runner, contains('com.vireen.whisper/window_theme'));
       expect(runner, contains('titlebarAppearsTransparent = true'));
       expect(runner, contains('titleVisibility = .visible'));
       expect(runner, contains('styleMask.remove(.fullSizeContentView)'));
-      expect(
-        runner,
-        contains('backgroundColor = brightness == "dark" ? .black : .white'),
-      );
+      expect(runner, contains('backgroundARGB: UInt32?'));
+      expect(runner, contains('backgroundColor = NSColor('));
+      expect(runner, contains('CGFloat((argb >> 16) & 0xFF) / 255.0'));
       expect(runner, contains('forInfoDictionaryKey: "CFBundleDisplayName"'));
     });
 

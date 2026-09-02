@@ -61,14 +61,13 @@ void main(List<String> arguments) async {
     var height = await LocalSetting().windowHeight();
     final themeMode = await LocalSetting().themeMode();
     final brightness = _brightnessForThemeMode(themeMode);
+    final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
     await _applyDesktopWindowTheme(themeMode);
 
     WindowOptions windowOptions = WindowOptions(
       size: Size(width, height),
       center: true,
-      backgroundColor: brightness == Brightness.dark
-          ? Colors.black
-          : Colors.white,
+      backgroundColor: windowBackground,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
       windowButtonVisibility: true,
@@ -113,11 +112,13 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
   }
 
   final brightness = _brightnessForThemeMode(mode);
+  final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
   try {
     await windowManager.setBrightness(brightness);
     if (Platform.isWindows || Platform.isMacOS) {
       await _windowThemeChannel.invokeMethod<void>('setBrightness', {
         'brightness': brightness.name,
+        'backgroundColor': windowBackground.toARGB32(),
       });
     }
   } catch (error) {

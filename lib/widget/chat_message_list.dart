@@ -148,21 +148,26 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   @override
   Widget build(BuildContext context) {
+    Widget messageList = AnimatedList(
+      key: widget.listKey,
+      controller: widget.controller,
+      initialItemCount: widget.messages.length,
+      padding: const EdgeInsets.only(bottom: 12),
+      reverse: true,
+      shrinkWrap: true,
+      itemBuilder: _buildMessage,
+    );
+    if (isDesktop()) {
+      messageList = ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: messageList,
+      );
+    }
+
     return Column(
       children: [
         Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: AnimatedList(
-              key: widget.listKey,
-              controller: widget.controller,
-              initialItemCount: widget.messages.length,
-              padding: const EdgeInsets.only(bottom: 12),
-              reverse: true,
-              shrinkWrap: true,
-              itemBuilder: _buildMessage,
-            ),
-          ),
+          child: Align(alignment: Alignment.topCenter, child: messageList),
         ),
         if (_selectionMode) _buildSelectionToolbar(context),
       ],

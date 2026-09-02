@@ -162,7 +162,10 @@ class MainFlutterWindow: NSWindow {
             details: nil))
         return
       }
-      self?.applyWindowTheme(brightness: brightness)
+      let backgroundARGB = (arguments["backgroundColor"] as? NSNumber)?.uint32Value
+      self?.applyWindowTheme(
+        brightness: brightness,
+        backgroundARGB: backgroundARGB)
       result(nil)
     }
     windowThemeChannel = channel
@@ -193,11 +196,19 @@ class MainFlutterWindow: NSWindow {
     fileManagerChannel = channel
   }
 
-  private func applyWindowTheme(brightness: String) {
+  private func applyWindowTheme(brightness: String, backgroundARGB: UInt32?) {
     titlebarAppearsTransparent = true
     titleVisibility = .visible
     styleMask.remove(.fullSizeContentView)
-    backgroundColor = brightness == "dark" ? .black : .white
+    if let argb = backgroundARGB {
+      backgroundColor = NSColor(
+        srgbRed: CGFloat((argb >> 16) & 0xFF) / 255.0,
+        green: CGFloat((argb >> 8) & 0xFF) / 255.0,
+        blue: CGFloat(argb & 0xFF) / 255.0,
+        alpha: CGFloat((argb >> 24) & 0xFF) / 255.0)
+    } else {
+      backgroundColor = brightness == "dark" ? .black : .white
+    }
     isOpaque = true
 
     if let displayName = Bundle.main.object(
