@@ -87,19 +87,23 @@ class PcmPassthroughAudioCodec implements AudioCodec {
 class OpusAudioCodec implements AudioCodec {
   OpusAudioCodec._({
     required this.config,
-    required opus.SimpleOpusEncoder encoder,
+    required opus.BufferedOpusEncoder encoder,
     required opus.SimpleOpusDecoder decoder,
-  })  : _encoder = encoder,
-        _decoder = decoder;
+  }) : _encoder = encoder,
+       _encoderInput = encoder.inputBuffer,
+       _decoder = decoder;
 
   static Future<OpusAudioCodec> create(AudioCodecConfig config) async {
     await _ensureInitialized();
     return OpusAudioCodec._(
       config: config,
-      encoder: opus.SimpleOpusEncoder(
+      encoder: opus.BufferedOpusEncoder(
         sampleRate: config.sampleRate,
         channels: config.channels,
         application: opus.Application.audio,
+        maxInputBufferSizeBytes:
+            opus.bytesPerInt16Sample *
+            opus.maxSamplesPerPacket(config.sampleRate, config.channels),
       ),
       decoder: opus.SimpleOpusDecoder(
         sampleRate: config.sampleRate,
@@ -114,7 +118,8 @@ class OpusAudioCodec implements AudioCodec {
 
   static Future<void>? _initialization;
 
-  final opus.SimpleOpusEncoder _encoder;
+  final opus.BufferedOpusEncoder _encoder;
+  final Uint8List _encoderInput;
   final opus.SimpleOpusDecoder _decoder;
 
   @override
@@ -122,7 +127,17 @@ class OpusAudioCodec implements AudioCodec {
 
   @override
   Uint8List encode(Int16List pcm) {
-    return _encoder.encode(input: pcm);
+    final bytes = pcm.buffer.asUint8List(pcm.offsetInBytes, pcm.lengthInBytes);
+    if (bytes.length > _encoderInput.length) {
+      throw ArgumentError.value(
+        bytes.length,
+        'pcm.lengthInBytes',
+        'exceeds ${_encoderInput.length}',
+      );
+    }
+    _encoderInput.setRange(0, bytes.length, bytes);
+    _encoder.inputBufferIndex = bytes.length;
+    return _encoder.encode();
   }
 
   @override

@@ -90,7 +90,11 @@ class ChatComposer extends StatelessWidget {
   Widget _buildDesktopComposer(BuildContext context, ColorScheme colorScheme) {
     final palette = context.whisperPalette;
     final accentColor = colorScheme.primary;
-    final containerColor = palette.surfaceElevated;
+    final containerColor = Color.lerp(
+      palette.surfaceCanvas,
+      palette.surfaceElevated,
+      colorScheme.brightness == Brightness.dark ? 0.72 : 0.62,
+    )!;
     final borderColor = palette.borderSubtle;
     return Container(
       key: desktopContainerKey,
@@ -206,7 +210,11 @@ class ChatComposer extends StatelessWidget {
     final palette = context.whisperPalette;
     final accentColor = colorScheme.primary;
     final outerContainerColor = colorScheme.surface;
-    final containerColor = palette.surfaceElevated;
+    final containerColor = Color.lerp(
+      palette.surfaceCanvas,
+      palette.surfaceElevated,
+      colorScheme.brightness == Brightness.dark ? 0.72 : 0.62,
+    )!;
     final borderColor = palette.borderSubtle;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),

@@ -36,9 +36,8 @@ enum AudioDiagnosticState {
 }
 
 class AudioShareDiagnostics {
-  AudioShareDiagnostics({
-    AudioShareDiagnosticsSink? sink,
-  }) : _log = PrivacyLog(sink: sink);
+  AudioShareDiagnostics({AudioShareDiagnosticsSink? sink})
+    : _log = PrivacyLog(sink: sink);
 
   static final AudioShareDiagnostics shared = AudioShareDiagnostics();
   static const bool traceEnabled = bool.fromEnvironment('WHISPER_AUDIO_TRACE');
@@ -86,15 +85,15 @@ class AudioShareDiagnostics {
     required int payloadBytes,
   }) {
     _sentAudioPacketCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.packetSent,
-        PrivacyField.sequence: sequence,
-        PrivacyField.bytes: payloadBytes,
-        PrivacyField.count: _sentAudioPacketCount,
-      },
-      _sentAudioPacketCount,
-    );
+    if (!_shouldEmitSample(_sentAudioPacketCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.packetSent,
+      PrivacyField.sequence: sequence,
+      PrivacyField.bytes: payloadBytes,
+      PrivacyField.count: _sentAudioPacketCount,
+    });
   }
 
   void audioPacketSendDropped({
@@ -103,15 +102,15 @@ class AudioShareDiagnostics {
     required String reason,
   }) {
     _droppedSendCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.packetSendDropped,
-        PrivacyField.sequence: sequence,
-        PrivacyField.state: _safeState(reason),
-        PrivacyField.count: _droppedSendCount,
-      },
-      _droppedSendCount,
-    );
+    if (!_shouldEmitSample(_droppedSendCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.packetSendDropped,
+      PrivacyField.sequence: sequence,
+      PrivacyField.state: _safeState(reason),
+      PrivacyField.count: _droppedSendCount,
+    });
   }
 
   void captureStarted({
@@ -134,17 +133,17 @@ class AudioShareDiagnostics {
     required int channels,
   }) {
     _captureFrameCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.captureFrame,
-        PrivacyField.sequence: nativeSequence,
-        PrivacyField.samples: samples,
-        PrivacyField.sampleRate: sampleRate,
-        PrivacyField.channels: channels,
-        PrivacyField.count: _captureFrameCount,
-      },
-      _captureFrameCount,
-    );
+    if (!_shouldEmitSample(_captureFrameCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.captureFrame,
+      PrivacyField.sequence: nativeSequence,
+      PrivacyField.samples: samples,
+      PrivacyField.sampleRate: sampleRate,
+      PrivacyField.channels: channels,
+      PrivacyField.count: _captureFrameCount,
+    });
   }
 
   void capturePacket({
@@ -153,15 +152,15 @@ class AudioShareDiagnostics {
     required int payloadBytes,
   }) {
     _capturePacketCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.capturePacket,
-        PrivacyField.sequence: sequence,
-        PrivacyField.bytes: payloadBytes,
-        PrivacyField.count: _capturePacketCount,
-      },
-      _capturePacketCount,
-    );
+    if (!_shouldEmitSample(_capturePacketCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.capturePacket,
+      PrivacyField.sequence: sequence,
+      PrivacyField.bytes: payloadBytes,
+      PrivacyField.count: _capturePacketCount,
+    });
   }
 
   void audioChannelAttached() {
@@ -187,14 +186,14 @@ class AudioShareDiagnostics {
 
   void audioChannelMessageBytes(int bytes) {
     _channelMessageCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.channelMessage,
-        PrivacyField.bytes: bytes,
-        PrivacyField.count: _channelMessageCount,
-      },
-      _channelMessageCount,
-    );
+    if (!_shouldEmitSample(_channelMessageCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.channelMessage,
+      PrivacyField.bytes: bytes,
+      PrivacyField.count: _channelMessageCount,
+    });
   }
 
   void audioPacketDelivered({
@@ -203,15 +202,15 @@ class AudioShareDiagnostics {
     required int payloadBytes,
   }) {
     _deliveredAudioPacketCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.packetDelivered,
-        PrivacyField.sequence: sequence,
-        PrivacyField.bytes: payloadBytes,
-        PrivacyField.count: _deliveredAudioPacketCount,
-      },
-      _deliveredAudioPacketCount,
-    );
+    if (!_shouldEmitSample(_deliveredAudioPacketCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.packetDelivered,
+      PrivacyField.sequence: sequence,
+      PrivacyField.bytes: payloadBytes,
+      PrivacyField.count: _deliveredAudioPacketCount,
+    });
   }
 
   void audioPacketDropped({
@@ -221,16 +220,16 @@ class AudioShareDiagnostics {
     required String state,
   }) {
     _droppedAudioPacketCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.packetDropped,
-        PrivacyField.sequence: sequence,
-        PrivacyField.bytes: payloadBytes,
-        PrivacyField.state: _safeState(state),
-        PrivacyField.count: _droppedAudioPacketCount,
-      },
-      _droppedAudioPacketCount,
-    );
+    if (!_shouldEmitSample(_droppedAudioPacketCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.packetDropped,
+      PrivacyField.sequence: sequence,
+      PrivacyField.bytes: payloadBytes,
+      PrivacyField.state: _safeState(state),
+      PrivacyField.count: _droppedAudioPacketCount,
+    });
   }
 
   void groupPacketDelivered({
@@ -240,15 +239,15 @@ class AudioShareDiagnostics {
     required int payloadBytes,
   }) {
     _deliveredGroupPacketCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.groupPacketDelivered,
-        PrivacyField.sequence: sequence,
-        PrivacyField.bytes: payloadBytes,
-        PrivacyField.count: _deliveredGroupPacketCount,
-      },
-      _deliveredGroupPacketCount,
-    );
+    if (!_shouldEmitSample(_deliveredGroupPacketCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.groupPacketDelivered,
+      PrivacyField.sequence: sequence,
+      PrivacyField.bytes: payloadBytes,
+      PrivacyField.count: _deliveredGroupPacketCount,
+    });
   }
 
   void packetDecodeFailed({
@@ -257,16 +256,16 @@ class AudioShareDiagnostics {
     required Object groupError,
   }) {
     _decodeFailureCount++;
-    _emitSampled(
-      <PrivacyField, Object>{
-        PrivacyField.kind: AudioDiagnosticKind.decodeFailed,
-        PrivacyField.bytes: bytes,
-        PrivacyField.count: _decodeFailureCount,
-        PrivacyField.reason: AudioFailureReason.protocol,
-        PrivacyField.errorType: _log.errorType(legacyError),
-      },
-      _decodeFailureCount,
-    );
+    if (!_shouldEmitSample(_decodeFailureCount)) {
+      return;
+    }
+    _emit(<PrivacyField, Object>{
+      PrivacyField.kind: AudioDiagnosticKind.decodeFailed,
+      PrivacyField.bytes: bytes,
+      PrivacyField.count: _decodeFailureCount,
+      PrivacyField.reason: AudioFailureReason.protocol,
+      PrivacyField.errorType: _log.errorType(legacyError),
+    });
   }
 
   AudioDiagnosticState _safeState(String value) {
@@ -279,19 +278,15 @@ class AudioShareDiagnostics {
       'inactive' ||
       'idle' ||
       'offered' ||
-      'stopped' =>
-        AudioDiagnosticState.inactive,
+      'stopped' => AudioDiagnosticState.inactive,
       'missing' => AudioDiagnosticState.missing,
       'transport' => AudioDiagnosticState.transport,
       _ => AudioDiagnosticState.unknown,
     };
   }
 
-  void _emitSampled(Map<PrivacyField, Object> fields, int count) {
-    if (count <= 3 || count % 100 == 0) {
-      _emit(fields);
-    }
-  }
+  bool _shouldEmitSample(int count) =>
+      _enabled && (count <= 3 || count % 100 == 0);
 
   void _emit(Map<PrivacyField, Object> fields) {
     if (!_enabled) {

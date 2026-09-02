@@ -3372,6 +3372,8 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   private var stopRequested = false
   private var sessionId = ""
   private var sequence: Int64 = 0
+  private var audioBufferListStorage: UnsafeMutableRawPointer?
+  private var audioBufferListStorageSize = 0
 
   var isStopRequested: Bool {
     stateQueue.sync { stopRequested }
@@ -3380,6 +3382,10 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
   init(channel: FlutterMethodChannel) {
     self.channel = channel
     super.init()
+  }
+
+  deinit {
+    audioBufferListStorage?.deallocate()
   }
 
   func start(sessionId: String, format: [String: Any]) async throws {
@@ -3518,12 +3524,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
 
     let isNonInterleaved =
       (asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
-    let audioBufferListStorage = UnsafeMutableRawPointer.allocate(
-      byteCount: listSize,
-      alignment: MemoryLayout<AudioBufferList>.alignment)
-    defer {
-      audioBufferListStorage.deallocate()
-    }
+    let audioBufferListStorage = ensureAudioBufferListStorage(size: listSize)
     let audioBufferListPointer = audioBufferListStorage.bindMemory(
       to: AudioBufferList.self,
       capacity: 1)
@@ -3548,27 +3549,37 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     let isFloat = (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0
     let isSignedInteger =
       (asbd.mFormatFlags & kAudioFormatFlagIsSignedInteger) != 0
-    var output = [Int16](repeating: 0, count: frameCount * channels)
-
-    if isFloat && asbd.mBitsPerChannel == 32 {
-      copyFloat32(
-        from: audioBufferList,
-        frameCount: frameCount,
-        channels: channels,
-        nonInterleaved: isNonInterleaved,
-        to: &output)
-    } else if isSignedInteger && asbd.mBitsPerChannel == 16 {
-      copyInt16(
-        from: audioBufferList,
-        frameCount: frameCount,
-        channels: channels,
-        nonInterleaved: isNonInterleaved,
-        to: &output)
-    } else {
+    let outputSampleCount = frameCount * channels
+    var data = Data(count: outputSampleCount * MemoryLayout<Int16>.size)
+    let converted = data.withUnsafeMutableBytes { rawOutput -> Bool in
+      let output = rawOutput.bindMemory(to: Int16.self)
+      guard output.count >= outputSampleCount,
+            let outputBase = output.baseAddress else {
+        return false
+      }
+      if isFloat && asbd.mBitsPerChannel == 32 {
+        copyFloat32(
+          from: audioBufferList,
+          frameCount: frameCount,
+          channels: channels,
+          nonInterleaved: isNonInterleaved,
+          to: outputBase)
+        return true
+      }
+      if isSignedInteger && asbd.mBitsPerChannel == 16 {
+        copyInt16(
+          from: audioBufferList,
+          frameCount: frameCount,
+          channels: channels,
+          nonInterleaved: isNonInterleaved,
+          to: outputBase)
+        return true
+      }
+      return false
+    }
+    guard converted else {
       return nil
     }
-
-    let data = output.withUnsafeBufferPointer { Data(buffer: $0) }
     return CapturedPcm(
       data: data,
       sampleRate: sampleRate > 0 ? sampleRate : 48000,
@@ -3580,20 +3591,25 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     frameCount: Int,
     channels: Int,
     nonInterleaved: Bool,
-    to output: inout [Int16]
+    to output: UnsafeMutablePointer<Int16>
   ) {
     if nonInterleaved {
-      for channel in 0..<channels {
+      var channel = 0
+      while channel < channels {
         let sourceChannel = buffers.count == 1 ? 0 : min(channel, buffers.count - 1)
         guard sourceChannel >= 0,
               sourceChannel < buffers.count,
               let data = buffers[sourceChannel].mData else {
+          channel += 1
           continue
         }
         let source = data.assumingMemoryBound(to: Float.self)
-        for frame in 0..<frameCount {
+        var frame = 0
+        while frame < frameCount {
           output[frame * channels + channel] = floatToInt16(source[frame])
+          frame += 1
         }
+        channel += 1
       }
       return
     }
@@ -3613,7 +3629,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       frameCount: frameCount,
       sourceChannels: sourceChannels,
       targetChannels: channels,
-      to: &output)
+      to: output)
   }
 
   private func copyInt16(
@@ -3621,20 +3637,25 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     frameCount: Int,
     channels: Int,
     nonInterleaved: Bool,
-    to output: inout [Int16]
+    to output: UnsafeMutablePointer<Int16>
   ) {
     if nonInterleaved {
-      for channel in 0..<channels {
+      var channel = 0
+      while channel < channels {
         let sourceChannel = buffers.count == 1 ? 0 : min(channel, buffers.count - 1)
         guard sourceChannel >= 0,
               sourceChannel < buffers.count,
               let data = buffers[sourceChannel].mData else {
+          channel += 1
           continue
         }
         let source = data.assumingMemoryBound(to: Int16.self)
-        for frame in 0..<frameCount {
+        var frame = 0
+        while frame < frameCount {
           output[frame * channels + channel] = source[frame]
+          frame += 1
         }
+        channel += 1
       }
       return
     }
@@ -3654,7 +3675,7 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       frameCount: frameCount,
       sourceChannels: sourceChannels,
       targetChannels: channels,
-      to: &output)
+      to: output)
   }
 
   private func copyInterleavedFloat32(
@@ -3662,14 +3683,27 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     frameCount: Int,
     sourceChannels: Int,
     targetChannels: Int,
-    to output: inout [Int16]
+    to output: UnsafeMutablePointer<Int16>
   ) {
-    for frame in 0..<frameCount {
-      for channel in 0..<targetChannels {
+    if sourceChannels == targetChannels {
+      let sampleCount = frameCount * targetChannels
+      var index = 0
+      while index < sampleCount {
+        output[index] = floatToInt16(source[index])
+        index += 1
+      }
+      return
+    }
+    var frame = 0
+    while frame < frameCount {
+      var channel = 0
+      while channel < targetChannels {
         let sourceChannel = sourceChannels == 1 ? 0 : min(channel, sourceChannels - 1)
         output[frame * targetChannels + channel] =
           floatToInt16(source[frame * sourceChannels + sourceChannel])
+        channel += 1
       }
+      frame += 1
     }
   }
 
@@ -3678,14 +3712,22 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     frameCount: Int,
     sourceChannels: Int,
     targetChannels: Int,
-    to output: inout [Int16]
+    to output: UnsafeMutablePointer<Int16>
   ) {
-    for frame in 0..<frameCount {
-      for channel in 0..<targetChannels {
+    if sourceChannels == targetChannels {
+      output.update(from: source, count: frameCount * targetChannels)
+      return
+    }
+    var frame = 0
+    while frame < frameCount {
+      var channel = 0
+      while channel < targetChannels {
         let sourceChannel = sourceChannels == 1 ? 0 : min(channel, sourceChannels - 1)
         output[frame * targetChannels + channel] =
           source[frame * sourceChannels + sourceChannel]
+        channel += 1
       }
+      frame += 1
     }
   }
 
@@ -3703,8 +3745,28 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
     return max(1, min(max(1, detectedChannels), targetChannels))
   }
 
+  private func ensureAudioBufferListStorage(size: Int) -> UnsafeMutableRawPointer {
+    if let storage = audioBufferListStorage,
+       audioBufferListStorageSize >= size {
+      return storage
+    }
+    audioBufferListStorage?.deallocate()
+    let storage = UnsafeMutableRawPointer.allocate(
+      byteCount: size,
+      alignment: MemoryLayout<AudioBufferList>.alignment)
+    audioBufferListStorage = storage
+    audioBufferListStorageSize = size
+    return storage
+  }
+
+  @inline(__always)
   private func floatToInt16(_ value: Float) -> Int16 {
-    let clamped = max(-1.0, min(1.0, value))
-    return Int16(clamped * Float(Int16.max))
+    if value >= 1.0 {
+      return Int16.max
+    }
+    if value <= -1.0 {
+      return -Int16.max
+    }
+    return Int16(value * Float(Int16.max))
   }
 }

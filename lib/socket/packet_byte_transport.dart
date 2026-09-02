@@ -266,7 +266,9 @@ class PacketByteTransport {
     if (bytes is! List<int>) {
       throw const FormatException('binary media packet required');
     }
-    return encoder.encode(Uint8List.fromList(bytes));
+    return encoder.encode(
+      bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+    );
   }
 }
 

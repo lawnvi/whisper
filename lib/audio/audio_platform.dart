@@ -5,9 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 
 class AudioPlatform {
-  AudioPlatform({
-    MethodChannel? channel,
-  }) : _channel = channel ?? const MethodChannel(channelName) {
+  AudioPlatform({MethodChannel? channel})
+    : _channel = channel ?? const MethodChannel(channelName) {
     _channel.setMethodCallHandler(handleNativeMethodCall);
   }
 
@@ -49,9 +48,7 @@ class AudioPlatform {
     return _channel.invokeMethod<void>('writePcm', arguments);
   }
 
-  Future<void> stopPlayback({
-    required String sessionId,
-  }) {
+  Future<void> stopPlayback({required String sessionId}) {
     return _channel.invokeMethod<void>('stopPlayback', <String, dynamic>{
       'sessionId': sessionId,
     });
@@ -67,9 +64,7 @@ class AudioPlatform {
     });
   }
 
-  Future<void> stopCapture({
-    required String sessionId,
-  }) {
+  Future<void> stopCapture({required String sessionId}) {
     return _channel.invokeMethod<void>('stopCapture', <String, dynamic>{
       'sessionId': sessionId,
     });
@@ -152,6 +147,12 @@ class AudioPlatform {
     if (bytes.length.isOdd) {
       throw const FormatException('PCM byte length must be even');
     }
+    if (Endian.host == Endian.little && bytes.offsetInBytes.isEven) {
+      return bytes.buffer.asInt16List(
+        bytes.offsetInBytes,
+        bytes.length ~/ Int16List.bytesPerElement,
+      );
+    }
     final data = ByteData.sublistView(bytes);
     final pcm = Int16List(bytes.length ~/ 2);
     for (var i = 0; i < pcm.length; i++) {
@@ -190,10 +191,7 @@ class PlatformPcmFrame {
 }
 
 class PlatformAudioError {
-  const PlatformAudioError({
-    required this.sessionId,
-    required this.message,
-  });
+  const PlatformAudioError({required this.sessionId, required this.message});
 
   final String sessionId;
   final String message;

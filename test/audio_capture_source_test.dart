@@ -26,9 +26,9 @@ void main() {
     calls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
-      calls.add(call);
-      return null;
-    });
+          calls.add(call);
+          return null;
+        });
   });
 
   tearDown(() {
@@ -36,37 +36,42 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test('starts platform capture and encodes capture frames into audio packets',
-      () async {
-    final platform = AudioPlatform();
-    final packets = <AudioPacketFrame>[];
-    final pcm = Int16List.fromList(
-      List<int>.generate(config.frameSize * config.channels, (index) => index),
-    );
-    final source = AudioCaptureSource(
-      codec: PcmPassthroughAudioCodec(config),
-      platform: platform,
-      onPacket: packets.add,
-    );
+  test(
+    'starts platform capture and encodes capture frames into audio packets',
+    () async {
+      final platform = AudioPlatform();
+      final packets = <AudioPacketFrame>[];
+      final pcm = Int16List.fromList(
+        List<int>.generate(
+          config.frameSize * config.channels,
+          (index) => index,
+        ),
+      );
+      final source = AudioCaptureSource(
+        codec: PcmPassthroughAudioCodec(config),
+        platform: platform,
+        onPacket: packets.add,
+      );
 
-    await source.start(sessionId: 'audio-1', format: format);
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 9,
-        'captureTimeMicros': 5678,
-        'pcm': _pcmBytes(pcm),
-      }),
-    );
+      await source.start(sessionId: 'audio-1', format: format);
+      await platform.handleNativeMethodCall(
+        MethodCall('onCapturePcm', <String, dynamic>{
+          'sessionId': 'audio-1',
+          'sequence': 9,
+          'captureTimeMicros': 5678,
+          'pcm': _pcmBytes(pcm),
+        }),
+      );
 
-    expect(calls.first.method, 'startCapture');
-    expect(packets, hasLength(1));
-    expect(packets.single.sessionId, 'audio-1');
-    expect(packets.single.sequence, 0);
-    expect(packets.single.captureTimeMicros, 5678);
-    expect(packets.single.payload.length, pcm.length * 2);
-    await source.stop();
-  });
+      expect(calls.first.method, 'startCapture');
+      expect(packets, hasLength(1));
+      expect(packets.single.sessionId, 'audio-1');
+      expect(packets.single.sequence, 0);
+      expect(packets.single.captureTimeMicros, 5678);
+      expect(packets.single.payload.length, pcm.length * 2);
+      await source.stop();
+    },
+  );
 
   test('buffers variable native chunks into codec-sized packets', () async {
     final platform = AudioPlatform();
@@ -107,8 +112,7 @@ void main() {
     await source.stop();
   });
 
-  test('converts multi-channel native PCM to the codec channel layout',
-      () async {
+  test('preserves PCM order while the packet buffer wraps', () async {
     final platform = AudioPlatform();
     final codec = _RecordingAudioCodec(config);
     final source = AudioCaptureSource(
@@ -116,56 +120,94 @@ void main() {
       platform: platform,
       onPacket: (_) {},
     );
-    final frame = <int>[10, 20, 30, 40, 50, 60];
-    final pcm = Int16List.fromList(
-      List<int>.generate(
-        config.frameSize * 6,
-        (index) => frame[index % frame.length],
-      ),
+    final samples = Int16List.fromList(
+      List<int>.generate(4500, (index) => index % 32000),
     );
 
     await source.start(sessionId: 'audio-1', format: format);
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 1,
-        'captureTimeMicros': 1000,
-        'sampleRate': 48000,
-        'channels': 6,
-        'pcm': _pcmBytes(pcm),
-      }),
-    );
+    for (var chunk = 0; chunk < 3; chunk++) {
+      final start = chunk * 1500;
+      await platform.handleNativeMethodCall(
+        MethodCall('onCapturePcm', <String, dynamic>{
+          'sessionId': 'audio-1',
+          'sequence': chunk,
+          'captureTimeMicros': 1000 + chunk * 10000,
+          'pcm': _pcmBytes(Int16List.sublistView(samples, start, start + 1500)),
+        }),
+      );
+    }
 
-    expect(codec.encodedLengths, <int>[config.frameSize * config.channels]);
-    expect(codec.encodedPcm.single.take(6), <int>[10, 20, 10, 20, 10, 20]);
+    expect(codec.encodedPcm, hasLength(2));
+    expect(
+      codec.encodedPcm.expand((pcm) => pcm),
+      orderedEquals(samples.take(config.frameSize * config.channels * 2)),
+    );
     await source.stop();
   });
 
-  test('resamples native PCM to the codec sample rate before encoding',
-      () async {
-    final platform = AudioPlatform();
-    final codec = _RecordingAudioCodec(config);
-    final source = AudioCaptureSource(
-      codec: codec,
-      platform: platform,
-      onPacket: (_) {},
-    );
+  test(
+    'converts multi-channel native PCM to the codec channel layout',
+    () async {
+      final platform = AudioPlatform();
+      final codec = _RecordingAudioCodec(config);
+      final source = AudioCaptureSource(
+        codec: codec,
+        platform: platform,
+        onPacket: (_) {},
+      );
+      final frame = <int>[10, 20, 30, 40, 50, 60];
+      final pcm = Int16List.fromList(
+        List<int>.generate(
+          config.frameSize * 6,
+          (index) => frame[index % frame.length],
+        ),
+      );
 
-    await source.start(sessionId: 'audio-1', format: format);
-    await platform.handleNativeMethodCall(
-      MethodCall('onCapturePcm', <String, dynamic>{
-        'sessionId': 'audio-1',
-        'sequence': 1,
-        'captureTimeMicros': 1000,
-        'sampleRate': 24000,
-        'channels': 2,
-        'pcm': _pcmBytes(Int16List(config.frameSize * config.channels ~/ 2)),
-      }),
-    );
+      await source.start(sessionId: 'audio-1', format: format);
+      await platform.handleNativeMethodCall(
+        MethodCall('onCapturePcm', <String, dynamic>{
+          'sessionId': 'audio-1',
+          'sequence': 1,
+          'captureTimeMicros': 1000,
+          'sampleRate': 48000,
+          'channels': 6,
+          'pcm': _pcmBytes(pcm),
+        }),
+      );
 
-    expect(codec.encodedLengths, <int>[config.frameSize * config.channels]);
-    await source.stop();
-  });
+      expect(codec.encodedLengths, <int>[config.frameSize * config.channels]);
+      expect(codec.encodedPcm.single.take(6), <int>[10, 20, 10, 20, 10, 20]);
+      await source.stop();
+    },
+  );
+
+  test(
+    'resamples native PCM to the codec sample rate before encoding',
+    () async {
+      final platform = AudioPlatform();
+      final codec = _RecordingAudioCodec(config);
+      final source = AudioCaptureSource(
+        codec: codec,
+        platform: platform,
+        onPacket: (_) {},
+      );
+
+      await source.start(sessionId: 'audio-1', format: format);
+      await platform.handleNativeMethodCall(
+        MethodCall('onCapturePcm', <String, dynamic>{
+          'sessionId': 'audio-1',
+          'sequence': 1,
+          'captureTimeMicros': 1000,
+          'sampleRate': 24000,
+          'channels': 2,
+          'pcm': _pcmBytes(Int16List(config.frameSize * config.channels ~/ 2)),
+        }),
+      );
+
+      expect(codec.encodedLengths, <int>[config.frameSize * config.channels]);
+      await source.stop();
+    },
+  );
 
   test('ignores capture frames for other sessions', () async {
     final platform = AudioPlatform();
@@ -204,85 +246,93 @@ void main() {
 
     expect(calls, hasLength(1));
     expect(calls.single.method, 'stopCapture');
-    expect(calls.single.arguments, <String, dynamic>{
-      'sessionId': 'audio-1',
-    });
+    expect(calls.single.arguments, <String, dynamic>{'sessionId': 'audio-1'});
   });
 
-  test('stop waits for an in-flight native start before forcing capture stop',
-      () async {
-    final startEntered = Completer<void>();
-    final releaseStart = Completer<void>();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (MethodCall call) async {
-      calls.add(call);
-      if (call.method == 'startCapture') {
-        startEntered.complete();
-        await releaseStart.future;
-      }
-      return null;
-    });
-    final source = AudioCaptureSource(
-      codec: PcmPassthroughAudioCodec(config),
-      platform: AudioPlatform(),
-      onPacket: (_) {},
-    );
+  test(
+    'stop waits for an in-flight native start before forcing capture stop',
+    () async {
+      final startEntered = Completer<void>();
+      final releaseStart = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            calls.add(call);
+            if (call.method == 'startCapture') {
+              startEntered.complete();
+              await releaseStart.future;
+            }
+            return null;
+          });
+      final source = AudioCaptureSource(
+        codec: PcmPassthroughAudioCodec(config),
+        platform: AudioPlatform(),
+        onPacket: (_) {},
+      );
 
-    final starting = source.start(sessionId: 'audio-race', format: format);
-    await startEntered.future;
-    var stopCompleted = false;
-    final stopping = source.stop().whenComplete(() => stopCompleted = true);
-    await Future<void>.delayed(Duration.zero);
+      final starting = source.start(sessionId: 'audio-race', format: format);
+      await startEntered.future;
+      var stopCompleted = false;
+      final stopping = source.stop().whenComplete(() => stopCompleted = true);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(stopCompleted, isFalse);
-    expect(calls.map((call) => call.method), <String>['startCapture']);
+      expect(stopCompleted, isFalse);
+      expect(calls.map((call) => call.method), <String>['startCapture']);
 
-    releaseStart.complete();
-    await starting;
-    await stopping;
+      releaseStart.complete();
+      await starting;
+      await stopping;
 
-    expect(
-      calls.map((call) => call.method),
-      <String>['startCapture', 'stopCapture'],
-    );
-    expect(calls.last.arguments, <String, dynamic>{'sessionId': 'audio-race'});
-  });
+      expect(calls.map((call) => call.method), <String>[
+        'startCapture',
+        'stopCapture',
+      ]);
+      expect(calls.last.arguments, <String, dynamic>{
+        'sessionId': 'audio-race',
+      });
+    },
+  );
 
-  test('stop still forces native cleanup when an in-flight start fails',
-      () async {
-    final startEntered = Completer<void>();
-    final releaseStart = Completer<void>();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (MethodCall call) async {
-      calls.add(call);
-      if (call.method == 'startCapture') {
-        startEntered.complete();
-        await releaseStart.future;
-        throw PlatformException(code: 'audio-capture-start-failed');
-      }
-      return null;
-    });
-    final source = AudioCaptureSource(
-      codec: PcmPassthroughAudioCodec(config),
-      platform: AudioPlatform(),
-      onPacket: (_) {},
-    );
+  test(
+    'stop still forces native cleanup when an in-flight start fails',
+    () async {
+      final startEntered = Completer<void>();
+      final releaseStart = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+            calls.add(call);
+            if (call.method == 'startCapture') {
+              startEntered.complete();
+              await releaseStart.future;
+              throw PlatformException(code: 'audio-capture-start-failed');
+            }
+            return null;
+          });
+      final source = AudioCaptureSource(
+        codec: PcmPassthroughAudioCodec(config),
+        platform: AudioPlatform(),
+        onPacket: (_) {},
+      );
 
-    final starting =
-        source.start(sessionId: 'audio-failed-start', format: format);
-    final startFailure =
-        expectLater(starting, throwsA(isA<PlatformException>()));
-    await startEntered.future;
-    final stopping = source.stop();
-    releaseStart.complete();
+      final starting = source.start(
+        sessionId: 'audio-failed-start',
+        format: format,
+      );
+      final startFailure = expectLater(
+        starting,
+        throwsA(isA<PlatformException>()),
+      );
+      await startEntered.future;
+      final stopping = source.stop();
+      releaseStart.complete();
 
-    await startFailure;
-    await stopping;
-    expect(
-      calls.map((call) => call.method),
-      <String>['startCapture', 'stopCapture'],
-    );
-  });
+      await startFailure;
+      await stopping;
+      expect(calls.map((call) => call.method), <String>[
+        'startCapture',
+        'stopCapture',
+      ]);
+    },
+  );
 
   test('logs native capture frames and encoded audio packets', () async {
     final platform = AudioPlatform();
