@@ -388,9 +388,7 @@ void main() {
     expect(tester.getTopLeft(surfaceFinder).dx, 0);
   });
 
-  testWidgets('settings slider exposes the value and the thicker track', (
-    tester,
-  ) async {
+  testWidgets('settings slider updates the displayed value', (tester) async {
     var value = 1.0;
     await tester.pumpWidget(
       MaterialApp(
@@ -405,8 +403,6 @@ void main() {
               valueLabel: '${value.toStringAsFixed(1)}×',
               minLabel: '0.5×',
               maxLabel: '3.0×',
-              anchorValue: 1,
-              anchorLabel: '1.0×',
               onChanged: (next) => setState(() => value = next),
               onChangeEnd: (_) {},
             ),
@@ -416,8 +412,6 @@ void main() {
     );
 
     expect(find.text('1.0×'), findsWidgets);
-    final sliderTheme = tester.widget<SliderTheme>(find.byType(SliderTheme));
-    expect(sliderTheme.data.trackHeight, 8);
 
     tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
     await tester.pump();

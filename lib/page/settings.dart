@@ -1701,6 +1701,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return WhisperGlassBottomSheet(
+              maxSheetWidth: 480,
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -1774,6 +1775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return WhisperGlassBottomSheet(
+              maxSheetWidth: 480,
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -1802,8 +1804,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     minLabel: _remoteInputScrollMultiplierLabel(0.5),
                     maxLabel: _remoteInputScrollMultiplierLabel(3),
-                    anchorValue: 1,
-                    anchorLabel: _remoteInputScrollMultiplierLabel(1),
                     onChanged: (value) {
                       setModalState(() {
                         selectedMultiplier = value;
