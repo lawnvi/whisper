@@ -675,5 +675,20 @@
   "@chatTimestampYesterday": {
     "placeholders": { "time": { "type": "String" } }
   },
-  "messageLinkOpenFailed": "No se pudo abrir este enlace"
+  "messageLinkOpenFailed": "No se pudo abrir este enlace",
+  "connectFirstDevice": "Conecta tu primer dispositivo",
+  "deviceConnectionGuide": "Abre Whisper en otro dispositivo conectado a la misma red Wi-Fi o local. Los dispositivos cercanos aparecen automáticamente en la lista.",
+  "manualConnectAction": "Introducir dirección",
+  "deviceDiscoveryHelp": "¿No aparecen dispositivos? Prueba el enlace por QR o permite el acceso a la red local en los ajustes del sistema de ambos dispositivos.",
+  "deviceOffline": "Dispositivos sin conexión",
+  "serverPortInUse": "El puerto {port} está ocupado. Cierra otras instancias de Whisper o elige otro puerto en Ajustes e inténtalo de nuevo.",
+  "serverPermissionDenied": "El sistema denegó la escucha de red. Permite el acceso de Whisper a la red local, revisa el cortafuegos e inténtalo de nuevo.",
+  "serverUnavailableHelp": "No se pueden recibir conexiones. Revisa la conexión de red, el permiso de red local y el cortafuegos e inténtalo de nuevo.",
+  "@serverPortInUse": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  }
 }

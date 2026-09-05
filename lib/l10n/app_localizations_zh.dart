@@ -1295,4 +1295,32 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get messageLinkOpenFailed => '无法打开此链接';
+
+  @override
+  String get connectFirstDevice => '连接你的第一台设备';
+
+  @override
+  String get deviceConnectionGuide =>
+      '在另一台设备打开 Whisper，并连接同一个 Wi-Fi 或局域网。附近设备会自动显示在列表中。';
+
+  @override
+  String get manualConnectAction => '手动输入地址';
+
+  @override
+  String get deviceDiscoveryHelp => '没有发现设备？可尝试二维码连接，或在两台设备的系统设置中允许本地网络访问。';
+
+  @override
+  String get deviceOffline => '离线设备';
+
+  @override
+  String serverPortInUse(int port) {
+    return '端口 $port 正被占用。请关闭其他 Whisper 实例，或在设置中更换端口后重试。';
+  }
+
+  @override
+  String get serverPermissionDenied =>
+      '系统拒绝了网络监听。请允许 Whisper 访问本地网络，并检查防火墙设置后重试。';
+
+  @override
+  String get serverUnavailableHelp => '暂时无法接收连接。请确认网络已连接，并检查本地网络权限及防火墙后重试。';
 }

@@ -2409,6 +2409,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'无法打开此链接'**
   String get messageLinkOpenFailed;
+
+  /// No description provided for @connectFirstDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接你的第一台设备'**
+  String get connectFirstDevice;
+
+  /// No description provided for @deviceConnectionGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'在另一台设备打开 Whisper，并连接同一个 Wi-Fi 或局域网。附近设备会自动显示在列表中。'**
+  String get deviceConnectionGuide;
+
+  /// No description provided for @manualConnectAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动输入地址'**
+  String get manualConnectAction;
+
+  /// No description provided for @deviceDiscoveryHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有发现设备？可尝试二维码连接，或在两台设备的系统设置中允许本地网络访问。'**
+  String get deviceDiscoveryHelp;
+
+  /// No description provided for @deviceOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线设备'**
+  String get deviceOffline;
+
+  /// No description provided for @serverPortInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'端口 {port} 正被占用。请关闭其他 Whisper 实例，或在设置中更换端口后重试。'**
+  String serverPortInUse(int port);
+
+  /// No description provided for @serverPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统拒绝了网络监听。请允许 Whisper 访问本地网络，并检查防火墙设置后重试。'**
+  String get serverPermissionDenied;
+
+  /// No description provided for @serverUnavailableHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法接收连接。请确认网络已连接，并检查本地网络权限及防火墙后重试。'**
+  String get serverUnavailableHelp;
 }
 
 class _AppLocalizationsDelegate

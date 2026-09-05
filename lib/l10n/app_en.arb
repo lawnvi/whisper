@@ -648,5 +648,20 @@
   "@chatTimestampYesterday": {
     "placeholders": { "time": { "type": "String" } }
   },
-  "messageLinkOpenFailed": "Could not open this link"
+  "messageLinkOpenFailed": "Could not open this link",
+  "connectFirstDevice": "Connect your first device",
+  "deviceConnectionGuide": "Open Whisper on another device connected to the same Wi-Fi or LAN. Nearby devices appear automatically in the list.",
+  "manualConnectAction": "Enter address manually",
+  "deviceDiscoveryHelp": "No devices found? Try QR pairing, or allow local network access in system settings on both devices.",
+  "deviceOffline": "Offline devices",
+  "serverPortInUse": "Port {port} is already in use. Close other Whisper instances, or choose another port in Settings and retry.",
+  "serverPermissionDenied": "The system denied network listening. Allow Whisper to access the local network, check your firewall, and retry.",
+  "serverUnavailableHelp": "Unable to accept connections. Check your network connection, local network permission, and firewall, then retry.",
+  "@serverPortInUse": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  }
 }

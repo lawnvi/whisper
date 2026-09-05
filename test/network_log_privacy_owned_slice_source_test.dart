@@ -122,8 +122,12 @@ void main() {
     expect(startServer, isNot(contains('result.error}')));
     expect(startServer, contains('DeviceListOperationKind.serverStart'));
     expect(startServer, contains('privacyLog.errorType(error)'));
-    expect(startServer, contains('description:'));
-    expect(startServer, contains('startServerFailed'));
+    expect(startServer, contains('showServerStartFailureDialog'));
+    final dialog = File(
+      'lib/widget/server_start_failure_dialog.dart',
+    ).readAsStringSync();
+    expect(dialog, contains('startServerFailed'));
+    expect(dialog, isNot(contains(r'$error')));
   });
 
   test('remote-input packet traces require explicit opt-in and stay bounded',

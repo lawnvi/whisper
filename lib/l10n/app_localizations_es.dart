@@ -1406,4 +1406,34 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get messageLinkOpenFailed => 'No se pudo abrir este enlace';
+
+  @override
+  String get connectFirstDevice => 'Conecta tu primer dispositivo';
+
+  @override
+  String get deviceConnectionGuide =>
+      'Abre Whisper en otro dispositivo conectado a la misma red Wi-Fi o local. Los dispositivos cercanos aparecen automáticamente en la lista.';
+
+  @override
+  String get manualConnectAction => 'Introducir dirección';
+
+  @override
+  String get deviceDiscoveryHelp =>
+      '¿No aparecen dispositivos? Prueba el enlace por QR o permite el acceso a la red local en los ajustes del sistema de ambos dispositivos.';
+
+  @override
+  String get deviceOffline => 'Dispositivos sin conexión';
+
+  @override
+  String serverPortInUse(int port) {
+    return 'El puerto $port está ocupado. Cierra otras instancias de Whisper o elige otro puerto en Ajustes e inténtalo de nuevo.';
+  }
+
+  @override
+  String get serverPermissionDenied =>
+      'El sistema denegó la escucha de red. Permite el acceso de Whisper a la red local, revisa el cortafuegos e inténtalo de nuevo.';
+
+  @override
+  String get serverUnavailableHelp =>
+      'No se pueden recibir conexiones. Revisa la conexión de red, el permiso de red local y el cortafuegos e inténtalo de nuevo.';
 }

@@ -1386,4 +1386,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get messageLinkOpenFailed => 'Could not open this link';
+
+  @override
+  String get connectFirstDevice => 'Connect your first device';
+
+  @override
+  String get deviceConnectionGuide =>
+      'Open Whisper on another device connected to the same Wi-Fi or LAN. Nearby devices appear automatically in the list.';
+
+  @override
+  String get manualConnectAction => 'Enter address manually';
+
+  @override
+  String get deviceDiscoveryHelp =>
+      'No devices found? Try QR pairing, or allow local network access in system settings on both devices.';
+
+  @override
+  String get deviceOffline => 'Offline devices';
+
+  @override
+  String serverPortInUse(int port) {
+    return 'Port $port is already in use. Close other Whisper instances, or choose another port in Settings and retry.';
+  }
+
+  @override
+  String get serverPermissionDenied =>
+      'The system denied network listening. Allow Whisper to access the local network, check your firewall, and retry.';
+
+  @override
+  String get serverUnavailableHelp =>
+      'Unable to accept connections. Check your network connection, local network permission, and firewall, then retry.';
 }

@@ -64,6 +64,8 @@ import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
+import 'package:whisper/widget/device_connection_widgets.dart';
+import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
@@ -1902,12 +1904,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
           ),
         ],
       ),
-      body: ListView.builder(
-        itemCount: _sessionItems.length,
-        itemBuilder: (context, index) {
-          return _buildDeviceItemOld(_sessionItems[index]);
-        },
-      ),
+      body: _sessionItems.isEmpty
+          ? DeviceConnectionWelcome(
+              hasDevices: false,
+              onPair: _openPairingQr,
+              onManualConnect: _showManualConnectDialog,
+            )
+          : ListView.builder(
+              itemCount: _sessionItems.length,
+              itemBuilder: (context, index) {
+                return _buildDeviceItemOld(_sessionItems[index]);
+              },
+            ),
     );
   }
 
@@ -2240,19 +2248,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     Color? iconColor,
     String? tooltip,
   }) {
-    final palette = context.whisperPalette;
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: Tooltip(
-        message: tooltip ?? '',
-        child: CupertinoButton(
-          padding: EdgeInsets.zero,
-          borderRadius: BorderRadius.circular(11),
-          onPressed: onPressed,
-          child: Icon(icon, size: 20, color: iconColor ?? palette.textMuted),
-        ),
-      ),
+    return DeviceToolbarButton(
+      icon: icon,
+      label: tooltip ?? '',
+      iconColor: iconColor,
+      onPressed: onPressed,
     );
   }
 
@@ -2713,125 +2713,41 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return ms.toStringAsFixed(1);
   }
 
-  Widget _buildDesktopPlaceholder(bool isDark) {
-    final palette = context.whisperPalette;
-    return Container(
-      color: Colors.transparent,
-      alignment: Alignment.center,
-      child: Text(
-        AppLocalizations.of(context)?.selectConversationPlaceholder ??
-            '选择一个设备开始对话',
-        style: TextStyle(color: palette.textMuted, fontSize: 18),
-      ),
-    );
+  Widget _buildDesktopPlaceholder(bool isDark) => DeviceConnectionWelcome(
+    hasDevices: _sessionItems.isNotEmpty,
+    onPair: _openPairingQr,
+    onManualConnect: _showManualConnectDialog,
+  );
+
+  String _sessionStatusLabel(ChatSessionItem session) {
+    final l10n = AppLocalizations.of(context)!;
+    if (session.isConnected) return l10n.connectedNow;
+    if (session.isNearby) return l10n.nearbyAvailable;
+    return l10n.deviceOffline;
   }
 
   Widget _buildDesktopSessionTile(
     ChatSessionItem session, {
     required bool selected,
   }) {
-    final deviceItem = session.device;
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final backgroundColor = selected
-        ? (colorScheme.brightness == Brightness.dark
-              ? palette.surfaceMuted
-              : colorScheme.primary.withValues(alpha: 0.08))
-        : Colors.transparent;
-
+    final peer = session.device;
+    final shortId = peer.uid.length > 6
+        ? peer.uid.substring(peer.uid.length - 6)
+        : peer.uid;
     return ContextMenuRegion(
-      child: Material(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            setState(() {
-              _selectedDesktopPeerId = deviceItem.uid;
-            });
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSessionAvatar(session),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              deviceItem.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (_isTrustedDevice(deviceItem)) ...[
-                            const SizedBox(width: 6),
-                            Tooltip(
-                              message: AppLocalizations.of(
-                                context,
-                              )!.e2eeTrustedConnection,
-                              child: Icon(
-                                Icons.verified_user_rounded,
-                                size: 16,
-                                color: palette.trusted,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 8),
-                          Text(
-                            _formatSessionTime(session.lastTimestamp),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: palette.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _sessionStatusColor(session),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              session.preview,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: palette.textMuted,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: DesktopDeviceSessionTile(
+        name: peer.name,
+        identity: '${platformLabel(peer.platform)} · $shortId',
+        statusLabel: _sessionStatusLabel(session),
+        preview: session.preview,
+        time: _formatSessionTime(session.lastTimestamp),
+        avatar: _buildSessionAvatar(session),
+        statusColor: _sessionStatusColor(session),
+        selected: selected,
+        trusted: _isTrustedDevice(peer),
+        onTap: () => setState(() => _selectedDesktopPeerId = peer.uid),
       ),
-      items: _buildSessionContextActions(deviceItem),
+      items: _buildSessionContextActions(peer),
     );
   }
 
@@ -3531,20 +3447,40 @@ class _DeviceListScreen extends State<DeviceListScreen>
       PrivacyField.success: false,
       if (error != null) PrivacyField.errorType: privacyLog.errorType(error),
     });
-    final failureMessage =
-        AppLocalizations.of(context)?.startServerFailed ?? '服务启动失败';
-    showLoadingDialog(
-      context,
-      title: failureMessage,
-      description: failureMessage,
-      isLoading: true,
-      icon: const Icon(Icons.warning_rounded, color: Colors.red),
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? 'Cancel',
-      onCancel: () {
-        Navigator.of(context).pop();
-      },
-      task: (VoidCallback onCancel) async {},
-    );
+    if (mounted) {
+      unawaited(_recoverServerStart(error, port ?? device?.port ?? 10002));
+    }
+  }
+
+  bool _serverStartFailureVisible = false;
+
+  Future<void> _recoverServerStart(Object? error, int port) async {
+    if (_serverStartFailureVisible || !mounted) return;
+    _serverStartFailureVisible = true;
+    ServerStartRecovery? recovery;
+    try {
+      recovery = await showServerStartFailureDialog(
+        context,
+        error: error,
+        port: port,
+      );
+    } finally {
+      _serverStartFailureVisible = false;
+    }
+    if (!mounted) return;
+    if (recovery == ServerStartRecovery.retry) {
+      await _startServer(port: port);
+    } else if (recovery == ServerStartRecovery.settings) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => app_settings.SettingsScreen(
+            exitForUpdate: _shutdownAndDestroyWindow,
+          ),
+        ),
+      );
+      if (mounted) await _refreshDevice();
+    }
   }
 
   @override
