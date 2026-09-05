@@ -10,7 +10,7 @@ This file focuses on the big-picture architecture that is not obvious from readi
 
 ## What this is
 
-Whisper is a Flutter LAN-collaboration app (Android, macOS, Linux, Windows; iOS runner kept but untested) that moves text, files, clipboard, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same network over a direct WebSocket connection. It is **not** related to the OpenAI Whisper speech model. There is no end-to-end encryption — never describe transfers as secure against untrusted peers. `whisper-web/` is a separate Next.js 15 product site.
+Whisper is a Flutter LAN-collaboration app (Android, macOS, Linux, Windows; iOS runner kept but untested) that moves text, files, clipboard, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same network over a direct WebSocket connection. It is **not** related to the OpenAI Whisper speech model. Authenticated application data uses X25519 and XChaCha20-Poly1305; discovery metadata and local storage are not encrypted, and the implementation has not had an independent cryptographic audit. `whisper-web/` is a separate Next.js 15 product site.
 
 ## Common commands
 

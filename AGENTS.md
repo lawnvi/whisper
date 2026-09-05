@@ -6,7 +6,7 @@
 - Purpose: send text, files, clipboard content, Android notifications, desktop system audio, and keyboard/mouse input between trusted devices on the same local network.
 - Primary users: people moving work between their own computers and phones without a public relay.
 - Platforms: Android, macOS, Linux, Windows, and a Next.js product site under `whisper-web/`.
-- Important constraints: transfers stay on the LAN, end-to-end encryption is not implemented yet, Linux discovery depends on Avahi, Linux audio depends on PulseAudio or PipeWire Pulse, and Linux keyboard/mouse sharing currently expects X11.
+- Important constraints: transfers stay on the LAN, authenticated application data is encrypted end to end (discovery metadata and local storage are not), Linux discovery depends on Avahi, Linux audio depends on PulseAudio or PipeWire Pulse, and Linux keyboard/mouse sharing currently expects X11.
 
 ## Setup Commands
 
@@ -39,7 +39,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - `lib/page/`: main screens such as device discovery, conversation, app list, and settings.
 - `lib/widget/`: reusable UI pieces for chat, composer, banners, dialogs, and desktop workspace layout.
 - `lib/state/`: app state coordinators for connections, auto-connect, sessions, transfers, shutdown, and discovery throttling.
-- `lib/socket/`: WebSocket server/client orchestration, auth flow, message dispatch, file transfer, profile refresh, audio, and remote input routing.
+- `lib/socket/`: WebSocket server/client orchestration, auth flow, message dispatch, file transfer, profile refresh, audio, and remote input routing. File path validation, portable names, and verified publication are separated into `file_path_policy.dart`, `transfer_file_name.dart`, and `verified_file_publisher.dart`.
 - `lib/model/`: Drift database, device/message/transfer models, and generated database code.
 - `lib/audio/`: audio sharing protocol, codecs, capture/playback abstractions, transport, and runtime coordinator.
 - `lib/remote_input/`: keyboard/mouse sharing protocol, topology/layout, native platform bridges, transport, and coordinator.
@@ -81,7 +81,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 
 ## Security And Privacy Notes
 
-- Whisper currently has no end-to-end encryption; do not describe transfers as secure against untrusted LAN peers.
+- Authenticated sessions use X25519 and XChaCha20-Poly1305; discovery metadata remains visible and local storage is not encrypted. The implementation has not had an independent cryptographic audit; do not claim complete protection against untrusted peers.
 - Do not add public relay behavior without an explicit design and security review.
 - Do not commit new secrets, tokens, signing identities, private keys, or local credentials.
 - The existing `keystore/whisper.keystore` is tracked; do not replace or rotate it without explicit approval.
