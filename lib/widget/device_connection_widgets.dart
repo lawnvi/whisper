@@ -7,18 +7,34 @@ class DeviceConnectionWelcome extends StatelessWidget {
   const DeviceConnectionWelcome({
     super.key,
     required this.hasDevices,
+    this.isLoading = false,
     required this.onPair,
     required this.onManualConnect,
   });
 
   final bool hasDevices;
+  final bool isLoading;
   final VoidCallback onPair;
   final VoidCallback onManualConnect;
 
   @override
   Widget build(BuildContext context) {
+    // Wait for stored sessions before deciding this is a first-device setup.
+    if (isLoading) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
     final palette = context.whisperPalette;
+    if (hasDevices) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            l10n.selectConversationPlaceholder,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.textMuted, fontSize: 16),
+          ),
+        ),
+      );
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
@@ -30,9 +46,7 @@ class DeviceConnectionWelcome extends StatelessWidget {
               Icon(Icons.devices_rounded, size: 52, color: palette.connected),
               const SizedBox(height: 24),
               Text(
-                hasDevices
-                    ? l10n.selectConversationPlaceholder
-                    : l10n.connectFirstDevice,
+                l10n.connectFirstDevice,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),

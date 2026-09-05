@@ -40,6 +40,30 @@ void main() {
   );
 
   for (final language in ['zh', 'en', 'es']) {
+    testWidgets('known devices show only the conversation hint in $language', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        localized(
+          DeviceConnectionWelcome(
+            hasDevices: true,
+            onPair: () {},
+            onManualConnect: () {},
+          ),
+          Locale(language),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(DeviceConnectionWelcome)),
+      )!;
+      expect(find.text(l10n.selectConversationPlaceholder), findsOneWidget);
+      expect(find.text(l10n.deviceConnectionGuide), findsNothing);
+      expect(find.text(l10n.deviceDiscoveryHelp), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+    });
+
     testWidgets(
       'welcome fits a narrow window and offers working actions in $language',
       (tester) async {
@@ -69,6 +93,36 @@ void main() {
       },
     );
   }
+
+  testWidgets('loading known devices does not flash first-device setup', (
+    tester,
+  ) async {
+    Widget welcome({required bool loading, required bool hasDevices}) =>
+        localized(
+          DeviceConnectionWelcome(
+            isLoading: loading,
+            hasDevices: hasDevices,
+            onPair: () {},
+            onManualConnect: () {},
+          ),
+          const Locale('zh'),
+        );
+
+    await tester.pumpWidget(welcome(loading: true, hasDevices: false));
+    await tester.pumpAndSettle();
+    expect(find.byType(Text), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+
+    await tester.pumpWidget(welcome(loading: false, hasDevices: true));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(DeviceConnectionWelcome)),
+    )!;
+    expect(find.text(l10n.selectConversationPlaceholder), findsOneWidget);
+    expect(find.text(l10n.connectFirstDevice), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+  });
 
   testWidgets('icon controls expose a label and an accessible tap action', (
     tester,

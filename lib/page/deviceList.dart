@@ -1907,6 +1907,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       body: _sessionItems.isEmpty
           ? DeviceConnectionWelcome(
               hasDevices: false,
+              isLoading: device == null,
               onPair: _openPairingQr,
               onManualConnect: _showManualConnectDialog,
             )
@@ -2715,6 +2716,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Widget _buildDesktopPlaceholder(bool isDark) => DeviceConnectionWelcome(
     hasDevices: _sessionItems.isNotEmpty,
+    isLoading: device == null,
     onPair: _openPairingQr,
     onManualConnect: _showManualConnectDialog,
   );
