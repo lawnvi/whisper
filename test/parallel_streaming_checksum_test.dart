@@ -17,17 +17,52 @@ void main() {
     );
     final checksum = await ParallelStreamingChecksum.start();
 
-    checksum
-      ..add(first)
-      ..add(second);
+    await checksum.add(first);
+    await checksum.add(second);
 
     expect(await checksum.close(), bytesChecksum(<int>[...first, ...second]));
   });
 
   test('can dispose a worker before producing a digest', () async {
     final checksum = await ParallelStreamingChecksum.start();
-    checksum.add(Uint8List(1024));
+    await checksum.add(Uint8List(1024));
 
     await checksum.dispose();
+  });
+
+  test(
+    'awaited producers bound the backlog without changing the digest',
+    () async {
+      const limit = 256 * 1024;
+      final chunk = Uint8List(64 * 1024);
+      final checksum = await ParallelStreamingChecksum.start(
+        maxPendingBytes: limit,
+      );
+      addTearDown(checksum.dispose);
+      for (var index = 0; index < 64; index++) {
+        await checksum.add(chunk);
+        expect(checksum.pendingBytes, lessThan(limit));
+      }
+      expect(
+        await checksum.close(),
+        bytesChecksum(Uint8List(chunk.length * 64)),
+      );
+    },
+  );
+
+  test('disposing releases a producer waiting for checksum capacity', () async {
+    final checksum = await ParallelStreamingChecksum.start(maxPendingBytes: 1);
+    final pending = checksum.add(Uint8List(1024 * 1024));
+    final rejected = expectLater(pending, throwsStateError);
+    await checksum.dispose();
+    await rejected;
+    await expectLater(checksum.add(<int>[1]), throwsStateError);
+  });
+
+  test('rejects an invalid backlog limit before starting a worker', () async {
+    await expectLater(
+      ParallelStreamingChecksum.start(maxPendingBytes: 0),
+      throwsArgumentError,
+    );
   });
 }

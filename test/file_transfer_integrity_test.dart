@@ -275,6 +275,7 @@ void main() {
         );
         final sent = <WhisperFrameV3>[];
         final engine = _engine(database, sent);
+        addTearDown(() => engine.closeAll(persistRecoverable: false));
 
         final matching = FileTransferV3Control(
           action: FileTransferV3Action.ready,
@@ -894,6 +895,10 @@ void main() {
         expect(await published.readAsBytes(), bytes);
         expect(transfer.state, FileTransferState.completed);
         expect(transfer.finalPath, published.path);
+        expect(
+          await File(await safeTransferTempPath(root, transferId)).exists(),
+          isFalse,
+        );
         expect(message?.path, published.path);
         expect(visibilitySawCommittedPaths, isTrue);
       },

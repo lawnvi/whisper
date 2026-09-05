@@ -190,6 +190,7 @@ void main() {
       temp,
       reservations.first,
     );
+    await releaseDownloadReservation(reservations.first);
 
     expect(await published.readAsString(), 'verified payload');
     expect(temp.existsSync(), isTrue);
@@ -244,6 +245,16 @@ void main() {
     addTearDown(() => root.delete(recursive: true));
     final reservation = await reserveUniqueDownloadFile(root, 'report.pdf');
     final detached = p.join(root.path, 'detached-reservation');
+    if (Platform.isWindows) {
+      await expectLater(
+        File(reservation.path).rename(detached),
+        throwsA(isA<FileSystemException>()),
+      );
+      await discardDownloadReservation(reservation);
+      expect(await File(detached).exists(), isFalse);
+      expect(await File(reservation.path).exists(), isFalse);
+      return;
+    }
     await File(reservation.path).rename(detached);
     final replacement = File(reservation.path);
     await replacement.writeAsString('replacement');
@@ -269,6 +280,18 @@ void main() {
     final temp = File(p.join(root.path, 'verified.part'));
     await temp.writeAsString('verified payload');
     await publishTempWithoutOverwrite(temp, reservation);
+    if (Platform.isWindows) {
+      await expectLater(
+        File(
+          reservation.path,
+        ).rename(p.join(root.path, 'detached-published-file')),
+        throwsA(isA<FileSystemException>()),
+      );
+      await discardDownloadReservation(reservation);
+      expect(await File(reservation.path).exists(), isFalse);
+      expect(await temp.readAsString(), 'verified payload');
+      return;
+    }
     await File(reservation.path).rename(
       p.join(root.path, 'detached-published-file'),
     );
@@ -316,6 +339,16 @@ void main() {
           '3aac0a1146ffe55bac7c05f61401fb1e7e4e6a94110b91585c646fe8cf745f28',
     );
     final original = File(p.join(root.path, 'original.part'));
+    if (Platform.isWindows) {
+      await expectLater(
+        temp.rename(original.path),
+        throwsA(isA<FileSystemException>()),
+      );
+      await snapshot.close();
+      expect(await temp.readAsString(), 'verified payload');
+      expect(await original.exists(), isFalse);
+      return;
+    }
     await temp.rename(original.path);
     await temp.writeAsString('malicious bytes!');
     final reservation = await reserveUniqueDownloadFile(root, 'report.pdf');
@@ -411,7 +444,17 @@ void main() {
       throwsA(isA<FileSystemException>()),
     );
     await discardDownloadReservation(reservation);
-    expect(await replacement.readAsString(), 'replacement');
+    if (Platform.isWindows) {
+      // Windows rejects the replacement rename while our handle is open.
+      expect(await replacement.exists(), isFalse);
+      expect(
+        await File(p.join(root.path, 'detached-partial')).exists(),
+        isFalse,
+      );
+      expect(await temp.readAsString(), 'verified payload');
+    } else {
+      expect(await replacement.readAsString(), 'replacement');
+    }
     await snapshot.close();
   });
 }

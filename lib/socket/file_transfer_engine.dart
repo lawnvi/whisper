@@ -139,7 +139,7 @@ Future<ParallelStreamingChecksum> _parallelChecksumForFilePrefix(
   try {
     if (end > 0) {
       await for (final chunk in file.openRead(0, end)) {
-        checksum.add(chunk);
+        await checksum.add(chunk);
       }
     }
     return checksum;
@@ -165,7 +165,7 @@ Future<ParallelStreamingChecksum> _parallelChecksumForSourcePrefix(
           'Unexpected EOF while hashing transfer source prefix',
         );
       }
-      checksum.add(bytes);
+      await checksum.add(bytes);
       offset += bytes.length;
     }
     return checksum;
@@ -2496,7 +2496,7 @@ class FileTransferEngine {
       if (checksumState != null) {
         final payloadEnd = cursor + payload.length;
         if (checksumState.offset == cursor) {
-          checksumState.checksum.add(payload);
+          await checksumState.checksum.add(payload);
           checksumState.offset = payloadEnd;
         } else if (checksumState.offset < payloadEnd) {
           throw StateError('Outgoing checksum stream is not contiguous');
@@ -2762,7 +2762,7 @@ class FileTransferEngine {
     );
     final committedBytes = frame.offset + frame.payload.length;
     writePipeline.add(writer, frame.payload, endOffset: committedBytes);
-    checksum.add(frame.payload);
+    await checksum.add(frame.payload);
     _receivingTransferOffsets[transfer.transferId] = committedBytes;
     _dispatchTransferProgress(
       transfer,
@@ -3450,18 +3450,20 @@ class FileTransferEngine {
           throw StateError('incoming file message is missing');
         }
         final root = await _downloadDirectory();
-        final reservation = await reserveUniqueDownloadFile(root, message.name);
+        DownloadFileReservation? reservation;
         late final File published;
         late final FileTransferData completed;
         try {
           final fileTimestamp = message.fileTimestamp ?? 0;
-          published = await publishVerifiedSnapshot(
+          reservation = await publishVerifiedDownload(
             snapshot,
-            reservation,
+            root,
+            message.name,
             preparePublishedFile: fileTimestamp > 0
                 ? (file) => _setPublishedFileTimestamp(file, fileTimestamp)
                 : null,
           );
+          published = File(reservation.path);
           completed = await _database().completeIncomingFileTransfer(
             transferId: transfer.transferId,
             finalPath: published.path,
@@ -3469,7 +3471,9 @@ class FileTransferEngine {
           );
         } catch (_) {
           try {
-            await discardDownloadReservation(reservation);
+            if (reservation != null) {
+              await discardDownloadReservation(reservation);
+            }
           } catch (cleanupError) {
             _logFailure(
               FileTransferDiagnosticKind.reservationCleanupFailed,
@@ -3479,6 +3483,9 @@ class FileTransferEngine {
           rethrow;
         }
         await releaseDownloadReservation(reservation);
+        // Windows refuses to remove the temp name while its snapshot read
+        // handle remains open, including after hard-link publication.
+        await snapshot.close();
 
         try {
           _dispatchTransferData(completed);
@@ -3490,7 +3497,7 @@ class FileTransferEngine {
         }
         try {
           tempFile = await _validatedIncomingTempFile(transfer);
-          if (await tempFile.exists()) {
+          if (!reservation.sourceWasMoved && await tempFile.exists()) {
             tempFile = await _validatedIncomingTempFile(transfer);
             await tempFile.delete();
           }
