@@ -1505,4 +1505,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get serverUnavailableHelp =>
       'No se pueden recibir conexiones. Revisa la conexión de red, el permiso de red local y el cortafuegos e inténtalo de nuevo.';
+
+  @override
+  String updatePackageSaved(String path) {
+    return 'El instalador se guardó en:\n$path\nPuedes volver a instalarlo más tarde.';
+  }
+
+  @override
+  String get updateInstalledRestart =>
+      'Actualización instalada. Vuelve a abrir Whisper para usar la nueva versión.';
 }

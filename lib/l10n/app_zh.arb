@@ -758,5 +758,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "updatePackageSaved": "安装包已保存在：\n{path}\n你可以稍后重新安装。",
+  "@updatePackageSaved": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "updateInstalledRestart": "更新已安装，重新打开 Whisper 后生效。"
+
 }

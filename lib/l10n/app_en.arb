@@ -682,5 +682,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "updatePackageSaved": "The installer is saved at:\n{path}\nYou can retry the installation later.",
+  "@updatePackageSaved": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "updateInstalledRestart": "Update installed. Reopen Whisper to use the new version."
+
 }

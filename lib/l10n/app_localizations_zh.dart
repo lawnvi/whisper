@@ -1384,4 +1384,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get serverUnavailableHelp => '暂时无法接收连接。请确认网络已连接，并检查本地网络权限及防火墙后重试。';
+
+  @override
+  String updatePackageSaved(String path) {
+    return '安装包已保存在：\n$path\n你可以稍后重新安装。';
+  }
+
+  @override
+  String get updateInstalledRestart => '更新已安装，重新打开 Whisper 后生效。';
 }

@@ -2571,6 +2571,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂时无法接收连接。请确认网络已连接，并检查本地网络权限及防火墙后重试。'**
   String get serverUnavailableHelp;
+
+  /// No description provided for @updatePackageSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装包已保存在：\n{path}\n你可以稍后重新安装。'**
+  String updatePackageSaved(String path);
+
+  /// No description provided for @updateInstalledRestart.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新已安装，重新打开 Whisper 后生效。'**
+  String get updateInstalledRestart;
 }
 
 class _AppLocalizationsDelegate

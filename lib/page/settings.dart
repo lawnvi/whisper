@@ -1025,6 +1025,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _downloadingUpdate = true;
       _updateDownloadProgress = 0;
     });
+    AppUpdateDownload? downloaded;
     try {
       final download = await _updateManager.downloadUpdate(
         release,
@@ -1037,6 +1038,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           });
         },
       );
+      downloaded = download;
       final disposition = await _updateManager.openInstaller(download);
       if (!mounted) {
         return;
@@ -1049,7 +1051,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await widget.exitForUpdate!();
         return;
       }
-      showAppToast(AppLocalizations.of(context)!.updateInstallerOpened);
+      final l10n = AppLocalizations.of(context)!;
+      showAppToast(
+        disposition == AppUpdateInstallDisposition.installed
+            ? l10n.updateInstalledRestart
+            : l10n.updateInstallerOpened,
+      );
     } catch (error) {
       _logSettingsFailure(SettingsOperationKind.updateInstall, error);
       if (!mounted) {
@@ -1058,7 +1065,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _downloadingUpdate = false;
       });
-      showAppToast(AppLocalizations.of(context)!.updateInstallFailed);
+      final l10n = AppLocalizations.of(context)!;
+      if (downloaded != null) {
+        await showWhisperDialog<void>(
+          context,
+          builder: (dialogContext) => WhisperGlassDialog(
+            title: Text(l10n.updateInstallFailed),
+            content: SelectableText(
+              l10n.updatePackageSaved(downloaded!.file.path),
+            ),
+            actions: [
+              WhisperDialogButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                label: MaterialLocalizations.of(dialogContext).closeButtonLabel,
+              ),
+            ],
+          ),
+        );
+      } else {
+        showAppToast(l10n.updateInstallFailed);
+      }
     }
   }
 

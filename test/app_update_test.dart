@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/app_update.dart';
@@ -30,6 +33,99 @@ Map<String, Object?> _release({
 }
 
 void main() {
+  group('Debian update installation', () {
+    late Directory directory;
+    late AppUpdateDownload download;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('whisper-update-test-');
+      final file = File('${directory.path}/package with spaces.deb');
+      await file.writeAsString('test package');
+      final asset = AppUpdateAsset(
+        name: 'package with spaces.deb',
+        downloadUrl: Uri.parse('https://github.com/lawnvi/whisper/update.deb'),
+        size: await file.length(),
+        sha256: (await sha256.bind(file.openRead()).first).toString(),
+      );
+      download = AppUpdateDownload(
+        file: file,
+        release: AppUpdateRelease(
+          version: '0.0.52',
+          tagName: 'dev-v0.0.52',
+          channel: AppUpdateChannel.preview,
+          releaseUrl: Uri.parse('https://github.com/lawnvi/whisper/releases'),
+          notes: '',
+          publishedAt: null,
+          asset: asset,
+        ),
+      );
+    });
+
+    tearDown(() => directory.delete(recursive: true));
+
+    test('waits for apt and passes the installer as one argument', () async {
+      var invoked = false;
+      final service = AppUpdateService(
+        platform: AppUpdatePlatform.linux,
+        processRunner: (executable, arguments) async {
+          invoked = true;
+          expect(executable, '/usr/bin/pkexec');
+          expect(arguments, [
+            '/usr/bin/apt-get',
+            '-y',
+            'install',
+            '--',
+            download.file.absolute.path,
+          ]);
+          return ProcessResult(1, 0, 'installed', '');
+        },
+      );
+      expect(
+        await service.openInstaller(download),
+        AppUpdateInstallDisposition.installed,
+      );
+      expect(invoked, isTrue);
+      expect(await download.file.exists(), isTrue);
+    });
+
+    test(
+      'does not report success when authorization or installation fails',
+      () async {
+        for (final exitCode in [126, 127, 100]) {
+          final service = AppUpdateService(
+            platform: AppUpdatePlatform.linux,
+            processRunner: (_, _) async =>
+                ProcessResult(1, exitCode, '', 'failed'),
+          );
+          await expectLater(
+            service.openInstaller(download),
+            throwsA(isA<AppUpdateException>()),
+          );
+          expect(await download.file.exists(), isTrue);
+          expect(
+            await File('${directory.path}/install.log').readAsString(),
+            contains('exitCode=$exitCode'),
+          );
+        }
+      },
+    );
+
+    test(
+      'rejects a modified package before invoking privileged installation',
+      () async {
+        await download.file.writeAsString('changed package');
+        final service = AppUpdateService(
+          platform: AppUpdatePlatform.linux,
+          processRunner: (_, _) async => throw StateError('must not execute'),
+        );
+        await expectLater(
+          service.openInstaller(download),
+          throwsA(isA<AppUpdateException>()),
+        );
+      },
+    );
+  });
+
   test('preview channel selects the newest recognized release', () {
     final result = parseGitHubReleases(
       jsonEncode(<Map<String, Object?>>[

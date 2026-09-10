@@ -709,5 +709,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "updatePackageSaved": "El instalador se guardó en:\n{path}\nPuedes volver a instalarlo más tarde.",
+  "@updatePackageSaved": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "updateInstalledRestart": "Actualización instalada. Vuelve a abrir Whisper para usar la nueva versión."
+
 }

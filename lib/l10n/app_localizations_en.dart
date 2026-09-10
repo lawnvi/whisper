@@ -1486,4 +1486,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get serverUnavailableHelp =>
       'Unable to accept connections. Check your network connection, local network permission, and firewall, then retry.';
+
+  @override
+  String updatePackageSaved(String path) {
+    return 'The installer is saved at:\n$path\nYou can retry the installation later.';
+  }
+
+  @override
+  String get updateInstalledRestart =>
+      'Update installed. Reopen Whisper to use the new version.';
 }

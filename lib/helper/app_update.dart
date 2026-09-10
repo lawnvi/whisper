@@ -26,7 +26,7 @@ enum AppUpdatePlatform { android, ios, macos, windows, linux, unsupported }
 
 enum AppUpdateStatus { upToDate, updateAvailable }
 
-enum AppUpdateInstallDisposition { keepRunning, exitApplication }
+enum AppUpdateInstallDisposition { keepRunning, exitApplication, installed }
 
 class AppUpdateException implements Exception {
   const AppUpdateException(this.message);
@@ -103,9 +103,7 @@ abstract interface class AppUpdateManager {
     void Function(double progress)? onProgress,
   });
 
-  Future<AppUpdateInstallDisposition> openInstaller(
-    AppUpdateDownload download,
-  );
+  Future<AppUpdateInstallDisposition> openInstaller(AppUpdateDownload download);
 }
 
 class AppUpdateService implements AppUpdateManager {
@@ -115,12 +113,19 @@ class AppUpdateService implements AppUpdateManager {
     AppUpdateChannel? channel,
     HttpClient Function()? httpClientFactory,
     Future<Directory> Function()? temporaryDirectoryProvider,
+    Future<ProcessResult> Function(String, List<String>)? processRunner,
   }) : platform = platform ?? currentAppUpdatePlatform(),
        architecture = architecture ?? Abi.current().toString().toLowerCase(),
        channel = channel ?? configuredAppUpdateChannel(),
        _httpClientFactory = httpClientFactory ?? HttpClient.new,
        _temporaryDirectoryProvider =
-           temporaryDirectoryProvider ?? getTemporaryDirectory;
+           temporaryDirectoryProvider ??
+           (() => _updateDownloadDirectory(
+             platform ?? currentAppUpdatePlatform(),
+           )),
+       _processRunner =
+           processRunner ??
+           ((executable, arguments) => Process.run(executable, arguments));
 
   static final AppUpdateService shared = AppUpdateService();
 
@@ -129,6 +134,7 @@ class AppUpdateService implements AppUpdateManager {
   final AppUpdateChannel channel;
   final HttpClient Function() _httpClientFactory;
   final Future<Directory> Function() _temporaryDirectoryProvider;
+  final Future<ProcessResult> Function(String, List<String>) _processRunner;
 
   AppUpdateCheckResult? _cachedResult;
   DateTime? _cachedAt;
@@ -327,8 +333,37 @@ class AppUpdateService implements AppUpdateManager {
     }
 
     if (platform == AppUpdatePlatform.linux &&
+        download.file.path.toLowerCase().endsWith('.deb')) {
+      final asset = download.release.asset;
+      if (asset == null ||
+          !await _isDownloadedAssetValid(download.file, asset)) {
+        throw const AppUpdateException('Downloaded update checksum mismatch');
+      }
+      // App Center may open successfully without accepting a local package.
+      // Let polkit request authorization, and wait for the package manager's result.
+      final result = await _processRunner('/usr/bin/pkexec', <String>[
+        '/usr/bin/apt-get',
+        '-y',
+        'install',
+        '--',
+        download.file.absolute.path,
+      ]);
+      await File(
+        p.join(download.file.parent.path, 'install.log'),
+      ).writeAsString(
+        'exitCode=${result.exitCode}\n${result.stdout}\n${result.stderr}',
+      );
+      if (result.exitCode != 0) {
+        throw AppUpdateException(
+          'Linux package installation failed (${result.exitCode})',
+        );
+      }
+      return AppUpdateInstallDisposition.installed;
+    }
+
+    if (platform == AppUpdatePlatform.linux &&
         download.file.path.toLowerCase().endsWith('.appimage')) {
-      final chmod = await Process.run('chmod', <String>[
+      final chmod = await _processRunner('chmod', <String>[
         '+x',
         download.file.path,
       ]);
@@ -345,10 +380,19 @@ class AppUpdateService implements AppUpdateManager {
   }
 }
 
+Future<Directory> _updateDownloadDirectory(AppUpdatePlatform platform) async {
+  if (platform == AppUpdatePlatform.linux) {
+    return await getDownloadsDirectory() ??
+        await getApplicationSupportDirectory();
+  }
+  return getTemporaryDirectory();
+}
+
 AppUpdateInstallDisposition installDispositionForPlatform(
   AppUpdatePlatform platform,
 ) {
-  final shouldExit = platform == AppUpdatePlatform.macos ||
+  final shouldExit =
+      platform == AppUpdatePlatform.macos ||
       platform == AppUpdatePlatform.windows;
   return shouldExit
       ? AppUpdateInstallDisposition.exitApplication
