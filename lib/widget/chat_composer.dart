@@ -592,6 +592,13 @@ class ChatComposer extends StatelessWidget {
       unawaited(_handlePasteShortcut());
       return KeyEventResult.handled;
     }
+    if (_canDeleteClipboardImage(event)) {
+      if (event is KeyDownEvent) {
+        onRemoveClipboardImage!(pendingClipboardImages.length - 1);
+      }
+      // Holding Delete must not remove the entire image queue in one press.
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
         event.logicalKey == LogicalKeyboardKey.shiftRight) {
       keyPressedMap[LogicalKeyboardKey.shift.keyLabel] = event is KeyDownEvent;
@@ -625,6 +632,24 @@ class ChatComposer extends StatelessWidget {
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  bool _canDeleteClipboardImage(KeyEvent event) {
+    if (!isDesktopStyle ||
+        isLoading ||
+        !_showsClipboardImagesPreview ||
+        onRemoveClipboardImage == null ||
+        controller.text.isNotEmpty ||
+        _hasActiveComposition ||
+        (event.logicalKey != LogicalKeyboardKey.backspace &&
+            event.logicalKey != LogicalKeyboardKey.delete)) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    return !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed;
   }
 
   bool get _hasActiveComposition {
