@@ -486,9 +486,8 @@ class WsSvrManager {
   HttpServer? _serverClosing;
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
-  int _remoteProfileRevision = 0;
-  final List<Completer<PeerProfile?>> _remoteProfileRefreshWaiters =
-      <Completer<PeerProfile?>>[];
+  final Map<String, Set<Completer<PeerProfile?>>> _remoteProfileRefreshWaiters =
+      <String, Set<Completer<PeerProfile?>>>{};
   late final FileTransferEngine _transferEngine = FileTransferEngine(
     currentConnectionBinding: _peerConnections.currentBinding,
     authenticatedIdentityHashForConnection: (binding) {
@@ -696,7 +695,9 @@ class WsSvrManager {
   @visibleForTesting
   Future<PeerProfile?> debugWaitForSelectedProfileUpdate() {
     final completer = Completer<PeerProfile?>();
-    _remoteProfileRefreshWaiters.add(completer);
+    _remoteProfileRefreshWaiters
+        .putIfAbsent(receiver, () => <Completer<PeerProfile?>>{})
+        .add(completer);
     return completer.future;
   }
 
@@ -3042,6 +3043,7 @@ class WsSvrManager {
         selectPeer(receiver);
       }
     }
+    _completeRemoteProfileRefreshWaiters(peerId: peerId);
     if (_removedBindingOwnsPeerState(binding)) {
       // 会话生命周期终点:不论断因都结算稳定性复位,
       // 稳定连接挣得的退避复位不因手动断开等断因而丢失。
@@ -4853,37 +4855,40 @@ class WsSvrManager {
   }
 
   Future<PeerProfile?> requestRemoteProfileRefresh({
+    String? peerId,
     Duration timeout = const Duration(milliseconds: 1200),
   }) async {
-    if (_sink == null) {
-      return _remoteProfile;
+    final targetPeerId = peerId ?? receiver;
+    if (!isConnectedTo(targetPeerId)) {
+      return remoteProfileFor(targetPeerId);
     }
 
-    final startRevision = _remoteProfileRevision;
     final completer = Completer<PeerProfile?>();
-    _remoteProfileRefreshWaiters.add(completer);
-    final timer = Timer(timeout, () {
-      _remoteProfileRefreshWaiters.remove(completer);
-      if (!completer.isCompleted) {
-        completer.complete(_remoteProfile);
-      }
-    });
-
+    _remoteProfileRefreshWaiters
+        .putIfAbsent(targetPeerId, () => <Completer<PeerProfile?>>{})
+        .add(completer);
     try {
-      await _heartBeat(profileRefreshRequest: true);
-      if (_remoteProfileRevision != startRevision && !completer.isCompleted) {
-        _remoteProfileRefreshWaiters.remove(completer);
-        completer.complete(_remoteProfile);
-      }
-    } catch (_) {
-      _remoteProfileRefreshWaiters.remove(completer);
-      timer.cancel();
-      if (!completer.isCompleted) {
-        completer.complete(_remoteProfile);
+      unawaited(
+        _heartBeat(
+          profileRefreshRequest: true,
+          peerId: targetPeerId,
+        ).catchError((Object _) {
+          if (!completer.isCompleted) {
+            completer.complete(remoteProfileFor(targetPeerId));
+          }
+        }),
+      );
+      return await completer.future.timeout(
+        timeout,
+        onTimeout: () => remoteProfileFor(targetPeerId),
+      );
+    } finally {
+      final waiters = _remoteProfileRefreshWaiters[targetPeerId];
+      waiters?.remove(completer);
+      if (waiters?.isEmpty == true) {
+        _remoteProfileRefreshWaiters.remove(targetPeerId);
       }
     }
-
-    return completer.future.whenComplete(timer.cancel);
   }
 
   void _setRemoteProfile(PeerProfile? profile, {String? peerId}) {
@@ -4898,24 +4903,26 @@ class WsSvrManager {
       _remoteProfilesByPeerId.clear();
     }
 
-    if (hasPeerId && peerId != receiver) {
-      return;
+    if (!hasPeerId || peerId == receiver) {
+      _setSelectedRemoteProfile(profile);
     }
-    _setSelectedRemoteProfile(profile);
+    _completeRemoteProfileRefreshWaiters(peerId: hasPeerId ? peerId : null);
   }
 
   void _setSelectedRemoteProfile(PeerProfile? profile) {
     _remoteProfile = profile;
-    _remoteProfileRevision++;
-    _completeRemoteProfileRefreshWaiters();
   }
 
-  void _completeRemoteProfileRefreshWaiters() {
-    final waiters = _remoteProfileRefreshWaiters.toList(growable: false);
-    _remoteProfileRefreshWaiters.clear();
-    for (final waiter in waiters) {
-      if (!waiter.isCompleted) {
-        waiter.complete(_remoteProfile);
+  void _completeRemoteProfileRefreshWaiters({String? peerId}) {
+    final peerIds = peerId == null
+        ? _remoteProfileRefreshWaiters.keys.toList(growable: false)
+        : <String>[peerId];
+    for (final id in peerIds) {
+      final waiters = _remoteProfileRefreshWaiters.remove(id);
+      for (final waiter in waiters ?? const <Completer<PeerProfile?>>{}) {
+        if (!waiter.isCompleted) {
+          waiter.complete(remoteProfileFor(id));
+        }
       }
     }
   }

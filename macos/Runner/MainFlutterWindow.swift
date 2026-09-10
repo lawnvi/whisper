@@ -2630,6 +2630,9 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   }
 
   private func showCaptureCursorIfNeeded() {
+    // A cursor warp can briefly suppress hardware motion. Resume it before
+    // showing the local cursor, even if release raced the queued hide.
+    CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
     guard captureCursorHidden else {
       return
     }
@@ -2649,10 +2652,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         NSCursor.unhide()
       }
       NSCursor.setHiddenUntilMouseMoves(false)
-      CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
       if let point = point {
         CGWarpMouseCursorPosition(point)
       }
+      CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
       _ = CGDisplayShowCursor(CGMainDisplayID())
     }
     if Thread.isMainThread {

@@ -208,7 +208,16 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }
 
   Future<void> _loadWorkspace() async {
-    final localTopology = await _loadLocalTopology();
+    final localTopologyFuture = _loadLocalTopology();
+    await Future.wait(
+      _socketManager.connectedPeerIds.map(
+        (peerId) => _socketManager.requestRemoteProfileRefresh(peerId: peerId),
+      ),
+    );
+    final localTopology = await localTopologyFuture;
+    if (!mounted) {
+      return;
+    }
     final self = await LocalSetting().instance();
     final connectedDevices = _socketManager.connectedRemoteInputDevices(
       preferredPeerId: widget.preferredPeerId,
@@ -263,8 +272,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         _focusedPeerId = _selectedPeerIds.first;
       }
     });
-    final layoutChanged = await _magnetizeSelectedLayouts();
-    if (layoutChanged && workspaceSnapshot.isControllerLive) {
+    await _magnetizeSelectedLayouts();
+    if (workspaceSnapshot.isControllerLive) {
       await _restartControllerWorkspaceIfLive();
     }
     if (mounted) {

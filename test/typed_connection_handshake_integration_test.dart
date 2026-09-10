@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/device_identity.dart';
 import 'package:whisper/socket/peer_socket_session.dart';
@@ -887,21 +888,34 @@ void main() {
   });
 
   test(
-    'background peer registration cannot complete the selected peer waiter',
+    'profile refresh keeps peers isolated and updates display topology',
     () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
+      var displaysA = 1;
+      var displaysB = 2;
+      Completer<void>? profileGateA;
+      final refreshRequestedA = Completer<void>();
       final peerA = WsSvrManager.forTesting(
         database: database,
         identityStore: _identityStore(1),
-        localPeerProfileLoader: () async => _profile('peer-a'),
+        localPeerProfileLoader: () async {
+          if (profileGateA != null) {
+            if (!refreshRequestedA.isCompleted) {
+              refreshRequestedA.complete();
+            }
+            await profileGateA.future;
+          }
+          return _profile('peer-a', displayCount: displaysA);
+        },
         autoConnectEnabled: () async => true,
         manageSharedCoordinators: false,
       );
       final peerB = WsSvrManager.forTesting(
         database: database,
         identityStore: _identityStore(33),
-        localPeerProfileLoader: () async => _profile('peer-b'),
+        localPeerProfileLoader: () async =>
+            _profile('peer-b', displayCount: displaysB),
         autoConnectEnabled: () async => true,
         manageSharedCoordinators: false,
       );
@@ -962,6 +976,48 @@ void main() {
         const Duration(seconds: 2),
       );
       expect(refreshed?.device.uid, 'peer-a');
+      expect(hub.remoteDisplayTopologyFor('peer-a')?.displays.length, 1);
+      expect(hub.remoteDisplayTopologyFor('peer-b')?.displays.length, 2);
+
+      displaysA = 2;
+      displaysB = 1;
+      profileGateA = Completer<void>();
+      addTearDown(() {
+        if (!profileGateA!.isCompleted) profileGateA.complete();
+      });
+      var refreshACompleted = false;
+      final refreshA = hub
+          .requestRemoteProfileRefresh(
+            peerId: 'peer-a',
+            timeout: const Duration(seconds: 3),
+          )
+          .whenComplete(() => refreshACompleted = true);
+      await refreshRequestedA.future.timeout(const Duration(seconds: 2));
+      final refreshB = await hub.requestRemoteProfileRefresh(peerId: 'peer-b');
+      expect(refreshB?.displayTopology?.displays.length, 1);
+      expect(refreshACompleted, isFalse);
+      expect(hub.remoteDisplayTopologyFor('peer-a')?.displays.length, 1);
+      expect(hub.receiver, 'peer-a');
+
+      profileGateA.complete();
+      expect((await refreshA)?.displayTopology?.displays.length, 2);
+      expect(
+        hub.isCurrentConnectionGeneration('peer-a', connectedA.generation),
+        isTrue,
+      );
+      expect(
+        hub.isCurrentConnectionGeneration('peer-b', connectedB.generation),
+        isTrue,
+      );
+
+      profileGateA = Completer<void>();
+      final timedOut = await hub.requestRemoteProfileRefresh(
+        peerId: 'peer-a',
+        timeout: const Duration(milliseconds: 30),
+      );
+      expect(timedOut?.device.uid, 'peer-a');
+      expect(timedOut?.displayTopology?.displays.length, 2);
+      profileGateA.complete();
     },
   );
 }
@@ -1126,7 +1182,7 @@ DeviceIdentityStore _identityStore(int seedStart) => DeviceIdentityStore(
   ),
 );
 
-PeerProfile _profile(String uid) => PeerProfile(
+PeerProfile _profile(String uid, {int displayCount = 0}) => PeerProfile(
   device: DeviceData(
     id: 0,
     uid: uid,
@@ -1146,19 +1202,38 @@ PeerProfile _profile(String uid) => PeerProfile(
   autoApproveNewDevices: false,
   autoConnectEnabled: true,
   protocolVersion: PeerSocketSession.protocolVersion,
-  capabilities: const PeerCapabilities(
+  capabilities: PeerCapabilities(
     fileTransferV3: true,
     systemAudioSourceV1: false,
     speakerSinkV1: false,
-    remoteInputSourceV1: false,
-    remoteInputSinkV1: false,
-    remoteInputTopologyV1: false,
+    remoteInputSourceV1: displayCount > 0,
+    remoteInputSinkV1: displayCount > 0,
+    remoteInputTopologyV1: displayCount > 0,
     audioGroupSourceV1: false,
     audioGroupSinkV1: false,
     audioGroupRejoinV1: false,
     audioSyncClockV1: false,
     audioChannelRoleV1: false,
   ),
+  displayTopology: displayCount == 0
+      ? null
+      : RemoteInputTopology(
+          platform: 'test',
+          updatedAt: 1,
+          displays: List.generate(
+            displayCount,
+            (index) => RemoteInputDisplay(
+              displayId: '$uid-$index',
+              name: 'Display $index',
+              x: index * 1920,
+              y: 0,
+              width: 1920,
+              height: 1080,
+              scale: 1,
+              isPrimary: index == 0,
+            ),
+          ),
+        ),
 );
 
 final class _SeedStorage implements DeviceIdentitySeedStorage {

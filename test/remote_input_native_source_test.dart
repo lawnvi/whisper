@@ -373,8 +373,26 @@ void main() {
       expect(source, contains('captureRearmMotion'));
       expect(pauseCapture, contains('captureRequiresInteriorRearm = true'));
       expect(
+        pauseCapture.indexOf('moveCaptureCursorToLocalEdge('),
+        lessThan(pauseCapture.indexOf('showCaptureCursorIfNeeded()')),
+      );
+      expect(
         handleEvent.indexOf('captureRequiresInteriorRearm'),
         lessThan(handleEvent.indexOf('captureActivationCrossing')),
+      );
+    });
+
+    test('resumes hardware mouse motion immediately after returning locally', () {
+      final restoreCursor = RegExp(
+        r'private func showCaptureCursorIfNeeded\(\)[\s\S]*?\n  private func showCursorForRemoteInjection',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        restoreCursor,
+        contains('CGAssociateMouseAndMouseCursorPosition(boolean_t(1))'),
+      );
+      expect(
+        restoreCursor.indexOf('CGAssociateMouseAndMouseCursorPosition'),
+        lessThan(restoreCursor.indexOf('guard captureCursorHidden')),
       );
     });
 
