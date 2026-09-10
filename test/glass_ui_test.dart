@@ -45,7 +45,7 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.byType(WhisperGlassDialog), findsOneWidget);
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsNWidgets(2));
     await tester.tap(find.widgetWithText(WhisperDialogButton, 'Close'));
     await tester.pumpAndSettle();
     expect(find.byType(WhisperGlassDialog), findsNothing);

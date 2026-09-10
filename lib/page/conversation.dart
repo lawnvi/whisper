@@ -1667,7 +1667,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ? AudioChannelRole.left
             : (index == 1 ? AudioChannelRole.right : AudioChannelRole.stereo),
     };
-    return showModalBottomSheet<Map<String, AudioChannelRole>>(
+    return showWhisperModalBottomSheet<Map<String, AudioChannelRole>>(
       context: context,
       showDragHandle: true,
       builder: (context) {

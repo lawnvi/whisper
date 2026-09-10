@@ -79,7 +79,7 @@ void main() {
     );
     expect(deviceList, contains('_androidSystemShareInbox.initialize()'));
     expect(deviceList, contains('_androidSystemShareInbox.removeListener('));
-    expect(deviceList, contains('showModalBottomSheet<String>'));
+    expect(deviceList, contains('showWhisperModalBottomSheet<String>'));
     expect(deviceList, contains('onlineTargets.length == 1'));
     expect(deviceList, contains('locallyTrusted'));
     expect(deviceList, contains('socketManager.sendMessageTo'));

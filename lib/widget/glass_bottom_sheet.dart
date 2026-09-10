@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/frosted_modal_route.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 
 const Duration whisperBottomSheetEnterDuration = Duration(milliseconds: 280);
@@ -18,9 +19,9 @@ Future<T?> showWhisperGlassBottomSheet<T>(
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
   return Navigator.of(context, rootNavigator: useRootNavigator).push<T>(
-    PageRouteBuilder<T>(
+    WhisperFrostedPageRoute<T>(
+      barrierBlurSigma: whisperModalBlurSigma(context),
       settings: routeSettings,
-      opaque: false,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: isDark
@@ -56,6 +57,47 @@ Future<T?> showWhisperGlassBottomSheet<T>(
           ),
         );
       },
+    ),
+  );
+}
+
+Future<T?> showWhisperModalBottomSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool isScrollControlled = false,
+  bool useSafeArea = false,
+  bool? showDragHandle,
+  Color? backgroundColor,
+  BoxConstraints? constraints,
+  ShapeBorder? shape,
+}) {
+  final navigator = Navigator.of(context);
+  final localizations = MaterialLocalizations.of(context);
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return navigator.push<T>(
+    WhisperFrostedBottomSheetRoute<T>(
+      builder: builder,
+      barrierBlurSigma: whisperModalBlurSigma(context),
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: navigator.context,
+      ),
+      barrierLabel: localizations.scrimLabel,
+      barrierOnTapHint: localizations.scrimOnTapHint(
+        localizations.bottomSheetLabel,
+      ),
+      modalBarrierColor: isDark
+          ? Colors.black.withValues(alpha: 0.46)
+          : const Color(0xFF0F172A).withValues(alpha: 0.22),
+      isScrollControlled: isScrollControlled,
+      useSafeArea: useSafeArea,
+      showDragHandle: showDragHandle,
+      backgroundColor: backgroundColor,
+      constraints: constraints,
+      shape: shape,
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
     ),
   );
 }

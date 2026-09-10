@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/frosted_modal_route.dart';
 
 const Duration whisperDialogEnterDuration = Duration(milliseconds: 220);
 const Duration whisperDialogExitDuration = Duration(milliseconds: 150);
@@ -18,9 +19,9 @@ Future<T?> showWhisperDialog<T>(
   final brightness = Theme.of(context).brightness;
 
   return Navigator.of(context, rootNavigator: useRootNavigator).push<T>(
-    PageRouteBuilder<T>(
+    WhisperFrostedPageRoute<T>(
+      barrierBlurSigma: whisperModalBlurSigma(context),
       settings: routeSettings,
-      opaque: false,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: brightness == Brightness.dark

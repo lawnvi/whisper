@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
 
 class ContextMenuActionItem {
   const ContextMenuActionItem({
@@ -146,7 +147,7 @@ class _ContextMenuRegionState extends State<ContextMenuRegion> {
     }
     final palette = context.whisperPalette;
     final colorScheme = Theme.of(context).colorScheme;
-    final selected = await showModalBottomSheet<int>(
+    final selected = await showWhisperModalBottomSheet<int>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,
