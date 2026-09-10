@@ -173,17 +173,15 @@ class ScreenshotPlugin {
       cairo_clip(cr);
       self->DrawSnapshot(cr);
       cairo_restore(cr);
-      cairo_set_source_rgb(cr, 1, 1, 1);
-      cairo_set_line_width(cr, 4);
-      cairo_rectangle(cr, rect.left, rect.top, rect.width(), rect.height());
-      cairo_stroke_preserve(cr);
       cairo_set_source_rgb(cr, 0.145, 0.388, 0.922);
       cairo_set_line_width(cr, 2);
+      cairo_rectangle(cr, rect.left, rect.top, rect.width(), rect.height());
       cairo_stroke(cr);
       for (double x : {rect.left, (rect.left + rect.right) / 2, rect.right}) {
         for (double y : {rect.top, (rect.top + rect.bottom) / 2, rect.bottom}) {
           if (x == (rect.left + rect.right) / 2 && y == (rect.top + rect.bottom) / 2) continue;
-          RoundedRect(cr, {x - 3.5, y - 3.5, x + 3.5, y + 3.5}, 1.5);
+          cairo_new_sub_path(cr);
+          cairo_arc(cr, x, y, 3.5, 0, 2 * G_PI);
           cairo_set_source_rgb(cr, 1, 1, 1); cairo_fill_preserve(cr);
           cairo_set_source_rgb(cr, 0.145, 0.388, 0.922);
           cairo_set_line_width(cr, 1.5); cairo_stroke(cr);

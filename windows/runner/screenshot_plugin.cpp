@@ -230,6 +230,16 @@ class ScreenshotPlugin : public flutter::Plugin {
     SelectObject(dc, old_brush); SelectObject(dc, old_pen); DeleteObject(brush);
   }
 
+  static void FillCircle(HDC dc, CapturePoint center, double radius, COLORREF color) {
+    const auto brush = CreateSolidBrush(color);
+    const auto old_brush = SelectObject(dc, brush);
+    const auto old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
+    const auto r = NativeRect({center.x - radius, center.y - radius,
+                              center.x + radius, center.y + radius});
+    Ellipse(dc, r.left, r.top, r.right, r.bottom);
+    SelectObject(dc, old_brush); SelectObject(dc, old_pen); DeleteObject(brush);
+  }
+
   void DrawTextLabel(HDC dc, const std::wstring& text, CaptureRect rect, int size) const {
     const auto font = CreateFontW(-static_cast<int>(size * UiScale()), 0, 0, 0, FW_MEDIUM,
         FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -278,18 +288,16 @@ class ScreenshotPlugin : public flutter::Plugin {
       BitBlt(dc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
              snapshot_dc_, rect.left, rect.top, SRCCOPY);
       const auto old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-      for (const auto color : {RGB(255, 255, 255), RGB(37, 99, 235)}) {
-        const auto pen = CreatePen(PS_SOLID, static_cast<int>((color == RGB(255, 255, 255) ? 4 : 2) * s), color);
-        const auto old_pen = SelectObject(dc, pen);
-        Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom);
-        SelectObject(dc, old_pen); DeleteObject(pen);
-      }
+      const auto pen = CreatePen(PS_SOLID, static_cast<int>(2 * s), RGB(37, 99, 235));
+      const auto old_pen = SelectObject(dc, pen);
+      Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom);
+      SelectObject(dc, old_pen); DeleteObject(pen);
       SelectObject(dc, old_brush);
       for (double x : {selected.left, (selected.left + selected.right) / 2, selected.right}) {
         for (double y : {selected.top, (selected.top + selected.bottom) / 2, selected.bottom}) {
           if (x == (selected.left + selected.right) / 2 && y == (selected.top + selected.bottom) / 2) continue;
-          FillRounded(dc, {x - 4 * s, y - 4 * s, x + 4 * s, y + 4 * s}, RGB(37, 99, 235), static_cast<int>(2 * s));
-          FillRounded(dc, {x - 2.5 * s, y - 2.5 * s, x + 2.5 * s, y + 2.5 * s}, RGB(255, 255, 255), static_cast<int>(s));
+          FillCircle(dc, {x, y}, 4.25 * s, RGB(37, 99, 235));
+          FillCircle(dc, {x, y}, 2.75 * s, RGB(255, 255, 255));
         }
       }
     }

@@ -261,6 +261,9 @@ private final class ScreenshotSession {
     for display in displays {
       let panel = ScreenshotPanel(contentRect: display.frame,
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      // The panel contains a desktop snapshot; window transitions would scale
+      // the whole desktop image when entering or leaving region selection.
+      panel.animationBehavior = .none
       panel.level = .screenSaver
       panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
       panel.isOpaque = true
@@ -495,16 +498,12 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
       context.draw(display.image, in: bounds)
       context.restoreGState()
       let edge = NSBezierPath(rect: rect)
-      NSColor.white.setStroke()
-      edge.lineWidth = 4
-      edge.stroke()
       accent.setStroke()
       edge.lineWidth = 2
       edge.stroke()
       for x in [rect.minX, rect.midX, rect.maxX] {
         for y in [rect.minY, rect.midY, rect.maxY] where x != rect.midX || y != rect.midY {
-          let handle = NSBezierPath(roundedRect: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7),
-                                   xRadius: 1.5, yRadius: 1.5)
+          let handle = NSBezierPath(ovalIn: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7))
           NSColor.white.setFill(); handle.fill()
           accent.setStroke(); handle.lineWidth = 1.5; handle.stroke()
         }

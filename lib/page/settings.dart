@@ -328,7 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final locale = Localizations.localeOf(context);
     final horizontalPagePadding = _isMobilePlatform ? 10.0 : 14.0;
 
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
         backgroundColor: palette.surfaceCanvas,
@@ -809,6 +809,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: page,
     );
   }
 
@@ -1918,7 +1922,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         widget.isConnected ?? WsSvrManager().isConnectedTo(device.uid);
     final horizontalPagePadding = isMobile() ? 10.0 : 14.0;
 
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
         backgroundColor: palette.surfaceCanvas,
@@ -2023,6 +2027,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           ),
         ),
       ),
+    );
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: page,
     );
   }
 
