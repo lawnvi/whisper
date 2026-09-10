@@ -11,6 +11,7 @@ import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/app_update.dart';
 import 'package:whisper/helper/desktop_startup.dart';
+import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -30,6 +31,7 @@ import 'package:whisper/widget/app_dialogs.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/glass_settings_slider.dart';
+import 'package:whisper/widget/screenshot_controls.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -460,6 +462,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       l10n.settingsSectionSystemBehavior,
                       l10n.settingsSectionSystemBehaviorDesc,
                       [
+                        if (_isDesktopPlatform)
+                          AnimatedBuilder(
+                            animation: DesktopScreenshotController.shared,
+                            builder: (context, _) {
+                              final screenshot =
+                                  DesktopScreenshotController.shared;
+                              return _buildSettingItem(
+                                l10n.screenshotShortcutTitle,
+                                const Icon(Icons.crop_free_rounded),
+                                desc: !screenshot.enabled
+                                    ? l10n.screenshotShortcutDisabled
+                                    : screenshot.registered
+                                    ? screenshot.shortcutLabel
+                                    : l10n.screenshotShortcutUnavailable,
+                                onTap: () =>
+                                    showScreenshotShortcutDialog(context),
+                              );
+                            },
+                          ),
                         if (_isDesktopPlatform)
                           _buildSettingItem(
                             l10n.launchAtStartup,

@@ -362,6 +362,8 @@ void main() {
   testWidgets('about row contains website and source links', (tester) async {
     await _pumpAt(tester, width: 720, height: 1500, autoCheckForUpdates: false);
 
+    await tester.ensureVisible(find.text('About Whisper'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('About Whisper'));
     await tester.pumpAndSettle();
 

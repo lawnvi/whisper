@@ -73,6 +73,7 @@ dependencies:
   window_manager: ^0.4.3
   tray_manager: ^0.3.0
   hotkey_manager: ^0.2.3
+  dbus: ^0.7.12
   logger: ^2.5.0
   flutter_notification_listener_plus: ^1.3.5
   toastification: ^3.2.0

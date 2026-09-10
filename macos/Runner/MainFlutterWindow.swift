@@ -128,6 +128,8 @@ class MainFlutterWindow: NSWindow {
       with: flutterViewController.registrar(forPlugin: "RemoteInputPlugin"))
     DesktopClipboardImagePlugin.register(
       with: flutterViewController.registrar(forPlugin: "DesktopClipboardImagePlugin"))
+    ScreenshotPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "ScreenshotPlugin"))
     registerWindowThemeChannel(with: flutterViewController)
     registerFileManagerChannel(with: flutterViewController)
     registerDesktopQuickSendChannel(with: flutterViewController)

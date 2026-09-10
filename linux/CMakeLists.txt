@@ -53,6 +53,7 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(KEYBINDER REQUIRED IMPORTED_TARGET keybinder-3.0)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse libpulse-simple)
 pkg_check_modules(X11_REMOTE_INPUT IMPORTED_TARGET x11 xtst)
 pkg_check_modules(XI_REMOTE_INPUT IMPORTED_TARGET xi)
@@ -73,6 +74,7 @@ add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
   "remote_input_plugin.cc"
+  "screenshot_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
@@ -83,6 +85,7 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::KEYBINDER)
 target_compile_definitions(${BINARY_NAME} PRIVATE HAVE_PULSE_AUDIO=1)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::PULSE)
 if(X11_REMOTE_INPUT_FOUND)

@@ -13,6 +13,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "remote_input_plugin.cpp"
+  "screenshot_plugin.cpp"
   "single_instance.cpp"
   "utils.cpp"
   "window_theme_plugin.cpp"
@@ -40,6 +41,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app flutter_wrapper_plugin)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "ole32.lib" "windowscodecs.lib" "winmm.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "msimg32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

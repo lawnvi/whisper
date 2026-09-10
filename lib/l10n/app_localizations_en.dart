@@ -9,6 +9,73 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get screenshotCapture => 'Capture region';
+
+  @override
+  String get screenshotSelectionHint =>
+      'Drag to select a region · Esc to cancel';
+
+  @override
+  String get screenshotAdjustHint =>
+      'Drag to move · Drag edges to resize · Enter to copy · Esc to cancel';
+
+  @override
+  String get screenshotConfirm => 'Copy';
+
+  @override
+  String get screenshotCopied =>
+      'Screenshot copied. Paste it wherever you need.';
+
+  @override
+  String get screenshotPermissionDenied =>
+      'Allow Whisper to record the screen in System Settings → Privacy & Security, then restart Whisper.';
+
+  @override
+  String get screenshotUnavailable =>
+      'Region capture is unavailable. On Linux, check that your desktop screenshot portal is installed and running.';
+
+  @override
+  String get screenshotFailed =>
+      'Screenshot or clipboard copy failed. Please try again.';
+
+  @override
+  String get screenshotShortcutTitle => 'Screenshot shortcut';
+
+  @override
+  String get screenshotShortcutDesc =>
+      'Capture a region without hiding Whisper, then copy it to the clipboard for manual pasting.';
+
+  @override
+  String get screenshotShortcutEnabled => 'Enable global shortcut';
+
+  @override
+  String get screenshotShortcutDisabled =>
+      'Disabled · the screenshot button is still available';
+
+  @override
+  String get screenshotShortcutUnavailable =>
+      'Shortcut not registered · click to configure';
+
+  @override
+  String get screenshotShortcutRecord =>
+      'Click here, then press a key combination';
+
+  @override
+  String get screenshotShortcutHint =>
+      'Use Ctrl, Alt or Command/Super with a letter, number or F1–F12. Esc cancels capture. On Wayland, confirm the shortcut in the system dialog.';
+
+  @override
+  String get screenshotShortcutReset => 'Restore default shortcut';
+
+  @override
+  String get screenshotShortcutInvalid =>
+      'Use a valid key combination different from the quick-send shortcut.';
+
+  @override
+  String get screenshotShortcutFailed =>
+      'Could not save the shortcut. It may be in use, cancelled, or unsupported by the desktop. Try another combination.';
+
+  @override
   String get connectDeviceTitle => 'Connect Device';
 
   @override

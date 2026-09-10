@@ -9,6 +9,72 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String get screenshotCapture => 'Capturar región';
+
+  @override
+  String get screenshotSelectionHint =>
+      'Arrastra para seleccionar · Esc para cancelar';
+
+  @override
+  String get screenshotAdjustHint =>
+      'Arrastra para mover · Ajusta los bordes · Enter para copiar · Esc para cancelar';
+
+  @override
+  String get screenshotConfirm => 'Copiar';
+
+  @override
+  String get screenshotCopied => 'Captura copiada. Pégala donde quieras.';
+
+  @override
+  String get screenshotPermissionDenied =>
+      'Permite a Whisper grabar la pantalla en Ajustes del Sistema → Privacidad y seguridad y reinicia Whisper.';
+
+  @override
+  String get screenshotUnavailable =>
+      'La captura de regiones no está disponible. En Linux, comprueba que el portal de capturas esté instalado y activo.';
+
+  @override
+  String get screenshotFailed =>
+      'No se pudo capturar o copiar al portapapeles. Inténtalo de nuevo.';
+
+  @override
+  String get screenshotShortcutTitle => 'Atajo de captura';
+
+  @override
+  String get screenshotShortcutDesc =>
+      'Selecciona una región sin ocultar Whisper y cópiala al portapapeles para pegarla manualmente.';
+
+  @override
+  String get screenshotShortcutEnabled => 'Activar atajo global';
+
+  @override
+  String get screenshotShortcutDisabled =>
+      'Desactivado · el botón de captura sigue disponible';
+
+  @override
+  String get screenshotShortcutUnavailable =>
+      'Atajo no registrado · pulsa para configurarlo';
+
+  @override
+  String get screenshotShortcutRecord =>
+      'Pulsa aquí y presiona una combinación de teclas';
+
+  @override
+  String get screenshotShortcutHint =>
+      'Usa Ctrl, Alt o Command/Super con una letra, número o F1–F12. Esc cancela la captura. En Wayland, confirma el atajo en el diálogo del sistema.';
+
+  @override
+  String get screenshotShortcutReset => 'Restaurar atajo predeterminado';
+
+  @override
+  String get screenshotShortcutInvalid =>
+      'Usa una combinación válida distinta del atajo de envío rápido.';
+
+  @override
+  String get screenshotShortcutFailed =>
+      'No se pudo guardar el atajo. Puede estar ocupado, cancelado o no ser compatible. Prueba otra combinación.';
+
+  @override
   String get connectDeviceTitle => 'Conectar dispositivo';
 
   @override

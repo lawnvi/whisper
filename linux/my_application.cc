@@ -10,6 +10,7 @@
 #include "desktop_quick_send_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
+#include "screenshot_plugin.h"
 
 namespace {
 
@@ -95,6 +96,7 @@ static void my_application_activate(GApplication* application) {
   audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
   remote_input_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));
+  screenshot_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));

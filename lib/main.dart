@@ -7,6 +7,7 @@ import 'package:whisper/audio/audio_platform.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sodium/sodium.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
+import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/image_memory_budget.dart';
@@ -160,11 +161,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadThemeMode();
     _loadLocale();
+    if (isDesktop()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final screenshot = DesktopScreenshotController.shared;
+        screenshot.onNotice = (notice) {
+          final context = appNavigatorKey.currentContext;
+          if (context == null) return;
+          final l10n = AppLocalizations.of(context)!;
+          showAppToast(switch (notice) {
+            ScreenshotNotice.copied => l10n.screenshotCopied,
+            ScreenshotNotice.permissionDenied =>
+              l10n.screenshotPermissionDenied,
+            ScreenshotNotice.unavailable => l10n.screenshotUnavailable,
+            ScreenshotNotice.failed => l10n.screenshotFailed,
+          });
+        };
+      });
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (isDesktop()) unawaited(DesktopScreenshotController.shared.shutdown());
     super.dispose();
   }
 
@@ -243,6 +263,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         locale: _locale,
+        builder: (context, child) {
+          if (isDesktop()) {
+            final l10n = AppLocalizations.of(context)!;
+            // Keep native capture chrome in sync when locale or theme changes.
+            unawaited(
+              DesktopScreenshotController.shared.initialize(
+                l10n.screenshotCapture,
+                captureLabels: {
+                  'hint': l10n.screenshotSelectionHint,
+                  'adjustHint': l10n.screenshotAdjustHint,
+                  'confirm': l10n.screenshotConfirm,
+                  'cancel': l10n.cancel,
+                  'appearance': Theme.of(context).brightness.name,
+                },
+              ),
+            );
+          }
+          return child ?? const SizedBox.shrink();
+        },
         home: const DeviceListScreen(),
       ),
     );

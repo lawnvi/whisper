@@ -100,6 +100,114 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @screenshotCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'区域截图'**
+  String get screenshotCapture;
+
+  /// No description provided for @screenshotSelectionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖动框选区域 · Esc 取消'**
+  String get screenshotSelectionHint;
+
+  /// No description provided for @screenshotAdjustHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖动移动 · 拖边调整 · Enter 复制 · Esc 取消'**
+  String get screenshotAdjustHint;
+
+  /// No description provided for @screenshotConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get screenshotConfirm;
+
+  /// No description provided for @screenshotCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'截图已复制，可自行粘贴使用'**
+  String get screenshotCopied;
+
+  /// No description provided for @screenshotPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在系统设置 → 隐私与安全性中允许 Whisper 录制屏幕，然后重启 Whisper'**
+  String get screenshotPermissionDenied;
+
+  /// No description provided for @screenshotUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前环境无法进行区域截图；Linux 请检查桌面的截图 Portal 服务是否已安装并运行'**
+  String get screenshotUnavailable;
+
+  /// No description provided for @screenshotFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'截图或复制到剪贴板失败，请重试'**
+  String get screenshotFailed;
+
+  /// No description provided for @screenshotShortcutTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'截图快捷键'**
+  String get screenshotShortcutTitle;
+
+  /// No description provided for @screenshotShortcutDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'框选屏幕区域后复制到剪贴板，由你自行粘贴；截图时保持 Whisper 窗口原样'**
+  String get screenshotShortcutDesc;
+
+  /// No description provided for @screenshotShortcutEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用全局快捷键'**
+  String get screenshotShortcutEnabled;
+
+  /// No description provided for @screenshotShortcutDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭 · 仍可使用截图按钮'**
+  String get screenshotShortcutDisabled;
+
+  /// No description provided for @screenshotShortcutUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷键未注册 · 点击配置'**
+  String get screenshotShortcutUnavailable;
+
+  /// No description provided for @screenshotShortcutRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击这里，然后按下组合键'**
+  String get screenshotShortcutRecord;
+
+  /// No description provided for @screenshotShortcutHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用 Ctrl、Alt 或 Command/Super 搭配字母、数字或 F1–F12；截图时按 Esc 取消，Wayland 下需在系统对话框确认快捷键'**
+  String get screenshotShortcutHint;
+
+  /// No description provided for @screenshotShortcutReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认快捷键'**
+  String get screenshotShortcutReset;
+
+  /// No description provided for @screenshotShortcutInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请使用有效组合键，并避开快捷发送的快捷键'**
+  String get screenshotShortcutInvalid;
+
+  /// No description provided for @screenshotShortcutFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷键保存失败，可能已被占用、被取消或桌面环境不支持，请尝试其他组合'**
+  String get screenshotShortcutFailed;
+
   /// No description provided for @connectDeviceTitle.
   ///
   /// In zh, this message translates to:

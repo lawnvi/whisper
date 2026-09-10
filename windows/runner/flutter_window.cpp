@@ -7,6 +7,7 @@
 #include "desktop_quick_send_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "remote_input_plugin.h"
+#include "screenshot_plugin.h"
 #include "single_instance.h"
 #include "window_theme_plugin.h"
 
@@ -51,6 +52,9 @@ bool FlutterWindow::OnCreate() {
   DesktopQuickSendPluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin(
           "DesktopQuickSendPlugin"));
+  ScreenshotPluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin("ScreenshotPlugin"),
+      GetHandle());
   WindowThemePluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("WindowThemePlugin"),
       GetHandle());

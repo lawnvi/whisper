@@ -9,6 +9,64 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get screenshotCapture => '区域截图';
+
+  @override
+  String get screenshotSelectionHint => '拖动框选区域 · Esc 取消';
+
+  @override
+  String get screenshotAdjustHint => '拖动移动 · 拖边调整 · Enter 复制 · Esc 取消';
+
+  @override
+  String get screenshotConfirm => '复制';
+
+  @override
+  String get screenshotCopied => '截图已复制，可自行粘贴使用';
+
+  @override
+  String get screenshotPermissionDenied =>
+      '请在系统设置 → 隐私与安全性中允许 Whisper 录制屏幕，然后重启 Whisper';
+
+  @override
+  String get screenshotUnavailable =>
+      '当前环境无法进行区域截图；Linux 请检查桌面的截图 Portal 服务是否已安装并运行';
+
+  @override
+  String get screenshotFailed => '截图或复制到剪贴板失败，请重试';
+
+  @override
+  String get screenshotShortcutTitle => '截图快捷键';
+
+  @override
+  String get screenshotShortcutDesc =>
+      '框选屏幕区域后复制到剪贴板，由你自行粘贴；截图时保持 Whisper 窗口原样';
+
+  @override
+  String get screenshotShortcutEnabled => '启用全局快捷键';
+
+  @override
+  String get screenshotShortcutDisabled => '已关闭 · 仍可使用截图按钮';
+
+  @override
+  String get screenshotShortcutUnavailable => '快捷键未注册 · 点击配置';
+
+  @override
+  String get screenshotShortcutRecord => '点击这里，然后按下组合键';
+
+  @override
+  String get screenshotShortcutHint =>
+      '使用 Ctrl、Alt 或 Command/Super 搭配字母、数字或 F1–F12；截图时按 Esc 取消，Wayland 下需在系统对话框确认快捷键';
+
+  @override
+  String get screenshotShortcutReset => '恢复默认快捷键';
+
+  @override
+  String get screenshotShortcutInvalid => '请使用有效组合键，并避开快捷发送的快捷键';
+
+  @override
+  String get screenshotShortcutFailed => '快捷键保存失败，可能已被占用、被取消或桌面环境不支持，请尝试其他组合';
+
+  @override
   String get connectDeviceTitle => '连接设备';
 
   @override

@@ -10,6 +10,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/screenshot_controls.dart';
 
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey = ValueKey(
@@ -193,6 +194,7 @@ class ChatComposer extends StatelessWidget {
                   buttonSize: 26,
                   iconSize: 15,
                 ),
+              if (isDesktop()) const ScreenshotButton(),
               const Spacer(),
               _buildPrimaryActionButton(
                 context,
