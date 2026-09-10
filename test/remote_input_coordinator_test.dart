@@ -11,6 +11,7 @@ import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/bounded_receive_queue.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -669,10 +670,11 @@ void main() {
       expect(calls.where((call) => call.method == 'injectEvent'), hasLength(2));
     });
 
-    test('sink coalesces queued mouse move packets before injection', () async {
+    test('sink coalesces mouse packets behind the serialized receive queue', () async {
       final sentControls = <RemoteInputControlMessage>[];
       final manager = RemoteInputManager();
       final firstInjectCompleter = Completer<void>();
+      final receiveQueue = BoundedReceiveQueue();
       var blockNextInject = true;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -688,6 +690,11 @@ void main() {
         platform: platform,
         transportFactory: (_) async => _FakeRemoteInputTransport(),
       );
+      addTearDown(() async {
+        if (!firstInjectCompleter.isCompleted) firstInjectCompleter.complete();
+        await receiveQueue.closeAndDrain();
+        await coordinator.stopLocal();
+      });
       const offer = RemoteInputControlMessage(
         action: RemoteInputControlAction.offer,
         sessionId: 'input-coalesce-1',
@@ -707,7 +714,12 @@ void main() {
         sendControl: sentControls.add,
       );
 
-      manager.handlePacketBytes(_mouseMoveFrameBytes(
+      Future<bool> receive(Uint8List bytes) => receiveQueue.add(
+            bytes.length,
+            () async => await manager.handlePacketBytes(bytes),
+          );
+      final deliveries = <Future<bool>>[];
+      deliveries.add(receive(_mouseMoveFrameBytes(
         sessionId: 'input-coalesce-1',
         sequence: 1,
         payload: <String, dynamic>{
@@ -716,11 +728,11 @@ void main() {
           'deltaY': 2,
           'edge': 'right',
         },
-      ));
+      )));
       await Future<void>.delayed(Duration.zero);
 
       for (var sequence = 2; sequence <= 6; sequence++) {
-        manager.handlePacketBytes(_mouseMoveFrameBytes(
+        deliveries.add(receive(_mouseMoveFrameBytes(
           sessionId: 'input-coalesce-1',
           sequence: sequence,
           payload: <String, dynamic>{
@@ -729,9 +741,12 @@ void main() {
             'deltaY': 2,
             'edge': 'right',
           },
-        ));
+        )));
       }
       await Future<void>.delayed(Duration.zero);
+      expect(receiveQueue.pendingItems, 0);
+      expect(coordinator.debugPendingInjectionItems, 2);
+      expect(await Future.wait(deliveries), everyElement(isTrue));
       firstInjectCompleter.complete();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
@@ -1123,6 +1138,8 @@ void main() {
 
     test('sink preserves every queued key button and release in order',
         () async {
+      const packetCount = 200;
+      final allInjected = Completer<void>();
       final sentControls = <RemoteInputControlMessage>[];
       final manager = RemoteInputManager();
       final coordinator = RemoteInputCoordinator(
@@ -1146,6 +1163,10 @@ void main() {
           firstInjectStarted.complete();
           await releaseFirstInject.future;
         }
+        if (call.method == 'injectEvent' &&
+            call.arguments['sequence'] == packetCount) {
+          allInjected.complete();
+        }
         return null;
       });
       const offer = RemoteInputControlMessage(
@@ -1166,7 +1187,6 @@ void main() {
         sendControl: sentControls.add,
       );
 
-      const packetCount = 200;
       final expectedTypes = <RemoteInputEventType>[];
       final deliveries = <Future<void>>[];
       for (var sequence = 1; sequence <= packetCount; sequence++) {
@@ -1205,6 +1225,7 @@ void main() {
 
       releaseFirstInject.complete();
       await Future.wait(deliveries).timeout(const Duration(seconds: 2));
+      await allInjected.future.timeout(const Duration(seconds: 2));
 
       final injected =
           calls.where((call) => call.method == 'injectEvent').toList();
@@ -1498,6 +1519,7 @@ void main() {
         nativeInjectionTimeout: const Duration(milliseconds: 20),
       );
       final blockedInjection = Completer<void>();
+      final injectionStopped = Completer<void>();
       var stopInjectionCount = 0;
       addTearDown(() async {
         if (!blockedInjection.isCompleted) {
@@ -1513,6 +1535,7 @@ void main() {
         }
         if (call.method == 'stopInjection') {
           stopInjectionCount++;
+          if (!injectionStopped.isCompleted) injectionStopped.complete();
         }
         return null;
       });
@@ -1542,7 +1565,7 @@ void main() {
           payload: const <String, dynamic>{},
         ),
       ).timeout(const Duration(milliseconds: 200));
-      await Future<void>.delayed(Duration.zero);
+      await injectionStopped.future.timeout(const Duration(milliseconds: 200));
 
       expect(
         manager.session(offer.sessionId)?.state,

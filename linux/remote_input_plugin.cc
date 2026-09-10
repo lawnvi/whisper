@@ -1858,6 +1858,7 @@ class RemoteInputPlugin {
         return;
       }
       injection_routes_ = InjectionRoutesValue(args, "mappings");
+      RefreshInjectionDisplaysLocked();
       RespondSuccess(method_call);
       return;
     }
@@ -1907,6 +1908,11 @@ class RemoteInputPlugin {
       return true;
     }
     if (portal_attempted) {
+      return false;
+    }
+    if (g_getenv("WAYLAND_DISPLAY") != nullptr ||
+        g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
+      *error = "Wayland remote input requires libei and desktop portal support";
       return false;
     }
     return StartX11Capture(session_id, edge, display_id, segment,
@@ -2916,6 +2922,11 @@ class RemoteInputPlugin {
     if (portal_attempted) {
       return false;
     }
+    if (g_getenv("WAYLAND_DISPLAY") != nullptr ||
+        g_strcmp0(g_getenv("XDG_SESSION_TYPE"), "wayland") == 0) {
+      *error = "Wayland remote input requires libei and desktop portal support";
+      return false;
+    }
     return StartX11Injection(session_id, display_id, edge, segment,
                              std::move(routes), error);
 #else
@@ -2944,6 +2955,7 @@ class RemoteInputPlugin {
     std::lock_guard<std::mutex> lock(injection_mutex_);
     injection_backend_ = InjectionBackend::kX11;
     injection_display_ = display;
+    RefreshInjectionDisplaysLocked();
     injection_session_id_ = session_id;
     injection_display_id_ = display_id;
     injection_edge_ = edge;
@@ -3051,6 +3063,7 @@ class RemoteInputPlugin {
     portal_session_handle_ = session.session_handle;
     portal_ei_ = portal_ei;
     portal_x_display_ = x_display;
+    RefreshInjectionDisplaysLocked();
     portal_running_.store(true);
     ResetPortalDeviceStateLocked();
     if (!WaitForPortalDevicesLocked(error)) {
@@ -3589,8 +3602,7 @@ class RemoteInputPlugin {
     if (edge_unit >= 0 && HasSegment(injection_segment_) &&
         !injection_edge_.empty()) {
       const ScreenBounds bounds =
-          BoundsForDisplay(InjectionBoundsDisplayLocked(),
-                           injection_display_id_);
+          InjectionBoundsForDisplayLocked(injection_display_id_);
       const int coordinate = SegmentCoordinate(edge_unit, injection_segment_);
       x = bounds.left + kCaptureCursorInset;
       y = ClampInt(coordinate, bounds.top + kCaptureCursorInset,
@@ -3607,7 +3619,7 @@ class RemoteInputPlugin {
         y = bounds.bottom() - kCaptureCursorInset;
       }
     } else {
-      const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
+      const ScreenBounds bounds = injection_bounds_;
       const int unit_width = bounds.width > 1 ? bounds.width - 1 : 1;
       const int unit_height = bounds.height > 1 ? bounds.height - 1 : 1;
       const double unit_x = ClampedUnit(JsonNumber(json, "unitX"));
@@ -4519,7 +4531,7 @@ class RemoteInputPlugin {
     if (edge_unit >= 0 && HasSegment(injection_segment_) &&
         !injection_edge_.empty()) {
       const ScreenBounds bounds =
-          BoundsForDisplay(injection_display_, injection_display_id_);
+          InjectionBoundsForDisplayLocked(injection_display_id_);
       const int coordinate = SegmentCoordinate(edge_unit, injection_segment_);
       int x = bounds.left + kCaptureCursorInset;
       int y = ClampInt(coordinate, bounds.top + kCaptureCursorInset,
@@ -4664,8 +4676,23 @@ class RemoteInputPlugin {
     return injection_display_;
   }
 
+  void RefreshInjectionDisplaysLocked() {
+    Display* display = InjectionBoundsDisplayLocked();
+    injection_bounds_ = BoundsFor(display);
+    injection_displays_ = DisplayInfos(display);
+  }
+
+  ScreenBounds InjectionBoundsForDisplayLocked(const std::string& id) const {
+    // XRRGetMonitors and XGetAtomName are synchronous round trips. Keep them
+    // out of mouse packets; refresh when the session or routes change.
+    for (const auto& display : injection_displays_) {
+      if (display.id == id) return display.bounds;
+    }
+    return injection_bounds_;
+  }
+
   void RememberInjectedCursorPositionLocked(int x, int y) {
-    const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
+    const ScreenBounds bounds = injection_bounds_;
     injected_cursor_x_ = ClampInt(x, bounds.left, bounds.right());
     injected_cursor_y_ = ClampInt(y, bounds.top, bounds.bottom());
     has_injected_cursor_position_ = true;
@@ -4758,7 +4785,7 @@ class RemoteInputPlugin {
       DoublePoint previous_point,
       DoublePoint current_point) const {
     const ScreenBounds bounds =
-        BoundsForDisplay(InjectionBoundsDisplayLocked(), route.sink_display_id);
+        InjectionBoundsForDisplayLocked(route.sink_display_id);
     const double delta_x = current_point.x - previous_point.x;
     const double delta_y = current_point.y - previous_point.y;
     if (delta_x == 0 && delta_y == 0) {
@@ -4842,8 +4869,7 @@ class RemoteInputPlugin {
     const int next_y = y + delta_y;
     if (HasSegment(injection_segment_) && !injection_edge_.empty()) {
       const ScreenBounds bounds =
-          BoundsForDisplay(InjectionBoundsDisplayLocked(),
-                           injection_display_id_);
+          InjectionBoundsForDisplayLocked(injection_display_id_);
       if (!PointInSegment(x, y, injection_edge_, injection_segment_,
                           kEdgeThreshold)) {
         return false;
@@ -4861,7 +4887,7 @@ class RemoteInputPlugin {
         return next_y >= bounds.bottom() - kEdgeThreshold && delta_y > 0;
       }
     }
-    const ScreenBounds bounds = BoundsFor(InjectionBoundsDisplayLocked());
+    const ScreenBounds bounds = injection_bounds_;
     const std::string edge = JsonString(json, "edge", "right");
     if (edge == "left") {
       return next_x >= bounds.right() - kEdgeThreshold && delta_x > 0;
@@ -4889,9 +4915,8 @@ class RemoteInputPlugin {
         HasSegment(injection_segment_) && !injection_edge_.empty();
     const ScreenBounds bounds =
         using_configured_edge
-            ? BoundsForDisplay(InjectionBoundsDisplayLocked(),
-                               injection_display_id_)
-            : BoundsFor(InjectionBoundsDisplayLocked());
+            ? InjectionBoundsForDisplayLocked(injection_display_id_)
+            : injection_bounds_;
     const std::string edge =
         using_configured_edge ? injection_edge_ : JsonString(json, "edge", "right");
     constexpr int distance = 32;
@@ -5222,6 +5247,8 @@ class RemoteInputPlugin {
   std::mutex injection_mutex_;
   InjectionBackend injection_backend_ = InjectionBackend::kNone;
   Display* injection_display_ = nullptr;
+  ScreenBounds injection_bounds_;
+  std::vector<DisplayInfo> injection_displays_;
   std::string injection_session_id_;
   std::string injection_display_id_;
   std::string injection_edge_;

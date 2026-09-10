@@ -96,7 +96,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
-    RemoteInputPluginHandleWindowMessage(hwnd, message, wparam, lparam);
+    // Remote input consumes its private keyboard/mouse messages on the native
+    // window thread. Do not send those high-frequency packets through Flutter
+    // a second time after the plugin has already handled them.
+    if (RemoteInputPluginHandleWindowMessage(hwnd, message, wparam, lparam)) {
+      return 0;
+    }
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);

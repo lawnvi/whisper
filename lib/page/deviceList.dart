@@ -1023,7 +1023,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final textPreview = normalizedText.length <= 500
         ? normalizedText
         : normalizedText.substring(0, 500);
-    return showModalBottomSheet<String>(
+    return showWhisperModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -2225,20 +2225,23 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final palette = context.whisperPalette;
     final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
     final legacyState = _remoteInputCoordinator.state;
+    // A stale offering/armed state can survive briefly while a peer is being
+    // disconnected. Do not leave the toolbar highlighted unless the session
+    // still has a live authenticated peer behind it.
     final legacyLive =
         legacyState.status != RemoteInputRuntimeStatus.idle &&
-        legacyState.status != RemoteInputRuntimeStatus.failed;
-    final isActive =
-        snapshot.isControllerLive || snapshot.isControlledLive || legacyLive;
-    final isBusy =
-        snapshot.status == RemoteInputWorkspaceStatus.offering ||
-        legacyState.status == RemoteInputRuntimeStatus.offering ||
-        legacyState.status == RemoteInputRuntimeStatus.connecting;
+        legacyState.status != RemoteInputRuntimeStatus.failed &&
+        legacyState.peerId.isNotEmpty &&
+        socketManager.isConnectedTo(legacyState.peerId);
+    final workspaceLive =
+        snapshot.isControllerLive &&
+        snapshot.targets.values.any((target) => target.isConnected);
+    final isActive = workspaceLive || snapshot.isControlledLive || legacyLive;
     return _buildDesktopToolButton(
       icon: Icons.keyboard_alt_outlined,
       tooltip:
           AppLocalizations.of(context)?.remoteInputWorkspaceTooltip ?? '键鼠工作区',
-      iconColor: isActive || isBusy ? Colors.lightBlue : palette.textMuted,
+      iconColor: isActive ? Colors.lightBlue : palette.textMuted,
       onPressed: _openRemoteInputWorkspace,
     );
   }

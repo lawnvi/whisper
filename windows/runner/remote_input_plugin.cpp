@@ -1,4 +1,5 @@
 #include "remote_input_plugin.h"
+#include "remote_input_cursor.h"
 
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -7,9 +8,14 @@
 #include <flutter/standard_method_codec.h>
 
 #include <algorithm>
+#include <atomic>
+#include <array>
+#include <future>
+#include <thread>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -22,6 +28,14 @@ namespace {
 
 constexpr char kRemoteInputChannel[] = "com.vireen.whisper/remote_input";
 constexpr int kEdgeThreshold = 6;
+constexpr UINT kKeyboardInputMessage = WM_APP + 0x575;
+constexpr UINT kMouseInputMessage = WM_APP + 0x576;
+constexpr UINT kRawMouseInputMessage = WM_APP + 0x577;
+
+struct LowLevelMousePacket {
+  WPARAM message;
+  MSLLHOOKSTRUCT data;
+};
 
 enum class RemoteInputDiagnosticEvent {
   kCaptureActive,
@@ -902,6 +916,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     if (!capture_active_ && capture_requires_interior_rearm_) {
       if (wparam == WM_MOUSEMOVE && CaptureCursorEnteredInterior(point)) {
         capture_requires_interior_rearm_ = false;
+        hook_can_activate_keyboard_.store(true);
       }
       return false;
     }
@@ -914,14 +929,15 @@ class RemoteInputPlugin : public flutter::Plugin {
     return capture_active_;
   }
 
-  bool HandleLowLevelKeyboard(WPARAM wparam, const KBDLLHOOKSTRUCT* keyboard) {
+  bool HandleLowLevelKeyboard(WPARAM wparam, const KBDLLHOOKSTRUCT* keyboard,
+                              bool release_hotkey) {
     if (capture_session_id_.empty() || keyboard == nullptr) {
       return false;
     }
     const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
     const bool up = wparam == WM_KEYUP || wparam == WM_SYSKEYUP;
     const auto virtual_key = static_cast<USHORT>(keyboard->vkCode);
-    if (down && IsReleaseHotkey(virtual_key)) {
+    if (down && release_hotkey) {
       EmitRelease("hotkey");
       StopCapture();
       return true;
@@ -953,8 +969,55 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   bool HandleWindowMessage(HWND,
                            UINT message,
-                           WPARAM,
+                           WPARAM wparam,
                            LPARAM lparam) {
+    if (message == kMouseInputMessage) {
+      std::unique_ptr<LowLevelMousePacket> packet(
+          reinterpret_cast<LowLevelMousePacket*>(lparam));
+      if (packet != nullptr && !capture_session_id_.empty()) {
+        HandleLowLevelMouse(packet->message, &packet->data);
+      }
+      return true;
+    }
+    if (message == kKeyboardInputMessage) {
+      if ((wparam >> 16) != keyboard_hook_generation_) return true;
+      KBDLLHOOKSTRUCT keyboard{};
+      keyboard.vkCode = static_cast<DWORD>(wparam & 0xffff);
+      HandleLowLevelKeyboard((lparam & 1) ? WM_KEYDOWN : WM_KEYUP,
+                             &keyboard, (lparam & 2) != 0);
+      return true;
+    }
+    if (message == kRawMouseInputMessage) {
+      // Raw mouse input can arrive much faster than Flutter can serialize
+      // packets. Drain a bounded batch so keyboard messages stay interleaved
+      // with movement instead of waiting behind an unbounded mouse backlog.
+      for (int i = 0; i < 16; ++i) {
+        std::optional<RAWMOUSE> mouse;
+        {
+          std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+          if (raw_mouse_queue_.empty()) {
+            break;
+          }
+          mouse = raw_mouse_queue_.front();
+          raw_mouse_queue_.pop_front();
+        }
+        HandleRawMouse(*mouse);
+      }
+      bool repost = false;
+      {
+        std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+        if (!raw_mouse_queue_.empty()) {
+          repost = true;
+        } else {
+          raw_mouse_message_posted_ = false;
+        }
+      }
+      if (repost && !PostMessage(window_, kRawMouseInputMessage, 0, 0)) {
+        std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+        raw_mouse_message_posted_ = false;
+      }
+      return true;
+    }
     if (message != WM_INPUT || capture_session_id_.empty()) {
       return false;
     }
@@ -972,14 +1035,19 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
     const auto* raw = reinterpret_cast<const RAWINPUT*>(buffer.data());
     if (raw->header.dwType == RIM_TYPEMOUSE) {
-      HandleRawMouse(raw->data.mouse);
+      QueueRawMouse(raw->data.mouse);
     } else if (raw->header.dwType == RIM_TYPEKEYBOARD) {
       HandleRawKeyboard(raw->data.keyboard);
     }
-    return false;
+    return true;
   }
 
  private:
+  struct HookCaptureGeometry {
+    std::vector<CaptureRoute> routes;
+    std::vector<ScreenArea> areas;
+  };
+
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
@@ -1170,6 +1238,10 @@ class RemoteInputPlugin : public flutter::Plugin {
     event_diagnostic_count_ = 0;
     inactive_event_diagnostic_count_ = 0;
     sequence_ = 0;
+    ++keyboard_hook_generation_;
+    hook_release_hotkey_ = release_hotkey_ == "ctrl+alt+esc";
+    RefreshHookCaptureGeometry();
+    hook_can_activate_keyboard_.store(true);
     const bool raw_input_registered = RegisterRawInput(true);
     std::string hook_error;
     const bool hooks_installed = InstallHooks(&hook_error);
@@ -1191,6 +1263,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   void StopCapture() {
+    hook_can_activate_keyboard_.store(false);
+    hook_suppress_keyboard_.store(false);
     if (!capture_session_id_.empty()) {
       RegisterRawInput(false);
     }
@@ -1228,6 +1302,8 @@ class RemoteInputPlugin : public flutter::Plugin {
         return;
       }
       EmitDiagnostic(RemoteInputDiagnosticEvent::kCapturePaused);
+      hook_can_activate_keyboard_.store(false);
+      hook_suppress_keyboard_.store(false);
       ReleaseCommonModifierKeys();
       if (!release_edge.empty()) {
         ApplyCaptureRoute(
@@ -1236,6 +1312,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       }
       capture_active_ = false;
       capture_requires_interior_rearm_ = true;
+      RefreshHookCaptureGeometry();
       pending_active_start_ = false;
       capture_activation_sequence_ = 0;
       capture_buttons_ = 0;
@@ -1248,6 +1325,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   void StopInjection() {
+    remote_cursor_.Reset();
     ReleaseInjectedButtons();
     ReleaseInjectedKeys();
     ReleaseCommonModifierKeys();
@@ -1273,15 +1351,37 @@ class RemoteInputPlugin : public flutter::Plugin {
         }
       }
     }
-    if (keyboard_hook_ == nullptr) {
-      keyboard_hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
-                                        GetModuleHandle(nullptr), 0);
-      if (keyboard_hook_ == nullptr) {
-        installed = false;
-        if (error_message != nullptr) {
-          *error_message +=
-              " keyboardHook=" + std::to_string(GetLastError());
+    if (!keyboard_hook_thread_.joinable()) {
+      std::promise<DWORD> ready;
+      auto status = ready.get_future();
+      keyboard_hook_thread_ = std::thread([this, ready = std::move(ready)]() mutable {
+        // Low-level hooks must return promptly. Flutter rendering and platform
+        // calls cannot run on this thread or Windows may silently remove it.
+        MSG message{};
+        PeekMessage(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+        keyboard_hook_thread_id_ = GetCurrentThreadId();
+        for (size_t key = 0; key < hook_pressed_keys_.size(); ++key) {
+          hook_pressed_keys_[key] = (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
         }
+        // The hook reports left/right modifiers. Do not retain the aggregate
+        // startup state after a side-specific key-up.
+        hook_pressed_keys_[VK_CONTROL] = false;
+        hook_pressed_keys_[VK_MENU] = false;
+        keyboard_hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                         GetModuleHandle(nullptr), 0);
+        const DWORD error = keyboard_hook_ ? ERROR_SUCCESS : GetLastError();
+        ready.set_value(error);
+        if (error != ERROR_SUCCESS) return;
+        while (GetMessage(&message, nullptr, 0, 0) > 0) {
+          TranslateMessage(&message);
+          DispatchMessage(&message);
+        }
+        UnhookWindowsHookEx(keyboard_hook_);
+      });
+      const DWORD error = status.get();
+      if (error != ERROR_SUCCESS) {
+        installed = false;
+        if (error_message) *error_message += " keyboardHook=" + std::to_string(error);
       }
     }
     return installed;
@@ -1292,20 +1392,53 @@ class RemoteInputPlugin : public flutter::Plugin {
       UnhookWindowsHookEx(mouse_hook_);
       mouse_hook_ = nullptr;
     }
-    if (keyboard_hook_ != nullptr) {
-      UnhookWindowsHookEx(keyboard_hook_);
-      keyboard_hook_ = nullptr;
+    if (keyboard_hook_thread_.joinable()) {
+      PostThreadMessage(keyboard_hook_thread_id_, WM_QUIT, 0, 0);
+      keyboard_hook_thread_.join();
     }
+    keyboard_hook_ = nullptr;
+    keyboard_hook_thread_id_ = 0;
+    MSG mouse_message{};
+    while (PeekMessage(&mouse_message, window_, kMouseInputMessage,
+                       kMouseInputMessage, PM_REMOVE)) {
+      delete reinterpret_cast<LowLevelMousePacket*>(mouse_message.lParam);
+    }
+    // Drop events already queued for a stopped capture, including a hotkey stop.
+    MSG message{};
+    while (PeekMessage(&message, window_, kKeyboardInputMessage,
+                       kKeyboardInputMessage, PM_REMOVE)) {}
+    while (PeekMessage(&message, window_, kRawMouseInputMessage,
+                       kRawMouseInputMessage, PM_REMOVE)) {}
+    ClearRawMouseQueue();
+  }
+
+  void ClearRawMouseQueue() {
+    std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+    raw_mouse_queue_.clear();
+    raw_mouse_message_posted_ = false;
   }
 
   static LRESULT CALLBACK LowLevelMouseProc(int code,
                                             WPARAM wparam,
                                             LPARAM lparam) {
-    if (code == HC_ACTION && g_plugin != nullptr &&
-        g_plugin->HandleLowLevelMouse(
-            wparam,
-            reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam))) {
-      return 1;
+    if (code == HC_ACTION && g_plugin != nullptr && lparam != 0) {
+      // Once capture is active, raw input carries movement and the hook only
+      // needs to suppress the local cursor. While armed, probe the edge; when
+      // paused, keep probing until the cursor has re-entered the interior.
+      if (g_plugin->hook_suppress_keyboard_.load()) {
+        return 1;
+      }
+      if (!g_plugin->capture_requires_interior_rearm_ &&
+          !g_plugin->IsHookCursorAtCaptureEdge()) {
+        return CallNextHookEx(nullptr, code, wparam, lparam);
+      }
+      auto* packet = new LowLevelMousePacket{
+          wparam, *reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam)};
+      if (PostMessage(g_plugin->window_, kMouseInputMessage, 0,
+                      reinterpret_cast<LPARAM>(packet))) {
+        return CallNextHookEx(nullptr, code, wparam, lparam);
+      }
+      delete packet;
     }
     return CallNextHookEx(nullptr, code, wparam, lparam);
   }
@@ -1313,25 +1446,78 @@ class RemoteInputPlugin : public flutter::Plugin {
   static LRESULT CALLBACK LowLevelKeyboardProc(int code,
                                                WPARAM wparam,
                                                LPARAM lparam) {
-    if (code == HC_ACTION && g_plugin != nullptr &&
-        g_plugin->HandleLowLevelKeyboard(wparam,
-            reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam))) {
-      return 1;
+    if (code == HC_ACTION && g_plugin != nullptr) {
+      const auto* keyboard = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam);
+      const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
+      const bool up = wparam == WM_KEYUP || wparam == WM_SYSKEYUP;
+      if (down || up) {
+        if (keyboard->vkCode < g_plugin->hook_pressed_keys_.size()) {
+          g_plugin->hook_pressed_keys_[keyboard->vkCode] = down;
+        }
+        const auto& pressed = g_plugin->hook_pressed_keys_;
+        const bool release = down && g_plugin->hook_release_hotkey_ &&
+            keyboard->vkCode == VK_ESCAPE &&
+            (pressed[VK_CONTROL] || pressed[VK_LCONTROL] || pressed[VK_RCONTROL]) &&
+            (pressed[VK_MENU] || pressed[VK_LMENU] || pressed[VK_RMENU]);
+        const bool suppress = g_plugin->hook_suppress_keyboard_.load() || release ||
+            g_plugin->IsHookCursorAtCaptureEdge();
+        const WPARAM key = keyboard->vkCode |
+            (g_plugin->keyboard_hook_generation_ << 16);
+        if (suppress && PostMessage(g_plugin->window_, kKeyboardInputMessage, key,
+                                   (down ? 1 : 0) | (release ? 2 : 0))) {
+          return 1;
+        }
+      }
     }
     return CallNextHookEx(nullptr, code, wparam, lparam);
   }
 
   bool RegisterRawInput(bool enabled) {
-    RAWINPUTDEVICE devices[2] = {};
-    devices[0].usUsagePage = 0x01;
-    devices[0].usUsage = 0x02;
-    devices[0].dwFlags = enabled ? RIDEV_INPUTSINK : RIDEV_REMOVE;
-    devices[0].hwndTarget = enabled ? window_ : nullptr;
-    devices[1].usUsagePage = 0x01;
-    devices[1].usUsage = 0x06;
-    devices[1].dwFlags = enabled ? RIDEV_INPUTSINK : RIDEV_REMOVE;
-    devices[1].hwndTarget = enabled ? window_ : nullptr;
-    return RegisterRawInputDevices(devices, 2, sizeof(RAWINPUTDEVICE)) == TRUE;
+    // Keyboard events come exclusively from the low-level keyboard hook. Do
+    // not register a second raw keyboard stream that only adds WM_INPUT work
+    // to the Flutter window queue.
+    RAWINPUTDEVICE device = {};
+    device.usUsagePage = 0x01;
+    device.usUsage = 0x02;
+    device.dwFlags = enabled ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = enabled ? window_ : nullptr;
+    return RegisterRawInputDevices(&device, 1, sizeof(RAWINPUTDEVICE)) == TRUE;
+  }
+
+  void QueueRawMouse(const RAWMOUSE& mouse) {
+    bool should_post = false;
+    {
+      std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+      const bool movement_only = mouse.usButtonFlags == 0 &&
+          (mouse.lLastX != 0 || mouse.lLastY != 0);
+      if (movement_only && !raw_mouse_queue_.empty() &&
+          raw_mouse_queue_.back().usButtonFlags == 0) {
+        // Preserve total motion while collapsing a high-frequency stream.
+        auto& pending = raw_mouse_queue_.back();
+        pending.lLastX += mouse.lLastX;
+        pending.lLastY += mouse.lLastY;
+      } else {
+        constexpr size_t kMaxQueuedRawMousePackets = 256;
+        if (raw_mouse_queue_.size() >= kMaxQueuedRawMousePackets &&
+            movement_only) {
+          auto& pending = raw_mouse_queue_.back();
+          if (pending.usButtonFlags == 0) {
+            pending.lLastX += mouse.lLastX;
+            pending.lLastY += mouse.lLastY;
+          }
+        } else {
+          raw_mouse_queue_.push_back(mouse);
+        }
+      }
+      if (!raw_mouse_message_posted_) {
+        raw_mouse_message_posted_ = true;
+        should_post = true;
+      }
+    }
+    if (should_post && !PostMessage(window_, kRawMouseInputMessage, 0, 0)) {
+      std::lock_guard<std::mutex> lock(raw_mouse_mutex_);
+      raw_mouse_message_posted_ = false;
+    }
   }
 
   void HandleRawMouse(const RAWMOUSE& mouse) {
@@ -1649,6 +1835,14 @@ class RemoteInputPlugin : public flutter::Plugin {
       POINT point,
       const std::vector<CaptureRoute>& routes) const {
     const ScreenArea area = CaptureAreaForDisplay(route.source_display_id);
+    return IsCursorAtRouteEdge(route, point, routes, area);
+  }
+
+  bool IsCursorAtRouteEdge(
+      const CaptureRoute& route,
+      POINT point,
+      const std::vector<CaptureRoute>& routes,
+      const ScreenArea& area) const {
     const int left = area.left;
     const int top = area.top;
     const int right = area.right;
@@ -1776,6 +1970,31 @@ class RemoteInputPlugin : public flutter::Plugin {
     return true;
   }
 
+  void RefreshHookCaptureGeometry() {
+    auto geometry = std::make_shared<HookCaptureGeometry>();
+    geometry->routes = CaptureRoutesForMatching();
+    for (const auto& route : geometry->routes) {
+      geometry->areas.push_back(CaptureAreaForDisplay(route.source_display_id));
+    }
+    std::atomic_store(&hook_capture_geometry_,
+                      std::shared_ptr<const HookCaptureGeometry>(geometry));
+  }
+
+  bool IsHookCursorAtCaptureEdge() const {
+    if (!hook_can_activate_keyboard_.load()) return false;
+    POINT point{};
+    if (!GetCursorPos(&point)) return false;
+    // Preserve first-key activation without querying monitors or mutable
+    // capture routes from the low-level hook thread.
+    const auto geometry = std::atomic_load(&hook_capture_geometry_);
+    if (!geometry) return false;
+    for (size_t i = 0; i < geometry->routes.size(); ++i) {
+      if (IsCursorAtRouteEdge(geometry->routes[i], point, geometry->routes,
+                             geometry->areas[i])) return true;
+    }
+    return false;
+  }
+
   bool CaptureCursorEnteredInterior(POINT point) const {
     const ScreenArea area = CaptureArea();
     constexpr int distance = 32;
@@ -1812,20 +2031,13 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
     capture_active_ = true;
+    hook_suppress_keyboard_.store(true);
     pending_active_start_ = true;
     capture_activation_sequence_ = sequence_ + 1;
     capture_buttons_ = CurrentMouseButtonsMask();
     event_diagnostic_count_ = 0;
     (void)source;
     EmitDiagnostic(RemoteInputDiagnosticEvent::kCaptureActive);
-  }
-
-  bool IsReleaseHotkey(USHORT virtual_key) const {
-    if (release_hotkey_ != "ctrl+alt+esc" || virtual_key != VK_ESCAPE) {
-      return false;
-    }
-    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
-           (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
   }
 
   ScreenArea CaptureArea() const {
@@ -2103,7 +2315,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     return point;
   }
 
-  void MoveCursorToPoint(POINT point) const {
+  void MoveCursorToPoint(POINT point) {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
     const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -2122,7 +2334,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         static_cast<double>(unit_height)));
     input.mi.dwFlags =
         MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
-    SendInput(1, &input, sizeof(INPUT));
+    if (SendInput(1, &input, sizeof(INPUT)) == 1) remote_cursor_.Update(point);
   }
 
   int ConsumeInjectedScrollDelta(double delta, double* remainder) {
@@ -2375,6 +2587,7 @@ class RemoteInputPlugin : public flutter::Plugin {
               : std::nullopt;
       if (routed_edge_unit.has_value()) {
         const std::string release_session_id = injection_session_id_;
+        remote_cursor_.Reset();
         ReleaseInjectedButtons();
         ReleaseInjectedKeys();
         ReleaseCommonModifierKeys();
@@ -2393,6 +2606,7 @@ class RemoteInputPlugin : public flutter::Plugin {
       if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
         const double edge_unit = InjectionEdgeUnit(current);
+        remote_cursor_.Reset();
         ReleaseInjectedButtons();
         ReleaseInjectedKeys();
         ReleaseCommonModifierKeys();
@@ -2681,8 +2895,20 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::optional<double> capture_activation_edge_unit_;
   uint64_t sequence_ = 0;
   uint64_t capture_activation_sequence_ = 0;
+  RemoteInputCursor remote_cursor_;
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;
+  std::thread keyboard_hook_thread_;
+  DWORD keyboard_hook_thread_id_ = 0;
+  WPARAM keyboard_hook_generation_ = 0;
+  std::atomic<bool> hook_suppress_keyboard_{false};
+  std::atomic<bool> hook_can_activate_keyboard_{false};
+  std::shared_ptr<const HookCaptureGeometry> hook_capture_geometry_;
+  bool hook_release_hotkey_ = true;
+  std::array<bool, 256> hook_pressed_keys_{};
+  std::mutex raw_mouse_mutex_;
+  std::deque<RAWMOUSE> raw_mouse_queue_;
+  bool raw_mouse_message_posted_ = false;
 };
 
 }  // namespace

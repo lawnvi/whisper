@@ -12,6 +12,18 @@ void main() {
       ).readAsStringSync();
     });
 
+    test('supplies and tears down a cursor on a desktop without a mouse', () {
+      final cursor = File(
+        'windows/runner/remote_input_cursor.h',
+      ).readAsStringSync();
+      expect(cursor, contains('GetSystemMetrics(SM_MOUSEPRESENT)'));
+      expect(cursor, contains('CURSOR_SHOWING'));
+      expect(cursor, contains('WS_EX_TRANSPARENT | WS_EX_NOACTIVATE'));
+      expect(cursor, contains('SWP_NOACTIVATE | SWP_SHOWWINDOW'));
+      expect(source, contains('remote_cursor_.Update(point)'));
+      expect(source, contains('remote_cursor_.Reset()'));
+    });
+
     test('injects keyboard events with scan codes', () {
       expect(source, contains('MapVirtualKeyW'));
       expect(source, contains('KEYEVENTF_SCANCODE'));
@@ -62,7 +74,9 @@ void main() {
     });
 
     test('captures all keyboard events in the low-level hook', () {
-      expect(source, contains('HandleLowLevelKeyboard(wparam,'));
+      expect(source, contains('kKeyboardInputMessage'));
+      expect(source, contains('keyboard_hook_thread_ = std::thread'));
+      expect(source, contains('hook_suppress_keyboard_.store(true)'));
       expect(source, isNot(contains('LLKHF_INJECTED')));
 
       final lowLevelKeyboard = RegExp(
@@ -115,13 +129,70 @@ void main() {
       );
     });
 
-    test(
-      'activates keyboard capture when the first key arrives at the edge',
-      () {
-        expect(source, contains('IsCursorAtCaptureEdge('));
-        expect(source, contains('ActivateCapture("keyboard")'));
-      },
-    );
+    test('activates keyboard capture when the first key arrives at the edge', () {
+      expect(source, contains('IsCursorAtCaptureEdge('));
+      expect(source, contains('ActivateCapture("keyboard")'));
+      final callback = RegExp(
+        r'static LRESULT CALLBACK LowLevelKeyboardProc\([\s\S]*?\n  bool RegisterRawInput',
+      ).firstMatch(source)!.group(0)!;
+      expect(callback, contains('g_plugin->IsHookCursorAtCaptureEdge()'));
+      expect(
+        callback.indexOf('g_plugin->IsHookCursorAtCaptureEdge()'),
+        lessThan(callback.indexOf('if (suppress && PostMessage(')),
+      );
+      final hookEdge = RegExp(
+        r'bool IsHookCursorAtCaptureEdge\(\) const[\s\S]*?\n  bool CaptureCursorEnteredInterior',
+      ).firstMatch(source)!.group(0)!;
+      expect(hookEdge, contains('hook_can_activate_keyboard_.load()'));
+      expect(hookEdge, contains('std::atomic_load(&hook_capture_geometry_)'));
+      expect(hookEdge, isNot(contains('CaptureAreaForDisplay(')));
+      final pause = RegExp(
+        r'void PauseCapture\([\s\S]*?\n  void StopInjection',
+      ).firstMatch(source)!.group(0)!;
+      expect(pause, contains('hook_can_activate_keyboard_.store(false)'));
+    });
+
+    test('keeps the hook responsive while the Flutter thread is busy', () {
+      final callback = RegExp(
+        r'static LRESULT CALLBACK LowLevelKeyboardProc\([\s\S]*?\n  bool RegisterRawInput',
+      ).firstMatch(source)!.group(0)!;
+      expect(callback, contains('PostMessage('));
+      expect(callback, isNot(contains('HandleLowLevelKeyboard(')));
+      expect(callback, isNot(contains('EmitInputEvent(')));
+      expect(callback, isNot(contains('InvokeMethod(')));
+      expect(callback, contains('hook_pressed_keys_'));
+      expect(source, contains('keyboard_hook_thread_.join()'));
+      expect(source, contains('(wparam >> 16) != keyboard_hook_generation_'));
+    });
+
+    test('keeps the low-level mouse hook responsive while routing events', () {
+      final callback = RegExp(
+        r'static LRESULT CALLBACK LowLevelMouseProc\([\s\S]*?\n  static LRESULT CALLBACK LowLevelKeyboardProc',
+      ).firstMatch(source)!.group(0)!;
+      expect(callback, contains('PostMessage('));
+      expect(callback, contains('LowLevelMousePacket'));
+      expect(callback, isNot(contains('HandleLowLevelMouse(')));
+      expect(source, contains('delete reinterpret_cast<LowLevelMousePacket*>'));
+    });
+
+    test('coalesces raw mouse input so it cannot starve keyboard messages', () {
+      expect(source, contains('kRawMouseInputMessage'));
+      expect(source, contains('raw_mouse_queue_'));
+      expect(source, contains('raw_mouse_message_posted_'));
+      expect(source, contains('QueueRawMouse(raw->data.mouse)'));
+      expect(source, contains('kMaxQueuedRawMousePackets'));
+      expect(source, contains('RegisterRawInputDevices(&device, 1'));
+      final windowSource = File(
+        'windows/runner/flutter_window.cpp',
+      ).readAsStringSync();
+      expect(
+        windowSource,
+        contains(
+          'if (RemoteInputPluginHandleWindowMessage(hwnd, message, wparam, lparam))',
+        ),
+      );
+      expect(windowSource, contains('return 0;'));
+    });
 
     test('does not duplicate keyboard events from raw input', () {
       final rawKeyboard = RegExp(

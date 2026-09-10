@@ -12,6 +12,22 @@ void main() {
   });
 
   test(
+    'remote input toolbar does not highlight disconnected stale sessions',
+    () {
+      final source = File('lib/page/deviceList.dart').readAsStringSync();
+      final action = RegExp(
+        r'Widget _buildDesktopRemoteInputWorkspaceAction\(\) \{[\s\S]*?\n  \}',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        action,
+        contains('socketManager.isConnectedTo(legacyState.peerId)'),
+      );
+      expect(action, contains('target.isConnected'));
+      expect(action, contains('iconColor: isActive ? Colors.lightBlue'));
+    },
+  );
+
+  test(
     'embedded conversation no longer exposes the single peer remote input action',
     () {
       final source = File('lib/page/conversation.dart').readAsStringSync();

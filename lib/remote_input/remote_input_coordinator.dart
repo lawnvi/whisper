@@ -117,18 +117,10 @@ final class _PendingInjectionEntry {
   _PendingInjectionEntry({
     required this.frame,
     required this.byteLength,
-    required this.completion,
   });
 
   RemoteInputPacketFrame frame;
   int byteLength;
-  final Completer<void> completion;
-
-  void complete() {
-    if (!completion.isCompleted) {
-      completion.complete();
-    }
-  }
 }
 
 class RemoteInputCoordinator extends ChangeNotifier {
@@ -845,7 +837,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
               _enqueueInjection(message, frames, sendControl: sendControl),
         );
       }
-      return _enqueueInjection(message, intercepted, sendControl: sendControl);
+      _enqueueInjection(message, intercepted, sendControl: sendControl);
+      return Future<void>.value();
     };
     _setState(
       RemoteInputRuntimeState(
@@ -949,18 +942,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
   void _resetInjectionQueue() {
     _injectionQueueGeneration++;
     _injectionPumpGeneration = null;
-    _activeInjectionEntry?.complete();
     _activeInjectionEntry = null;
-    for (final entry in _pendingInjectionFrames) {
-      entry.complete();
-    }
     _pendingInjectionFrames.clear();
     _retainedInjectionItems = 0;
     _retainedInjectionBytes = 0;
     _injectionQueueSessionId = '';
   }
 
-  Future<void> _enqueueInjection(
+  // Admit packets to this bounded queue without waiting for native execution.
+  // Otherwise the serialized WebSocket receiver prevents moves from coalescing.
+  void _enqueueInjection(
     RemoteInputControlMessage message,
     List<RemoteInputPacketFrame> frames, {
     required RemoteInputControlSender sendControl,
@@ -969,25 +960,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _state.sessionId != message.sessionId ||
         _injectionQueueSessionId != message.sessionId ||
         _failedInjectionSessionId == message.sessionId) {
-      return Future<void>.value();
+      return;
     }
     final acceptedFrames = frames
         .where((frame) => frame.sessionId == message.sessionId)
         .toList(growable: false);
     if (acceptedFrames.isEmpty) {
-      return Future<void>.value();
+      return;
     }
-    final completions = <Completer<void>>[
-      for (var i = 0; i < acceptedFrames.length; i++) Completer<void>(),
-    ];
-    for (var i = 0; i < acceptedFrames.length; i++) {
-      if (_appendPendingInjectionFrame(acceptedFrames[i], completions[i])) {
+    for (final frame in acceptedFrames) {
+      if (_appendPendingInjectionFrame(frame)) {
         continue;
-      }
-      for (final completion in completions) {
-        if (!completion.isCompleted) {
-          completion.complete();
-        }
       }
       _failInjectionQueue(
         message,
@@ -999,13 +982,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     if (_failedInjectionSessionId != message.sessionId) {
       _startInjectionPump(message, sendControl: sendControl);
     }
-    return Future.wait(completions.map((completion) => completion.future));
   }
 
-  bool _appendPendingInjectionFrame(
-    RemoteInputPacketFrame frame,
-    Completer<void> completion,
-  ) {
+  bool _appendPendingInjectionFrame(RemoteInputPacketFrame frame) {
     if (_pendingInjectionFrames.isNotEmpty) {
       final previous = _pendingInjectionFrames.last;
       final coalesced = _coalesceQueuedInjectionFrame(previous.frame, frame);
@@ -1020,7 +999,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
           ..frame = coalesced
           ..byteLength = coalescedBytes;
         _retainedInjectionBytes = nextRetainedBytes;
-        completion.complete();
         return true;
       }
     }
@@ -1033,7 +1011,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
       _PendingInjectionEntry(
         frame: frame,
         byteLength: byteLength,
-        completion: completion,
       ),
     );
     _retainedInjectionItems++;
@@ -1090,7 +1067,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
           }
           return;
         } finally {
-          entry.complete();
           if (_isCurrentInjectionQueue(message.sessionId, generation) &&
               identical(_activeInjectionEntry, entry)) {
             _activeInjectionEntry = null;

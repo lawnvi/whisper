@@ -4,6 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Linux remote input native backend', () {
+    test('release builds require and bundle the Wayland client library', () {
+      final workflow = File('.github/workflows/release.yml').readAsStringSync();
+      final cmake = File('linux/CMakeLists.txt').readAsStringSync();
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      expect(workflow, contains('script/build_linux_libei.sh'));
+      expect(workflow, contains('WHISPER_REQUIRE_WAYLAND_INPUT=ON'));
+      expect(cmake, contains('message(FATAL_ERROR'));
+      expect(cmake, contains('RENAME "libei.so.1"'));
+      expect(plugin, contains('Wayland remote input requires libei'));
+    });
+
+    test('caches injection topology outside the mouse event path', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      final releaseRouting = RegExp(
+        r'Maybe<InjectionReleaseCrossing> InjectionReleaseCrossingForRoute\([\s\S]*?\n  bool SegmentContains',
+      ).firstMatch(plugin)!.group(0)!;
+      expect(releaseRouting, contains('InjectionBoundsForDisplayLocked'));
+      expect(
+        releaseRouting,
+        isNot(contains('BoundsForDisplay(InjectionBoundsDisplayLocked')),
+      );
+      expect(plugin, contains('RefreshInjectionDisplaysLocked();'));
+    });
+
     test('registers an X11 remote input plugin with capture and injection', () {
       final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
       final header = File('linux/remote_input_plugin.h').readAsStringSync();
