@@ -9,6 +9,7 @@ import 'package:sodium/sodium.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
 import 'package:whisper/helper/file.dart';
+import 'package:whisper/helper/image_memory_budget.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
@@ -34,6 +35,7 @@ enum AppDiagnosticKind { desktopWindowTheme }
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await applyImageMemoryBudget();
   final sodium = await SodiumInit.init();
   WhisperAead.installNativeAcceleration(sodium);
   StreamingChecksum.installNativeSha256Acceleration();
@@ -150,6 +152,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Locale? _locale;
   ThemeMode _themeMode = ThemeMode.light;
+  bool _imagesInBackground = false;
 
   @override
   void initState() {
@@ -170,6 +173,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (_themeMode == ThemeMode.system) {
       unawaited(_applyDesktopWindowTheme(_themeMode));
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final background =
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached;
+    if (_imagesInBackground == background) {
+      return;
+    }
+    _imagesInBackground = background;
+    unawaited(applyImageMemoryBudget(background: background));
   }
 
   Future<void> _loadThemeMode() async {

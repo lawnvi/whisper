@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -416,6 +417,52 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
     expect(picker.requestedWidth, 1200);
+  });
+
+  testWidgets('reopening image previews releases size-listener handles', (
+    tester,
+  ) async {
+    final original = AndroidDocumentPicker.shared;
+    final onCreate = ui.Image.onCreate;
+    final images = <ui.Image>[];
+    AndroidDocumentPicker.shared = _ThumbnailPicker();
+    ui.Image.onCreate = images.add;
+    addTearDown(() {
+      AndroidDocumentPicker.shared = original;
+      ui.Image.onCreate = onCreate;
+    });
+    for (var cycle = 0; cycle < 3; cycle++) {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 240,
+              child: MediaMessagePreview(
+                kind: MediaFileKind.image,
+                path: 'content://provider/photo/handle-check',
+                name: 'photo.png',
+                status: '',
+                contentAvailable: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+    expect(images, isNotEmpty);
+    final sizeListenerHandles = images
+        .where((image) => !image.debugDisposed)
+        .expand(
+          (image) => image.debugGetOpenHandleStackTraces() ?? <StackTrace>[],
+        )
+        .where(
+          (stack) =>
+              stack.toString().contains('_ImagePreviewState._resolveImage'),
+        );
+    expect(sizeListenerHandles, isEmpty);
   });
 
   testWidgets('content uri fullscreen image reads the original bytes', (

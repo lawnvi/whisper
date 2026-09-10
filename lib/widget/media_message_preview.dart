@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -329,21 +330,13 @@ class _ImagePreviewState extends State<_ImagePreview> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _resolveImage();
-  }
-
-  @override
   void didUpdateWidget(covariant _ImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path) {
+      _removeImageListener();
       _contentUriBytes = null;
       _aspectRatio = null;
       _loadContentUriThumbnail();
-      if (!_isAndroidContentUri(widget.path)) {
-        _resolveImage();
-      }
     }
   }
 
@@ -361,20 +354,9 @@ class _ImagePreviewState extends State<_ImagePreview> {
       return;
     }
     setState(() => _contentUriBytes = bytes);
-    _resolveImage();
   }
 
-  void _resolveImage() {
-    final bytes = _contentUriBytes;
-    if (_isAndroidContentUri(widget.path) && (bytes == null || bytes.isEmpty)) {
-      return;
-    }
-    final ImageProvider provider = _isAndroidContentUri(widget.path)
-        ? MemoryImage(bytes!)
-        : ResizeImage(
-            FileImage(File(widget.path)),
-            width: _mediaPreviewCacheWidth,
-          );
+  void _resolveImage(ImageProvider provider) {
     final stream = provider.resolve(createLocalImageConfiguration(context));
     if (_stream?.key == stream.key) {
       return;
@@ -385,18 +367,22 @@ class _ImagePreviewState extends State<_ImagePreview> {
     }
     _stream = stream;
     final listener = ImageStreamListener((info, synchronousCall) {
-      final width = info.image.width;
-      final height = info.image.height;
-      if (!mounted || width <= 0 || height <= 0) {
-        return;
-      }
-      final ratio = width / height;
-      if (_aspectRatio != ratio) {
-        if (synchronousCall) {
-          _aspectRatio = ratio;
-        } else {
-          setState(() => _aspectRatio = ratio);
+      try {
+        final width = info.image.width;
+        final height = info.image.height;
+        if (!mounted || width <= 0 || height <= 0) {
+          return;
         }
+        final ratio = width / height;
+        if (_aspectRatio != ratio) {
+          if (synchronousCall) {
+            _aspectRatio = ratio;
+          } else {
+            setState(() => _aspectRatio = ratio);
+          }
+        }
+      } finally {
+        info.dispose();
       }
     }, onError: (Object error, StackTrace? stackTrace) {});
     _listener = listener;
@@ -405,26 +391,51 @@ class _ImagePreviewState extends State<_ImagePreview> {
 
   @override
   void dispose() {
+    _removeImageListener();
+    super.dispose();
+  }
+
+  void _removeImageListener() {
     final listener = _listener;
     if (listener != null) {
       _stream?.removeListener(listener);
     }
-    super.dispose();
+    _stream = null;
+    _listener = null;
   }
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : 300.0;
+        final pixels = width * MediaQuery.devicePixelRatioOf(context);
+        // Bucket resizes to avoid decoding another image for each dragged pixel.
+        final cacheWidth = ((pixels / 64).ceil() * 64).clamp(64, 1024);
+        return _buildPreview(context, cacheWidth);
+      },
+    );
+  }
+
+  Widget _buildPreview(BuildContext context, int cacheWidth) {
     final palette = context.whisperPalette;
     final bytes = _contentUriBytes;
     final contentUri = _isAndroidContentUri(widget.path);
     final ImageProvider? provider = contentUri
         ? bytes == null || bytes.isEmpty
               ? null
-              : MemoryImage(bytes)
+              : MemoryBoundedMemoryImage(bytes)
         : ResizeImage(
-            FileImage(File(widget.path)),
-            width: _mediaPreviewCacheWidth,
+            MemoryBoundedFileImage(File(widget.path)),
+            width: cacheWidth,
+            height: (cacheWidth * _mediaPreviewMaxHeightFactor).ceil(),
+            policy: ResizeImagePolicy.fit,
           );
+    if (provider != null) {
+      _resolveImage(provider);
+    }
     return _AdaptiveVisualMediaFrame(
       frameKey: const ValueKey<String>('image-preview-frame'),
       sourceAspectRatio: _aspectRatio ?? 4 / 3,
@@ -443,7 +454,7 @@ class _ImagePreviewState extends State<_ImagePreview> {
             : Image(
                 image: provider,
                 fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
+                filterQuality: FilterQuality.medium,
                 semanticLabel: widget.name,
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.broken_image_outlined,
@@ -1701,13 +1712,35 @@ class _FullscreenImageState extends State<_FullscreenImage> {
   @override
   Widget build(BuildContext context) {
     if (!_isAndroidContentUri(widget.path)) {
-      return _buildViewer(
-        Image.file(
-          File(widget.path),
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.medium,
-          semanticLabel: widget.name,
-        ),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+          final viewport = constraints.biggest;
+          final original = MemoryBoundedFileImage(File(widget.path));
+          final ImageProvider provider = _zoomed
+              ? original
+              : ResizeImage(
+                  original,
+                  width: math.max(
+                    128,
+                    (viewport.width * pixelRatio / 128).ceil() * 128,
+                  ),
+                  height: math.max(
+                    128,
+                    (viewport.height * pixelRatio / 128).ceil() * 128,
+                  ),
+                  policy: ResizeImagePolicy.fit,
+                );
+          return _buildViewer(
+            Image(
+              image: provider,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              semanticLabel: widget.name,
+            ),
+          );
+        },
       );
     }
     return FutureBuilder<Uint8List>(

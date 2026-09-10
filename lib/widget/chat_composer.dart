@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -325,6 +326,7 @@ class ChatComposer extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: _buildClipboardImage(
+                        context,
                         pendingClipboardImages[index],
                         colorScheme,
                       ),
@@ -364,6 +366,7 @@ class ChatComposer extends StatelessWidget {
   }
 
   Widget _buildClipboardImage(
+    BuildContext context,
     ClipboardImageDraft draft,
     ColorScheme colorScheme,
   ) {
@@ -382,17 +385,19 @@ class ChatComposer extends StatelessWidget {
       ),
     );
 
-    return draft.bytes.isEmpty
-        ? Image.file(
-            File(draft.path),
-            fit: BoxFit.cover,
-            errorBuilder: errorBuilder,
-          )
-        : Image.memory(
-            draft.bytes,
-            fit: BoxFit.cover,
-            errorBuilder: errorBuilder,
-          );
+    final extent = (88 * MediaQuery.devicePixelRatioOf(context)).ceil();
+    return Image(
+      image: ResizeImage(
+        draft.bytes.isEmpty
+            ? MemoryBoundedFileImage(File(draft.path))
+            : MemoryBoundedMemoryImage(draft.bytes),
+        width: extent,
+        height: extent,
+        policy: ResizeImagePolicy.fit,
+      ),
+      fit: BoxFit.cover,
+      errorBuilder: errorBuilder,
+    );
   }
 
   Widget _buildClipboardFilesPreview(BuildContext context) {
