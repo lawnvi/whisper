@@ -5835,6 +5835,13 @@ class WsSvrManager {
         sessionId: sessionId,
         offerId: offer.offerId,
       );
+      // Images are produced by actions such as region screenshots. Materialize
+      // an image offer as soon as it reaches the controller so Ctrl/Cmd+V in
+      // any local application can use it, including platforms without a
+      // native local-paste interception hook.
+      if (offer.items.length == 1 && offer.items.single.isImage) {
+        await prepareRemoteClipboardPaste(peerId: peerId, sessionId: sessionId);
+      }
       if (!isWorkspaceOrigin) {
         return;
       }

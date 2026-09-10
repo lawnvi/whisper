@@ -49,6 +49,24 @@ void main() {
     expect(publishItemsMethod, isNot(contains('clipboardAutoSync')));
   });
 
+  test('image offers are materialized on the controller immediately', () {
+    final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
+    expect(manager, contains('offer.items.single.isImage'));
+    expect(
+      manager,
+      contains('await prepareRemoteClipboardPaste(peerId: peerId'),
+    );
+  });
+
+  test('Linux mirrors CLIPBOARD owner changes to the watcher channel', () {
+    final linux = File(
+      'linux/desktop_clipboard_image_plugin.cc',
+    ).readAsStringSync();
+    expect(linux, contains('gtk_clipboard_get(GDK_SELECTION_CLIPBOARD)'));
+    expect(linux, contains('onClipboardChanged'));
+    expect(linux, contains('owner-change'));
+  });
+
   test('macOS controller intercepts and replays local paste on demand', () {
     final mac = File('macos/Runner/MainFlutterWindow.swift').readAsStringSync();
     final platform = File(

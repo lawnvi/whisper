@@ -15,6 +15,8 @@ constexpr char kDesktopClipboardImageChannel[] =
 constexpr guint kUriListTarget = 0;
 constexpr guint kGnomeCopiedFilesTarget = 1;
 
+FlMethodChannel* g_clipboard_watcher_channel = nullptr;
+
 GtkTargetEntry kFileClipboardTargets[] = {
     {const_cast<gchar*>("text/uri-list"), 0, kUriListTarget},
     {const_cast<gchar*>("x-special/gnome-copied-files"), 0,
@@ -47,6 +49,16 @@ void ProvideFileUris(GtkClipboard*,
 
 void ClearFileUris(GtkClipboard*, gpointer user_data) {
   g_strfreev(static_cast<gchar**>(user_data));
+}
+
+void NotifyClipboardChanged(GtkClipboard*, GdkEvent*, gpointer) {
+  if (g_clipboard_watcher_channel == nullptr) {
+    return;
+  }
+  g_autoptr(FlValue) args = fl_value_new_map();
+  fl_method_channel_invoke_method(g_clipboard_watcher_channel,
+                                  "onClipboardChanged", args, nullptr,
+                                  nullptr, nullptr);
 }
 
 FlValue* ReadImagePng() {
@@ -197,5 +209,14 @@ void desktop_clipboard_image_plugin_register(FlPluginRegistry* registry) {
       kDesktopClipboardImageChannel, FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(channel, MethodCallCallback,
                                             nullptr, nullptr);
+  // clipboard_watcher 0.3 listens to PRIMARY on Linux. Screenshots and image
+  // clipboard writes use CLIPBOARD, so mirror its event onto the same Dart
+  // channel to keep remote clipboard sync responsive.
+  g_clipboard_watcher_channel = fl_method_channel_new(
+      fl_plugin_registrar_get_messenger(registrar), "clipboard_watcher",
+      FL_METHOD_CODEC(codec));
+  GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+  g_signal_connect(clipboard, "owner-change", G_CALLBACK(NotifyClipboardChanged),
+                   nullptr);
   g_object_unref(channel);
 }
