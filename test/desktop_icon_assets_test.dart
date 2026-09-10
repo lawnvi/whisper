@@ -21,11 +21,20 @@ void main() {
     final tray = await _decodePng('assets/tray_icon.png');
     expect(tray.width, 256);
     expect(tray.height, 256);
-    final pixels = await tray.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final pixels = await tray.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
     expect(pixels, isNotNull);
     expect(_alphaAt(pixels!, tray.width, 0, 0), 0);
     expect(_alphaAt(pixels, tray.width, 128, 28), greaterThan(200));
     expect(_alphaAt(pixels, tray.width, 86, 128), lessThan(32));
+    for (var offset = 0; offset < pixels.lengthInBytes; offset += 4) {
+      if (pixels.getUint8(offset + 3) > 0) {
+        expect(pixels.getUint8(offset), 255);
+        expect(pixels.getUint8(offset + 1), 255);
+        expect(pixels.getUint8(offset + 2), 255);
+      }
+    }
     tray.dispose();
 
     expect(_icoImageCount('assets/tray_icon.ico'), 8);
@@ -35,7 +44,9 @@ void main() {
     final logo = await _decodePng('assets/app_icon_round.png');
     expect(logo.width, 180);
     expect(logo.height, 180);
-    final pixels = await logo.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final pixels = await logo.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
     expect(pixels, isNotNull);
     expect(_alphaAt(pixels!, logo.width, 0, 0), 0);
     expect(_alphaAt(pixels, logo.width, 90, 90), greaterThan(240));
