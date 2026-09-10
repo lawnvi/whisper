@@ -100,13 +100,14 @@ temporary_output="${output_file}.tmp.$$"
 trap 'rm -f "$temporary_output"' EXIT
 mkdir -p "$(dirname "$output_file")"
 
+# Bash 3.2 on macOS treats empty arrays as unset under nounset.
 {
-  render_section '重要变更' "${breaking_changes[@]}"
-  render_section '新功能' "${features[@]}"
-  render_section '性能优化' "${performance_improvements[@]}"
-  render_section '修复与改进' "${fixes[@]}"
-  render_section '体验优化' "${experience_improvements[@]}"
-  render_section '其他更新' "${other_updates[@]}"
+  render_section '重要变更' ${breaking_changes[@]+"${breaking_changes[@]}"}
+  render_section '新功能' ${features[@]+"${features[@]}"}
+  render_section '性能优化' ${performance_improvements[@]+"${performance_improvements[@]}"}
+  render_section '修复与改进' ${fixes[@]+"${fixes[@]}"}
+  render_section '体验优化' ${experience_improvements[@]+"${experience_improvements[@]}"}
+  render_section '其他更新' ${other_updates[@]+"${other_updates[@]}"}
 
   if ((
     ${#breaking_changes[@]} == 0 &&
