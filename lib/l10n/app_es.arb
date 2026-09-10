@@ -367,6 +367,7 @@
   "remoteInputWorkspaceAddTarget": "Agregar al espacio",
   "remoteInputWorkspaceRemoveTarget": "Quitar del espacio",
   "remoteInputWorkspaceState": "Estado",
+  "remoteInputWorkspaceResolution": "Resolución",
   "remoteInputWorkspaceConflict": "Bordes superpuestos",
   "remoteInputWorkspaceReachable": "Accesible",
   "remoteInputWorkspaceDisconnected": "No conectado al espacio de trabajo",

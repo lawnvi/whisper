@@ -33,7 +33,7 @@ void main() {
       expect(source, isNot(contains('"$text"')));
     }
 
-    expect(source, contains('l10n.remoteInputLayoutTitle'));
+    expect(source, contains('l10n.remoteInputWorkspaceResolution'));
     expect(source, contains('remoteInputLocalScreen'));
     expect(source, contains('l10n.remoteInputWorkspaceReachable'));
     expect(source, contains('l10n.remoteInputWorkspaceDisconnected'));

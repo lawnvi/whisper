@@ -554,6 +554,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   Widget _buildDevicePanel(AppLocalizations l10n) {
     final palette = context.whisperPalette;
     final colors = Theme.of(context).colorScheme;
+    final selectionColor = colors.primary;
     final graph = _workspaceGraph();
     final reachablePeerIds = _reachablePeerIds(graph);
     return WhisperGlassSurface(
@@ -570,7 +571,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                 Icon(
                   Icons.devices_other_rounded,
                   size: 19,
-                  color: colors.primary,
+                  color: palette.textMuted,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -668,19 +669,37 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Material(
                           color: focused
-                              ? palette.surfaceMuted.withValues(alpha: 0.50)
+                              ? selectionColor.withValues(
+                                  alpha: colors.brightness == Brightness.dark
+                                      ? 0.16
+                                      : 0.07,
+                                )
                               : Colors.transparent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                             side: BorderSide(
                               color: focused
-                                  ? colors.primary.withValues(alpha: 0.28)
-                                  : palette.borderSubtle,
+                                  ? selectionColor.withValues(alpha: 0.34)
+                                  : palette.borderSubtle.withValues(
+                                      alpha: 0.60,
+                                    ),
                             ),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
                             onTap: () => _focusDevice(device),
+                            overlayColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.pressed) ||
+                                  states.contains(WidgetState.focused)) {
+                                return selectionColor.withValues(alpha: 0.10);
+                              }
+                              if (states.contains(WidgetState.hovered)) {
+                                return selectionColor.withValues(alpha: 0.06);
+                              }
+                              return null;
+                            }),
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
                               child: Row(
@@ -688,6 +707,20 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                                   Checkbox(
                                     value: selected,
                                     visualDensity: VisualDensity.compact,
+                                    activeColor: selectionColor,
+                                    checkColor: colors.onPrimary,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    side: BorderSide(
+                                      color: palette.textMuted.withValues(
+                                        alpha: 0.62,
+                                      ),
+                                      width: 1.2,
+                                    ),
+                                    overlayColor: WidgetStatePropertyAll(
+                                      selectionColor.withValues(alpha: 0.10),
+                                    ),
                                     onChanged: (value) {
                                       unawaited(
                                         _setDeviceSelected(
@@ -749,7 +782,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                                       Icons.info_outline_rounded,
                                       size: 19,
                                       color: focused
-                                          ? colors.primary
+                                          ? selectionColor
                                           : palette.textMuted,
                                     ),
                                   ),
@@ -787,12 +820,15 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }) {
     final palette = context.whisperPalette;
     if (!_socketManager.isConnectedTo(device.uid) ||
-        !reachablePeerIds.contains(device.uid)) {
+        !_selectedPeerIds.contains(device.uid)) {
       return palette.textMuted;
     }
-    if (!_socketManager.supportsRemoteInputWorkspaceGraphFor(device.uid) ||
-        graph.conflictingPeerIds.contains(device.uid)) {
+    if (!_socketManager.supportsRemoteInputWorkspaceGraphFor(device.uid)) {
       return palette.warning;
+    }
+    if (graph.conflictingPeerIds.contains(device.uid) ||
+        !reachablePeerIds.contains(device.uid)) {
+      return _workspaceLayoutWarningColor(palette);
     }
     return palette.trusted;
   }
@@ -855,7 +891,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                   _WorkspaceNoticeChip(
                     icon: Icons.warning_amber_rounded,
                     label: l10n.remoteInputWorkspaceConflict,
-                    color: palette.warning,
+                    color: _workspaceLayoutWarningColor(palette),
                   ),
               ],
             ),
@@ -1036,7 +1072,12 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     final bounds = _peerLayoutBounds(device, layout);
     final offset = toCanvas(bounds.x, bounds.y);
     final groupSize = toSize(bounds.width, bounds.height);
+    final invalidLayout =
+        _socketManager.isConnectedTo(device.uid) &&
+        _socketManager.supportsRemoteInputWorkspaceGraphFor(device.uid) &&
+        (conflict || !reachable);
     return Positioned(
+      key: ValueKey(device.uid),
       left: offset.dx,
       top: offset.dy,
       width: groupSize.width,
@@ -1065,28 +1106,42 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
             unawaited(_snapAndSaveLayout(device));
           },
           onPanCancel: () => _cancelDraggedLayout(device),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
+          child: _WorkspaceLayoutFeedback(
+            active: _draggingPeerId.isEmpty && invalidLayout,
+            screenRects: [
               for (final display in displays)
-                Positioned(
-                  left: (display.left - bounds.left) * scale,
-                  top: (display.top - bounds.top) * scale,
-                  width: math.max(1.0, display.width * scale),
-                  height: math.max(1.0, display.height * scale),
-                  child: _ScreenBlock(
-                    title: display.name.isEmpty ? device.name : display.name,
-                    subtitle: _displaySizeLabel(display),
-                    badge: AppLocalizations.of(
-                      context,
-                    )!.remoteInputWorkspaceRemoteBadge,
-                    selected: _focusedPeerId == device.uid,
-                    conflict: conflict,
-                    local: false,
-                    reachable: reachable,
-                  ),
+                Rect.fromLTWH(
+                  (display.left - bounds.left) * scale,
+                  (display.top - bounds.top) * scale,
+                  math.max(1.0, display.width * scale),
+                  math.max(1.0, display.height * scale),
                 ),
             ],
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                for (final display in displays)
+                  Positioned(
+                    left: (display.left - bounds.left) * scale,
+                    top: (display.top - bounds.top) * scale,
+                    width: math.max(1.0, display.width * scale),
+                    height: math.max(1.0, display.height * scale),
+                    child: _ScreenBlock(
+                      title: display.name.isEmpty ? device.name : display.name,
+                      subtitle: _displaySizeLabel(display),
+                      badge: AppLocalizations.of(
+                        context,
+                      )!.remoteInputWorkspaceRemoteBadge,
+                      selected: _focusedPeerId == device.uid,
+                      conflict: conflict,
+                      invalidLayout: invalidLayout,
+                      dragging: _draggingPeerId.isNotEmpty,
+                      local: false,
+                      reachable: reachable,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1108,13 +1163,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
             l10n,
             focused,
             snapshot: snapshot,
-            graph: graph,
-            reachablePeerIds: reachablePeerIds,
-          );
-    final statusColor = focused == null
-        ? palette.textMuted
-        : _peerStatusColor(
-            focused,
             graph: graph,
             reachablePeerIds: reachablePeerIds,
           );
@@ -1175,17 +1223,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _WorkspaceNoticeChip(
-                      icon: statusColor == palette.trusted
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.info_outline_rounded,
-                      label: statusLabel,
-                      color: statusColor,
-                    ),
-                  ),
                   const SizedBox(height: 20),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1229,7 +1266,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                     child: Column(
                       children: [
                         _DetailRow(
-                          label: l10n.remoteInputLayoutTitle,
+                          label: l10n.remoteInputWorkspaceResolution,
                           value: _focusedLayoutSummary(_layouts[focused.uid]),
                         ),
                         _DetailRow(
@@ -1776,6 +1813,9 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   }
 }
 
+Color _workspaceLayoutWarningColor(WhisperPalette palette) =>
+    Color.lerp(palette.danger, palette.textMuted, 0.18)!;
+
 class _WorkspaceDefaultLayoutAnchor {
   const _WorkspaceDefaultLayoutAnchor({
     required this.x,
@@ -1889,6 +1929,188 @@ class _WorkspaceNoticeChip extends StatelessWidget {
   }
 }
 
+class _WorkspaceLayoutFeedback extends StatefulWidget {
+  const _WorkspaceLayoutFeedback({
+    required this.active,
+    required this.screenRects,
+    required this.child,
+  });
+
+  final bool active;
+  final List<Rect> screenRects;
+  final Widget child;
+
+  @override
+  State<_WorkspaceLayoutFeedback> createState() =>
+      _WorkspaceLayoutFeedbackState();
+}
+
+class _WorkspaceLayoutFeedbackState extends State<_WorkspaceLayoutFeedback>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 10),
+  );
+  bool _reduceMotion = true;
+  bool _highContrast = false;
+  bool _tickersEnabled = true;
+  bool _appActive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _appActive = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _highContrast = MediaQuery.highContrastOf(context);
+    _tickersEnabled = TickerMode.of(context);
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkspaceLayoutFeedback oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  bool get _shouldAnimate =>
+      widget.active &&
+      !_reduceMotion &&
+      !_highContrast &&
+      _tickersEnabled &&
+      _appActive;
+
+  void _syncAnimation() {
+    if (!_shouldAnimate) {
+      _controller.reset();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_appActive == active) return;
+    setState(() => _appActive = active);
+    _syncAnimation();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        if (_shouldAnimate)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _InvalidLayoutBorderPainter(
+                    progress: _controller,
+                    screenRects: widget.screenRects,
+                    color: _workspaceLayoutWarningColor(context.whisperPalette),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _InvalidLayoutBorderPainter extends CustomPainter {
+  _InvalidLayoutBorderPainter({
+    required this.progress,
+    required List<Rect> screenRects,
+    required this.color,
+  }) : screenRects = List.unmodifiable(screenRects),
+       super(repaint: progress);
+
+  final Animation<double> progress;
+  final List<Rect> screenRects;
+  final Color color;
+
+  // Use the same rounded edge as the glass pane; never blur or tint its center.
+  late final List<RRect> _rims = [
+    for (final rect in screenRects)
+      if (rect.shortestSide > 2.2)
+        RRect.fromRectAndRadius(rect.deflate(0.9), const Radius.circular(13.1)),
+  ];
+  late final List<PathMetric> _outlines = [
+    for (final rim in _rims) (Path()..addRRect(rim)).computeMetrics().first,
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final glintColor = Color.lerp(Colors.white, color, 0.18)!;
+    for (var index = 0; index < _outlines.length; index++) {
+      final outline = _outlines[index];
+      final rim = _rims[index];
+      final light = outline.getTangentForOffset(
+        progress.value * outline.length,
+      );
+      if (light == null) continue;
+      final radius = math.max(40.0, math.min(rim.width, rim.height) * 0.90);
+      final lightBounds = Rect.fromCircle(
+        center: light.position,
+        radius: radius,
+      );
+
+      Paint reflection(double width, Color tint, double opacity) => Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..shader = RadialGradient(
+          colors: [
+            tint.withValues(alpha: opacity),
+            tint.withValues(alpha: opacity * 0.78),
+            tint.withValues(alpha: opacity * 0.30),
+            tint.withValues(alpha: 0),
+          ],
+          stops: const [0, 0.32, 0.70, 1],
+        ).createShader(lightBounds);
+
+      canvas.save();
+      canvas.clipRRect(rim.inflate(0.9));
+      // A broad, symmetric reflection has no bright head or segmented tail.
+      // Inset layers soften the rim without an animated backdrop blur.
+      canvas.drawRRect(rim, reflection(16, color, 0.035));
+      canvas.drawRRect(rim, reflection(10, color, 0.08));
+      canvas.drawRRect(rim, reflection(4.8, color, 0.20));
+      canvas.drawRRect(rim, reflection(1.6, glintColor, 0.76));
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InvalidLayoutBorderPainter oldDelegate) {
+    if (oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.screenRects.length != screenRects.length) {
+      return true;
+    }
+    for (var index = 0; index < screenRects.length; index++) {
+      if (oldDelegate.screenRects[index] != screenRects[index]) return true;
+    }
+    return false;
+  }
+}
+
 class _WorkspaceGridPainter extends CustomPainter {
   const _WorkspaceGridPainter({required this.color});
 
@@ -1920,6 +2142,8 @@ class _ScreenBlock extends StatelessWidget {
     required this.conflict,
     required this.local,
     required this.reachable,
+    this.invalidLayout = false,
+    this.dragging = false,
   });
 
   final String title;
@@ -1929,6 +2153,8 @@ class _ScreenBlock extends StatelessWidget {
   final bool conflict;
   final bool local;
   final bool reachable;
+  final bool invalidLayout;
+  final bool dragging;
 
   @override
   Widget build(BuildContext context) {
@@ -1937,6 +2163,9 @@ class _ScreenBlock extends StatelessWidget {
     final palette = context.whisperPalette;
     final isDark = theme.brightness == Brightness.dark;
     final highContrast = MediaQuery.highContrastOf(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final showLayoutWarning = invalidLayout && !dragging;
+    final warningColor = _workspaceLayoutWarningColor(palette);
     final glassGradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
@@ -1953,26 +2182,47 @@ class _ScreenBlock extends StatelessWidget {
             ],
     );
     final blurSigma = highContrast ? 0.0 : 18.0;
-    final borderWidth = selected || conflict ? 2.0 : 1.0;
-    final borderColor = conflict
-        ? palette.warning
-        : selected
-        ? colorScheme.primary
+    final borderWidth = highContrast && (selected || showLayoutWarning)
+        ? 2.0
+        : showLayoutWarning
+        ? 1.8
+        : 1.0;
+    // Local and remote displays share one outline. The existing checkmark
+    // indicates selection without giving one display a different-colored frame.
+    final neutralBorder = Color.lerp(
+      palette.borderSubtle,
+      palette.textMuted,
+      isDark ? 0.46 : 0.34,
+    )!;
+    final borderColor = showLayoutWarning
+        ? highContrast
+              ? warningColor
+              : Color.lerp(
+                  neutralBorder,
+                  warningColor,
+                  0.70,
+                )!.withValues(alpha: isDark ? 0.86 : 0.76)
         : highContrast
-        ? colorScheme.onSurface.withValues(alpha: 0.42)
-        : Colors.white.withValues(alpha: isDark ? 0.18 : 0.92);
+        ? selected
+              ? colorScheme.primary
+              : colorScheme.onSurface.withValues(alpha: 0.42)
+        : neutralBorder;
     return Semantics(
       selected: selected,
       label: '$badge, $title, $subtitle',
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 160),
-        opacity: reachable || local ? 1 : 0.48,
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
+        opacity: reachable || local || invalidLayout ? 1 : 0.48,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: reduceMotion || dragging
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 gradient: glassGradient,
@@ -2082,8 +2332,12 @@ class _ScreenBlock extends StatelessWidget {
                                 ? Icons.link_off_rounded
                                 : Icons.check_circle_rounded,
                             size: 16,
-                            color: conflict
-                                ? palette.warning
+                            color: invalidLayout
+                                ? dragging
+                                      ? palette.textMuted
+                                      : warningColor.withValues(
+                                          alpha: highContrast ? 1 : 0.78,
+                                        )
                                 : !reachable
                                 ? palette.textMuted
                                 : colorScheme.primary,

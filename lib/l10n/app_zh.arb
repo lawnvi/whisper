@@ -402,6 +402,7 @@
   "remoteInputWorkspaceAddTarget": "加入工作区",
   "remoteInputWorkspaceRemoveTarget": "移出工作区",
   "remoteInputWorkspaceState": "状态",
+  "remoteInputWorkspaceResolution": "分辨率",
   "remoteInputWorkspaceConflict": "边缘重叠",
   "remoteInputWorkspaceReachable": "可达",
   "remoteInputWorkspaceDisconnected": "未连接到工作区",

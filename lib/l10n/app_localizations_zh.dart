@@ -753,6 +753,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputWorkspaceState => '状态';
 
   @override
+  String get remoteInputWorkspaceResolution => '分辨率';
+
+  @override
   String get remoteInputWorkspaceConflict => '边缘重叠';
 
   @override

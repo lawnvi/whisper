@@ -803,6 +803,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteInputWorkspaceState => 'State';
 
   @override
+  String get remoteInputWorkspaceResolution => 'Resolution';
+
+  @override
   String get remoteInputWorkspaceConflict => 'Edge overlap';
 
   @override

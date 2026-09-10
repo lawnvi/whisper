@@ -1444,6 +1444,12 @@ abstract class AppLocalizations {
   /// **'状态'**
   String get remoteInputWorkspaceState;
 
+  /// No description provided for @remoteInputWorkspaceResolution.
+  ///
+  /// In zh, this message translates to:
+  /// **'分辨率'**
+  String get remoteInputWorkspaceResolution;
+
   /// No description provided for @remoteInputWorkspaceConflict.
   ///
   /// In zh, this message translates to:

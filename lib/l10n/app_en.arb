@@ -340,6 +340,7 @@
   "remoteInputWorkspaceAddTarget": "Add to workspace",
   "remoteInputWorkspaceRemoveTarget": "Remove from workspace",
   "remoteInputWorkspaceState": "State",
+  "remoteInputWorkspaceResolution": "Resolution",
   "remoteInputWorkspaceConflict": "Edge overlap",
   "remoteInputWorkspaceReachable": "Reachable",
   "remoteInputWorkspaceDisconnected": "Not connected to the workspace",
