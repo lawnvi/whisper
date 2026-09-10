@@ -2,6 +2,7 @@ import Cocoa
 import Carbon
 import FlutterMacOS
 import ScreenCaptureKit
+import QuartzCore
 
 final class ScreenshotPlugin: NSObject, FlutterPlugin {
   private let channel: FlutterMethodChannel
@@ -273,13 +274,18 @@ private final class ScreenshotSession {
       panel.acceptsMouseMovedEvents = true
       let view = ScreenshotCanvas(frame: CGRect(origin: .zero, size: display.frame.size),
         display: display, session: self)
-      panel.contentView = view
+      let backdrop = NSView(frame: view.frame)
+      backdrop.wantsLayer = true
+      backdrop.layer?.contents = display.image
+      backdrop.layer?.contentsGravity = .resize
+      backdrop.addSubview(view)
+      panel.contentView = backdrop
       panels.append(panel)
       panel.orderFrontRegardless()
     }
     let active = displays.firstIndex { $0.frame.contains(pointer) } ?? 0
     panels[active].makeKey()
-    panels[active].makeFirstResponder(panels[active].contentView)
+    panels[active].makeFirstResponder(panels[active].contentView?.subviews.first)
     NSCursor.crosshair.set()
   }
 
@@ -375,8 +381,7 @@ private final class ScreenshotSession {
   }
   private func redraw() {
     panels.forEach {
-      ($0.contentView as? ScreenshotCanvas)?.updateActionHints()
-      $0.contentView?.needsDisplay = true
+      ($0.contentView?.subviews.first as? ScreenshotCanvas)?.refreshSelection()
     }
   }
 
@@ -433,6 +438,12 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
   private let session: ScreenshotSession
   private var tracking: NSTrackingArea?
   private var toolTipRect = CGRect.null
+  private let dimLayer = CAShapeLayer()
+  private let selectionLayer = CAShapeLayer()
+  private let handlesLayer = CAShapeLayer()
+  private var previousHintSelected = false
+  private var previousToolbar = CGRect.null
+  private var previousHover = 0
   private let accent = NSColor(srgbRed: 0.145, green: 0.388, blue: 0.922, alpha: 1)
   private var dark: Bool { session.labels["appearance"] == "dark" }
   private var textColor: NSColor {
@@ -447,6 +458,26 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
     self.display = display
     self.session = session
     super.init(frame: frame)
+    wantsLayer = true
+    dimLayer.fillColor = NSColor.black.withAlphaComponent(0.36).cgColor
+    dimLayer.fillRule = .evenOdd
+    selectionLayer.fillColor = nil
+    selectionLayer.strokeColor = accent.cgColor
+    selectionLayer.lineWidth = 2
+    handlesLayer.fillColor = NSColor.white.cgColor
+    handlesLayer.strokeColor = accent.cgColor
+    handlesLayer.lineWidth = 1.5
+  }
+  override func viewDidMoveToSuperview() {
+    super.viewDidMoveToSuperview()
+    guard let backdrop = superview?.layer, let annotations = layer else { return }
+    // Cache the desktop once. Dragging updates only compositor paths, without
+    // decoding or repainting every Retina display for every mouse event.
+    for shape in [dimLayer, selectionLayer, handlesLayer] {
+      shape.frame = bounds
+      backdrop.insertSublayer(shape, below: annotations)
+    }
+    refreshSelection()
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -486,29 +517,41 @@ private final class ScreenshotCanvas: NSView, NSViewToolTipOwner {
     session.labels[point.x < toolTipRect.midX ? "cancel" : "confirm"] ?? ""
   }
 
-  override func draw(_ dirtyRect: NSRect) {
-    guard let context = NSGraphicsContext.current?.cgContext else { return }
-    context.draw(display.image, in: bounds)
-    NSColor.black.withAlphaComponent(0.36).setFill()
-    bounds.fill()
+  func refreshSelection() {
+    updateActionHints()
     let rect = local(session.selection)
-    if rect.width > 0 && rect.height > 0 {
-      context.saveGState()
-      context.clip(to: rect)
-      context.draw(display.image, in: bounds)
-      context.restoreGState()
-      let edge = NSBezierPath(rect: rect)
-      accent.setStroke()
-      edge.lineWidth = 2
-      edge.stroke()
+    let hasSelection = rect.width > 0 && rect.height > 0
+    let dim = CGMutablePath()
+    dim.addRect(bounds)
+    if hasSelection { dim.addRect(rect) }
+    let handles = CGMutablePath()
+    if hasSelection {
       for x in [rect.minX, rect.midX, rect.maxX] {
         for y in [rect.minY, rect.midY, rect.maxY] where x != rect.midX || y != rect.midY {
-          let handle = NSBezierPath(ovalIn: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7))
-          NSColor.white.setFill(); handle.fill()
-          accent.setStroke(); handle.lineWidth = 1.5; handle.stroke()
+          handles.addEllipse(in: CGRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7))
         }
       }
     }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    dimLayer.path = dim
+    selectionLayer.path = hasSelection ? CGPath(rect: rect, transform: nil) : nil
+    handlesLayer.path = handles
+    CATransaction.commit()
+
+    let toolbar = session.selected && !session.dragging ? local(session.actionRect) : .null
+    let pointer = CGPoint(x: session.pointer.x - display.frame.minX,
+                          y: session.pointer.y - display.frame.minY)
+    let hover = toolbar.contains(pointer) ? (pointer.x < toolbar.midX ? 1 : 2) : 0
+    if toolbar != previousToolbar || hover != previousHover || session.selected != previousHintSelected {
+      needsDisplay = true
+    }
+    previousToolbar = toolbar
+    previousHover = hover
+    previousHintSelected = session.selected
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
     let hint = session.labels[session.selected ? "adjustHint" : "hint"] ?? ""
     let hintWidth = min(bounds.width - 32, max(280, CGFloat(hint.count) * 13))
     let hintRect = CGRect(x: (bounds.width - hintWidth) / 2, y: bounds.height - 64,

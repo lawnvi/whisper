@@ -147,6 +147,14 @@ class ScreenshotPlugin : public flutter::Plugin {
       SetThreadDpiAwarenessContext(previous_dpi);
       Finish(false, "capture-failed"); return;
     }
+    // Paint the complete overlay off screen, then present it in one blit.
+    frame_dc_ = CreateCompatibleDC(snapshot_dc_);
+    frame_bitmap_ = CreateCompatibleBitmap(snapshot_dc_, width_, height_);
+    if (!frame_dc_ || !frame_bitmap_) {
+      SetThreadDpiAwarenessContext(previous_dpi);
+      Finish(false, "capture-failed"); return;
+    }
+    old_frame_bitmap_ = SelectObject(frame_dc_, frame_bitmap_);
     GdiFlush();
     WNDCLASSW window_class{};
     window_class.lpfnWndProc = WindowProc;
@@ -268,7 +276,8 @@ class ScreenshotPlugin : public flutter::Plugin {
 
   void Paint(HWND window) {
     PAINTSTRUCT paint{};
-    HDC dc = BeginPaint(window, &paint);
+    HDC screen = BeginPaint(window, &paint);
+    HDC dc = frame_dc_;
     BitBlt(dc, 0, 0, width_, height_, snapshot_dc_, 0, 0, SRCCOPY);
     HDC dim = CreateCompatibleDC(dc);
     HBITMAP black = CreateCompatibleBitmap(dc, 1, 1);
@@ -333,6 +342,9 @@ class ScreenshotPlugin : public flutter::Plugin {
           static_cast<int>(y + 7 * s), static_cast<int>(3 * s), static_cast<int>(3 * s));
       SelectObject(dc, old_brush); SelectObject(dc, old_pen); DeleteObject(pen);
     }
+    const RECT& dirty = paint.rcPaint;
+    BitBlt(screen, dirty.left, dirty.top, dirty.right - dirty.left,
+           dirty.bottom - dirty.top, dc, dirty.left, dirty.top, SRCCOPY);
     EndPaint(window, &paint);
   }
 
@@ -378,6 +390,14 @@ class ScreenshotPlugin : public flutter::Plugin {
     selection_.Reset(0, 0);
     if (GetCapture() == overlay) ReleaseCapture();
     if (overlay) DestroyWindow(overlay);
+    if (frame_dc_) {
+      if (old_frame_bitmap_) SelectObject(frame_dc_, old_frame_bitmap_);
+      DeleteDC(frame_dc_);
+    }
+    if (frame_bitmap_) DeleteObject(frame_bitmap_);
+    frame_dc_ = nullptr;
+    frame_bitmap_ = nullptr;
+    old_frame_bitmap_ = nullptr;
     if (snapshot_dc_) {
       if (old_bitmap_) SelectObject(snapshot_dc_, old_bitmap_);
       DeleteDC(snapshot_dc_);
@@ -455,6 +475,9 @@ class ScreenshotPlugin : public flutter::Plugin {
   UINT modifiers_ = 0;
   HWND overlay_ = nullptr;
   HWND foreground_ = nullptr;
+  HDC frame_dc_ = nullptr;
+  HBITMAP frame_bitmap_ = nullptr;
+  HGDIOBJ old_frame_bitmap_ = nullptr;
   HDC snapshot_dc_ = nullptr;
   HBITMAP bitmap_ = nullptr;
   HGDIOBJ old_bitmap_ = nullptr;
