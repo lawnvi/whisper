@@ -15,13 +15,6 @@
 
 [Download the latest release](https://github.com/lawnvi/whisper/releases/latest) · [View release notes](https://github.com/lawnvi/whisper/releases)
 
-> **Temporary note for Ubuntu 26.04:** The `0.0.50` DEB package does not declare the `libjsoncpp26` dependency, so installation cannot complete normally. The packaging configuration has been fixed in source and will be included in the next release. Until then, use the AppImage:
-
-```bash
-chmod +x whisper-0.0.50-linux-x86_64.AppImage
-./whisper-0.0.50-linux-x86_64.AppImage
-```
-
 ## What It Solves
 
 Whisper is built for a small but frequent problem: your computers, phones, and spare devices are right next to you, yet moving a bit of text, a file, or audio still often means using a chat app, cloud drive, or cable.
@@ -50,6 +43,7 @@ It is not a cloud drive or a public remote desktop tool. Whisper works inside a 
 - **Streaming verification and resume**: calculate SHA-256 while receiving, normally avoiding a second full-file read at completion, and resume from the last acknowledged offset after a disconnect.
 - **System audio sharing**: stream system audio from one desktop device to one or more playback devices, with basic speaker groups and channel roles.
 - **Keyboard and mouse sharing**: share one keyboard and mouse across multiple trusted desktops, with text, image, and file clipboard content following the workspace.
+- **Desktop screenshots**: click to select a window or drag to select a region, then confirm to copy the image for pasting into Whisper or another app. Screenshot shortcuts are configurable.
 - **Desktop experience**: tray integration, launch at startup, close to tray, reveal files in the system file manager, drag files out from desktop messages, light/dark themes, and multilingual UI.
 
 ## Connection
@@ -87,7 +81,7 @@ flutter run
 For local macOS debugging, the repository script is recommended. It builds, signs, and launches the debug app:
 
 ```bash
-sh script/build_and_run.sh
+./script/build_and_run.sh
 ```
 
 ### 3. Verify
@@ -102,7 +96,7 @@ flutter test
 Package a macOS DMG:
 
 ```bash
-sh script/build_and_run.sh package-macos
+./script/build_and_run.sh package-macos
 ```
 
 Regenerate code after database or localization changes:
@@ -133,6 +127,16 @@ On desktop, open audio sharing from the device tools area and choose one or more
 ### Share Keyboard and Mouse
 
 On desktop, open the keyboard/mouse sharing workspace and arrange the local and target screens. Once enabled, the pointer crosses from the configured screen edge to the target device, and keyboard input follows the active target.
+
+Both the controller and the controlled device can stop sharing. Disconnecting a target releases its input control. Single-device sharing and multi-device workspaces share local input ownership: a controlled device cannot start another controller session at the same time. Stop the current session before switching roles.
+
+Enable clipboard auto-sync to paste across devices. Copy text, images, or files, then paste on the target device. Screenshots can also be pasted into the Whisper composer for review before sending; larger images and files need time to transfer over the LAN.
+
+On macOS, grant the requested permissions, including Accessibility. Linux keyboard/mouse sharing currently requires X11; screenshot support on Wayland does not imply keyboard/mouse sharing support.
+
+### Capture and Paste a Screenshot
+
+Use the desktop screenshot button or the shortcut configured in Settings. Click to select a window or drag to select a region, then confirm to copy the image; press `Esc` to cancel. Capturing does not send the image automatically. Paste into the Whisper composer to preview and send it. Linux availability depends on desktop screenshot services, and the system capture dialog may behave differently.
 
 ### Listen to Android Notifications
 
