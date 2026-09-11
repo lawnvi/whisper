@@ -217,6 +217,28 @@ final class _ControlledSink implements WebSocketSink {
 }
 
 void main() {
+  test('input transport loss stops its session before socket cleanup completes', () async {
+    final manager = RemoteInputManager();
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    manager.acceptOffer(const RemoteInputControlMessage(
+      action: RemoteInputControlAction.offer, sessionId: sessionId,
+      sourcePeerId: 'peer-a', sinkPeerId: 'local', layoutEdge: RemoteInputEdge.right,
+    ));
+    final stopped = <String>[];
+    manager.onSessionClosed = stopped.add;
+    final channel = _ControlledChannel(failClose: false);
+    expect(manager.attachChannel(channel, claim: SessionUpgradeClaim(
+      route: '/input', namespace: 'remote-input', sessionId: sessionId,
+      peerId: 'peer-a', mediaMacKey: Uint8List(32), channelBinding: Uint8List(32),
+    )), isTrue);
+    await channel.closeRemote();
+    await channel.closeStarted.future.timeout(const Duration(seconds: 1));
+    expect(stopped, [sessionId]);
+    expect(manager.session(sessionId)?.state, RemoteInputSessionState.stopped);
+    channel.releaseClose.complete();
+    await manager.closeChannels();
+  });
+
   test(
     'remote input callback completion drives websocket receive watermarks',
     () async {

@@ -14,6 +14,12 @@ constexpr char kDesktopClipboardImageChannel[] =
 
 constexpr guint kUriListTarget = 0;
 constexpr guint kGnomeCopiedFilesTarget = 1;
+constexpr guint kImageTarget = 2;
+
+struct ClipboardPayload {
+  gchar** uris;
+  GdkPixbuf* image;
+};
 
 FlMethodChannel* g_clipboard_watcher_channel = nullptr;
 
@@ -27,7 +33,12 @@ void ProvideFileUris(GtkClipboard*,
                      GtkSelectionData* selection_data,
                      guint target,
                      gpointer user_data) {
-  auto** uris = static_cast<gchar**>(user_data);
+  auto* payload = static_cast<ClipboardPayload*>(user_data);
+  if (target == kImageTarget) {
+    gtk_selection_data_set_pixbuf(selection_data, payload->image);
+    return;
+  }
+  auto** uris = payload->uris;
   if (target == kUriListTarget) {
     gtk_selection_data_set_uris(selection_data, uris);
     return;
@@ -48,7 +59,33 @@ void ProvideFileUris(GtkClipboard*,
 }
 
 void ClearFileUris(GtkClipboard*, gpointer user_data) {
-  g_strfreev(static_cast<gchar**>(user_data));
+  auto* payload = static_cast<ClipboardPayload*>(user_data);
+  g_strfreev(payload->uris);
+  g_clear_object(&payload->image);
+  delete payload;
+}
+
+bool WriteClipboardPayload(GtkClipboard* clipboard, ClipboardPayload* payload) {
+  GtkTargetList* targets = gtk_target_list_new(
+      kFileClipboardTargets, G_N_ELEMENTS(kFileClipboardTargets));
+  if (payload->image != nullptr) {
+    // Keep the source URI alongside the image, as on macOS/Windows. It lets
+    // the watcher recognize received images instead of publishing them back.
+    gtk_target_list_add_image_targets(targets, kImageTarget, TRUE);
+  }
+  gint count = 0;
+  GtkTargetEntry* entries = gtk_target_table_new_from_list(targets, &count);
+  gtk_target_list_unref(targets);
+  const bool written = gtk_clipboard_set_with_data(
+      clipboard, entries, count, ProvideFileUris, ClearFileUris, payload);
+  if (written) {
+    gtk_clipboard_set_can_store(clipboard, entries, count);
+    gtk_clipboard_store(clipboard);
+  } else {
+    ClearFileUris(clipboard, payload);
+  }
+  gtk_target_table_free(entries, count);
+  return written;
 }
 
 void NotifyClipboardChanged(GtkClipboard*, GdkEvent*, gpointer) {
@@ -143,30 +180,22 @@ bool WriteFilePaths(FlValue* arguments) {
   const bool as_image = as_image_value != nullptr &&
                         fl_value_get_type(as_image_value) == FL_VALUE_TYPE_BOOL &&
                         fl_value_get_bool(as_image_value);
+  g_autoptr(GdkPixbuf) pixbuf = nullptr;
   if (as_image && fl_value_get_length(paths) == 1) {
     FlValue* path_value = fl_value_get_list_value(paths, 0);
     g_autoptr(GError) error = nullptr;
-    g_autoptr(GdkPixbuf) pixbuf =
+    pixbuf =
         gdk_pixbuf_new_from_file(fl_value_get_string(path_value), &error);
     if (pixbuf == nullptr) {
       return false;
     }
-    gtk_clipboard_set_image(clipboard, pixbuf);
-  } else {
-    auto** clipboard_uris = reinterpret_cast<gchar**>(
-        g_ptr_array_free(g_steal_pointer(&uris), FALSE));
-    if (!gtk_clipboard_set_with_data(
-            clipboard, kFileClipboardTargets,
-            G_N_ELEMENTS(kFileClipboardTargets), ProvideFileUris,
-            ClearFileUris, clipboard_uris)) {
-      g_strfreev(clipboard_uris);
-      return false;
-    }
-    gtk_clipboard_set_can_store(clipboard, kFileClipboardTargets,
-                                G_N_ELEMENTS(kFileClipboardTargets));
   }
-  gtk_clipboard_store(clipboard);
-  return true;
+  return WriteClipboardPayload(
+      clipboard,
+      new ClipboardPayload{
+          reinterpret_cast<gchar**>(
+              g_ptr_array_free(g_steal_pointer(&uris), FALSE)),
+          g_steal_pointer(&pixbuf)});
 }
 
 void MethodCallCallback(FlMethodChannel*,

@@ -37,9 +37,9 @@ class DesktopClipboardImageReader {
     MethodChannel channel = const MethodChannel(channelName),
     Future<Directory> Function()? tempDirectoryProvider,
     DateTime Function()? nowProvider,
-  })  : _channel = channel,
-        _tempDirectoryProvider = tempDirectoryProvider,
-        _nowProvider = nowProvider;
+  }) : _channel = channel,
+       _tempDirectoryProvider = tempDirectoryProvider,
+       _nowProvider = nowProvider;
 
   final MethodChannel _channel;
   final Future<Directory> Function()? _tempDirectoryProvider;
@@ -151,11 +151,16 @@ class DesktopClipboardFileReader {
 
   const DesktopClipboardFileReader({
     MethodChannel channel = const MethodChannel(channelName),
-  }) : _channel = channel;
+    Future<Directory> Function()? tempDirectoryProvider,
+  }) : _channel = channel,
+       _tempDirectoryProvider = tempDirectoryProvider;
 
   final MethodChannel _channel;
+  final Future<Directory> Function()? _tempDirectoryProvider;
 
-  Future<List<ClipboardFileDraft>> readFileDrafts() async {
+  Future<List<ClipboardFileDraft>> readFileDrafts({
+    bool retainRemoteFiles = false,
+  }) async {
     final List<String>? paths;
     try {
       paths = await _channel.invokeListMethod<String>('readFilePaths');
@@ -170,6 +175,9 @@ class DesktopClipboardFileReader {
     }
 
     final drafts = <ClipboardFileDraft>[];
+    final base = _tempDirectoryProvider == null
+        ? Directory.systemTemp
+        : await _tempDirectoryProvider();
     for (final path in paths) {
       try {
         final stat = await FileStat.stat(path);
@@ -177,9 +185,27 @@ class DesktopClipboardFileReader {
         if (!isFile) {
           continue;
         }
+        var draftPath = path;
+        if (retainRemoteFiles &&
+            p.isWithin(p.join(base.path, 'whisper_remote_clipboard'), path)) {
+          // Composer drafts outlive the sharing session and its disposable
+          // download cache; keep their files just like local screenshot drafts.
+          final directory = await Directory(
+            p.join(base.path, 'whisper_clipboard_images'),
+          ).create(recursive: true);
+          final retained = await directory.createTemp('paste-');
+          try {
+            draftPath = (await File(
+              path,
+            ).copy(p.join(retained.path, p.basename(path)))).path;
+          } catch (_) {
+            await retained.delete(recursive: true);
+            rethrow;
+          }
+        }
         drafts.add(
           ClipboardFileDraft(
-            path: path,
+            path: draftPath,
             fileName: p.basename(path),
             size: stat.size,
           ),

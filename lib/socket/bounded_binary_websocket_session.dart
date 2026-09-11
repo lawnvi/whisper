@@ -4,9 +4,8 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper/socket/bounded_receive_queue.dart';
 
-typedef BinaryWebSocketMessageHandler = FutureOr<void> Function(
-  Uint8List bytes,
-);
+typedef BinaryWebSocketMessageHandler =
+    FutureOr<void> Function(Uint8List bytes);
 
 final class BoundedBinaryWebSocketSession {
   BoundedBinaryWebSocketSession({
@@ -14,20 +13,21 @@ final class BoundedBinaryWebSocketSession {
     required this.maxMessageBytes,
     required BinaryWebSocketMessageHandler onMessage,
     void Function(Object error)? onError,
+    void Function()? onClosing,
     void Function()? onClosed,
-  })  : _channel = channel,
-        _onMessage = onMessage,
-        _onError = onError,
-        _onClosed = onClosed {
+  }) : _channel = channel,
+       _onMessage = onMessage,
+       _onError = onError,
+       _onClosing = onClosing,
+       _onClosed = onClosed {
     if (maxMessageBytes <= 0) {
       throw ArgumentError.value(maxMessageBytes, 'maxMessageBytes');
     }
     _queue = BoundedReceiveQueue(
       onPause: () => _subscription?.pause(),
       onResume: () => _subscription?.resume(),
-      onOverflow: () => _failClosed(
-        StateError('binary websocket receive queue overflow'),
-      ),
+      onOverflow: () =>
+          _failClosed(StateError('binary websocket receive queue overflow')),
     );
     final subscription = channel.stream.listen(
       _handleMessage,
@@ -37,9 +37,7 @@ final class BoundedBinaryWebSocketSession {
     );
     _subscription = subscription;
     if (_closing) {
-      unawaited(
-        subscription.cancel().catchError((Object _, StackTrace __) {}),
-      );
+      unawaited(subscription.cancel().catchError((Object _, StackTrace __) {}));
     }
   }
 
@@ -47,6 +45,7 @@ final class BoundedBinaryWebSocketSession {
   final int maxMessageBytes;
   final BinaryWebSocketMessageHandler _onMessage;
   final void Function(Object error)? _onError;
+  final void Function()? _onClosing;
   final void Function()? _onClosed;
   late final BoundedReceiveQueue _queue;
   StreamSubscription<dynamic>? _subscription;
@@ -78,13 +77,17 @@ final class BoundedBinaryWebSocketSession {
     final queued = _queue.add(bytes.length, () async {
       await _onMessage(bytes);
     });
-    unawaited(queued.then<void>((accepted) {
-      if (!accepted) {
-        _failClosed(StateError('binary websocket receive queue closed'));
-      }
-    }).catchError((Object error, StackTrace stackTrace) {
-      _failClosed(error);
-    }));
+    unawaited(
+      queued
+          .then<void>((accepted) {
+            if (!accepted) {
+              _failClosed(StateError('binary websocket receive queue closed'));
+            }
+          })
+          .catchError((Object error, StackTrace stackTrace) {
+            _failClosed(error);
+          }),
+    );
   }
 
   void _failClosed(Object error) {
@@ -94,9 +97,7 @@ final class BoundedBinaryWebSocketSession {
     try {
       _onError?.call(error);
     } finally {
-      unawaited(
-        _beginClose().catchError((Object _, StackTrace __) {}),
-      );
+      unawaited(_beginClose().catchError((Object _, StackTrace __) {}));
     }
   }
 
@@ -120,25 +121,31 @@ final class BoundedBinaryWebSocketSession {
     final closeFuture = completer.future;
     _closeFuture = closeFuture;
     final subscription = _subscription;
-    unawaited(() async {
-      try {
-        await Future.wait(<Future<void>>[
-          if (cancelSubscription && subscription != null) subscription.cancel(),
-          _queue.closeAndDrain(),
-          _channel.sink.close(),
-        ]);
-      } finally {
-        if (identical(_subscription, subscription)) {
-          _subscription = null;
+    unawaited(
+      () async {
+        try {
+          try {
+            _onClosing?.call();
+          } finally {
+            await Future.wait(<Future<void>>[
+              if (cancelSubscription && subscription != null)
+                subscription.cancel(),
+              _queue.closeAndDrain(),
+              _channel.sink.close(),
+            ]);
+          }
+        } finally {
+          if (identical(_subscription, subscription)) {
+            _subscription = null;
+          }
+          _onClosed?.call();
         }
-        _onClosed?.call();
-      }
-    }()
-        .then<void>(
-      (_) => completer.complete(),
-      onError: (Object error, StackTrace stackTrace) =>
-          completer.completeError(error, stackTrace),
-    ));
+      }().then<void>(
+        (_) => completer.complete(),
+        onError: (Object error, StackTrace stackTrace) =>
+            completer.completeError(error, stackTrace),
+      ),
+    );
     return closeFuture;
   }
 }

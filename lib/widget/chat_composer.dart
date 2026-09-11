@@ -83,7 +83,19 @@ class ChatComposer extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     if (isDesktopStyle) {
-      return _buildDesktopComposer(context, colorScheme);
+      return Actions(
+        actions: <Type, Action<Intent>>{
+          if (canSend && onPasteClipboard != null)
+            // Shared input on macOS dispatches a paste intent directly.
+            PasteTextIntent: CallbackAction<PasteTextIntent>(
+              onInvoke: (_) {
+                unawaited(_handlePasteShortcut());
+                return null;
+              },
+            ),
+        },
+        child: _buildDesktopComposer(context, colorScheme),
+      );
     }
 
     return _buildMobileComposer(context, colorScheme);

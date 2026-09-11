@@ -1204,7 +1204,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     final generation = ++_clipboardPasteGeneration;
     try {
-      final drafts = await _clipboardFileReader.readFileDrafts();
+      final drafts = await _clipboardFileReader.readFileDrafts(
+        retainRemoteFiles: true,
+      );
       if (!mounted || generation != _clipboardPasteGeneration) {
         return null;
       }

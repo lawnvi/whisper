@@ -38,6 +38,52 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
+    test(
+      'stopping during native injection startup cannot reactivate the session',
+      () async {
+        final started = Completer<void>(), finish = Completer<void>();
+        final manager = RemoteInputManager();
+        final coordinator = RemoteInputCoordinator(
+          manager: manager,
+          platform: platform,
+          scrollMultiplierProvider: () async => 1,
+        );
+        final controls = <RemoteInputControlMessage>[];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add(call);
+              if (call.method == 'startInjection') {
+                started.complete();
+                await finish.future;
+              }
+              return null;
+            });
+        final pending = coordinator.handleControlMessage(
+          const RemoteInputControlMessage(
+            action: RemoteInputControlAction.offer,
+            sessionId: 'cancel-start',
+            sourcePeerId: 'source',
+            sinkPeerId: 'sink',
+            layoutEdge: RemoteInputEdge.right,
+          ),
+          localPeerId: 'sink',
+          remoteHost: 'source.local',
+          remotePort: 10002,
+          isMutuallyTrusted: true,
+          localCanInject: true,
+          sendControl: controls.add,
+        );
+        await started.future;
+        await coordinator.stopSharing(sendControl: controls.add);
+        finish.complete();
+        await pending;
+        expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+        expect(manager.onPacket, isNull);
+        expect(controls.map((c) => c.action), [RemoteInputControlAction.stop]);
+        await coordinator.stopLocal();
+      },
+    );
+
     test('source arms capture after a trusted capable offer is accepted',
         () async {
       final transport = _FakeRemoteInputTransport();
@@ -598,6 +644,14 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(calls.map((call) => call.method), contains('injectEvent'));
+      await coordinator.stopSharing(sendControl: sentControls.add);
+      final stop = sentControls.last;
+      expect(stop.action, RemoteInputControlAction.stop);
+      expect(stop.sessionId, offer.sessionId);
+      expect(stop.sourcePeerId, 'mac');
+      expect(stop.sinkPeerId, 'win');
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+      expect(calls.map((call) => call.method), contains('stopInjection'));
     });
 
     test('sink waits for remote clipboard files before injecting paste',

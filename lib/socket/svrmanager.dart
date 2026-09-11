@@ -3121,6 +3121,7 @@ class WsSvrManager {
     await Future.wait(<Future<void>>[
       _audioManager.closePeerChannels(peerId),
       _remoteInputManager.closePeerChannels(peerId),
+      _remoteClipboardTransfer.clearPeer(peerId),
     ]);
     if (!ownsCleanup()) {
       return;
@@ -4269,6 +4270,9 @@ class WsSvrManager {
             generation: session.connectionGeneration,
           ),
           frame,
+          prepareImages:
+              frame.type == WhisperFrameType.clipboardOffer &&
+              await LocalSetting().clipboardAutoSync(),
         );
         if (frame.type == WhisperFrameType.clipboardOffer &&
             clipboardSessionId != null) {
@@ -5147,6 +5151,7 @@ class WsSvrManager {
         namespace: namespace,
       );
     } else if (route == '/input') {
+      await _remoteClipboardTransfer.clearSession(sessionId);
       await _remoteInputManager.closeSessionChannels(
         sessionId,
         peerId: peerId,
@@ -5835,13 +5840,6 @@ class WsSvrManager {
         sessionId: sessionId,
         offerId: offer.offerId,
       );
-      // Images are produced by actions such as region screenshots. Materialize
-      // an image offer as soon as it reaches the controller so Ctrl/Cmd+V in
-      // any local application can use it, including platforms without a
-      // native local-paste interception hook.
-      if (offer.items.length == 1 && offer.items.single.isImage) {
-        await prepareRemoteClipboardPaste(peerId: peerId, sessionId: sessionId);
-      }
       if (!isWorkspaceOrigin) {
         return;
       }

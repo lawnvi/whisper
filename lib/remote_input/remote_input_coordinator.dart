@@ -114,10 +114,7 @@ class RemoteInputRuntimeState {
 }
 
 final class _PendingInjectionEntry {
-  _PendingInjectionEntry({
-    required this.frame,
-    required this.byteLength,
-  });
+  _PendingInjectionEntry({required this.frame, required this.byteLength});
 
   RemoteInputPacketFrame frame;
   int byteLength;
@@ -168,6 +165,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
   RemoteClipboardSessionCleaner? _remoteClipboardSessionCleaner;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
+  int _runtimeGeneration = 0;
+  Future<void>? _stopping;
   RemoteInputPacketTransport? _transport;
   final ListQueue<_PendingInjectionEntry> _pendingInjectionFrames =
       ListQueue<_PendingInjectionEntry>();
@@ -293,7 +292,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       allowed: isMutuallyTrusted,
       enabled: remoteCanInject,
     );
-    await stopLocal();
+    final stopping = stopLocal();
+    final generation = _runtimeGeneration;
+    await stopping;
+    if (generation != _runtimeGeneration) return;
     if (!isMutuallyTrusted || !remoteCanInject) {
       final failureReason = !isMutuallyTrusted
           ? RemoteInputFailureReason.trustRequired
@@ -467,7 +469,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   Future<void> stopLocal() => _stopLocal();
 
-  Future<void> _stopLocal({bool sessionAlreadyStopped = false}) async {
+  Future<void> _stopLocal({bool sessionAlreadyStopped = false}) {
+    _runtimeGeneration++;
+    return _stopping ??= _disposeLocal(
+      sessionAlreadyStopped: sessionAlreadyStopped,
+    ).whenComplete(() => _stopping = null);
+  }
+
+  Future<void> _disposeLocal({required bool sessionAlreadyStopped}) async {
     final current = _state;
     _trace(
       RemoteInputDiagnosticKind.stopped,
@@ -491,36 +500,43 @@ class RemoteInputCoordinator extends ChangeNotifier {
     if (_manager.onPacket != null) {
       _manager.onPacket = null;
     }
-    await _inputSubscription?.cancel();
-    await _releaseSubscription?.cancel();
-    await _errorSubscription?.cancel();
-    await _diagnosticSubscription?.cancel();
-    await _transportDoneSubscription?.cancel();
+    _manager.onSessionClosed = null;
+    final cancellations = [
+      if (_inputSubscription != null) _inputSubscription!.cancel(),
+      if (_releaseSubscription != null) _releaseSubscription!.cancel(),
+      if (_errorSubscription != null) _errorSubscription!.cancel(),
+      if (_diagnosticSubscription != null) _diagnosticSubscription!.cancel(),
+      if (_transportDoneSubscription != null)
+        _transportDoneSubscription!.cancel(),
+    ];
     _inputSubscription = null;
     _releaseSubscription = null;
     _errorSubscription = null;
     _diagnosticSubscription = null;
     _transportDoneSubscription = null;
+    // Invalidate the session before any cleanup yields to a pending start.
+    _setState(const RemoteInputRuntimeState.idle());
     if (current.sessionId.isNotEmpty) {
-      final clearClipboard = _remoteClipboardSessionCleaner;
-      if (clearClipboard != null && current.peerId.isNotEmpty) {
-        await clearClipboard(
-          peerId: current.peerId,
-          sessionId: current.sessionId,
-        );
-      }
-      if (current.role == RemoteInputRuntimeRole.source) {
-        await _platform.stopCapture(sessionId: current.sessionId);
-      }
-      if (current.role == RemoteInputRuntimeRole.sink) {
-        await _platform.stopInjection(sessionId: current.sessionId);
-      }
       if (!sessionAlreadyStopped) {
         _manager.stopSession(current.sessionId);
       }
+      if (current.role == RemoteInputRuntimeRole.source) {
+        cancellations.add(_platform.stopCapture(sessionId: current.sessionId));
+      }
+      if (current.role == RemoteInputRuntimeRole.sink) {
+        cancellations.add(
+          _platform.stopInjection(sessionId: current.sessionId),
+        );
+      }
+      final clearClipboard = _remoteClipboardSessionCleaner;
+      if (clearClipboard != null && current.peerId.isNotEmpty) {
+        cancellations.add(
+          clearClipboard(peerId: current.peerId, sessionId: current.sessionId),
+        );
+      }
     }
-    await transport?.close();
-    _setState(const RemoteInputRuntimeState.idle());
+    if (transport != null) cancellations.add(transport.close());
+    await Future.wait(cancellations);
   }
 
   Future<void> _handleOffer(
@@ -600,14 +616,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     try {
       _trace(RemoteInputDiagnosticKind.injectionStarting);
-      await _startInjection(
+      final started = await _startInjection(
         accept,
         sendControl: sendControl,
         remotePlatform: remotePlatform,
       );
+      if (!started) return;
       _trace(RemoteInputDiagnosticKind.acceptSent);
       sendControl(accept);
     } catch (error) {
+      if (_state.sessionId != offer.sessionId) return;
       final failureReason = remoteInputFailureReasonFor(
         error,
         context: RemoteInputFailureContext.injection,
@@ -668,6 +686,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         mediaSendKey: mediaSendKey,
       );
     } catch (error) {
+      if (_state.sessionId != accept.sessionId) return;
       final failureReason = remoteInputFailureReasonFor(
         error,
         context: RemoteInputFailureContext.capture,
@@ -700,13 +719,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _startInjection(
+  Future<bool> _startInjection(
     RemoteInputControlMessage message, {
     required RemoteInputControlSender sendControl,
     String remotePlatform = '',
   }) async {
     _trace(RemoteInputDiagnosticKind.injectionStarting);
-    await stopLocal();
+    final stopping = stopLocal();
+    final generation = _runtimeGeneration;
+    await stopping;
+    if (generation != _runtimeGeneration) return false;
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.connecting,
@@ -723,6 +745,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       segmentEnd: message.sinkSegmentEnd,
       edgeMappings: message.edgeMappings,
     );
+    if (generation != _runtimeGeneration) return false;
     _trace(RemoteInputDiagnosticKind.injectionStarted);
     final targetPlatform = _platformKindProvider();
     _keyTranslator = _keyTranslatorFactory(targetPlatform);
@@ -731,6 +754,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       remotePlatform,
     );
     updateScrollMultiplier(await _loadScrollMultiplier());
+    if (generation != _runtimeGeneration) return false;
     _latestSinkPacketSequence = 0;
     _latestSinkActivationSequence = 0;
     _sinkPacketTraceCount = 0;
@@ -784,7 +808,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           RemoteInputDiagnosticKind.platformError,
           reason: RemoteInputFailureReason.injection,
         );
-        unawaited(stopLocal());
+        unawaited(stopSharing(sendControl: sendControl));
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
@@ -793,6 +817,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _beginInjectionQueue(message.sessionId);
+    _manager.onSessionClosed = (sessionId) {
+      if (_state.sessionId == sessionId) {
+        // Release held keys and cancel pending paste before the socket waits
+        // for its receive queue to drain.
+        unawaited(stopLocal());
+      }
+    };
     _manager.onPacket = (packet) {
       final routing = _sinkControlMessage ?? message;
       final routedPacket = _routeSinkActiveStartPacket(packet, routing);
@@ -849,6 +880,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     _trace(RemoteInputDiagnosticKind.injectionActive);
+    return true;
   }
 
   FutureOr<List<RemoteInputPacketFrame>> _interceptRemoteClipboardPaste(
@@ -1008,10 +1040,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return false;
     }
     _pendingInjectionFrames.add(
-      _PendingInjectionEntry(
-        frame: frame,
-        byteLength: byteLength,
-      ),
+      _PendingInjectionEntry(frame: frame, byteLength: byteLength),
     );
     _retainedInjectionItems++;
     _retainedInjectionBytes += byteLength;
@@ -1264,6 +1293,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     Uint8List? mediaSendKey,
   }) async {
     final edge = message.layoutEdge;
+    final generation = _runtimeGeneration;
     if (edge == null) {
       _trace(
         RemoteInputDiagnosticKind.captureMissingEdge,
@@ -1301,6 +1331,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
         sessionId: message.sessionId,
         peerId: message.sourcePeerId,
       );
+    }
+    if (generation != _runtimeGeneration) {
+      await transport.close();
+      return;
     }
     _transport = transport;
     _transportDoneSubscription = _listenForSourceTransportDone(
@@ -1356,7 +1390,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           RemoteInputDiagnosticKind.platformError,
           reason: RemoteInputFailureReason.capture,
         );
-        unawaited(stopLocal());
+        unawaited(stopSharing(sendControl: sendControl));
       }
     });
     _diagnosticSubscription = _platform.diagnostics.listen((diagnostic) {
@@ -1373,6 +1407,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       segmentEnd: message.sourceSegmentEnd,
       edgeMappings: message.edgeMappings,
     );
+    if (generation != _runtimeGeneration) return;
     _trace(RemoteInputDiagnosticKind.captureStarted);
     _setState(
       RemoteInputRuntimeState(

@@ -463,7 +463,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         result: result)
 
     case "stopCapture":
-      stopCapture()
+      if let args = call.arguments as? [String: Any],
+         args["sessionId"] as? String == captureSessionId {
+        stopCapture()
+      }
       result(nil)
 
     case "pauseCapture":
@@ -569,7 +572,10 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       result(nil)
 
     case "stopInjection":
-      stopInjection()
+      if let args = call.arguments as? [String: Any],
+         args["sessionId"] as? String == injectionSessionId {
+        stopInjection()
+      }
       result(nil)
 
     case "getDisplayTopology":

@@ -49,12 +49,16 @@ void main() {
     expect(publishItemsMethod, isNot(contains('clipboardAutoSync')));
   });
 
-  test('image offers are materialized on the controller immediately', () {
+  test('image offers prepare on either peer outside the receive queue', () {
     final manager = File('lib/socket/svrmanager.dart').readAsStringSync();
-    expect(manager, contains('offer.items.single.isImage'));
+    final transfer = File(
+      'lib/remote_input/remote_clipboard_transfer.dart',
+    ).readAsStringSync();
+    expect(manager, contains('prepareImages:'));
+    expect(transfer, contains('unawaited(_prepareImageOffer(offer))'));
     expect(
       manager,
-      contains('await prepareRemoteClipboardPaste(peerId: peerId'),
+      isNot(contains('await prepareRemoteClipboardPaste(peerId: peerId')),
     );
   });
 

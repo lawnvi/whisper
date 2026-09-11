@@ -58,6 +58,7 @@ class RemoteInputManager {
   static final RemoteInputManager shared = RemoteInputManager();
 
   RemoteInputPacketCallback? onPacket;
+  void Function(String sessionId)? onSessionClosed;
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
@@ -345,6 +346,13 @@ class RemoteInputManager {
           packetDecoder.decode(bytes),
           expectedSessionId: claim.sessionId,
         ),
+        onClosing: () {
+          if (_sessions[claim.sessionId]?.state ==
+              RemoteInputSessionState.connected) {
+            stopSession(claim.sessionId);
+            onSessionClosed?.call(claim.sessionId);
+          }
+        },
         onClosed: () {
           packetDecoder.destroy();
           _channels.remove(binding)?.destroy();

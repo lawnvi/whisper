@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_clipboard_image.dart';
+import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/widget/chat_composer.dart';
 
 void main() {
@@ -625,6 +626,24 @@ void main() {
     expect(filePasteAttempts, 1);
     expect(imagePasteAttempts, 0);
     expect(controller.text, 'hello ');
+
+    // macOS sharing dispatches paste commands instead of Flutter key events.
+    const channel = MethodChannel('test_composer_remote_paste');
+    final platform = RemoteInputPlatform(channel: channel);
+    addTearDown(() => channel.setMethodCallHandler(null));
+    for (final method in ['onTextShortcut', 'onLocalPasteShortcut']) {
+      final beforePaste = filePasteAttempts;
+      final handled = await platform.handleNativeMethodCall(
+        MethodCall(method, const {
+          'shortcut': 'paste',
+          'appActive': true,
+        }),
+      );
+      await tester.pump();
+      expect(filePasteAttempts, beforePaste + 1, reason: method);
+      expect(controller.text, 'hello ', reason: method);
+      expect(handled, method == 'onTextShortcut', reason: method);
+    }
   });
 
   testWidgets(

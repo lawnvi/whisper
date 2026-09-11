@@ -41,6 +41,57 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
+    test('stopping while transport connects cannot restart capture', () async {
+      final started = Completer<void>();
+      final connected = Completer<RemoteInputPacketTransport>();
+      final transport = _FakeRemoteInputTransport();
+      final coordinator = RemoteInputWorkspaceCoordinator(
+        platform: platform,
+        transportFactory: (_) {
+          started.complete();
+          return connected.future;
+        },
+      );
+      final controls = <RemoteInputControlMessage>[];
+      void send(String peerId, RemoteInputControlMessage message) =>
+          controls.add(message);
+      await coordinator.startControllerWorkspace(
+        sourcePeerId: 'mac',
+        targets: [
+          _targetRequest(
+            peerId: 'peer',
+            host: 'peer.local',
+            routeId: 'route',
+            start: 0,
+            end: 800,
+          ),
+        ],
+        sendControlTo: send,
+      );
+      final pending = coordinator.handleControlMessage(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.accept,
+          sessionId: controls.single.sessionId,
+          sourcePeerId: 'mac',
+          sinkPeerId: 'peer',
+          layoutEdge: RemoteInputEdge.right,
+        ),
+        localPeerId: 'mac',
+        remoteHost: 'peer.local',
+        remotePort: 10002,
+        sendControlTo: send,
+      );
+      await started.future;
+      await coordinator.stopControllerWorkspace();
+      calls.clear();
+      connected.complete(transport);
+      await pending;
+      expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
+      expect(transport.closed, isTrue);
+      expect(calls.where((call) => call.method == 'startCapture'), isEmpty);
+      await coordinator.stopControllerWorkspace();
+    });
+
     test(
       'keeps multiple accepted targets and routes input by routeId',
       () async {
@@ -382,7 +433,9 @@ void main() {
     test(
       'disconnects an unreachable branch and restores it after auth',
       () async {
+        var controllerAvailable = true;
         final coordinator = RemoteInputWorkspaceCoordinator(
+          controllerAvailable: () => controllerAvailable,
           platform: platform,
           transportFactory: (uri) async {
             final transport = _FakeRemoteInputTransport();
@@ -476,12 +529,26 @@ void main() {
 
         await coordinator.handlePeerDisconnected('peer-b');
 
-        expect(coordinator.snapshot.isControllerLive, isTrue);
+        expect(coordinator.snapshot.isControllerLive, isFalse);
+        expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
         expect(coordinator.snapshot.connectedTargetPeerIds, isEmpty);
         expect(
           sentControls['peer-c']!.map((message) => message.action),
           contains(RemoteInputControlAction.stop),
         );
+
+        controllerAvailable = false;
+        await coordinator.handlePeerReconnected(
+          peerId: 'peer-b',
+          host: 'peer-b-new.local',
+          port: 10002,
+          isMutuallyTrusted: true,
+          remoteCanInject: true,
+          sendControlTo: (_, _) =>
+              fail('A controlled device must not reconnect as controller'),
+        );
+        expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
+        controllerAvailable = true;
 
         await coordinator.handlePeerReconnected(
           peerId: 'peer-b',
@@ -510,6 +577,27 @@ void main() {
           coordinator.snapshot.status,
           RemoteInputWorkspaceStatus.offering,
         );
+        final reoffer = sentControls['peer-b']!.lastWhere(
+          (message) => message.action == RemoteInputControlAction.offer,
+        );
+        await coordinator.handleControlMessage(
+          RemoteInputControlMessage(
+            action: RemoteInputControlAction.stop,
+            sessionId: reoffer.sessionId,
+            sourcePeerId: 'mac',
+            sinkPeerId: 'peer-b',
+          ),
+          localPeerId: 'mac',
+          remoteHost: 'peer-b-new.local',
+          remotePort: 10002,
+          sendControlTo: (peerId, control) {
+            sentControls.putIfAbsent(peerId, () => []).add(control);
+          },
+        );
+        expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
+        expect(coordinator.snapshot.isControllerLive, isFalse);
+        expect(coordinator.snapshot.liveTargetPeerIds, isEmpty);
+        await coordinator.stopControllerWorkspace();
       },
     );
 

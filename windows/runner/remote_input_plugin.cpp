@@ -1092,7 +1092,9 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
 
     if (method == "stopCapture") {
-      StopCapture();
+      const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+      const auto* session_id = args == nullptr ? nullptr : GetMapValue<std::string>(*args, "sessionId");
+      if (session_id != nullptr && *session_id == capture_session_id_) StopCapture();
       result->Success();
       return;
     }
@@ -1199,7 +1201,9 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
 
     if (method == "stopInjection") {
-      StopInjection();
+      const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+      const auto* session_id = args == nullptr ? nullptr : GetMapValue<std::string>(*args, "sessionId");
+      if (session_id != nullptr && *session_id == injection_session_id_) StopInjection();
       result->Success();
       return;
     }

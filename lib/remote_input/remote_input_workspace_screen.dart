@@ -60,6 +60,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   bool _loading = true;
   bool _starting = false;
 
+  bool get _hasLegacySession =>
+      _legacyCoordinator.state.status != RemoteInputRuntimeStatus.idle &&
+      _legacyCoordinator.state.status != RemoteInputRuntimeStatus.failed;
+
   DeviceData? get _focusedDevice =>
       _devices.where((device) => device.uid == _focusedPeerId).firstOrNull;
 
@@ -73,6 +77,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     _devices = widget.initialDevices;
     _focusedPeerId = widget.preferredPeerId;
     _workspaceCoordinator.addListener(_handleWorkspaceChanged);
+    _legacyCoordinator.addListener(_handleWorkspaceChanged);
     unawaited(_loadWorkspace());
   }
 
@@ -80,6 +85,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _workspaceCoordinator.removeListener(_handleWorkspaceChanged);
+    _legacyCoordinator.removeListener(_handleWorkspaceChanged);
     super.dispose();
   }
 
@@ -520,7 +526,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
 
   Widget _buildWorkspaceToggleButton(AppLocalizations l10n) {
     final palette = context.whisperPalette;
-    final isLive = _workspaceCoordinator.snapshot.isControllerLive;
+    final isLive =
+        _workspaceCoordinator.snapshot.isControllerLive || _hasLegacySession;
     final icon = _starting
         ? const SizedBox.square(
             dimension: 16,
@@ -1313,6 +1320,21 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     AppLocalizations l10n,
   ) {
     final palette = context.whisperPalette;
+    if (_hasLegacySession) {
+      final state = _legacyCoordinator.state;
+      final isSink = state.role == RemoteInputRuntimeRole.sink;
+      return _WorkspaceStatusPresentation(
+        icon: Icons.keyboard_alt_outlined,
+        label: state.isBusy
+            ? (isSink
+                  ? l10n.remoteInputSinkConnecting
+                  : l10n.remoteInputSourceConnecting)
+            : (isSink
+                  ? l10n.remoteInputSinkActiveStop
+                  : l10n.remoteInputSourceActiveStop),
+        color: state.isBusy ? palette.warning : palette.connected,
+      );
+    }
     final snapshot = _workspaceCoordinator.snapshot;
     return switch (snapshot.status) {
       RemoteInputWorkspaceStatus.offering => _WorkspaceStatusPresentation(
@@ -1354,14 +1376,17 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       showAppToast(l10n.remoteInputStopped);
       return;
     }
-    if (_selectedPeerIds.isEmpty) {
-      showAppToast(l10n.remoteInputWorkspaceNoTargets);
+    if (_hasLegacySession) {
+      final peerId = _legacyCoordinator.state.peerId;
+      await _legacyCoordinator.stopSharing(
+        sendControl: (control) =>
+            _socketManager.sendRemoteInputControlTo(peerId, control),
+      );
+      showAppToast(l10n.remoteInputStopped);
       return;
     }
-    final legacyState = _legacyCoordinator.state;
-    if (legacyState.status != RemoteInputRuntimeStatus.idle &&
-        legacyState.status != RemoteInputRuntimeStatus.failed) {
-      showAppToast(l10n.remoteInputStopCurrentFirst);
+    if (_selectedPeerIds.isEmpty) {
+      showAppToast(l10n.remoteInputWorkspaceNoTargets);
       return;
     }
     if (!isDesktop() || !supportsNativeRemoteInput()) {

@@ -137,6 +137,35 @@ void main() {
     });
 
     test(
+      'composer keeps received images after the sharing cache is cleared',
+      () async {
+        final source = File(
+          p.join(
+            tempDir.path,
+            'whisper_remote_clipboard',
+            'session',
+            'image.png',
+          ),
+        );
+        await source.parent.create(recursive: true);
+        await source.writeAsBytes([137, 80, 78, 71]);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (_) async => [source.path]);
+        final reader = DesktopClipboardFileReader(
+          channel: channel,
+          tempDirectoryProvider: () async => tempDir,
+        );
+        expect((await reader.readFileDrafts()).single.path, source.path);
+        final draft = (await reader.readFileDrafts(
+          retainRemoteFiles: true,
+        )).single;
+        await source.parent.delete(recursive: true);
+        expect(draft.fileName, 'image.png');
+        expect(await File(draft.path).readAsBytes(), [137, 80, 78, 71]);
+      },
+    );
+
+    test(
       'returns an empty list when the platform channel is unavailable',
       () async {
         final reader = DesktopClipboardFileReader(channel: channel);
@@ -148,28 +177,31 @@ void main() {
     );
   });
 
-  test('DesktopClipboardFileWriter exposes image files to the system clipboard',
-      () async {
-    const channel = MethodChannel('test_desktop_clipboard_writer');
-    MethodCall? receivedCall;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          receivedCall = call;
-          return true;
-        });
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null),
-    );
+  test(
+    'DesktopClipboardFileWriter exposes image files to the system clipboard',
+    () async {
+      const channel = MethodChannel('test_desktop_clipboard_writer');
+      MethodCall? receivedCall;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            receivedCall = call;
+            return true;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
 
-    final written = await const DesktopClipboardFileWriter(channel: channel)
-        .writeFilePaths(<String>['/tmp/received-image.jpg'], asImage: true);
+      final written = await const DesktopClipboardFileWriter(
+        channel: channel,
+      ).writeFilePaths(<String>['/tmp/received-image.jpg'], asImage: true);
 
-    expect(written, isTrue);
-    expect(receivedCall?.method, 'writeFilePaths');
-    expect(receivedCall?.arguments, <String, Object?>{
-      'paths': <String>['/tmp/received-image.jpg'],
-      'asImage': true,
-    });
-  });
+      expect(written, isTrue);
+      expect(receivedCall?.method, 'writeFilePaths');
+      expect(receivedCall?.arguments, <String, Object?>{
+        'paths': <String>['/tmp/received-image.jpg'],
+        'asImage': true,
+      });
+    },
+  );
 }
