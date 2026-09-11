@@ -4688,19 +4688,6 @@ class WsSvrManager {
               control.action == RemoteInputControlAction.reject ||
               control.action == RemoteInputControlAction.stop ||
               control.action == RemoteInputControlAction.error;
-          final handledByWorkspaceBusy = await RemoteInputWorkspaceCoordinator
-              .shared
-              .handleIncomingOfferIfBusy(
-                control,
-                localPeerId: self.uid,
-                sendControlTo: (_, control) =>
-                    sendRemoteInputControlTo(session.remotePeerId, control),
-              );
-          requireCurrentBusiness();
-          if (handledByWorkspaceBusy) {
-            await _ackMessage(message);
-            break;
-          }
           try {
             final handledByWorkspace = await session.withMediaSendKeyAsync(
               (mediaSendKey) =>

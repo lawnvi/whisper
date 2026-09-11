@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 
 enum RemoteInputFailureReason {
   permission,
@@ -36,6 +37,7 @@ RemoteInputFailureReason remoteInputFailureReasonFor(
   Object error, {
   required RemoteInputFailureContext context,
 }) {
+  if (error is RemoteInputBusyException) return RemoteInputFailureReason.busy;
   if (error is PlatformException) {
     final code = error.code.toLowerCase();
     if (code.contains('permission') || code.contains('denied')) {

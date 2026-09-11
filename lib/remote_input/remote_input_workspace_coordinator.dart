@@ -11,6 +11,7 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
+import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -323,21 +324,13 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     RemoteInputTransportFactory? transportFactory,
     RemoteInputWorkspaceSessionIdFactory? workspaceSessionIdFactory,
     RemoteInputPlatformKindProvider? platformKindProvider,
-    bool Function()? controllerAvailable,
-  }) : _manager = manager ?? RemoteInputManager(),
+  }) : _manager = manager ?? RemoteInputManager.shared,
        _platform = platform ?? RemoteInputCoordinator.shared.platform,
        _transportFactory = transportFactory,
        _workspaceSessionIdFactory =
            workspaceSessionIdFactory ?? const Uuid().v4,
        _platformKindProvider =
-           platformKindProvider ?? currentRemoteInputPlatformKind,
-       _controllerAvailable =
-           controllerAvailable ??
-           (() {
-             final status = RemoteInputCoordinator.shared.state.status;
-             return status == RemoteInputRuntimeStatus.idle ||
-                 status == RemoteInputRuntimeStatus.failed;
-           });
+           platformKindProvider ?? currentRemoteInputPlatformKind;
 
   static final RemoteInputWorkspaceCoordinator shared =
       RemoteInputWorkspaceCoordinator(
@@ -350,9 +343,14 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   final RemoteInputTransportFactory? _transportFactory;
   final RemoteInputWorkspaceSessionIdFactory _workspaceSessionIdFactory;
   final RemoteInputPlatformKindProvider _platformKindProvider;
-  final bool Function() _controllerAvailable;
-  int _runtimeGeneration = 0;
-  Future<void>? _stopping;
+  late final RemoteInputLifecycleOwner _lifecycle = _manager.lifecycle
+      .createOwner(
+        cleanup: _disposeRuntime,
+        canYield: () =>
+            _snapshot.role == RemoteInputWorkspaceRole.controller &&
+            _snapshot.workspaceSessionId.isNotEmpty &&
+            !_snapshot.isControllerLive,
+      );
 
   RemoteInputWorkspaceSnapshot _snapshot =
       const RemoteInputWorkspaceSnapshot.idle();
@@ -403,9 +401,6 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     List<RemoteInputWorkspaceRoute> workspaceRoutes =
         const <RemoteInputWorkspaceRoute>[],
   }) async {
-    if (!_controllerAvailable()) {
-      throw const RemoteInputWorkspaceException('Remote input is busy');
-    }
     if (targets.isEmpty) {
       throw const RemoteInputWorkspaceException(
         'Select at least one remote input target',
@@ -431,12 +426,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       );
     }
 
-    final stopping = stopControllerWorkspace(
-      sendControlTo: _sendControlTo ?? sendControlTo,
-    );
-    final generation = _runtimeGeneration;
-    await stopping;
-    if (generation != _runtimeGeneration || !_controllerAvailable()) return;
+    final generation = await _lifecycle.start();
+    if (generation == null) return;
     final workspaceSessionId = _workspaceSessionIdFactory();
     _sendControlTo = sendControlTo;
     _targets.clear();
@@ -511,7 +502,6 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         sessionId: offer.sessionId,
         status: RemoteInputWorkspaceTargetStatus.offering,
       );
-      sendControlTo(target.peerId, offer);
     }
     _setSnapshot(
       RemoteInputWorkspaceSnapshot(
@@ -522,6 +512,20 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         targets: snapshots,
       ),
     );
+    try {
+      for (final target in _targets.values.toList(growable: false)) {
+        if (generation != _lifecycle.generation) return;
+        sendControlTo(target.request.peerId, target.offer);
+      }
+    } catch (error) {
+      await _failController(
+        remoteInputFailureReasonFor(
+          error,
+          context: RemoteInputFailureContext.transport,
+        ),
+      );
+      rethrow;
+    }
   }
 
   Future<bool> updateControllerWorkspaceRoutes({
@@ -532,6 +536,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (!_snapshot.isControllerLive) {
       return false;
     }
+    final generation = _lifecycle.generation;
     final invalidTarget = targets.where((target) {
       return !target.isMutuallyTrusted || !target.remoteCanInject;
     }).firstOrNull;
@@ -553,20 +558,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     for (final peerId in removedPeerIds) {
       final runtime = _targets.remove(peerId)!;
       _onlinePeerIds.remove(peerId);
-      if (runtime.snapshot.isLive) {
-        sendControlTo(
-          peerId,
-          RemoteInputControlMessage(
-            action: RemoteInputControlAction.stop,
-            sessionId: runtime.offer.sessionId,
-            sourcePeerId: runtime.offer.sourcePeerId,
-            sinkPeerId: runtime.offer.sinkPeerId,
-          ),
-        );
-      }
-      await runtime.transportDoneSubscription?.cancel();
-      await runtime.transport?.close();
-      _manager.stopSession(runtime.offer.sessionId);
+      await _disposeTarget(runtime, notifyPeer: sendControlTo);
+      if (generation != _lifecycle.generation) return false;
     }
     _onlinePeerIds.addAll(requestedByPeer.keys);
     _workspaceRoutesByRuntimeId.clear();
@@ -599,36 +592,6 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         ..injectionMappings = injectionMappings;
     }
     await _reconcileWorkspaceGraph(sendControlTo: sendControlTo);
-    return true;
-  }
-
-  Future<bool> handleIncomingOfferIfBusy(
-    RemoteInputControlMessage offer, {
-    required String localPeerId,
-    required RemoteInputPeerControlSender sendControlTo,
-  }) async {
-    if (offer.action != RemoteInputControlAction.offer ||
-        offer.sinkPeerId != localPeerId) {
-      return false;
-    }
-    if (!_snapshot.isControllerLive) {
-      // Becoming a controlled device cancels the dormant controller's reconnect
-      // plan; the two roles must never own native input at the same time.
-      if (_snapshot.role == RemoteInputWorkspaceRole.controller) {
-        await stopControllerWorkspace();
-      }
-      return false;
-    }
-    sendControlTo(
-      offer.sourcePeerId,
-      RemoteInputControlMessage(
-        action: RemoteInputControlAction.reject,
-        sessionId: offer.sessionId,
-        sourcePeerId: offer.sourcePeerId,
-        sinkPeerId: offer.sinkPeerId,
-        errorMessage: RemoteInputFailureReason.busy.name,
-      ),
-    );
     return true;
   }
 
@@ -689,7 +652,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required bool remoteCanInject,
     required RemoteInputPeerControlSender sendControlTo,
   }) async {
-    if (!_controllerAvailable() ||
+    if (!_lifecycle.isCurrent ||
         _snapshot.role != RemoteInputWorkspaceRole.controller ||
         _workspaceRoutes.isEmpty ||
         !_targets.containsKey(peerId) ||
@@ -706,9 +669,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       isMutuallyTrusted: isMutuallyTrusted,
       remoteCanInject: remoteCanInject,
     );
-    final generation = _runtimeGeneration;
+    final generation = _lifecycle.generation;
     await _reconcileWorkspaceGraph(sendControlTo: sendControlTo);
-    if (generation != _runtimeGeneration || !_controllerAvailable()) return;
+    if (generation != _lifecycle.generation || !_lifecycle.isCurrent) return;
     final reachable = _reachableWorkspacePeerIds();
     for (final entry in _targets.entries.toList(growable: false)) {
       final runtime = entry.value;
@@ -731,29 +694,30 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
 
   Future<void> stopControllerWorkspace({
     RemoteInputPeerControlSender? sendControlTo,
-  }) async {
-    final sender = sendControlTo ?? _sendControlTo;
-    final currentWorkspaceSessionId = _snapshot.workspaceSessionId;
-    if (_snapshot.role == RemoteInputWorkspaceRole.controller) {
-      for (final target in _targets.values) {
-        if (target.snapshot.isLive && sender != null) {
-          sender(
-            target.request.peerId,
-            RemoteInputControlMessage(
-              action: RemoteInputControlAction.stop,
-              sessionId: target.offer.sessionId,
-              sourcePeerId: target.offer.sourcePeerId,
-              sinkPeerId: target.offer.sinkPeerId,
-            ),
-          );
-        }
-      }
+  }) {
+    if (sendControlTo != null) _sendControlTo = sendControlTo;
+    return _lifecycle.stop(notifyPeer: true);
+  }
+
+  Future<void> _failController(RemoteInputFailureReason reason) async {
+    final stopping = stopControllerWorkspace();
+    final generation = _lifecycle.generation;
+    try {
+      await stopping;
+    } catch (_) {
+      _traceWorkspace(
+        RemoteInputWorkspaceDiagnosticKind.platformError,
+        reason: reason,
+      );
     }
-    final stopping = _disposeControllerRuntime(
-      workspaceSessionId: currentWorkspaceSessionId,
+    if (generation != _lifecycle.generation) return;
+    _setSnapshot(
+      RemoteInputWorkspaceSnapshot(
+        role: RemoteInputWorkspaceRole.idle,
+        status: RemoteInputWorkspaceStatus.failed,
+        errorMessage: reason.name,
+      ),
     );
-    _setSnapshot(const RemoteInputWorkspaceSnapshot.idle());
-    await stopping;
   }
 
   Future<bool> _handleAccept(
@@ -775,7 +739,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         target.connecting) {
       return true;
     }
-    final generation = _runtimeGeneration;
+    final generation = _lifecycle.generation;
     target.connecting = true;
     _manager.handleControlMessage(accept);
     final path = accept.path.isNotEmpty ? accept.path : target.offer.path;
@@ -807,7 +771,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         );
       }
     } catch (error) {
-      if (generation != _runtimeGeneration ||
+      if (generation != _lifecycle.generation ||
           !identical(_targets[target.request.peerId], target)) {
         return true;
       }
@@ -823,7 +787,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       await _handleError(failure);
       return true;
     }
-    if (generation != _runtimeGeneration ||
+    if (generation != _lifecycle.generation ||
         !identical(_targets[target.request.peerId], target) ||
         !_onlinePeerIds.contains(target.request.peerId) ||
         target.snapshot.status != RemoteInputWorkspaceTargetStatus.offering) {
@@ -840,25 +804,15 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     try {
       await _refreshCapture();
     } catch (error) {
-      if (generation != _runtimeGeneration) return true;
+      if (generation != _lifecycle.generation) return true;
       final failure = remoteInputFailureReasonFor(
         error,
         context: RemoteInputFailureContext.capture,
       );
-      final stopping = stopControllerWorkspace();
-      final stoppedGeneration = _runtimeGeneration;
-      await stopping;
-      if (stoppedGeneration != _runtimeGeneration) return true;
-      _setSnapshot(
-        RemoteInputWorkspaceSnapshot(
-          role: RemoteInputWorkspaceRole.idle,
-          status: RemoteInputWorkspaceStatus.failed,
-          errorMessage: failure.name,
-        ),
-      );
+      await _failController(failure);
       return true;
     }
-    if (generation != _runtimeGeneration ||
+    if (generation != _lifecycle.generation ||
         !identical(_targets[target.request.peerId], target)) {
       return true;
     }
@@ -867,6 +821,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   }
 
   Future<bool> _handleRelease(RemoteInputControlMessage message) async {
+    final generation = _lifecycle.generation;
     final target = _targetForSession(message.sessionId);
     if (target == null ||
         _snapshot.role != RemoteInputWorkspaceRole.controller ||
@@ -902,6 +857,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       releaseActivationSequence: sourceActivationSequence,
       releaseEdgeUnit: message.releaseEdgeUnit,
     );
+    if (generation != _lifecycle.generation) return true;
     _clearActiveCaptureRoute(target);
     _setSnapshot(
       _snapshot.copyWith(
@@ -918,6 +874,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required _RemoteInputWorkspaceTargetRuntime activeTarget,
     required int sourceActivationSequence,
   }) async {
+    final generation = _lifecycle.generation;
     final nextPeerId = incomingRoute.sourcePeerId;
     if (nextPeerId == _snapshot.sourcePeerId) {
       final mapping = incomingRoute.mapping;
@@ -932,6 +889,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         segmentEnd: mapping.sourceSegmentEnd,
         routeId: message.routeId,
       );
+      if (generation != _lifecycle.generation) return true;
       _clearActiveCaptureRoute(activeTarget);
       _setSnapshot(
         _snapshot.copyWith(
@@ -952,6 +910,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         releaseSequence: _latestSourceSequence,
         releaseActivationSequence: sourceActivationSequence,
       );
+      if (generation != _lifecycle.generation) return true;
       _clearActiveCaptureRoute(activeTarget);
       _setSnapshot(
         _snapshot.copyWith(
@@ -1010,21 +969,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
-    _onlinePeerIds.remove(target.request.peerId);
-    await _releaseCaptureForActiveTargetIfNeeded(target);
-    await target.transportDoneSubscription?.cancel();
-    target.transportDoneSubscription = null;
-    await target.transport?.close();
-    target.transport = null;
-    _manager.stopSession(message.sessionId);
     final stableError = message.action == RemoteInputControlAction.reject
         ? remoteInputFailureReasonFromWire(message.errorMessage).name
         : '';
-    target.snapshot = target.snapshot.copyWith(
-      status: RemoteInputWorkspaceTargetStatus.stopped,
-      errorMessage: stableError,
-    );
-    await _publishAfterTargetClosed(
+    await _closeControllerTarget(
+      target,
       terminalStatus: RemoteInputWorkspaceStatus.idle,
       errorMessage: stableError,
     );
@@ -1036,21 +985,12 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     if (target == null) {
       return false;
     }
-    _onlinePeerIds.remove(target.request.peerId);
-    _manager.stopSession(message.sessionId);
     final failureReason = remoteInputFailureReasonFromWire(
       message.errorMessage,
     );
-    await _releaseCaptureForActiveTargetIfNeeded(target);
-    await target.transportDoneSubscription?.cancel();
-    target.transportDoneSubscription = null;
-    await target.transport?.close();
-    target.transport = null;
-    target.snapshot = target.snapshot.copyWith(
-      status: RemoteInputWorkspaceTargetStatus.failed,
-      errorMessage: failureReason.name,
-    );
-    await _publishAfterTargetClosed(
+    await _closeControllerTarget(
+      target,
+      targetStatus: RemoteInputWorkspaceTargetStatus.failed,
       terminalStatus: RemoteInputWorkspaceStatus.failed,
       errorMessage: failureReason.name,
     );
@@ -1061,6 +1001,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required RemoteInputWorkspaceStatus terminalStatus,
     String errorMessage = '',
   }) async {
+    final generation = _lifecycle.generation;
+    if (!_lifecycle.isCurrent) return;
     if (_workspaceRoutes.isNotEmpty) {
       await _reconcileWorkspaceGraph(
         sendControlTo: _sendControlTo,
@@ -1084,14 +1026,16 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
               errorMessage: errorMessage,
               targets: _snapshotTargets(),
             );
-      await _disposeControllerRuntime(
-        workspaceSessionId: _snapshot.workspaceSessionId,
-      );
+      final stopping = _lifecycle.stop();
+      final generation = _lifecycle.generation;
+      await stopping;
+      if (generation != _lifecycle.generation) return;
       _setSnapshot(terminalSnapshot);
       return;
     }
     if (!hasConnectedTarget) {
       await _platform.stopCapture(sessionId: _snapshot.workspaceSessionId);
+      if (generation != _lifecycle.generation) return;
       _setSnapshot(
         _snapshot.copyWith(
           status: RemoteInputWorkspaceStatus.offering,
@@ -1103,6 +1047,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       return;
     }
     await _refreshCapture();
+    if (generation != _lifecycle.generation) return;
     _publishTargets(
       statusFallback: RemoteInputWorkspaceStatus.armed,
       errorMessage: errorMessage,
@@ -1134,12 +1079,12 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         _workspaceRoutes.isEmpty) {
       return;
     }
-    final generation = _runtimeGeneration;
+    final generation = _lifecycle.generation;
     final reachable = _reachableWorkspacePeerIds();
     if (_snapshot.activePeerId.isNotEmpty &&
         !reachable.contains(_snapshot.activePeerId)) {
       await _platform.pauseCapture(sessionId: _snapshot.workspaceSessionId);
-      if (generation != _runtimeGeneration) return;
+      if (generation != _lifecycle.generation) return;
       _snapshot = _snapshot.copyWith(activePeerId: '');
     }
     for (final target in _targets.values.toList(growable: false)) {
@@ -1147,28 +1092,12 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
           !target.snapshot.isLive) {
         continue;
       }
-      if (sendControlTo != null) {
-        sendControlTo(
-          target.request.peerId,
-          RemoteInputControlMessage(
-            action: RemoteInputControlAction.stop,
-            sessionId: target.offer.sessionId,
-            sourcePeerId: target.offer.sourcePeerId,
-            sinkPeerId: target.offer.sinkPeerId,
-          ),
-        );
-      }
-      await target.transportDoneSubscription?.cancel();
-      if (generation != _runtimeGeneration) return;
-      target.transportDoneSubscription = null;
-      await target.transport?.close();
-      if (generation != _runtimeGeneration) return;
-      target.transport = null;
-      _manager.stopSession(target.offer.sessionId);
-      target.snapshot = target.snapshot.copyWith(
-        status: RemoteInputWorkspaceTargetStatus.stopped,
+      await _disposeTarget(
+        target,
+        notifyPeer: sendControlTo,
         errorMessage: RemoteInputFailureReason.transport.name,
       );
+      if (generation != _lifecycle.generation) return;
     }
 
     _workspaceRevision += 1;
@@ -1225,7 +1154,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     } else {
       await _platform.stopCapture(sessionId: _snapshot.workspaceSessionId);
     }
-    if (generation != _runtimeGeneration) return;
+    if (generation != _lifecycle.generation) return;
     _publishTargets(
       statusFallback: connected
           ? RemoteInputWorkspaceStatus.armed
@@ -1237,6 +1166,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   }
 
   Future<void> _refreshCapture() async {
+    if (!_lifecycle.isCurrent) return;
+    final generation = _lifecycle.generation;
+    final sessionId = _snapshot.workspaceSessionId;
     final connectedTargets = _targets.values
         .where((target) => target.snapshot.isConnected)
         .toList(growable: false);
@@ -1249,20 +1181,24 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         .toList(growable: false);
     final primaryMapping = mappings.isNotEmpty ? mappings.first : null;
     final primaryTarget = connectedTargets.first;
-    await _platform.startCapture(
-      sessionId: _snapshot.workspaceSessionId,
-      edge: primaryMapping?.sourceEdge ?? primaryTarget.request.layoutEdge,
-      releaseHotkey: primaryTarget.request.releaseHotkey,
-      displayId:
-          primaryMapping?.sourceDisplayId ??
-          primaryTarget.request.sourceDisplayId,
-      segmentStart:
-          primaryMapping?.sourceSegmentStart ??
-          primaryTarget.request.sourceSegmentStart,
-      segmentEnd:
-          primaryMapping?.sourceSegmentEnd ??
-          primaryTarget.request.sourceSegmentEnd,
-      edgeMappings: mappings,
+    await _lifecycle.startNative(
+      generation: generation,
+      start: () => _platform.startCapture(
+        sessionId: sessionId,
+        edge: primaryMapping?.sourceEdge ?? primaryTarget.request.layoutEdge,
+        releaseHotkey: primaryTarget.request.releaseHotkey,
+        displayId:
+            primaryMapping?.sourceDisplayId ??
+            primaryTarget.request.sourceDisplayId,
+        segmentStart:
+            primaryMapping?.sourceSegmentStart ??
+            primaryTarget.request.sourceSegmentStart,
+        segmentEnd:
+            primaryMapping?.sourceSegmentEnd ??
+            primaryTarget.request.sourceSegmentEnd,
+        edgeMappings: mappings,
+      ),
+      rollback: () => _platform.stopCapture(sessionId: sessionId),
     );
   }
 
@@ -1298,22 +1234,61 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     _RemoteInputWorkspaceTargetRuntime target, {
     required RemoteInputWorkspaceStatus terminalStatus,
     required String errorMessage,
+    RemoteInputWorkspaceTargetStatus targetStatus =
+        RemoteInputWorkspaceTargetStatus.stopped,
   }) async {
+    final generation = _lifecycle.generation;
     _onlinePeerIds.remove(target.request.peerId);
-    await _releaseCaptureForActiveTargetIfNeeded(target);
-    await target.transportDoneSubscription?.cancel();
-    target.transportDoneSubscription = null;
-    await target.transport?.close();
-    target.transport = null;
-    _manager.stopSession(target.offer.sessionId);
-    target.snapshot = target.snapshot.copyWith(
-      status: RemoteInputWorkspaceTargetStatus.stopped,
-      errorMessage: errorMessage,
-    );
+    await Future.wait([
+      _releaseCaptureForActiveTargetIfNeeded(target),
+      _disposeTarget(target, status: targetStatus, errorMessage: errorMessage),
+    ]);
+    if (generation != _lifecycle.generation ||
+        !identical(_targets[target.request.peerId], target)) {
+      return;
+    }
     await _publishAfterTargetClosed(
       terminalStatus: terminalStatus,
       errorMessage: errorMessage,
     );
+  }
+
+  Future<void> _disposeTarget(
+    _RemoteInputWorkspaceTargetRuntime target, {
+    RemoteInputWorkspaceTargetStatus status =
+        RemoteInputWorkspaceTargetStatus.stopped,
+    String errorMessage = '',
+    RemoteInputPeerControlSender? notifyPeer,
+  }) {
+    final closing = target.closing;
+    if (closing != null) return closing;
+    final subscription = target.transportDoneSubscription;
+    final transport = target.transport;
+    final wasLive = target.snapshot.isLive;
+    target.transportDoneSubscription = null;
+    target.transport = null;
+    target.connecting = false;
+    target.snapshot = target.snapshot.copyWith(
+      status: status,
+      errorMessage: errorMessage,
+    );
+    return target.closing = Future.wait<void>([
+      if (wasLive && notifyPeer != null)
+        Future<void>.sync(
+          () => notifyPeer(
+            target.request.peerId,
+            RemoteInputControlMessage(
+              action: RemoteInputControlAction.stop,
+              sessionId: target.offer.sessionId,
+              sourcePeerId: target.offer.sourcePeerId,
+              sinkPeerId: target.offer.sinkPeerId,
+            ),
+          ),
+        ),
+      _manager.stopSession(target.offer.sessionId),
+      if (subscription != null) subscription.cancel(),
+      if (transport != null) Future<void>.sync(transport.close),
+    ]).then<void>((_) {});
   }
 
   Future<void> _releaseCaptureForActiveTargetIfNeeded(
@@ -1335,21 +1310,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     });
     _errorSubscription ??= _platform.errors.listen((error) {
       if (error.sessionId == _snapshot.workspaceSessionId) {
-        _setSnapshot(
-          _snapshot.copyWith(
-            status: RemoteInputWorkspaceStatus.failed,
-            errorMessage: RemoteInputFailureReason.capture.name,
-          ),
-        );
         _traceWorkspace(
           RemoteInputWorkspaceDiagnosticKind.platformError,
           reason: RemoteInputFailureReason.capture,
         );
-        unawaited(
-          _disposeControllerRuntime(
-            workspaceSessionId: _snapshot.workspaceSessionId,
-          ),
-        );
+        unawaited(_failController(RemoteInputFailureReason.capture));
       }
     });
     _diagnosticSubscription ??= _platform.diagnostics.listen((diagnostic) {
@@ -1750,14 +1715,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     };
   }
 
-  Future<void> _disposeControllerRuntime({required String workspaceSessionId}) {
-    _runtimeGeneration++;
-    return _stopping ??= _disposeRuntime(
-      workspaceSessionId: workspaceSessionId,
-    ).whenComplete(() => _stopping = null);
-  }
-
-  Future<void> _disposeRuntime({required String workspaceSessionId}) async {
+  Future<void> _disposeRuntime(bool notifyPeer) async {
+    final workspaceSessionId = _snapshot.workspaceSessionId;
+    final sender = _sendControlTo;
     final cancellations = [
       if (_inputSubscription != null) _inputSubscription!.cancel(),
       if (_releaseSubscription != null) _releaseSubscription!.cancel(),
@@ -1772,15 +1732,9 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
       cancellations.add(_platform.stopCapture(sessionId: workspaceSessionId));
     }
     for (final target in _targets.values) {
-      if (target.transportDoneSubscription != null) {
-        cancellations.add(target.transportDoneSubscription!.cancel());
-      }
-      target.transportDoneSubscription = null;
-      if (target.transport != null) {
-        cancellations.add(target.transport!.close());
-      }
-      target.transport = null;
-      _manager.stopSession(target.offer.sessionId);
+      cancellations.add(
+        _disposeTarget(target, notifyPeer: notifyPeer ? sender : null),
+      );
     }
     _targets.clear();
     _onlinePeerIds.clear();
@@ -1794,6 +1748,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     _workspaceRevision = 0;
     _sourcePeerId = '';
     _sendControlTo = null;
+    _setSnapshot(const RemoteInputWorkspaceSnapshot.idle());
     await Future.wait(cancellations);
   }
 
@@ -1841,6 +1796,7 @@ class _RemoteInputWorkspaceTargetRuntime {
   RemoteInputWorkspaceTargetSnapshot snapshot;
   RemoteInputPacketTransport? transport;
   bool connecting = false;
+  Future<void>? closing;
   StreamSubscription<void>? transportDoneSubscription;
   int targetActivationSequence = 0;
   int sourceActivationSequence = 0;

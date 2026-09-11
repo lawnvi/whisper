@@ -11,6 +11,7 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
@@ -32,8 +33,6 @@ typedef RemoteClipboardPastePreparer =
       required String peerId,
       required String sessionId,
     });
-typedef RemoteClipboardSessionCleaner =
-    Future<void> Function({required String peerId, required String sessionId});
 
 enum RemoteInputRuntimeRole { none, source, sink }
 
@@ -143,9 +142,12 @@ class RemoteInputCoordinator extends ChangeNotifier {
            scrollMultiplierProvider ??
            LocalSetting().remoteInputScrollMultiplier,
        _remoteClipboardPastePreparer = remoteClipboardPastePreparer,
-       _remoteClipboardSessionCleaner = remoteClipboardSessionCleaner,
        _nativeInjectionTimeout = nativeInjectionTimeout,
-       assert(nativeInjectionTimeout.inMicroseconds > 0);
+       assert(nativeInjectionTimeout.inMicroseconds > 0) {
+    if (remoteClipboardSessionCleaner != null) {
+      _manager.configureSessionCleanup(remoteClipboardSessionCleaner);
+    }
+  }
 
   static final RemoteInputCoordinator shared = RemoteInputCoordinator();
   static const double _sinkEntryReleaseDistance = 16;
@@ -162,11 +164,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
   final RemoteInputScrollMultiplierProvider _scrollMultiplierProvider;
   final Duration _nativeInjectionTimeout;
   RemoteClipboardPastePreparer? _remoteClipboardPastePreparer;
-  RemoteClipboardSessionCleaner? _remoteClipboardSessionCleaner;
 
   RemoteInputRuntimeState _state = const RemoteInputRuntimeState.idle();
-  int _runtimeGeneration = 0;
-  Future<void>? _stopping;
+  late final RemoteInputLifecycleOwner _lifecycle = _manager.lifecycle
+      .createOwner(cleanup: _disposeLocal);
+  RemoteInputControlSender? _sendControl;
+  RemoteInputPacketCallback? _packetHandler;
+  void Function(String sessionId)? _sessionClosedHandler;
   RemoteInputPacketTransport? _transport;
   final ListQueue<_PendingInjectionEntry> _pendingInjectionFrames =
       ListQueue<_PendingInjectionEntry>();
@@ -206,7 +210,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required RemoteClipboardSessionCleaner clearSession,
   }) {
     _remoteClipboardPastePreparer = preparePaste;
-    _remoteClipboardSessionCleaner = clearSession;
+    _manager.configureSessionCleanup(clearSession);
   }
 
   @visibleForTesting
@@ -292,11 +296,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
       allowed: isMutuallyTrusted,
       enabled: remoteCanInject,
     );
-    final stopping = stopLocal();
-    final generation = _runtimeGeneration;
-    await stopping;
-    if (generation != _runtimeGeneration) return;
     if (!isMutuallyTrusted || !remoteCanInject) {
+      if (_hasLiveSession) throw const RemoteInputBusyException();
       final failureReason = !isMutuallyTrusted
           ? RemoteInputFailureReason.trustRequired
           : RemoteInputFailureReason.unsupported;
@@ -316,6 +317,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       );
       return;
     }
+
+    final generation = await _lifecycle.start();
+    if (generation == null) return;
+    _sendControl = sendControl;
 
     final offer = _manager.createOffer(
       sourcePeerId: sourcePeerId,
@@ -344,7 +349,13 @@ class RemoteInputCoordinator extends ChangeNotifier {
       ),
     );
     _trace(RemoteInputDiagnosticKind.offerCreated);
-    sendControl(offer);
+    if (generation != _lifecycle.generation) return;
+    try {
+      sendControl(offer);
+    } catch (_) {
+      await stopLocal();
+      rethrow;
+    }
   }
 
   Future<void> handleControlMessage(
@@ -411,13 +422,17 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _trace(RemoteInputDiagnosticKind.controlError, reason: failureReason);
         _manager.handleControlMessage(message);
         if (_state.sessionId == message.sessionId) {
-          await stopLocal();
+          final peerId = _state.peerId;
+          final stopping = stopLocal();
+          final generation = _lifecycle.generation;
+          await stopping;
+          if (generation != _lifecycle.generation) return;
           _setState(
             RemoteInputRuntimeState(
               status: RemoteInputRuntimeStatus.failed,
               role: RemoteInputRuntimeRole.none,
               sessionId: message.sessionId,
-              peerId: _state.peerId,
+              peerId: peerId,
               errorMessage: failureReason.name,
             ),
           );
@@ -427,6 +442,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }
 
   Future<void> _handleRoutes(RemoteInputControlMessage message) async {
+    final generation = _lifecycle.generation;
     final current = _sinkControlMessage;
     if (_state.role != RemoteInputRuntimeRole.sink ||
         _state.sessionId != message.sessionId ||
@@ -440,44 +456,23 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sessionId: message.sessionId,
       edgeMappings: message.edgeMappings,
     );
+    if (generation != _lifecycle.generation) return;
     _sinkControlMessage = message;
     _sinkActiveEdgeMapping = message.edgeMappings.firstOrNull;
     _manager.handleControlMessage(message);
   }
 
-  Future<void> stopSharing({
-    required RemoteInputControlSender sendControl,
-  }) async {
-    final current = _state;
-    if (current.status == RemoteInputRuntimeStatus.idle ||
-        current.sessionId.isEmpty) {
-      return;
-    }
-    final session = _manager.session(current.sessionId);
-    if (session != null) {
-      sendControl(
-        RemoteInputControlMessage(
-          action: RemoteInputControlAction.stop,
-          sessionId: session.sessionId,
-          sourcePeerId: session.sourcePeerId,
-          sinkPeerId: session.sinkPeerId,
-        ),
-      );
-    }
-    await stopLocal();
+  Future<void> stopSharing({required RemoteInputControlSender sendControl}) {
+    _sendControl = sendControl;
+    return _lifecycle.stop(notifyPeer: true);
   }
 
-  Future<void> stopLocal() => _stopLocal();
+  Future<void> stopLocal() => _lifecycle.stop();
 
-  Future<void> _stopLocal({bool sessionAlreadyStopped = false}) {
-    _runtimeGeneration++;
-    return _stopping ??= _disposeLocal(
-      sessionAlreadyStopped: sessionAlreadyStopped,
-    ).whenComplete(() => _stopping = null);
-  }
-
-  Future<void> _disposeLocal({required bool sessionAlreadyStopped}) async {
+  Future<void> _disposeLocal(bool notifyPeer) async {
     final current = _state;
+    final sender = _sendControl;
+    _sendControl = null;
     _trace(
       RemoteInputDiagnosticKind.stopped,
       state: current.status,
@@ -497,10 +492,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _sinkControlMessage = null;
     _sinkPressedModifiers.clear();
     _suppressPasteKeyUp = false;
-    if (_manager.onPacket != null) {
+    if (identical(_manager.onPacket, _packetHandler)) {
       _manager.onPacket = null;
     }
-    _manager.onSessionClosed = null;
+    if (identical(_manager.onSessionClosed, _sessionClosedHandler)) {
+      _manager.onSessionClosed = null;
+    }
+    _packetHandler = null;
+    _sessionClosedHandler = null;
     final cancellations = [
       if (_inputSubscription != null) _inputSubscription!.cancel(),
       if (_releaseSubscription != null) _releaseSubscription!.cancel(),
@@ -517,21 +516,28 @@ class RemoteInputCoordinator extends ChangeNotifier {
     // Invalidate the session before any cleanup yields to a pending start.
     _setState(const RemoteInputRuntimeState.idle());
     if (current.sessionId.isNotEmpty) {
-      if (!sessionAlreadyStopped) {
-        _manager.stopSession(current.sessionId);
+      final session = _manager.session(current.sessionId);
+      if (notifyPeer && sender != null && session != null) {
+        cancellations.add(
+          Future<void>.sync(
+            () => sender(
+              RemoteInputControlMessage(
+                action: RemoteInputControlAction.stop,
+                sessionId: session.sessionId,
+                sourcePeerId: session.sourcePeerId,
+                sinkPeerId: session.sinkPeerId,
+              ),
+            ),
+          ),
+        );
       }
+      cancellations.add(_manager.stopSession(current.sessionId));
       if (current.role == RemoteInputRuntimeRole.source) {
         cancellations.add(_platform.stopCapture(sessionId: current.sessionId));
       }
       if (current.role == RemoteInputRuntimeRole.sink) {
         cancellations.add(
           _platform.stopInjection(sessionId: current.sessionId),
-        );
-      }
-      final clearClipboard = _remoteClipboardSessionCleaner;
-      if (clearClipboard != null && current.peerId.isNotEmpty) {
-        cancellations.add(
-          clearClipboard(peerId: current.peerId, sessionId: current.sessionId),
         );
       }
     }
@@ -549,7 +555,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }) async {
     if (offer.sinkPeerId != localPeerId) {
       _trace(RemoteInputDiagnosticKind.offerIgnored);
-      _manager.handleControlMessage(offer);
       return;
     }
     if (!isMutuallyTrusted || !localCanInject) {
@@ -573,7 +578,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
       );
       return;
     }
-    if (_hasLiveSession && _state.sessionId != offer.sessionId) {
+    if (_hasLiveSession && _state.sessionId == offer.sessionId) return;
+    if (!_lifecycle.canStart || _hasLiveSession) {
       _trace(
         RemoteInputDiagnosticKind.offerBusy,
         state: _state.status,
@@ -592,6 +598,24 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return;
     }
 
+    final int? generation;
+    try {
+      generation = await _lifecycle.start();
+    } on RemoteInputBusyException {
+      sendControl(
+        RemoteInputControlMessage(
+          action: RemoteInputControlAction.reject,
+          sessionId: offer.sessionId,
+          sourcePeerId: offer.sourcePeerId,
+          sinkPeerId: offer.sinkPeerId,
+          errorMessage: RemoteInputFailureReason.busy.name,
+        ),
+      );
+      return;
+    }
+    if (generation == null) return;
+    _sendControl = sendControl;
+
     final accept = _manager.acceptOffer(
       offer,
       sinkPlatform: _platformKindProvider().name,
@@ -599,6 +623,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     if (accept.action == RemoteInputControlAction.error) {
+      await stopLocal();
       _trace(
         RemoteInputDiagnosticKind.offerAcceptFailed,
         reason: RemoteInputFailureReason.protocol,
@@ -618,10 +643,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
       _trace(RemoteInputDiagnosticKind.injectionStarting);
       final started = await _startInjection(
         accept,
+        generation: generation,
         sendControl: sendControl,
         remotePlatform: remotePlatform,
       );
-      if (!started) return;
+      if (!started || generation != _lifecycle.generation) return;
       _trace(RemoteInputDiagnosticKind.acceptSent);
       sendControl(accept);
     } catch (error) {
@@ -636,7 +662,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
         localError: error,
       );
       final failedPeerId = offer.sourcePeerId;
-      await stopLocal();
+      final stopping = stopLocal();
+      final stoppedGeneration = _lifecycle.generation;
+      await stopping;
+      if (stoppedGeneration != _lifecycle.generation) return;
       _setState(
         RemoteInputRuntimeState(
           status: RemoteInputRuntimeStatus.failed,
@@ -697,7 +726,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
         localError: error,
       );
       final failedPeerId = accept.sinkPeerId;
-      await stopLocal();
+      final stopping = stopLocal();
+      final generation = _lifecycle.generation;
+      await stopping;
+      if (generation != _lifecycle.generation) return;
       _setState(
         RemoteInputRuntimeState(
           status: RemoteInputRuntimeStatus.failed,
@@ -721,14 +753,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   Future<bool> _startInjection(
     RemoteInputControlMessage message, {
+    required int generation,
     required RemoteInputControlSender sendControl,
     String remotePlatform = '',
   }) async {
     _trace(RemoteInputDiagnosticKind.injectionStarting);
-    final stopping = stopLocal();
-    final generation = _runtimeGeneration;
-    await stopping;
-    if (generation != _runtimeGeneration) return false;
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.connecting,
@@ -737,15 +766,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       ),
     );
-    await _platform.startInjection(
-      sessionId: message.sessionId,
-      displayId: message.sinkDisplayId,
-      edge: message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
-      segmentStart: message.sinkSegmentStart,
-      segmentEnd: message.sinkSegmentEnd,
-      edgeMappings: message.edgeMappings,
+    final started = await _lifecycle.startNative(
+      generation: generation,
+      start: () => _platform.startInjection(
+        sessionId: message.sessionId,
+        displayId: message.sinkDisplayId,
+        edge: message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
+        segmentStart: message.sinkSegmentStart,
+        segmentEnd: message.sinkSegmentEnd,
+        edgeMappings: message.edgeMappings,
+      ),
+      rollback: () => _platform.stopInjection(sessionId: message.sessionId),
     );
-    if (generation != _runtimeGeneration) return false;
+    if (!started || generation != _lifecycle.generation) return false;
     _trace(RemoteInputDiagnosticKind.injectionStarted);
     final targetPlatform = _platformKindProvider();
     _keyTranslator = _keyTranslatorFactory(targetPlatform);
@@ -754,7 +787,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       remotePlatform,
     );
     updateScrollMultiplier(await _loadScrollMultiplier());
-    if (generation != _runtimeGeneration) return false;
+    if (generation != _lifecycle.generation) return false;
     _latestSinkPacketSequence = 0;
     _latestSinkActivationSequence = 0;
     _sinkPacketTraceCount = 0;
@@ -817,14 +850,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _beginInjectionQueue(message.sessionId);
-    _manager.onSessionClosed = (sessionId) {
+    _manager.onSessionClosed = _sessionClosedHandler = (sessionId) {
       if (_state.sessionId == sessionId) {
         // Release held keys and cancel pending paste before the socket waits
         // for its receive queue to drain.
         unawaited(stopLocal());
       }
     };
-    _manager.onPacket = (packet) {
+    _manager.onPacket = _packetHandler = (packet) {
       final routing = _sinkControlMessage ?? message;
       final routedPacket = _routeSinkActiveStartPacket(packet, routing);
       if (packet.sessionId == message.sessionId &&
@@ -931,7 +964,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return frames;
     }
     traceRemoteClipboard('paste_shortcut_detected');
+    final generation = _lifecycle.generation;
     return prepare(peerId: peerId, sessionId: sessionId).then((result) {
+      if (generation != _lifecycle.generation) {
+        return const <RemoteInputPacketFrame>[];
+      }
       traceRemoteClipboard('paste_shortcut_result', reason: result.name);
       if (result == RemoteClipboardPasteResult.notAvailable) {
         return frames;
@@ -1157,7 +1194,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   Future<void> _finishFailedInjectionStop(String sessionId) async {
     try {
-      await _stopLocal(sessionAlreadyStopped: true);
+      await stopLocal();
     } catch (_) {
       if (_state.role == RemoteInputRuntimeRole.sink &&
           _state.sessionId == sessionId) {
@@ -1293,7 +1330,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     Uint8List? mediaSendKey,
   }) async {
     final edge = message.layoutEdge;
-    final generation = _runtimeGeneration;
+    final generation = _lifecycle.generation;
     if (edge == null) {
       _trace(
         RemoteInputDiagnosticKind.captureMissingEdge,
@@ -1332,7 +1369,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         peerId: message.sourcePeerId,
       );
     }
-    if (generation != _runtimeGeneration) {
+    if (generation != _lifecycle.generation) {
       await transport.close();
       return;
     }
@@ -1398,16 +1435,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
         _trace(RemoteInputDiagnosticKind.platformDiagnostic);
       }
     });
-    await _platform.startCapture(
-      sessionId: message.sessionId,
-      edge: message.sourceEdge ?? edge,
-      releaseHotkey: message.releaseHotkey,
-      displayId: message.sourceDisplayId,
-      segmentStart: message.sourceSegmentStart,
-      segmentEnd: message.sourceSegmentEnd,
-      edgeMappings: message.edgeMappings,
+    final started = await _lifecycle.startNative(
+      generation: generation,
+      start: () => _platform.startCapture(
+        sessionId: message.sessionId,
+        edge: message.sourceEdge ?? edge,
+        releaseHotkey: message.releaseHotkey,
+        displayId: message.sourceDisplayId,
+        segmentStart: message.sourceSegmentStart,
+        segmentEnd: message.sourceSegmentEnd,
+        edgeMappings: message.edgeMappings,
+      ),
+      rollback: () => _platform.stopCapture(sessionId: message.sessionId),
     );
-    if (generation != _runtimeGeneration) return;
+    if (!started || generation != _lifecycle.generation) return;
     _trace(RemoteInputDiagnosticKind.captureStarted);
     _setState(
       RemoteInputRuntimeState(
@@ -1437,6 +1478,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }
 
   Future<void> _handleRelease(RemoteInputControlMessage message) async {
+    final generation = _lifecycle.generation;
     _manager.handleControlMessage(message);
     if (_state.sessionId != message.sessionId ||
         _state.role != RemoteInputRuntimeRole.source ||
@@ -1459,6 +1501,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       segmentEnd: message.sourceSegmentEnd,
       routeId: message.routeId,
     );
+    if (generation != _lifecycle.generation) return;
     _setState(
       RemoteInputRuntimeState(
         status: RemoteInputRuntimeStatus.armed,

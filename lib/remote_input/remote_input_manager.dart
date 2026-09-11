@@ -5,6 +5,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_binary_websocket_session.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
@@ -12,6 +13,8 @@ import 'package:whisper/socket/session_upgrade_token_registry.dart';
 
 typedef RemoteInputPacketCallback =
     FutureOr<void> Function(RemoteInputPacketFrame packet);
+typedef RemoteClipboardSessionCleaner =
+    Future<void> Function({required String peerId, required String sessionId});
 
 enum RemoteInputSessionState { offering, connected, stopped, failed }
 
@@ -59,6 +62,10 @@ class RemoteInputManager {
 
   RemoteInputPacketCallback? onPacket;
   void Function(String sessionId)? onSessionClosed;
+  final RemoteInputLifecycle lifecycle = RemoteInputLifecycle();
+  RemoteClipboardSessionCleaner? _sessionCleaner;
+  final Map<String, String> _sessionPeerIds = <String, String>{};
+  final Map<String, Future<void>> _sessionCloses = <String, Future<void>>{};
   final Uuid _uuid;
   final Map<String, RemoteInputSession> _sessions =
       <String, RemoteInputSession>{};
@@ -75,6 +82,10 @@ class RemoteInputManager {
   int get activeChannelCount => _channels.length;
   bool get hasActiveChannels => _channels.isNotEmpty;
   bool get isClosingChannels => _closingChannels;
+
+  void configureSessionCleanup(RemoteClipboardSessionCleaner cleanup) {
+    _sessionCleaner = cleanup;
+  }
 
   RemoteInputControlMessage createOffer({
     required String sourcePeerId,
@@ -96,6 +107,7 @@ class RemoteInputManager {
     bool remoteClipboardV1 = false,
   }) {
     final sessionId = _uuid.v4();
+    _sessionPeerIds[sessionId] = sinkPeerId;
     _sessions[sessionId] = RemoteInputSession(
       sessionId: sessionId,
       sourcePeerId: sourcePeerId,
@@ -143,6 +155,7 @@ class RemoteInputManager {
         errorMessage: 'remote input offer missing layout edge',
       );
     }
+    _sessionPeerIds[offer.sessionId] = offer.sourcePeerId;
     _sessions[offer.sessionId] = RemoteInputSession(
       sessionId: offer.sessionId,
       sourcePeerId: offer.sourcePeerId,
@@ -225,20 +238,45 @@ class RemoteInputManager {
     }
   }
 
-  void stopSession(String sessionId) {
+  Future<void> stopSession(String sessionId) {
+    final existing = _sessionCloses[sessionId];
+    if (existing != null) return existing;
     final current = _sessions[sessionId];
     if (current != null) {
       _sessions[sessionId] = current.copyWith(
         state: RemoteInputSessionState.stopped,
       );
     }
+    final peerId = _sessionPeerIds.remove(sessionId);
+    final cleaner = _sessionCleaner;
+    final completer = Completer<void>();
+    final closing = completer.future;
+    _sessionCloses[sessionId] = closing;
+    unawaited(closing.catchError((Object _) {}));
     unawaited(
-      closeSessionChannels(
-        sessionId,
-        peerId: current?.sourcePeerId,
-        namespace: 'remote-input',
-      ),
+      Future.wait<void>([
+            if (cleaner != null && peerId != null)
+              Future<void>.sync(
+                () => cleaner(peerId: peerId, sessionId: sessionId),
+              ),
+            closeSessionChannels(
+              sessionId,
+              peerId: current?.sourcePeerId,
+              namespace: 'remote-input',
+            ),
+          ])
+          .then<void>(
+            (_) => completer.complete(),
+            onError: (Object error, StackTrace stackTrace) =>
+                completer.completeError(error, stackTrace),
+          )
+          .whenComplete(() {
+            if (identical(_sessionCloses[sessionId], closing)) {
+              _sessionCloses.remove(sessionId);
+            }
+          }),
     );
+    return closing;
   }
 
   Future<void> closeSessionChannels(

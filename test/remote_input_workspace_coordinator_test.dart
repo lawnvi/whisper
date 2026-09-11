@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
+import 'package:whisper/remote_input/remote_input_manager.dart';
 import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -20,6 +21,7 @@ void main() {
     late MethodChannel channel;
     late List<MethodCall> calls;
     late RemoteInputPlatform platform;
+    late RemoteInputManager manager;
     late Map<String, _FakeRemoteInputTransport> transports;
     late Map<String, List<RemoteInputControlMessage>> sentControls;
 
@@ -27,6 +29,7 @@ void main() {
       channel = const MethodChannel('test_remote_input_workspace');
       calls = <MethodCall>[];
       platform = RemoteInputPlatform(channel: channel);
+      manager = RemoteInputManager();
       transports = <String, _FakeRemoteInputTransport>{};
       sentControls = <String, List<RemoteInputControlMessage>>{};
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -46,6 +49,7 @@ void main() {
       final connected = Completer<RemoteInputPacketTransport>();
       final transport = _FakeRemoteInputTransport();
       final coordinator = RemoteInputWorkspaceCoordinator(
+        manager: manager,
         platform: platform,
         transportFactory: (_) {
           started.complete();
@@ -96,6 +100,7 @@ void main() {
       'keeps multiple accepted targets and routes input by routeId',
       () async {
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (uri) async {
             expect(uri.queryParameters['session'], isNotEmpty);
@@ -271,6 +276,7 @@ void main() {
 
     test('hands input from one controlled peer to another', () async {
       final coordinator = RemoteInputWorkspaceCoordinator(
+        manager: manager,
         platform: platform,
         transportFactory: (uri) async {
           final transport = _FakeRemoteInputTransport();
@@ -433,9 +439,8 @@ void main() {
     test(
       'disconnects an unreachable branch and restores it after auth',
       () async {
-        var controllerAvailable = true;
         final coordinator = RemoteInputWorkspaceCoordinator(
-          controllerAvailable: () => controllerAvailable,
+          manager: manager,
           platform: platform,
           transportFactory: (uri) async {
             final transport = _FakeRemoteInputTransport();
@@ -537,19 +542,6 @@ void main() {
           contains(RemoteInputControlAction.stop),
         );
 
-        controllerAvailable = false;
-        await coordinator.handlePeerReconnected(
-          peerId: 'peer-b',
-          host: 'peer-b-new.local',
-          port: 10002,
-          isMutuallyTrusted: true,
-          remoteCanInject: true,
-          sendControlTo: (_, _) =>
-              fail('A controlled device must not reconnect as controller'),
-        );
-        expect(coordinator.snapshot.status, RemoteInputWorkspaceStatus.idle);
-        controllerAvailable = true;
-
         await coordinator.handlePeerReconnected(
           peerId: 'peer-b',
           host: 'peer-b-new.local',
@@ -605,6 +597,7 @@ void main() {
       'release from one target pauses capture without stopping others',
       () async {
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (uri) async {
             final transport = _FakeRemoteInputTransport();
@@ -753,53 +746,9 @@ void main() {
       },
     );
 
-    test('controller role rejects incoming sink offers', () async {
-      final coordinator = RemoteInputWorkspaceCoordinator(
-        platform: platform,
-        transportFactory: (_) async => _FakeRemoteInputTransport(),
-        workspaceSessionIdFactory: () => 'workspace-1',
-      );
-      await coordinator.startControllerWorkspace(
-        sourcePeerId: 'mac',
-        targets: [
-          _targetRequest(
-            peerId: 'peer-b',
-            host: 'peer-b.local',
-            routeId: 'route-b',
-            start: 0,
-            end: 400,
-          ),
-        ],
-        sendControlTo: (peerId, control) {
-          sentControls.putIfAbsent(peerId, () => []).add(control);
-        },
-      );
-
-      final handled = await coordinator.handleIncomingOfferIfBusy(
-        const RemoteInputControlMessage(
-          action: RemoteInputControlAction.offer,
-          sessionId: 'incoming-1',
-          sourcePeerId: 'peer-d',
-          sinkPeerId: 'mac',
-          layoutEdge: RemoteInputEdge.left,
-          releaseHotkey: 'ctrl+alt+esc',
-        ),
-        localPeerId: 'mac',
-        sendControlTo: (peerId, control) {
-          sentControls.putIfAbsent(peerId, () => []).add(control);
-        },
-      );
-
-      expect(handled, isTrue);
-      expect(
-        sentControls['peer-d']!.last.action,
-        RemoteInputControlAction.reject,
-      );
-      expect(sentControls['peer-d']!.last.errorMessage, 'busy');
-    });
-
     test('returns to idle when the only target rejects the offer', () async {
       final coordinator = RemoteInputWorkspaceCoordinator(
+        manager: manager,
         platform: platform,
         transportFactory: (_) async => _FakeRemoteInputTransport(),
         workspaceSessionIdFactory: () => 'workspace-1',
@@ -848,6 +797,7 @@ void main() {
       () async {
         final sentControls = <String, List<RemoteInputControlMessage>>{};
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (_) async => _FakeRemoteInputTransport(),
           workspaceSessionIdFactory: () => 'workspace-private',
@@ -899,6 +849,7 @@ void main() {
     test('workspace preserves an allowlisted remote failure reason', () async {
       final sentControls = <String, List<RemoteInputControlMessage>>{};
       final coordinator = RemoteInputWorkspaceCoordinator(
+        manager: manager,
         platform: platform,
         transportFactory: (_) async => _FakeRemoteInputTransport(),
         workspaceSessionIdFactory: () => 'workspace-reason',
@@ -947,6 +898,7 @@ void main() {
       () async {
         final transport = _ObservableFakeRemoteInputTransport();
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (_) async => transport,
           workspaceSessionIdFactory: () => 'workspace-1',
@@ -1000,6 +952,7 @@ void main() {
     test('releases capture when the active target transport closes', () async {
       final transports = <String, _ObservableFakeRemoteInputTransport>{};
       final coordinator = RemoteInputWorkspaceCoordinator(
+        manager: manager,
         platform: platform,
         transportFactory: (uri) async {
           final transport = _ObservableFakeRemoteInputTransport();
@@ -1092,6 +1045,7 @@ void main() {
       'peer disconnect removes the active target and keeps others armed',
       () async {
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (uri) async {
             final transport = _FakeRemoteInputTransport();
@@ -1183,6 +1137,7 @@ void main() {
       'peer disconnect returns to idle when it was the last target',
       () async {
         final coordinator = RemoteInputWorkspaceCoordinator(
+          manager: manager,
           platform: platform,
           transportFactory: (_) async => _FakeRemoteInputTransport(),
           workspaceSessionIdFactory: () => 'workspace-1',
