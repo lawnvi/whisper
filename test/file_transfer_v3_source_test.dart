@@ -163,6 +163,44 @@ void main() {
     );
   });
 
+  test('v3 outgoing progress is smoothed by the ACK-paced estimator', () {
+    final source = File(
+      'lib/socket/file_transfer_engine.dart',
+    ).readAsStringSync();
+    final ready = methodBody(
+      source,
+      'Future<void> _handleFileTransferV3Ready',
+      'Future<void> _sendOutgoingFileVerification',
+    );
+    final ack = methodBody(
+      source,
+      'Future<void> _handleFileTransferV3Ack(',
+      'Future<void> _handleFileTransferV3Verify(',
+    );
+    final dispatch = methodBody(
+      source,
+      'void _dispatchTransferData(FileTransferData data)',
+      'Future<FileTransferData?> _emitTransferById',
+    );
+    final release = methodBody(
+      source,
+      'Future<void> _releaseOutgoingAndStartNext(',
+      'Future<void> _startQueuedOutgoingFileTransferV3(',
+    );
+
+    // ready 建立估计器基准,ACK 只喂样本;发送端 transferring 快照统一走估计器。
+    expect(
+      ready,
+      contains('_trackOutgoingProgress(transfer, durableOffset: offset)'),
+    );
+    expect(ack, contains('.estimator.onAck('));
+    expect(dispatch, contains('_outgoingDisplaySnapshot('));
+    expect(source, contains('_untrackOutgoingProgress(transfer.transferId)'));
+    expect(release, isNot(contains('_tickOutgoingProgress')));
+    // 定时器只在有活跃发送时存在。
+    expect(source, contains('_outgoingProgressTimer?.cancel();'));
+  });
+
   test('v3 incoming file data acks before the full send window', () {
     final source = File(
       'lib/socket/file_transfer_engine.dart',

@@ -20,6 +20,7 @@ import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
@@ -213,6 +214,8 @@ class FileTransferEngine {
     Future<void> Function(File file, int timestamp)? setPublishedFileTimestamp,
     PrivacyLog? privacyLogger,
     FileTransferV3FlowParameters? flowLimits,
+    DateTime Function()? now,
+    TransferAckTimerFactory? progressTimerFactory,
     LocalDatabase Function() database = LocalDatabase.new,
   }) : _currentConnectionBinding = currentConnectionBinding,
        _authenticatedIdentityHashForConnection =
@@ -248,6 +251,8 @@ class FileTransferEngine {
            ((Platform.isAndroid || Platform.isIOS)
                ? FileTransferV3FlowParameters.mobile
                : FileTransferV3FlowParameters.desktop),
+       _now = now ?? DateTime.now,
+       _progressTimerFactory = progressTimerFactory ?? Timer.new,
        _database = database;
 
   static const int defaultTransferChunkSize = fileTransferV3FramePayloadSize;
@@ -309,6 +314,12 @@ class FileTransferEngine {
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _receivingTransferSequences = <String, int>{};
   final Map<String, int> _incomingProgressDispatchTimes = <String, int>{};
+  final DateTime Function() _now;
+  final TransferAckTimerFactory _progressTimerFactory;
+  final Map<String, _OutgoingProgressTracker> _outgoingProgressTrackers =
+      <String, _OutgoingProgressTracker>{};
+  final Map<String, double> _lastOutgoingRateByPeer = <String, double>{};
+  Timer? _outgoingProgressTimer;
   final Map<String, int> _outgoingTransferSequences = <String, int>{};
   final Map<String, int> _outgoingWindowEndOffsets = <String, int>{};
   final Map<String, FileTransferV3FlowParameters> _outgoingFlows =
@@ -1544,6 +1555,7 @@ class FileTransferEngine {
     for (final transfer in canceled) {
       _ackWatchdog.cancel(transfer.transferId);
       _outgoingWindowEndOffsets.remove(transfer.transferId);
+      _untrackOutgoingProgress(transfer.transferId);
       _outgoingTransferSequences.remove(transfer.transferId);
       await _outgoingChecksums.remove(transfer.transferId)?.dispose();
       await _closeOutgoingTransferSource(transfer.transferId);
@@ -1590,8 +1602,117 @@ class FileTransferEngine {
   }
 
   void _dispatchTransferData(FileTransferData data) {
-    final snapshot = _database().snapshotForTransfer(data);
+    var snapshot = _database().snapshotForTransfer(data);
+    final tracker = _outgoingProgressTrackers[data.transferId];
+    if (tracker != null && data.direction == FileTransferDirection.outgoing) {
+      tracker.transfer = data;
+      if (data.state == FileTransferState.transferring) {
+        snapshot = _outgoingDisplaySnapshot(
+          tracker,
+          _now().millisecondsSinceEpoch,
+        );
+        tracker.lastEmitted = snapshot.committedBytes;
+      }
+    }
     _emitTransferUpdated(snapshot);
+  }
+
+  /// 发送端 `transferring` 快照统一走估计器:ACK 只按 ackIntervalSize 到达,
+  /// 直接显示 durableOffset 会一顿一顿,见 [OutgoingProgressEstimator]。
+  TransferSnapshot _outgoingDisplaySnapshot(
+    _OutgoingProgressTracker tracker,
+    int nowMs,
+  ) {
+    final transfer = tracker.transfer;
+    final sentEnd =
+        _outgoingWindowEndOffsets[transfer.transferId] ??
+        tracker.estimator.durableOffset;
+    final displayed = tracker.estimator.estimate(
+      nowMs: nowMs,
+      sentEnd: sentEnd,
+      size: transfer.size,
+    );
+    return TransferSnapshot(
+      transferId: transfer.transferId,
+      messageUuid: transfer.messageUuid,
+      peerUid: transfer.peerUid,
+      direction: transfer.direction,
+      state: FileTransferState.transferring,
+      finalPath: transfer.finalPath,
+      tempPath: transfer.tempPath,
+      size: transfer.size,
+      committedBytes: math.max(displayed, transfer.committedBytes),
+      lastError: transfer.lastError,
+      updatedAt: nowMs,
+    );
+  }
+
+  void _trackOutgoingProgress(
+    FileTransferData transfer, {
+    required int durableOffset,
+  }) {
+    final nowMs = _now().millisecondsSinceEpoch;
+    final existing = _outgoingProgressTrackers[transfer.transferId];
+    if (existing != null) {
+      existing.transfer = transfer;
+      existing.estimator.reset(durableOffset, nowMs);
+    } else {
+      _outgoingProgressTrackers[transfer.transferId] = _OutgoingProgressTracker(
+        transfer: transfer,
+        estimator: OutgoingProgressEstimator(
+          durableOffset: durableOffset,
+          nowMs: nowMs,
+          seedRateBytesPerMs: _lastOutgoingRateByPeer[transfer.peerUid] ?? 0,
+        ),
+      );
+    }
+    _outgoingProgressTimer ??= _progressTimerFactory(
+      const Duration(milliseconds: _progressDispatchIntervalMs),
+      _tickOutgoingProgress,
+    );
+  }
+
+  void _untrackOutgoingProgress(String transferId) {
+    final tracker = _outgoingProgressTrackers.remove(transferId);
+    if (tracker == null) {
+      return;
+    }
+    final rate = tracker.estimator.rateBytesPerMs;
+    if (rate > 0) {
+      _lastOutgoingRateByPeer[tracker.transfer.peerUid] = rate;
+    }
+    if (_outgoingProgressTrackers.isEmpty) {
+      _outgoingProgressTimer?.cancel();
+      _outgoingProgressTimer = null;
+    }
+  }
+
+  void _clearOutgoingProgressTrackers() {
+    for (final transferId in _outgoingProgressTrackers.keys.toList()) {
+      _untrackOutgoingProgress(transferId);
+    }
+  }
+
+  /// 周期性把插值后的发送进度推给 UI;定时器只在有活跃发送时运行。
+  void _tickOutgoingProgress() {
+    final nowMs = _now().millisecondsSinceEpoch;
+    for (final tracker in _outgoingProgressTrackers.values.toList()) {
+      if (tracker.transfer.state != FileTransferState.transferring) {
+        continue;
+      }
+      final snapshot = _outgoingDisplaySnapshot(tracker, nowMs);
+      if (snapshot.committedBytes == tracker.lastEmitted) {
+        continue;
+      }
+      tracker.lastEmitted = snapshot.committedBytes;
+      _emitTransferUpdated(snapshot);
+    }
+    _outgoingProgressTimer = _outgoingProgressTrackers.isEmpty
+        ? null
+        : _progressTimerFactory(
+            const Duration(milliseconds: _progressDispatchIntervalMs),
+            _tickOutgoingProgress,
+          );
   }
 
   Future<FileTransferData?> _emitTransferById(String transferId) async {
@@ -1685,6 +1806,7 @@ class FileTransferEngine {
             await _clearActiveIncomingTransfer(current.transferId, flush: true);
           }
           _outgoingWindowEndOffsets.remove(current.transferId);
+          _untrackOutgoingProgress(current.transferId);
           _outgoingTransferSequences.remove(current.transferId);
           _outgoingFlows.remove(current.transferId);
           _incomingFlows.remove(current.transferId);
@@ -1710,6 +1832,7 @@ class FileTransferEngine {
     _ackWatchdog.cancel(message.uuid);
     _outgoingTransferSequences[message.uuid] = 0;
     _outgoingWindowEndOffsets.remove(message.uuid);
+    _untrackOutgoingProgress(message.uuid);
     _outgoingFlows.remove(message.uuid);
     return _sendFileTransferV3FrameTo(
       peerId,
@@ -2289,6 +2412,7 @@ class FileTransferEngine {
       if (sourceProof != control.resumeProofSha256) {
         _ackWatchdog.cancel(transfer.transferId);
         _outgoingWindowEndOffsets.remove(transfer.transferId);
+        _untrackOutgoingProgress(transfer.transferId);
         _outgoingTransferSequences[transfer.transferId] = 0;
         await _sendFileTransferV3ControlTo(
           transfer.peerUid,
@@ -2325,6 +2449,7 @@ class FileTransferEngine {
     final offset = control.durableOffset;
     _outgoingWindowEndOffsets[transfer.transferId] = offset;
     _outgoingTransferSequences[transfer.transferId] = 0;
+    _trackOutgoingProgress(transfer, durableOffset: offset);
     final updated = await _updateTransfer(
       transfer.transferId,
       state: FileTransferState.transferring,
@@ -3044,6 +3169,13 @@ class FileTransferEngine {
       throw const WireInputRejected(WireInputReason.sessionNotCurrent);
     }
     final durableOffset = control.durableOffset;
+    _outgoingProgressTrackers[transfer.transferId]?.estimator.onAck(
+      durableOffset,
+      _now().millisecondsSinceEpoch,
+    );
+    if (durableOffset >= transfer.size) {
+      _untrackOutgoingProgress(transfer.transferId);
+    }
     final updated = await _updateTransfer(
       transfer.transferId,
       state: durableOffset >= transfer.size
@@ -3057,6 +3189,7 @@ class FileTransferEngine {
     }
     if (durableOffset >= updated.size) {
       _outgoingWindowEndOffsets.remove(control.transferId);
+      _untrackOutgoingProgress(control.transferId);
       final message = await _database().fetchAssociatedFileTransferMessage(
         updated,
       );
@@ -3111,6 +3244,7 @@ class FileTransferEngine {
         _operationConnectionBindings[transfer.transferId];
     _ackWatchdog.cancel(transfer.transferId);
     _outgoingWindowEndOffsets.remove(transfer.transferId);
+    _untrackOutgoingProgress(transfer.transferId);
     _outgoingTransferSequences.remove(transfer.transferId);
     _outgoingFlows.remove(transfer.transferId);
     await _outgoingChecksums.remove(transfer.transferId)?.dispose();
@@ -3942,6 +4076,7 @@ class FileTransferEngine {
     _incomingConnectionBindings.clear();
     _outgoingTransferSequences.clear();
     _outgoingWindowEndOffsets.clear();
+    _clearOutgoingProgressTrackers();
     _outgoingFlows.clear();
     _incomingFlows.clear();
     for (final checksum in _outgoingChecksums.values) {
@@ -4007,4 +4142,12 @@ class FileTransferEngine {
       }
     }
   }
+}
+
+final class _OutgoingProgressTracker {
+  _OutgoingProgressTracker({required this.transfer, required this.estimator});
+
+  FileTransferData transfer;
+  final OutgoingProgressEstimator estimator;
+  int lastEmitted = -1;
 }
