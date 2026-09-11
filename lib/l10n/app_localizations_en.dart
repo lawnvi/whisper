@@ -13,7 +13,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get screenshotSelectionHint =>
-      'Drag to select a region · Esc to cancel';
+      'Click a window · Drag a region · Esc to cancel';
 
   @override
   String get screenshotAdjustHint =>

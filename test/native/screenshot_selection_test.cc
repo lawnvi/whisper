@@ -59,5 +59,19 @@ int main() {
   ExpectRect(selection, {1800.5, 300.5, 2700.5, 2100.5});
   selection.Reset(5000, 2600);
   assert(!selection.selected() && !selection.dragging());
+  // A click tolerates jitter, clips off-screen windows, and remains editable.
+  selection.Begin({200, 100}, 9, {-40, -20, 600, 400});
+  selection.End({203, 102});
+  ExpectRect(selection, {0, 0, 600, 400});
+  assert(selection.selected() && !selection.dragging());
+  selection.Begin({300, 200}, 9, {100, 100, 500, 300});
+  selection.End({320, 230});
+  ExpectRect(selection, {20, 30, 620, 430});
+  // Dragging out and back still means region selection, not a window click.
+  selection.Reset(1920, 1080);
+  selection.Begin({200, 100}, 9, {0, 0, 600, 400});
+  selection.Update({400, 300});
+  selection.End({203, 102});
+  ExpectRect(selection, {200, 100, 203, 102});
   std::cout << "Screenshot selection checks passed\n";
 }

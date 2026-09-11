@@ -151,6 +151,9 @@ private final class ScreenshotSession {
   private var timeout: DispatchWorkItem?
   private var screenObserver: NSObjectProtocol?
   private var desktop = CGRect.zero
+  private var windowFrames: [CGRect] = []
+  private var clickWindow = CGRect.zero
+  private var moved = false
   private var anchor = CGPoint.zero
   private var original = CGRect.zero
   private var operation = 0
@@ -176,6 +179,20 @@ private final class ScreenshotSession {
     }
     previousKeyWindow = NSApp.keyWindow
     desktop = screens.dropFirst().reduce(screens[0].frame) { $0.union($1.frame) }
+    // Read the visible stack before our overlays become the frontmost windows.
+    // Quartz uses a top-left origin; AppKit uses the main screen's bottom-left.
+    let mainTop = screens[0].frame.maxY
+    let windows = CGWindowListCopyWindowInfo(
+      [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    windowFrames = windows.compactMap { window in
+      guard let layer = window[kCGWindowLayer as String] as? Int, layer == 0,
+            (window[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+            let bounds = window[kCGWindowBounds as String] as? [String: Any],
+            let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+            rect.width >= 2, rect.height >= 2 else { return nil }
+      return CGRect(x: rect.minX, y: mainTop - rect.maxY,
+                    width: rect.width, height: rect.height).intersection(desktop)
+    }
     pointer = NSEvent.mouseLocation
     screenObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -311,6 +328,9 @@ private final class ScreenshotSession {
     }
     anchor = clamp(point)
     original = selection
+    clickWindow = windowFrames.first { $0.contains(anchor) }
+      ?? displays.first { $0.frame.contains(anchor) }?.frame ?? .zero
+    moved = false
     operation = hitTest(point)
     if operation == 0 {
       operation = create
@@ -325,6 +345,7 @@ private final class ScreenshotSession {
     pointer = point
     guard dragging else { updateCursor(); redraw(); return }
     let point = clamp(point)
+    moved = moved || abs(point.x - anchor.x) > 4 || abs(point.y - anchor.y) > 4
     if operation == create {
       selection = rect(anchor, point)
     } else if operation == move {
@@ -346,6 +367,7 @@ private final class ScreenshotSession {
   func end(_ point: CGPoint) {
     guard completion != nil, dragging else { return }
     update(point)
+    if operation == create && !moved { selection = clickWindow }
     operation = 0
     selected = selection.width >= 2 && selection.height >= 2
     if !selected { selection = .zero }
@@ -425,6 +447,7 @@ private final class ScreenshotSession {
     panels.forEach { $0.close() }
     panels.removeAll()
     displays.removeAll()
+    windowFrames.removeAll()
     if restoreKey { previousKeyWindow?.makeKey() }
     NSCursor.arrow.set()
     completion(value)

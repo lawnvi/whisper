@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 using whisper::CapturePoint;
@@ -120,6 +121,21 @@ class ScreenshotPlugin {
     }
     snapshot_ = gdk_pixbuf_get_from_window(root, 0, 0, width_, height_);
     if (!snapshot_) { Finish(false, "capture-failed"); return; }
+    window_frames_.clear();
+    GList* windows = gdk_screen_get_window_stack(gdk_screen_get_default());
+    // EWMH lists bottom to top; freeze geometry before showing the overlay.
+    for (GList* node = g_list_last(windows); node; node = node->prev) {
+      auto* window = GDK_WINDOW(node->data);
+      if (!gdk_window_is_viewable(window) ||
+          gdk_window_get_type_hint(window) == GDK_WINDOW_TYPE_HINT_DESKTOP) continue;
+      GdkRectangle bounds{};
+      gdk_window_get_frame_extents(window, &bounds);
+      if (bounds.width >= 2 && bounds.height >= 2) {
+        window_frames_.push_back({static_cast<double>(bounds.x), static_cast<double>(bounds.y),
+          static_cast<double>(bounds.x + bounds.width), static_cast<double>(bounds.y + bounds.height)});
+      }
+    }
+    g_list_free_full(windows, g_object_unref);
     overlay_ = gtk_window_new(GTK_WINDOW_POPUP);
     gtk_window_set_decorated(GTK_WINDOW(overlay_), FALSE);
     gtk_window_set_title(GTK_WINDOW(overlay_), "Whisper Region Capture");
@@ -305,8 +321,12 @@ class ScreenshotPlugin {
       if (self->selection_.selected() && toolbar.contains(point)) {
         self->Finish(point.x >= toolbar.left + 42); return TRUE;
       }
-      self->selection_.Begin(point);
       self->pointer_ = self->action_point_ = point;
+      auto window = self->MonitorBounds();
+      for (const auto& frame : self->window_frames_) {
+        if (frame.contains(point)) { window = frame; break; }
+      }
+      self->selection_.Begin(point, 9, window);
       gtk_widget_queue_draw(self->overlay_);
     }
     return TRUE;
@@ -387,6 +407,7 @@ class ScreenshotPlugin {
     overlay_ = nullptr;
     g_clear_object(&snapshot_);
     selection_.Reset(0, 0);
+    window_frames_.clear();
     if (error || (copy && !copied)) {
       fl_method_call_respond_error(call, error ? error : "clipboard-failed", nullptr, nullptr, nullptr);
     } else {
@@ -406,6 +427,7 @@ class ScreenshotPlugin {
   int width_ = 0;
   int height_ = 0;
   ScreenshotSelection selection_;
+  std::vector<CaptureRect> window_frames_;
   CapturePoint pointer_, action_point_;
   std::string hint_, adjust_hint_, confirm_, cancel_;
   bool dark_ = false;

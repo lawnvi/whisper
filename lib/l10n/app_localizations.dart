@@ -109,7 +109,7 @@ abstract class AppLocalizations {
   /// No description provided for @screenshotSelectionHint.
   ///
   /// In zh, this message translates to:
-  /// **'拖动框选区域 · Esc 取消'**
+  /// **'单击选择窗口 · 拖动框选区域 · Esc 取消'**
   String get screenshotSelectionHint;
 
   /// No description provided for @screenshotAdjustHint.

@@ -1,6 +1,6 @@
 {
   "screenshotCapture": "Capturar región",
-  "screenshotSelectionHint": "Arrastra para seleccionar · Esc para cancelar",
+  "screenshotSelectionHint": "Clic en una ventana · Arrastra un área · Esc para cancelar",
   "screenshotAdjustHint": "Arrastra para mover · Ajusta los bordes · Enter para copiar · Esc para cancelar",
   "screenshotConfirm": "Copiar",
   "screenshotCopied": "Captura copiada. Pégala donde quieras.",

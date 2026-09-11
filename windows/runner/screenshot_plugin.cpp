@@ -3,6 +3,7 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <dwmapi.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -10,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
 using Value = flutter::EncodableValue;
@@ -163,6 +165,24 @@ class ScreenshotPlugin : public flutter::Plugin {
     window_class.lpszClassName = kOverlayClass;
     RegisterClassW(&window_class);
     foreground_ = GetForegroundWindow();
+    window_frames_.clear();
+    EnumWindows([](HWND window, LPARAM data) -> BOOL {
+      auto* self = reinterpret_cast<ScreenshotPlugin*>(data);
+      if (!IsWindowVisible(window) || IsIconic(window) || window == GetShellWindow()) return TRUE;
+      DWORD cloaked = 0;
+      DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+      if (cloaked) return TRUE;
+      RECT bounds{};
+      if (FAILED(DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds))) &&
+          !GetWindowRect(window, &bounds)) return TRUE;
+      if (bounds.right - bounds.left >= 2 && bounds.bottom - bounds.top >= 2) {
+        self->window_frames_.push_back({static_cast<double>(bounds.left - self->origin_.x),
+          static_cast<double>(bounds.top - self->origin_.y),
+          static_cast<double>(bounds.right - self->origin_.x),
+          static_cast<double>(bounds.bottom - self->origin_.y)});
+      }
+      return TRUE;
+    }, reinterpret_cast<LPARAM>(this));
     overlay_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         kOverlayClass, L"Whisper", WS_POPUP, origin_.x, origin_.y,
         width_, height_, nullptr, nullptr, GetModuleHandle(nullptr), this);
@@ -388,6 +408,7 @@ class ScreenshotPlugin : public flutter::Plugin {
     const bool restore_focus = overlay && GetForegroundWindow() == overlay;
     overlay_ = nullptr;
     selection_.Reset(0, 0);
+    window_frames_.clear();
     if (GetCapture() == overlay) ReleaseCapture();
     if (overlay) DestroyWindow(overlay);
     if (frame_dc_) {
@@ -423,17 +444,22 @@ class ScreenshotPlugin : public flutter::Plugin {
     switch (message) {
       case WM_PAINT: self->Paint(window); return 0;
       case WM_ERASEBKGND: return 1;
-      case WM_LBUTTONDOWN:
+      case WM_LBUTTONDOWN: {
         self->pointer_ = self->CursorPoint();
         if (self->selection_.selected() && self->Toolbar().contains(self->pointer_)) {
           self->Finish(self->pointer_.x >= self->Toolbar().left + 42 * self->UiScale());
           return 0;
         }
         self->action_point_ = self->pointer_;
-        self->selection_.Begin(self->pointer_, 9 * self->UiScale());
+        auto bounds = self->MonitorBounds();
+        for (const auto& frame : self->window_frames_) {
+          if (frame.contains(self->pointer_)) { bounds = frame; break; }
+        }
+        self->selection_.Begin(self->pointer_, 9 * self->UiScale(), bounds, 4 * self->UiScale());
         SetCapture(window);
         InvalidateRect(window, nullptr, FALSE);
         return 0;
+      }
       case WM_MOUSEMOVE:
         self->pointer_ = self->CursorPoint();
         self->selection_.Update(self->pointer_);
@@ -486,6 +512,7 @@ class ScreenshotPlugin : public flutter::Plugin {
   LONG height_ = 0;
   POINT origin_{};
   ScreenshotSelection selection_;
+  std::vector<CaptureRect> window_frames_;
   CapturePoint pointer_, action_point_;
   std::wstring hint_, adjust_hint_;
   bool dark_ = false;

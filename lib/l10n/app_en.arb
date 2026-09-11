@@ -1,6 +1,6 @@
 {
   "screenshotCapture": "Capture region",
-  "screenshotSelectionHint": "Drag to select a region · Esc to cancel",
+  "screenshotSelectionHint": "Click a window · Drag a region · Esc to cancel",
   "screenshotAdjustHint": "Drag to move · Drag edges to resize · Enter to copy · Esc to cancel",
   "screenshotConfirm": "Copy",
   "screenshotCopied": "Screenshot copied. Paste it wherever you need.",

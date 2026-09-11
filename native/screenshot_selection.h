@@ -40,9 +40,13 @@ class ScreenshotSelection {
     else if (std::abs(p.y - rect_.bottom) <= tolerance) hit |= kBottom;
     return hit ? hit : rect_.contains(p) ? kMove : kOutside;
   }
-  void Begin(CapturePoint p, double tolerance = 9) {
+  void Begin(CapturePoint p, double tolerance = 9,
+             CaptureRect click_window = {}, double click_tolerance = 4) {
     anchor_ = Clamp(p);
     original_ = rect_;
+    click_window_ = click_window;
+    click_tolerance_ = click_tolerance;
+    moved_ = false;
     operation_ = HitTest(p, tolerance);
     if (operation_ == kOutside) {
       operation_ = kCreate; selected_ = false;
@@ -52,6 +56,8 @@ class ScreenshotSelection {
   void Update(CapturePoint p) {
     if (!dragging()) return;
     p = Clamp(p);
+    moved_ = moved_ || std::abs(p.x - anchor_.x) > click_tolerance_ ||
+        std::abs(p.y - anchor_.y) > click_tolerance_;
     if (operation_ == kCreate) {
       rect_ = {std::min(anchor_.x, p.x), std::min(anchor_.y, p.y),
                std::max(anchor_.x, p.x), std::max(anchor_.y, p.y)};
@@ -76,6 +82,12 @@ class ScreenshotSelection {
   void End(CapturePoint p) {
     if (!dragging()) return;
     Update(p);
+    if (operation_ == kCreate && !moved_ &&
+        click_window_.width() >= 2 && click_window_.height() >= 2) {
+      const auto first = Clamp({click_window_.left, click_window_.top});
+      const auto last = Clamp({click_window_.right, click_window_.bottom});
+      rect_ = {first.x, first.y, last.x, last.y};
+    }
     operation_ = kOutside;
     selected_ = rect_.width() >= 2 && rect_.height() >= 2;
     if (!selected_) rect_ = {};
@@ -87,10 +99,12 @@ class ScreenshotSelection {
             std::max(0.0, std::min(p.y, height_))};
   }
   double width_ = 0, height_ = 0;
-  CaptureRect rect_, original_;
+  CaptureRect rect_, original_, click_window_;
   CapturePoint anchor_;
+  double click_tolerance_ = 4;
   int operation_ = kOutside;
   bool selected_ = false;
+  bool moved_ = false;
 };
 }  // namespace whisper
 #endif  // WHISPER_SCREENSHOT_SELECTION_H_

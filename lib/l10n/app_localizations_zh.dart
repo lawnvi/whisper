@@ -12,7 +12,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get screenshotCapture => '区域截图';
 
   @override
-  String get screenshotSelectionHint => '拖动框选区域 · Esc 取消';
+  String get screenshotSelectionHint => '单击选择窗口 · 拖动框选区域 · Esc 取消';
 
   @override
   String get screenshotAdjustHint => '拖动移动 · 拖边调整 · Enter 复制 · Esc 取消';

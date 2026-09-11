@@ -1,6 +1,6 @@
 {
   "screenshotCapture": "区域截图",
-  "screenshotSelectionHint": "拖动框选区域 · Esc 取消",
+  "screenshotSelectionHint": "单击选择窗口 · 拖动框选区域 · Esc 取消",
   "screenshotAdjustHint": "拖动移动 · 拖边调整 · Enter 复制 · Esc 取消",
   "screenshotConfirm": "复制",
   "screenshotCopied": "截图已复制，可自行粘贴使用",
