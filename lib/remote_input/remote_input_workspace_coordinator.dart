@@ -31,6 +31,7 @@ enum RemoteInputWorkspaceStatus { idle, offering, armed, active, failed }
 enum RemoteInputWorkspaceTargetStatus { offering, connected, failed, stopped }
 
 enum RemoteInputWorkspaceDiagnosticKind {
+  transportConnectFailed,
   transportClosed,
   platformDiagnostic,
   platformError,
@@ -383,6 +384,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
   void _traceWorkspace(
     RemoteInputWorkspaceDiagnosticKind kind, {
     RemoteInputFailureReason? reason,
+    Object? localError,
   }) {
     if (kReleaseMode &&
         Platform.environment['WHISPER_REMOTE_INPUT_TRACE'] != '1') {
@@ -391,6 +393,8 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     privacyLog.event(PrivacyEvent.remoteInputDiagnostic, <PrivacyField, Object>{
       PrivacyField.kind: kind,
       if (reason != null) PrivacyField.reason: reason,
+      if (localError != null)
+        PrivacyField.errorType: privacyLog.errorType(localError),
     });
   }
 
@@ -771,6 +775,11 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         );
       }
     } catch (error) {
+      _traceWorkspace(
+        RemoteInputWorkspaceDiagnosticKind.transportConnectFailed,
+        reason: RemoteInputFailureReason.transport,
+        localError: error,
+      );
       if (generation != _lifecycle.generation ||
           !identical(_targets[target.request.peerId], target)) {
         return true;
