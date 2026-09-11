@@ -59,6 +59,7 @@ import 'package:path/path.dart' as p;
 
 import '../helper/file.dart';
 import '../helper/notification.dart';
+import 'package:whisper/socket/direct_peer_http_client.dart';
 
 abstract class ISocketEvent {
   void onError(String message);
@@ -154,7 +155,7 @@ final class _PendingOutgoingConnection {
     required this.peerPolicyEpoch,
     required this.startedPolicyRevision,
     required this.socketCloseTimeout,
-  }) : httpClient = HttpClient();
+  }) : httpClient = newDirectPeerHttpClient();
 
   final ConnectionAttemptRequest request;
   final int globalPolicyEpoch;

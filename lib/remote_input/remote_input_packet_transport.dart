@@ -7,6 +7,7 @@ import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/packet_byte_transport.dart';
+import 'package:whisper/socket/direct_peer_http_client.dart';
 
 abstract class RemoteInputPacketTransport {
   void send(RemoteInputPacketFrame packet);
@@ -123,7 +124,10 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
   }) async {
     AuthenticatedMediaPacketEncoder? unownedPacketEncoder;
     try {
-      WebSocketChannel channel = IOWebSocketChannel.connect(uri);
+      WebSocketChannel channel = IOWebSocketChannel.connect(
+        uri,
+        customClient: newDirectPeerHttpClient(),
+      );
       await channel.ready;
       channel = await authenticateMediaWebSocketClient(
         channel,

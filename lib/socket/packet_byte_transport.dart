@@ -10,6 +10,7 @@ import 'package:whisper/socket/bounded_outbound_queue.dart';
 import 'package:whisper/socket/media_upgrade_proof.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
+import 'package:whisper/socket/direct_peer_http_client.dart';
 
 enum PacketSendResult { sent, dropped, closed, transportFailure }
 
@@ -708,7 +709,10 @@ Future<PacketByteTransport> connectPacketWebSocket(
     final PacketWebSocketConnection connection;
     Stream<dynamic>? incoming;
     if (connector == null) {
-      WebSocketChannel channel = IOWebSocketChannel.connect(uri);
+      WebSocketChannel channel = IOWebSocketChannel.connect(
+        uri,
+        customClient: newDirectPeerHttpClient(),
+      );
       await channel.ready;
       if (unownedMediaUpgradeContext case final context?) {
         try {

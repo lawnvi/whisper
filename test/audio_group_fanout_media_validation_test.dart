@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,26 +19,22 @@ final _mediaKey = Uint8List.fromList(
   List<int>.generate(32, (index) => index + 1),
 );
 
-Uri _mediaUri(
-  int port, {
-  required String sessionId,
-  required String token,
-}) {
+Uri _mediaUri(int port, {required String sessionId, required String token}) {
   return buildPeerPacketUri(
     host: '127.0.0.1',
     port: port,
     path: '/audio',
-    queryParameters: <String, String>{
-      'session': sessionId,
-      'token': token,
-    },
+    queryParameters: <String, String>{'session': sessionId, 'token': token},
   );
 }
 
 void main() {
   // AudioGroupCoordinator.shared 构造时会注册平台通道 handler,需要 binding。
-  // 本文件不能使用裸 HttpClient(TestWidgetsFlutterBinding 会替换为假实现)。
+  // TestWidgetsFlutterBinding 会把 HttpClient 替换为返回 400 的假实现,而对等
+  // 连接统一走 newDirectPeerHttpClient() 创建的真实客户端连本地服务,
+  // 这里恢复真实网络。
   TestWidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = null;
 
   late SessionUpgradeTokenRegistry tokens;
   late AudioShareManager audioManager;
@@ -65,14 +62,11 @@ void main() {
     await server.closeGracefully(closeServer: true, forceServerClose: true);
   });
 
-  test(
-      'production group packet validation delivers fanout packets whose '
+  test('production group packet validation delivers fanout packets whose '
       'session id is the stream id', () async {
     final group = AudioGroupCoordinator.shared.startGroup(
       sourcePeerId: _sourcePeerId,
-      sinks: <String, AudioChannelRole>{
-        _sinkPeerId: AudioChannelRole.stereo,
-      },
+      sinks: <String, AudioChannelRole>{_sinkPeerId: AudioChannelRole.stereo},
       format: const AudioStreamFormat(
         codec: AudioCodecKind.opus,
         sampleRate: 48000,
