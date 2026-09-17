@@ -57,6 +57,13 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# The audio plugin still uses C++/WinRT's C++17 coroutine fallback, which
+# MSVC 14.51 requires opting into until the plugin adopts standard coroutines.
+if(MSVC_VERSION GREATER_EQUAL 1951 AND TARGET audioplayers_windows_plugin)
+  target_compile_definitions(audioplayers_windows_plugin PRIVATE
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

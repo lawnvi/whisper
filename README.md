@@ -42,6 +42,7 @@ Whisper 解决的是一个很日常但反复出现的问题：自己的电脑、
 - **可控的剪贴板同步**：自动同步默认关闭，普通会话只发送到当前可信设备，多设备键鼠工作区会同步到其中已连接的设备；桌面端可在 Whisper 运行期间监听，Android 10 及以上版本只能在 Whisper 位于前台时读取新剪贴板。
 - **流式校验与续传**：文件接收时同步计算 SHA-256，完成后通常无需重新读取整个文件；断线后可从已确认的位置继续传输。
 - **系统音频共享**：把一台设备的系统音频推给一个或多个播放端，支持基础扬声器组和左右声道角色。
+- **电视投屏（DLNA，实验性）**：在桌面端设置中开启“电视投屏”，即可通过本机设备名称接收同一局域网视频 App 的投屏，无需 Whisper 配对；内置播放支持暂停、进度和音量控制，开关默认关闭并记住选择，详见 [接收说明](docs/cast_receiver.md)。
 - **键鼠共享**：在多台受信任桌面设备之间共享一套键鼠，并让文本、图片和文件剪贴板跟随工作区。
 - **桌面截图**：点击选择窗口或拖动框选区域，确认后复制到剪贴板，可粘贴到 Whisper 输入框或其他应用；支持自定义截图快捷键。
 - **桌面体验**：支持托盘、启动项、关闭到托盘、在文件管理器中定位文件、桌面文件拖出复制、浅色/深色主题和多语言。
@@ -70,6 +71,8 @@ flutter doctor
 - macOS / iOS：Xcode
 - Windows：Visual Studio C++ 工具链
 - Linux：Flutter Linux desktop 依赖、Avahi、PulseAudio 或 PipeWire Pulse、GStreamer、libsecret/keybinder/jsoncpp 与可用的系统密钥环
+
+电视投屏使用应用内播放器，macOS 和 Windows 构建会附带播放库；Linux 构建需安装 `libmpv-dev libepoxy-dev`，运行时需要对应的 libmpv/libepoxy 软件包；历史方案与实测结论见 [AirPlay / Wi-Fi Direct 实验记录](docs/2026-09-17_cast-experiments-report.md)。
 
 ### 2. 获取依赖并运行
 

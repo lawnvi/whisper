@@ -64,6 +64,7 @@ dependencies:
   crypto: ^3.0.6
   cryptography: ^2.9.0
   ffi: ^2.1.4
+  win32: ^5.15.0
   sodium: 4.0.2+1
   super_drag_and_drop: ^0.9.1
   bonsoir: ^5.1.10
@@ -89,6 +90,12 @@ dependencies:
     sdk: flutter
   audioplayers: ^6.7.1
   mime: ^2.0.0
+  xml: ^6.6.1
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_macos_video: ^1.1.4
+  media_kit_libs_windows_video: ^1.0.11
+  media_kit_libs_linux: ^1.2.1
 
 
 dev_dependencies:

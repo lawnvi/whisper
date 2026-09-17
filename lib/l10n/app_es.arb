@@ -718,6 +718,39 @@
       }
     }
   },
-  "updateInstalledRestart": "Actualización instalada. Vuelve a abrir Whisper para usar la nueva versión."
-
+  "updateInstalledRestart": "Actualización instalada. Vuelve a abrir Whisper para usar la nueva versión.",
+  "castReceiverTitle": "Transmisión a TV",
+  "castReceiverHint": "Activa esta opción y elige el nombre de este dispositivo en una app de vídeo de la misma red local.",
+  "castReceiverStarting": "Iniciando…",
+  "castReceiverNoLan": "No hay una dirección de red local. Conéctate a la red y vuelve a activar la transmisión.",
+  "castReceiverStartupFailed": "No se pudo iniciar la transmisión. Desactívala y vuelve a activarla.",
+  "castPlay": "Reproducir",
+  "castPause": "Pausar",
+  "castMute": "Silenciar",
+  "castUnmute": "Activar sonido",
+  "castFullscreen": "Pantalla completa",
+  "castPlaybackFailed": "No se pudo reproducir el vídeo. Reintenta o vuelve a transmitir desde el teléfono.",
+  "castControlFailed": "No se pudo aplicar el control. Inténtalo de nuevo.",
+  "castRequestTitle": "¿Permitir la transmisión?",
+  "castRequestMessage": "Un dispositivo en {address} quiere reproducir un vídeo aquí.",
+  "castRequestCountdown": "Se permitirá en {seconds} segundos. Puedes rechazarla.",
+  "castRequestDeny": "Rechazar",
+  "castRequestAllow": "Permitir",
+  "castExitFullscreen": "Salir de pantalla completa",
+  "castSeek": "Posición de reproducción",
+  "castVolume": "Volumen",
+  "@castRequestMessage": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "@castRequestCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  }
 }

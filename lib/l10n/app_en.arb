@@ -691,6 +691,39 @@
       }
     }
   },
-  "updateInstalledRestart": "Update installed. Reopen Whisper to use the new version."
-
+  "updateInstalledRestart": "Update installed. Reopen Whisper to use the new version.",
+  "castReceiverTitle": "TV casting",
+  "castReceiverHint": "Turn on, then select this device’s name in a video app on the same local network.",
+  "castReceiverStarting": "Starting…",
+  "castReceiverNoLan": "No local network address is available. Connect to the network and turn casting on again.",
+  "castReceiverStartupFailed": "Casting could not start. Turn it off and on again.",
+  "castPlay": "Play",
+  "castPause": "Pause",
+  "castMute": "Mute",
+  "castUnmute": "Unmute",
+  "castFullscreen": "Fullscreen",
+  "castPlaybackFailed": "Video playback failed. Retry or cast again from your phone.",
+  "castControlFailed": "The control could not be applied. Please retry.",
+  "castRequestTitle": "Allow this device to cast?",
+  "castRequestMessage": "A device at {address} wants to play a video here.",
+  "castRequestCountdown": "Allowing in {seconds} seconds. You can decline.",
+  "castRequestDeny": "Decline",
+  "castRequestAllow": "Allow casting",
+  "castExitFullscreen": "Exit fullscreen",
+  "castSeek": "Playback position",
+  "castVolume": "Volume",
+  "@castRequestMessage": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "@castRequestCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  }
 }

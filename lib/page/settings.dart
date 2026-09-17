@@ -28,6 +28,7 @@ import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/notification_app_registry.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/app_dialogs.dart';
+import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/glass_settings_slider.dart';
@@ -455,6 +456,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                       ),
+                      if (_isDesktopPlatform)
+                        AnimatedBuilder(
+                          animation: CastReceiverManager.shared,
+                          builder: (context, _) {
+                            final receiver = CastReceiverManager.shared;
+                            return _buildSettingItem(
+                              l10n.castReceiverTitle,
+                              const Icon(Icons.tv_rounded),
+                              desc: switch (receiver.status.issue) {
+                                CastReceiverIssue.noLanAddress =>
+                                  l10n.castReceiverNoLan,
+                                CastReceiverIssue.startupFailed =>
+                                  l10n.castReceiverStartupFailed,
+                                null =>
+                                  receiver.busy
+                                      ? l10n.castReceiverStarting
+                                      : l10n.castReceiverHint,
+                              },
+                              trailing: CupertinoSwitch(
+                                value: receiver.enabled,
+                                onChanged: receiver.busy
+                                    ? null
+                                    : (value) =>
+                                          unawaited(receiver.setEnabled(value)),
+                              ),
+                            );
+                          },
+                        ),
                     ],
                   ),
                   if (_isDesktopPlatform || !_isMobilePlatform)
@@ -1403,6 +1432,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await updateNickname(nickname);
     } else {
       await LocalSetting().updateNickname(nickname);
+      await CastReceiverManager.shared.updateName();
       await WsSvrManager().broadcastLocalProfileUpdate();
     }
     await _refreshDevice();

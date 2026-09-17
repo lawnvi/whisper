@@ -285,6 +285,11 @@ void main() {
     await _pumpAt(tester, width: 720, height: 1500, updateManager: manager);
 
     expect(manager.checkCount, 1);
+    await tester.scrollUntilVisible(
+      find.text('Check for updates'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Check for updates'), findsOneWidget);
     final versionLabel = find.text('Update available: 2.5.0');
     final updateBadge = find.byKey(
@@ -297,7 +302,6 @@ void main() {
       greaterThanOrEqualTo(4),
     );
     expect(find.byIcon(Icons.download_rounded), findsNothing);
-
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
     expect(find.text('Version 2.5.0 is available'), findsWidgets);
@@ -316,6 +320,12 @@ void main() {
     final manager = _FakeUpdateManager(downloadGate: gate);
     await _pumpAt(tester, width: 720, height: 1500, updateManager: manager);
 
+    await tester.scrollUntilVisible(
+      find.text('Check for updates'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Update'));
@@ -349,6 +359,12 @@ void main() {
         },
       );
 
+      await tester.scrollUntilVisible(
+        find.text('Check for updates'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Update'));
@@ -362,7 +378,11 @@ void main() {
   testWidgets('about row contains website and source links', (tester) async {
     await _pumpAt(tester, width: 720, height: 1500, autoCheckForUpdates: false);
 
-    await tester.ensureVisible(find.text('About Whisper'));
+    await tester.scrollUntilVisible(
+      find.text('About Whisper'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('About Whisper'));
     await tester.pumpAndSettle();

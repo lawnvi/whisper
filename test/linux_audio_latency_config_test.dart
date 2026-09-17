@@ -14,9 +14,13 @@ void main() {
     expect(releaseWorkflow, contains('lld'));
     expect(releaseWorkflow, contains('pkg-config'));
     expect(releaseWorkflow, contains('libpulse-dev'));
+    expect(releaseWorkflow, contains('libmpv-dev'));
+    expect(releaseWorkflow, contains('libepoxy-dev'));
     expect(releaseWorkflow, contains('libgstreamer1.0-dev'));
     expect(releaseWorkflow, contains('libgstreamer-plugins-base1.0-dev'));
     expect(debScript, contains('Depends: libpulse0'));
+    expect(debScript, contains('libmpv2'));
+    expect(debScript, contains('libepoxy0'));
     expect(debScript, contains('libgstreamer1.0-0'));
     expect(debScript, contains('gstreamer1.0-plugins-good'));
     expect(debScript, contains('gstreamer1.0-libav'));

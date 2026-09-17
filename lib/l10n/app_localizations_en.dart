@@ -1495,4 +1495,73 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateInstalledRestart =>
       'Update installed. Reopen Whisper to use the new version.';
+
+  @override
+  String get castReceiverTitle => 'TV casting';
+
+  @override
+  String get castReceiverHint =>
+      'Turn on, then select this device’s name in a video app on the same local network.';
+
+  @override
+  String get castReceiverStarting => 'Starting…';
+
+  @override
+  String get castReceiverNoLan =>
+      'No local network address is available. Connect to the network and turn casting on again.';
+
+  @override
+  String get castReceiverStartupFailed =>
+      'Casting could not start. Turn it off and on again.';
+
+  @override
+  String get castPlay => 'Play';
+
+  @override
+  String get castPause => 'Pause';
+
+  @override
+  String get castMute => 'Mute';
+
+  @override
+  String get castUnmute => 'Unmute';
+
+  @override
+  String get castFullscreen => 'Fullscreen';
+
+  @override
+  String get castPlaybackFailed =>
+      'Video playback failed. Retry or cast again from your phone.';
+
+  @override
+  String get castControlFailed =>
+      'The control could not be applied. Please retry.';
+
+  @override
+  String get castRequestTitle => 'Allow this device to cast?';
+
+  @override
+  String castRequestMessage(String address) {
+    return 'A device at $address wants to play a video here.';
+  }
+
+  @override
+  String castRequestCountdown(int seconds) {
+    return 'Allowing in $seconds seconds. You can decline.';
+  }
+
+  @override
+  String get castRequestDeny => 'Decline';
+
+  @override
+  String get castRequestAllow => 'Allow casting';
+
+  @override
+  String get castExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get castSeek => 'Playback position';
+
+  @override
+  String get castVolume => 'Volume';
 }

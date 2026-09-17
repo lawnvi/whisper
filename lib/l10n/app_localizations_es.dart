@@ -1514,4 +1514,73 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get updateInstalledRestart =>
       'Actualización instalada. Vuelve a abrir Whisper para usar la nueva versión.';
+
+  @override
+  String get castReceiverTitle => 'Transmisión a TV';
+
+  @override
+  String get castReceiverHint =>
+      'Activa esta opción y elige el nombre de este dispositivo en una app de vídeo de la misma red local.';
+
+  @override
+  String get castReceiverStarting => 'Iniciando…';
+
+  @override
+  String get castReceiverNoLan =>
+      'No hay una dirección de red local. Conéctate a la red y vuelve a activar la transmisión.';
+
+  @override
+  String get castReceiverStartupFailed =>
+      'No se pudo iniciar la transmisión. Desactívala y vuelve a activarla.';
+
+  @override
+  String get castPlay => 'Reproducir';
+
+  @override
+  String get castPause => 'Pausar';
+
+  @override
+  String get castMute => 'Silenciar';
+
+  @override
+  String get castUnmute => 'Activar sonido';
+
+  @override
+  String get castFullscreen => 'Pantalla completa';
+
+  @override
+  String get castPlaybackFailed =>
+      'No se pudo reproducir el vídeo. Reintenta o vuelve a transmitir desde el teléfono.';
+
+  @override
+  String get castControlFailed =>
+      'No se pudo aplicar el control. Inténtalo de nuevo.';
+
+  @override
+  String get castRequestTitle => '¿Permitir la transmisión?';
+
+  @override
+  String castRequestMessage(String address) {
+    return 'Un dispositivo en $address quiere reproducir un vídeo aquí.';
+  }
+
+  @override
+  String castRequestCountdown(int seconds) {
+    return 'Se permitirá en $seconds segundos. Puedes rechazarla.';
+  }
+
+  @override
+  String get castRequestDeny => 'Rechazar';
+
+  @override
+  String get castRequestAllow => 'Permitir';
+
+  @override
+  String get castExitFullscreen => 'Salir de pantalla completa';
+
+  @override
+  String get castSeek => 'Posición de reproducción';
+
+  @override
+  String get castVolume => 'Volumen';
 }

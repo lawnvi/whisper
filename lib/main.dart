@@ -16,6 +16,8 @@ import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
+import 'package:whisper/widget/cast_playback_host.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,6 +97,9 @@ void main(List<String> arguments) async {
     coordinator: AudioGroupCoordinator.shared,
     platform: AudioPlatform.shared,
   );
+  if (isDesktop()) {
+    unawaited(CastReceiverManager.shared.initialize());
+  }
   runApp(MyApp());
 }
 
@@ -280,7 +285,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
             );
           }
-          return child ?? const SizedBox.shrink();
+          final content = child ?? const SizedBox.shrink();
+          return isDesktop() ? CastPlaybackHost(child: content) : content;
         },
         home: const DeviceListScreen(),
       ),

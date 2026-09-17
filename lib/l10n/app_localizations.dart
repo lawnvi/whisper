@@ -2583,6 +2583,126 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'更新已安装，重新打开 Whisper 后生效。'**
   String get updateInstalledRestart;
+
+  /// No description provided for @castReceiverTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'电视投屏'**
+  String get castReceiverTitle;
+
+  /// No description provided for @castReceiverHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，在同一局域网的视频 App 中选择本机设备名称即可投屏。'**
+  String get castReceiverHint;
+
+  /// No description provided for @castReceiverStarting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在启动…'**
+  String get castReceiverStarting;
+
+  /// No description provided for @castReceiverNoLan.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可用的局域网地址，请连接网络后重新开启。'**
+  String get castReceiverNoLan;
+
+  /// No description provided for @castReceiverStartupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'投屏服务未能启动，请关闭后重新开启。'**
+  String get castReceiverStartupFailed;
+
+  /// No description provided for @castPlay.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放'**
+  String get castPlay;
+
+  /// No description provided for @castPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get castPause;
+
+  /// No description provided for @castMute.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音'**
+  String get castMute;
+
+  /// No description provided for @castUnmute.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消静音'**
+  String get castUnmute;
+
+  /// No description provided for @castFullscreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'全屏'**
+  String get castFullscreen;
+
+  /// No description provided for @castPlaybackFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'视频播放失败，请重试或在手机上重新投屏。'**
+  String get castPlaybackFailed;
+
+  /// No description provided for @castControlFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作未完成，请重试。'**
+  String get castControlFailed;
+
+  /// No description provided for @castRequestTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许这台设备投屏吗？'**
+  String get castRequestTitle;
+
+  /// No description provided for @castRequestMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {address} 的设备希望在本机播放视频。'**
+  String castRequestMessage(String address);
+
+  /// No description provided for @castRequestCountdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'{seconds} 秒后自动允许，你也可以拒绝。'**
+  String castRequestCountdown(int seconds);
+
+  /// No description provided for @castRequestDeny.
+  ///
+  /// In zh, this message translates to:
+  /// **'拒绝'**
+  String get castRequestDeny;
+
+  /// No description provided for @castRequestAllow.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许投屏'**
+  String get castRequestAllow;
+
+  /// No description provided for @castExitFullscreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出全屏'**
+  String get castExitFullscreen;
+
+  /// No description provided for @castSeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放进度'**
+  String get castSeek;
+
+  /// No description provided for @castVolume.
+  ///
+  /// In zh, this message translates to:
+  /// **'音量'**
+  String get castVolume;
 }
 
 class _AppLocalizationsDelegate

@@ -1392,4 +1392,68 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateInstalledRestart => '更新已安装，重新打开 Whisper 后生效。';
+
+  @override
+  String get castReceiverTitle => '电视投屏';
+
+  @override
+  String get castReceiverHint => '开启后，在同一局域网的视频 App 中选择本机设备名称即可投屏。';
+
+  @override
+  String get castReceiverStarting => '正在启动…';
+
+  @override
+  String get castReceiverNoLan => '没有可用的局域网地址，请连接网络后重新开启。';
+
+  @override
+  String get castReceiverStartupFailed => '投屏服务未能启动，请关闭后重新开启。';
+
+  @override
+  String get castPlay => '播放';
+
+  @override
+  String get castPause => '暂停';
+
+  @override
+  String get castMute => '静音';
+
+  @override
+  String get castUnmute => '取消静音';
+
+  @override
+  String get castFullscreen => '全屏';
+
+  @override
+  String get castPlaybackFailed => '视频播放失败，请重试或在手机上重新投屏。';
+
+  @override
+  String get castControlFailed => '操作未完成，请重试。';
+
+  @override
+  String get castRequestTitle => '允许这台设备投屏吗？';
+
+  @override
+  String castRequestMessage(String address) {
+    return '来自 $address 的设备希望在本机播放视频。';
+  }
+
+  @override
+  String castRequestCountdown(int seconds) {
+    return '$seconds 秒后自动允许，你也可以拒绝。';
+  }
+
+  @override
+  String get castRequestDeny => '拒绝';
+
+  @override
+  String get castRequestAllow => '允许投屏';
+
+  @override
+  String get castExitFullscreen => '退出全屏';
+
+  @override
+  String get castSeek => '播放进度';
+
+  @override
+  String get castVolume => '音量';
 }

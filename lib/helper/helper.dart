@@ -10,6 +10,7 @@ import 'package:logger/logger.dart';
 import 'package:whisper/helper/clipboard_write_suppression.dart';
 import 'package:whisper/helper/local_network_permission.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/windows_network_interfaces.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/state/ipv4_address_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -169,8 +170,7 @@ Future<String> deviceName() async {
           var ios = await dp.iosInfo;
           return ios.name;
         case TargetPlatform.linux:
-          var linux = await dp.linuxInfo;
-          return linux.name;
+          return Platform.localHostname;
         case TargetPlatform.windows:
           var windows = await dp.windowsInfo;
           return windows.computerName;
@@ -219,6 +219,7 @@ Future<String> getLocalIpAddress() async {
 
   try {
     final candidates = <LocalIpv4Candidate>[];
+    final descriptions = await localNetworkInterfaceDescriptions();
     for (final interface in await NetworkInterface.list(
       type: InternetAddressType.IPv4,
       includeLinkLocal: true,
@@ -227,7 +228,8 @@ Future<String> getLocalIpAddress() async {
         if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
           candidates.add((
             address: addr.address,
-            interfaceName: interface.name,
+            interfaceName:
+                '${interface.name} ${descriptions[interface.index] ?? ''}',
           ));
         }
       }
@@ -239,6 +241,14 @@ Future<String> getLocalIpAddress() async {
 }
 
 typedef LocalIpv4Candidate = ({String address, String interfaceName});
+
+Future<Map<int, String>> localNetworkInterfaceDescriptions() async {
+  final interfaces = await windowsNetworkInterfaces();
+  return {
+    for (final interface in interfaces ?? <WindowsNetworkInterface>[])
+      interface.index: interface.description,
+  };
+}
 
 String? selectLocalIpv4Address(Iterable<LocalIpv4Candidate> candidates) {
   LocalIpv4Candidate? best;

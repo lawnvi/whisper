@@ -112,6 +112,26 @@ void main() {
     );
   });
 
+  test('Wi-Fi Direct driver description does not outrank the LAN', () {
+    for (final name in ['本地连接* 10', 'Local Area Connection* 10', '投屏网卡']) {
+      expect(
+        selectLocalIpv4Address(<LocalIpv4Candidate>[
+          (
+            address: '192.168.137.1',
+            interfaceName: '$name Microsoft Wi-Fi Direct Virtual Adapter #2',
+          ),
+          (
+            address: '192.168.1.200',
+            interfaceName: 'WLAN Intel Wi-Fi 6E AX211',
+          ),
+          (address: '198.18.0.1', interfaceName: 'Meta Meta Tunnel'),
+        ]),
+        '192.168.1.200',
+        reason: name,
+      );
+    }
+  });
+
   test('recognizes usable unicast while rejecting unsafe IPv4 classes', () {
     expect(Ipv4AddressPolicy.isUsableUnicast('100.64.0.8'), isTrue);
     expect(Ipv4AddressPolicy.isUsableUnicast('203.0.113.8'), isTrue);

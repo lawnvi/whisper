@@ -11,6 +11,14 @@ BUILD_DIR="${OUTPUT_DIR}/pkgroot"
 INSTALL_DIR="/opt/${APP_NAME}"
 BUNDLE_DIR="${PROJECT_DIR}/build/linux/x64/release/bundle"
 
+# The CI image and newer distributions ship different libmpv SONAMEs.
+MPV_LINKS="$(readelf -d "${BUNDLE_DIR}/lib/libmedia_kit_video_plugin.so")"
+case "$MPV_LINKS" in
+  *libmpv.so.1*) MPV_PACKAGE=libmpv1 ;;
+  *libmpv.so.2*) MPV_PACKAGE=libmpv2 ;;
+  *) echo "Cannot identify the required libmpv runtime" >&2; exit 1 ;;
+esac
+
 echo "Building DEB package ${APP_NAME} ${VERSION} (${ARCHITECTURE})"
 
 dart "${PROJECT_DIR}/script/prune_flutter_assets.dart" linux-x64 \
@@ -33,7 +41,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libpulse0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
+Depends: libpulse0, ${MPV_PACKAGE}, libepoxy0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
 Description: Cross-platform local network file and message transfer

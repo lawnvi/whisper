@@ -52,20 +52,26 @@ double _galleryPage(WidgetTester tester, Finder gallery) {
 }
 
 void main() {
-  test('media previews avoid bundled video decoder libraries', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
-    final preview = File(
-      'lib/widget/media_message_preview.dart',
-    ).readAsStringSync();
-    final conversation = File('lib/page/conversation.dart').readAsStringSync();
+  test(
+    'chat previews keep external video playback and mobile avoids decoders',
+    () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final preview = File(
+        'lib/widget/media_message_preview.dart',
+      ).readAsStringSync();
+      final conversation = File(
+        'lib/page/conversation.dart',
+      ).readAsStringSync();
 
-    expect(pubspec, contains('audioplayers:'));
-    expect(pubspec, isNot(contains('media_kit:')));
-    expect(pubspec, isNot(contains('media_kit_video:')));
-    expect(preview, contains('DeviceFileSource'));
-    expect(preview, isNot(contains('VideoController')));
-    expect(conversation, contains('kind == MediaFileKind.video'));
-  });
+      expect(pubspec, contains('audioplayers:'));
+      expect(pubspec, isNot(contains('media_kit_libs_video:')));
+      expect(pubspec, isNot(contains('media_kit_libs_android_video:')));
+      expect(pubspec, isNot(contains('media_kit_libs_ios_video:')));
+      expect(preview, contains('DeviceFileSource'));
+      expect(preview, isNot(contains('VideoController')));
+      expect(conversation, contains('kind == MediaFileKind.video'));
+    },
+  );
 
   test('classifies common media extensions', () {
     expect(mediaFileKindFor(name: 'photo.webp', path: ''), MediaFileKind.image);

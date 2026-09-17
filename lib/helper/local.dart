@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:whisper/cast_receiver/receiver_name.dart' as cast;
 import 'package:whisper/model/LocalDatabase.dart';
 
 import 'helper.dart';
@@ -21,6 +22,7 @@ class LocalSetting {
 
   final String _uuid = "_uuid";
   final String _name = "_name";
+  final String _explicitDeviceName = "_explicit_device_name";
   final String _port = "_port";
   final String _isServer = "_is_server";
   final String _clipboard = "_clipboard";
@@ -37,6 +39,7 @@ class LocalSetting {
   final String _ignoreAndroidNotify = "_ignoreAndroidNotify";
   final String _listenAndroidNotify = "_listenAndroidNotify";
   final String _themeMode = "_theme_mode";
+  final String _castReceiverEnabled = "_cast_receiver_enabled";
   final String _autoConnectEnabled = "_auto_connect_enabled";
   final String _lastManualPeerId = "_last_manual_peer_id";
   final String _androidBackgroundKeepAlive = "_android_background_keep_alive";
@@ -121,8 +124,23 @@ class LocalSetting {
     await sp.remove(_deviceIdentitySeed);
   }
 
+  Future<String> deviceDisplayName() async {
+    return getSPDefault(_name, await deviceName());
+  }
+
+  Future<String> castReceiverName() async {
+    final sp = await _preferences();
+    return cast.castReceiverName(
+      savedName: sp.getString(_name) ?? '',
+      systemName: await deviceName(),
+      deviceId: await getSPDefault(_uuid, const Uuid().v4()),
+      explicitlyNamed: sp.getBool(_explicitDeviceName) ?? false,
+    );
+  }
+
   Future<void> updateNickname(String nickname) async {
     await _setSP(_name, nickname);
+    await _setSP(_explicitDeviceName, true);
   }
 
   Future<void> updatePort(int port) async {
@@ -248,6 +266,14 @@ class LocalSetting {
 
   Future<bool> isListenAndroid() async {
     return await getSPDefault(_listenAndroidNotify, false);
+  }
+
+  Future<bool> castReceiverEnabled() async {
+    return await getSPDefault(_castReceiverEnabled, false);
+  }
+
+  Future<void> setCastReceiverEnabled(bool enabled) async {
+    await _setSP(_castReceiverEnabled, enabled);
   }
 
   Future<bool> autoConnectEnabled() async {
