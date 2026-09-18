@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   clipboard_watcher
+  desktop_multi_window
   flutter_secure_storage_linux
   hotkey_manager_linux
   irondash_engine_context

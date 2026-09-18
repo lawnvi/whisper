@@ -12,36 +12,21 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/cast_request_prompt.dart';
 
-/// Keeps the existing navigation mounted while video uses the Whisper window.
+/// Keeps the main navigation mounted while playback is shown in a child window.
 class CastPlaybackHost extends StatelessWidget {
   const CastPlaybackHost({super.key, required this.child});
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final player = CastPlayer.shared;
     final requests = CastRequestGate.shared;
     return AnimatedBuilder(
-      animation: Listenable.merge([player, requests]),
+      animation: requests,
       child: child,
       builder: (context, child) => Stack(
         fit: StackFit.expand,
         children: [
-          Offstage(offstage: player.visible, child: child),
-          if (player.visible)
-            // Supply an Overlay for tooltips without replacing the main route.
-            HeroControllerScope.none(
-              child: Navigator(
-                onGenerateRoute: (_) => PageRouteBuilder<void>(
-                  pageBuilder: (context, animation, secondaryAnimation) =>
-                      AnimatedBuilder(
-                        animation: player,
-                        builder: (context, _) =>
-                            _CastPlaybackView(player: player),
-                      ),
-                ),
-              ),
-            ),
+          child ?? const SizedBox.shrink(),
           if (requests.pending case final request?)
             CastRequestPrompt(
               key: ObjectKey(request),
@@ -54,20 +39,19 @@ class CastPlaybackHost extends StatelessWidget {
   }
 }
 
-class _CastPlaybackView extends StatefulWidget {
-  const _CastPlaybackView({required this.player});
+class CastPlaybackView extends StatefulWidget {
+  const CastPlaybackView({super.key, required this.player});
   final CastPlayer player;
 
   @override
-  State<_CastPlaybackView> createState() => _CastPlaybackViewState();
+  State<CastPlaybackView> createState() => _CastPlaybackViewState();
 }
 
-class _CastPlaybackViewState extends State<_CastPlaybackView>
+class _CastPlaybackViewState extends State<CastPlaybackView>
     with WindowListener {
   double? _seekPreview;
   double? _volumePreview;
   bool _fullscreen = false;
-  bool _wasFullscreen = false;
   bool _controlsVisible = true;
   bool _pointerDown = false;
   bool _keyboardControls = false;
@@ -77,20 +61,6 @@ class _CastPlaybackViewState extends State<_CastPlaybackView>
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    unawaited(_showWindow());
-  }
-
-  Future<void> _showWindow() async {
-    try {
-      _wasFullscreen = await windowManager.isFullScreen();
-      if (!mounted) return;
-      _setFullscreen(_wasFullscreen);
-      if (await windowManager.isMinimized()) await windowManager.restore();
-      await windowManager.show();
-      await windowManager.focus();
-    } on Object {
-      // Window activation is best-effort; it must not interrupt playback.
-    }
   }
 
   void _activity({bool pointer = false}) {
@@ -148,9 +118,6 @@ class _CastPlaybackViewState extends State<_CastPlaybackView>
   void dispose() {
     _hideTimer?.cancel();
     windowManager.removeListener(this);
-    if (!_wasFullscreen && _fullscreen) {
-      unawaited(windowManager.setFullScreen(false));
-    }
     super.dispose();
   }
 
@@ -235,8 +202,8 @@ class _CastPlaybackViewState extends State<_CastPlaybackView>
                       onTap: failed
                           ? null
                           : () => unawaited(
-                                _command(player.paused ? 'play' : 'pause'),
-                              ),
+                              _command(player.paused ? 'play' : 'pause'),
+                            ),
                       child: Video(
                         controller: controller,
                         controls: NoVideoControls,
@@ -350,10 +317,7 @@ class _CastPlaybackViewState extends State<_CastPlaybackView>
           builder: (context, constraints) {
             // Keep the volume control compact so it does not dominate the
             // transport controls on normal desktop widths.
-            final volumeWidth = (constraints.maxWidth * .14).clamp(
-              96.0,
-              160.0,
-            );
+            final volumeWidth = (constraints.maxWidth * .14).clamp(96.0, 160.0);
             return SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,

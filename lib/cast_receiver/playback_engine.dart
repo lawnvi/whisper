@@ -33,7 +33,7 @@ abstract class CastPlaybackEngine {
   Future<void> dispose();
 }
 
-/// Created only when media starts; no separate app, window or player process.
+/// Created only when media starts inside the dedicated playback window.
 class MediaKitCastEngine implements CastPlaybackEngine {
   MediaKitCastEngine() {
     MediaKit.ensureInitialized();

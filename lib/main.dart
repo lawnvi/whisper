@@ -17,6 +17,7 @@ import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
+import 'package:whisper/cast_receiver/cast_playback_window.dart';
 import 'package:whisper/widget/cast_playback_host.dart';
 import 'package:whisper/socket/aead_engine.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,12 @@ enum AppDiagnosticKind { desktopWindowTheme }
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (arguments.length >= 3 &&
+      arguments[0] == 'multi_window' &&
+      arguments[2] == 'cast_playback') {
+    runApp(const CastPlaybackWindowApp());
+    return;
+  }
   await applyImageMemoryBudget();
   final sodium = await SodiumInit.init();
   WhisperAead.installNativeAcceleration(sodium);

@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   bonsoir_windows
   clipboard_watcher
+  desktop_multi_window
   flutter_secure_storage_windows
   hotkey_manager_windows
   irondash_engine_context

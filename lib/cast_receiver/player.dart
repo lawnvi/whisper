@@ -2,23 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:whisper/helper/desktop_window_attention.dart';
 
 import 'playback_engine.dart';
+import 'playback_window.dart';
 
 /// Serializes phone and local controls against the same in-app player.
 class CastPlayer extends ChangeNotifier {
   CastPlayer({
     Future<CastPlaybackEngine> Function()? engineFactory,
     Future<void> Function()? revealWindow,
+    CastPlaybackWindowBridge? windowBridge,
   }) : _engineFactory = engineFactory ?? (() async => MediaKitCastEngine()),
-       _revealWindow = revealWindow;
+       _revealWindow = revealWindow,
+       _windowBridge = windowBridge {
+    _windowBridge?.onEvent = _handleWindowEvent;
+  }
 
   static final shared = CastPlayer(
-    revealWindow: revealDesktopWindowForAttention,
+    windowBridge: CastPlaybackWindowBridge.shared,
   );
   final Future<CastPlaybackEngine> Function() _engineFactory;
   final Future<void> Function()? _revealWindow;
+  final CastPlaybackWindowBridge? _windowBridge;
   CastPlaybackEngine? _engine;
   StreamSubscription<void>? _events;
   Future<void> _pending = Future<void>.value();
@@ -44,11 +49,60 @@ class CastPlayer extends ChangeNotifier {
   bool get paused => _paused;
   VideoController? get videoController => _engine?.videoController;
 
+  Map<String, Object> get snapshot => {
+    'status': Map<String, dynamic>.of(status),
+    'visible': _visible,
+    'paused': _paused,
+    'uri': _uri,
+    'metadata': _metadata,
+  };
+
+  void _applySnapshot(Map<String, dynamic> snapshot) {
+    status.addAll(Map<String, dynamic>.from(snapshot['status'] as Map));
+    _visible = snapshot['visible'] == true;
+    _paused = snapshot['paused'] == true;
+    _uri = snapshot['uri'] as String;
+    _metadata = snapshot['metadata'] as String;
+    notifyListeners();
+  }
+
+  void _handleWindowEvent(Map<String, dynamic> event) {
+    if (!_accepting) return;
+    if (event['name'] == 'closed') {
+      _visible = false;
+      _reset(_uri.isEmpty ? 'NO_MEDIA_PRESENT' : 'STOPPED');
+      notifyListeners();
+    } else if (event['name'] == 'state') {
+      _applySnapshot(Map<String, dynamic>.from(event['snapshot'] as Map));
+    }
+  }
+
+  Future<void> _commandInWindow(
+    String command,
+    Map<String, Object> data,
+  ) async {
+    final bridge = _windowBridge!;
+    if (command == 'stop' && !bridge.hasWindow) return;
+    if (command == 'play') {
+      if (_uri.isEmpty) throw StateError('No media');
+      // Only a destroyed window needs its media restored. Resume in the same
+      // window must not load the URI again or lose the playback position.
+      if (!bridge.hasWindow) {
+        await bridge.command('load', {'url': _uri, 'metadata': _metadata});
+        await bridge.command('volume', {'value': status['volume'] as double});
+        await bridge.command('mute', {'value': status['muted'] == true});
+      }
+    }
+    final snapshot = await bridge.command(command, data);
+    if (_accepting) _applySnapshot(snapshot);
+  }
+
   void activate() => _accepting = true;
 
   Future<void> command(String command, [Map<String, Object> data = const {}]) =>
       _enqueue(() async {
         if (!_accepting) throw StateError('Receiver stopped');
+        if (_windowBridge != null) return _commandInWindow(command, data);
         switch (command) {
           case 'load':
             await _releaseEngine();
@@ -194,11 +248,23 @@ class CastPlayer extends ChangeNotifier {
   Future<void> close() {
     _accepting = false;
     return _enqueue(() async {
-      await _releaseEngine();
-      _uri = '';
-      _metadata = '';
-      _reset('NO_MEDIA_PRESENT');
-      notifyListeners();
+      try {
+        if (_windowBridge case final bridge? when bridge.hasWindow) {
+          await bridge.command('shutdown');
+        }
+      } finally {
+        await _releaseEngine();
+        _uri = '';
+        _metadata = '';
+        _reset('NO_MEDIA_PRESENT');
+        notifyListeners();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _windowBridge?.onEvent = null;
+    super.dispose();
   }
 }

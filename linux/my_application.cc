@@ -9,6 +9,7 @@
 #include "desktop_clipboard_image_plugin.h"
 #include "desktop_quick_send_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "remote_input_plugin.h"
 #include "screenshot_plugin.h"
 
@@ -93,6 +94,8 @@ static void my_application_activate(GApplication* application) {
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  desktop_multi_window_plugin_set_window_created_callback(
+      [](FlPluginRegistry* registry) { fl_register_plugins(registry); });
   audio_share_plugin_register(FL_PLUGIN_REGISTRY(view));
   remote_input_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));

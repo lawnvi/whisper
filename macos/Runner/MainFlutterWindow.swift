@@ -9,6 +9,7 @@ import IOKit.hid
 import OSLog
 import ScreenCaptureKit
 import window_manager
+import desktop_multi_window
 
 private let privacyTraceLog = OSLog(
   subsystem: Bundle.main.bundleIdentifier ?? "com.vireen.whisper",
@@ -122,6 +123,9 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      RegisterGeneratedPlugins(registry: controller)
+    }
     AudioSharePlugin.register(
       with: flutterViewController.registrar(forPlugin: "AudioSharePlugin"))
     RemoteInputPlugin.register(
