@@ -417,9 +417,13 @@ class _ChatMessageListState extends State<ChatMessageList> {
         key: ValueKey<String>('message-copy-${message.id}'),
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          fixedSize: Size.square(isMobile() ? 20 : 18),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
         constraints: BoxConstraints(
-          minWidth: isMobile() ? 18 : 20,
-          minHeight: isMobile() ? 18 : 20,
+          minWidth: isMobile() ? 20 : 18,
+          minHeight: isMobile() ? 20 : 18,
         ),
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
@@ -434,7 +438,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
           child: Icon(
             copied ? Icons.check_rounded : Icons.content_copy_rounded,
             key: ValueKey<bool>(copied),
-            size: isMobile() ? 14 : 15,
+            size: isMobile() ? 13 : 14,
             color: copied
                 ? colorScheme.primary
                 : colorScheme.onSurfaceVariant.withValues(alpha: 0.85),

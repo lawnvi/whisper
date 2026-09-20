@@ -2076,44 +2076,58 @@ class _SendMessageScreen extends State<SendMessageScreen>
       decorationColor: colorScheme.primary.withValues(alpha: 0.55),
     );
 
-    return Container(
+    const verticalPadding = 10.0;
+    final actionReserve = isMobile() ? 22.0 : 21.0;
+
+    // Keep the bubble content-sized for short messages. The previous outer
+    // Container expanded to the available width, which made a one-line
+    // message look like a large empty card on phones and desktops alike.
+    return Align(
       alignment: isOpponent ? Alignment.centerLeft : Alignment.centerRight,
-      constraints: BoxConstraints(maxWidth: screenWidth),
-      padding: EdgeInsets.fromLTRB(
-        isOpponent ? 2 : 18,
-        2,
-        isOpponent ? 18 : 2,
-        2,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: isOpponent ? receivedBubbleColor : sentBubbleColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isOpponent ? receivedBorderColor : sentBorderColor,
-          ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          isOpponent ? 2 : 18,
+          2,
+          isOpponent ? 18 : 2,
+          2,
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(
-                child: MessageLinkText(
-                  text: content,
-                  style: textStyle,
-                  linkStyle: linkStyle,
-                  linksEnabled: !_messageSelectionActive,
-                  onOpen: _openMessageLink,
-                  textAlign: TextAlign.left,
-                ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: screenWidth),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: isOpponent ? receivedBubbleColor : sentBubbleColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isOpponent ? receivedBorderColor : sentBorderColor,
               ),
-              if (trailingAction != null) ...[
-                const SizedBox(width: 8),
-                trailingAction,
-              ],
-            ],
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                verticalPadding,
+                trailingAction == null ? 14 : 8,
+                verticalPadding,
+              ),
+              child: Stack(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(
+                      right: trailingAction == null ? 0 : actionReserve,
+                    ),
+                    child: MessageLinkText(
+                      text: content,
+                      style: textStyle,
+                      linkStyle: linkStyle,
+                      linksEnabled: !_messageSelectionActive,
+                      onOpen: _openMessageLink,
+                      textAlign: TextAlign.left,
+                    ),
+                  ),
+                  if (trailingAction != null)
+                    Positioned(right: 0, bottom: 0, child: trailingAction),
+                ],
+              ),
+            ),
           ),
         ),
       ),
