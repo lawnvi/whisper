@@ -790,5 +790,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "mobileControlPointer": "Ratón",
+  "mobileControlKeysTab": "Teclado",
+  "mobileControlTextTab": "Texto",
+  "mobileControlSettings": "Ajustes del puntero",
+  "mobileControlLiftHint": "Levanta el dedo para pausar y recolocar.",
+  "mobileControlDragHint": "Mantén el botón izquierdo para arrastrar.",
+  "mobileControlPrecisionHint": "Mueve despacio para mayor precisión. Gira más rápido para recorrer más distancia.",
+  "mobileControlCalibrationRetry": "Mantén el teléfono quieto y vuelve a calibrar.",
+  "mobileControlStartShort": "Iniciar"
 }

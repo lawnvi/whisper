@@ -134,7 +134,7 @@ void main() {
         find.text('Motion unavailable. Switched to touchpad.'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Start control'));
+      await tester.tap(find.byTooltip('Start control'));
       await tester.pump();
       expect(find.text('Trust required'), findsOneWidget);
       expect(transport.sent, isEmpty);
@@ -145,9 +145,9 @@ void main() {
     'keyboard sends selected combo, horizontal scrolling sends no keys',
     (tester) async {
       await mount(tester, app());
-      await tester.tap(find.text('Start control'));
+      await tester.tap(find.byTooltip('Start control'));
       await tester.pump();
-      await tester.tap(find.text('Virtual keyboard'));
+      await tester.tap(find.text('Keyboard'));
       await tester.pump();
       final before = transport.sent.length;
       await tester.drag(find.text('Q'), const Offset(-160, 0));
@@ -159,7 +159,7 @@ void main() {
       expect(transport.sent.length, greaterThanOrEqualTo(before));
       await tester.tap(find.text('Function / navigation'));
       await tester.pump();
-      await tester.tap(find.text('⌘ Command'));
+      await tester.tap(find.byTooltip('Command'));
       await tester.pump();
       await tester.tap(find.text('F1'));
       await tester.pump();
@@ -176,9 +176,9 @@ void main() {
     tester,
   ) async {
     await mount(tester, app());
-    await tester.tap(find.text('Start control'));
+    await tester.tap(find.byTooltip('Start control'));
     await tester.pump();
-    await tester.tap(find.text('Text input'));
+    await tester.tap(find.text('Text'));
     await tester.pump();
     await tester.enterText(find.byType(TextField), '中文🙂');
     await coordinator.stopLocal();
@@ -195,7 +195,7 @@ void main() {
     (tester) async {
       await mount(tester, app(theme: AppTheme.darkTheme, scale: 1.6));
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Virtual keyboard'));
+      await tester.tap(find.text('Keyboard'));
       await tester.pump();
       expect(tester.takeException(), isNull);
       tester.view.physicalSize = const Size(844, 390);
@@ -209,7 +209,7 @@ void main() {
     (tester) async {
       sensor = _Sensor(true);
       await mount(tester, app());
-      await tester.tap(find.text('Start control'));
+      await tester.tap(find.byTooltip('Start control'));
       await tester.pump();
       expect(sensor.events.hasListener, isTrue);
       await tester.ensureVisible(find.text('Left click'));
@@ -246,7 +246,7 @@ void main() {
     tester,
   ) async {
     await mount(tester, app());
-    await tester.tap(find.text('Start control'));
+    await tester.tap(find.byTooltip('Start control'));
     await tester.pump();
     await tester.ensureVisible(find.text('Left click'));
     await tester.pumpAndSettle();
@@ -278,6 +278,127 @@ void main() {
     expect(jsonDecode(utf8.decode(events[1].payload))['deltaX'], 30);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('a tap on the pad preserves another finger holding left', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    final held = await tester.startGesture(
+      tester.getCenter(find.text('Left click')),
+      pointer: 1,
+    );
+    final finger = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('mobile-touchpad'))),
+      pointer: 2,
+    );
+    await finger.up();
+    await tester.pump();
+    List<bool> states() => transport.sent
+        .where((p) => p.eventType == RemoteInputEventType.mouseButton)
+        .map((p) => jsonDecode(utf8.decode(p.payload))['down'] as bool)
+        .toList();
+    expect(states(), [true]);
+    await held.up();
+    expect(states(), [true, false]);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('two-finger scroll stays scroll when one finger lifts', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    final center = tester.getCenter(
+      find.byKey(const ValueKey('mobile-touchpad')),
+    );
+    final first = await tester.startGesture(center, pointer: 1);
+    final second = await tester.startGesture(
+      center + const Offset(40, 0),
+      pointer: 2,
+    );
+    await first.moveBy(const Offset(0, 20));
+    await second.up();
+    await first.moveBy(const Offset(0, 20));
+    await first.up();
+    await tester.pump();
+    final inputs = transport.sent.where(
+      (p) => p.eventType != RemoteInputEventType.heartbeat,
+    );
+    expect(inputs, isNotEmpty);
+    expect(
+      inputs.every((p) => p.eventType == RemoteInputEventType.mouseWheel),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets(
+    'mode and orientation changes release held input and stop sensors',
+    (tester) async {
+      sensor = _Sensor(true);
+      await mount(tester, app());
+      await tester.tap(find.byTooltip('Start control'));
+      await tester.pump();
+      final held = await tester.startGesture(
+        tester.getCenter(find.text('Left click')),
+        pointer: 1,
+      );
+      await tester.tap(find.text('Keyboard'));
+      await tester.pump();
+      expect(sensor.events.hasListener, isFalse);
+      expect(
+        transport.sent
+            .where((p) => p.eventType == RemoteInputEventType.mouseButton)
+            .map((p) => jsonDecode(utf8.decode(p.payload))['down']),
+        [true, false],
+      );
+      await held.up();
+      await tester.tap(find.text('Mouse'));
+      await tester.pump();
+      final next = await tester.startGesture(
+        tester.getCenter(find.text('Left click')),
+        pointer: 2,
+      );
+      tester.view.physicalSize = const Size(844, 390);
+      await tester.pump();
+      expect(
+        transport.sent
+            .where((p) => p.eventType == RemoteInputEventType.mouseButton)
+            .map((p) => jsonDecode(utf8.decode(p.payload))['down']),
+        [true, false, true, false],
+      );
+      await next.up();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('short portrait keeps every pointer action above navigation', (
+    tester,
+  ) async {
+    sensor = _Sensor(true);
+    await mount(tester, app());
+    tester.view.physicalSize = const Size(360, 640);
+    await tester.pump();
+    final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+    for (final label in [
+      'Left click',
+      'Right click',
+      'Hold and tilt to scroll',
+    ]) {
+      expect(
+        tester.getBottomRight(find.text(label)).dy,
+        lessThan(navigationTop),
+      );
+    }
+    expect(
+      find.ancestor(
+        of: find.text('Left click'),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('permission failure explains the Mac setting', (tester) async {
     await mount(
       tester,
@@ -303,7 +424,7 @@ void main() {
         },
       ),
     );
-    await tester.tap(find.text('Start control'));
+    await tester.tap(find.byTooltip('Start control'));
     await tester.pump();
     expect(find.textContaining('Accessibility on the Mac'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

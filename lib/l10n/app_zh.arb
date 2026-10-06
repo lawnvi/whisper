@@ -839,5 +839,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "mobileControlPointer": "鼠标",
+  "mobileControlKeysTab": "键盘",
+  "mobileControlTextTab": "文字",
+  "mobileControlSettings": "指针设置",
+  "mobileControlLiftHint": "松手暂停，调整握姿后继续。",
+  "mobileControlDragHint": "按住左键即可拖拽。",
+  "mobileControlPrecisionHint": "慢转精细定位，快转大幅移动。",
+  "mobileControlCalibrationRetry": "请保持手机静止，再试一次校准。",
+  "mobileControlStartShort": "开始"
 }

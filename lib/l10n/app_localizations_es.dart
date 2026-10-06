@@ -1689,4 +1689,35 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get castVolume => 'Volumen';
+
+  @override
+  String get mobileControlPointer => 'Ratón';
+
+  @override
+  String get mobileControlKeysTab => 'Teclado';
+
+  @override
+  String get mobileControlTextTab => 'Texto';
+
+  @override
+  String get mobileControlSettings => 'Ajustes del puntero';
+
+  @override
+  String get mobileControlLiftHint =>
+      'Levanta el dedo para pausar y recolocar.';
+
+  @override
+  String get mobileControlDragHint =>
+      'Mantén el botón izquierdo para arrastrar.';
+
+  @override
+  String get mobileControlPrecisionHint =>
+      'Mueve despacio para mayor precisión. Gira más rápido para recorrer más distancia.';
+
+  @override
+  String get mobileControlCalibrationRetry =>
+      'Mantén el teléfono quieto y vuelve a calibrar.';
+
+  @override
+  String get mobileControlStartShort => 'Iniciar';
 }

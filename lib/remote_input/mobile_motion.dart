@@ -34,18 +34,26 @@ class MobileMotionSensor {
 /// Pausing resets time/filter history; it never accumulates movement to replay.
 class MobileMotionMapper {
   static const gain = 1200.0;
-  static const deadZone = 0.012;
-  static const filterSeconds = 0.025;
+  static const deadZone = 0.008;
+  static const slowFilterSeconds = 0.040;
+  static const fastFilterSeconds = 0.008;
+  static const precisionGain = 0.38;
+  static const fullSpeedRadians = 0.6;
+  static const calibrationSamples = 50;
+  static const calibrationNoise = 0.004;
   double sensitivity = 1;
   int? _previousMicros;
   Offset _filtered = Offset.zero;
   List<double> _bias = [0, 0, 0];
   final List<List<double>> _calibration = [];
+  int? _calibrationMicros;
+  List<double>? _calibrationGravity;
   bool calibrating = false;
 
   void reset() {
     _previousMicros = null;
     _filtered = Offset.zero;
+    _clearCalibrationWindow();
   }
 
   void calibrate() {
@@ -60,7 +68,57 @@ class MobileMotionMapper {
     reset();
   }
 
-  Offset add(MotionSample sample, {required bool enabled}) {
+  void _clearCalibrationWindow() {
+    _calibration.clear();
+    _calibrationMicros = null;
+    _calibrationGravity = null;
+  }
+
+  void _learnBias(MotionSample sample, {required bool explicit}) {
+    final w = sample.angularVelocity;
+    final gravityLength = _length(sample.gravity);
+    final up = sample.gravity.map((v) => v / gravityLength).toList();
+    final previous = _calibrationMicros;
+    final gravity = _calibrationGravity;
+    final dt = previous == null ? 0 : sample.micros - previous;
+    if (_length(w) > (explicit ? 0.15 : 0.04) ||
+        (previous != null && (dt <= 0 || dt > 100000)) ||
+        (gravity != null &&
+            _length(List.generate(3, (i) => up[i] - gravity[i])) > 0.015)) {
+      _clearCalibrationWindow();
+      return;
+    }
+    _calibrationMicros = sample.micros;
+    _calibrationGravity ??= up;
+    _calibration.add(List.of(w));
+    if (_calibration.length < calibrationSamples) return;
+    final mean = List.generate(
+      3,
+      (axis) =>
+          _calibration.fold<double>(0, (sum, v) => sum + v[axis]) /
+          _calibration.length,
+    );
+    final variance = List.generate(
+      3,
+      (axis) =>
+          _calibration.fold<double>(
+            0,
+            (sum, v) => sum + math.pow(v[axis] - mean[axis], 2),
+          ) /
+          _calibration.length,
+    );
+    if (variance.every((v) => v <= calibrationNoise * calibrationNoise)) {
+      _bias = mean;
+      if (explicit) calibrating = false;
+    }
+    _clearCalibrationWindow();
+  }
+
+  Offset add(
+    MotionSample sample, {
+    required bool enabled,
+    bool learnBias = true,
+  }) {
     final w = sample.angularVelocity, g = sample.gravity;
     if (w.length != 3 ||
         g.length != 3 ||
@@ -68,27 +126,21 @@ class MobileMotionMapper {
       reset();
       return Offset.zero;
     }
-    if (calibrating) {
-      if (_length(w) > 0.15) {
-        _calibration.clear();
-      } else {
-        _calibration.add(List<double>.of(w));
-        if (_calibration.length >= 50) {
-          _bias = List.generate(
-            3,
-            (axis) =>
-                _calibration.fold<double>(0, (sum, v) => sum + v[axis]) /
-                _calibration.length,
-          );
-          cancelCalibration();
-        }
-      }
+    if (_length(g) < 1) {
+      reset();
+      return Offset.zero;
+    }
+    if (calibrating || (!enabled && learnBias)) {
+      _previousMicros = null;
+      _filtered = Offset.zero;
+      _learnBias(sample, explicit: calibrating);
       return Offset.zero;
     }
     if (!enabled) {
       reset();
       return Offset.zero;
     }
+    _clearCalibrationWindow();
     final previous = _previousMicros;
     _previousMicros = sample.micros;
     if (previous == null) return Offset.zero;
@@ -115,6 +167,12 @@ class MobileMotionMapper {
       -deadband(project(right, rightLength)),
     );
     // A stationary sample stops immediately instead of letting the filter coast.
+    // Slow wrist motion gets precision and stronger tremor filtering. Fast
+    // movement approaches the original gain with less filtering latency.
+    final speed = (velocity.distance / fullSpeedRadians).clamp(0.0, 1.0);
+    final blend = speed * speed * (3 - 2 * speed);
+    final filterSeconds =
+        slowFilterSeconds + (fastFilterSeconds - slowFilterSeconds) * blend;
     final alpha = dt / (filterSeconds + dt);
     _filtered = Offset(
       velocity.dx == 0
@@ -124,7 +182,8 @@ class MobileMotionMapper {
           ? 0
           : _filtered.dy + alpha * (velocity.dy - _filtered.dy),
     );
-    return _filtered * (dt * gain * sensitivity.clamp(0.5, 3));
+    final acceleration = precisionGain + (1 - precisionGain) * blend;
+    return _filtered * (dt * gain * acceleration * sensitivity.clamp(0.5, 3));
   }
 
   double _length(List<double> v) =>

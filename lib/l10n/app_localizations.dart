@@ -2889,6 +2889,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'音量'**
   String get castVolume;
+
+  /// No description provided for @mobileControlPointer.
+  ///
+  /// In zh, this message translates to:
+  /// **'鼠标'**
+  String get mobileControlPointer;
+
+  /// No description provided for @mobileControlKeysTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'键盘'**
+  String get mobileControlKeysTab;
+
+  /// No description provided for @mobileControlTextTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字'**
+  String get mobileControlTextTab;
+
+  /// No description provided for @mobileControlSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'指针设置'**
+  String get mobileControlSettings;
+
+  /// No description provided for @mobileControlLiftHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'松手暂停，调整握姿后继续。'**
+  String get mobileControlLiftHint;
+
+  /// No description provided for @mobileControlDragHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按住左键即可拖拽。'**
+  String get mobileControlDragHint;
+
+  /// No description provided for @mobileControlPrecisionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'慢转精细定位，快转大幅移动。'**
+  String get mobileControlPrecisionHint;
+
+  /// No description provided for @mobileControlCalibrationRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'请保持手机静止，再试一次校准。'**
+  String get mobileControlCalibrationRetry;
+
+  /// No description provided for @mobileControlStartShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始'**
+  String get mobileControlStartShort;
 }
 
 class _AppLocalizationsDelegate

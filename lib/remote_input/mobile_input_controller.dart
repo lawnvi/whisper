@@ -39,6 +39,21 @@ class MobileInputController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSensitivity(double value) {
+    motion.sensitivity = value;
+    notifyListeners();
+  }
+
+  void calibrate() {
+    motion.calibrate();
+    notifyListeners();
+  }
+
+  void cancelCalibration() {
+    motion.cancelCalibration();
+    notifyListeners();
+  }
+
   void setAir(bool value) {
     reset();
     air = value;
@@ -63,7 +78,11 @@ class MobileInputController extends ChangeNotifier {
         air &&
         (moving || scrolling || _buttons.contains(0)) &&
         _nowMicros >= _suppressUntil;
-    final delta = motion.add(sample, enabled: enabled);
+    final delta = motion.add(
+      sample,
+      enabled: enabled,
+      learnBias: _active && air && !moving && !scrolling && _buttons.isEmpty,
+    );
     if (wasCalibrating != motion.calibrating) notifyListeners();
     if (enabled && delta != Offset.zero) {
       move(scrolling ? Offset(0, delta.dy) : delta, scroll: scrolling);
@@ -111,6 +130,8 @@ class MobileInputController extends ChangeNotifier {
   }
 
   void click() {
+    // A touchpad tap must not release a button held by another finger.
+    if (_buttons.contains(0)) return;
     button(0, true);
     button(0, false);
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:whisper/remote_input/mobile_motion.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
 
 class MobileControlScreen extends StatefulWidget {
   const MobileControlScreen({
@@ -58,7 +60,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     _ => l10n.connectFailed,
   };
   bool? _landscape;
-  bool _touchMoved = false;
+  bool _touchMoved = false, _touchScrolling = false;
   Offset? _touchOrigin;
   int _gestureGeneration = 0;
   final Map<int, Offset> _touches = {};
@@ -273,188 +275,332 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         View.of(context).physicalSize.height;
     final state = _coordinator.state;
     final busy = _starting || _stopping || (_ownsSession && state.isBusy);
+    final palette = context.whisperPalette;
     return Scaffold(
+      backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
+        backgroundColor: palette.surfaceCanvas,
         title: Text(l10n.mobileControlTitle),
         actions: [
-          if (_ownsSession || _starting)
-            TextButton(
-              onPressed: _stopping ? null : _stop,
-              child: Text(l10n.mobileControlStop),
+          if (_tab == 0 && _input.air)
+            IconButton(
+              tooltip: l10n.mobileControlSettings,
+              onPressed: _showMotionSettings,
+              icon: const Icon(Icons.tune_rounded),
             ),
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
                 children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: palette.surfaceElevated,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: palette.borderSubtle),
+                    ),
+                    child: const Icon(Icons.desktop_mac_outlined, size: 22),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      widget.peerName,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.peerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _active
+                                    ? palette.trusted
+                                    : palette.textMuted,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                _active
+                                    ? l10n.mobileControlActive
+                                    : l10n.mobileControlReady,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: palette.textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   if (busy)
                     const SizedBox(
-                      width: 20,
-                      height: 20,
+                      width: 24,
+                      height: 24,
                       child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  const SizedBox(width: 8),
+                  if (_ownsSession || _starting)
+                    IconButton.filledTonal(
+                      tooltip: l10n.mobileControlStop,
+                      style: IconButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: palette.surfaceElevated,
+                        side: BorderSide(color: palette.borderSubtle),
+                      ),
+                      onPressed: _stopping ? null : _stop,
+                      icon: const Icon(Icons.stop_rounded),
                     )
                   else
-                    Text(
-                      _active
-                          ? l10n.mobileControlActive
-                          : l10n.mobileControlReady,
+                    Tooltip(
+                      message: l10n.mobileControlStart,
+                      child: FilledButton(
+                        onPressed: busy ? null : _start,
+                        child: Text(l10n.mobileControlStartShort),
+                      ),
                     ),
                 ],
               ),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    if (_error != null ||
-                        state.status == RemoteInputRuntimeStatus.failed)
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          _error ?? _failureText(state.errorMessage),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    if (!_ownsSession && !_starting)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Text(l10n.mobileControlIdleHint),
-                            const SizedBox(height: 12),
-                            FilledButton.icon(
-                              onPressed: _starting ? null : _start,
-                              icon: const Icon(Icons.play_arrow),
-                              label: Text(l10n.mobileControlStart),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final (index, label, icon) in [
-                            (
-                              0,
-                              _input.air
-                                  ? l10n.mobileControlAir
-                                  : l10n.mobileControlTouchpad,
-                              Icons.mouse_outlined,
-                            ),
-                            (
-                              1,
-                              l10n.mobileControlKeyboard,
-                              Icons.keyboard_outlined,
-                            ),
-                            (2, l10n.mobileControlText, Icons.edit_outlined),
-                          ])
-                            ChoiceChip(
-                              label: Text(label),
-                              avatar: Icon(icon, size: 18),
-                              selected: _tab == index,
-                              onSelected: _coordinator.isSendingText
-                                  ? null
-                                  : (_) => _selectTab(index),
-                            ),
-                        ],
-                      ),
+            if (_error != null ||
+                state.status == RemoteInputRuntimeStatus.failed)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 96),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    _error ?? _failureText(state.errorMessage),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                     ),
-                    _tab == 0
-                        ? _pointerPanel()
-                        : _tab == 1
-                        ? _keyboard()
-                        : _textPanel(),
-                  ],
+                  ),
                 ),
               ),
+            Expanded(
+              child: _tab == 0
+                  ? _pointerPanel()
+                  : SingleChildScrollView(
+                      child: _tab == 1 ? _keyboard() : _textPanel(),
+                    ),
             ),
           ],
         ),
       ),
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: palette.surfaceElevated,
+        indicatorColor: Theme.of(
+          context,
+        ).colorScheme.primary.withValues(alpha: 0.12),
+        selectedIndex: _tab,
+        onDestinationSelected: _coordinator.isSendingText ? null : _selectTab,
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.mouse_outlined),
+            selectedIcon: Icon(
+              Icons.mouse_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            label: l10n.mobileControlPointer,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.keyboard_outlined),
+            selectedIcon: Icon(
+              Icons.keyboard_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            label: l10n.mobileControlKeysTab,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.notes_rounded),
+            selectedIcon: Icon(
+              Icons.notes_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            label: l10n.mobileControlTextTab,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _pointerPanel() => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(l10n.mobileControlAir),
-          value: _input.air,
-          onChanged: _available
-              ? (value) {
+  Widget _pointerPanel() => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final wide =
+          constraints.maxWidth > 600 &&
+          constraints.maxHeight < 420 &&
+          scale < 1.4;
+      final minimumHeight = wide
+          ? 300.0
+          : scale < 1.4
+          ? 360.0
+          : 480.0 * scale;
+      final height = math.max(constraints.maxHeight, minimumHeight);
+      final panel = SizedBox(
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: Column(
+            children: [
+              _ModeSelector(
+                labels: [l10n.mobileControlAir, l10n.mobileControlTouchpad],
+                selected: _input.air ? 0 : 1,
+                onSelected: (index) {
+                  if (index == 0 && !_available) return;
                   _reset();
-                  _input.setAir(value);
+                  _input.setAir(index == 0);
                   _syncSensors();
-                }
-              : null,
+                },
+                disabledIndex: _available ? null : 0,
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _movementSurface()),
+                          const SizedBox(width: 12),
+                          SizedBox(width: 216, child: _pointerActions()),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Expanded(child: _movementSurface()),
+                          const SizedBox(height: 12),
+                          _pointerActions(),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _checkedSensor && !_available
+                    ? l10n.mobileControlSensorUnavailable
+                    : !_active
+                    ? l10n.mobileControlIdleHint
+                    : l10n.mobileControlDragHint,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.whisperPalette.textMuted,
+                ),
+              ),
+            ],
+          ),
         ),
-        if (_checkedSensor && !_available)
-          Text(l10n.mobileControlSensorUnavailable),
-        const SizedBox(height: 8),
+      );
+      // Only constrained windows scroll. Each input surface claims its own
+      // pointers, including a second finger used to drag with a held button.
+      return height > constraints.maxHeight
+          ? SingleChildScrollView(child: panel)
+          : panel;
+    },
+  );
+
+  Widget _movementSurface() => Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: _input.air
+            ? _HoldArea(
+                generation: _gestureGeneration,
+                label: l10n.mobileControlHoldMove,
+                icon: Icons.open_with_rounded,
+                subtitle: l10n.mobileControlLiftHint,
+                prominent: true,
+                enabled: _enabled,
+                active: _input.moving,
+                onDown: () => _input.holdMotion(down: true),
+                onUp: () => _input.holdMotion(down: false),
+              )
+            : _touchpad(),
+      ),
+      const SizedBox(width: 10),
+      SizedBox(
+        width: 52,
+        child: Semantics(
+          label: l10n.mobileControlScroll,
+          child: Tooltip(
+            message: l10n.mobileControlScroll,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragUpdate: _enabled
+                  ? (d) => _input.move(Offset(0, d.delta.dy), scroll: true)
+                  : null,
+              onVerticalDragEnd: (_) => _input.flush(),
+              onVerticalDragCancel: _input.flush,
+              child: Container(
+                decoration: _surfaceDecoration(),
+                child: Icon(
+                  Icons.unfold_more_rounded,
+                  color: _enabled
+                      ? context.whisperPalette.textMuted
+                      : Theme.of(context).disabledColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  BoxDecoration _surfaceDecoration() => BoxDecoration(
+    color: context.whisperPalette.surfaceElevated,
+    borderRadius: BorderRadius.circular(24),
+    border: Border.all(color: context.whisperPalette.borderSubtle),
+  );
+
+  Widget _pointerActions() {
+    final buttonHeight = math.max(
+      64.0,
+      MediaQuery.textScalerOf(context).scale(14) * 3.2 + 18,
+    );
+    Widget button(int number, String label) => Expanded(
+      child: _HoldArea(
+        generation: _gestureGeneration,
+        label: label,
+        enabled: _enabled,
+        onDown: () => _input.button(number, true),
+        onUp: () => _input.button(number, false),
+      ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         SizedBox(
-          height: 220,
-          width: double.infinity,
-          child: _input.air
-              ? _HoldArea(
-                  generation: _gestureGeneration,
-                  label: l10n.mobileControlHoldMove,
-                  enabled: _enabled,
-                  active: _input.moving,
-                  onDown: () => _input.holdMotion(down: true),
-                  onUp: () => _input.holdMotion(down: false),
-                )
-              : _touchpad(),
+          height: buttonHeight,
+          child: Row(
+            children: [
+              button(0, l10n.mobileControlLeft),
+              const SizedBox(width: 10),
+              button(1, l10n.mobileControlRight),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 60,
-                child: _HoldArea(
-                  generation: _gestureGeneration,
-                  label: l10n.mobileControlLeft,
-                  enabled: _enabled,
-                  onDown: () => _input.button(0, true),
-                  onUp: () => _input.button(0, false),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SizedBox(
-                height: 60,
-                child: _HoldArea(
-                  generation: _gestureGeneration,
-                  label: l10n.mobileControlRight,
-                  enabled: _enabled,
-                  onDown: () => _input.button(1, true),
-                  onUp: () => _input.button(1, false),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_input.air)
+        if (_input.air) ...[
+          const SizedBox(height: 10),
           SizedBox(
-            height: 56,
+            height: buttonHeight,
             width: double.infinity,
             child: _HoldArea(
               generation: _gestureGeneration,
@@ -465,71 +611,110 @@ class _MobileControlScreenState extends State<MobileControlScreen>
               onUp: () => _input.holdMotion(down: false, scroll: true),
             ),
           ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onVerticalDragUpdate: _enabled
-              ? (d) => _input.move(Offset(0, d.delta.dy), scroll: true)
-              : null,
-          onVerticalDragEnd: (_) => _input.flush(),
-          onVerticalDragCancel: _input.flush,
-          child: Container(
-            height: 64,
-            alignment: Alignment.center,
-            color: context.whisperPalette.surfaceElevated,
-            child: Text(l10n.mobileControlScroll),
-          ),
-        ),
-        if (_input.air) ...[
-          const SizedBox(height: 12),
-          Text(l10n.mobileControlSensitivity),
-          Slider(
-            value: _input.motion.sensitivity,
-            min: 0.5,
-            max: 3,
-            divisions: 10,
-            label: '${_input.motion.sensitivity.toStringAsFixed(1)}×',
-            onChanged: (value) => setState(() {
-              _input.motion.sensitivity = value;
-            }),
-            onChangeEnd: (value) =>
-                unawaited(LocalSetting().setMobileInputSensitivity(value)),
-          ),
-          OutlinedButton(
-            onPressed: !_enabled
-                ? null
-                : () {
-                    _reset();
-                    _input.motion.calibrate();
-                    _redraw();
-                    _calibrationTimer = Timer(const Duration(seconds: 5), () {
-                      if (!mounted) return;
-                      _input.motion.cancelCalibration();
-                      _redraw();
-                    });
-                  },
-            child: Text(
-              _input.motion.calibrating
-                  ? l10n.mobileControlCalibrating
-                  : l10n.mobileControlCalibrate,
-            ),
-          ),
         ],
       ],
-    ),
-  );
+    );
+  }
+
+  Future<void> _showMotionSettings() async {
+    _reset();
+    await showWhisperModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => ListenableBuilder(
+        listenable: _input,
+        builder: (context, _) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.mobileControlSettings,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(child: Text(l10n.mobileControlSensitivity)),
+                  Text(
+                    '${_input.motion.sensitivity.toStringAsFixed(2)}×',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+              Slider(
+                value: _input.motion.sensitivity,
+                min: 0.5,
+                max: 3,
+                divisions: 10,
+                onChanged: (value) {
+                  _input.setSensitivity(value);
+                },
+                onChangeEnd: (value) =>
+                    unawaited(LocalSetting().setMobileInputSensitivity(value)),
+              ),
+              Text(
+                l10n.mobileControlPrecisionHint,
+                style: TextStyle(color: context.whisperPalette.textMuted),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.center_focus_strong_rounded),
+                  onPressed: !_enabled || _input.motion.calibrating
+                      ? null
+                      : () {
+                          _reset();
+                          _input.calibrate();
+                          _calibrationTimer = Timer(
+                            const Duration(seconds: 5),
+                            () {
+                              if (!mounted) return;
+                              _input.cancelCalibration();
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    l10n.mobileControlCalibrationRetry,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                  label: Text(
+                    _input.motion.calibrating
+                        ? l10n.mobileControlCalibrating
+                        : l10n.mobileControlCalibrate,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted) _reset();
+  }
 
   Widget _touchpad() => GestureDetector(
+    behavior: HitTestBehavior.opaque,
     onPanUpdate: (_) {},
     child: Listener(
       onPointerDown: (event) {
         if (!_enabled) return;
         if (_touches.isEmpty) {
           _touchMoved = false;
+          _touchScrolling = false;
           _touchOrigin = event.localPosition;
         }
         _touches[event.pointer] = event.localPosition;
         if (_touches.length > 1) {
           _touchMoved = true;
+          _touchScrolling = true;
           _input.flush();
         }
       },
@@ -544,7 +729,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         }
         _input.move(
           delta / (_touches.length > 1 ? _touches.length.toDouble() : 1),
-          scroll: _touches.length > 1,
+          scroll: _touchScrolling,
         );
       },
       onPointerUp: (event) {
@@ -560,13 +745,16 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       child: Semantics(
         label: l10n.mobileControlTouchHint,
         child: Container(
+          key: const ValueKey('mobile-touchpad'),
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.whisperPalette.surfaceElevated,
-            borderRadius: BorderRadius.circular(16),
+          decoration: _surfaceDecoration(),
+          padding: const EdgeInsets.all(20),
+          child: _SurfaceLabel(
+            icon: Icons.touch_app_outlined,
+            label: l10n.mobileControlTouchpad,
+            subtitle: l10n.mobileControlTouchHint,
+            enabled: _enabled,
           ),
-          padding: const EdgeInsets.all(16),
-          child: Text(l10n.mobileControlTouchHint, textAlign: TextAlign.center),
         ),
       ),
     ),
@@ -628,50 +816,76 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 8,
-            children: [
-              ChoiceChip(
-                label: Text(l10n.mobileControlMainKeys),
-                selected: _keyPage == 0,
-                onSelected: (_) {
-                  _reset();
-                  setState(() {
-                    _keyPage = 0;
-                  });
-                },
-              ),
-              ChoiceChip(
-                label: Text(l10n.mobileControlFunctionKeys),
-                selected: _keyPage == 1,
-                onSelected: (_) {
-                  _reset();
-                  setState(() {
-                    _keyPage = 1;
-                  });
-                },
-              ),
+          _ModeSelector(
+            labels: [
+              l10n.mobileControlMainKeys,
+              l10n.mobileControlFunctionKeys,
             ],
+            selected: _keyPage,
+            onSelected: (index) {
+              _reset();
+              setState(() => _keyPage = index);
+            },
           ),
           const SizedBox(height: 8),
-          Text(l10n.mobileControlShortcutHint),
+          Text(
+            l10n.mobileControlShortcutHint,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.whisperPalette.textMuted,
+            ),
+          ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              for (final (semantic, label) in [
-                ('meta', '⌘ Command'),
-                ('control', '⌃ Control'),
-                ('alt', '⌥ Option'),
-                ('shift', '⇧ Shift'),
+              for (final (semantic, symbol, label) in [
+                ('meta', 'Cmd', 'Command'),
+                ('control', 'Ctrl', 'Control'),
+                ('alt', 'Opt', 'Option'),
+                ('shift', 'Shift', 'Shift'),
               ])
-                FilterChip(
-                  label: Text(label),
-                  selected: _input.modifiers.contains(semantic),
-                  onSelected: _enabled
-                      ? (_) => _input.toggleModifier(semantic)
-                      : null,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Tooltip(
+                      message: label,
+                      child: Semantics(
+                        label: label,
+                        selected: _input.modifiers.contains(semantic),
+                        child: OutlinedButton(
+                          onPressed: _enabled
+                              ? () => _input.toggleModifier(semantic)
+                              : null,
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurface,
+                            side: BorderSide(
+                              color: _input.modifiers.contains(semantic)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : context.whisperPalette.borderSubtle,
+                            ),
+                            minimumSize: const Size(48, 52),
+                            backgroundColor: _input.modifiers.contains(semantic)
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.12)
+                                : context.whisperPalette.surfaceElevated,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            symbol,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -689,7 +903,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                         Padding(
                           padding: const EdgeInsets.only(right: 8, bottom: 8),
                           child: SizedBox(
-                            width: semantic == 'space' ? 104 : 64,
+                            width: semantic == 'space' ? 128 : 56,
                             height: 52,
                             child: _VirtualKey(
                               label: label,
@@ -718,25 +932,35 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     padding: const EdgeInsets.all(16),
     child: Column(
       children: [
-        Text(l10n.mobileControlTextHint),
+        Text(
+          l10n.mobileControlTextHint,
+          style: TextStyle(color: context.whisperPalette.textMuted),
+        ),
         const SizedBox(height: 16),
         TextField(
           controller: _text,
-          minLines: 3,
-          maxLines: 8,
+          minLines: 6,
+          maxLines: 12,
           readOnly: _coordinator.isSendingText,
-          decoration: InputDecoration(labelText: l10n.mobileControlText),
+          decoration: InputDecoration(
+            labelText: l10n.mobileControlText,
+            filled: true,
+            fillColor: context.whisperPalette.surfaceElevated,
+          ),
         ),
         const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _enabled ? _sendText : null,
-          child: _coordinator.isSendingText
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Text(l10n.mobileControlSendText),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: _enabled ? _sendText : null,
+            child: _coordinator.isSendingText
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(l10n.mobileControlSendText),
+          ),
         ),
       ],
     ),
@@ -756,10 +980,15 @@ class _HoldArea extends StatefulWidget {
     required this.onDown,
     required this.onUp,
     this.active = false,
+    this.icon,
+    this.subtitle,
+    this.prominent = false,
     required this.generation,
   });
   final String label;
-  final bool enabled, active;
+  final bool enabled, active, prominent;
+  final IconData? icon;
+  final String? subtitle;
   final int generation;
   final VoidCallback onDown, onUp;
   @override
@@ -786,44 +1015,162 @@ class _HoldAreaState extends State<_HoldArea> {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
+    excludeSemantics: true,
     enabled: widget.enabled,
-    label: widget.label,
+    label: [
+      widget.label,
+      if (widget.subtitle != null) widget.subtitle!,
+    ].join('. '),
     onTap: widget.enabled
         ? () {
             widget.onDown();
             widget.onUp();
           }
         : null,
-    child: Listener(
-      onPointerDown: (event) {
-        if (!widget.enabled || _pointer != null) return;
-        _pointer = event.pointer;
-        widget.onDown();
-        setState(() {});
-      },
-      onPointerUp: (event) {
-        if (_pointer == event.pointer) _release();
-      },
-      onPointerCancel: (event) {
-        if (_pointer == event.pointer) _release();
-      },
-      child: Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: (_pointer != null || widget.active) && widget.enabled
-              ? Theme.of(context).colorScheme.primaryContainer
-              : context.whisperPalette.surfaceElevated,
-        ),
-        child: Text(
-          widget.label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: widget.enabled ? null : Theme.of(context).disabledColor,
+    child: RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: widget.enabled
+          ? {
+              EagerGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                    EagerGestureRecognizer.new,
+                    (_) {},
+                  ),
+            }
+          : {},
+      child: Listener(
+        onPointerDown: (event) {
+          if (!widget.enabled || _pointer != null) return;
+          _pointer = event.pointer;
+          widget.onDown();
+          setState(() {});
+        },
+        onPointerUp: (event) {
+          if (_pointer == event.pointer) _release();
+        },
+        onPointerCancel: (event) {
+          if (_pointer == event.pointer) _release();
+        },
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.prominent ? 24 : 18),
+            border: Border.all(color: context.whisperPalette.borderSubtle),
+            color: (_pointer != null || widget.active) && widget.enabled
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+                : context.whisperPalette.surfaceElevated,
+          ),
+          child: _SurfaceLabel(
+            label: widget.label,
+            icon: widget.icon,
+            subtitle: widget.subtitle,
+            enabled: widget.enabled,
+            active: _pointer != null || widget.active,
           ),
         ),
       ),
+    ),
+  );
+}
+
+class _SurfaceLabel extends StatelessWidget {
+  const _SurfaceLabel({
+    required this.label,
+    required this.enabled,
+    this.icon,
+    this.subtitle,
+    this.active = false,
+  });
+  final String label;
+  final String? subtitle;
+  final IconData? icon;
+  final bool enabled, active;
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.whisperPalette;
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null && constraints.maxHeight >= 160) ...[
+            Icon(
+              icon,
+              size: 32,
+              color: active
+                  ? Theme.of(context).colorScheme.primary
+                  : palette.textMuted,
+            ),
+            const SizedBox(height: 16),
+          ],
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: enabled ? null : palette.textMuted,
+            ),
+          ),
+          if (subtitle != null && constraints.maxHeight >= 120) ...[
+            const SizedBox(height: 8),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: palette.textMuted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeSelector extends StatelessWidget {
+  const _ModeSelector({
+    required this.labels,
+    required this.selected,
+    required this.onSelected,
+    this.disabledIndex,
+  });
+  final List<String> labels;
+  final int selected;
+  final int? disabledIndex;
+  final ValueChanged<int> onSelected;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: context.whisperPalette.surfaceMuted,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        for (var i = 0; i < labels.length; i++)
+          Expanded(
+            child: Semantics(
+              selected: selected == i,
+              child: TextButton(
+                onPressed: disabledIndex == i ? null : () => onSelected(i),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  backgroundColor: selected == i
+                      ? context.whisperPalette.surfaceElevated
+                      : null,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(labels[i], textAlign: TextAlign.center),
+              ),
+            ),
+          ),
+      ],
     ),
   );
 }
@@ -880,7 +1227,13 @@ class _VirtualKeyState extends State<_VirtualKey> {
         : const <Type, GestureRecognizerFactory>{},
     child: OutlinedButton(
       onPressed: widget.enabled ? widget.onTap : null,
-      style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+      style: OutlinedButton.styleFrom(
+        padding: EdgeInsets.zero,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        backgroundColor: context.whisperPalette.surfaceElevated,
+        side: BorderSide(color: context.whisperPalette.borderSubtle),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
       child: Text(widget.label),
     ),
   );

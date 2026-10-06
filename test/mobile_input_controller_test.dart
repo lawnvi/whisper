@@ -71,6 +71,98 @@ void main() {
     expect(mapper.calibrating, isTrue);
     mapper.cancelCalibration();
   });
+  test('idle bias correction removes drift without learning held motion', () {
+    final mapper = MobileMotionMapper();
+    MotionSample sample(int t, double yaw) =>
+        MotionSample(t, [0, 0, yaw], [0, 0, 9.8]);
+    for (var i = 0; i < 60; i++) {
+      expect(mapper.add(sample(i * 10000, 0.025), enabled: false), Offset.zero);
+    }
+    var drift = Offset.zero;
+    for (var i = 60; i < 1060; i++) {
+      drift += mapper.add(sample(i * 10000, 0.025), enabled: true);
+    }
+    expect(drift.distance, lessThan(0.01));
+    // A continuous deliberate slow turn must keep moving even after 50 samples.
+    for (var i = 1060; i < 1160; i++) {
+      mapper.add(sample(i * 10000, -0.03), enabled: true);
+    }
+    expect(
+      mapper.add(sample(11600000, -0.03), enabled: true).dx,
+      greaterThan(0.1),
+    );
+  });
+  test('calibration rejects unstable, stale and duplicate samples', () {
+    final mapper = MobileMotionMapper()..calibrate();
+    for (var i = 0; i < 100; i++) {
+      mapper.add(
+        MotionSample(i * 10000, [0, 0, i.isEven ? 0.06 : -0.06], [0, 0, 9.8]),
+        enabled: false,
+      );
+    }
+    expect(mapper.calibrating, isTrue);
+    for (var i = 0; i < 100; i++) {
+      mapper.add(
+        const MotionSample(1100000, [0, 0, 0.06], [0, 0, 9.8]),
+        enabled: false,
+      );
+    }
+    expect(mapper.calibrating, isTrue);
+    for (var i = 0; i < 100; i++) {
+      mapper.add(
+        MotionSample(2000000 + i * 200000, [0, 0, 0.06], [0, 0, 9.8]),
+        enabled: false,
+      );
+    }
+    expect(mapper.calibrating, isTrue);
+  });
+  test(
+    'slow wrist movement is precise while fast movement responds promptly',
+    () {
+      Offset travel(double yaw) {
+        final mapper = MobileMotionMapper();
+        var result = Offset.zero;
+        for (var i = 0; i <= 100; i++) {
+          result += mapper.add(
+            MotionSample(i * 10000, [0, 0, -yaw], [0, 0, 9.8]),
+            enabled: true,
+          );
+        }
+        return result;
+      }
+
+      // A small 0.05-radian turn travels 15–30px, not the previous ~45px.
+      expect(travel(0.05).dx, inInclusiveRange(15, 30));
+      expect(travel(1).dx, inInclusiveRange(1100, 1200));
+      final mapper = MobileMotionMapper();
+      mapper.add(const MotionSample(0, [0, 0, -1], [0, 0, 9.8]), enabled: true);
+      final first = mapper.add(
+        const MotionSample(10000, [0, 0, -1], [0, 0, 9.8]),
+        enabled: true,
+      );
+      expect(first.dx, greaterThan(6));
+      expect(
+        mapper.add(
+          const MotionSample(20000, [0, 0, 0], [0, 0, 9.8]),
+          enabled: true,
+        ),
+        Offset.zero,
+      );
+    },
+  );
+  test('alternating hand tremor has bounded cursor excursion', () {
+    final mapper = MobileMotionMapper();
+    var position = Offset.zero;
+    var furthest = 0.0;
+    for (var i = 0; i <= 1000; i++) {
+      position += mapper.add(
+        MotionSample(i * 10000, [0, 0, i.isEven ? 0.015 : -0.015], [0, 0, 9.8]),
+        enabled: true,
+      );
+      if (position.distance > furthest) furthest = position.distance;
+    }
+    expect(furthest, lessThan(1));
+  });
   test(
     'keyboard lookup covers full keys with independent modifier mappings',
     () {
@@ -137,6 +229,13 @@ void main() {
     expect(sent.first.$2, {'deltaX': 4.0, 'deltaY': 6.0});
     await tester.pump(const Duration(milliseconds: 20));
     expect(sent, hasLength(4));
+  });
+  test('touchpad tap cannot release a separately held left button', () {
+    controller.button(0, true);
+    controller.click();
+    expect(sent, hasLength(1));
+    controller.button(0, false);
+    expect(sent.map((event) => event.$2['down']), [true, false]);
   });
   test('modifiers remain local until a key and unwind in reverse order', () {
     controller.toggleModifier('meta');

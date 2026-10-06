@@ -1552,4 +1552,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get castVolume => '音量';
+
+  @override
+  String get mobileControlPointer => '鼠标';
+
+  @override
+  String get mobileControlKeysTab => '键盘';
+
+  @override
+  String get mobileControlTextTab => '文字';
+
+  @override
+  String get mobileControlSettings => '指针设置';
+
+  @override
+  String get mobileControlLiftHint => '松手暂停，调整握姿后继续。';
+
+  @override
+  String get mobileControlDragHint => '按住左键即可拖拽。';
+
+  @override
+  String get mobileControlPrecisionHint => '慢转精细定位，快转大幅移动。';
+
+  @override
+  String get mobileControlCalibrationRetry => '请保持手机静止，再试一次校准。';
+
+  @override
+  String get mobileControlStartShort => '开始';
 }

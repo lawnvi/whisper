@@ -763,5 +763,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "mobileControlPointer": "Mouse",
+  "mobileControlKeysTab": "Keyboard",
+  "mobileControlTextTab": "Text",
+  "mobileControlSettings": "Pointer settings",
+  "mobileControlLiftHint": "Lift your finger to pause and reposition.",
+  "mobileControlDragHint": "Hold the left button to drag.",
+  "mobileControlPrecisionHint": "Small movements give finer control. Turn faster to travel farther.",
+  "mobileControlCalibrationRetry": "Keep the phone still and try calibrating again.",
+  "mobileControlStartShort": "Start"
 }
