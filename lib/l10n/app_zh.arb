@@ -23,7 +23,7 @@
   "mobileControlTextUnconfirmed": "未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。",
   "mobileControlTextSent": "文字已交给电脑系统，请查看目标应用。",
   "mobileControlSensorUnavailable": "体感不可用，已切换到触控板。",
-  "mobileControlSensitivity": "体感灵敏度",
+  "mobileControlSensitivity": "体感移动速度",
   "mobileControlCalibrate": "校准",
   "mobileControlCalibrating": "请保持手机静止片刻…",
   "mobileControlCalibrationDone": "校准完成",
@@ -852,5 +852,12 @@
   "mobileControlMotionStart": "开启体感",
   "mobileControlMotionPause": "暂停体感",
   "mobileControlMotionOnHint": "转腕即可移动，点此暂停。",
-  "mobileControlMotionOffHint": "点一下开启，无需一直按住屏幕。"
+  "mobileControlMotionOffHint": "点一下开启，无需一直按住屏幕。",
+  "mobileControlTarget": "控制目标",
+  "mobileControlTargetHint": "可以连接多台电脑，每次只控制一台。切换时结束当前控制，点击“开始”控制新电脑。",
+  "mobileControlPointerSpeed": "触控板移动速度",
+  "mobileControlScrollSpeed": "滚轮滑动速度",
+  "mobileControlScrollRail": "滑动\n滚动",
+  "mobileControlPermissionDesktop": "请在电脑上允许远程控制后重试。Linux 需要接受系统的远程控制授权。",
+  "mobileControlLinuxTextHint": "Linux 只能发送电脑当前键盘布局支持的字符。中文和 emoji 请通过虚拟键盘配合电脑输入法输入。不支持的文字会保留在草稿中。"
 }

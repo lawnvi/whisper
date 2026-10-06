@@ -23,7 +23,7 @@
   "mobileControlTextUnconfirmed": "Entrada sin confirmar. Borrador conservado; revisa el ordenador antes de reenviar.",
   "mobileControlTextSent": "Texto entregado al sistema. Revisa la aplicación de destino.",
   "mobileControlSensorUnavailable": "Movimiento no disponible. Se ha activado el panel táctil.",
-  "mobileControlSensitivity": "Sensibilidad del movimiento",
+  "mobileControlSensitivity": "Velocidad del puntero por movimiento",
   "mobileControlCalibrate": "Calibrar",
   "mobileControlCalibrating": "Mantén el teléfono quieto un momento…",
   "mobileControlCalibrationDone": "Calibración completada",
@@ -803,5 +803,12 @@
   "mobileControlMotionStart": "Activar movimiento",
   "mobileControlMotionPause": "Pausar movimiento",
   "mobileControlMotionOnHint": "Gira la muñeca para mover. Toca aquí para pausar.",
-  "mobileControlMotionOffHint": "Toca una vez y mueve sin mantener pulsada la pantalla."
+  "mobileControlMotionOffHint": "Toca una vez y mueve sin mantener pulsada la pantalla.",
+  "mobileControlTarget": "Equipo a controlar",
+  "mobileControlTargetHint": "Puedes conectar varios equipos y controlar uno a la vez. Al cambiar se detiene la sesión; toca Iniciar para controlar el equipo seleccionado.",
+  "mobileControlPointerSpeed": "Velocidad del puntero del panel táctil",
+  "mobileControlScrollSpeed": "Velocidad de desplazamiento",
+  "mobileControlScrollRail": "Desliza\npara desplazar",
+  "mobileControlPermissionDesktop": "Permite el control remoto en el equipo y vuelve a iniciar. En Linux, acepta la solicitud de control remoto del sistema.",
+  "mobileControlLinuxTextHint": "Linux solo puede enviar caracteres disponibles en la distribución de teclado del equipo. Para chino y emoji, usa el teclado virtual con el método de entrada del equipo. El texto no compatible se conserva en el borrador."
 }

@@ -1141,9 +1141,16 @@ class RemoteInputPlugin : public flutter::Plugin {
         result->Error("bad-arguments", "startInjection requires sessionId");
         return;
       }
+      const auto* mode = GetMapValue<std::string>(*args, "mode");
+      if (mode != nullptr && *mode != "manual" && *mode != "edgeTraversal") {
+        result->Error("bad-arguments", "Unknown remote input mode");
+        return;
+      }
       ReleaseInjectedButtons();
       ReleaseInjectedKeys();
       ReleaseCommonModifierKeys();
+      manual_injection_ = mode != nullptr && *mode == "manual";
+      manual_remainder_x_ = manual_remainder_y_ = 0;
       injection_session_id_ = *session_id;
       injected_cursor_entered_interior_ = false;
       ResetInjectedScrollState();
@@ -1195,7 +1202,14 @@ class RemoteInputPlugin : public flutter::Plugin {
                       "injectEvent requires sessionId, eventType, and payload");
         return;
       }
-      InjectEvent(*session_id, *event_type, *payload);
+      if (*event_type == "textCommit") {
+        if (!InjectUnicodeText(*session_id, *payload)) {
+          result->Error("text-injection-failed", "Text injection was not confirmed");
+          return;
+        }
+      } else {
+        InjectEvent(*session_id, *event_type, *payload);
+      }
       result->Success();
       return;
     }
@@ -1334,6 +1348,8 @@ class RemoteInputPlugin : public flutter::Plugin {
     ReleaseInjectedKeys();
     ReleaseCommonModifierKeys();
     injection_session_id_.clear();
+    manual_injection_ = false;
+    manual_remainder_x_ = manual_remainder_y_ = 0;
     injected_cursor_entered_interior_ = false;
     ResetInjectedScrollState();
     injection_display_id_.clear();
@@ -2308,6 +2324,15 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   POINT ClampToVirtualScreen(POINT point) const {
+    if (manual_injection_) {
+      MONITORINFO monitor = {};
+      monitor.cbSize = sizeof(monitor);
+      if (GetMonitorInfo(MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        point.x = std::clamp(point.x, monitor.rcMonitor.left, monitor.rcMonitor.right - 1);
+        point.y = std::clamp(point.y, monitor.rcMonitor.top, monitor.rcMonitor.bottom - 1);
+        return point;
+      }
+    }
     const ScreenArea area = VirtualScreenArea();
     const int left = area.left;
     const int top = area.top;
@@ -2573,6 +2598,43 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
   }
 
+  bool InjectUnicodeText(const std::string& session_id,
+                         const std::vector<uint8_t>& payload) {
+    if (!manual_injection_ || session_id != injection_session_id_) return false;
+    const auto text = JsonStringValue(PayloadString(payload), "text");
+    if (!text.has_value() || text->empty() || text->size() > 4096) return false;
+    const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        text->data(), static_cast<int>(text->size()), nullptr, 0);
+    if (length <= 0) return false;
+    std::wstring unicode(length, L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text->data(),
+        static_cast<int>(text->size()), unicode.data(), length);
+    for (size_t i = 0; i < unicode.size(); ++i) {
+      const bool newline = unicode[i] == L'\n' || unicode[i] == L'\r';
+      if (unicode[i] == L'\r' && i + 1 < unicode.size() && unicode[i + 1] == L'\n') ++i;
+      const size_t units = !newline && unicode[i] >= 0xD800 && unicode[i] <= 0xDBFF ? 2 : 1;
+      if (i + units > unicode.size()) return false;
+      INPUT events[4] = {};
+      for (size_t unit = 0; unit < units; ++unit) {
+        INPUT& down = events[unit * 2];
+        down.type = INPUT_KEYBOARD;
+        down.ki.wVk = newline ? VK_RETURN : 0;
+        down.ki.wScan = newline ? 0 : unicode[i + unit];
+        down.ki.dwFlags = newline ? 0 : KEYEVENTF_UNICODE;
+        events[unit * 2 + 1] = down;
+        events[unit * 2 + 1].ki.dwFlags |= KEYEVENTF_KEYUP;
+      }
+      const UINT count = static_cast<UINT>(units * 2);
+      if (SendInput(count, events, sizeof(INPUT)) != count) {
+        // A partial batch must never leave the Enter key held.
+        for (size_t unit = 0; unit < units; ++unit) SendInput(1, &events[unit * 2 + 1], sizeof(INPUT));
+        return false;
+      }
+      i += units - 1;
+    }
+    return true;
+  }
+
   void InjectEvent(const std::string& session_id,
                    const std::string& event_type,
                    const std::vector<uint8_t>& payload) {
@@ -2581,11 +2643,17 @@ class RemoteInputPlugin : public flutter::Plugin {
     }
     const auto json = PayloadString(payload);
     if (event_type == "mouseMove") {
-      const int delta_x = static_cast<int>(std::round(JsonNumber(json, "deltaX").value_or(0)));
-      const int delta_y = static_cast<int>(std::round(JsonNumber(json, "deltaY").value_or(0)));
+      const double raw_x = JsonNumber(json, "deltaX").value_or(0) + manual_remainder_x_;
+      const double raw_y = JsonNumber(json, "deltaY").value_or(0) + manual_remainder_y_;
+      const int delta_x = static_cast<int>(std::round(raw_x));
+      const int delta_y = static_cast<int>(std::round(raw_y));
+      if (manual_injection_) {
+        manual_remainder_x_ = raw_x - delta_x;
+        manual_remainder_y_ = raw_y - delta_y;
+      }
       POINT current = CurrentCursorPoint();
       const auto routed_edge_unit =
-          !JsonBool(json, "activeStart") && injected_cursor_entered_interior_ &&
+          !manual_injection_ && !JsonBool(json, "activeStart") && injected_cursor_entered_interior_ &&
                   injected_buttons_ == 0 && pending_injected_buttons_ == 0
               ? ReverseInjectionSourceEdgeUnit(current, delta_x, delta_y)
               : std::nullopt;
@@ -2607,7 +2675,7 @@ class RemoteInputPlugin : public flutter::Plugin {
             release_route.source_segment);
         return;
       }
-      if (IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
+      if (!manual_injection_ && IsInjectionReverseRelease(json, current, delta_x, delta_y)) {
         const std::string release_session_id = injection_session_id_;
         const double edge_unit = InjectionEdgeUnit(current);
         remote_cursor_.Reset();
@@ -2617,7 +2685,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         EmitReleaseForSession(release_session_id, "edge", edge_unit);
         return;
       }
-      if (JsonBool(json, "activeStart")) {
+      if (!manual_injection_ && JsonBool(json, "activeStart")) {
         current = CursorPointForEntry(json);
         MoveCursorToPoint(current);
         injected_cursor_entered_interior_ = false;
@@ -2871,6 +2939,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::mutex channel_mutex_;
   std::string capture_session_id_;
   std::string injection_session_id_;
+  bool manual_injection_ = false;
+  double manual_remainder_x_ = 0, manual_remainder_y_ = 0;
   std::string capture_edge_ = "right";
   std::string capture_display_id_;
   std::string capture_route_id_;

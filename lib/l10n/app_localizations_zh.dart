@@ -82,7 +82,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlSensorUnavailable => '体感不可用，已切换到触控板。';
 
   @override
-  String get mobileControlSensitivity => '体感灵敏度';
+  String get mobileControlSensitivity => '体感移动速度';
 
   @override
   String get mobileControlCalibrate => '校准';
@@ -1591,4 +1591,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlMotionOffHint => '点一下开启，无需一直按住屏幕。';
+
+  @override
+  String get mobileControlTarget => '控制目标';
+
+  @override
+  String get mobileControlTargetHint =>
+      '可以连接多台电脑，每次只控制一台。切换时结束当前控制，点击“开始”控制新电脑。';
+
+  @override
+  String get mobileControlPointerSpeed => '触控板移动速度';
+
+  @override
+  String get mobileControlScrollSpeed => '滚轮滑动速度';
+
+  @override
+  String get mobileControlScrollRail => '滑动\n滚动';
+
+  @override
+  String get mobileControlPermissionDesktop =>
+      '请在电脑上允许远程控制后重试。Linux 需要接受系统的远程控制授权。';
+
+  @override
+  String get mobileControlLinuxTextHint =>
+      'Linux 只能发送电脑当前键盘布局支持的字符。中文和 emoji 请通过虚拟键盘配合电脑输入法输入。不支持的文字会保留在草稿中。';
 }

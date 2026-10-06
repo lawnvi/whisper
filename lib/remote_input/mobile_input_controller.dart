@@ -19,6 +19,8 @@ class MobileInputController extends ChangeNotifier {
   final Set<String> modifiers = {};
   final Set<int> _buttons = {};
   final Stopwatch _clock = Stopwatch()..start();
+  double pointerSpeed = 1.0;
+  double scrollSpeed = 1.0;
   bool _active = false;
   bool air = true;
   bool moving = false;
@@ -36,6 +38,18 @@ class MobileInputController extends ChangeNotifier {
     if (_active == value) return;
     reset();
     _active = value;
+    notifyListeners();
+  }
+
+  void setPointerSpeed(double value) {
+    flush();
+    pointerSpeed = value.isFinite ? value.clamp(0.5, 3.0) : 1.0;
+    notifyListeners();
+  }
+
+  void setScrollSpeed(double value) {
+    flush();
+    scrollSpeed = value.isFinite ? value.clamp(0.5, 3.0) : 1.0;
     notifyListeners();
   }
 
@@ -95,15 +109,25 @@ class MobileInputController extends ChangeNotifier {
     );
     if (wasCalibrating != motion.calibrating) notifyListeners();
     if (enabled && delta != Offset.zero) {
-      move(scrolling ? Offset(0, delta.dy) : delta, scroll: scrolling);
+      move(
+        scrolling ? Offset(0, delta.dy) : delta,
+        scroll: scrolling,
+        fromMotion: true,
+      );
     }
   }
 
-  void move(Offset delta, {bool scroll = false}) {
+  void move(Offset delta, {bool scroll = false, bool fromMotion = false}) {
     if (!_active || !delta.dx.isFinite || !delta.dy.isFinite) return;
     if (_pending != Offset.zero && scroll != _pendingScroll) flush();
     _pendingScroll = scroll;
-    _pending += delta;
+    _pending +=
+        delta *
+        (scroll
+            ? scrollSpeed
+            : fromMotion
+            ? 1.0
+            : pointerSpeed);
     _flushTimer ??= Timer(const Duration(microseconds: 16667), flush);
   }
 

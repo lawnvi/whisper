@@ -87,7 +87,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Motion unavailable. Switched to touchpad.';
 
   @override
-  String get mobileControlSensitivity => 'Motion sensitivity';
+  String get mobileControlSensitivity => 'Motion pointer speed';
 
   @override
   String get mobileControlCalibrate => 'Calibrate';
@@ -1711,4 +1711,28 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get mobileControlMotionOffHint =>
       'Tap once, then move without holding the screen.';
+
+  @override
+  String get mobileControlTarget => 'Control target';
+
+  @override
+  String get mobileControlTargetHint =>
+      'Connect to several computers, control one at a time. Switching stops the current session; tap Start to control the selected computer.';
+
+  @override
+  String get mobileControlPointerSpeed => 'Touchpad pointer speed';
+
+  @override
+  String get mobileControlScrollSpeed => 'Scroll speed';
+
+  @override
+  String get mobileControlScrollRail => 'Slide to\nscroll';
+
+  @override
+  String get mobileControlPermissionDesktop =>
+      'Allow remote control on the computer, then start again. On Linux, accept the system remote-control prompt.';
+
+  @override
+  String get mobileControlLinuxTextHint =>
+      'Linux can commit only characters available in the computer’s current keyboard layout. For Chinese and emoji, use the virtual keyboard with the computer’s input method. Unsupported text stays in your draft.';
 }

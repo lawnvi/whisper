@@ -314,6 +314,24 @@ class LocalSetting {
     value.isFinite ? value.clamp(0.5, 3.0) : 1.0,
   );
 
+  Future<double> mobilePointerSpeed() => _mobileSpeed('mobile_pointer_speed');
+  Future<double> mobileScrollSpeed() => _mobileSpeed('mobile_scroll_speed');
+
+  Future<double> _mobileSpeed(String key) async {
+    final raw = (await _preferences()).get(key);
+    final value = raw is num ? raw.toDouble() : 1.0;
+    return value.isFinite ? value.clamp(0.5, 3.0) : 1.0;
+  }
+
+  Future<void> setMobilePointerSpeed(double value) => _setSP(
+    'mobile_pointer_speed',
+    value.isFinite ? value.clamp(0.5, 3.0) : 1.0,
+  );
+  Future<void> setMobileScrollSpeed(double value) => _setSP(
+    'mobile_scroll_speed',
+    value.isFinite ? value.clamp(0.5, 3.0) : 1.0,
+  );
+
   Future<double> remoteInputScrollMultiplier() async {
     final SharedPreferences sp = await _preferences();
     final raw = sp.get(_remoteInputScrollMultiplier);

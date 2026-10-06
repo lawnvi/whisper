@@ -17,6 +17,11 @@ import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 
+class MobileControlTarget {
+  const MobileControlTarget(this.id, this.name, {this.platform = 'macos'});
+  final String id, name, platform;
+}
+
 class MobileControlScreen extends StatefulWidget {
   const MobileControlScreen({
     super.key,
@@ -24,12 +29,14 @@ class MobileControlScreen extends StatefulWidget {
     required this.peerName,
     required this.onStart,
     required this.onStop,
+    this.targets,
     this.coordinator,
     this.sensor,
   });
   final String peerId;
   final String peerName;
-  final Future<void> Function() onStart;
+  final Future<void> Function(String peerId) onStart;
+  final List<MobileControlTarget> Function()? targets;
   final Future<void> Function() onStop;
   final RemoteInputCoordinator? coordinator;
   final MobileMotionSensor? sensor;
@@ -38,7 +45,20 @@ class MobileControlScreen extends StatefulWidget {
 }
 
 class _MobileControlScreenState extends State<MobileControlScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  late MobileControlTarget _target = MobileControlTarget(
+    widget.peerId,
+    widget.peerName,
+  );
+  late final _transition = AnimationController(
+    vsync: this,
+    value: 1,
+    duration: const Duration(milliseconds: 200),
+    reverseDuration: const Duration(milliseconds: 120),
+  );
+  bool _transitioning = false;
+  int _transitionGeneration = 0;
+  Completer<void>? _orientationReady;
   late final RemoteInputCoordinator _coordinator =
       widget.coordinator ?? RemoteInputCoordinator.shared;
   late final MobileMotionSensor _sensor = widget.sensor ?? MobileMotionSensor();
@@ -63,7 +83,10 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   int _tab = 0, _keyPage = 0, _startGeneration = 0;
   String? _error;
   String _failureText(String reason) => switch (reason) {
-    'permission' => l10n.mobileControlPermission,
+    'permission' =>
+      _target.platform.toLowerCase().contains('mac')
+          ? l10n.mobileControlPermission
+          : l10n.mobileControlPermissionDesktop,
     'busy' => l10n.remoteInputStopCurrentFirst,
     'trustRequired' => l10n.remoteInputRequiresMutualTrust,
     'unsupported' => l10n.remoteInputPeerUnsupported,
@@ -76,14 +99,18 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   AppLocalizations get l10n => AppLocalizations.of(context)!;
   bool get _ownsSession =>
       _coordinator.isManual &&
-      _coordinator.state.isForPeer(widget.peerId) &&
+      _coordinator.state.isForPeer(_target.id) &&
       _coordinator.state.role == RemoteInputRuntimeRole.source;
   bool get _active => _ownsSession && _coordinator.state.isActive;
-  bool get _enabled => _active && !_coordinator.isSendingText && !_stopping;
+  bool get _enabled =>
+      _active && !_coordinator.isSendingText && !_stopping && !_transitioning;
 
   @override
   void initState() {
     super.initState();
+    for (final target in widget.targets?.call() ?? <MobileControlTarget>[]) {
+      if (target.id == widget.peerId) _target = target;
+    }
     WidgetsBinding.instance.addObserver(this);
     _coordinator.addListener(_refresh);
     _input.addListener(_redraw);
@@ -98,7 +125,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       /* touchpad fallback */
     }
     final sensitivity = await LocalSetting().mobileInputSensitivity();
+    final pointerSpeed = await LocalSetting().mobilePointerSpeed();
+    final scrollSpeed = await LocalSetting().mobileScrollSpeed();
     if (!mounted) return;
+    _input.pointerSpeed = pointerSpeed;
+    _input.scrollSpeed = scrollSpeed;
     _available = available;
     _checkedSensor = true;
     _input.motion.sensitivity = sensitivity;
@@ -159,7 +190,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       _error = null;
     });
     try {
-      await widget.onStart();
+      await widget.onStart(_target.id);
       if (!mounted || generation != _startGeneration) {
         if (_ownsSession) await widget.onStop();
         return;
@@ -211,38 +242,78 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     _input.reset();
   }
 
-  void _selectTab(int tab) {
+  Future<void> _selectTab(int tab, {bool animate = true}) async {
+    if (tab == _tab && !_transitioning) return;
+    final generation = ++_transitionGeneration;
+    final useAnimation = animate && !MediaQuery.disableAnimationsOf(context);
     _reset();
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() {
-      _tab = tab;
-    });
+    setState(() => _transitioning = true);
     _syncSensors();
-    _orientKeyboard(tab == 1);
+    if (useAnimation) {
+      try {
+        await _transition.reverse().orCancel;
+        await WidgetsBinding.instance.endOfFrame;
+        await Future<void>.delayed(const Duration(milliseconds: 32));
+      } on TickerCanceled {
+        return;
+      }
+    } else {
+      _transition.value = 0;
+    }
+    if (!mounted || generation != _transitionGeneration) return;
+    setState(() => _tab = tab);
+    await _orientKeyboard(tab == 1, waitForMetrics: useAnimation);
+    if (!mounted || generation != _transitionGeneration) return;
+    setState(() => _transitioning = false);
+    _refresh();
+    if (useAnimation) {
+      unawaited(_transition.forward());
+    } else {
+      _transition.value = 1;
+    }
   }
 
-  void _orientKeyboard(bool landscape) {
+  Future<void> _orientKeyboard(
+    bool landscape, {
+    bool waitForMetrics = false,
+  }) async {
     if (_keyboardOrientation == landscape ||
         defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
     _keyboardOrientation = landscape;
-    unawaited(
-      SystemChrome.setPreferredOrientations(
+    final ready = Completer<void>();
+    _orientationReady = ready;
+    try {
+      await SystemChrome.setPreferredOrientations(
         landscape
             ? [
                 DeviceOrientation.landscapeLeft,
                 DeviceOrientation.landscapeRight,
               ]
             : [DeviceOrientation.portraitUp],
-      ).catchError((Object _) {}),
-    );
+      );
+      if (waitForMetrics && _landscape != landscape) {
+        // Keep the old layout hidden until Android has delivered the new size.
+        await ready.future.timeout(
+          const Duration(milliseconds: 450),
+          onTimeout: () {},
+        );
+      }
+    } catch (_) {
+      /* The scrollable layout remains usable if rotation is unavailable. */
+    }
+    if (_orientationReady == ready) _orientationReady = null;
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) unawaited(_stop());
-    if (state == AppLifecycleState.paused && _tab == 1) _selectTab(0);
+    if (state == AppLifecycleState.paused &&
+        (_tab == 1 || _keyboardOrientation)) {
+      unawaited(_selectTab(0, animate: false));
+    }
   }
 
   @override
@@ -251,12 +322,18 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     final landscape = size.width > size.height;
     if (_landscape != null && _landscape != landscape) _reset();
     _landscape = landscape;
+    if (landscape == _keyboardOrientation &&
+        _orientationReady?.isCompleted == false) {
+      _orientationReady!.complete();
+    }
   }
 
   @override
   void dispose() {
     ++_startGeneration;
-    _orientKeyboard(false);
+    ++_transitionGeneration;
+    unawaited(_orientKeyboard(false));
+    _transition.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _coordinator.removeListener(_refresh);
     _input.removeListener(_redraw);
@@ -299,7 +376,21 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ColoredBox(
+    color: context.whisperPalette.surfaceCanvas,
+    child: IgnorePointer(
+      ignoring: _transitioning,
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: _transition,
+          curve: Curves.easeOutCubic,
+        ),
+        child: _buildPage(context),
+      ),
+    ),
+  );
+
+  Widget _buildPage(BuildContext context) {
     _landscape ??=
         View.of(context).physicalSize.width >
         View.of(context).physicalSize.height;
@@ -313,10 +404,10 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         backgroundColor: palette.surfaceCanvas,
         title: _deviceTitle(),
         actions: [
-          if (_tab == 0 && _input.air)
+          if (_tab == 0)
             IconButton(
               tooltip: l10n.mobileControlSettings,
-              onPressed: _showMotionSettings,
+              onPressed: _showPointerSettings,
               icon: const Icon(Icons.tune_rounded),
             ),
           _sessionAction(busy),
@@ -392,13 +483,89 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
   }
 
-  Widget _deviceTitle() => Semantics(
+  Widget _deviceTitle() => InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap:
+        widget.targets == null ||
+            _starting ||
+            _stopping ||
+            _coordinator.isSendingText
+        ? null
+        : _chooseTarget,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Row(
+        children: [
+          Flexible(child: _deviceLabel()),
+          if (widget.targets != null)
+            const Icon(Icons.expand_more_rounded, size: 18),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _chooseTarget() async {
+    _reset();
+    final targets = widget.targets!();
+    final selected = await showWhisperModalBottomSheet<MobileControlTarget>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.mobileControlTarget,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(l10n.mobileControlTargetHint),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final target in targets)
+                    ListTile(
+                      leading: const Icon(Icons.desktop_windows_outlined),
+                      title: Text(target.name),
+                      trailing: target.id == _target.id
+                          ? const Icon(Icons.check_rounded)
+                          : null,
+                      onTap: () => Navigator.pop(context, target),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selected == null || selected.id == _target.id) return;
+    await _stop();
+    if (!mounted) return;
+    setState(() {
+      _target = selected;
+      _error = null;
+    });
+    _text.clear();
+  }
+
+  Widget _deviceLabel() => Semantics(
     label: l10n.mobileControlTitle,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.peerName,
+          _target.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleMedium,
@@ -568,11 +735,23 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                     onVerticalDragCancel: _input.flush,
                     child: Container(
                       decoration: _surfaceDecoration(),
-                      child: Icon(
-                        Icons.unfold_more_rounded,
-                        color: _enabled
-                            ? context.whisperPalette.textMuted
-                            : Theme.of(context).disabledColor,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.swipe_vertical_rounded,
+                            color: context.whisperPalette.textMuted,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.mobileControlScrollRail,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: context.whisperPalette.textMuted,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -634,7 +813,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
   }
 
-  Future<void> _showMotionSettings() async {
+  Future<void> _showPointerSettings() async {
     _reset();
     await showWhisperModalBottomSheet<void>(
       context: context,
@@ -654,62 +833,82 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(child: Text(l10n.mobileControlSensitivity)),
-                  Text(
-                    '${_input.motion.sensitivity.toStringAsFixed(2)}×',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
-              Slider(
-                value: _input.motion.sensitivity,
-                min: 0.5,
-                max: 3,
-                divisions: 10,
-                onChanged: (value) {
-                  _input.setSensitivity(value);
+              _speedSlider(
+                l10n.mobileControlPointerSpeed,
+                _input.pointerSpeed,
+                (value) {
+                  _input.setPointerSpeed(value);
                 },
-                onChangeEnd: (value) =>
-                    unawaited(LocalSetting().setMobileInputSensitivity(value)),
+                LocalSetting().setMobilePointerSpeed,
               ),
-              Text(
-                l10n.mobileControlPrecisionHint,
-                style: TextStyle(color: context.whisperPalette.textMuted),
+              _speedSlider(
+                l10n.mobileControlScrollSpeed,
+                _input.scrollSpeed,
+                (value) {
+                  _input.setScrollSpeed(value);
+                },
+                LocalSetting().setMobileScrollSpeed,
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.center_focus_strong_rounded),
-                  onPressed: !_enabled || _input.motion.calibrating
-                      ? null
-                      : () {
-                          _reset();
-                          _input.calibrate();
-                          _calibrationTimer = Timer(
-                            const Duration(seconds: 5),
-                            () {
-                              if (!mounted) return;
-                              _input.cancelCalibration();
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    l10n.mobileControlCalibrationRetry,
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                  label: Text(
-                    _input.motion.calibrating
-                        ? l10n.mobileControlCalibrating
-                        : l10n.mobileControlCalibrate,
+              if (_available) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: Text(l10n.mobileControlSensitivity)),
+                    Text(
+                      '${_input.motion.sensitivity.toStringAsFixed(2)}×',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+                Slider(
+                  value: _input.motion.sensitivity,
+                  min: 0.5,
+                  max: 3,
+                  divisions: 10,
+                  onChanged: (value) {
+                    _input.setSensitivity(value);
+                  },
+                  onChangeEnd: (value) => unawaited(
+                    LocalSetting().setMobileInputSensitivity(value),
                   ),
                 ),
-              ),
+                Text(
+                  l10n.mobileControlPrecisionHint,
+                  style: TextStyle(color: context.whisperPalette.textMuted),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.center_focus_strong_rounded),
+                    onPressed: !_enabled || _input.motion.calibrating
+                        ? null
+                        : () {
+                            _reset();
+                            _input.calibrate();
+                            _calibrationTimer = Timer(
+                              const Duration(seconds: 5),
+                              () {
+                                if (!mounted) return;
+                                _input.cancelCalibration();
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      l10n.mobileControlCalibrationRetry,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                    label: Text(
+                      _input.motion.calibrating
+                          ? l10n.mobileControlCalibrating
+                          : l10n.mobileControlCalibrate,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -717,6 +916,31 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
     if (mounted) _reset();
   }
+
+  Widget _speedSlider(
+    String label,
+    double value,
+    ValueChanged<double> onChanged,
+    Future<void> Function(double) save,
+  ) => Column(
+    children: [
+      Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text('${value.toStringAsFixed(2)}×'),
+        ],
+      ),
+      Slider(
+        value: value,
+        min: 0.5,
+        max: 3,
+        divisions: 10,
+        label: label,
+        onChanged: onChanged,
+        onChangeEnd: (value) => unawaited(save(value)),
+      ),
+    ],
+  );
 
   Widget _touchpad() => GestureDetector(
     behavior: HitTestBehavior.opaque,
@@ -829,6 +1053,13 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     ),
   );
 
+  bool get _macTarget => _target.platform.toLowerCase().contains('mac');
+  String get _metaLabel => _macTarget
+      ? 'Cmd'
+      : _target.platform.toLowerCase().contains('win')
+      ? 'Win'
+      : 'Super';
+
   Widget _keyboard() {
     // Keep 12 columns in landscape. Less-used punctuation shares the Fn page.
     final rows = <List<(String, String)>>[
@@ -875,9 +1106,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         ],
       ],
       [
-        ('meta', 'Cmd'),
+        ('meta', _metaLabel),
         ('control', 'Ctrl'),
-        ('alt', 'Opt'),
+        ('alt', _macTarget ? 'Opt' : 'Alt'),
         if (_keyPage == 1) ('shift', 'Shift'),
         ('space', 'Space'),
         ('arrowLeft', '←'),
@@ -959,9 +1190,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
 
   Widget _keyboardKey(String semantic, String label) {
     final modifier = switch (semantic) {
-      'meta' => 'Command',
+      'meta' => _macTarget ? 'Command' : _metaLabel,
       'control' => 'Control',
-      'alt' => 'Option',
+      'alt' => _macTarget ? 'Option' : 'Alt',
       'shift' => 'Shift',
       _ => null,
     };
@@ -1021,7 +1252,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     child: Column(
       children: [
         Text(
-          l10n.mobileControlTextHint,
+          _target.platform.toLowerCase().contains('linux')
+              ? l10n.mobileControlLinuxTextHint
+              : l10n.mobileControlTextHint,
           style: TextStyle(color: context.whisperPalette.textMuted),
         ),
         const SizedBox(height: 16),

@@ -911,7 +911,7 @@ void ClosePortalSession(GDBusConnection* connection,
 }
 
 bool StartRemoteDesktopPortalSession(PortalSession* session,
-                                     std::string* error) {
+                                     std::string* error, bool connect_eis = true) {
   GError* bus_error = nullptr;
   GDBusConnection* connection =
       g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &bus_error);
@@ -997,7 +997,7 @@ bool StartRemoteDesktopPortalSession(PortalSession* session,
   g_variant_unref(start_response.results);
 
   int eis_fd = -1;
-  if (!ConnectToEis(connection, session_handle, &eis_fd, error)) {
+  if (connect_eis && !ConnectToEis(connection, session_handle, &eis_fd, error)) {
     ClosePortalSession(connection, session_handle);
     g_object_unref(connection);
     return false;
@@ -1831,6 +1831,11 @@ class RemoteInputPlugin {
                      "startInjection requires sessionId");
         return;
       }
+      const std::string mode = StringValue(args, "mode");
+      if (!mode.empty() && mode != "manual" && mode != "edgeTraversal") {
+        RespondError(method_call, "bad-arguments", "Unknown remote input mode");
+        return;
+      }
       std::string error;
       if (!StartInjection(
               session_id,
@@ -1841,7 +1846,7 @@ class RemoteInputPlugin {
                   DoubleValue(args, "segmentEnd"),
               },
               InjectionRoutesValue(args, "mappings"),
-              &error)) {
+              mode == "manual", &error)) {
         RespondError(method_call, "remote-input-injection-unavailable", error);
         return;
       }
@@ -1872,7 +1877,19 @@ class RemoteInputPlugin {
                      "injectEvent requires sessionId, eventType, and payload");
         return;
       }
-      InjectEvent(session_id, event_type, payload);
+      if (event_type == "textCommit") {
+        if (!InjectManualText(session_id, payload)) {
+          RespondError(method_call, "text-injection-failed", "Text injection was not confirmed");
+          return;
+        }
+      } else {
+        manual_event_failed_ = false;
+        InjectEvent(session_id, event_type, payload);
+        if (manual_event_failed_) {
+          RespondError(method_call, "input-injection-failed", "Desktop input is unavailable");
+          return;
+        }
+      }
       RespondSuccess(method_call);
       return;
     }
@@ -2906,14 +2923,32 @@ class RemoteInputPlugin {
                       const std::string& edge,
                       EdgeSegment segment,
                       std::vector<InjectionRoute> routes,
+                      bool manual,
                       std::string* error) {
 #if HAVE_X11_REMOTE_INPUT
     StopInjection("");
+    manual_injection_ = manual;
     if (IsLinuxDesktopLocked()) {
       *error = "Unlock the Linux desktop before sharing keyboard and mouse";
       TraceRemoteInput(RemoteInputTraceEvent::kInjectionBlocked);
       return false;
     }
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (manual && RemoteDesktopPortalAvailable()) {
+      // Manual control needs keysyms for Unicode text, which ConnectToEIS
+      // disables. Keep the existing EIS path for desktop edge traversal.
+      PortalSession session;
+      if (!StartRemoteDesktopPortalSession(&session, error, false)) return false;
+      std::lock_guard<std::mutex> lock(injection_mutex_);
+      injection_backend_ = InjectionBackend::kPortal;
+      injection_session_id_ = session_id;
+      portal_connection_ = session.connection;
+      portal_session_handle_ = session.session_handle;
+      portal_x_display_ = XOpenDisplay(nullptr);
+      manual_portal_ = true;
+      return true;
+    }
+#endif
     bool portal_attempted = false;
     if (TryStartPortalInjection(session_id, display_id, edge, segment, routes,
                                 &portal_attempted, error)) {
@@ -2930,6 +2965,7 @@ class RemoteInputPlugin {
     return StartX11Injection(session_id, display_id, edge, segment,
                              std::move(routes), error);
 #else
+    (void)manual;
     (void)session_id;
     (void)display_id;
     (void)edge;
@@ -3420,6 +3456,9 @@ class RemoteInputPlugin {
       injection_display_ = nullptr;
     }
     injection_session_id_.clear();
+    manual_injection_ = false;
+    manual_portal_ = false;
+    manual_remainder_x_ = manual_remainder_y_ = 0;
     injection_display_id_.clear();
     injection_edge_.clear();
     injection_route_id_.clear();
@@ -3434,6 +3473,73 @@ class RemoteInputPlugin {
     injection_backend_ = InjectionBackend::kNone;
 #else
     (void)session_id;
+#endif
+  }
+
+  bool InjectManualText(const std::string& session_id,
+                        const std::vector<uint8_t>& payload) {
+#if HAVE_X11_REMOTE_INPUT
+    std::lock_guard<std::mutex> lock(injection_mutex_);
+    const auto text = JsonStringValue(PayloadString(payload), "text");
+    if (!manual_injection_ || session_id != injection_session_id_ ||
+        !text.has_value() || text->empty() || text->size() > 4096 ||
+        !g_utf8_validate(text->data(), text->size(), nullptr)) return false;
+#if HAVE_LIBEI_REMOTE_INPUT
+    if (manual_portal_) {
+      // Mutter acknowledges unmapped keysyms without delivering input. Check
+      // the active map before sending anything, so a draft can never lose just
+      // its unsupported characters while receiving a successful text result.
+      if (portal_x_display_ == nullptr) return false;
+      for (const char* p = text->c_str(); *p; p = g_utf8_next_char(p)) {
+        const gunichar scalar = g_utf8_get_char(p);
+        const KeySym symbol = scalar == '\n' || scalar == '\r' ? 0xff0d :
+            scalar == '\t' ? 0xff09 : scalar <= 0xff ? scalar : 0x01000000 | scalar;
+        if (XKeysymToKeycode(portal_x_display_, symbol) == 0) return false;
+      }
+      for (const char* p = text->c_str(); *p; p = g_utf8_next_char(p)) {
+        gunichar scalar = g_utf8_get_char(p);
+        if (scalar == '\r' && p[1] == '\n') continue;
+        const int keysym = scalar == '\n' || scalar == '\r' ? 0xff0d :
+            scalar == '\t' ? 0xff09 : scalar <= 0xff ? scalar : 0x01000000 | scalar;
+        const bool down = ManualPortalKeyLocked("NotifyKeyboardKeysym", keysym, true);
+        const bool up = ManualPortalKeyLocked("NotifyKeyboardKeysym", keysym, false);
+        if (!down || !up) return false;
+      }
+      return true;
+    }
+#endif
+    // X11 has no application-independent Unicode commit API. Only use keys
+    // already represented in the active keymap; never mutate a global keymap
+    // or overwrite the user's clipboard to emulate a text commit.
+    if (injection_display_ == nullptr) return false;
+    std::vector<std::pair<KeyCode, bool>> keys;
+    for (const char* p = text->c_str(); *p; p = g_utf8_next_char(p)) {
+      const gunichar scalar = g_utf8_get_char(p);
+      if (scalar == '\r' && p[1] == '\n') continue;
+      const KeySym symbol = scalar == '\n' || scalar == '\r' ? 0xff0d :
+          scalar == '\t' ? 0xff09 : scalar <= 0xff ? scalar : 0x01000000 | scalar;
+      const KeyCode code = XKeysymToKeycode(injection_display_, symbol);
+      if (code == 0) return false;
+      int count = 0;
+      KeySym* mapping = XGetKeyboardMapping(injection_display_, code, 1, &count);
+      const bool plain = mapping != nullptr && count > 0 && mapping[0] == symbol;
+      const bool shifted = mapping != nullptr && count > 1 && mapping[1] == symbol;
+      if (mapping != nullptr) XFree(mapping);
+      if (!plain && !shifted) return false;
+      keys.emplace_back(code, !plain);
+    }
+    const KeyCode shift = XKeysymToKeycode(injection_display_, 0xffe1);
+    for (const auto& key : keys) {
+      if (key.second) SendKeyboardKeyLocked(shift, true);
+      SendKeyboardKeyLocked(key.first, true);
+      SendKeyboardKeyLocked(key.first, false);
+      if (key.second) SendKeyboardKeyLocked(shift, false);
+    }
+    XSync(injection_display_, False);
+    return true;
+#else
+    (void)session_id; (void)payload;
+    return false;
 #endif
   }
 
@@ -3490,8 +3596,56 @@ class RemoteInputPlugin {
   }
 
 #if HAVE_X11_REMOTE_INPUT && HAVE_LIBEI_REMOTE_INPUT
+  bool ManualPortalCallLocked(const char* method, GVariant* parameters) {
+    GError* error = nullptr;
+    GVariant* reply = g_dbus_connection_call_sync(
+        portal_connection_, kPortalBusName, kPortalObjectPath,
+        kPortalRemoteDesktopInterface, method, parameters, nullptr,
+        G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error);
+    if (error != nullptr) g_error_free(error);
+    if (reply == nullptr) { manual_event_failed_ = true; return false; }
+    g_variant_unref(reply);
+    return true;
+  }
+
+  bool ManualPortalKeyLocked(const char* method, int key, bool down) {
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+    return ManualPortalCallLocked(method, g_variant_new("(oa{sv}iu)",
+        portal_session_handle_.c_str(), &options, key, down ? 1u : 0u));
+  }
+
+  void InjectManualPortalEventLocked(const std::string& type, const std::string& json) {
+    if (type == "mouseMove" || type == "mouseWheel") {
+      GVariantBuilder options;
+      g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+      // Preserve precise touchpad pixels. Wheel detents map to 15 portal
+      // pixels; vertical portal scrolling has the opposite wheel direction.
+      const bool wheel = type == "mouseWheel";
+      const double gain = wheel && JsonString(json, "scrollUnit") != "pixel" ? 15.0 / 120.0 : 1.0;
+      if (type == "mouseWheel") g_variant_builder_add(&options, "{sv}", "finish", g_variant_new_boolean(true));
+      ManualPortalCallLocked(type == "mouseMove" ? "NotifyPointerMotion" : "NotifyPointerAxis",
+          g_variant_new("(oa{sv}dd)", portal_session_handle_.c_str(), &options,
+              JsonNumber(json, "deltaX") * gain, JsonNumber(json, "deltaY") * (wheel ? -gain : gain)));
+    } else if (type == "mouseButton") {
+      const int button = static_cast<int>(std::lround(JsonNumber(json, "button")));
+      const bool down = JsonBool(json, "down");
+      SendPortalMouseButtonLocked(button, down);
+      SetInjectedButton(button, down);
+    } else if (type == "key") {
+      const int key = static_cast<int>(std::lround(JsonNumber(json, "linuxKeyCode", JsonNumber(json, "keyCode"))));
+      const bool down = JsonBool(json, "down");
+      SendPortalKeyboardKeyLocked(key, down);
+      SetInjectedKey(key, down);
+    }
+  }
+
   void InjectPortalEventLocked(const std::string& event_type,
                                const std::string& json) {
+    if (manual_portal_) {
+      InjectManualPortalEventLocked(event_type, json);
+      return;
+    }
     if (event_type == "mouseMove") {
       InjectPortalMouseMoveLocked(json);
       return;
@@ -3518,17 +3672,21 @@ class RemoteInputPlugin {
   }
 
   void InjectPortalMouseMoveLocked(const std::string& json) {
-    const int delta_x =
-        static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
-    const int delta_y =
-        static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
+    const double raw_x = JsonNumber(json, "deltaX") + manual_remainder_x_;
+    const double raw_y = JsonNumber(json, "deltaY") + manual_remainder_y_;
+    const int delta_x = static_cast<int>(std::lround(raw_x));
+    const int delta_y = static_cast<int>(std::lround(raw_y));
+    if (manual_injection_) {
+      manual_remainder_x_ = raw_x - delta_x;
+      manual_remainder_y_ = raw_y - delta_y;
+    }
     int current_x = 0;
     int current_y = 0;
     unsigned int mask = 0;
     InjectedCursorPositionLocked(&current_x, &current_y, &mask);
     const bool active_start = JsonBool(json, "activeStart");
     Maybe<InjectionReleaseRoute> routed_release;
-    if (!active_start && injected_cursor_entered_interior_ &&
+    if (!manual_injection_ && !active_start && injected_cursor_entered_interior_ &&
         injected_buttons_ == 0) {
       routed_release =
           ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
@@ -3549,7 +3707,7 @@ class RemoteInputPlugin {
           release_route.source_segment.end);
       return;
     }
-    if (!active_start && injected_cursor_entered_interior_ &&
+    if (!manual_injection_ && !active_start && injected_cursor_entered_interior_ &&
         IsInjectionReverseRelease(json, current_x, current_y, delta_x,
                                   delta_y)) {
       const std::string session_id = injection_session_id_;
@@ -3564,7 +3722,7 @@ class RemoteInputPlugin {
     }
     int final_x = current_x;
     int final_y = current_y;
-    if (active_start) {
+    if (!manual_injection_ && active_start) {
       SetPortalCursorPosForEntryLocked(json);
       injected_cursor_entered_interior_ = false;
       InjectedCursorPositionLocked(&current_x, &current_y, &mask);
@@ -3674,6 +3832,10 @@ class RemoteInputPlugin {
   }
 
   void SendPortalMouseButtonLocked(int button, bool down) {
+    if (manual_portal_) {
+      ManualPortalKeyLocked("NotifyPointerButton", EvdevButtonForProtocolButton(button), down);
+      return;
+    }
     if (portal_button_device_ == nullptr || !portal_button_ready_) {
       return;
     }
@@ -3694,6 +3856,10 @@ class RemoteInputPlugin {
   }
 
   void SendPortalKeyboardKeyLocked(int linux_key, bool down) {
+    if (manual_portal_) {
+      ManualPortalKeyLocked("NotifyKeyboardKeycode", linux_key, down);
+      return;
+    }
     if (linux_key <= 0 || portal_keyboard_device_ == nullptr ||
         !portal_keyboard_ready_) {
       return;
@@ -4581,10 +4747,14 @@ class RemoteInputPlugin {
   }
 
   void InjectMouseMoveLocked(const std::string& json) {
-    const int delta_x =
-        static_cast<int>(std::lround(JsonNumber(json, "deltaX")));
-    const int delta_y =
-        static_cast<int>(std::lround(JsonNumber(json, "deltaY")));
+    const double raw_x = JsonNumber(json, "deltaX") + manual_remainder_x_;
+    const double raw_y = JsonNumber(json, "deltaY") + manual_remainder_y_;
+    const int delta_x = static_cast<int>(std::lround(raw_x));
+    const int delta_y = static_cast<int>(std::lround(raw_y));
+    if (manual_injection_) {
+      manual_remainder_x_ = raw_x - delta_x;
+      manual_remainder_y_ = raw_y - delta_y;
+    }
     int current_x = 0;
     int current_y = 0;
     unsigned int mask = 0;
@@ -4594,7 +4764,7 @@ class RemoteInputPlugin {
       TraceRemoteInput(RemoteInputTraceEvent::kInjectedEvent);
     }
     Maybe<InjectionReleaseRoute> routed_release;
-    if (!active_start && injected_cursor_entered_interior_ &&
+    if (!manual_injection_ && !active_start && injected_cursor_entered_interior_ &&
         injected_buttons_ == 0) {
       routed_release =
           ReverseInjectionSourceEdgeUnit(current_x, current_y, delta_x,
@@ -4618,7 +4788,7 @@ class RemoteInputPlugin {
           release_route.source_segment.end);
       return;
     }
-    if (!active_start && injected_cursor_entered_interior_ &&
+    if (!manual_injection_ && !active_start && injected_cursor_entered_interior_ &&
         IsInjectionReverseRelease(json, current_x, current_y, delta_x,
                                   delta_y)) {
       const std::string session_id = injection_session_id_;
@@ -4636,7 +4806,7 @@ class RemoteInputPlugin {
     }
     int final_x = current_x;
     int final_y = current_y;
-    if (active_start) {
+    if (!manual_injection_ && active_start) {
       SetCursorPosForEntryLocked(json);
       injected_cursor_entered_interior_ = false;
       InjectedCursorPositionLocked(&current_x, &current_y, &mask);
@@ -5223,6 +5393,7 @@ class RemoteInputPlugin {
   }
 
   FlMethodChannel* channel_ = nullptr;
+  bool manual_event_failed_ = false;
 
 #if HAVE_X11_REMOTE_INPUT
   std::mutex capture_mutex_;
@@ -5244,6 +5415,8 @@ class RemoteInputPlugin {
   std::string capture_pause_release_route_id_;
   EdgeSegment capture_pause_release_segment_;
 
+  bool manual_injection_ = false, manual_portal_ = false;
+  double manual_remainder_x_ = 0, manual_remainder_y_ = 0;
   std::mutex injection_mutex_;
   InjectionBackend injection_backend_ = InjectionBackend::kNone;
   Display* injection_display_ = nullptr;

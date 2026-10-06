@@ -45,6 +45,8 @@ bool supportsNativeRemoteInput() {
   return false;
 }
 
+bool supportsManualRemoteInputSink() => supportsNativeRemoteInput();
+
 RemoteInputPlatformKind currentRemoteInputPlatformKind() {
   if (Platform.isMacOS) {
     return RemoteInputPlatformKind.macos;

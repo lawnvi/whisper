@@ -163,6 +163,33 @@ void main() {
     }
     expect(furthest, lessThan(1));
   });
+  test('pointer and scroll speeds scale independently without reordering', () {
+    final sent = <(RemoteInputEventType, Map<String, dynamic>)>[];
+    final input = MobileInputController((type, payload) {
+      sent.add((type, payload));
+      return sent.length;
+    })..active = true;
+    input.setPointerSpeed(2);
+    input.setScrollSpeed(0.5);
+    input.move(const Offset(3, 4));
+    input.button(0, true);
+    input.move(const Offset(0, 10), scroll: true);
+    input.button(0, false);
+    expect(sent.map((v) => v.$1), [
+      RemoteInputEventType.mouseMove,
+      RemoteInputEventType.mouseButton,
+      RemoteInputEventType.mouseWheel,
+      RemoteInputEventType.mouseButton,
+    ]);
+    expect(sent[0].$2['deltaX'], 6);
+    expect(sent[0].$2['deltaY'], 8);
+    expect(sent[2].$2['scrollDeltaY'], 5);
+    input.move(const Offset(3, 4), fromMotion: true);
+    input.flush();
+    expect(sent.last.$2['deltaX'], 3);
+    input.dispose();
+  });
+
   test(
     'keyboard lookup covers full keys with independent modifier mappings',
     () {

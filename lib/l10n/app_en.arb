@@ -23,7 +23,7 @@
   "mobileControlTextUnconfirmed": "Input was not confirmed. Draft kept; check the computer before resending.",
   "mobileControlTextSent": "Text delivered to the system. Check the target app.",
   "mobileControlSensorUnavailable": "Motion unavailable. Switched to touchpad.",
-  "mobileControlSensitivity": "Motion sensitivity",
+  "mobileControlSensitivity": "Motion pointer speed",
   "mobileControlCalibrate": "Calibrate",
   "mobileControlCalibrating": "Hold the phone still briefly…",
   "mobileControlCalibrationDone": "Calibration complete",
@@ -776,5 +776,12 @@
   "mobileControlMotionStart": "Enable motion",
   "mobileControlMotionPause": "Pause motion",
   "mobileControlMotionOnHint": "Turn your wrist to move. Tap here to pause.",
-  "mobileControlMotionOffHint": "Tap once, then move without holding the screen."
+  "mobileControlMotionOffHint": "Tap once, then move without holding the screen.",
+  "mobileControlTarget": "Control target",
+  "mobileControlTargetHint": "Connect to several computers, control one at a time. Switching stops the current session; tap Start to control the selected computer.",
+  "mobileControlPointerSpeed": "Touchpad pointer speed",
+  "mobileControlScrollSpeed": "Scroll speed",
+  "mobileControlScrollRail": "Slide to\nscroll",
+  "mobileControlPermissionDesktop": "Allow remote control on the computer, then start again. On Linux, accept the system remote-control prompt.",
+  "mobileControlLinuxTextHint": "Linux can commit only characters available in the computer’s current keyboard layout. For Chinese and emoji, use the virtual keyboard with the computer’s input method. Unsupported text stays in your draft."
 }

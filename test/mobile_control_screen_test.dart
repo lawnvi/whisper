@@ -99,22 +99,28 @@ void main() {
   }
 
   Widget app({
-    Future<void> Function()? onStart,
+    Future<void> Function(String)? onStart,
     ThemeData? theme,
     double scale = 1,
+    bool reduceMotion = true,
+    List<MobileControlTarget> Function()? targets,
   }) => MaterialApp(
     locale: const Locale('en'),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     theme: theme ?? AppTheme.lightTheme,
     home: MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+      data: MediaQueryData(
+        textScaler: TextScaler.linear(scale),
+        disableAnimations: reduceMotion,
+      ),
       child: MobileControlScreen(
         peerId: 'mac',
         peerName: 'My Mac',
+        targets: targets,
         coordinator: coordinator,
         sensor: sensor,
-        onStart: onStart ?? start,
+        onStart: onStart ?? (_) => start(),
         onStop: () => coordinator.stopSharing(sendControl: controls.add),
       ),
     ),
@@ -135,7 +141,7 @@ void main() {
       await mount(
         tester,
         app(
-          onStart: () async =>
+          onStart: (_) async =>
               throw const MobileControlStartException('Trust required'),
         ),
       );
@@ -518,11 +524,118 @@ void main() {
       expect(orientations(), ['DeviceOrientation.portraitUp']);
     },
   );
+  testWidgets(
+    'target switching releases the previous session and requires start',
+    (tester) async {
+      final selected = <String>[];
+      await mount(
+        tester,
+        app(
+          targets: () => [
+            const MobileControlTarget('mac', 'My Mac'),
+            const MobileControlTarget('pc', 'Windows PC', platform: 'windows'),
+          ],
+          onStart: (id) async {
+            selected.add(id);
+            if (id == 'mac') await start();
+          },
+        ),
+      );
+      await tester.tap(find.byTooltip('Start control'));
+      await tester.pump();
+      await tester.tap(find.text('My Mac'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Windows PC'));
+      await tester.pumpAndSettle();
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+      expect(selected, ['mac']);
+      expect(find.text('Windows PC'), findsOneWidget);
+      await tester.tap(find.byTooltip('Start control'));
+      await tester.pump();
+      expect(selected, ['mac', 'pc']);
+      await tester.tap(find.text('Keyboard'));
+      await tester.pump();
+      await tester.tap(find.text('Fn / symbols'));
+      await tester.pump();
+      expect(find.text('Win'), findsOneWidget);
+      expect(find.text('Alt'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('settings remain available in touchpad mode and persist speeds', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Pointer settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Touchpad pointer speed'), findsOneWidget);
+    expect(find.text('Scroll speed'), findsOneWidget);
+    final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
+    expect(sliders, hasLength(2));
+    sliders[0].onChanged!(2);
+    sliders[0].onChangeEnd!(2);
+    sliders[1].onChanged!(0.5);
+    sliders[1].onChangeEnd!(0.5);
+    await tester.pump();
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getDouble('mobile_pointer_speed'), 2);
+    expect(preferences.getDouble('mobile_scroll_speed'), 0.5);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('keyboard transition hides orientation reflow and blocks input', (
+    tester,
+  ) async {
+    await mount(tester, app(reduceMotion: false));
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    await tester.tap(find.text('Keyboard'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final fade = tester.widget<FadeTransition>(
+      find.byType(FadeTransition).first,
+    );
+    expect(fade.opacity.value, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(find.text('Q'), findsOneWidget);
+    final before = transport.sent
+        .where((p) => p.eventType == RemoteInputEventType.key)
+        .length;
+    await tester.tap(find.text('Q'), warnIfMissed: false);
+    await tester.pump();
+    expect(
+      transport.sent
+          .where((p) => p.eventType == RemoteInputEventType.key)
+          .length,
+      before,
+    );
+    tester.view.physicalSize = const Size(640, 360);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Q'));
+    await tester.pump();
+    expect(
+      transport.sent
+          .where((p) => p.eventType == RemoteInputEventType.key)
+          .length,
+      before + 2,
+    );
+    await tester.tap(find.byTooltip('Mouse'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mobile-touchpad')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('permission failure explains the Mac setting', (tester) async {
     await mount(
       tester,
       app(
-        onStart: () async {
+        onStart: (_) async {
           await start();
           await coordinator.handleControlMessage(
             RemoteInputControlMessage(

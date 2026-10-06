@@ -4,6 +4,48 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Linux remote input native backend', () {
+    test('manual portal input preserves desktop EIS and checks text first', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      final start = plugin.substring(
+        plugin.indexOf('  bool StartInjection('),
+        plugin.indexOf('  bool StartX11Injection('),
+      );
+      expect(start, contains('manual && RemoteDesktopPortalAvailable()'));
+      expect(
+        start,
+        contains('StartRemoteDesktopPortalSession(&session, error, false)'),
+      );
+      expect(start, contains('TryStartPortalInjection('));
+      final text = plugin.substring(
+        plugin.indexOf('  bool InjectManualText('),
+        plugin.indexOf('  void InjectEvent('),
+      );
+      expect(text, contains('session_id != injection_session_id_'));
+      expect(text, contains('g_utf8_validate'));
+      expect(text, contains('text->size() > 4096'));
+      expect(
+        text.indexOf('XKeysymToKeycode(portal_x_display_'),
+        lessThan(text.indexOf('ManualPortalKeyLocked(')),
+      );
+      expect(text, isNot(contains('XChangeKeyboardMapping')));
+      expect(text, isNot(contains('gtk_clipboard_set')));
+    });
+
+    test('manual movement skips edge release and preserves pixel scroll', () {
+      final plugin = File('linux/remote_input_plugin.cc').readAsStringSync();
+      expect(plugin, contains('!manual_injection_ && !active_start'));
+      expect(plugin, contains('!manual_injection_ && active_start'));
+      expect(plugin, contains('manual_remainder_x_ = raw_x - delta_x'));
+      final portal = plugin.substring(
+        plugin.indexOf('  void InjectManualPortalEventLocked('),
+        plugin.indexOf('  void InjectPortalEventLocked('),
+      );
+      expect(portal, contains('JsonString(json, "scrollUnit") != "pixel"'));
+      expect(portal, contains('(wheel ? -gain : gain)'));
+      expect(portal, contains('SetInjectedButton(button, down)'));
+      expect(portal, contains('SetInjectedKey(key, down)'));
+    });
+
     test('release builds require and bundle the Wayland client library', () {
       final workflow = File('.github/workflows/release.yml').readAsStringSync();
       final cmake = File('linux/CMakeLists.txt').readAsStringSync();

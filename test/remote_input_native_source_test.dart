@@ -24,6 +24,35 @@ void main() {
       expect(source, contains('remote_cursor_.Reset()'));
     });
 
+    test(
+      'manual input keeps cursor position and rejects failed text delivery',
+      () {
+        expect(
+          source,
+          contains('!manual_injection_ && IsInjectionReverseRelease'),
+        );
+        expect(
+          source,
+          contains('!manual_injection_ && JsonBool(json, "activeStart")'),
+        );
+        expect(source, contains('manual_remainder_x_ = raw_x - delta_x'));
+        final text = source.substring(
+          source.indexOf('  bool InjectUnicodeText('),
+          source.indexOf('  void InjectEvent('),
+        );
+        expect(text, contains('session_id != injection_session_id_'));
+        expect(text, contains('text->size() > 4096'));
+        expect(text, contains('MB_ERR_INVALID_CHARS'));
+        expect(text, contains('KEYEVENTF_UNICODE'));
+        expect(
+          text,
+          contains('SendInput(count, events, sizeof(INPUT)) != count'),
+        );
+        expect(text, contains('SendInput(1, &events[unit * 2 + 1]'));
+        expect(text, isNot(contains('SetClipboardData')));
+      },
+    );
+
     test('injects keyboard events with scan codes', () {
       expect(source, contains('MapVirtualKeyW'));
       expect(source, contains('KEYEVENTF_SCANCODE'));

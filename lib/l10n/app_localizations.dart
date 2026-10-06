@@ -247,7 +247,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlSensitivity.
   ///
   /// In zh, this message translates to:
-  /// **'体感灵敏度'**
+  /// **'体感移动速度'**
   String get mobileControlSensitivity;
 
   /// No description provided for @mobileControlCalibrate.
@@ -2967,6 +2967,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'点一下开启，无需一直按住屏幕。'**
   String get mobileControlMotionOffHint;
+
+  /// No description provided for @mobileControlTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制目标'**
+  String get mobileControlTarget;
+
+  /// No description provided for @mobileControlTargetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以连接多台电脑，每次只控制一台。切换时结束当前控制，点击“开始”控制新电脑。'**
+  String get mobileControlTargetHint;
+
+  /// No description provided for @mobileControlPointerSpeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'触控板移动速度'**
+  String get mobileControlPointerSpeed;
+
+  /// No description provided for @mobileControlScrollSpeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚轮滑动速度'**
+  String get mobileControlScrollSpeed;
+
+  /// No description provided for @mobileControlScrollRail.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑动\n滚动'**
+  String get mobileControlScrollRail;
+
+  /// No description provided for @mobileControlPermissionDesktop.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在电脑上允许远程控制后重试。Linux 需要接受系统的远程控制授权。'**
+  String get mobileControlPermissionDesktop;
+
+  /// No description provided for @mobileControlLinuxTextHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'Linux 只能发送电脑当前键盘布局支持的字符。中文和 emoji 请通过虚拟键盘配合电脑输入法输入。不支持的文字会保留在草稿中。'**
+  String get mobileControlLinuxTextHint;
 }
 
 class _AppLocalizationsDelegate

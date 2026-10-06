@@ -89,7 +89,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Movimiento no disponible. Se ha activado el panel táctil.';
 
   @override
-  String get mobileControlSensitivity => 'Sensibilidad del movimiento';
+  String get mobileControlSensitivity => 'Velocidad del puntero por movimiento';
 
   @override
   String get mobileControlCalibrate => 'Calibrar';
@@ -1734,4 +1734,29 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mobileControlMotionOffHint =>
       'Toca una vez y mueve sin mantener pulsada la pantalla.';
+
+  @override
+  String get mobileControlTarget => 'Equipo a controlar';
+
+  @override
+  String get mobileControlTargetHint =>
+      'Puedes conectar varios equipos y controlar uno a la vez. Al cambiar se detiene la sesión; toca Iniciar para controlar el equipo seleccionado.';
+
+  @override
+  String get mobileControlPointerSpeed =>
+      'Velocidad del puntero del panel táctil';
+
+  @override
+  String get mobileControlScrollSpeed => 'Velocidad de desplazamiento';
+
+  @override
+  String get mobileControlScrollRail => 'Desliza\npara desplazar';
+
+  @override
+  String get mobileControlPermissionDesktop =>
+      'Permite el control remoto en el equipo y vuelve a iniciar. En Linux, acepta la solicitud de control remoto del sistema.';
+
+  @override
+  String get mobileControlLinuxTextHint =>
+      'Linux solo puede enviar caracteres disponibles en la distribución de teclado del equipo. Para chino y emoji, usa el teclado virtual con el método de entrada del equipo. El texto no compatible se conserva en el borrador.';
 }

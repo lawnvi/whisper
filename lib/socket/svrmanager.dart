@@ -4684,7 +4684,7 @@ class WsSvrManager {
           final remoteProfile = _requireRemoteProfileForSession(session);
           final manual = control.mode == RemoteInputMode.manual;
           final manualAllowed =
-              Platform.isMacOS &&
+              supportsManualRemoteInputSink() &&
               remoteProfile.protocolVersion >= 11 &&
               remoteProfile.capabilities.remoteInputManualSourceV1;
           final localCanInject = manual
@@ -4848,7 +4848,7 @@ class WsSvrManager {
         systemAudioSourceV1: supportsNativeSystemAudio(),
         speakerSinkV1: true,
         remoteInputManualSourceV1: Platform.isAndroid,
-        remoteInputManualSinkV1: Platform.isMacOS,
+        remoteInputManualSinkV1: supportsManualRemoteInputSink(),
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
         remoteInputTopologyV1: hasTopology,
