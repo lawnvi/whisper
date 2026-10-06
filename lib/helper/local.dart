@@ -303,6 +303,17 @@ class LocalSetting {
     await _setSP(_audioSharePlaybackGain, gain.clamp(1.0, 3.0).toDouble());
   }
 
+  Future<double> mobileInputSensitivity() async {
+    final value =
+        (await _preferences()).getDouble('mobile_input_sensitivity') ?? 1.0;
+    return value.isFinite ? value.clamp(0.5, 3.0) : 1.0;
+  }
+
+  Future<void> setMobileInputSensitivity(double value) => _setSP(
+    'mobile_input_sensitivity',
+    value.isFinite ? value.clamp(0.5, 3.0) : 1.0,
+  );
+
   Future<double> remoteInputScrollMultiplier() async {
     final SharedPreferences sp = await _preferences();
     final raw = sp.get(_remoteInputScrollMultiplier);

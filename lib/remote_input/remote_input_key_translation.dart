@@ -543,6 +543,102 @@ const List<RemoteInputKeyCodeSet> _regularKeyCodeSets = <RemoteInputKeyCodeSet>[
       macKeyCode: 126,
       windowsKeyCode: 0x26,
       linuxKeyCode: 103),
+  RemoteInputKeyCodeSet(
+    semantic: 'home',
+    macKeyCode: 115,
+    windowsKeyCode: 36,
+    linuxKeyCode: 102,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'end',
+    macKeyCode: 119,
+    windowsKeyCode: 35,
+    linuxKeyCode: 107,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'pageUp',
+    macKeyCode: 116,
+    windowsKeyCode: 33,
+    linuxKeyCode: 104,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'pageDown',
+    macKeyCode: 121,
+    windowsKeyCode: 34,
+    linuxKeyCode: 109,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f1',
+    macKeyCode: 122,
+    windowsKeyCode: 112,
+    linuxKeyCode: 59,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f2',
+    macKeyCode: 120,
+    windowsKeyCode: 113,
+    linuxKeyCode: 60,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f3',
+    macKeyCode: 99,
+    windowsKeyCode: 114,
+    linuxKeyCode: 61,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f4',
+    macKeyCode: 118,
+    windowsKeyCode: 115,
+    linuxKeyCode: 62,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f5',
+    macKeyCode: 96,
+    windowsKeyCode: 116,
+    linuxKeyCode: 63,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f6',
+    macKeyCode: 97,
+    windowsKeyCode: 117,
+    linuxKeyCode: 64,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f7',
+    macKeyCode: 98,
+    windowsKeyCode: 118,
+    linuxKeyCode: 65,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f8',
+    macKeyCode: 100,
+    windowsKeyCode: 119,
+    linuxKeyCode: 66,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f9',
+    macKeyCode: 101,
+    windowsKeyCode: 120,
+    linuxKeyCode: 67,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f10',
+    macKeyCode: 109,
+    windowsKeyCode: 121,
+    linuxKeyCode: 68,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f11',
+    macKeyCode: 103,
+    windowsKeyCode: 122,
+    linuxKeyCode: 87,
+  ),
+  RemoteInputKeyCodeSet(
+    semantic: 'f12',
+    macKeyCode: 111,
+    windowsKeyCode: 123,
+    linuxKeyCode: 88,
+  ),
 ];
 
 RemoteInputKeyCodeSet? _regularKeyCodesFor(
@@ -577,4 +673,15 @@ RemoteInputKeyCodeSet? _regularKeyCodesFor(
     }
   }
   return null;
+}
+
+/// Shared semantic lookup for synthetic/mobile input; no desktop capture needed.
+RemoteInputKeyCodeSet remoteInputKeyCodes(String semantic) {
+  for (final codes in _regularKeyCodeSets) {
+    if (codes.semantic == semantic) return codes;
+  }
+  for (final modifier in RemoteInputModifierSemantic.values) {
+    if (modifier.name == semantic) return _modifierCodes(modifier);
+  }
+  throw ArgumentError.value(semantic, 'semantic', 'unknown input key');
 }

@@ -10,6 +10,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(DirPlugin())
         flutterEngine.plugins.add(BackgroundKeepAlivePlugin())
         flutterEngine.plugins.add(AudioSharePlugin())
+        flutterEngine.plugins.add(MobileMotionPlugin())
         flutterEngine.plugins.add(AndroidDocumentPickerPlugin())
         flutterEngine.plugins.add(AndroidSystemSharePlugin())
         flutterEngine.plugins.add(TransferNotificationPlugin())
