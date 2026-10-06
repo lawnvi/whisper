@@ -157,7 +157,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlTouchHint.
   ///
   /// In zh, this message translates to:
-  /// **'单指移动 · 轻点点击 · 双指滚动'**
+  /// **'单指移动 · 轻点左击\n双指轻点右击 · 双指滑动滚动'**
   String get mobileControlTouchHint;
 
   /// No description provided for @mobileControlHoldScroll.
@@ -205,7 +205,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlFunctionKeys.
   ///
   /// In zh, this message translates to:
-  /// **'功能 / 导航'**
+  /// **'功能 / 符号'**
   String get mobileControlFunctionKeys;
 
   /// No description provided for @mobileControlSendText.
@@ -2943,6 +2943,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'开始'**
   String get mobileControlStartShort;
+
+  /// No description provided for @mobileControlMotionStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启体感'**
+  String get mobileControlMotionStart;
+
+  /// No description provided for @mobileControlMotionPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停体感'**
+  String get mobileControlMotionPause;
+
+  /// No description provided for @mobileControlMotionOnHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'转腕即可移动，点此暂停。'**
+  String get mobileControlMotionOnHint;
+
+  /// No description provided for @mobileControlMotionOffHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点一下开启，无需一直按住屏幕。'**
+  String get mobileControlMotionOffHint;
 }
 
 class _AppLocalizationsDelegate

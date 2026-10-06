@@ -37,7 +37,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlHoldMove => '按住此处，转腕移动光标';
 
   @override
-  String get mobileControlTouchHint => '单指移动 · 轻点点击 · 双指滚动';
+  String get mobileControlTouchHint => '单指移动 · 轻点左击\n双指轻点右击 · 双指滑动滚动';
 
   @override
   String get mobileControlHoldScroll => '按住转腕滚动';
@@ -61,7 +61,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlMainKeys => '主键盘';
 
   @override
-  String get mobileControlFunctionKeys => '功能 / 导航';
+  String get mobileControlFunctionKeys => '功能 / 符号';
 
   @override
   String get mobileControlSendText => '发送文字';
@@ -1579,4 +1579,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mobileControlStartShort => '开始';
+
+  @override
+  String get mobileControlMotionStart => '开启体感';
+
+  @override
+  String get mobileControlMotionPause => '暂停体感';
+
+  @override
+  String get mobileControlMotionOnHint => '转腕即可移动，点此暂停。';
+
+  @override
+  String get mobileControlMotionOffHint => '点一下开启，无需一直按住屏幕。';
 }

@@ -8,7 +8,7 @@
   "mobileControlAir": "Air mouse",
   "mobileControlTouchpad": "Touchpad",
   "mobileControlHoldMove": "Hold here and turn your wrist to move",
-  "mobileControlTouchHint": "Move with one finger · Tap to click · Scroll with two",
+  "mobileControlTouchHint": "One finger to move · Tap to click\nTwo fingers: tap to right-click, slide to scroll",
   "mobileControlHoldScroll": "Hold and tilt to scroll",
   "mobileControlScroll": "Swipe to scroll",
   "mobileControlLeft": "Left click",
@@ -16,7 +16,7 @@
   "mobileControlKeyboard": "Virtual keyboard",
   "mobileControlText": "Text input",
   "mobileControlMainKeys": "Main keys",
-  "mobileControlFunctionKeys": "Function / navigation",
+  "mobileControlFunctionKeys": "Fn / symbols",
   "mobileControlSendText": "Send text",
   "mobileControlTextHint": "Select a text field on the computer, then write and send.",
   "mobileControlTextTooLong": "Send up to 4 KiB of text at a time.",
@@ -772,5 +772,9 @@
   "mobileControlDragHint": "Hold the left button to drag.",
   "mobileControlPrecisionHint": "Small movements give finer control. Turn faster to travel farther.",
   "mobileControlCalibrationRetry": "Keep the phone still and try calibrating again.",
-  "mobileControlStartShort": "Start"
+  "mobileControlStartShort": "Start",
+  "mobileControlMotionStart": "Enable motion",
+  "mobileControlMotionPause": "Pause motion",
+  "mobileControlMotionOnHint": "Turn your wrist to move. Tap here to pause.",
+  "mobileControlMotionOffHint": "Tap once, then move without holding the screen."
 }

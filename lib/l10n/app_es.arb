@@ -8,7 +8,7 @@
   "mobileControlAir": "Ratón por movimiento",
   "mobileControlTouchpad": "Panel táctil",
   "mobileControlHoldMove": "Mantén pulsado y gira la muñeca para mover",
-  "mobileControlTouchHint": "Un dedo para mover · Toca para hacer clic · Dos para desplazar",
+  "mobileControlTouchHint": "Un dedo: mover y tocar para hacer clic\nDos dedos: tocar para clic derecho, deslizar para desplazar",
   "mobileControlHoldScroll": "Mantén pulsado e inclina para desplazar",
   "mobileControlScroll": "Desliza para desplazar",
   "mobileControlLeft": "Clic izquierdo",
@@ -16,7 +16,7 @@
   "mobileControlKeyboard": "Teclado virtual",
   "mobileControlText": "Entrada de texto",
   "mobileControlMainKeys": "Teclas principales",
-  "mobileControlFunctionKeys": "Función / navegación",
+  "mobileControlFunctionKeys": "Fn / símbolos",
   "mobileControlSendText": "Enviar texto",
   "mobileControlTextHint": "Selecciona un campo en el ordenador, escribe y envía.",
   "mobileControlTextTooLong": "Envía hasta 4 KiB de texto cada vez.",
@@ -799,5 +799,9 @@
   "mobileControlDragHint": "Mantén el botón izquierdo para arrastrar.",
   "mobileControlPrecisionHint": "Mueve despacio para mayor precisión. Gira más rápido para recorrer más distancia.",
   "mobileControlCalibrationRetry": "Mantén el teléfono quieto y vuelve a calibrar.",
-  "mobileControlStartShort": "Iniciar"
+  "mobileControlStartShort": "Iniciar",
+  "mobileControlMotionStart": "Activar movimiento",
+  "mobileControlMotionPause": "Pausar movimiento",
+  "mobileControlMotionOnHint": "Gira la muñeca para mover. Toca aquí para pausar.",
+  "mobileControlMotionOffHint": "Toca una vez y mueve sin mantener pulsada la pantalla."
 }

@@ -71,6 +71,16 @@ class MobileInputController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleMotion() {
+    if (!_active || !air) return;
+    if (moving) {
+      reset();
+    } else {
+      holdMotion(down: true);
+      _suppressUntil = _nowMicros + 80000;
+    }
+  }
+
   void sample(MotionSample sample) {
     final wasCalibrating = motion.calibrating;
     final enabled =
@@ -129,11 +139,11 @@ class MobileInputController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void click() {
+  void click([int buttonNumber = 0]) {
     // A touchpad tap must not release a button held by another finger.
-    if (_buttons.contains(0)) return;
-    button(0, true);
-    button(0, false);
+    if (_buttons.isNotEmpty) return;
+    button(buttonNumber, true);
+    button(buttonNumber, false);
   }
 
   void toggleModifier(String semantic) {

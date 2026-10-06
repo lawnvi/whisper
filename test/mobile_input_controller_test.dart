@@ -270,6 +270,35 @@ void main() {
       expect(sent, hasLength(count));
     },
   );
+  testWidgets(
+    'latched motion continues without a touch and pause releases held input',
+    (tester) async {
+      var micros = 0;
+      final input = MobileInputController((type, data) {
+        sent.add((type, data));
+        return sent.length;
+      }, monotonicMicros: () => micros)..active = true;
+      addTearDown(input.dispose);
+      input.toggleMotion();
+      micros = 80000;
+      input.sample(MotionSample(micros, [0, 0, 1], [0, 0, 9.8]));
+      micros = 90000;
+      input.sample(MotionSample(micros, [0, 0, 1], [0, 0, 9.8]));
+      input.flush();
+      expect(sent.single.$1, RemoteInputEventType.mouseMove);
+      input.button(0, true);
+      input.toggleMotion();
+      expect(input.moving, isFalse);
+      expect(sent.last.$2, {'button': 0, 'down': false});
+      final count = sent.length;
+      micros = 300000;
+      input.sample(MotionSample(micros, [0, 0, 1], [0, 0, 9.8]));
+      micros = 310000;
+      input.sample(MotionSample(micros, [0, 0, 1], [0, 0, 9.8]));
+      input.flush();
+      expect(sent.length, count);
+    },
+  );
   testWidgets('inactive controller sends no packets', (tester) async {
     controller.active = false;
     controller.move(const Offset(1, 2));

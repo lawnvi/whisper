@@ -39,10 +39,17 @@ void main() {
   late _Transport transport;
   late _Sensor sensor;
   late List<RemoteInputControlMessage> controls;
+  late List<MethodCall> platformCalls;
   const channel = MethodChannel('test.mobile_screen');
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     controls = [];
+    platformCalls = [];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          platformCalls.add(call);
+          return null;
+        });
     transport = _Transport();
     sensor = _Sensor(false);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -56,6 +63,8 @@ void main() {
   tearDown(() async {
     await coordinator.stopLocal();
     await sensor.events.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
@@ -157,7 +166,7 @@ void main() {
         isEmpty,
       );
       expect(transport.sent.length, greaterThanOrEqualTo(before));
-      await tester.tap(find.text('Function / navigation'));
+      await tester.tap(find.text('Fn / symbols'));
       await tester.pump();
       await tester.tap(find.byTooltip('Command'));
       await tester.pump();
@@ -255,9 +264,7 @@ void main() {
       pointer: 1,
     );
     await tester.pump();
-    final pad = find.text(
-      'Move with one finger · Tap to click · Scroll with two',
-    );
+    final pad = find.byKey(const ValueKey('mobile-touchpad'));
     final finger = await tester.startGesture(tester.getCenter(pad), pointer: 2);
     await tester.pump();
     await finger.moveBy(const Offset(30, 0));
@@ -353,7 +360,7 @@ void main() {
         [true, false],
       );
       await held.up();
-      await tester.tap(find.text('Mouse'));
+      await tester.tap(find.byTooltip('Mouse'));
       await tester.pump();
       final next = await tester.startGesture(
         tester.getCenter(find.text('Left click')),
@@ -399,6 +406,118 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('motion toggles without holding and pauses on mode change', (
+    tester,
+  ) async {
+    sensor = _Sensor(true);
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    await tester.tap(find.text('Enable motion'));
+    await tester.pump();
+    expect(find.text('Pause motion'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Pause motion'), findsOneWidget);
+    await tester.tap(find.text('Pause motion'));
+    await tester.pump();
+    expect(find.text('Enable motion'), findsOneWidget);
+    await tester.tap(find.text('Enable motion'));
+    await tester.pump();
+    await tester.tap(find.text('Keyboard'));
+    await tester.pump();
+    expect(sensor.events.hasListener, isFalse);
+    await tester.tap(find.byTooltip('Mouse'));
+    await tester.pump();
+    expect(find.text('Enable motion'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('expanded touchpad supports a two-finger right click', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    tester.view.physicalSize = const Size(360, 640);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    final pad = find.byKey(const ValueKey('mobile-touchpad'));
+    expect(tester.getSize(pad).width, 328);
+    expect(tester.getSize(pad).height, greaterThan(320));
+    final first = await tester.startGesture(tester.getCenter(pad), pointer: 1);
+    final second = await tester.startGesture(
+      tester.getCenter(pad) + const Offset(40, 0),
+      pointer: 2,
+    );
+    await second.up();
+    await first.up();
+    await tester.pump();
+    final events = transport.sent
+        .where((p) => p.eventType != RemoteInputEventType.heartbeat)
+        .toList();
+    expect(events.map((p) => p.eventType), [
+      RemoteInputEventType.mouseButton,
+      RemoteInputEventType.mouseButton,
+    ]);
+    expect(jsonDecode(utf8.decode(events.first.payload)), {
+      'button': 1,
+      'down': true,
+    });
+    expect(jsonDecode(utf8.decode(events.last.payload)), {
+      'button': 1,
+      'down': false,
+    });
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets(
+    'keyboard requests landscape, fits main keys, and restores portrait',
+    (tester) async {
+      await mount(tester, app());
+      await tester.tap(find.text('Keyboard'));
+      await tester.pump();
+      List<dynamic> orientations() =>
+          platformCalls
+                  .where(
+                    (c) => c.method == 'SystemChrome.setPreferredOrientations',
+                  )
+                  .last
+                  .arguments
+              as List;
+      expect(orientations(), [
+        'DeviceOrientation.landscapeLeft',
+        'DeviceOrientation.landscapeRight',
+      ]);
+      tester.view.physicalSize = const Size(640, 360);
+      await tester.pump();
+      for (final key in [
+        'escape',
+        'backspace',
+        'keyP',
+        'backslash',
+        'capsLock',
+        'enter',
+        'shift',
+        'slash',
+        'space',
+        'meta',
+        'arrowRight',
+      ]) {
+        final bounds = tester.getRect(find.byKey(ValueKey('mobile-key-$key')));
+        expect(bounds.left, greaterThanOrEqualTo(0), reason: key);
+        expect(bounds.right, lessThanOrEqualTo(640), reason: key);
+        expect(bounds.bottom, lessThanOrEqualTo(360), reason: key);
+        expect(bounds.width, greaterThanOrEqualTo(48), reason: key);
+        expect(bounds.height, greaterThanOrEqualTo(48), reason: key);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Mouse'));
+      await tester.pump();
+      expect(orientations(), ['DeviceOrientation.portraitUp']);
+      await tester.tap(find.text('Keyboard'));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(orientations(), ['DeviceOrientation.portraitUp']);
+    },
+  );
   testWidgets('permission failure explains the Mac setting', (tester) async {
     await mount(
       tester,

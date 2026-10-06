@@ -39,7 +39,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlTouchHint =>
-      'Un dedo para mover · Toca para hacer clic · Dos para desplazar';
+      'Un dedo: mover y tocar para hacer clic\nDos dedos: tocar para clic derecho, deslizar para desplazar';
 
   @override
   String get mobileControlHoldScroll =>
@@ -64,7 +64,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlMainKeys => 'Teclas principales';
 
   @override
-  String get mobileControlFunctionKeys => 'Función / navegación';
+  String get mobileControlFunctionKeys => 'Fn / símbolos';
 
   @override
   String get mobileControlSendText => 'Enviar texto';
@@ -1720,4 +1720,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mobileControlStartShort => 'Iniciar';
+
+  @override
+  String get mobileControlMotionStart => 'Activar movimiento';
+
+  @override
+  String get mobileControlMotionPause => 'Pausar movimiento';
+
+  @override
+  String get mobileControlMotionOnHint =>
+      'Gira la muñeca para mover. Toca aquí para pausar.';
+
+  @override
+  String get mobileControlMotionOffHint =>
+      'Toca una vez y mueve sin mantener pulsada la pantalla.';
 }

@@ -8,7 +8,7 @@
   "mobileControlAir": "体感鼠标",
   "mobileControlTouchpad": "触控板",
   "mobileControlHoldMove": "按住此处，转腕移动光标",
-  "mobileControlTouchHint": "单指移动 · 轻点点击 · 双指滚动",
+  "mobileControlTouchHint": "单指移动 · 轻点左击\n双指轻点右击 · 双指滑动滚动",
   "mobileControlHoldScroll": "按住转腕滚动",
   "mobileControlScroll": "滑动滚动",
   "mobileControlLeft": "左键",
@@ -16,7 +16,7 @@
   "mobileControlKeyboard": "虚拟键盘",
   "mobileControlText": "文字输入",
   "mobileControlMainKeys": "主键盘",
-  "mobileControlFunctionKeys": "功能 / 导航",
+  "mobileControlFunctionKeys": "功能 / 符号",
   "mobileControlSendText": "发送文字",
   "mobileControlTextHint": "先在电脑选中输入框，再输入并发送文字。",
   "mobileControlTextTooLong": "每次最多发送 4 KiB 文字。",
@@ -848,5 +848,9 @@
   "mobileControlDragHint": "按住左键即可拖拽。",
   "mobileControlPrecisionHint": "慢转精细定位，快转大幅移动。",
   "mobileControlCalibrationRetry": "请保持手机静止，再试一次校准。",
-  "mobileControlStartShort": "开始"
+  "mobileControlStartShort": "开始",
+  "mobileControlMotionStart": "开启体感",
+  "mobileControlMotionPause": "暂停体感",
+  "mobileControlMotionOnHint": "转腕即可移动，点此暂停。",
+  "mobileControlMotionOffHint": "点一下开启，无需一直按住屏幕。"
 }

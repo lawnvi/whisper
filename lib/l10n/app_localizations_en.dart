@@ -38,7 +38,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mobileControlTouchHint =>
-      'Move with one finger · Tap to click · Scroll with two';
+      'One finger to move · Tap to click\nTwo fingers: tap to right-click, slide to scroll';
 
   @override
   String get mobileControlHoldScroll => 'Hold and tilt to scroll';
@@ -62,7 +62,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlMainKeys => 'Main keys';
 
   @override
-  String get mobileControlFunctionKeys => 'Function / navigation';
+  String get mobileControlFunctionKeys => 'Fn / symbols';
 
   @override
   String get mobileControlSendText => 'Send text';
@@ -1697,4 +1697,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mobileControlStartShort => 'Start';
+
+  @override
+  String get mobileControlMotionStart => 'Enable motion';
+
+  @override
+  String get mobileControlMotionPause => 'Pause motion';
+
+  @override
+  String get mobileControlMotionOnHint =>
+      'Turn your wrist to move. Tap here to pause.';
+
+  @override
+  String get mobileControlMotionOffHint =>
+      'Tap once, then move without holding the screen.';
 }
