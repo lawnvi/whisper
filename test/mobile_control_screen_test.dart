@@ -584,6 +584,80 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('open pointer settings follows calibration and disconnect', (
+    tester,
+  ) async {
+    sensor = _Sensor(true);
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Pointer settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider), findsNWidgets(3));
+    final calibrate = find.widgetWithText(OutlinedButton, 'Calibrate');
+    expect(tester.widget<OutlinedButton>(calibrate).onPressed, isNotNull);
+    await tester.tap(calibrate);
+    await tester.pump();
+    expect(find.text('Hold the phone still briefly…'), findsOneWidget);
+    for (var i = 0; i < 50; i++) {
+      sensor.events.add(MotionSample(i * 10000, [0, 0, 0], [0, 0, 9.8]));
+    }
+    await tester.pump();
+    expect(tester.widget<OutlinedButton>(calibrate).onPressed, isNotNull);
+    await coordinator.stopLocal();
+    await tester.pump();
+    expect(tester.widget<OutlinedButton>(calibrate).onPressed, isNull);
+    expect(sensor.events.hasListener, isFalse);
+    await tester.pump(const Duration(seconds: 6));
+    expect(
+      find.text('Keep the phone still and try calibrating again.'),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('held keyboard repeat stops on page change and disconnect', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    await tester.tap(find.text('Keyboard'));
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pump();
+    int keyCount() => transport.sent
+        .where((packet) => packet.eventType == RemoteInputEventType.key)
+        .length;
+    final backspace = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('mobile-key-backspace'))),
+      pointer: 1,
+    );
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(keyCount(), 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(keyCount(), 2);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(keyCount(), 4);
+    await tester.tap(find.text('Fn / symbols'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await backspace.up();
+    await tester.pump();
+    expect(keyCount(), 4);
+
+    final arrow = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('mobile-key-arrowLeft'))),
+      pointer: 2,
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(keyCount(), 6);
+    await coordinator.stopLocal();
+    await tester.pump(const Duration(milliseconds: 600));
+    await arrow.up();
+    await tester.pump();
+    expect(keyCount(), 6);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('keyboard transition hides orientation reflow and blocks input', (
     tester,
   ) async {

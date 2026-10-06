@@ -2,6 +2,8 @@
 
 日期：2026-10-06。分支：`codex/mobile-air-mouse-spike`。
 
+后续状态：Ubuntu 的连接端口与 portal 滚轮问题已修复，手机连接、键鼠操作和最终键盘过渡已复测，用户也已确认 Windows、Ubuntu 控制正常。详见[修复与实机验证记录](2026-10-06-mobile-controller-ubuntu-connection-fix.md)。当前代码职责划分见[手机手动控制](../../remote-input-lifecycle.md#手机手动控制)；下面的验证清单保留本次平台扩展提交时的记录。
+
 ## 界面和交互
 
 - 会话入口使用与现有线性图标一致的显示器与指针图形，沿用应用主题。

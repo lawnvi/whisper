@@ -10,6 +10,11 @@ typedef ManualInputSender =
     int Function(RemoteInputEventType type, Map<String, dynamic> payload);
 
 class MobileInputController extends ChangeNotifier {
+  static const keyRepeatDelay = Duration(milliseconds: 400);
+  static const _keyRepeatInterval = Duration(milliseconds: 60);
+  static const _motionSuppression = Duration(milliseconds: 80);
+  static const _movementFrameInterval = Duration(microseconds: 16667);
+
   MobileInputController(this.send, {int Function()? monotonicMicros})
     : _monotonicMicros = monotonicMicros;
   final ManualInputSender send;
@@ -91,7 +96,7 @@ class MobileInputController extends ChangeNotifier {
       reset();
     } else {
       holdMotion(down: true);
-      _suppressUntil = _nowMicros + 80000;
+      _suppressUntil = _nowMicros + _motionSuppression.inMicroseconds;
     }
   }
 
@@ -128,7 +133,7 @@ class MobileInputController extends ChangeNotifier {
             : fromMotion
             ? 1.0
             : pointerSpeed);
-    _flushTimer ??= Timer(const Duration(microseconds: 16667), flush);
+    _flushTimer ??= Timer(_movementFrameInterval, flush);
   }
 
   void flush() {
@@ -157,7 +162,7 @@ class MobileInputController extends ChangeNotifier {
       return;
     }
     flush();
-    _suppressUntil = _nowMicros + 80000;
+    _suppressUntil = _nowMicros + _motionSuppression.inMicroseconds;
     motion.reset();
     send(RemoteInputEventType.mouseButton, {'button': button, 'down': down});
     notifyListeners();
@@ -207,16 +212,13 @@ class MobileInputController extends ChangeNotifier {
     if (!_active) return;
     void begin() {
       key(semantic);
-      _repeatTimer = Timer.periodic(
-        const Duration(milliseconds: 60),
-        (_) => key(semantic),
-      );
+      _repeatTimer = Timer.periodic(_keyRepeatInterval, (_) => key(semantic));
     }
 
     if (immediate) {
       begin();
     } else {
-      _repeatDelay = Timer(const Duration(milliseconds: 400), begin);
+      _repeatDelay = Timer(keyRepeatDelay, begin);
     }
   }
 

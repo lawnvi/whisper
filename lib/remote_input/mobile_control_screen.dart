@@ -2,15 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/remote_input/mobile_control_keyboard.dart';
 import 'package:whisper/remote_input/mobile_input_controller.dart';
 import 'package:whisper/remote_input/mobile_motion.dart';
+import 'package:whisper/remote_input/mobile_pointer_settings.dart';
 import 'package:whisper/remote_input/mobile_touchpad.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
@@ -438,9 +440,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
             Expanded(
               child: _tab == 0
                   ? _pointerPanel()
-                  : SingleChildScrollView(
-                      child: _tab == 1 ? _keyboard() : _textPanel(),
-                    ),
+                  : SingleChildScrollView(child: _textPanel()),
             ),
           ],
         ),
@@ -822,125 +822,28 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       useSafeArea: true,
       builder: (context) => ListenableBuilder(
         listenable: _input,
-        builder: (context, _) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.mobileControlSettings,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 24),
-              _speedSlider(
-                l10n.mobileControlPointerSpeed,
-                _input.pointerSpeed,
-                (value) {
-                  _input.setPointerSpeed(value);
-                },
-                LocalSetting().setMobilePointerSpeed,
-              ),
-              _speedSlider(
-                l10n.mobileControlScrollSpeed,
-                _input.scrollSpeed,
-                (value) {
-                  _input.setScrollSpeed(value);
-                },
-                LocalSetting().setMobileScrollSpeed,
-              ),
-              if (_available) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(child: Text(l10n.mobileControlSensitivity)),
-                    Text(
-                      '${_input.motion.sensitivity.toStringAsFixed(2)}×',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ],
-                ),
-                Slider(
-                  value: _input.motion.sensitivity,
-                  min: 0.5,
-                  max: 3,
-                  divisions: 10,
-                  onChanged: (value) {
-                    _input.setSensitivity(value);
-                  },
-                  onChangeEnd: (value) => unawaited(
-                    LocalSetting().setMobileInputSensitivity(value),
-                  ),
-                ),
-                Text(
-                  l10n.mobileControlPrecisionHint,
-                  style: TextStyle(color: context.whisperPalette.textMuted),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.center_focus_strong_rounded),
-                    onPressed: !_enabled || _input.motion.calibrating
-                        ? null
-                        : () {
-                            _reset();
-                            _input.calibrate();
-                            _calibrationTimer = Timer(
-                              const Duration(seconds: 5),
-                              () {
-                                if (!mounted) return;
-                                _input.cancelCalibration();
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      l10n.mobileControlCalibrationRetry,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                    label: Text(
-                      _input.motion.calibrating
-                          ? l10n.mobileControlCalibrating
-                          : l10n.mobileControlCalibrate,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+        builder: (context, _) => MobilePointerSettings(
+          controller: _input,
+          sensorsAvailable: _available,
+          enabled: _enabled,
+          onCalibrate: _beginCalibration,
         ),
       ),
     );
     if (mounted) _reset();
   }
 
-  Widget _speedSlider(
-    String label,
-    double value,
-    ValueChanged<double> onChanged,
-    Future<void> Function(double) save,
-  ) => Column(
-    children: [
-      Row(
-        children: [
-          Expanded(child: Text(label)),
-          Text('${value.toStringAsFixed(2)}×'),
-        ],
-      ),
-      Slider(
-        value: value,
-        min: 0.5,
-        max: 3,
-        divisions: 10,
-        label: label,
-        onChanged: onChanged,
-        onChangeEnd: (value) => unawaited(save(value)),
-      ),
-    ],
-  );
+  void _beginCalibration() {
+    _reset();
+    _input.calibrate();
+    _calibrationTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      _input.cancelCalibration();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.mobileControlCalibrationRetry)),
+      );
+    });
+  }
 
   Widget _touchpad() => GestureDetector(
     behavior: HitTestBehavior.opaque,
@@ -1046,206 +949,19 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                   ),
                 ),
               ),
-            Expanded(child: _keyboard()),
+            Expanded(
+              child: MobileControlKeyboard(
+                controller: _input,
+                enabled: _enabled,
+                targetPlatform: _target.platform,
+                page: _keyPage,
+              ),
+            ),
           ],
         ),
       ),
     ),
   );
-
-  bool get _macTarget => _target.platform.toLowerCase().contains('mac');
-  String get _metaLabel => _macTarget
-      ? 'Cmd'
-      : _target.platform.toLowerCase().contains('win')
-      ? 'Win'
-      : 'Super';
-
-  Widget _keyboard() {
-    // Keep 12 columns in landscape. Less-used punctuation shares the Fn page.
-    final rows = <List<(String, String)>>[
-      if (_keyPage == 0) ...[
-        [
-          ('escape', 'Esc'),
-          for (final v in '1234567890'.split('')) ('digit$v', v),
-          ('backspace', '⌫'),
-        ],
-        [
-          ('tab', 'Tab'),
-          for (final v in 'QWERTYUIOP'.split('')) ('key$v', v),
-          ('backslash', '\\'),
-        ],
-        [
-          ('capsLock', 'Caps'),
-          for (final v in 'ASDFGHJKL'.split('')) ('key$v', v),
-          ('enter', 'Enter'),
-        ],
-        [
-          ('shift', 'Shift'),
-          for (final v in 'ZXCVBNM'.split('')) ('key$v', v),
-          ('comma', ','),
-          ('period', '.'),
-          ('slash', '/'),
-        ],
-      ] else ...[
-        [for (var i = 1; i <= 12; i++) ('f$i', 'F$i')],
-        [
-          ('home', 'Home'),
-          ('end', 'End'),
-          ('pageUp', 'PgUp'),
-          ('pageDown', 'PgDn'),
-          ('delete', 'Delete'),
-        ],
-        [
-          ('backquote', '`'),
-          ('minus', '-'),
-          ('equal', '='),
-          ('bracketLeft', '['),
-          ('bracketRight', ']'),
-          ('semicolon', ';'),
-          ('quote', "'"),
-        ],
-      ],
-      [
-        ('meta', _metaLabel),
-        ('control', 'Ctrl'),
-        ('alt', _macTarget ? 'Opt' : 'Alt'),
-        if (_keyPage == 1) ('shift', 'Shift'),
-        ('space', 'Space'),
-        ('arrowLeft', '←'),
-        ('arrowDown', '↓'),
-        ('arrowUp', '↑'),
-        ('arrowRight', '→'),
-      ],
-    ];
-    double weight(String key) => switch (key) {
-      'capsLock' => 1.25,
-      'enter' => 1.75,
-      'shift' => 1.75,
-      'space' => 3.25,
-      'meta' || 'control' || 'alt' => 1.1,
-      _ => 1,
-    };
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final width = math.max(
-          620.0 * math.max(1, scale),
-          constraints.maxWidth - 16,
-        );
-        final keyHeight = math.max(
-          48.0 * math.max(1, scale),
-          math.min(
-            56.0,
-            (constraints.maxHeight - 16 - (rows.length - 1) * 4) / rows.length,
-          ),
-        );
-        return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: SingleChildScrollView(
-              key: ValueKey('keyboard-$_keyPage'),
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: width,
-                child: Column(
-                  children: [
-                    for (
-                      var rowIndex = 0;
-                      rowIndex < rows.length;
-                      rowIndex++
-                    ) ...[
-                      if (rowIndex > 0) const SizedBox(height: 4),
-                      SizedBox(
-                        height: keyHeight,
-                        child: Row(
-                          children: [
-                            for (
-                              var index = 0;
-                              index < rows[rowIndex].length;
-                              index++
-                            ) ...[
-                              if (index > 0) const SizedBox(width: 4),
-                              Expanded(
-                                flex: (weight(rows[rowIndex][index].$1) * 100)
-                                    .round(),
-                                child: _keyboardKey(
-                                  rows[rowIndex][index].$1,
-                                  rows[rowIndex][index].$2,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _keyboardKey(String semantic, String label) {
-    final modifier = switch (semantic) {
-      'meta' => _macTarget ? 'Command' : _metaLabel,
-      'control' => 'Control',
-      'alt' => _macTarget ? 'Option' : 'Alt',
-      'shift' => 'Shift',
-      _ => null,
-    };
-    return SizedBox(
-      key: ValueKey('mobile-key-$semantic'),
-      child: modifier == null
-          ? _VirtualKey(
-              label: label,
-              enabled: _enabled,
-              onTap: () => _input.key(semantic),
-              repeat: semantic.startsWith('arrow') || semantic == 'backspace',
-              onRepeatStart: () =>
-                  _input.beginRepeat(semantic, immediate: true),
-              onRepeatStop: _input.cancelRepeat,
-            )
-          : Tooltip(
-              message: modifier,
-              child: Semantics(
-                label: modifier,
-                selected: _input.modifiers.contains(semantic),
-                child: OutlinedButton(
-                  onPressed: _enabled
-                      ? () => _input.toggleModifier(semantic)
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    foregroundColor: Theme.of(context).colorScheme.onSurface,
-                    backgroundColor: _input.modifiers.contains(semantic)
-                        ? Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.12)
-                        : context.whisperPalette.surfaceElevated,
-                    side: BorderSide(
-                      color: _input.modifiers.contains(semantic)
-                          ? Theme.of(context).colorScheme.primary
-                          : context.whisperPalette.borderSubtle,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
 
   Widget _textPanel() => Padding(
     padding: const EdgeInsets.all(16),
@@ -1488,70 +1204,6 @@ class _ModeSelector extends StatelessWidget {
             ),
           ),
       ],
-    ),
-  );
-}
-
-class _VirtualKey extends StatefulWidget {
-  const _VirtualKey({
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-    required this.repeat,
-    required this.onRepeatStart,
-    required this.onRepeatStop,
-  });
-  final String label;
-  final bool enabled, repeat;
-  final VoidCallback onTap, onRepeatStart, onRepeatStop;
-  @override
-  State<_VirtualKey> createState() => _VirtualKeyState();
-}
-
-class _VirtualKeyState extends State<_VirtualKey> {
-  void _cancel() {
-    widget.onRepeatStop();
-  }
-
-  @override
-  void didUpdateWidget(covariant _VirtualKey oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!widget.enabled) _cancel();
-  }
-
-  @override
-  Widget build(BuildContext context) => RawGestureDetector(
-    gestures: widget.enabled && widget.repeat
-        ? <Type, GestureRecognizerFactory>{
-            LongPressGestureRecognizer:
-                GestureRecognizerFactoryWithHandlers<
-                  LongPressGestureRecognizer
-                >(
-                  () => LongPressGestureRecognizer(
-                    duration: const Duration(milliseconds: 400),
-                  ),
-                  (recognizer) {
-                    recognizer.onLongPressStart = (_) {
-                      widget.onRepeatStart();
-                    };
-                    recognizer.onLongPressEnd = (_) {
-                      _cancel();
-                    };
-                    recognizer.onLongPressCancel = _cancel;
-                  },
-                ),
-          }
-        : const <Type, GestureRecognizerFactory>{},
-    child: OutlinedButton(
-      onPressed: widget.enabled ? widget.onTap : null,
-      style: OutlinedButton.styleFrom(
-        padding: EdgeInsets.zero,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
-        backgroundColor: context.whisperPalette.surfaceElevated,
-        side: BorderSide(color: context.whisperPalette.borderSubtle),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      child: Text(widget.label),
     ),
   );
 }
