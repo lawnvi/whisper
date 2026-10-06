@@ -10,7 +10,7 @@ class WirePeerProfile {
     required this.uid,
     required this.name,
     required this.platform,
-    this.protocolVersion = 10,
+    this.protocolVersion = 11,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -138,7 +138,7 @@ class PeerProfile {
     required this.trustedPeerIds,
     required this.autoApproveNewDevices,
     required this.autoConnectEnabled,
-    this.protocolVersion = 10,
+    this.protocolVersion = 11,
     this.capabilities = const PeerCapabilities(),
     this.displayTopology,
   });
@@ -355,6 +355,8 @@ class PeerCapabilities {
     this.fileTransferV3 = false,
     this.systemAudioSourceV1 = false,
     this.speakerSinkV1 = false,
+    this.remoteInputManualSourceV1 = false,
+    this.remoteInputManualSinkV1 = false,
     this.remoteInputSourceV1 = false,
     this.remoteInputSinkV1 = false,
     this.remoteInputTopologyV1 = false,
@@ -369,6 +371,8 @@ class PeerCapabilities {
   final bool fileTransferV3;
   final bool systemAudioSourceV1;
   final bool speakerSinkV1;
+  final bool remoteInputManualSourceV1;
+  final bool remoteInputManualSinkV1;
   final bool remoteInputSourceV1;
   final bool remoteInputSinkV1;
   final bool remoteInputTopologyV1;
@@ -384,6 +388,8 @@ class PeerCapabilities {
       'fileTransferV3': fileTransferV3,
       'systemAudioSourceV1': systemAudioSourceV1,
       'speakerSinkV1': speakerSinkV1,
+      'remoteInputManualSourceV1': remoteInputManualSourceV1,
+      'remoteInputManualSinkV1': remoteInputManualSinkV1,
       'remoteInputSourceV1': remoteInputSourceV1,
       'remoteInputSinkV1': remoteInputSinkV1,
       'remoteInputTopologyV1': remoteInputTopologyV1,
@@ -398,6 +404,10 @@ class PeerCapabilities {
 
   Map<String, dynamic> toWireJson(int protocolVersion) {
     final json = toJson();
+    if (protocolVersion < 11) {
+      json.remove('remoteInputManualSourceV1');
+      json.remove('remoteInputManualSinkV1');
+    }
     if (protocolVersion < 10) {
       json.remove('remoteInputWorkspaceGraphV1');
     }
@@ -409,6 +419,10 @@ class PeerCapabilities {
       fileTransferV3: json['fileTransferV3'] as bool? ?? false,
       systemAudioSourceV1: json['systemAudioSourceV1'] as bool? ?? false,
       speakerSinkV1: json['speakerSinkV1'] as bool? ?? false,
+      remoteInputManualSourceV1:
+          json['remoteInputManualSourceV1'] as bool? ?? false,
+      remoteInputManualSinkV1:
+          json['remoteInputManualSinkV1'] as bool? ?? false,
       remoteInputSourceV1: json['remoteInputSourceV1'] as bool? ?? false,
       remoteInputSinkV1: json['remoteInputSinkV1'] as bool? ?? false,
       remoteInputTopologyV1: json['remoteInputTopologyV1'] as bool? ?? false,
@@ -424,7 +438,7 @@ class PeerCapabilities {
 
   factory PeerCapabilities.fromWireJson(
     Map<String, dynamic> json, {
-    int protocolVersion = 10,
+    int protocolVersion = 11,
   }) {
     const legacyAllowed = <String>{
       'fileTransferV3',
@@ -443,6 +457,9 @@ class PeerCapabilities {
     final allowed = protocolVersion >= 10
         ? legacyAllowed.union(workspaceGraphV1)
         : legacyAllowed;
+    if (protocolVersion >= 11) {
+      allowed.addAll({'remoteInputManualSourceV1', 'remoteInputManualSinkV1'});
+    }
     if (json.keys.any((key) => !allowed.contains(key)) ||
         json.values.any((value) => value is! bool)) {
       throw const FormatException('Invalid wire capabilities');

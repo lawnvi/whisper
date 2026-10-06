@@ -26,6 +26,7 @@ class RemoteInputSession {
     required this.layoutEdge,
     required this.releaseHotkey,
     required this.state,
+    this.mode = RemoteInputMode.edgeTraversal,
     this.remoteClipboardV1 = false,
   });
 
@@ -35,6 +36,7 @@ class RemoteInputSession {
   final RemoteInputEdge? layoutEdge;
   final String releaseHotkey;
   final RemoteInputSessionState state;
+  final RemoteInputMode mode;
   final bool remoteClipboardV1;
 
   RemoteInputSession copyWith({RemoteInputSessionState? state}) {
@@ -45,6 +47,7 @@ class RemoteInputSession {
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
       state: state ?? this.state,
+      mode: mode,
       remoteClipboardV1: remoteClipboardV1,
     );
   }
@@ -90,7 +93,8 @@ class RemoteInputManager {
   RemoteInputControlMessage createOffer({
     required String sourcePeerId,
     required String sinkPeerId,
-    required RemoteInputEdge layoutEdge,
+    RemoteInputEdge? layoutEdge,
+    RemoteInputMode mode = RemoteInputMode.edgeTraversal,
     required String releaseHotkey,
     String sourcePlatform = '',
     String sinkPlatform = '',
@@ -113,12 +117,14 @@ class RemoteInputManager {
       sourcePeerId: sourcePeerId,
       sinkPeerId: sinkPeerId,
       layoutEdge: layoutEdge,
+      mode: mode,
       releaseHotkey: releaseHotkey,
       state: RemoteInputSessionState.offering,
       remoteClipboardV1: remoteClipboardV1,
     );
     return RemoteInputControlMessage(
       action: RemoteInputControlAction.offer,
+      mode: mode,
       sessionId: sessionId,
       sourcePeerId: sourcePeerId,
       sinkPeerId: sinkPeerId,
@@ -146,7 +152,8 @@ class RemoteInputManager {
     String sinkPlatform = '',
     bool remoteClipboardV1 = false,
   }) {
-    if (offer.layoutEdge == null) {
+    if (offer.mode == RemoteInputMode.edgeTraversal &&
+        offer.layoutEdge == null) {
       return RemoteInputControlMessage(
         action: RemoteInputControlAction.error,
         sessionId: offer.sessionId,
@@ -161,6 +168,7 @@ class RemoteInputManager {
       sourcePeerId: offer.sourcePeerId,
       sinkPeerId: offer.sinkPeerId,
       layoutEdge: offer.layoutEdge,
+      mode: offer.mode,
       releaseHotkey: offer.releaseHotkey,
       state: RemoteInputSessionState.connected,
       remoteClipboardV1: offer.remoteClipboardV1 && remoteClipboardV1,
@@ -173,6 +181,7 @@ class RemoteInputManager {
       transport: offer.transport,
       path: offer.path,
       layoutEdge: offer.layoutEdge,
+      mode: offer.mode,
       sourceDisplayId: offer.sourceDisplayId,
       sourceEdge: offer.sourceEdge,
       sourceSegmentStart: offer.sourceSegmentStart,
@@ -192,12 +201,14 @@ class RemoteInputManager {
   void handleControlMessage(RemoteInputControlMessage message) {
     switch (message.action) {
       case RemoteInputControlAction.offer:
-        if (message.layoutEdge != null) {
+        if (message.mode == RemoteInputMode.manual ||
+            message.layoutEdge != null) {
           _sessions[message.sessionId] = RemoteInputSession(
             sessionId: message.sessionId,
             sourcePeerId: message.sourcePeerId,
             sinkPeerId: message.sinkPeerId,
             layoutEdge: message.layoutEdge,
+            mode: message.mode,
             releaseHotkey: message.releaseHotkey,
             state: RemoteInputSessionState.offering,
             remoteClipboardV1: message.remoteClipboardV1,
@@ -212,6 +223,7 @@ class RemoteInputManager {
           sourcePeerId: message.sourcePeerId,
           sinkPeerId: message.sinkPeerId,
           layoutEdge: layoutEdge,
+          mode: message.mode,
           releaseHotkey: message.releaseHotkey.isNotEmpty
               ? message.releaseHotkey
               : current?.releaseHotkey ?? '',
@@ -221,6 +233,7 @@ class RemoteInputManager {
         );
         break;
       case RemoteInputControlAction.release:
+      case RemoteInputControlAction.textResult:
       case RemoteInputControlAction.routes:
         break;
       case RemoteInputControlAction.stop:

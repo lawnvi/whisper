@@ -372,6 +372,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private let channel: FlutterMethodChannel
   private var captureSessionId = ""
   private var injectionSessionId = ""
+  private var manualInjection = false
   private var captureEdge = "right"
   private var captureRouteId = ""
   private var captureDisplayId = ""
@@ -533,6 +534,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       lastInjectedPrimaryCapsLockTimeMicros = 0
       injectionDiagnosticCount = 0
       injectionSessionId = sessionId
+      manualInjection = args["mode"] as? String == "manual"
       injectionDisplayId = args["displayId"] as? String ?? ""
       injectionEdge = args["edge"] as? String ?? ""
       injectionRouteId = ""
@@ -566,6 +568,21 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
           code: "bad-arguments",
           message: "injectEvent requires sessionId, eventType, and payload",
           details: nil))
+        return
+      }
+      if eventType == "textCommit" {
+        guard manualInjection, sessionId == injectionSessionId,
+              let object = try? JSONSerialization.jsonObject(with: payload),
+              let data = object as? [String: Any], let text = data["text"] as? String,
+              !text.isEmpty, text.utf8.count <= 4096, AXIsProcessTrusted() else {
+          result(FlutterError(code: "invalid-text-commit", message: "Text injection unavailable", details: nil))
+          return
+        }
+        guard injectUnicodeText(text) else {
+          result(FlutterError(code: "text-injection-failed", message: "Text injection failed", details: nil))
+          return
+        }
+        result(nil)
         return
       }
       injectEvent(
@@ -696,6 +713,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     lastInjectedPrimaryCapsLockTimeMicros = 0
     injectionDiagnosticCount = 0
     injectionSessionId = ""
+    manualInjection = false
     injectionDisplayId = ""
     injectionEdge = ""
     injectionRouteId = ""
@@ -1055,7 +1073,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
       let fallbackPoint = CGPoint(
         x: doubleValue(data["x"]),
         y: doubleValue(data["y"]))
-      let entryPoint = entryPointIfNeeded(data)
+      let entryPoint = manualInjection ? nil : entryPointIfNeeded(data)
       if entryPoint != nil {
         injectedMouseEnteredInterior = false
       }
@@ -1064,7 +1082,7 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
         injectedMousePoint ??
         CGEvent(source: nil)?.location ??
         fallbackPoint
-      if entryPoint == nil && injectedMouseEnteredInterior && injectedMouseButtons == 0 {
+      if !manualInjection && entryPoint == nil && injectedMouseEnteredInterior && injectedMouseButtons == 0 {
         if let releaseRoute = reverseInjectionSourceEdgeUnit(
           currentPoint: currentPoint,
           deltaX: deltaX,
@@ -1174,6 +1192,37 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
     default:
       break
     }
+  }
+
+  private func injectUnicodeText(_ text: String) -> Bool {
+    var units: [UniChar] = []
+    func flush() -> Bool {
+      guard !units.isEmpty else { return true }
+      guard let down = CGEvent(keyboardEventSource: keyboardEventSource, virtualKey: 0, keyDown: true),
+            let up = CGEvent(keyboardEventSource: keyboardEventSource, virtualKey: 0, keyDown: false) else { return false }
+      for event in [down, up] {
+        event.flags = []
+        units.withUnsafeBufferPointer { buffer in
+          event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress!)
+        }
+        event.post(tap: .cghidEventTap)
+      }
+      units.removeAll(keepingCapacity: true)
+      return true
+    }
+    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    for scalar in normalized.unicodeScalars {
+      if scalar.value == 10 {
+        if !flush() { return false }
+        postKeyboardEvent(keyCode: 36, down: true)
+        postKeyboardEvent(keyCode: 36, down: false)
+      } else {
+        let next = Array(String(scalar).utf16)
+        if units.count + next.count > 20 && !flush() { return false }
+        units.append(contentsOf: next)
+      }
+    }
+    return flush()
   }
 
   private func payloadData(from value: Any?) -> Data? {
@@ -1567,6 +1616,17 @@ final class RemoteInputPlugin: NSObject, FlutterPlugin {
   private func clampedInjectedMousePoint(_ point: CGPoint) -> CGPoint {
     let bounds = virtualDisplayBounds()
     let inset: CGFloat = 2
+    if manualInjection {
+      let displays = NSScreen.screens.compactMap { cgDisplayBounds(displayId: screenDisplayId($0)) }
+      if displays.contains(where: { $0.contains(point) }) { return point }
+      let candidates = displays.map { rect in
+        CGPoint(x: min(rect.maxX - inset, max(rect.minX + inset, point.x)),
+                y: min(rect.maxY - inset, max(rect.minY + inset, point.y)))
+      }
+      if let closest = candidates.min(by: {
+        hypot($0.x - point.x, $0.y - point.y) < hypot($1.x - point.x, $1.y - point.y)
+      }) { return closest }
+    }
     return CGPoint(
       x: min(bounds.maxX - inset, max(bounds.minX + inset, point.x)),
       y: min(bounds.maxY - inset, max(bounds.minY + inset, point.y)))

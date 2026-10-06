@@ -564,6 +564,12 @@ class WsSvrManager {
         profile?.capabilities.remoteInputSinkV1 == true;
   }
 
+  bool supportsManualInputFor(String peerId) {
+    final profile = remoteProfileFor(peerId);
+    return profile?.protocolVersion == 11 &&
+        profile?.capabilities.remoteInputManualSinkV1 == true;
+  }
+
   PeerProfile? remoteProfileFor(String peerId) {
     return _remoteProfilesByPeerId[peerId] ??
         (peerId == receiver ? _remoteProfile : null);
@@ -2392,22 +2398,24 @@ class WsSvrManager {
   Future<ConnectionAttemptResult> _connectToServer(
     _PendingOutgoingConnection attempt,
   ) async {
-    final current = await _connectToServerVersion(
-      attempt,
-      PeerSocketSession.protocolVersion,
-    );
-    final shouldRetryLegacy =
-        current.reason == ConnectionAttemptReason.protocolMismatch ||
-        (current.reason == ConnectionAttemptReason.transportClosed &&
-            attempt.session?.remoteProfile == null);
-    if (!shouldRetryLegacy || attempt.isCancelled) {
-      return current;
+    for (
+      var version = PeerSocketSession.protocolVersion;
+      version >= PeerSocketSession.minimumProtocolVersion;
+      version--
+    ) {
+      final result = await _connectToServerVersion(attempt, version);
+      final retry =
+          result.reason == ConnectionAttemptReason.protocolMismatch ||
+          (result.reason == ConnectionAttemptReason.transportClosed &&
+              attempt.session?.remoteProfile == null);
+      if (!retry ||
+          attempt.isCancelled ||
+          version == PeerSocketSession.minimumProtocolVersion) {
+        return result;
+      }
+      attempt.resetTransportForProtocolRetry();
     }
-    attempt.resetTransportForProtocolRetry();
-    return _connectToServerVersion(
-      attempt,
-      PeerSocketSession.minimumProtocolVersion,
-    );
+    throw StateError('no supported peer protocol');
   }
 
   Future<ConnectionAttemptResult> _connectToServerVersion(
@@ -4673,7 +4681,15 @@ class WsSvrManager {
               storedRemote?.identityPublicKey ==
                   authenticatedSession?.remoteIdentityPublicKey &&
               authenticatedSession?.isAuthenticated == true;
-          final localCanInject = supportsNativeRemoteInput();
+          final remoteProfile = _requireRemoteProfileForSession(session);
+          final manual = control.mode == RemoteInputMode.manual;
+          final manualAllowed =
+              Platform.isMacOS &&
+              remoteProfile.protocolVersion >= 11 &&
+              remoteProfile.capabilities.remoteInputManualSourceV1;
+          final localCanInject = manual
+              ? manualAllowed
+              : supportsNativeRemoteInput();
           _remoteInputTrace(
             'remote input recv control ${_remoteInputControlSummary(control)} '
             'local=${self.uid} '
@@ -4831,6 +4847,8 @@ class WsSvrManager {
         fileTransferV3: true,
         systemAudioSourceV1: supportsNativeSystemAudio(),
         speakerSinkV1: true,
+        remoteInputManualSourceV1: Platform.isAndroid,
+        remoteInputManualSinkV1: Platform.isMacOS,
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
         remoteInputTopologyV1: hasTopology,
@@ -5307,6 +5325,11 @@ class WsSvrManager {
     String peerId,
     RemoteInputControlMessage control,
   ) {
+    if (control.mode == RemoteInputMode.manual &&
+        control.action == RemoteInputControlAction.offer &&
+        (!Platform.isAndroid || !supportsManualInputFor(peerId))) {
+      return Future<bool>.value(false);
+    }
     if (!_validateOutgoingControlSession(
       namespace: 'remote-input',
       peerId: peerId,

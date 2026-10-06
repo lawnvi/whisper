@@ -10,7 +10,10 @@ enum RemoteInputControlAction {
   reject,
   stop,
   error,
+  textResult,
 }
+
+enum RemoteInputMode { edgeTraversal, manual }
 
 enum RemoteInputTransport { websocket }
 
@@ -23,6 +26,8 @@ enum RemoteInputEventType {
   key,
   modifiers,
   release,
+  heartbeat,
+  textCommit,
 }
 
 class RemoteInputEdgeMapping {
@@ -122,6 +127,9 @@ class RemoteInputControlMessage {
     required this.sessionId,
     required this.sourcePeerId,
     required this.sinkPeerId,
+    this.mode = RemoteInputMode.edgeTraversal,
+    this.textSequence = 0,
+    this.textSucceeded = false,
     this.transport = RemoteInputTransport.websocket,
     this.path = '/input',
     this.transportToken = '',
@@ -152,6 +160,9 @@ class RemoteInputControlMessage {
   final String sessionId;
   final String sourcePeerId;
   final String sinkPeerId;
+  final RemoteInputMode mode;
+  final int textSequence;
+  final bool textSucceeded;
   final RemoteInputTransport transport;
   final String path;
   final String transportToken;
@@ -183,6 +194,9 @@ class RemoteInputControlMessage {
       sessionId: sessionId,
       sourcePeerId: sourcePeerId,
       sinkPeerId: sinkPeerId,
+      mode: mode,
+      textSequence: textSequence,
+      textSucceeded: textSucceeded,
       transport: transport,
       path: path,
       transportToken: token,
@@ -212,6 +226,11 @@ class RemoteInputControlMessage {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'action': action.name,
+    if (mode != RemoteInputMode.edgeTraversal) 'mode': mode.name,
+    if (action == RemoteInputControlAction.textResult) ...{
+      'textSequence': textSequence,
+      'textSucceeded': textSucceeded,
+    },
     'sessionId': sessionId,
     'sourcePeerId': sourcePeerId,
     'sinkPeerId': sinkPeerId,
@@ -245,7 +264,17 @@ class RemoteInputControlMessage {
   };
 
   factory RemoteInputControlMessage.fromJson(Map<String, dynamic> json) {
+    final rawMode = json['mode'];
+    final mode = rawMode == null
+        ? RemoteInputMode.edgeTraversal
+        : RemoteInputMode.values
+              .where((value) => value.name == rawMode)
+              .firstOrNull;
+    if (mode == null) throw const FormatException('unknown remote input mode');
     return RemoteInputControlMessage(
+      mode: mode,
+      textSequence: intJson(json['textSequence']),
+      textSucceeded: json['textSucceeded'] as bool? ?? false,
       action: enumByName(
         RemoteInputControlAction.values,
         json['action'] as String?,

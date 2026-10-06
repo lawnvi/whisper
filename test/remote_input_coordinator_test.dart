@@ -1387,6 +1387,8 @@ void main() {
                 'deltaX': 0,
                 'deltaY': 120,
               },
+            RemoteInputEventType.heartbeat ||
+            RemoteInputEventType.textCommit ||
             RemoteInputEventType.modifiers ||
             RemoteInputEventType.release =>
               const <String, dynamic>{},

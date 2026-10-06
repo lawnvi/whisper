@@ -20,32 +20,37 @@ import 'package:whisper/state/peer_profile.dart';
 import 'package:whisper/state/peer_reconnect_controller.dart';
 
 void main() {
-  test(
-    'client retries protocol 9 when a legacy server closes version 10',
-    () async {
-      final harness = await _HandshakeHarness.start();
-      final proxy = await _LegacyCloseThenProxy.start(harness.port);
-      addTearDown(proxy.close);
+  for (final supportedVersion in [10, 9]) {
+    test(
+      'client retries from 11 to $supportedVersion when a legacy server closes newer versions',
+      () async {
+        final harness = await _HandshakeHarness.start();
+        final proxy = await _LegacyCloseThenProxy.start(
+          harness.port,
+          closeCount: 11 - supportedVersion,
+        );
+        addTearDown(proxy.close);
 
-      final result = await harness.client
-          .connectToServer(
-            ConnectionAttemptRequest(
-              requestId: 'legacy-close-fallback',
-              endpoint: PeerEndpoint.loopbackForTesting(port: proxy.port),
-              expectedPeerId: 'server-peer',
-              mode: ConnectionAttemptMode.interactive,
-            ),
-          )
-          .timeout(const Duration(seconds: 5));
+        final result = await harness.client
+            .connectToServer(
+              ConnectionAttemptRequest(
+                requestId: 'legacy-close-fallback',
+                endpoint: PeerEndpoint.loopbackForTesting(port: proxy.port),
+                expectedPeerId: 'server-peer',
+                mode: ConnectionAttemptMode.interactive,
+              ),
+            )
+            .timeout(const Duration(seconds: 5));
 
-      expect(result.status, ConnectionAttemptStatus.authenticated);
-      expect(proxy.acceptedConnections, 2);
-      expect(
-        harness.client.remoteProfileFor('server-peer')?.protocolVersion,
-        PeerSocketSession.minimumProtocolVersion,
-      );
-    },
-  );
+        expect(result.status, ConnectionAttemptStatus.authenticated);
+        expect(proxy.acceptedConnections, 12 - supportedVersion);
+        expect(
+          harness.client.remoteProfileFor('server-peer')?.protocolVersion,
+          supportedVersion,
+        );
+      },
+    );
+  }
 
   test(
     'typed success waits for signed persistence and current registration',
@@ -1023,18 +1028,22 @@ void main() {
 }
 
 final class _LegacyCloseThenProxy {
-  _LegacyCloseThenProxy._(this._server, this._upstreamPort);
+  _LegacyCloseThenProxy._(this._server, this._upstreamPort, this.closeCount);
 
   final HttpServer _server;
   final int _upstreamPort;
+  final int closeCount;
   final Set<WebSocket> _sockets = <WebSocket>{};
   int acceptedConnections = 0;
 
   int get port => _server.port;
 
-  static Future<_LegacyCloseThenProxy> start(int upstreamPort) async {
+  static Future<_LegacyCloseThenProxy> start(
+    int upstreamPort, {
+    required int closeCount,
+  }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final proxy = _LegacyCloseThenProxy._(server, upstreamPort);
+    final proxy = _LegacyCloseThenProxy._(server, upstreamPort, closeCount);
     server.listen(proxy._handleRequest);
     return proxy;
   }
@@ -1043,7 +1052,7 @@ final class _LegacyCloseThenProxy {
     final downstream = await WebSocketTransformer.upgrade(request);
     _sockets.add(downstream);
     acceptedConnections += 1;
-    if (acceptedConnections == 1) {
+    if (acceptedConnections <= closeCount) {
       await downstream.first;
       await downstream.close();
       _sockets.remove(downstream);

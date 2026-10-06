@@ -202,8 +202,130 @@ class RemoteInputCoordinator extends ChangeNotifier {
       <RemoteInputModifierSemantic>{};
   bool _suppressPasteKeyUp = false;
 
+  RemoteInputMode _mode = RemoteInputMode.edgeTraversal;
+  Timer? _manualHeartbeat;
+  Timer? _manualDeadline;
+  Completer<bool>? _pendingText;
+  int _pendingTextSequence = 0;
+  bool get isManual => _mode == RemoteInputMode.manual;
+  bool get isSendingText => _pendingText != null;
+
   RemoteInputRuntimeState get state => _state;
   RemoteInputPlatform get platform => _platform;
+
+  void _armManualDeadline(Duration duration) {
+    _manualDeadline?.cancel();
+    final sessionId = _state.sessionId;
+    _manualDeadline = Timer(duration, () {
+      if (!isManual || _state.sessionId != sessionId) {
+        return;
+      }
+      final sender = _sendControl;
+      unawaited(
+        sender == null ? stopLocal() : stopSharing(sendControl: sender),
+      );
+    });
+  }
+
+  int sendManualInput(
+    RemoteInputEventType type,
+    Map<String, dynamic> payload,
+  ) => _sendManualPacket(type, payload);
+
+  int _sendManualPacket(
+    RemoteInputEventType type,
+    Map<String, dynamic> payload, {
+    bool textTransaction = false,
+  }) {
+    if (!isManual ||
+        !_state.isActive ||
+        _state.role != RemoteInputRuntimeRole.source ||
+        _transport == null ||
+        (isSendingText &&
+            !textTransaction &&
+            type != RemoteInputEventType.heartbeat)) {
+      return 0;
+    }
+    final packet = RemoteInputPacketFrame(
+      sessionId: _state.sessionId,
+      sequence: ++_latestSourceInputSequence,
+      timestampMicros: DateTime.now().microsecondsSinceEpoch,
+      eventType: type,
+      payload: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+    );
+    _validateManualPacket(packet);
+    try {
+      _transport!.send(packet);
+    } catch (_) {
+      unawaited(stopLocal());
+      return 0;
+    }
+    return packet.sequence;
+  }
+
+  Future<bool> sendManualText(String text) async {
+    if (isSendingText || text.isEmpty || utf8.encode(text).length > 4096) {
+      return false;
+    }
+    // Install the result listener before sending; a fake or local transport may
+    // reply synchronously. Only heartbeat packets may pass this transaction.
+    final pending = Completer<bool>();
+    _pendingText = pending;
+    _pendingTextSequence = _latestSourceInputSequence + 1;
+    final sequence = _sendManualPacket(RemoteInputEventType.textCommit, {
+      'text': text,
+    }, textTransaction: true);
+    if (sequence == 0) {
+      _pendingText = null;
+      return false;
+    }
+    notifyListeners();
+    try {
+      return await pending.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => false,
+      );
+    } finally {
+      if (identical(_pendingText, pending)) {
+        _pendingText = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  void _validateManualPacket(RemoteInputPacketFrame packet) {
+    final value = jsonDecode(utf8.decode(packet.payload));
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('invalid manual input');
+    }
+    bool finite(String key) =>
+        value[key] is num && (value[key] as num).isFinite;
+    final valid = switch (packet.eventType) {
+      RemoteInputEventType.heartbeat => value.isEmpty,
+      RemoteInputEventType.mouseMove =>
+        finite('deltaX') &&
+            finite('deltaY') &&
+            value['activeStart'] != true &&
+            !value.containsKey('buttons'),
+      RemoteInputEventType.mouseWheel =>
+        finite('scrollDeltaX') &&
+            finite('scrollDeltaY') &&
+            (value['scrollUnit'] == 'pixel' || value['scrollUnit'] == 'wheel'),
+      RemoteInputEventType.mouseButton =>
+        (value['button'] == 0 || value['button'] == 1) && value['down'] is bool,
+      RemoteInputEventType.key =>
+        value['macKeyCode'] is int &&
+            (value['macKeyCode'] as int) >= 0 &&
+            (value['macKeyCode'] as int) < 128 &&
+            value['down'] is bool,
+      RemoteInputEventType.textCommit =>
+        value['text'] is String &&
+            (value['text'] as String).isNotEmpty &&
+            utf8.encode(value['text'] as String).length <= 4096,
+      _ => false,
+    };
+    if (!valid) throw const FormatException('invalid manual input payload');
+  }
 
   void configureRemoteClipboard({
     required RemoteClipboardPastePreparer preparePaste,
@@ -273,7 +395,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     required String sinkPeerId,
     required String sinkHost,
     required int sinkPort,
-    required RemoteInputEdge layoutEdge,
+    RemoteInputEdge? layoutEdge,
+    RemoteInputMode mode = RemoteInputMode.edgeTraversal,
     required String releaseHotkey,
     required bool isMutuallyTrusted,
     required bool remoteCanInject,
@@ -320,6 +443,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
     final generation = await _lifecycle.start();
     if (generation == null) return;
+    _mode = mode;
     _sendControl = sendControl;
 
     final offer = _manager.createOffer(
@@ -327,7 +451,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkPeerId: sinkPeerId,
       layoutEdge: layoutEdge,
       releaseHotkey: releaseHotkey,
-      sourcePlatform: _platformKindProvider().name,
+      mode: mode,
+      sourcePlatform: mode == RemoteInputMode.manual
+          ? 'android'
+          : _platformKindProvider().name,
       sourceDisplayId: sourceDisplayId,
       sourceEdge: sourceEdge,
       sourceSegmentStart: sourceSegmentStart,
@@ -338,6 +465,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sinkSegmentEnd: sinkSegmentEnd,
       edgeMappings: edgeMappings,
       remoteClipboardV1:
+          mode == RemoteInputMode.edgeTraversal &&
           _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     _setState(
@@ -352,6 +480,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
     if (generation != _lifecycle.generation) return;
     try {
       sendControl(offer);
+      if (isManual) _armManualDeadline(const Duration(seconds: 5));
     } catch (_) {
       await stopLocal();
       rethrow;
@@ -378,6 +507,19 @@ class RemoteInputCoordinator extends ChangeNotifier {
       enabled: localCanInject,
     );
     switch (message.action) {
+      case RemoteInputControlAction.textResult:
+        if (isManual &&
+            _state.role == RemoteInputRuntimeRole.source &&
+            message.mode == _mode &&
+            message.sessionId == _state.sessionId &&
+            message.sinkPeerId == _state.peerId &&
+            message.textSequence == _pendingTextSequence) {
+          final pending = _pendingText;
+          if (pending != null && !pending.isCompleted) {
+            pending.complete(message.textSucceeded);
+          }
+        }
+        break;
       case RemoteInputControlAction.offer:
         await _handleOffer(
           message,
@@ -405,7 +547,6 @@ class RemoteInputCoordinator extends ChangeNotifier {
         await _handleRoutes(message);
         break;
       case RemoteInputControlAction.stop:
-      case RemoteInputControlAction.reject:
         _trace(
           RemoteInputDiagnosticKind.controlStopped,
           action: message.action,
@@ -415,6 +556,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
           await stopLocal();
         }
         break;
+      case RemoteInputControlAction.reject:
       case RemoteInputControlAction.error:
         final failureReason = remoteInputFailureReasonFromWire(
           message.errorMessage,
@@ -444,6 +586,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   Future<void> _handleRoutes(RemoteInputControlMessage message) async {
     final generation = _lifecycle.generation;
     final current = _sinkControlMessage;
+    if (isManual) return;
     if (_state.role != RemoteInputRuntimeRole.sink ||
         _state.sessionId != message.sessionId ||
         current == null ||
@@ -471,6 +614,16 @@ class RemoteInputCoordinator extends ChangeNotifier {
 
   Future<void> _disposeLocal(bool notifyPeer) async {
     final current = _state;
+    final wasManual = isManual;
+    _manualHeartbeat?.cancel();
+    _manualDeadline?.cancel();
+    _manualHeartbeat = null;
+    _manualDeadline = null;
+    final pendingText = _pendingText;
+    _pendingText = null;
+    if (pendingText != null && !pendingText.isCompleted) {
+      pendingText.complete(false);
+    }
     final sender = _sendControl;
     _sendControl = null;
     _trace(
@@ -523,6 +676,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
             () => sender(
               RemoteInputControlMessage(
                 action: RemoteInputControlAction.stop,
+                mode: session.mode,
                 sessionId: session.sessionId,
                 sourcePeerId: session.sourcePeerId,
                 sinkPeerId: session.sinkPeerId,
@@ -532,7 +686,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         );
       }
       cancellations.add(_manager.stopSession(current.sessionId));
-      if (current.role == RemoteInputRuntimeRole.source) {
+      if (current.role == RemoteInputRuntimeRole.source && !wasManual) {
         cancellations.add(_platform.stopCapture(sessionId: current.sessionId));
       }
       if (current.role == RemoteInputRuntimeRole.sink) {
@@ -570,6 +724,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.reject,
+          mode: offer.mode,
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
@@ -589,6 +744,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.reject,
+          mode: offer.mode,
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
@@ -605,6 +761,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.reject,
+          mode: offer.mode,
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
@@ -614,12 +771,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
       return;
     }
     if (generation == null) return;
+    _mode = offer.mode;
     _sendControl = sendControl;
 
     final accept = _manager.acceptOffer(
       offer,
       sinkPlatform: _platformKindProvider().name,
       remoteClipboardV1:
+          !isManual &&
           _platformKindProvider() != RemoteInputPlatformKind.unknown,
     );
     if (accept.action == RemoteInputControlAction.error) {
@@ -631,6 +790,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.error,
+          mode: accept.mode,
           sessionId: accept.sessionId,
           sourcePeerId: accept.sourcePeerId,
           sinkPeerId: accept.sinkPeerId,
@@ -678,6 +838,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.error,
+          mode: offer.mode,
           sessionId: offer.sessionId,
           sourcePeerId: offer.sourcePeerId,
           sinkPeerId: offer.sinkPeerId,
@@ -696,7 +857,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
     Uint8List? mediaSendKey,
   }) async {
     final current = _state;
-    if (accept.sourcePeerId != localPeerId ||
+    if (accept.mode != _mode ||
+        accept.sourcePeerId != localPeerId ||
         current.role != RemoteInputRuntimeRole.source ||
         current.status != RemoteInputRuntimeStatus.offering ||
         current.sessionId != accept.sessionId ||
@@ -742,6 +904,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.error,
+          mode: accept.mode,
           sessionId: accept.sessionId,
           sourcePeerId: accept.sourcePeerId,
           sinkPeerId: accept.sinkPeerId,
@@ -770,8 +933,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
       generation: generation,
       start: () => _platform.startInjection(
         sessionId: message.sessionId,
+        mode: message.mode,
         displayId: message.sinkDisplayId,
-        edge: message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
+        edge: isManual
+            ? null
+            : message.sinkEdge ?? _oppositeEdge(message.layoutEdge),
         segmentStart: message.sinkSegmentStart,
         segmentEnd: message.sinkSegmentEnd,
         edgeMappings: message.edgeMappings,
@@ -800,6 +966,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       if (release.sessionId == message.sessionId) {
         final routing = _sinkControlMessage ?? message;
         if (release.reason == 'edge') {
+          if (isManual) return;
           if (_isEarlySinkEdgeRelease(release)) {
             _trace(RemoteInputDiagnosticKind.earlyReleaseIgnored);
             return;
@@ -850,6 +1017,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     });
     _beginInjectionQueue(message.sessionId);
+    if (isManual) _armManualDeadline(const Duration(seconds: 5));
     _manager.onSessionClosed = _sessionClosedHandler = (sessionId) {
       if (_state.sessionId == sessionId) {
         // Release held keys and cancel pending paste before the socket waits
@@ -858,6 +1026,21 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
     };
     _manager.onPacket = _packetHandler = (packet) {
+      if (isManual) {
+        if (packet.sessionId != message.sessionId ||
+            packet.sequence <= _latestSinkPacketSequence) {
+          return Future<void>.value();
+        }
+        _validateManualPacket(packet);
+        _armManualDeadline(const Duration(seconds: 2));
+        _latestSinkPacketSequence = packet.sequence;
+        if (packet.eventType == RemoteInputEventType.heartbeat) {
+          return Future<void>.value();
+        }
+      } else if (packet.eventType == RemoteInputEventType.heartbeat ||
+          packet.eventType == RemoteInputEventType.textCommit) {
+        throw const FormatException('manual packet in desktop session');
+      }
       final routing = _sinkControlMessage ?? message;
       final routedPacket = _routeSinkActiveStartPacket(packet, routing);
       if (packet.sessionId == message.sessionId &&
@@ -878,15 +1061,20 @@ class RemoteInputCoordinator extends ChangeNotifier {
         scrollMultiplier: _scrollMultiplier,
         fallbackSourcePlatform: _sinkSourcePlatform,
       );
-      final translated =
-          _keyTranslator?.translateFrame(scrollNormalized) ??
-          <RemoteInputPacketFrame>[scrollNormalized];
-      final intercepted = _interceptRemoteClipboardPaste(
-        translated,
-        peerId: message.sourcePeerId,
-        sessionId: message.sessionId,
-        targetPlatform: targetPlatform,
-      );
+      // Manual packets carry an explicit target key code from the shared table.
+      // Android is not a desktop capture platform and needs no key inference.
+      final translated = isManual
+          ? <RemoteInputPacketFrame>[scrollNormalized]
+          : _keyTranslator?.translateFrame(scrollNormalized) ??
+                <RemoteInputPacketFrame>[scrollNormalized];
+      final intercepted = isManual
+          ? translated
+          : _interceptRemoteClipboardPaste(
+              translated,
+              peerId: message.sourcePeerId,
+              sessionId: message.sessionId,
+              targetPlatform: targetPlatform,
+            );
       if (_shouldTracePackets && _sinkPacketTraceCount < _packetTraceLimit) {
         _sinkPacketTraceCount++;
         _trace(
@@ -1122,8 +1310,37 @@ class RemoteInputCoordinator extends ChangeNotifier {
           await _platform
               .injectEvent(entry.frame)
               .timeout(_nativeInjectionTimeout);
+          if (entry.frame.eventType == RemoteInputEventType.textCommit &&
+              _isCurrentInjectionQueue(message.sessionId, generation)) {
+            sendControl(
+              RemoteInputControlMessage(
+                action: RemoteInputControlAction.textResult,
+                mode: RemoteInputMode.manual,
+                sessionId: message.sessionId,
+                sourcePeerId: message.sourcePeerId,
+                sinkPeerId: message.sinkPeerId,
+                textSequence: entry.frame.sequence,
+                textSucceeded: true,
+              ),
+            );
+          }
         } catch (error) {
           if (_isCurrentInjectionQueue(message.sessionId, generation)) {
+            if (entry.frame.eventType == RemoteInputEventType.textCommit) {
+              try {
+                sendControl(
+                  RemoteInputControlMessage(
+                    action: RemoteInputControlAction.textResult,
+                    mode: RemoteInputMode.manual,
+                    sessionId: message.sessionId,
+                    sourcePeerId: message.sourcePeerId,
+                    sinkPeerId: message.sinkPeerId,
+                    textSequence: entry.frame.sequence,
+                    textSucceeded: false,
+                  ),
+                );
+              } catch (_) {}
+            }
             _failInjectionQueue(
               message,
               sendControl: sendControl,
@@ -1182,6 +1399,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       sendControl(
         RemoteInputControlMessage(
           action: RemoteInputControlAction.error,
+          mode: message.mode,
           sessionId: message.sessionId,
           sourcePeerId: message.sourcePeerId,
           sinkPeerId: message.sinkPeerId,
@@ -1331,7 +1549,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }) async {
     final edge = message.layoutEdge;
     final generation = _lifecycle.generation;
-    if (edge == null) {
+    if (!isManual && edge == null) {
       _trace(
         RemoteInputDiagnosticKind.captureMissingEdge,
         reason: RemoteInputFailureReason.protocol,
@@ -1367,6 +1585,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
         mediaMacKey: mediaSendKey,
         sessionId: message.sessionId,
         peerId: message.sourcePeerId,
+        preserveMouseMoves: isManual,
       );
     }
     if (generation != _lifecycle.generation) {
@@ -1382,6 +1601,22 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _latestSourceInputSequence = 0;
     _latestSourceActivationSequence = 0;
     _sourcePacketTraceCount = 0;
+    if (isManual) {
+      _manualDeadline?.cancel();
+      _setState(
+        RemoteInputRuntimeState(
+          status: RemoteInputRuntimeStatus.active,
+          role: RemoteInputRuntimeRole.source,
+          sessionId: message.sessionId,
+          peerId: message.sinkPeerId,
+        ),
+      );
+      sendManualInput(RemoteInputEventType.heartbeat, const {});
+      _manualHeartbeat = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        sendManualInput(RemoteInputEventType.heartbeat, const {});
+      });
+      return;
+    }
     _inputSubscription = _platform.inputEvents.listen((event) {
       if (event.sessionId != message.sessionId) {
         return;
@@ -1439,7 +1674,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
       generation: generation,
       start: () => _platform.startCapture(
         sessionId: message.sessionId,
-        edge: message.sourceEdge ?? edge,
+        edge: message.sourceEdge ?? edge!,
         releaseHotkey: message.releaseHotkey,
         displayId: message.sourceDisplayId,
         segmentStart: message.sourceSegmentStart,
@@ -1478,6 +1713,7 @@ class RemoteInputCoordinator extends ChangeNotifier {
   }
 
   Future<void> _handleRelease(RemoteInputControlMessage message) async {
+    if (isManual) return;
     final generation = _lifecycle.generation;
     _manager.handleControlMessage(message);
     if (_state.sessionId != message.sessionId ||

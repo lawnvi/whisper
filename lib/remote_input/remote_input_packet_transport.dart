@@ -24,15 +24,21 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
   RemoteInputPacketByteTransport({
     required void Function(Uint8List bytes) sendBytes,
     Future<void> Function()? closeSink,
+    this.preserveMouseMoves = false,
   }) : _inner = PacketByteTransport(
          sendBytes: (bytes) => sendBytes(bytes as Uint8List),
          closeSink: closeSink ?? () async {},
        );
 
-  RemoteInputPacketByteTransport.withTransport(PacketByteTransport transport)
-    : _inner = transport;
+  RemoteInputPacketByteTransport.withTransport(
+    PacketByteTransport transport, {
+    this.preserveMouseMoves = false,
+  }) : _inner = transport;
 
   final PacketByteTransport _inner;
+  // Manual relative movement is already accumulated before transport; replacing
+  // it here would lose displacement and cross click/drag boundaries.
+  final bool preserveMouseMoves;
 
   @override
   void send(RemoteInputPacketFrame packet) {
@@ -40,10 +46,15 @@ class RemoteInputPacketByteTransport implements RemoteInputPacketTransport {
       return;
     }
     final kind = switch (packet.eventType) {
-      RemoteInputEventType.mouseMove => OutboundPacketKind.mouseMove,
+      RemoteInputEventType.mouseMove =>
+        preserveMouseMoves
+            ? OutboundPacketKind.key
+            : OutboundPacketKind.mouseMove,
       RemoteInputEventType.mouseWheel => OutboundPacketKind.scroll,
       RemoteInputEventType.mouseButton => OutboundPacketKind.button,
       RemoteInputEventType.key ||
+      RemoteInputEventType.textCommit ||
+      RemoteInputEventType.heartbeat ||
       RemoteInputEventType.modifiers => OutboundPacketKind.key,
       RemoteInputEventType.release => OutboundPacketKind.release,
     };
@@ -58,9 +69,10 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     implements RemoteInputObservablePacketTransport {
   RemoteInputWebSocketPacketTransport._(
     Stream<dynamic> incoming,
-    PacketByteTransport transport,
-  ) : _stream = incoming.asBroadcastStream(),
-      super.withTransport(transport) {
+    PacketByteTransport transport, {
+    bool preserveMouseMoves = false,
+  }) : _stream = incoming.asBroadcastStream(),
+       super.withTransport(transport, preserveMouseMoves: preserveMouseMoves) {
     _streamSubscription = _stream.listen(
       (_) {},
       onError: (_, __) {
@@ -82,6 +94,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     int maxItems = 128,
     int maxBytes = 256 * 1024,
     AuthenticatedMediaPacketEncoder? packetEncoder,
+    bool preserveMouseMoves = false,
   }) => RemoteInputWebSocketPacketTransport.forStreams(
     incoming: channel.stream,
     addStream: channel.sink.addStream,
@@ -89,6 +102,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     maxItems: maxItems,
     maxBytes: maxBytes,
     packetEncoder: packetEncoder,
+    preserveMouseMoves: preserveMouseMoves,
   );
 
   factory RemoteInputWebSocketPacketTransport.forStreams({
@@ -98,6 +112,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     int maxItems = 128,
     int maxBytes = 256 * 1024,
     AuthenticatedMediaPacketEncoder? packetEncoder,
+    bool preserveMouseMoves = false,
   }) {
     late final RemoteInputWebSocketPacketTransport transport;
     transport = RemoteInputWebSocketPacketTransport._(
@@ -112,6 +127,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
           transport._notifyDone();
         },
       ),
+      preserveMouseMoves: preserveMouseMoves,
     );
     return transport;
   }
@@ -121,6 +137,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
     required Uint8List mediaMacKey,
     required String sessionId,
     required String peerId,
+    bool preserveMouseMoves = false,
   }) async {
     AuthenticatedMediaPacketEncoder? unownedPacketEncoder;
     try {
@@ -149,6 +166,7 @@ class RemoteInputWebSocketPacketTransport extends RemoteInputPacketByteTransport
       final transport = RemoteInputWebSocketPacketTransport.forChannel(
         channel,
         packetEncoder: unownedPacketEncoder,
+        preserveMouseMoves: preserveMouseMoves,
       );
       unownedPacketEncoder = null;
       return transport;

@@ -175,6 +175,7 @@ class RemoteInputPlatform {
 
   Future<void> startInjection({
     required String sessionId,
+    RemoteInputMode mode = RemoteInputMode.edgeTraversal,
     String displayId = '',
     RemoteInputEdge? edge,
     int segmentStart = 0,
@@ -184,6 +185,7 @@ class RemoteInputPlatform {
   }) {
     return _channel.invokeMethod<void>('startInjection', <String, dynamic>{
       'sessionId': sessionId,
+      if (mode == RemoteInputMode.manual) 'mode': mode.name,
       if (displayId.isNotEmpty) 'displayId': displayId,
       if (edge != null) 'edge': edge.name,
       'segmentStart': segmentStart,

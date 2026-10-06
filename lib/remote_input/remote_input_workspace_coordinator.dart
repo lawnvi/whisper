@@ -607,6 +607,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
     required RemoteInputPeerControlSender sendControlTo,
     Uint8List? mediaSendKey,
   }) async {
+    if (message.mode == RemoteInputMode.manual) return false;
     _sendControlTo = sendControlTo;
     switch (message.action) {
       case RemoteInputControlAction.accept:
@@ -619,6 +620,7 @@ class RemoteInputWorkspaceCoordinator extends ChangeNotifier {
         );
       case RemoteInputControlAction.release:
         return _enqueueRouting(() => _handleRelease(message));
+      case RemoteInputControlAction.textResult:
       case RemoteInputControlAction.routes:
         return false;
       case RemoteInputControlAction.stop:
