@@ -1,4 +1,42 @@
 {
+  "mobileControlPermission": "Allow Whisper in System Settings → Privacy & Security → Accessibility on the Mac, then start again.",
+  "mobileControlTitle": "Control computer",
+  "mobileControlStart": "Start control",
+  "mobileControlStop": "Stop control",
+  "mobileControlReady": "Ready",
+  "mobileControlActive": "Controlling",
+  "mobileControlAir": "Air mouse",
+  "mobileControlTouchpad": "Touchpad",
+  "mobileControlHoldMove": "Hold here and turn your wrist to move",
+  "mobileControlTouchHint": "Move with one finger · Tap to click · Scroll with two",
+  "mobileControlHoldScroll": "Hold and tilt to scroll",
+  "mobileControlScroll": "Swipe to scroll",
+  "mobileControlLeft": "Left click",
+  "mobileControlRight": "Right click",
+  "mobileControlKeyboard": "Virtual keyboard",
+  "mobileControlText": "Text input",
+  "mobileControlMainKeys": "Main keys",
+  "mobileControlFunctionKeys": "Function / navigation",
+  "mobileControlSendText": "Send text",
+  "mobileControlTextHint": "Select a text field on the computer, then write and send.",
+  "mobileControlTextTooLong": "Send up to 4 KiB of text at a time.",
+  "mobileControlTextUnconfirmed": "Input was not confirmed. Draft kept; check the computer before resending.",
+  "mobileControlTextSent": "Text delivered to the system. Check the target app.",
+  "mobileControlSensorUnavailable": "Motion unavailable. Switched to touchpad.",
+  "mobileControlSensitivity": "Motion sensitivity",
+  "mobileControlCalibrate": "Calibrate",
+  "mobileControlCalibrating": "Hold the phone still briefly…",
+  "mobileControlCalibrationDone": "Calibration complete",
+  "mobileControlIdleHint": "Start to control the mouse and keyboard. Leaving this page stops control.",
+  "mobileControlReceiving": "Receiving mobile control from {name}",
+  "mobileControlShortcutHint": "Select modifiers, then a key. Modifiers clear after each combination.",
+  "@mobileControlReceiving": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "screenshotCapture": "Capture region",
   "screenshotSelectionHint": "Click a window · Drag a region · Esc to cancel",
   "screenshotAdjustHint": "Drag to move · Drag edges to resize · Enter to copy · Esc to cancel",

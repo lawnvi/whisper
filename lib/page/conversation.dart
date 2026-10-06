@@ -30,6 +30,7 @@ import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/page/transfer_assistant.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/mobile_control_screen.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -961,6 +962,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
+    if (Platform.isAndroid && !_isLocalhost && _isConnectedSession &&
+        socketManager.supportsManualInputFor(device.uid)) {
+      actions.add(IconButton(
+        tooltip: l10n.mobileControlTitle,
+        icon: const Icon(Icons.settings_remote_outlined),
+        onPressed: _openMobileControl,
+      ));
+    }
     if (_shouldShowRemoteInputAction) {
       final inputState = _remoteInputCoordinator.state;
       final isCurrentInputSession = inputState.isForPeer(device.uid);
@@ -1046,6 +1055,55 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
     return actions;
   }
+
+  void _sendMobileControl(RemoteInputControlMessage control) {
+    Future<void> stopIfCurrent() async {
+      if (_remoteInputCoordinator.state.sessionId == control.sessionId) {
+        await _remoteInputCoordinator.stopLocal();
+      }
+    }
+    unawaited(
+      socketManager.sendRemoteInputControlTo(device.uid, control).then<void>((sent) async {
+        if (!sent) await stopIfCurrent();
+      }).catchError((Object _) => stopIfCurrent()),
+    );
+  }
+
+  Future<void> _openMobileControl() => Navigator.push<void>(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => MobileControlScreen(
+        peerId: device.uid,
+        peerName: device.name,
+        onStart: () async {
+          final local = self ?? await LocalSetting().instance();
+          final stored = await LocalDatabase().fetchDevice(device.uid);
+          if (!socketManager.isConnectedTo(device.uid)) {
+            throw MobileControlStartException(l10n.connectFailed);
+          }
+          if (stored?.auth != true ||
+              !socketManager.remotePeerTrustsPeer(device.uid, local.uid)) {
+            throw MobileControlStartException(l10n.remoteInputRequiresMutualTrust);
+          }
+          if (!socketManager.supportsManualInputFor(device.uid)) {
+            throw MobileControlStartException(l10n.remoteInputPeerUnsupported);
+          }
+          await _remoteInputCoordinator.startSharingToConnectedPeer(
+            sourcePeerId: local.uid,
+            sinkPeerId: device.uid,
+            sinkHost: device.host,
+            sinkPort: device.port,
+            mode: RemoteInputMode.manual,
+            releaseHotkey: '',
+            isMutuallyTrusted: true,
+            remoteCanInject: true,
+            sendControl: _sendMobileControl,
+          );
+        },
+        onStop: () => _remoteInputCoordinator.stopSharing(sendControl: _sendMobileControl),
+      ),
+    ),
+  );
 
   Future<void> _openTransferAssistant() {
     return Navigator.push<void>(

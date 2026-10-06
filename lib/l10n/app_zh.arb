@@ -1,4 +1,42 @@
 {
+  "mobileControlPermission": "请在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许 Whisper，然后重新开始。",
+  "mobileControlTitle": "控制电脑",
+  "mobileControlStart": "开始控制",
+  "mobileControlStop": "停止控制",
+  "mobileControlReady": "已就绪",
+  "mobileControlActive": "正在控制",
+  "mobileControlAir": "体感鼠标",
+  "mobileControlTouchpad": "触控板",
+  "mobileControlHoldMove": "按住此处，转腕移动光标",
+  "mobileControlTouchHint": "单指移动 · 轻点点击 · 双指滚动",
+  "mobileControlHoldScroll": "按住转腕滚动",
+  "mobileControlScroll": "滑动滚动",
+  "mobileControlLeft": "左键",
+  "mobileControlRight": "右键",
+  "mobileControlKeyboard": "虚拟键盘",
+  "mobileControlText": "文字输入",
+  "mobileControlMainKeys": "主键盘",
+  "mobileControlFunctionKeys": "功能 / 导航",
+  "mobileControlSendText": "发送文字",
+  "mobileControlTextHint": "先在电脑选中输入框，再输入并发送文字。",
+  "mobileControlTextTooLong": "每次最多发送 4 KiB 文字。",
+  "mobileControlTextUnconfirmed": "未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。",
+  "mobileControlTextSent": "文字已交给电脑系统，请查看目标应用。",
+  "mobileControlSensorUnavailable": "体感不可用，已切换到触控板。",
+  "mobileControlSensitivity": "体感灵敏度",
+  "mobileControlCalibrate": "校准",
+  "mobileControlCalibrating": "请保持手机静止片刻…",
+  "mobileControlCalibrationDone": "校准完成",
+  "mobileControlIdleHint": "开始后可控制光标和键盘，离开此页面会停止。",
+  "mobileControlReceiving": "正在接受 {name} 的手机控制",
+  "mobileControlShortcutHint": "点选修饰键，再点普通键组合发送；完成后自动解除。",
+  "@mobileControlReceiving": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "screenshotCapture": "区域截图",
   "screenshotSelectionHint": "单击选择窗口 · 拖动框选区域 · Esc 取消",
   "screenshotAdjustHint": "拖动移动 · 拖边调整 · Enter 复制 · Esc 取消",

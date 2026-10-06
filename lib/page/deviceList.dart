@@ -40,6 +40,7 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
+import 'package:whisper/remote_input/manual_control_receiver_banner.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
@@ -1943,6 +1944,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 child: Column(
                   children: [
                     _buildDesktopSidebarToolbar(),
+                    const ManualControlReceiverBanner(),
                     Expanded(
                       child: ScrollConfiguration(
                         behavior: ScrollConfiguration.of(

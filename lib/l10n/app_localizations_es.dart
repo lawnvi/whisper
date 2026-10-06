@@ -9,6 +9,112 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String get mobileControlPermission =>
+      'Permite Whisper en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad en el Mac y vuelve a iniciar.';
+
+  @override
+  String get mobileControlTitle => 'Controlar ordenador';
+
+  @override
+  String get mobileControlStart => 'Iniciar control';
+
+  @override
+  String get mobileControlStop => 'Detener control';
+
+  @override
+  String get mobileControlReady => 'Listo';
+
+  @override
+  String get mobileControlActive => 'Controlando';
+
+  @override
+  String get mobileControlAir => 'Ratón por movimiento';
+
+  @override
+  String get mobileControlTouchpad => 'Panel táctil';
+
+  @override
+  String get mobileControlHoldMove =>
+      'Mantén pulsado y gira la muñeca para mover';
+
+  @override
+  String get mobileControlTouchHint =>
+      'Un dedo para mover · Toca para hacer clic · Dos para desplazar';
+
+  @override
+  String get mobileControlHoldScroll =>
+      'Mantén pulsado e inclina para desplazar';
+
+  @override
+  String get mobileControlScroll => 'Desliza para desplazar';
+
+  @override
+  String get mobileControlLeft => 'Clic izquierdo';
+
+  @override
+  String get mobileControlRight => 'Clic derecho';
+
+  @override
+  String get mobileControlKeyboard => 'Teclado virtual';
+
+  @override
+  String get mobileControlText => 'Entrada de texto';
+
+  @override
+  String get mobileControlMainKeys => 'Teclas principales';
+
+  @override
+  String get mobileControlFunctionKeys => 'Función / navegación';
+
+  @override
+  String get mobileControlSendText => 'Enviar texto';
+
+  @override
+  String get mobileControlTextHint =>
+      'Selecciona un campo en el ordenador, escribe y envía.';
+
+  @override
+  String get mobileControlTextTooLong => 'Envía hasta 4 KiB de texto cada vez.';
+
+  @override
+  String get mobileControlTextUnconfirmed =>
+      'Entrada sin confirmar. Borrador conservado; revisa el ordenador antes de reenviar.';
+
+  @override
+  String get mobileControlTextSent =>
+      'Texto entregado al sistema. Revisa la aplicación de destino.';
+
+  @override
+  String get mobileControlSensorUnavailable =>
+      'Movimiento no disponible. Se ha activado el panel táctil.';
+
+  @override
+  String get mobileControlSensitivity => 'Sensibilidad del movimiento';
+
+  @override
+  String get mobileControlCalibrate => 'Calibrar';
+
+  @override
+  String get mobileControlCalibrating =>
+      'Mantén el teléfono quieto un momento…';
+
+  @override
+  String get mobileControlCalibrationDone => 'Calibración completada';
+
+  @override
+  String get mobileControlIdleHint =>
+      'Inicia para controlar el ratón y el teclado. Al salir se detiene el control.';
+
+  @override
+  String mobileControlReceiving(String name) {
+    return 'Recibiendo control móvil de $name';
+  }
+
+  @override
+  String get mobileControlShortcutHint =>
+      'Selecciona modificadores y una tecla. Se desactivan después de cada combinación.';
+
+  @override
   String get screenshotCapture => 'Capturar región';
 
   @override

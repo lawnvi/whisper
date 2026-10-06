@@ -1,4 +1,42 @@
 {
+  "mobileControlPermission": "Permite Whisper en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad en el Mac y vuelve a iniciar.",
+  "mobileControlTitle": "Controlar ordenador",
+  "mobileControlStart": "Iniciar control",
+  "mobileControlStop": "Detener control",
+  "mobileControlReady": "Listo",
+  "mobileControlActive": "Controlando",
+  "mobileControlAir": "Ratón por movimiento",
+  "mobileControlTouchpad": "Panel táctil",
+  "mobileControlHoldMove": "Mantén pulsado y gira la muñeca para mover",
+  "mobileControlTouchHint": "Un dedo para mover · Toca para hacer clic · Dos para desplazar",
+  "mobileControlHoldScroll": "Mantén pulsado e inclina para desplazar",
+  "mobileControlScroll": "Desliza para desplazar",
+  "mobileControlLeft": "Clic izquierdo",
+  "mobileControlRight": "Clic derecho",
+  "mobileControlKeyboard": "Teclado virtual",
+  "mobileControlText": "Entrada de texto",
+  "mobileControlMainKeys": "Teclas principales",
+  "mobileControlFunctionKeys": "Función / navegación",
+  "mobileControlSendText": "Enviar texto",
+  "mobileControlTextHint": "Selecciona un campo en el ordenador, escribe y envía.",
+  "mobileControlTextTooLong": "Envía hasta 4 KiB de texto cada vez.",
+  "mobileControlTextUnconfirmed": "Entrada sin confirmar. Borrador conservado; revisa el ordenador antes de reenviar.",
+  "mobileControlTextSent": "Texto entregado al sistema. Revisa la aplicación de destino.",
+  "mobileControlSensorUnavailable": "Movimiento no disponible. Se ha activado el panel táctil.",
+  "mobileControlSensitivity": "Sensibilidad del movimiento",
+  "mobileControlCalibrate": "Calibrar",
+  "mobileControlCalibrating": "Mantén el teléfono quieto un momento…",
+  "mobileControlCalibrationDone": "Calibración completada",
+  "mobileControlIdleHint": "Inicia para controlar el ratón y el teclado. Al salir se detiene el control.",
+  "mobileControlReceiving": "Recibiendo control móvil de {name}",
+  "mobileControlShortcutHint": "Selecciona modificadores y una tecla. Se desactivan después de cada combinación.",
+  "@mobileControlReceiving": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "screenshotCapture": "Capturar región",
   "screenshotSelectionHint": "Clic en una ventana · Arrastra un área · Esc para cancelar",
   "screenshotAdjustHint": "Arrastra para mover · Ajusta los bordes · Enter para copiar · Esc para cancelar",

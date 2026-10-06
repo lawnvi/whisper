@@ -9,6 +9,109 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get mobileControlPermission =>
+      'Allow Whisper in System Settings → Privacy & Security → Accessibility on the Mac, then start again.';
+
+  @override
+  String get mobileControlTitle => 'Control computer';
+
+  @override
+  String get mobileControlStart => 'Start control';
+
+  @override
+  String get mobileControlStop => 'Stop control';
+
+  @override
+  String get mobileControlReady => 'Ready';
+
+  @override
+  String get mobileControlActive => 'Controlling';
+
+  @override
+  String get mobileControlAir => 'Air mouse';
+
+  @override
+  String get mobileControlTouchpad => 'Touchpad';
+
+  @override
+  String get mobileControlHoldMove => 'Hold here and turn your wrist to move';
+
+  @override
+  String get mobileControlTouchHint =>
+      'Move with one finger · Tap to click · Scroll with two';
+
+  @override
+  String get mobileControlHoldScroll => 'Hold and tilt to scroll';
+
+  @override
+  String get mobileControlScroll => 'Swipe to scroll';
+
+  @override
+  String get mobileControlLeft => 'Left click';
+
+  @override
+  String get mobileControlRight => 'Right click';
+
+  @override
+  String get mobileControlKeyboard => 'Virtual keyboard';
+
+  @override
+  String get mobileControlText => 'Text input';
+
+  @override
+  String get mobileControlMainKeys => 'Main keys';
+
+  @override
+  String get mobileControlFunctionKeys => 'Function / navigation';
+
+  @override
+  String get mobileControlSendText => 'Send text';
+
+  @override
+  String get mobileControlTextHint =>
+      'Select a text field on the computer, then write and send.';
+
+  @override
+  String get mobileControlTextTooLong => 'Send up to 4 KiB of text at a time.';
+
+  @override
+  String get mobileControlTextUnconfirmed =>
+      'Input was not confirmed. Draft kept; check the computer before resending.';
+
+  @override
+  String get mobileControlTextSent =>
+      'Text delivered to the system. Check the target app.';
+
+  @override
+  String get mobileControlSensorUnavailable =>
+      'Motion unavailable. Switched to touchpad.';
+
+  @override
+  String get mobileControlSensitivity => 'Motion sensitivity';
+
+  @override
+  String get mobileControlCalibrate => 'Calibrate';
+
+  @override
+  String get mobileControlCalibrating => 'Hold the phone still briefly…';
+
+  @override
+  String get mobileControlCalibrationDone => 'Calibration complete';
+
+  @override
+  String get mobileControlIdleHint =>
+      'Start to control the mouse and keyboard. Leaving this page stops control.';
+
+  @override
+  String mobileControlReceiving(String name) {
+    return 'Receiving mobile control from $name';
+  }
+
+  @override
+  String get mobileControlShortcutHint =>
+      'Select modifiers, then a key. Modifiers clear after each combination.';
+
+  @override
   String get screenshotCapture => 'Capture region';
 
   @override

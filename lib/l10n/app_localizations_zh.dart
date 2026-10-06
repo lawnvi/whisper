@@ -9,6 +9,102 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get mobileControlPermission =>
+      '请在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许 Whisper，然后重新开始。';
+
+  @override
+  String get mobileControlTitle => '控制电脑';
+
+  @override
+  String get mobileControlStart => '开始控制';
+
+  @override
+  String get mobileControlStop => '停止控制';
+
+  @override
+  String get mobileControlReady => '已就绪';
+
+  @override
+  String get mobileControlActive => '正在控制';
+
+  @override
+  String get mobileControlAir => '体感鼠标';
+
+  @override
+  String get mobileControlTouchpad => '触控板';
+
+  @override
+  String get mobileControlHoldMove => '按住此处，转腕移动光标';
+
+  @override
+  String get mobileControlTouchHint => '单指移动 · 轻点点击 · 双指滚动';
+
+  @override
+  String get mobileControlHoldScroll => '按住转腕滚动';
+
+  @override
+  String get mobileControlScroll => '滑动滚动';
+
+  @override
+  String get mobileControlLeft => '左键';
+
+  @override
+  String get mobileControlRight => '右键';
+
+  @override
+  String get mobileControlKeyboard => '虚拟键盘';
+
+  @override
+  String get mobileControlText => '文字输入';
+
+  @override
+  String get mobileControlMainKeys => '主键盘';
+
+  @override
+  String get mobileControlFunctionKeys => '功能 / 导航';
+
+  @override
+  String get mobileControlSendText => '发送文字';
+
+  @override
+  String get mobileControlTextHint => '先在电脑选中输入框，再输入并发送文字。';
+
+  @override
+  String get mobileControlTextTooLong => '每次最多发送 4 KiB 文字。';
+
+  @override
+  String get mobileControlTextUnconfirmed => '未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。';
+
+  @override
+  String get mobileControlTextSent => '文字已交给电脑系统，请查看目标应用。';
+
+  @override
+  String get mobileControlSensorUnavailable => '体感不可用，已切换到触控板。';
+
+  @override
+  String get mobileControlSensitivity => '体感灵敏度';
+
+  @override
+  String get mobileControlCalibrate => '校准';
+
+  @override
+  String get mobileControlCalibrating => '请保持手机静止片刻…';
+
+  @override
+  String get mobileControlCalibrationDone => '校准完成';
+
+  @override
+  String get mobileControlIdleHint => '开始后可控制光标和键盘，离开此页面会停止。';
+
+  @override
+  String mobileControlReceiving(String name) {
+    return '正在接受 $name 的手机控制';
+  }
+
+  @override
+  String get mobileControlShortcutHint => '点选修饰键，再点普通键组合发送；完成后自动解除。';
+
+  @override
   String get screenshotCapture => '区域截图';
 
   @override

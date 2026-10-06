@@ -100,6 +100,192 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @mobileControlPermission.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许 Whisper，然后重新开始。'**
+  String get mobileControlPermission;
+
+  /// No description provided for @mobileControlTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制电脑'**
+  String get mobileControlTitle;
+
+  /// No description provided for @mobileControlStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始控制'**
+  String get mobileControlStart;
+
+  /// No description provided for @mobileControlStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止控制'**
+  String get mobileControlStop;
+
+  /// No description provided for @mobileControlReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已就绪'**
+  String get mobileControlReady;
+
+  /// No description provided for @mobileControlActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制'**
+  String get mobileControlActive;
+
+  /// No description provided for @mobileControlAir.
+  ///
+  /// In zh, this message translates to:
+  /// **'体感鼠标'**
+  String get mobileControlAir;
+
+  /// No description provided for @mobileControlTouchpad.
+  ///
+  /// In zh, this message translates to:
+  /// **'触控板'**
+  String get mobileControlTouchpad;
+
+  /// No description provided for @mobileControlHoldMove.
+  ///
+  /// In zh, this message translates to:
+  /// **'按住此处，转腕移动光标'**
+  String get mobileControlHoldMove;
+
+  /// No description provided for @mobileControlTouchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'单指移动 · 轻点点击 · 双指滚动'**
+  String get mobileControlTouchHint;
+
+  /// No description provided for @mobileControlHoldScroll.
+  ///
+  /// In zh, this message translates to:
+  /// **'按住转腕滚动'**
+  String get mobileControlHoldScroll;
+
+  /// No description provided for @mobileControlScroll.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑动滚动'**
+  String get mobileControlScroll;
+
+  /// No description provided for @mobileControlLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左键'**
+  String get mobileControlLeft;
+
+  /// No description provided for @mobileControlRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右键'**
+  String get mobileControlRight;
+
+  /// No description provided for @mobileControlKeyboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟键盘'**
+  String get mobileControlKeyboard;
+
+  /// No description provided for @mobileControlText.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字输入'**
+  String get mobileControlText;
+
+  /// No description provided for @mobileControlMainKeys.
+  ///
+  /// In zh, this message translates to:
+  /// **'主键盘'**
+  String get mobileControlMainKeys;
+
+  /// No description provided for @mobileControlFunctionKeys.
+  ///
+  /// In zh, this message translates to:
+  /// **'功能 / 导航'**
+  String get mobileControlFunctionKeys;
+
+  /// No description provided for @mobileControlSendText.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送文字'**
+  String get mobileControlSendText;
+
+  /// No description provided for @mobileControlTextHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'先在电脑选中输入框，再输入并发送文字。'**
+  String get mobileControlTextHint;
+
+  /// No description provided for @mobileControlTextTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'每次最多发送 4 KiB 文字。'**
+  String get mobileControlTextTooLong;
+
+  /// No description provided for @mobileControlTextUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未确认输入结果，草稿已保留。请查看电脑后再决定是否重发。'**
+  String get mobileControlTextUnconfirmed;
+
+  /// No description provided for @mobileControlTextSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字已交给电脑系统，请查看目标应用。'**
+  String get mobileControlTextSent;
+
+  /// No description provided for @mobileControlSensorUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'体感不可用，已切换到触控板。'**
+  String get mobileControlSensorUnavailable;
+
+  /// No description provided for @mobileControlSensitivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'体感灵敏度'**
+  String get mobileControlSensitivity;
+
+  /// No description provided for @mobileControlCalibrate.
+  ///
+  /// In zh, this message translates to:
+  /// **'校准'**
+  String get mobileControlCalibrate;
+
+  /// No description provided for @mobileControlCalibrating.
+  ///
+  /// In zh, this message translates to:
+  /// **'请保持手机静止片刻…'**
+  String get mobileControlCalibrating;
+
+  /// No description provided for @mobileControlCalibrationDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'校准完成'**
+  String get mobileControlCalibrationDone;
+
+  /// No description provided for @mobileControlIdleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始后可控制光标和键盘，离开此页面会停止。'**
+  String get mobileControlIdleHint;
+
+  /// No description provided for @mobileControlReceiving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在接受 {name} 的手机控制'**
+  String mobileControlReceiving(String name);
+
+  /// No description provided for @mobileControlShortcutHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点选修饰键，再点普通键组合发送；完成后自动解除。'**
+  String get mobileControlShortcutHint;
+
   /// No description provided for @screenshotCapture.
   ///
   /// In zh, this message translates to:
