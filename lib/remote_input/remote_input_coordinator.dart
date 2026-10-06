@@ -1611,7 +1611,11 @@ class RemoteInputCoordinator extends ChangeNotifier {
           peerId: message.sinkPeerId,
         ),
       );
-      sendManualInput(RemoteInputEventType.heartbeat, const {});
+      if (sendManualInput(RemoteInputEventType.heartbeat, const {}) == 0 ||
+          generation != _lifecycle.generation ||
+          !_state.isActive) {
+        return;
+      }
       _manualHeartbeat = Timer.periodic(const Duration(milliseconds: 500), (_) {
         sendManualInput(RemoteInputEventType.heartbeat, const {});
       });

@@ -416,4 +416,15 @@ void main() {
       expect(coordinator.state.isActive, isFalse);
     },
   );
+  testWidgets('failure of the first heartbeat cannot leave a running session', (
+    tester,
+  ) async {
+    transport.onSend = (_) => throw StateError('closed transport');
+    await startSource();
+    await tester.pump();
+    expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
+    expect(calls, isEmpty);
+    await tester.pump(const Duration(seconds: 3));
+    expect(transport.packets, hasLength(1));
+  });
 }
