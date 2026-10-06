@@ -242,6 +242,42 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('touchpad moves while a separate finger holds left click', (
+    tester,
+  ) async {
+    await mount(tester, app());
+    await tester.tap(find.text('Start control'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Left click'));
+    await tester.pumpAndSettle();
+    final held = await tester.startGesture(
+      tester.getCenter(find.text('Left click')),
+      pointer: 1,
+    );
+    await tester.pump();
+    final pad = find.text(
+      'Move with one finger · Tap to click · Scroll with two',
+    );
+    final finger = await tester.startGesture(tester.getCenter(pad), pointer: 2);
+    await tester.pump();
+    await finger.moveBy(const Offset(30, 0));
+    await tester.pump(const Duration(milliseconds: 30));
+    await finger.up();
+    await held.up();
+    await tester.pump();
+    final events = transport.sent
+        .where((p) => p.eventType != RemoteInputEventType.heartbeat)
+        .toList();
+    expect(events.map((p) => p.eventType), [
+      RemoteInputEventType.mouseButton,
+      RemoteInputEventType.mouseMove,
+      RemoteInputEventType.mouseButton,
+    ]);
+    expect(jsonDecode(utf8.decode(events.first.payload))['down'], isTrue);
+    expect(jsonDecode(utf8.decode(events.last.payload))['down'], isFalse);
+    expect(jsonDecode(utf8.decode(events[1].payload))['deltaX'], 30);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('permission failure explains the Mac setting', (tester) async {
     await mount(
       tester,
