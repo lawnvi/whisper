@@ -94,11 +94,13 @@ void main() {
   late List<MethodCall> calls;
   late List<RemoteInputControlMessage> controls;
   late _Transport transport;
+  late List<Uri> transportUris;
   const channel = MethodChannel('test.manual_input');
   setUp(() {
     calls = [];
     controls = [];
     transport = _Transport();
+    transportUris = [];
     manager = RemoteInputManager();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -108,7 +110,10 @@ void main() {
     coordinator = RemoteInputCoordinator(
       manager: manager,
       platform: RemoteInputPlatform(channel: channel),
-      transportFactory: (_) async => transport,
+      transportFactory: (uri) async {
+        transportUris.add(uri);
+        return transport;
+      },
       scrollMultiplierProvider: () async => 1,
       platformKindProvider: () => RemoteInputPlatformKind.macos,
     );
@@ -137,7 +142,10 @@ void main() {
     sourcePeerId: 'phone',
     sinkPeerId: 'mac',
   );
-  Future<void> startSource() async {
+  Future<void> startSource({
+    int remotePort = 10002,
+    int transportPort = 0,
+  }) async {
     await coordinator.startSharingToConnectedPeer(
       sourcePeerId: 'phone',
       sinkPeerId: 'mac',
@@ -157,10 +165,11 @@ void main() {
         sessionId: sent.sessionId,
         sourcePeerId: 'phone',
         sinkPeerId: 'mac',
+        transportPort: transportPort,
       ),
       localPeerId: 'phone',
       remoteHost: 'mac',
-      remotePort: 10002,
+      remotePort: remotePort,
       isMutuallyTrusted: true,
       localCanInject: false,
       sendControl: controls.add,
@@ -199,6 +208,28 @@ void main() {
       await coordinator.stopLocal();
       expect(calls, isEmpty);
       await tester.pump(const Duration(seconds: 3));
+    },
+  );
+  test(
+    'manual accept resolves an incoming peer with no known listener port',
+    () async {
+      await startSource(remotePort: 0, transportPort: 21345);
+      expect(coordinator.state.isActive, isTrue);
+      expect(transportUris.single.host, 'mac');
+      expect(transportUris.single.port, 21345);
+      expect(transportUris.single.path, '/input');
+      expect(calls, isEmpty);
+    },
+  );
+  test(
+    'manual accept overrides a stale port and supports older receivers',
+    () async {
+      await startSource(remotePort: 10002, transportPort: 21345);
+      expect(transportUris.single.port, 21345);
+      await coordinator.stopLocal();
+      controls.clear();
+      await startSource(remotePort: 12345);
+      expect(transportUris.last.port, 12345);
     },
   );
   testWidgets('sink watchdog releases after startup or loss of valid input', (

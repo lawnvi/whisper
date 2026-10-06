@@ -3623,10 +3623,18 @@ class RemoteInputPlugin {
       // pixels; vertical portal scrolling has the opposite wheel direction.
       const bool wheel = type == "mouseWheel";
       const double gain = wheel && JsonString(json, "scrollUnit") != "pixel" ? 15.0 / 120.0 : 1.0;
-      if (type == "mouseWheel") g_variant_builder_add(&options, "{sv}", "finish", g_variant_new_boolean(true));
-      ManualPortalCallLocked(type == "mouseMove" ? "NotifyPointerMotion" : "NotifyPointerAxis",
+      const bool delivered = ManualPortalCallLocked(type == "mouseMove" ? "NotifyPointerMotion" : "NotifyPointerAxis",
           g_variant_new("(oa{sv}dd)", portal_session_handle_.c_str(), &options,
               JsonNumber(json, "deltaX") * gain, JsonNumber(json, "deltaY") * (wheel ? -gain : gain)));
+      if (wheel && delivered) {
+        // Mutter treats finish as an axis-stop event and ignores its deltas.
+        // Commit the movement first, then end this momentum-free scroll step.
+        GVariantBuilder finish;
+        g_variant_builder_init(&finish, G_VARIANT_TYPE_VARDICT);
+        g_variant_builder_add(&finish, "{sv}", "finish", g_variant_new_boolean(true));
+        ManualPortalCallLocked("NotifyPointerAxis",
+            g_variant_new("(oa{sv}dd)", portal_session_handle_.c_str(), &finish, 0.0, 0.0));
+      }
     } else if (type == "mouseButton") {
       const int button = static_cast<int>(std::lround(JsonNumber(json, "button")));
       const bool down = JsonBool(json, "down");

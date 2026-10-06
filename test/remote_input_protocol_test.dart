@@ -5,6 +5,63 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 void main() {
+  test('manual accept advertises an optional validated listener port', () {
+    const accept = RemoteInputControlMessage(
+      action: RemoteInputControlAction.accept,
+      mode: RemoteInputMode.manual,
+      sessionId: 'input-1',
+      sourcePeerId: 'phone',
+      sinkPeerId: 'linux',
+    );
+    final legacy = accept.withTransportToken('token').toJson();
+    expect(legacy, isNot(contains('transportPort')));
+    expect(RemoteInputControlMessage.fromJson(legacy).transportPort, 0);
+    for (final port in [1, 21345, 65535]) {
+      final message = accept.withTransportToken('token', port: port);
+      final json = message.withTransportToken('new-token').toJson();
+      expect(json['transportPort'], port);
+      expect(RemoteInputControlMessage.fromJson(json).transportPort, port);
+    }
+    for (final port in [null, 0, -1, 65536, 10002.5, '10002', true]) {
+      expect(
+        () => RemoteInputControlMessage.fromJson({
+          ...legacy,
+          'transportPort': port,
+        }),
+        throwsFormatException,
+      );
+    }
+    for (final action in RemoteInputControlAction.values) {
+      if (action == RemoteInputControlAction.accept) continue;
+      expect(
+        () => RemoteInputControlMessage.fromJson({
+          ...legacy,
+          'action': action.name,
+          'transportPort': 10002,
+        }),
+        throwsFormatException,
+      );
+    }
+    expect(
+      () => RemoteInputControlMessage.fromJson({
+        ...legacy,
+        'mode': 'edgeTraversal',
+        'transportPort': 10002,
+      }),
+      throwsFormatException,
+    );
+    const desktop = RemoteInputControlMessage(
+      action: RemoteInputControlAction.accept,
+      sessionId: 'input-1',
+      sourcePeerId: 'mac',
+      sinkPeerId: 'linux',
+    );
+    expect(
+      desktop.withTransportToken('token', port: 10002).toJson(),
+      isNot(contains('transportPort')),
+    );
+  });
+
   group('RemoteInputControlMessage', () {
     test('round-trips offer fields', () {
       const message = RemoteInputControlMessage(

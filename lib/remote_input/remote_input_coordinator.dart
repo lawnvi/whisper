@@ -1558,7 +1558,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     }
     final uri = _inputUri(
       host: remoteHost,
-      port: remotePort,
+      port: isManual && message.transportPort != 0
+          ? message.transportPort
+          : remotePort,
       path: message.path,
       sessionId: message.sessionId,
       transportToken: message.transportToken,

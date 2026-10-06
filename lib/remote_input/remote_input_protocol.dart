@@ -133,6 +133,7 @@ class RemoteInputControlMessage {
     this.transport = RemoteInputTransport.websocket,
     this.path = '/input',
     this.transportToken = '',
+    this.transportPort = 0,
     this.layoutEdge,
     this.sourceDisplayId = '',
     this.sourceEdge,
@@ -166,6 +167,9 @@ class RemoteInputControlMessage {
   final RemoteInputTransport transport;
   final String path;
   final String transportToken;
+  // An incoming chat connection does not reveal the peer's listening port.
+  // Manual accepts can supply it over the authenticated control channel.
+  final int transportPort;
   final RemoteInputEdge? layoutEdge;
   final String sourceDisplayId;
   final RemoteInputEdge? sourceEdge;
@@ -188,7 +192,7 @@ class RemoteInputControlMessage {
   final bool remoteClipboardV1;
   final int workspaceRevision;
 
-  RemoteInputControlMessage withTransportToken(String token) {
+  RemoteInputControlMessage withTransportToken(String token, {int? port}) {
     return RemoteInputControlMessage(
       action: action,
       sessionId: sessionId,
@@ -200,6 +204,7 @@ class RemoteInputControlMessage {
       transport: transport,
       path: path,
       transportToken: token,
+      transportPort: port ?? transportPort,
       layoutEdge: layoutEdge,
       sourceDisplayId: sourceDisplayId,
       sourceEdge: sourceEdge,
@@ -238,6 +243,10 @@ class RemoteInputControlMessage {
     'path': path,
     if (action == RemoteInputControlAction.accept && transportToken.isNotEmpty)
       'transportToken': transportToken,
+    if (action == RemoteInputControlAction.accept &&
+        mode == RemoteInputMode.manual &&
+        transportPort != 0)
+      'transportPort': transportPort,
     if (layoutEdge != null) 'layoutEdge': layoutEdge!.name,
     if (sourceDisplayId.isNotEmpty) 'sourceDisplayId': sourceDisplayId,
     if (sourceEdge != null) 'sourceEdge': sourceEdge!.name,
@@ -271,8 +280,18 @@ class RemoteInputControlMessage {
               .where((value) => value.name == rawMode)
               .firstOrNull;
     if (mode == null) throw const FormatException('unknown remote input mode');
+    final port = json['transportPort'];
+    if (json.containsKey('transportPort') &&
+        (mode != RemoteInputMode.manual ||
+            json['action'] != RemoteInputControlAction.accept.name ||
+            port is! int ||
+            port < 1 ||
+            port > 65535)) {
+      throw const FormatException('invalid remote input transport port');
+    }
     return RemoteInputControlMessage(
       mode: mode,
+      transportPort: port as int? ?? 0,
       textSequence: intJson(json['textSequence']),
       textSucceeded: json['textSucceeded'] as bool? ?? false,
       action: enumByName(

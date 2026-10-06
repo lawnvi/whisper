@@ -42,6 +42,12 @@ void main() {
       );
       expect(portal, contains('JsonString(json, "scrollUnit") != "pixel"'));
       expect(portal, contains('(wheel ? -gain : gain)'));
+      expect(portal, contains('if (wheel && delivered)'));
+      expect(
+        portal.indexOf('JsonNumber(json, "deltaY")'),
+        lessThan(portal.indexOf('"finish", g_variant_new_boolean(true)')),
+      );
+      expect(portal, contains('&finish, 0.0, 0.0'));
       expect(portal, contains('SetInjectedButton(button, down)'));
       expect(portal, contains('SetInjectedKey(key, down)'));
     });

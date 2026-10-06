@@ -5359,7 +5359,10 @@ class WsSvrManager {
       if (token == null) {
         return Future<bool>.value(false);
       }
-      outgoing = control.withTransportToken(token);
+      outgoing = control.withTransportToken(
+        token,
+        port: control.mode == RemoteInputMode.manual ? _server?.port : null,
+      );
     }
     _remoteInputTrace(
       'remote input send control ${_remoteInputControlSummary(control)} '
