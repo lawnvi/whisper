@@ -40,7 +40,6 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/remote_input/manual_control_receiver_banner.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
@@ -1944,7 +1943,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 child: Column(
                   children: [
                     _buildDesktopSidebarToolbar(),
-                    const ManualControlReceiverBanner(),
                     Expanded(
                       child: ScrollConfiguration(
                         behavior: ScrollConfiguration.of(
@@ -2740,6 +2738,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required bool selected,
   }) {
     final peer = session.device;
+    final inputState = _remoteInputCoordinator.state;
+    final receivingControl = _isReceivingMobileControl(peer.uid);
     final shortId = peer.uid.length > 6
         ? peer.uid.substring(peer.uid.length - 6)
         : peer.uid;
@@ -2754,9 +2754,33 @@ class _DeviceListScreen extends State<DeviceListScreen>
         statusColor: _sessionStatusColor(session),
         selected: selected,
         trusted: _isTrustedDevice(peer),
+        controlConnecting: receivingControl && inputState.isBusy,
+        onStopControl: receivingControl
+            ? () => _stopMobileControl(peer.uid, inputState.sessionId)
+            : null,
         onTap: () => setState(() => _selectedDesktopPeerId = peer.uid),
       ),
       items: _buildSessionContextActions(peer),
+    );
+  }
+
+  bool _isReceivingMobileControl(String peerId) {
+    final state = _remoteInputCoordinator.state;
+    return _remoteInputCoordinator.isManual &&
+        state.role == RemoteInputRuntimeRole.sink &&
+        state.isForPeer(peerId) &&
+        (state.isActive || state.isBusy);
+  }
+
+  Future<void> _stopMobileControl(String peerId, String sessionId) async {
+    if (!_isReceivingMobileControl(peerId) ||
+        _remoteInputCoordinator.state.sessionId != sessionId) {
+      return;
+    }
+    await _remoteInputCoordinator.stopSharing(
+      sendControl: (control) {
+        socketManager.sendRemoteInputControlTo(peerId, control);
+      },
     );
   }
 
@@ -2765,7 +2789,14 @@ class _DeviceListScreen extends State<DeviceListScreen>
   ) {
     final l10n = AppLocalizations.of(context);
     final isConnected = socketManager.isConnectedTo(deviceItem.uid);
+    final inputSessionId = _remoteInputCoordinator.state.sessionId;
     return [
+      if (_isReceivingMobileControl(deviceItem.uid))
+        ContextMenuActionItem(
+          label: l10n!.mobileControlStop,
+          icon: Icons.stop_circle_outlined,
+          onSelected: () => _stopMobileControl(deviceItem.uid, inputSessionId),
+        ),
       if (isConnected)
         ContextMenuActionItem(
           label: l10n?.disconnect ?? '断开',

@@ -5,6 +5,7 @@
   "mobileControlStop": "Stop control",
   "mobileControlReady": "Ready",
   "mobileControlActive": "Controlling",
+  "mobileControlPreparing": "Preparing control",
   "mobileControlAir": "Air mouse",
   "mobileControlTouchpad": "Touchpad",
   "mobileControlHoldMove": "Hold here and turn your wrist to move",
@@ -28,7 +29,7 @@
   "mobileControlCalibrating": "Hold the phone still briefly…",
   "mobileControlCalibrationDone": "Calibration complete",
   "mobileControlIdleHint": "Start to control the mouse and keyboard. Leaving this page stops control.",
-  "mobileControlReceiving": "Receiving mobile control from {name}",
+  "mobileControlReceiving": "This computer is controlled by {name}",
   "mobileControlShortcutHint": "Select modifiers, then a key. Modifiers clear after each combination.",
   "@mobileControlReceiving": {
     "placeholders": {

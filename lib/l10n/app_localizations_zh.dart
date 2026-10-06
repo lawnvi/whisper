@@ -28,6 +28,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlActive => '正在控制';
 
   @override
+  String get mobileControlPreparing => '正在连接控制';
+
+  @override
   String get mobileControlAir => '体感鼠标';
 
   @override
@@ -98,7 +101,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String mobileControlReceiving(String name) {
-    return '正在接受 $name 的手机控制';
+    return '此电脑正由 $name 控制';
   }
 
   @override

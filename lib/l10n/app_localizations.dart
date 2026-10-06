@@ -136,6 +136,12 @@ abstract class AppLocalizations {
   /// **'正在控制'**
   String get mobileControlActive;
 
+  /// No description provided for @mobileControlPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在连接控制'**
+  String get mobileControlPreparing;
+
   /// No description provided for @mobileControlAir.
   ///
   /// In zh, this message translates to:
@@ -277,7 +283,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlReceiving.
   ///
   /// In zh, this message translates to:
-  /// **'正在接受 {name} 的手机控制'**
+  /// **'此电脑正由 {name} 控制'**
   String mobileControlReceiving(String name);
 
   /// No description provided for @mobileControlShortcutHint.

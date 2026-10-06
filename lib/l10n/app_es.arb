@@ -5,6 +5,7 @@
   "mobileControlStop": "Detener control",
   "mobileControlReady": "Listo",
   "mobileControlActive": "Controlando",
+  "mobileControlPreparing": "Preparando control",
   "mobileControlAir": "Ratón por movimiento",
   "mobileControlTouchpad": "Panel táctil",
   "mobileControlHoldMove": "Mantén pulsado y gira la muñeca para mover",
@@ -28,7 +29,7 @@
   "mobileControlCalibrating": "Mantén el teléfono quieto un momento…",
   "mobileControlCalibrationDone": "Calibración completada",
   "mobileControlIdleHint": "Inicia para controlar el ratón y el teclado. Al salir se detiene el control.",
-  "mobileControlReceiving": "Recibiendo control móvil de {name}",
+  "mobileControlReceiving": "Este equipo está siendo controlado por {name}",
   "mobileControlShortcutHint": "Selecciona modificadores y una tecla. Se desactivan después de cada combinación.",
   "@mobileControlReceiving": {
     "placeholders": {

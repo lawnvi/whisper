@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/computer_control_icon.dart';
 
 class DeviceConnectionWelcome extends StatelessWidget {
   const DeviceConnectionWelcome({
@@ -147,6 +148,8 @@ class DesktopDeviceSessionTile extends StatelessWidget {
     required this.selected,
     required this.trusted,
     required this.onTap,
+    this.onStopControl,
+    this.controlConnecting = false,
   });
 
   final String name, identity, statusLabel, preview, time;
@@ -154,11 +157,22 @@ class DesktopDeviceSessionTile extends StatelessWidget {
   final Color statusColor;
   final bool selected, trusted;
   final VoidCallback onTap;
+  final VoidCallback? onStopControl;
+  final bool controlConnecting;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
+    final l10n = AppLocalizations.of(context)!;
+    final receivingControl = onStopControl != null;
+    final controlLabel = controlConnecting
+        ? l10n.mobileControlPreparing
+        : l10n.mobileControlActive;
+    final controlDescription = controlConnecting
+        ? l10n.remoteInputSinkConnecting
+        : l10n.mobileControlReceiving(name);
+    final controlActionLabel = '$controlDescription\n${l10n.mobileControlStop}';
     return Material(
       color: selected
           ? (colors.brightness == Brightness.dark
@@ -231,14 +245,21 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Tooltip(
-                            message: '$statusLabel · $identity',
-                            child: Text(
-                              preview,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: palette.textMuted,
+                            message: receivingControl
+                                ? controlDescription
+                                : '$statusLabel · $identity',
+                            child: Semantics(
+                              liveRegion: receivingControl,
+                              child: Text(
+                                receivingControl ? controlLabel : preview,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: receivingControl
+                                      ? colors.primary
+                                      : palette.textMuted,
+                                ),
                               ),
                             ),
                           ),
@@ -248,6 +269,26 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (receivingControl) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: controlActionLabel,
+                  onPressed: onStopControl,
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size.square(48),
+                    foregroundColor: colors.primary,
+                    backgroundColor: colors.primary.withValues(alpha: 0.08),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  iconSize: 20,
+                  icon: Semantics(
+                    label: controlActionLabel,
+                    child: const ComputerControlIcon(),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

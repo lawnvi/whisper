@@ -28,6 +28,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlActive => 'Controlling';
 
   @override
+  String get mobileControlPreparing => 'Preparing control';
+
+  @override
   String get mobileControlAir => 'Air mouse';
 
   @override
@@ -104,7 +107,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String mobileControlReceiving(String name) {
-    return 'Receiving mobile control from $name';
+    return 'This computer is controlled by $name';
   }
 
   @override
