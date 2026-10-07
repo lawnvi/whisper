@@ -51,6 +51,9 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
     with WindowListener {
   double? _seekPreview;
   double? _volumePreview;
+  double? _pendingVolume;
+  bool _sendingVolume = false;
+  bool _draggingVolume = false;
   bool _fullscreen = false;
   bool _controlsVisible = true;
   bool _pointerDown = false;
@@ -114,8 +117,38 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
     _setFullscreen(fullscreen);
   }
 
+  void _changeVolume(double value) {
+    setState(() => _volumePreview = value);
+    _pendingVolume = value;
+    _activity();
+    if (!_sendingVolume) unawaited(_sendVolume());
+  }
+
+  Future<void> _sendVolume() async {
+    _sendingVolume = true;
+    try {
+      // Keep only the newest unsent value while the player acknowledges a write.
+      while (mounted && _pendingVolume != null) {
+        final value = _pendingVolume!;
+        _pendingVolume = null;
+        await _command('volume', {'value': value});
+      }
+    } finally {
+      _sendingVolume = false;
+      if (mounted && !_draggingVolume) _finishVolumeChange();
+    }
+  }
+
+  void _finishVolumeChange() {
+    _draggingVolume = false;
+    // Preserve the thumb position until the last write has completed.
+    if (!_sendingVolume) setState(() => _volumePreview = null);
+    _activity();
+  }
+
   @override
   void dispose() {
+    _pendingVolume = null;
     _hideTimer?.cancel();
     windowManager.removeListener(this);
     super.dispose();
@@ -395,14 +428,12 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                             semanticFormatterCallback: (value) =>
                                 '${(value * 100).round()}%',
                             value: _volumePreview ?? volume,
-                            onChanged: (value) {
-                              setState(() => _volumePreview = value);
+                            onChangeStart: (_) {
+                              _draggingVolume = true;
                               _activity();
                             },
-                            onChangeEnd: (value) {
-                              setState(() => _volumePreview = null);
-                              unawaited(_command('volume', {'value': value}));
-                            },
+                            onChanged: _changeVolume,
+                            onChangeEnd: (_) => _finishVolumeChange(),
                           ),
                         ),
                       ),
