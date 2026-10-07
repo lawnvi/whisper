@@ -66,7 +66,6 @@ import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
-import 'package:whisper/widget/manual_connection_dialog.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
@@ -82,6 +81,7 @@ import 'pairing_qr.dart';
 import 'settings.dart' as app_settings;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
+import 'package:whisper/widget/subtle_motion.dart';
 
 enum DeviceListOperationKind {
   temporaryFileCleanup,
@@ -190,7 +190,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
   static const double _desktopToolbarGap = 10;
-  static const double _desktopToolbarToolGroupWidth = 174;
+  static const double _desktopToolbarToolGroupWidth = 140;
   static const Duration _desktopToolbarAnimationDuration = Duration(
     milliseconds: 220,
   );
@@ -1812,9 +1812,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          onPressed: _showManualConnectDialog,
-          color: Colors.grey,
-          icon: const Icon(Icons.add, size: 32), // 调整圆角以获得更圆的按钮
+          tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
+          onPressed: _openPairingQr,
+          icon: Icon(
+            Icons.qr_code_scanner_rounded,
+            size: 28,
+            color: isDark ? Colors.white60 : Colors.black45,
+          ),
         ),
         title: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1878,15 +1882,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 _refreshDevice();
               },
             ),
-          IconButton(
-            tooltip: AppLocalizations.of(context)?.qrPairingTitle ?? '二维码连接',
-            onPressed: _openPairingQr,
-            icon: Icon(
-              Icons.qr_code_scanner_rounded,
-              size: 28,
-              color: isDark ? Colors.white60 : Colors.black45,
-            ),
-          ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
@@ -2178,14 +2173,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildDesktopToolButton(
-              icon: Icons.add,
-              tooltip: AppLocalizations.of(context)?.connect ?? '连接',
-              onPressed: _showManualConnectDialog,
-            ),
-            const SizedBox(width: 2),
-            _buildDesktopToolButton(
               icon: Icons.qr_code_scanner_rounded,
-              tooltip: AppLocalizations.of(context)?.qrPairingTitle ?? '二维码连接',
+              tooltip:
+                  AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
               onPressed: _openPairingQr,
             ),
             const SizedBox(width: 2),
@@ -2885,13 +2875,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return DateFormat('yyyy/MM/dd').format(messageTime);
   }
 
-  Future<void> _showManualConnectDialog() async {
-    final endpoint = await showManualConnectionDialog(context);
-    if (!mounted || endpoint == null) return;
-    _connectServer(endpoint.host, endpoint.port);
-  }
+  Future<void> _showManualConnectDialog() =>
+      _openPairingQr(startWithAddress: true);
 
-  Future<void> _openPairingQr() async {
+  Future<void> _openPairingQr({bool startWithAddress = false}) async {
     final qrController = PairingQrDialogController();
     _activePairingQrController?.dismiss();
     _activePairingQrController = qrController;
@@ -2899,31 +2886,44 @@ class _DeviceListScreen extends State<DeviceListScreen>
       final localDevice = device ?? await LocalSetting().instance();
       final currentHost = await getLocalIpAddress();
       final identity = await DeviceIdentityStore().loadOrCreate();
-      final localInvite = PairingInvite(
-        host: currentHost,
-        port: localDevice.port,
-        peerId: localDevice.uid,
-        publicKeyHash: identityPublicKeyHash(identity.publicKeyBase64Url),
-      );
+      PairingInvite? localInvite;
+      try {
+        localInvite = PairingInvite(
+          host: currentHost,
+          port: localDevice.port,
+          peerId: localDevice.uid,
+          publicKeyHash: identityPublicKeyHash(identity.publicKeyBase64Url),
+        );
+      } on PairingInviteFormatException catch (error) {
+        // An unavailable local QR address must not block manual connections.
+        if (error.reason != PairingInviteError.invalidHost) rethrow;
+      }
       if (!mounted) {
         return;
       }
-      final invite = await showPairingQrDialog(
+      final result = await showPairingQrDialog(
         context,
         localInvite: localInvite,
+        localPeerId: localDevice.uid,
+        startWithAddress: startWithAddress,
         startWithScanner: isMobile(),
         controller: qrController,
       );
-      if (!mounted || invite == null) {
+      if (!mounted || result == null) {
         return;
       }
-      await _connectServerInternal(
-        invite.host,
-        invite.port,
-        manual: true,
-        peerId: invite.peerId,
-        publicKeyHash: invite.publicKeyHash,
-      );
+      final invite = result.invite;
+      if (invite != null) {
+        await _connectServerInternal(
+          invite.host,
+          invite.port,
+          manual: true,
+          peerId: invite.peerId,
+          publicKeyHash: invite.publicKeyHash,
+        );
+      } else {
+        _connectServer(result.endpoint.host, result.endpoint.port);
+      }
     } on PairingInviteFormatException catch (error) {
       if (mounted) {
         _showConnectionDiagnosticStage(
@@ -3127,26 +3127,25 @@ class _DeviceListScreen extends State<DeviceListScreen>
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _sessionStatusColor(session),
-                          ),
+                        ConnectionStatusDot(
+                          color: _sessionStatusColor(session),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            session.preview,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.white54
-                                  : Colors.black45,
+                          child: WhisperAnimatedSwitcher(
+                            value: (session.isConnected, session.isNearby),
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              session.preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black45,
+                              ),
                             ),
                           ),
                         ),

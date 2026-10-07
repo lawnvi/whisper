@@ -61,6 +61,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(copiedTexts, <String>['saved note']);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
   });
 
   testWidgets(
@@ -126,23 +128,42 @@ void main() {
     },
   );
 
-  testWidgets('copy action briefly morphs into a success check', (
-    tester,
-  ) async {
-    await _pumpPage(tester, database, copiedTexts);
-    await tester.tap(
-      find.byKey(transferAssistantMessageCopyKey(favoriteMessage.id)),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-    expect(copiedTexts, <String>['saved note']);
-    // Row actions stay in the list.
-    expect(find.byType(BottomSheet), findsNothing);
-    await tester.pump(const Duration(milliseconds: 1000));
-    await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.content_copy_rounded), findsWidgets);
-  });
+  testWidgets(
+    'copy confirms completion inline without a toast or layout shift',
+    (tester) async {
+      final complete = Completer<void>();
+      await _pumpPage(
+        tester,
+        database,
+        copiedTexts,
+        copyText: (text) async {
+          copiedTexts.add(text);
+          await complete.future;
+        },
+      );
+      await _search(tester, 'needle');
+      final copy = find.byKey(
+        transferAssistantMessageCopyKey(searchableMessage.id),
+      );
+      final bounds = tester.getRect(copy);
+      await tester.tap(copy);
+      await tester.pump();
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      expect(tester.widget<IconButton>(copy).onPressed, isNull);
+      complete.complete();
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+      expect(find.byTooltip('Text copied'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.getRect(copy), bounds);
+      expect(copiedTexts, <String>['old needle text']);
+      expect(find.byType(BottomSheet), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.content_copy_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+    },
+  );
 
   testWidgets('reveals a distant match and copies the exact full message', (
     tester,
@@ -214,13 +235,18 @@ void main() {
     );
     await tester.tap(copy);
     await tester.pumpAndSettle();
-    expect(find.text("Couldn't copy text"), findsOneWidget);
+    expect(find.byTooltip("Couldn't copy text"), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
     expect(find.byIcon(Icons.check_rounded), findsNothing);
     await tester.tap(copy);
     await tester.pumpAndSettle();
     expect(copiedTexts, <String>['old needle text']);
-    expect(find.text("Couldn't copy text"), findsNothing);
-    await tester.pump(const Duration(seconds: 1));
+    expect(find.byTooltip("Couldn't copy text"), findsNothing);
+    expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('empty history has one empty state and a reversible filter', (
@@ -385,7 +411,8 @@ void main() {
     await tester.pump();
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(copiedTexts, <String>['old needle text']);
-    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SnackBar), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('search with an open keyboard keeps empty results scrollable', (

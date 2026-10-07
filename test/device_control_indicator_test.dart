@@ -74,6 +74,7 @@ void main() {
 
       await tester.pumpWidget(app(tile()));
       expect(find.byType(ComputerControlIcon), findsNothing);
+      await tester.pumpAndSettle();
       expect(find.text('Controlling'), findsNothing);
       expect(find.text('Latest message'), findsOneWidget);
     },

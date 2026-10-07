@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/computer_control_icon.dart';
+import 'package:whisper/widget/subtle_motion.dart';
 
 class DeviceConnectionWelcome extends StatelessWidget {
   const DeviceConnectionWelcome({
@@ -234,14 +235,7 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: statusColor,
-                          ),
-                        ),
+                        ConnectionStatusDot(color: statusColor),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Tooltip(
@@ -250,15 +244,23 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                                 : '$statusLabel · $identity',
                             child: Semantics(
                               liveRegion: receivingControl,
-                              child: Text(
-                                receivingControl ? controlLabel : preview,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: receivingControl
-                                      ? colors.primary
-                                      : palette.textMuted,
+                              child: WhisperAnimatedSwitcher(
+                                value: (
+                                  receivingControl,
+                                  controlConnecting,
+                                  statusLabel,
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  receivingControl ? controlLabel : preview,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: receivingControl
+                                        ? colors.primary
+                                        : palette.textMuted,
+                                  ),
                                 ),
                               ),
                             ),

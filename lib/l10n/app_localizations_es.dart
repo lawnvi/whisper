@@ -470,7 +470,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deleteSelectedMessagesDesc =>
-      'Se eliminarán los registros seleccionados. Los archivos locales se conservarán.';
+      'Se eliminarán los mensajes seleccionados. No se puede deshacer.';
 
   @override
   String language(Object language) {
@@ -1850,4 +1850,37 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get historyLoadFailed =>
       'No se pudo cargar el historial. Toca para reintentar.';
+
+  @override
+  String get deleteReceivedFilesDesc =>
+      'También se eliminarán los archivos recibidos. Se conservarán los originales enviados.';
+
+  @override
+  String get keepReceivedFiles => 'Conservar archivos recibidos';
+
+  @override
+  String get messageDeleteFailed =>
+      'No se pudo completar la eliminación. Inténtalo de nuevo.';
+
+  @override
+  String get connectionQrTab => 'Código QR';
+
+  @override
+  String get connectionScanTab => 'Escanear';
+
+  @override
+  String get connectionAddressTab => 'IP / puerto';
+
+  @override
+  String get connectionAddressLabel => 'Dirección IP o nombre de host';
+
+  @override
+  String get connectionDetailsTab => 'Este equipo';
+
+  @override
+  String get connectionAddressHint =>
+      'Consulta la dirección y el puerto en la pantalla principal de Whisper del otro dispositivo. Ambos deben estar en la misma red local.';
+
+  @override
+  String get qrCopyFailed => 'No se pudo copiar. Inténtalo de nuevo.';
 }

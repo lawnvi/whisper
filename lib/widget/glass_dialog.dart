@@ -3,10 +3,11 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/whisper_motion.dart';
 import 'package:whisper/widget/frosted_modal_route.dart';
 
-const Duration whisperDialogEnterDuration = Duration(milliseconds: 220);
-const Duration whisperDialogExitDuration = Duration(milliseconds: 150);
+const Duration whisperDialogEnterDuration = WhisperMotion.dialogEnter;
+const Duration whisperDialogExitDuration = WhisperMotion.dialogExit;
 
 Future<T?> showWhisperDialog<T>(
   BuildContext context, {
@@ -40,19 +41,46 @@ Future<T?> showWhisperDialog<T>(
             if (reduceMotion) {
               return child;
             }
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            return FadeTransition(
-              opacity: curved,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
-                child: child,
-              ),
-            );
+            return _DialogMotion(animation: animation, child: child);
           },
+    ),
+  );
+}
+
+class _DialogMotion extends StatefulWidget {
+  const _DialogMotion({required this.animation, required this.child});
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  State<_DialogMotion> createState() => _DialogMotionState();
+}
+
+class _DialogMotionState extends State<_DialogMotion> {
+  late final CurvedAnimation _scale = CurvedAnimation(
+    parent: widget.animation,
+    curve: WhisperMotion.spring,
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final CurvedAnimation _opacity = CurvedAnimation(
+    parent: widget.animation,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  @override
+  void dispose() {
+    _scale.dispose();
+    _opacity.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _opacity,
+    child: ScaleTransition(
+      scale: Tween<double>(begin: .95, end: 1).animate(_scale),
+      child: widget.child,
     ),
   );
 }

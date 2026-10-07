@@ -444,7 +444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deleteSelectedMessagesDesc => '将删除所选聊天记录，本地文件会保留。';
+  String get deleteSelectedMessagesDesc => '将删除所选消息，无法撤销。';
 
   @override
   String language(Object language) {
@@ -1696,4 +1696,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyLoadFailed => '历史记录未能加载，点按重试';
+
+  @override
+  String get deleteReceivedFilesDesc => '同时删除接收的本地文件，发送的源文件会保留。';
+
+  @override
+  String get keepReceivedFiles => '保留接收的文件';
+
+  @override
+  String get messageDeleteFailed => '删除未完成，请重试。';
+
+  @override
+  String get connectionQrTab => '二维码';
+
+  @override
+  String get connectionScanTab => '扫一扫';
+
+  @override
+  String get connectionAddressTab => 'IP / 端口';
+
+  @override
+  String get connectionAddressLabel => 'IP 地址或主机名';
+
+  @override
+  String get connectionDetailsTab => '本机信息';
+
+  @override
+  String get connectionAddressHint => '填写对方 Whisper 首页显示的地址和端口。两台设备需连接同一局域网。';
+
+  @override
+  String get qrCopyFailed => '复制失败，请重试';
 }

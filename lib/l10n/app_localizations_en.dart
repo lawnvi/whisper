@@ -465,7 +465,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteSelectedMessagesDesc =>
-      'The selected chat records will be deleted. Local files will be kept.';
+      'The selected messages will be deleted. This cannot be undone.';
 
   @override
   String language(Object language) {
@@ -1824,4 +1824,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historyLoadFailed => 'Could not load history. Tap to retry.';
+
+  @override
+  String get deleteReceivedFilesDesc =>
+      'Received local files will also be deleted. Sent originals will be kept.';
+
+  @override
+  String get keepReceivedFiles => 'Keep received files';
+
+  @override
+  String get messageDeleteFailed =>
+      'Deletion could not be completed. Please try again.';
+
+  @override
+  String get connectionQrTab => 'QR code';
+
+  @override
+  String get connectionScanTab => 'Scan';
+
+  @override
+  String get connectionAddressTab => 'IP / port';
+
+  @override
+  String get connectionAddressLabel => 'IP address or hostname';
+
+  @override
+  String get connectionDetailsTab => 'This device';
+
+  @override
+  String get connectionAddressHint =>
+      'Find the IP and port on the other device’s Whisper home screen. Use the same LAN.';
+
+  @override
+  String get qrCopyFailed => 'Could not copy. Try again.';
 }

@@ -17,14 +17,28 @@ void main() {
     expect(source, contains('pairingQrController?.dismiss();'));
   });
 
-  test('invalid local QR host is diagnosed as a Wi-Fi problem', () {
-    final source = File('lib/page/deviceList.dart').readAsStringSync();
+  test(
+    'unavailable local QR host does not block the manual connection tab',
+    () {
+      final source = File('lib/page/deviceList.dart').readAsStringSync();
 
-    expect(source, contains('final currentHost = await getLocalIpAddress();'));
-    expect(source, contains('host: currentHost'));
-    expect(source, contains('error.reason == PairingInviteError.invalidHost'));
-    expect(source, contains('? ConnectionDiagnosticStage.wifi'));
-  });
+      expect(
+        source,
+        contains('final currentHost = await getLocalIpAddress();'),
+      );
+      expect(source, contains('host: currentHost'));
+      expect(source, contains('PairingInvite? localInvite;'));
+      expect(
+        source,
+        contains('error.reason != PairingInviteError.invalidHost'),
+      );
+      expect(source, contains('startWithAddress: startWithAddress'));
+      expect(
+        source,
+        contains('_connectServer(result.endpoint.host, result.endpoint.port)'),
+      );
+    },
+  );
 
   test('mobile runners declare camera access for QR scanning', () {
     final androidManifest = File(

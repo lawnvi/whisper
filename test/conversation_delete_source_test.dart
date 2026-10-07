@@ -1,24 +1,31 @@
 import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('deleting a missing file message still deletes the message row', () {
+  test('single and batch deletion use the same received-file policy', () {
     final source = File('lib/page/conversation.dart').readAsStringSync();
-
-    expect(source, contains('Future<void> _deleteMessageFileIfExists'));
-    expect(source, contains('final file = File(path);'));
-    expect(source, contains('await file.exists()'));
-    expect(source, contains('FileSystemException'));
-
-    final callback = RegExp(
-      r'onDeleteMessage: \(message, \{deleteFile = false\}\) async \{[\s\S]*?\n            \},',
-    ).firstMatch(source)!.group(0)!;
-
-    expect(callback, isNot(contains('File(message.path).delete()')));
-    expect(callback, contains('await _deleteMessageFileIfExists(message);'));
-    expect(callback, contains('await _deleteItems(<int>[message.id]);'));
-    expect(source, contains('onDeleteMessages: (messages) =>'));
+    expect(
+      source,
+      contains('_deleteMessages([message], deleteFiles: deleteFile)'),
+    );
+    expect(source, contains('onDeleteMessages: _deleteMessages'));
+    final deletion = source.substring(
+      source.indexOf('Future<void> _deleteMessages('),
+      source.indexOf('Future<void> _deleteItems('),
+    );
+    expect(
+      deletion,
+      contains('canDeleteReceivedMessageFile(message, self?.uid)'),
+    );
+    expect(
+      deletion.indexOf('await _cancelTransfer('),
+      lessThan(deletion.indexOf('await deleteReceivedMessageFile(')),
+    );
+    expect(deletion, contains('path: _effectiveMessagePath(message)'));
+    expect(
+      deletion,
+      contains('await _deleteItems(messages.map((message) => message.id))'),
+    );
     expect(source, contains('db.deleteMessages(ids)'));
   });
 }

@@ -223,17 +223,10 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
   }
 
   Future<bool> _copy(String text) async {
-    final l10n = AppLocalizations.of(context)!;
     try {
       await widget.copyText(text);
-      if (mounted) {
-        _showSnackBar(l10n.transferAssistantCopied);
-      }
       return true;
     } catch (_) {
-      if (mounted) {
-        _showSnackBar(l10n.transferAssistantCopyFailed);
-      }
       return false;
     }
   }
@@ -797,7 +790,6 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
               const SizedBox(width: 4),
               _AnimatedCopyButton(
                 buttonKey: widget.copyKey,
-                tooltip: l10n.transferAssistantCopy,
                 onCopy: widget.onCopy,
               ),
               IconButton(
@@ -808,13 +800,15 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
                 onPressed: widget.onFavorite,
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 iconSize: 20,
-                color: widget.isFavorite ? palette.warning : palette.textMuted,
+                color: widget.isFavorite
+                    ? theme.colorScheme.primary
+                    : palette.textMuted,
                 icon: _AnimatedHistoryIcon(
                   icon: widget.isFavorite
                       ? Icons.star_rounded
                       : Icons.star_border_rounded,
                   color: widget.isFavorite
-                      ? palette.warning
+                      ? theme.colorScheme.primary
                       : palette.textMuted,
                 ),
               ),
@@ -870,14 +864,9 @@ TextSpan _highlightText(String text, String query, ColorScheme colors) {
 }
 
 class _AnimatedCopyButton extends StatefulWidget {
-  const _AnimatedCopyButton({
-    required this.buttonKey,
-    required this.tooltip,
-    required this.onCopy,
-  });
+  const _AnimatedCopyButton({required this.buttonKey, required this.onCopy});
 
   final Key buttonKey;
-  final String tooltip;
   final Future<bool> Function() onCopy;
 
   @override
@@ -888,6 +877,7 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
   Timer? _resetTimer;
   bool _copying = false;
   bool _copied = false;
+  bool _copyFailed = false;
 
   @override
   void dispose() {
@@ -899,45 +889,62 @@ class _AnimatedCopyButtonState extends State<_AnimatedCopyButton> {
     if (_copying) {
       return;
     }
+    _resetTimer?.cancel();
     setState(() => _copying = true);
     final copied = await widget.onCopy();
     if (!mounted) {
       return;
     }
-    if (!copied) {
-      setState(() => _copying = false);
-      return;
+    if (copied) {
+      unawaited(HapticFeedback.selectionClick());
     }
-    unawaited(HapticFeedback.selectionClick());
-    _resetTimer?.cancel();
     setState(() {
       _copying = false;
-      _copied = true;
+      _copied = copied;
+      _copyFailed = !copied;
     });
-    _resetTimer = Timer(const Duration(milliseconds: 900), () {
+    _resetTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
-        setState(() => _copied = false);
+        setState(() {
+          _copied = false;
+          _copyFailed = false;
+        });
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
-    return SizedBox.square(
-      dimension: 48,
-      child: IconButton(
-        key: widget.buttonKey,
-        tooltip: widget.tooltip,
-        onPressed: _copying ? null : _handleCopy,
-        style: IconButton.styleFrom(
-          foregroundColor: context.whisperPalette.textMuted,
-        ),
-        icon: _AnimatedHistoryIcon(
-          icon: _copied ? Icons.check_rounded : Icons.content_copy_rounded,
-          color: _copied
-              ? colorScheme.primary
-              : context.whisperPalette.textMuted,
+    final palette = context.whisperPalette;
+    final tooltip = _copied
+        ? l10n.transferAssistantCopied
+        : _copyFailed
+        ? l10n.transferAssistantCopyFailed
+        : l10n.transferAssistantCopy;
+    return Semantics(
+      liveRegion: true,
+      value: _copied || _copyFailed ? tooltip : null,
+      child: SizedBox.square(
+        dimension: 48,
+        child: IconButton(
+          key: widget.buttonKey,
+          tooltip: tooltip,
+          onPressed: _copying ? null : _handleCopy,
+          style: IconButton.styleFrom(foregroundColor: palette.textMuted),
+          icon: _AnimatedHistoryIcon(
+            icon: _copied
+                ? Icons.check_rounded
+                : _copyFailed
+                ? Icons.error_outline_rounded
+                : Icons.content_copy_rounded,
+            color: _copied
+                ? palette.trusted
+                : _copyFailed
+                ? colorScheme.error
+                : palette.textMuted,
+          ),
         ),
       ),
     );

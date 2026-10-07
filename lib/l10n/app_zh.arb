@@ -245,7 +245,7 @@
       }
     }
   },
-  "deleteSelectedMessagesDesc": "将删除所选聊天记录，本地文件会保留。",
+  "deleteSelectedMessagesDesc": "将删除所选消息，无法撤销。",
   "language": "语言 {language}",
   "pushNotification": "推送安卓通知",
   "ignoreNotification": "忽略安卓通知",
@@ -886,5 +886,15 @@
   "mobileControlTransportHelp": "控制连接已中断，请确认电脑上的 Whisper 正在运行，再重新开始。",
   "mobileControlInjectionHelp": "电脑未能执行输入，请检查系统控制权限后重新开始。",
   "clipboardAutoSyncAndroidDesc": "回到 Whisper 后，将新复制的文字同步到当前可信设备",
-  "historyLoadFailed": "历史记录未能加载，点按重试"
+  "historyLoadFailed": "历史记录未能加载，点按重试",
+  "deleteReceivedFilesDesc": "同时删除接收的本地文件，发送的源文件会保留。",
+  "keepReceivedFiles": "保留接收的文件",
+  "messageDeleteFailed": "删除未完成，请重试。",
+  "connectionQrTab": "二维码",
+  "connectionScanTab": "扫一扫",
+  "connectionAddressTab": "IP / 端口",
+  "connectionAddressLabel": "IP 地址或主机名",
+  "connectionDetailsTab": "本机信息",
+  "connectionAddressHint": "填写对方 Whisper 首页显示的地址和端口。两台设备需连接同一局域网。",
+  "qrCopyFailed": "复制失败，请重试"
 }

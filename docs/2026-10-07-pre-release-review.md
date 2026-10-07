@@ -207,3 +207,93 @@ Android 回退版已构建并覆盖安装。实机确认两行设备列表、顶
 相关测试现为 22 项通过，新增覆盖等待时保留内容、过渡中的旧按钮不触发动作、快速查询乱序回复，以及减少动画下的收藏/复制反馈。`flutter analyze --no-pub` 无问题，Android arm64 debug 构建通过。检查了浅色/深色、收藏/复制成功、展开和筛选过渡的渲染中间帧；使用临时内存样例，预览脚本已清理。本轮未重跑全量测试。
 
 证据：`/tmp/whisper-history-motion-tests.log`、`/tmp/whisper-history-motion-analyze.log`、`/tmp/whisper-history-motion-build.log`、`/tmp/whisper-history-motion-*.png`。
+
+## 全应用轻量动效
+
+在 `66ece62` 提交保存前一轮搜索、连接提示和历史分页改动后，按用户确认的六处范围补充动效，保持现有布局、设备列表密度和操作入口：
+
+- 发送区的附件、发送、等待状态采用短暂淡入淡出与轻微缩放；草稿和输入焦点保留，旧操作退出时立即失效。
+- 普通文件消息的进度环、校验、失败和文件图标使用固定 40dp 区域，状态切换平滑过渡；百分比更新沿用原有平滑进度，不逐次切换文字。
+- 多选框横向展开，底部多选栏与输入区同步收放。展开组件只保留一份内容，快速反向切换不重复创建输入框或复用同一焦点节点的两个实例。
+- 设备列表状态圆点渐变、连接文字与会话连接图标淡入淡出，保持行高。
+- 手机左右键和滚轮按下立即高亮，松开 120ms 淡回；开始/停止和控制状态同步过渡。鼠标事件发送与动画完全独立。
+- 桌面粘贴图片和文件的预览区域平滑展开、移除后收起，输入区域持续保留。
+
+共享过渡位于 `lib/widget/subtle_motion.dart`：常规时长 180ms、进入 easeOutCubic / 退出 easeInCubic；遵循系统减少动画设置。退出内容的指针、键盘焦点和无障碍操作立即停用。新增行为测试覆盖旧操作失效、快速反转时草稿与焦点安全、减少动画下的图标尺寸，以及鼠标按下/抬起/取消不等待动画。
+
+相关组件测试 76 项通过。使用临时样例渲染了发送按钮、附件、多选和手机控制器的浅色/深色及中间帧，样例不写入真实数据库，临时预览测试已移除。截图位于 `/tmp/whisper-app-motion-*.png`。没有更改协议、原生输入后端、依赖、dev CI 或签名资产。
+
+最终验证使用 Flutter 3.44.9：
+
+- `flutter analyze --no-pub` 通过，无问题。
+- 完整 `flutter test --no-pub --reporter expanded`：**1777 通过、3 跳过**，约 7 分 8 秒。磁盘压力中断过的上一轮不计为完整验证。
+- Android arm64 debug 构建通过，最终 APK 已 `adb install -r` 覆盖安装成功；手机处于锁屏状态，本轮未完成真实设备上的交互检查。
+- macOS `./script/build_and_run.sh --verify` **未通过**：本机可用空间不足，在 Flutter framework / native library 的 `lipo` 打包阶段失败。使用与默认值一致的 `WHISPER_UPDATE_CHANNEL=preview` 绕过本机 Bash 3 对空数组的限制，没有更改脚本。清理了临时 SDK 中可重新下载的缓存以及 macOS 构建中间产物后仍不足以完成打包；原来已签名的桌面应用已重新启动，当前桌面实例仍为旧版。
+- 本轮未执行 Windows、Linux 或 iOS 原生构建；共享 Dart 界面通过组件与全量测试，各平台安装包的实际交互仍需验证。
+
+日志：`/tmp/whisper-app-motion-tests.log`、`/tmp/whisper-app-motion-all-tests.log`、`/tmp/whisper-app-motion-analyze.log`、`/tmp/whisper-app-motion-build.log`、`/tmp/whisper-app-motion-install.log`。macOS 构建日志仅保留在本机，未纳入仓库。
+
+## 删除确认与连接入口整合
+
+按最新反馈统一会话中的单条和多选删除：菜单只保留“删除”，确认弹窗默认不勾选“保留接收的文件”。只有接收的文件进入文件删除路径，发送源文件及传输助手里的本地源文件始终保留；这一限制同时在界面和文件删除函数中执行。文件已经不存在时仍可删除消息，其他删除错误保留消息与选择状态并显示失败提示。删除正在接收的文件前先取消对应传输。桌面 Esc 优先关闭确认弹窗，再按一次退出多选；删除执行期间不会提前退出。
+
+连接弹窗整合“二维码 / 扫一扫 / IP、端口”，桌面仅显示二维码与地址两个标签。地址输入复用 `PeerEndpoint` 校验，切换标签保留草稿；扫码页面离开时销毁原生相机视图，忽略过期扫描，二维码仍携带并校验原有设备身份信息。本机暂时没有可用于二维码的局域网地址时，手动地址入口仍然可用。移动端二维码按钮移到原“＋”位置，桌面去掉“＋”并让搜索框增加对应宽度。二维码仅减少外层多余边距，保留识别所需白边；弹层沿用现有淡入、缩放与退出动效，标签切换遵循减少动态效果设置。
+
+本轮主要涉及 `chat_message_list.dart`、`conversation.dart`、`message_deletion.dart`、`message_deletion_dialog.dart`、`pairing_qr.dart`、`manual_connection_dialog.dart`、`deviceList.dart` 和中英西本地化。保留上一轮尚未提交的细节动画修改，没有修改 dev CI、依赖锁文件或签名资产。
+
+- Flutter 3.44.9：`flutter analyze --no-pub` 通过；全量 `flutter test --no-pub --reporter expanded` **1789 通过，3 跳过**。
+- 新增行为覆盖默认删除/保留文件、源文件保护、取消、混合多选、缺失文件、错误提示、Esc 焦点及执行中状态；连接覆盖三种语言校验、软键盘、草稿保持、扫码原生视图销毁、二维码路由所有权。
+- 组件预览检查窄屏、大字号和深浅主题。Android debug 构建通过，已覆盖安装到 MI 6 / Android 13，保留原有数据；手机仍锁屏，尚未完成这轮实机点击与扫码验收。
+- 日志：`/tmp/whisper-delete-connect-analyze.log`、`/tmp/whisper-delete-connect-all-tests.log`、`/tmp/whisper-delete-connect-android-build.log`、`/tmp/whisper-delete-connect-install.log`；组件预览截图位于 `/tmp/whisper-qr-phone.png`、`/tmp/whisper-address-phone.png`、`/tmp/whisper-address-keyboard.png`、`/tmp/whisper-qr-small-dark.png`。
+- macOS 本轮重新执行 `./script/build_and_run.sh --verify`，编译通过；随后系统钥匙串授权完成，签名校验及启动验证通过。日志：`/tmp/whisper-delete-connect-macos.log`。本轮未构建 Windows、Linux、iOS；这些平台的原生窗口交互仍需对应设备验证。
+
+
+## 圆角与页面动效进一步调整
+
+- `message_deletion_dialog.dart` 的保留文件选项改为圆形勾选框，删除默认值和文件保护规则不变。
+- `pairing_qr.dart` 在宽桌面窗口固定左侧二维码，右侧切换本机信息与 IP/端口表单；窄窗口保持紧凑布局。分段标签使用胶囊形指示器、圆角裁切与按压/悬停状态，防止状态底色溢出四角。`manual_connection_dialog.dart` 将手机输入区适当下移，键盘弹出时平滑收起额外留白；表单草稿保留。
+- `whisper_motion.dart` 与 `app_theme.dart` 统一 macOS/Windows/Linux 的页面过渡：底层工作区静止，新页面以短距离位移、轻微缩放回弹和淡入出现，返回时更快收回。页面子树使用重绘边界，过渡不逐帧重建页面内容。`glass_dialog.dart` 的公共弹窗使用相同的轻回弹节奏，位移/缩放与透明度分别使用曲线。开启减少动态效果时停止这些可见位移与缩放。iOS 原有侧滑返回保留。
+- 验证：Flutter 3.44.9 全量测试 **1795 通过、3 跳过**；新增测试覆盖桌面三平台底层侧边栏位置不变、快速反向退出、减少动态效果、二维码切换时位置不变和表单草稿保留。最后调整退出曲线后，导航/公共弹窗的 9 项测试再次通过。
+- Android debug 构建并覆盖安装成功。手机当时处于 `com.miui.screenshot` 系统截图编辑界面，没有代替用户退出编辑，因此本轮未完成手机的实际点击点验。已检查深浅主题的桌面左右分栏、手机输入区及圆形选项组件预览。
+- macOS `./script/build_and_run.sh --verify` 通过，签名有效，新进程已启动。Windows、Linux、iOS 本轮未重新构建；桌面路由经过对应平台配置的组件测试，尚无真实帧耗时或高刷屏性能结论。
+- 证据：`/tmp/whisper-round-motion-all-tests.log`、`/tmp/whisper-round-motion-navigation.log`、`/tmp/whisper-round-motion-macos.log`、`/tmp/whisper-round-motion-android.log`、`/tmp/whisper-round-motion-install.log`；截图 `/tmp/whisper-round-address-desktop-light.png`、`/tmp/whisper-round-address-desktop-dark.png`、`/tmp/whisper-round-address-phone-light.png`。
+
+## 连接弹窗尺寸与按钮一致性
+
+- `pairing_qr.dart` 的手机二维码改为按宽度布局：常见 360dp 屏幕由原先最多 176dp 放大到 280dp，保留扫码白边。二维码和 IP/端口页按当前内容收紧高度，底部仅保留正常内边距；切换使用淡入与高度过渡。表单保留挂载以保存草稿，隐藏页不接受焦点；扫码仍只在对应标签激活后创建原生视图。
+- `manual_connection_dialog.dart` 保留手机输入区上方适当间距，取消随弹窗高度扩大的留白；由弹窗外层传入软键盘状态，避免 Dialog 移除 viewInsets 后无法收起额外间距。桌面复制连接信息和连接按钮统一为 48dp 最小高度与标准视觉密度。
+- Flutter 3.44.9：连接相关 13 项测试及 `flutter analyze --no-pub` 通过；覆盖扫码释放、三语言校验、草稿保留、键盘提交、窄屏、大字号、内容高度与桌面二维码位置稳定。另检查了手机深浅主题、横屏与桌面组件预览，临时预览脚本已移除。
+- Android arm64 debug 构建、覆盖安装成功；macOS `./script/build_and_run.sh --verify` 通过，签名有效且新进程已启动。手机当前锁屏，本轮未完成实机点击和扫码验收。此次没有重跑全量测试或 Windows、Linux、iOS 构建。
+- 日志：`/tmp/whisper-qr-fit-focused.log`、`/tmp/whisper-qr-fit-analyze.log`、`/tmp/whisper-qr-fit-preview.log`、`/tmp/whisper-qr-fit-android.log`、`/tmp/whisper-qr-fit-install.log`、`/tmp/whisper-qr-fit-macos.log`。预览截图：`/tmp/whisper-qr-fit-phone-qr.png`、`/tmp/whisper-qr-fit-phone-address.png`、`/tmp/whisper-qr-fit-small-dark-qr.png`、`/tmp/whisper-qr-fit-desktop-qr.png`、`/tmp/whisper-qr-fit-desktop-address.png`。
+
+## 二维码留白与桌面 Esc 焦点修复
+
+- 按后续反馈将 `pairing_qr.dart` 的手机二维码最大尺寸从 280dp 调整到 240dp，增加上、下及信息区间距；底部仍随内容收紧。已检查深浅主题预览，窄屏与大字号测试通过。
+- 核实上一轮本机确已于 22:34 启动新版。新增桌面右键多选回归，在 macOS/Windows/Linux 平台配置下均复现了焦点切到侧栏搜索框后 Esc 无效。`chat_message_list.dart` 现在仅在多选期间注册工作区级键盘处理，退出或销毁时移除；当前页面不在前台、有弹窗、或正在删除时不取消多选。移动端保留列表内的硬件键盘响应。
+- `message_deletion_flow_test.dart` 覆盖右键菜单、输入区收起、搜索框焦点、弹窗和新页面优先响应、销毁清理；连接与消息组件相关 **32 项测试通过**，`flutter analyze --no-pub` 无问题。Android debug 已覆盖安装，macOS `--verify` 通过，并于 22:49 启动修复版（本次 PID 78985）。手机已打开更新后的连接弹窗；桌面 Esc 的本轮验证为组件测试，未代替用户操作真实消息。本次未重复全量测试及 Windows/Linux/iOS 原生构建。
+- 证据：`/tmp/whisper-esc-before.log`、`/tmp/whisper-esc-qr-focused.log`、`/tmp/whisper-esc-qr-analyze.log`、`/tmp/whisper-esc-qr-android.log`、`/tmp/whisper-esc-qr-install.log`、`/tmp/whisper-esc-qr-macos.log`；二维码预览 `/tmp/whisper-qr-spacing-light.png`、`/tmp/whisper-qr-spacing-dark.png`，临时预览脚本已移除。
+
+## 手机连接标签统一高度与手动连接提示
+
+- `pairing_qr.dart` 的三个手机标签改为共用一个外框高度，根据屏幕宽度、字号与当前可用高度计算，切换标签期间保持尺寸和位置稳定。二维码保留 240dp 上限与留白，扫码区填满中间区域；软键盘及横竖屏变化仍可调整整体可用空间。
+- `manual_connection_dialog.dart` 在固定内容区域内分配提示、输入区和底部连接按钮的间距；空间不足时滚动，表单校验和草稿保留。手机 IP/端口页增加简短提示：在对方 Whisper 首页查看地址与端口，两台设备需在同一局域网。中英西 ARB 与生成的本地化代码已同步。
+- Flutter 3.44.9：连接相关 **15 项测试通过**，包含三个标签切换中间帧的外框一致性、320dp 大字号、横屏、相机释放、三语言校验与软键盘提交；`flutter analyze --no-pub` 无问题。检查了三语言、深浅主题的组件预览，临时预览脚本已移除。
+- Android arm64 debug 构建、覆盖安装及启动成功。此次未重跑全量测试或桌面/iOS 原生构建；桌面分栏与按钮尺寸的组件回归通过。
+- 日志：`/tmp/whisper-qr-stable-focused.log`、`/tmp/whisper-qr-stable-analyze.log`、`/tmp/whisper-qr-stable-preview.log`、`/tmp/whisper-qr-stable-android.log`、`/tmp/whisper-qr-stable-install.log`；预览 `/tmp/whisper-qr-stable-phone-{qr,address,scan}.png`、`/tmp/whisper-qr-stable-small-dark-address.png`、`/tmp/whisper-qr-stable-spanish-address.png`。组件预览的扫码相机使用测试视图替身，不代表真实取景画面。
+
+## 扫码边距、复制反馈与标签过渡
+
+- `pairing_qr.dart` 的手机扫码取景区、IP/端口提示及表单统一与标签栏外缘对齐，收紧标题与内容间距。常见 360dp 屏幕的共用弹窗高度由 480dp 调整为 464dp；三个标签切换时保持同一外框，二维码仍保留 240dp 上限和留白。
+- 复制连接信息不再显示 SnackBar，等待系统剪贴板写入成功后原位切换为圆角对勾，2 秒后恢复；失败使用错误图标和本地化提示，允许重试。处理中禁用重复点击，销毁页面时取消反馈计时器。手机与桌面复制按钮共用此反馈。
+- 手机标签内容增加 240ms 先淡出、再轻移淡入的过渡，避免二维码透到表单文字下面。表单保留草稿，退出内容立即停用点击、焦点与无障碍操作；扫码相机仍只在当前标签激活时创建，离开后立即释放。减少动态效果设置下直接切换。
+- Flutter 3.44.9：连接相关 **21 项测试通过**，`flutter analyze --no-pub` 无问题。覆盖复制成功确认、失败重试与销毁、快速反向切换、旧操作失效、统一外框和边缘对齐，以及原有相机释放、三语言校验和软键盘提交。检查了深浅主题及过渡中间帧的组件预览，临时预览脚本已移除。
+- Android arm64 debug 构建、覆盖安装及启动成功；macOS `./script/build_and_run.sh --verify` 通过，签名有效，新进程已启动（本次 PID 83642）。本轮未重新执行全量测试或 Windows/Linux/iOS 原生构建，扫码画面与复制交互采用组件验证，未据此宣称真机交互验收完成。依赖锁文件、CI 和签名资产未修改。
+- 证据：`/tmp/whisper-qr-polish-focused.log`、`/tmp/whisper-qr-polish-analyze.log`、`/tmp/whisper-qr-polish-preview.log`、`/tmp/whisper-qr-polish-android.log`、`/tmp/whisper-qr-polish-install.log`、`/tmp/whisper-qr-polish-macos.log`；预览 `/tmp/whisper-qr-polish-{light,dark}-{qr,copied,address,scan,transition}.png`。扫码组件预览使用测试视图替身。
+
+## 历史搜索复制反馈统一
+
+- `transfer_assistant.dart` 的搜索结果、最近消息及收藏列表复制操作去掉 SnackBar；系统剪贴板写入成功后，按钮以淡入和轻微缩放切换为绿色圆角对勾，2 秒后恢复。失败原位显示错误图标及本地化提示，允许重试；保留无障碍反馈和减少动态效果支持。
+- 更新现有页面测试，覆盖等待写入确认、无 Toast、按钮尺寸稳定、失败重试、收藏列表与减少动画。Flutter 3.44.9：18 项页面测试及 `flutter analyze --no-pub` 通过，Android arm64 debug 已构建并覆盖安装，macOS `--verify` 的构建、签名与启动验证通过。本轮未重复全量测试或 Windows/Linux/iOS 原生构建，复制交互以组件测试验证。
+- 日志：`/tmp/whisper-search-copy-tests.log`、`/tmp/whisper-search-copy-analyze.log`、`/tmp/whisper-search-copy-android.log`、`/tmp/whisper-search-copy-install.log`、`/tmp/whisper-search-copy-macos.log`。
+
+收藏的选中颜色随后统一为主题主色，与顶部收藏筛选一致：浅色模式使用蓝色，深色模式使用浅蓝色。18 项页面测试、静态分析、Android debug 构建安装和 macOS `--verify` 再次通过，日志位于 `/tmp/whisper-favorite-color-*.log`。

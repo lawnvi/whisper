@@ -11,6 +11,7 @@ import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
+import 'package:whisper/widget/subtle_motion.dart';
 
 class ChatComposer extends StatelessWidget {
   static const desktopContainerKey = ValueKey(
@@ -132,14 +133,23 @@ class ChatComposer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_showsClipboardFilesPreview) ...[
-            _buildClipboardFilesPreview(context),
-            const SizedBox(height: 10),
-          ],
-          if (_showsClipboardImagesPreview) ...[
-            _buildClipboardImagesPreview(context),
-            const SizedBox(height: 10),
-          ],
+          WhisperAnimatedReveal(
+            visible:
+                _showsClipboardFilesPreview || _showsClipboardImagesPreview,
+            child: _showsClipboardFilesPreview || _showsClipboardImagesPreview
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: AnimatedSize(
+                      duration: whisperMotionDuration(context),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topLeft,
+                      child: _showsClipboardFilesPreview
+                          ? _buildClipboardFilesPreview(context)
+                          : _buildClipboardImagesPreview(context),
+                    ),
+                  )
+                : null,
+          ),
           GestureDetector(
             key: desktopInputRegionKey,
             behavior: HitTestBehavior.opaque,
@@ -518,37 +528,41 @@ class ChatComposer extends StatelessWidget {
     final foregroundColor = showsAttachmentAction
         ? (enabled ? colorScheme.onSurfaceVariant : colorScheme.outline)
         : (enabled ? Colors.white : colorScheme.outline);
-    return IconButton(
-      key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
-      onPressed: enabled ? () => _handlePrimaryAction(context) : null,
-      style: IconButton.styleFrom(
-        minimumSize: Size(buttonSize, buttonSize),
-        maximumSize: Size(buttonSize, buttonSize),
-        backgroundColor: backgroundColor,
-        foregroundColor: foregroundColor,
-        shape: const CircleBorder(),
-        padding: EdgeInsets.zero,
-        elevation: 0,
-        side: showsAttachmentAction
-            ? BorderSide.none
-            : BorderSide(color: enabled ? accentColor : disabledBorderColor),
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: Colors.transparent,
-      ),
-      icon: isLoading
-          ? SizedBox(
-              width: iconSize,
-              height: iconSize,
-              child: CupertinoActivityIndicator(
-                color: showsAttachmentAction ? accentColor : Colors.white,
+    return WhisperAnimatedSwitcher(
+      value: (showsAttachmentAction, isLoading),
+      scale: true,
+      child: IconButton(
+        key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
+        onPressed: enabled ? () => _handlePrimaryAction(context) : null,
+        style: IconButton.styleFrom(
+          minimumSize: Size(buttonSize, buttonSize),
+          maximumSize: Size(buttonSize, buttonSize),
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+          shape: const CircleBorder(),
+          padding: EdgeInsets.zero,
+          elevation: 0,
+          side: showsAttachmentAction
+              ? BorderSide.none
+              : BorderSide(color: enabled ? accentColor : disabledBorderColor),
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: Colors.transparent,
+        ),
+        icon: isLoading
+            ? SizedBox(
+                width: iconSize,
+                height: iconSize,
+                child: CupertinoActivityIndicator(
+                  color: showsAttachmentAction ? accentColor : Colors.white,
+                ),
+              )
+            : Icon(
+                showsAttachmentAction
+                    ? Icons.add_rounded
+                    : Icons.arrow_upward_rounded,
+                size: iconSize,
               ),
-            )
-          : Icon(
-              showsAttachmentAction
-                  ? Icons.add_rounded
-                  : Icons.arrow_upward_rounded,
-              size: iconSize,
-            ),
+      ),
     );
   }
 

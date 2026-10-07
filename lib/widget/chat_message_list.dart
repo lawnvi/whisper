@@ -9,8 +9,10 @@ import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/theme/app_theme.dart';
-import 'package:whisper/widget/app_dialogs.dart';
+import 'package:whisper/state/message_deletion.dart';
+import 'package:whisper/widget/message_deletion_dialog.dart';
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/subtle_motion.dart';
 
 class ChatMessageList extends StatefulWidget {
   final Widget Function(MessageData message, bool isOpponent) buildFileMessage;
@@ -29,7 +31,8 @@ class ChatMessageList extends StatefulWidget {
   final Future<void> Function(MessageData message)? onCopyFile;
   final Future<void> Function(MessageData message, {bool deleteFile})
   onDeleteMessage;
-  final Future<void> Function(List<MessageData> messages) onDeleteMessages;
+  final Future<void> Function(List<MessageData> messages, {bool deleteFiles})
+  onDeleteMessages;
   final ValueChanged<bool>? onSelectionModeChanged;
   final String? selfUid;
 
@@ -60,10 +63,14 @@ class _ChatMessageListState extends State<ChatMessageList> {
   int? _copiedMessageId;
   bool _selectionMode = false;
   bool _deleting = false;
+  bool _confirmingDeletion = false;
+  final FocusNode _selectionFocus = FocusNode(debugLabel: 'message selection');
 
   @override
   void dispose() {
     _copyResetTimer?.cancel();
+    FocusManager.instance.removeEarlyKeyEventHandler(_handleSelectionKey);
+    _selectionFocus.dispose();
     super.dispose();
   }
 
@@ -77,15 +84,38 @@ class _ChatMessageListState extends State<ChatMessageList> {
         _selectedMessageIds.clear();
       }
     });
+    if (isDesktop()) {
+      if (active) {
+        FocusManager.instance.addEarlyKeyEventHandler(_handleSelectionKey);
+      } else {
+        FocusManager.instance.removeEarlyKeyEventHandler(_handleSelectionKey);
+      }
+    }
     widget.onSelectionModeChanged?.call(active);
+  }
+
+  KeyEventResult _handleSelectionKey(KeyEvent event) {
+    // Multi-select is a workspace mode even when search or message text has focus.
+    // Overlaid menus/dialogs and other pages retain their own Escape behavior.
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _selectionMode &&
+        !_deleting &&
+        !_confirmingDeletion &&
+        TickerMode.of(context) &&
+        ModalRoute.of(context)?.isCurrent != false) {
+      _setSelectionMode(false);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _startSelection(MessageData message) {
     setState(() {
-      _selectionMode = true;
       _selectedMessageIds.add(message.id);
     });
-    widget.onSelectionModeChanged?.call(true);
+    _setSelectionMode(true);
+    _selectionFocus.requestFocus();
   }
 
   void _toggleSelection(MessageData message) {
@@ -117,32 +147,45 @@ class _ChatMessageListState extends State<ChatMessageList> {
       return;
     }
 
-    final localizations = AppLocalizations.of(context);
-    final confirmed = await confirmAction(
-      context,
-      title:
-          localizations?.deleteSelectedMessagesTitle(selectedMessages.length) ??
-          '删除 ${selectedMessages.length} 条消息',
-      description:
-          localizations?.deleteSelectedMessagesDesc ?? '将删除所选聊天记录，本地文件会保留。',
-      confirmButtonText: localizations?.delete ?? '删除',
-      cancelButtonText: localizations?.cancel ?? '取消',
-      isDestructive: true,
-    );
-    if (!confirmed || !mounted) {
-      return;
-    }
+    await _confirmDeletion(selectedMessages, selection: true);
+  }
 
-    setState(() => _deleting = true);
+  Future<void> _confirmDeletion(
+    List<MessageData> messages, {
+    bool selection = false,
+  }) async {
+    if (_deleting || _confirmingDeletion) return;
+    _confirmingDeletion = true;
     try {
-      await widget.onDeleteMessages(selectedMessages);
+      final hasReceivedFiles = messages.any(
+        (message) => canDeleteReceivedMessageFile(message, widget.selfUid),
+      );
+      final deleteFiles = await showMessageDeletionDialog(
+        context,
+        count: messages.length,
+        hasReceivedFiles: hasReceivedFiles,
+      );
+      if (deleteFiles == null || !mounted) return;
+      setState(() => _deleting = true);
+      if (selection) {
+        await widget.onDeleteMessages(messages, deleteFiles: deleteFiles);
+      } else {
+        await widget.onDeleteMessage(messages.single, deleteFile: deleteFiles);
+      }
+      if (mounted && selection) _setSelectionMode(false);
+    } on Object {
       if (mounted) {
-        _setSelectionMode(false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)?.messageDeleteFailed ?? '删除未完成，请重试。',
+            ),
+          ),
+        );
       }
     } finally {
-      if (mounted) {
-        setState(() => _deleting = false);
-      }
+      _confirmingDeletion = false;
+      if (mounted) setState(() => _deleting = false);
     }
   }
 
@@ -164,13 +207,20 @@ class _ChatMessageListState extends State<ChatMessageList> {
       );
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: Align(alignment: Alignment.topCenter, child: messageList),
-        ),
-        if (_selectionMode) _buildSelectionToolbar(context),
-      ],
+    return Focus(
+      focusNode: _selectionFocus,
+      onKeyEvent: (_, event) => _handleSelectionKey(event),
+      child: Column(
+        children: [
+          Expanded(
+            child: Align(alignment: Alignment.topCenter, child: messageList),
+          ),
+          WhisperAnimatedReveal(
+            visible: _selectionMode,
+            child: _selectionMode ? _buildSelectionToolbar(context) : null,
+          ),
+        ],
+      ),
     );
   }
 
@@ -207,20 +257,27 @@ class _ChatMessageListState extends State<ChatMessageList> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_selectionMode)
-                  SizedBox(
-                    width: 42,
-                    height: 42,
-                    child: Center(
-                      child: Checkbox(
-                        key: ValueKey('message-selection-${message.id}'),
-                        value: isSelected,
-                        shape: const CircleBorder(),
-                        side: BorderSide(color: colorScheme.outline),
-                        onChanged: (_) => _toggleSelection(message),
-                      ),
-                    ),
-                  ),
+                WhisperAnimatedReveal(
+                  axis: Axis.horizontal,
+                  visible: _selectionMode,
+                  child: _selectionMode
+                      ? SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: Center(
+                            child: Checkbox(
+                              key: ValueKey('message-selection-${message.id}'),
+                              value: isSelected,
+                              shape: const CircleBorder(),
+                              side: BorderSide(color: colorScheme.outline),
+                              onChanged: _deleting
+                                  ? null
+                                  : (_) => _toggleSelection(message),
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
                 Expanded(
                   child: Container(
                     alignment: isOpponent
@@ -238,6 +295,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
+                          if (_deleting) return;
                           if (_selectionMode) {
                             _toggleSelection(message);
                           } else if (isFile) {
@@ -295,13 +353,6 @@ class _ChatMessageListState extends State<ChatMessageList> {
         icon: Icons.checklist_rounded,
         onSelected: () => _startSelection(message),
       ),
-      if (!isFile)
-        ContextMenuActionItem(
-          label: localizations?.delete ?? '删除',
-          icon: Icons.delete_outline_rounded,
-          destructive: true,
-          onSelected: () => widget.onDeleteMessage(message),
-        ),
       if (isFile && (isOpponent || isDesktop()))
         ContextMenuActionItem(
           label: localizations?.open ?? '打开',
@@ -318,29 +369,12 @@ class _ChatMessageListState extends State<ChatMessageList> {
           icon: Icons.folder_open_rounded,
           onSelected: () => widget.onOpenContainingFolder(message.path),
         ),
-      if (isFile && isOpponent)
-        ContextMenuActionItem(
-          label:
-              '${localizations?.delete ?? '删除'} (${localizations?.keepFile ?? '保留文件'})',
-          icon: Icons.delete_outline_rounded,
-          destructive: true,
-          onSelected: () => widget.onDeleteMessage(message),
-        ),
-      if (isFile && isOpponent)
-        ContextMenuActionItem(
-          label:
-              '${localizations?.delete ?? '删除'} (${localizations?.deleteFile ?? '删除文件'})',
-          icon: Icons.delete_forever_outlined,
-          destructive: true,
-          onSelected: () => widget.onDeleteMessage(message, deleteFile: true),
-        ),
-      if (isFile && !isOpponent)
-        ContextMenuActionItem(
-          label: localizations?.delete ?? '删除',
-          icon: Icons.delete_outline_rounded,
-          destructive: true,
-          onSelected: () => widget.onDeleteMessage(message),
-        ),
+      ContextMenuActionItem(
+        label: localizations?.delete ?? '删除',
+        icon: Icons.delete_outline_rounded,
+        destructive: true,
+        onSelected: () => unawaited(_confirmDeletion([message])),
+      ),
     ];
   }
 

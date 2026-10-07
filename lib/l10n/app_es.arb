@@ -245,7 +245,7 @@
       }
     }
   },
-  "deleteSelectedMessagesDesc": "Se eliminarán los registros seleccionados. Los archivos locales se conservarán.",
+  "deleteSelectedMessagesDesc": "Se eliminarán los mensajes seleccionados. No se puede deshacer.",
   "language": "Idioma {language}",
   "pushNotification": "Enviar notificaciones de Android",
   "ignoreNotification": "Ignorar notificaciones de Android",
@@ -837,5 +837,15 @@
   "mobileControlTransportHelp": "Se interrumpió la conexión de control. Abre Whisper en el ordenador y vuelve a iniciar.",
   "mobileControlInjectionHelp": "El ordenador no pudo procesar la entrada. Revisa los permisos de control y vuelve a iniciar.",
   "clipboardAutoSyncAndroidDesc": "Sincroniza el texto copiado con el dispositivo de confianza actual al volver a Whisper",
-  "historyLoadFailed": "No se pudo cargar el historial. Toca para reintentar."
+  "historyLoadFailed": "No se pudo cargar el historial. Toca para reintentar.",
+  "deleteReceivedFilesDesc": "También se eliminarán los archivos recibidos. Se conservarán los originales enviados.",
+  "keepReceivedFiles": "Conservar archivos recibidos",
+  "messageDeleteFailed": "No se pudo completar la eliminación. Inténtalo de nuevo.",
+  "connectionQrTab": "Código QR",
+  "connectionScanTab": "Escanear",
+  "connectionAddressTab": "IP / puerto",
+  "connectionAddressLabel": "Dirección IP o nombre de host",
+  "connectionDetailsTab": "Este equipo",
+  "connectionAddressHint": "Consulta la dirección y el puerto en la pantalla principal de Whisper del otro dispositivo. Ambos deben estar en la misma red local.",
+  "qrCopyFailed": "No se pudo copiar. Inténtalo de nuevo."
 }

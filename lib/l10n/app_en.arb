@@ -218,7 +218,7 @@
       }
     }
   },
-  "deleteSelectedMessagesDesc": "The selected chat records will be deleted. Local files will be kept.",
+  "deleteSelectedMessagesDesc": "The selected messages will be deleted. This cannot be undone.",
   "language": "Language {language}",
   "pushNotification": "Forward Android Notifications",
   "ignoreNotification": "Ignore Android Notifications",
@@ -810,5 +810,15 @@
   "mobileControlTransportHelp": "The control connection was interrupted. Open Whisper on the computer, then start again.",
   "mobileControlInjectionHelp": "The computer could not process input. Check its control permissions, then start again.",
   "clipboardAutoSyncAndroidDesc": "Sync newly copied text to the current trusted device when you return to Whisper",
-  "historyLoadFailed": "Could not load history. Tap to retry."
+  "historyLoadFailed": "Could not load history. Tap to retry.",
+  "deleteReceivedFilesDesc": "Received local files will also be deleted. Sent originals will be kept.",
+  "keepReceivedFiles": "Keep received files",
+  "messageDeleteFailed": "Deletion could not be completed. Please try again.",
+  "connectionQrTab": "QR code",
+  "connectionScanTab": "Scan",
+  "connectionAddressTab": "IP / port",
+  "connectionAddressLabel": "IP address or hostname",
+  "connectionDetailsTab": "This device",
+  "connectionAddressHint": "Find the IP and port on the other device’s Whisper home screen. Use the same LAN.",
+  "qrCopyFailed": "Could not copy. Try again."
 }

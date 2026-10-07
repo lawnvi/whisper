@@ -17,6 +17,7 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:whisper/state/conversation_history_pager.dart';
+import 'package:whisper/state/message_deletion.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
@@ -60,6 +61,7 @@ import '../helper/notification.dart';
 import 'dart:io' show Platform;
 
 import '../l10n/app_localizations.dart';
+import 'package:whisper/widget/subtle_motion.dart';
 
 enum ConversationOperationKind {
   deleteFile,
@@ -319,7 +321,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final target = value.clamp(0, 1).toDouble();
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: target),
-      duration: _transferProgressAnimationDuration,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : _transferProgressAnimationDuration,
       curve: Curves.easeOutCubic,
       builder: (context, animatedValue, child) {
         return builder(context, animatedValue.clamp(0, 1).toDouble());
@@ -570,24 +574,30 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }, duration: const Duration(milliseconds: 100));
   }
 
-  Future<void> _deleteMessageFileIfExists(MessageData message) async {
-    final path = _effectiveMessagePath(message);
-    if (path.isEmpty) {
-      return;
-    }
-    final file = File(path);
-    if (!await file.exists()) {
-      return;
-    }
-    try {
-      await file.delete();
-    } on FileSystemException catch (error) {
-      if (!await file.exists()) {
-        return;
+  Future<void> _deleteMessages(
+    List<MessageData> messages, {
+    bool deleteFiles = false,
+  }) async {
+    if (deleteFiles) {
+      for (final message in messages) {
+        if (!canDeleteReceivedMessageFile(message, self?.uid)) continue;
+        final transfer = _transferForMessage(message);
+        if (transfer != null && !_isTransferTerminal(transfer.state)) {
+          await _cancelTransfer(transfer.transferId);
+        }
+        try {
+          await deleteReceivedMessageFile(
+            message,
+            selfUid: self?.uid,
+            path: _effectiveMessagePath(message),
+          );
+        } on FileSystemException catch (error) {
+          _logConversationFailure(ConversationOperationKind.deleteFile, error);
+          rethrow;
+        }
       }
-      _logConversationFailure(ConversationOperationKind.deleteFile, error);
-      rethrow;
     }
+    await _deleteItems(messages.map((message) => message.id));
   }
 
   Future<void> _deleteItems(Iterable<int> messageIds) async {
@@ -689,14 +699,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
             onOpenFile: _openMessageFile,
             onCopyText: copyToClipboard,
             onCopyFile: _copyMessageFile,
-            onDeleteMessage: (message, {deleteFile = false}) async {
-              if (deleteFile) {
-                await _deleteMessageFileIfExists(message);
-              }
-              await _deleteItems(<int>[message.id]);
-            },
-            onDeleteMessages: (messages) =>
-                _deleteItems(messages.map((message) => message.id)),
+            onDeleteMessage: (message, {deleteFile = false}) =>
+                _deleteMessages([message], deleteFiles: deleteFile),
+            onDeleteMessages: _deleteMessages,
             onSelectionModeChanged: (active) {
               if (_messageSelectionActive == active) {
                 return;
@@ -706,10 +711,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
             selfUid: self?.uid,
           ),
         ),
-        if (!_messageSelectionActive && _canSendCurrentDevice)
-          _buildComposer(isDark),
-        if (!embedded && !_messageSelectionActive && _canSendCurrentDevice)
-          const SizedBox(height: 6),
+        WhisperAnimatedReveal(
+          visible: !_messageSelectionActive && _canSendCurrentDevice,
+          child: !_messageSelectionActive && _canSendCurrentDevice
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildComposer(isDark),
+                    if (!embedded) const SizedBox(height: 6),
+                  ],
+                )
+              : null,
+        ),
       ],
     );
 
@@ -876,24 +889,32 @@ class _SendMessageScreen extends State<SendMessageScreen>
         const SizedBox(height: 4),
         Row(
           children: [
-            if (_isConnectedSession)
-              Icon(Icons.lock_rounded, size: 14, color: palette.trusted)
-            else
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: device.around == true ? Colors.green : Colors.grey,
-                ),
+            SizedBox.square(
+              dimension: 14,
+              child: WhisperAnimatedSwitcher(
+                value: (_isConnectedSession, device.around),
+                child: _isConnectedSession
+                    ? Icon(Icons.lock_rounded, size: 14, color: palette.trusted)
+                    : Center(
+                        child: ConnectionStatusDot(
+                          color: device.around == true
+                              ? Colors.green
+                              : Colors.grey,
+                        ),
+                      ),
               ),
+            ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                _connectionDetailText(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: palette.textMuted),
+              child: WhisperAnimatedSwitcher(
+                value: _connectionDetailText(),
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _connectionDetailText(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                ),
               ),
             ),
           ],
@@ -1057,15 +1078,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
         tooltip: _isConnectedSession
             ? (AppLocalizations.of(context)?.disconnect ?? '断开')
             : (AppLocalizations.of(context)?.connect ?? '连接'),
-        icon: Icon(
-          _isConnectedSession
-              ? Icons.wifi_rounded
-              : (_canToggleConnection
-                    ? Icons.wifi_find_rounded
-                    : Icons.wifi_off_rounded),
-          color: _isConnectedSession
-              ? Colors.lightBlue
-              : (_canToggleConnection ? palette.textMuted : Colors.grey),
+        icon: WhisperAnimatedSwitcher(
+          value: (_isConnectedSession, _canToggleConnection),
+          child: Icon(
+            _isConnectedSession
+                ? Icons.wifi_rounded
+                : (_canToggleConnection
+                      ? Icons.wifi_find_rounded
+                      : Icons.wifi_off_rounded),
+            color: _isConnectedSession
+                ? Colors.lightBlue
+                : (_canToggleConnection ? palette.textMuted : Colors.grey),
+          ),
         ),
       ),
     );
@@ -2348,46 +2372,53 @@ class _SendMessageScreen extends State<SendMessageScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (failed || isActiveTransfer) const SizedBox(width: 8),
-              if (failed)
-                const Icon(
-                  Icons.error_outline_rounded,
-                  color: Colors.redAccent,
-                  size: 24,
-                )
-              else if (isActiveTransfer)
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: transfer.state == FileTransferState.verifying
-                      ? CircularProgressIndicator(
-                          value: null,
-                          strokeWidth: 2.4,
-                          color: colorScheme.primary,
-                          backgroundColor: colorScheme.primary.withValues(
-                            alpha: 0.18,
-                          ),
+              SizedBox.square(
+                dimension: 40,
+                child: WhisperAnimatedSwitcher(
+                  value: failed
+                      ? 'failed'
+                      : isActiveTransfer
+                      ? (transfer.state == FileTransferState.verifying
+                            ? 'verifying'
+                            : 'progress')
+                      : 'file',
+                  child: failed
+                      ? const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 24,
                         )
-                      : _buildAnimatedTransferProgress(
-                          value: transfer.progress,
-                          builder: (context, value) =>
-                              CircularProgressIndicator(
-                                value: value,
-                                strokeWidth: 2.4,
-                                color: colorScheme.primary,
-                                backgroundColor: colorScheme.primary.withValues(
-                                  alpha: 0.18,
+                      : isActiveTransfer
+                      ? SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: transfer.state == FileTransferState.verifying
+                              ? CircularProgressIndicator(
+                                  value: null,
+                                  strokeWidth: 2.4,
+                                  color: colorScheme.primary,
+                                  backgroundColor: colorScheme.primary
+                                      .withValues(alpha: 0.18),
+                                )
+                              : _buildAnimatedTransferProgress(
+                                  value: transfer.progress,
+                                  builder: (context, value) =>
+                                      CircularProgressIndicator(
+                                        value: value,
+                                        strokeWidth: 2.4,
+                                        color: colorScheme.primary,
+                                        backgroundColor: colorScheme.primary
+                                            .withValues(alpha: 0.18),
+                                      ),
                                 ),
-                              ),
+                        )
+                      : Icon(
+                          Icons.insert_drive_file,
+                          color: colorScheme.primary.withValues(alpha: 0.86),
+                          size: 34,
                         ),
-                )
-              else
-                Icon(
-                  Icons.insert_drive_file,
-                  color: colorScheme.primary.withValues(alpha: 0.86),
-                  size: 34,
                 ),
-              if (failed || isActiveTransfer) const SizedBox(width: 8),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -2407,23 +2438,26 @@ class _SendMessageScreen extends State<SendMessageScreen>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    if (isActiveTransfer)
-                      _buildAnimatedTransferProgress(
-                        value: transfer.progress,
-                        builder: (context, value) => Text(
-                          _fileStatusText(
-                            message,
-                            transfer,
-                            progressOverride: value,
-                          ),
-                          style: fileStatusStyle,
-                        ),
-                      )
-                    else
-                      Text(
-                        _fileStatusText(message, transfer),
-                        style: fileStatusStyle,
-                      ),
+                    WhisperAnimatedSwitcher(
+                      value: (failed, transfer?.state),
+                      alignment: Alignment.centerLeft,
+                      child: isActiveTransfer
+                          ? _buildAnimatedTransferProgress(
+                              value: transfer.progress,
+                              builder: (context, value) => Text(
+                                _fileStatusText(
+                                  message,
+                                  transfer,
+                                  progressOverride: value,
+                                ),
+                                style: fileStatusStyle,
+                              ),
+                            )
+                          : Text(
+                              _fileStatusText(message, transfer),
+                              style: fileStatusStyle,
+                            ),
+                    ),
                   ],
                 ),
               ),

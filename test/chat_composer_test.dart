@@ -10,6 +10,77 @@ import 'package:whisper/widget/chat_composer.dart';
 
 void main() {
   testWidgets(
+    'draft action transitions keep focus and use only the current action',
+    (tester) async {
+      final controller = TextEditingController();
+      final focus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focus.dispose);
+      var loading = false;
+      var sent = 0;
+      var picked = 0;
+      late StateSetter update;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return ChatComposer(
+                  clipboardEnabled: true,
+                  canSend: true,
+                  isInputEmpty: controller.text.isEmpty,
+                  isLoading: loading,
+                  isLocalhost: false,
+                  isDesktopStyle: true,
+                  keyPressedMap: const {},
+                  controller: controller,
+                  focusNode: focus,
+                  onPickFiles: () async {
+                    picked++;
+                  },
+                  onSendClipboard: () async {},
+                  onSendText: (_) async {
+                    sent++;
+                    return false;
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      final position = tester.getCenter(
+        find.byKey(ChatComposer.attachmentButtonKey),
+      );
+      focus.requestFocus();
+      update(() => controller.text = 'Keep this draft');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(focus.hasFocus, isTrue);
+      await tester.tapAt(position);
+      expect(sent, 1);
+      expect(picked, 0);
+      expect(controller.text, 'Keep this draft');
+      update(() => loading = true);
+      await tester.pump();
+      await tester.tapAt(position);
+      expect(sent, 1);
+      update(() {
+        loading = false;
+        controller.clear();
+      });
+      await tester.pump();
+      await tester.tapAt(position);
+      expect(picked, 1);
+      expect(sent, 1);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ChatComposer.sendButtonKey), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'desktop composer shows attachment as primary action when empty',
     (tester) async {
       var pickedFiles = 0;
@@ -634,10 +705,7 @@ void main() {
     for (final method in ['onTextShortcut', 'onLocalPasteShortcut']) {
       final beforePaste = filePasteAttempts;
       final handled = await platform.handleNativeMethodCall(
-        MethodCall(method, const {
-          'shortcut': 'paste',
-          'appActive': true,
-        }),
+        MethodCall(method, const {'shortcut': 'paste', 'appActive': true}),
       );
       await tester.pump();
       expect(filePasteAttempts, beforePaste + 1, reason: method);

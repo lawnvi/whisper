@@ -23,7 +23,7 @@ void main() {
             onOpenFile: (_) {},
             onCopyText: (_) {},
             onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (_) async {},
+            onDeleteMessages: (_, {deleteFiles = false}) async {},
             selfUid: 'me',
           ),
         ),
@@ -91,7 +91,7 @@ void main() {
               copiedText = content;
             },
             onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (_) async {},
+            onDeleteMessages: (_, {deleteFiles = false}) async {},
             selfUid: 'me',
           ),
         ),
@@ -143,7 +143,7 @@ void main() {
             onOpenFile: (_) {},
             onCopyText: (_) {},
             onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (selected) async {
+            onDeleteMessages: (selected, {deleteFiles = false}) async {
               deletedIds.addAll(selected.map((message) => message.id));
             },
             onSelectionModeChanged: selectionStates.add,
@@ -172,7 +172,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('删除 2 条消息'), findsOneWidget);
-    expect(find.text('将删除所选聊天记录，本地文件会保留。'), findsOneWidget);
+    expect(find.text('将删除所选消息，无法撤销。'), findsOneWidget);
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
 
@@ -225,7 +225,7 @@ void main() {
               copiedFile = value;
             },
             onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (_) async {},
+            onDeleteMessages: (_, {deleteFiles = false}) async {},
             selfUid: 'me',
           ),
         ),
@@ -270,7 +270,7 @@ void main() {
             onOpenFile: (_) {},
             onCopyText: (value) => copied = value,
             onDeleteMessage: (_, {deleteFile = false}) async {},
-            onDeleteMessages: (_) async {},
+            onDeleteMessages: (_, {deleteFiles = false}) async {},
             selfUid: 'me',
           ),
         ),

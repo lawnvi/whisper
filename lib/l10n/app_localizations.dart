@@ -883,7 +883,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteSelectedMessagesDesc.
   ///
   /// In zh, this message translates to:
-  /// **'将删除所选聊天记录，本地文件会保留。'**
+  /// **'将删除所选消息，无法撤销。'**
   String get deleteSelectedMessagesDesc;
 
   /// No description provided for @language.
@@ -3171,6 +3171,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'历史记录未能加载，点按重试'**
   String get historyLoadFailed;
+
+  /// No description provided for @deleteReceivedFilesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'同时删除接收的本地文件，发送的源文件会保留。'**
+  String get deleteReceivedFilesDesc;
+
+  /// No description provided for @keepReceivedFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留接收的文件'**
+  String get keepReceivedFiles;
+
+  /// No description provided for @messageDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除未完成，请重试。'**
+  String get messageDeleteFailed;
+
+  /// No description provided for @connectionQrTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'二维码'**
+  String get connectionQrTab;
+
+  /// No description provided for @connectionScanTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'扫一扫'**
+  String get connectionScanTab;
+
+  /// No description provided for @connectionAddressTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'IP / 端口'**
+  String get connectionAddressTab;
+
+  /// No description provided for @connectionAddressLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'IP 地址或主机名'**
+  String get connectionAddressLabel;
+
+  /// No description provided for @connectionDetailsTab.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机信息'**
+  String get connectionDetailsTab;
+
+  /// No description provided for @connectionAddressHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写对方 Whisper 首页显示的地址和端口。两台设备需连接同一局域网。'**
+  String get connectionAddressHint;
+
+  /// No description provided for @qrCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制失败，请重试'**
+  String get qrCopyFailed;
 }
 
 class _AppLocalizationsDelegate

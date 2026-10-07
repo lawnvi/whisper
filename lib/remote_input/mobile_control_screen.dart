@@ -16,6 +16,7 @@ import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_lifecycle.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
+import 'package:whisper/widget/subtle_motion.dart';
 
 class MobileControlTarget {
   const MobileControlTarget(this.id, this.name, {this.platform = 'macos'});
@@ -538,14 +539,18 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        Text(
-          _active ? l10n.mobileControlActive : l10n.mobileControlReady,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: _active
-                ? context.whisperPalette.trusted
-                : context.whisperPalette.textMuted,
+        WhisperAnimatedSwitcher(
+          value: _active,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            _active ? l10n.mobileControlActive : l10n.mobileControlReady,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: _active
+                  ? context.whisperPalette.trusted
+                  : context.whisperPalette.textMuted,
+            ),
           ),
         ),
       ],
@@ -570,12 +575,16 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         backgroundColor: color.withValues(alpha: .1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      icon: pending
-          ? SizedBox.square(
-              dimension: 22,
-              child: CircularProgressIndicator(strokeWidth: 2, color: color),
-            )
-          : Icon(icon, size: 24),
+      icon: WhisperAnimatedSwitcher(
+        value: (pending, icon),
+        scale: true,
+        child: pending
+            ? SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              )
+            : Icon(icon, size: 24),
+      ),
     ),
   );
 
@@ -1020,7 +1029,15 @@ class _HoldAreaState extends State<_HoldArea> {
         onPointerCancel: (event) {
           if (_pointer == event.pointer) _release();
         },
-        child: Container(
+        child: AnimatedContainer(
+          // Input is delivered above immediately; only release feedback fades.
+          duration:
+              (_pointer != null || widget.active) ||
+                  !widget.enabled ||
+                  MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           decoration: BoxDecoration(

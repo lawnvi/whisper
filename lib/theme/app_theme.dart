@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:whisper/theme/whisper_motion.dart';
 
 abstract final class WhisperUi {
   static const settingsMaxWidth = 760.0;
@@ -160,9 +161,9 @@ class AppTheme {
         builders: <TargetPlatform, PageTransitionsBuilder>{
           TargetPlatform.android: ZoomPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
-          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: WhisperDesktopPageTransitionsBuilder(),
+          TargetPlatform.windows: WhisperDesktopPageTransitionsBuilder(),
+          TargetPlatform.linux: WhisperDesktopPageTransitionsBuilder(),
           TargetPlatform.fuchsia: ZoomPageTransitionsBuilder(),
         },
       ),

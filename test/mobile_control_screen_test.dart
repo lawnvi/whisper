@@ -266,6 +266,54 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('mouse feedback never delays down, up or cancellation', (
+    tester,
+  ) async {
+    await mount(tester, app(reduceMotion: false));
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pumpAndSettle();
+    final left = find.byKey(const ValueKey('mobile-mouse-left'));
+    await tester.ensureVisible(left);
+    List<bool> states() => transport.sent
+        .where((packet) => packet.eventType == RemoteInputEventType.mouseButton)
+        .map(
+          (packet) =>
+              (jsonDecode(utf8.decode(packet.payload)) as Map)['down'] as bool,
+        )
+        .toList();
+    Color surface() =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find
+                          .descendant(
+                            of: left,
+                            matching: find.byType(DecoratedBox),
+                          )
+                          .first,
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color!;
+    final initial = surface();
+    final held = await tester.startGesture(tester.getCenter(left));
+    expect(states(), [true]);
+    await tester.pump();
+    final pressed = surface();
+    expect(pressed, isNot(initial));
+    await held.up();
+    expect(states(), [true, false]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(surface(), isNot(initial));
+    expect(surface(), isNot(pressed));
+    final next = await tester.startGesture(tester.getCenter(left));
+    expect(states(), [true, false, true]);
+    await next.cancel();
+    expect(states(), [true, false, true, false]);
+    await tester.pumpAndSettle();
+    expect(surface(), initial);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('touchpad moves while a separate finger holds left click', (
     tester,
   ) async {
