@@ -100,6 +100,72 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @mobileControlSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'空格'**
+  String get mobileControlSpace;
+
+  /// No description provided for @mobileControlEnter.
+  ///
+  /// In zh, this message translates to:
+  /// **'回车'**
+  String get mobileControlEnter;
+
+  /// No description provided for @mobileControlSymbols.
+  ///
+  /// In zh, this message translates to:
+  /// **'数字与符号'**
+  String get mobileControlSymbols;
+
+  /// No description provided for @mobileControlMoreSymbols.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多符号'**
+  String get mobileControlMoreSymbols;
+
+  /// No description provided for @mobileControlDirectKeys.
+  ///
+  /// In zh, this message translates to:
+  /// **'直接按键'**
+  String get mobileControlDirectKeys;
+
+  /// No description provided for @mobileControlReturnKeys.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回直接按键'**
+  String get mobileControlReturnKeys;
+
+  /// No description provided for @mobileControlDraftHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'中文、表情或一段文字…'**
+  String get mobileControlDraftHint;
+
+  /// No description provided for @mobileControlScrollShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'滚动'**
+  String get mobileControlScrollShort;
+
+  /// No description provided for @mobileControlLeftShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'左键'**
+  String get mobileControlLeftShort;
+
+  /// No description provided for @mobileControlRightShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'右键'**
+  String get mobileControlRightShort;
+
+  /// No description provided for @mobileControlStopShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get mobileControlStopShort;
+
   /// No description provided for @mobileControlPermission.
   ///
   /// In zh, this message translates to:
@@ -211,7 +277,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlFunctionKeys.
   ///
   /// In zh, this message translates to:
-  /// **'功能 / 符号'**
+  /// **'功能与导航键'**
   String get mobileControlFunctionKeys;
 
   /// No description provided for @mobileControlSendText.
@@ -2983,7 +3049,7 @@ abstract class AppLocalizations {
   /// No description provided for @mobileControlTargetHint.
   ///
   /// In zh, this message translates to:
-  /// **'可以连接多台电脑，每次只控制一台。切换时结束当前控制，点击“开始”控制新电脑。'**
+  /// **'切换后需重新开始控制。'**
   String get mobileControlTargetHint;
 
   /// No description provided for @mobileControlPointerSpeed.

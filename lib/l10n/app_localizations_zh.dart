@@ -9,6 +9,39 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get mobileControlSpace => '空格';
+
+  @override
+  String get mobileControlEnter => '回车';
+
+  @override
+  String get mobileControlSymbols => '数字与符号';
+
+  @override
+  String get mobileControlMoreSymbols => '更多符号';
+
+  @override
+  String get mobileControlDirectKeys => '直接按键';
+
+  @override
+  String get mobileControlReturnKeys => '返回直接按键';
+
+  @override
+  String get mobileControlDraftHint => '中文、表情或一段文字…';
+
+  @override
+  String get mobileControlScrollShort => '滚动';
+
+  @override
+  String get mobileControlLeftShort => '左键';
+
+  @override
+  String get mobileControlRightShort => '右键';
+
+  @override
+  String get mobileControlStopShort => '停止';
+
+  @override
   String get mobileControlPermission =>
       '请在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许 Whisper，然后重新开始。';
 
@@ -64,7 +97,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlMainKeys => '主键盘';
 
   @override
-  String get mobileControlFunctionKeys => '功能 / 符号';
+  String get mobileControlFunctionKeys => '功能与导航键';
 
   @override
   String get mobileControlSendText => '发送文字';
@@ -1599,8 +1632,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlTarget => '控制目标';
 
   @override
-  String get mobileControlTargetHint =>
-      '可以连接多台电脑，每次只控制一台。切换时结束当前控制，点击“开始”控制新电脑。';
+  String get mobileControlTargetHint => '切换后需重新开始控制。';
 
   @override
   String get mobileControlPointerSpeed => '触控板移动速度';

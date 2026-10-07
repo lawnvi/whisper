@@ -9,6 +9,39 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String get mobileControlSpace => 'Espacio';
+
+  @override
+  String get mobileControlEnter => 'Intro';
+
+  @override
+  String get mobileControlSymbols => 'Números y símbolos';
+
+  @override
+  String get mobileControlMoreSymbols => 'Más símbolos';
+
+  @override
+  String get mobileControlDirectKeys => 'Teclas directas';
+
+  @override
+  String get mobileControlReturnKeys => 'Volver a las teclas';
+
+  @override
+  String get mobileControlDraftHint => 'Texto, emojis o un mensaje corto…';
+
+  @override
+  String get mobileControlScrollShort => 'Desplazar';
+
+  @override
+  String get mobileControlLeftShort => 'Izquierdo';
+
+  @override
+  String get mobileControlRightShort => 'Derecho';
+
+  @override
+  String get mobileControlStopShort => 'Parar';
+
+  @override
   String get mobileControlPermission =>
       'Permite Whisper en Ajustes del Sistema → Privacidad y seguridad → Accesibilidad en el Mac y vuelve a iniciar.';
 
@@ -67,7 +100,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlMainKeys => 'Teclas principales';
 
   @override
-  String get mobileControlFunctionKeys => 'Fn / símbolos';
+  String get mobileControlFunctionKeys => 'Teclas de función y navegación';
 
   @override
   String get mobileControlSendText => 'Enviar texto';
@@ -1742,8 +1775,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlTarget => 'Equipo a controlar';
 
   @override
-  String get mobileControlTargetHint =>
-      'Puedes conectar varios equipos y controlar uno a la vez. Al cambiar se detiene la sesión; toca Iniciar para controlar el equipo seleccionado.';
+  String get mobileControlTargetHint => 'Vuelve a iniciar al cambiar.';
 
   @override
   String get mobileControlPointerSpeed =>

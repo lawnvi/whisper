@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/remote_input/mobile_input_controller.dart';
+import 'package:whisper/remote_input/mobile_control_keyboard.dart';
 import 'package:whisper/remote_input/mobile_motion.dart';
 import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
@@ -279,6 +280,34 @@ void main() {
     ]);
     expect(controller.modifiers, isEmpty);
   });
+  test(
+    'all ASCII punctuation has a key mapping and balanced Shift override',
+    () {
+      final punctuation = [
+        for (var code = 33; code < 127; code++)
+          if (!RegExp(r'[a-zA-Z0-9]').hasMatch(String.fromCharCode(code)))
+            String.fromCharCode(code),
+      ];
+      expect(mobileControlSymbols.keys, unorderedEquals(punctuation));
+      for (final symbol in mobileControlSymbols.values) {
+        sent.clear();
+        controller.toggleModifier('meta');
+        controller.toggleModifier('shift');
+        controller.key(symbol.$1, shift: symbol.$2);
+        expect(
+          sent
+              .where((e) => e.$2['keySemantic'] == 'shift')
+              .map((e) => e.$2['down']),
+          symbol.$2 ? [true, false] : isEmpty,
+        );
+        expect(
+          sent.map((e) => e.$2['down']).where((v) => v == true).length,
+          sent.map((e) => e.$2['down']).where((v) => v == false).length,
+        );
+        expect(controller.modifiers, isEmpty);
+      }
+    },
+  );
   testWidgets(
     'repeat starts at 400ms and reset releases drag and cancels repeat',
     (tester) async {

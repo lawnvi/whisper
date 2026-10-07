@@ -9,6 +9,39 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get mobileControlSpace => 'Space';
+
+  @override
+  String get mobileControlEnter => 'Return';
+
+  @override
+  String get mobileControlSymbols => 'Numbers and symbols';
+
+  @override
+  String get mobileControlMoreSymbols => 'More symbols';
+
+  @override
+  String get mobileControlDirectKeys => 'Direct keys';
+
+  @override
+  String get mobileControlReturnKeys => 'Return to direct keys';
+
+  @override
+  String get mobileControlDraftHint => 'Chinese, emoji or a short message…';
+
+  @override
+  String get mobileControlScrollShort => 'Scroll';
+
+  @override
+  String get mobileControlLeftShort => 'Left';
+
+  @override
+  String get mobileControlRightShort => 'Right';
+
+  @override
+  String get mobileControlStopShort => 'Stop';
+
+  @override
   String get mobileControlPermission =>
       'Allow Whisper in System Settings → Privacy & Security → Accessibility on the Mac, then start again.';
 
@@ -65,7 +98,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlMainKeys => 'Main keys';
 
   @override
-  String get mobileControlFunctionKeys => 'Fn / symbols';
+  String get mobileControlFunctionKeys => 'Function and navigation keys';
 
   @override
   String get mobileControlSendText => 'Send text';
@@ -1719,8 +1752,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlTarget => 'Control target';
 
   @override
-  String get mobileControlTargetHint =>
-      'Connect to several computers, control one at a time. Switching stops the current session; tap Start to control the selected computer.';
+  String get mobileControlTargetHint => 'Start again after switching.';
 
   @override
   String get mobileControlPointerSpeed => 'Touchpad pointer speed';

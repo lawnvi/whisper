@@ -181,16 +181,19 @@ class MobileInputController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void key(String semantic) {
+  void key(String semantic, {bool? shift}) {
     if (!_active) return;
     flush();
-    final selected = modifiers.toList();
+    // Symbol keys supply their own Shift state without leaving it latched.
+    final selected = {...modifiers};
+    if (shift == true) selected.add('shift');
+    if (shift == false) selected.remove('shift');
     for (final modifier in selected) {
       _key(modifier, true);
     }
     _key(semantic, true);
     _key(semantic, false);
-    for (final modifier in selected.reversed) {
+    for (final modifier in selected.toList().reversed) {
       _key(modifier, false);
     }
     modifiers.clear();

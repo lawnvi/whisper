@@ -70,6 +70,7 @@ Future<T?> showWhisperModalBottomSheet<T>({
   Color? backgroundColor,
   BoxConstraints? constraints,
   ShapeBorder? shape,
+  AnimationStyle? sheetAnimationStyle,
 }) {
   final navigator = Navigator.of(context);
   final localizations = MaterialLocalizations.of(context);
@@ -97,7 +98,7 @@ Future<T?> showWhisperModalBottomSheet<T>({
       shape: shape,
       sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
           ? AnimationStyle.noAnimation
-          : null,
+          : sheetAnimationStyle,
     ),
   );
 }

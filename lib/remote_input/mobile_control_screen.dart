@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/l10n/app_localizations.dart';
@@ -58,9 +56,14 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     duration: const Duration(milliseconds: 200),
     reverseDuration: const Duration(milliseconds: 120),
   );
+  static const _controlSheetAnimation = AnimationStyle(
+    duration: Duration(milliseconds: 300),
+    reverseDuration: Duration(milliseconds: 220),
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInOutCubic,
+  );
   bool _transitioning = false;
   int _transitionGeneration = 0;
-  Completer<void>? _orientationReady;
   late final RemoteInputCoordinator _coordinator =
       widget.coordinator ?? RemoteInputCoordinator.shared;
   late final MobileMotionSensor _sensor = widget.sensor ?? MobileMotionSensor();
@@ -74,13 +77,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     cancel: _input.reset,
   );
   final _text = TextEditingController();
-  bool _keyboardOrientation = false;
+  final _textFocus = FocusNode();
+  bool _editingText = false;
   StreamSubscription<MotionSample>? _samples;
   Timer? _calibrationTimer;
-  bool _available = false,
-      _checkedSensor = false,
-      _starting = false,
-      _stopping = false;
+  bool _available = false, _starting = false, _stopping = false;
   bool _awake = false;
   int _tab = 0, _keyPage = 0, _startGeneration = 0;
   String? _error;
@@ -113,6 +114,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     for (final target in widget.targets?.call() ?? <MobileControlTarget>[]) {
       if (target.id == widget.peerId) _target = target;
     }
+    _textFocus.addListener(_textFocusChanged);
     WidgetsBinding.instance.addObserver(this);
     _coordinator.addListener(_refresh);
     _input.addListener(_redraw);
@@ -133,7 +135,6 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     _input.pointerSpeed = pointerSpeed;
     _input.scrollSpeed = scrollSpeed;
     _available = available;
-    _checkedSensor = true;
     _input.motion.sensitivity = sensitivity;
     _input.setAir(available);
     _refresh();
@@ -156,13 +157,16 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   }
 
   void _syncSensors() {
-    if (_enabled && _available && _input.air && _tab == 0) {
+    if (_enabled &&
+        _available &&
+        ((_input.air && _tab == 0) || _input.motion.calibrating)) {
       _samples ??= _sensor.samples().listen(
         (sample) {
           final calibrating = _input.motion.calibrating;
           _input.sample(sample);
           if (calibrating && !_input.motion.calibrating && mounted) {
             _calibrationTimer?.cancel();
+            _syncSensors();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(l10n.mobileControlCalibrationDone)),
             );
@@ -264,9 +268,10 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       _transition.value = 0;
     }
     if (!mounted || generation != _transitionGeneration) return;
-    setState(() => _tab = tab);
-    await _orientKeyboard(tab == 1, waitForMetrics: useAnimation);
-    if (!mounted || generation != _transitionGeneration) return;
+    setState(() {
+      _tab = tab;
+      _editingText = false;
+    });
     setState(() => _transitioning = false);
     _refresh();
     if (useAnimation) {
@@ -276,46 +281,21 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     }
   }
 
-  Future<void> _orientKeyboard(
-    bool landscape, {
-    bool waitForMetrics = false,
-  }) async {
-    if (_keyboardOrientation == landscape ||
-        defaultTargetPlatform != TargetPlatform.android) {
-      return;
-    }
-    _keyboardOrientation = landscape;
-    final ready = Completer<void>();
-    _orientationReady = ready;
-    try {
-      await SystemChrome.setPreferredOrientations(
-        landscape
-            ? [
-                DeviceOrientation.landscapeLeft,
-                DeviceOrientation.landscapeRight,
-              ]
-            : [DeviceOrientation.portraitUp],
-      );
-      if (waitForMetrics && _landscape != landscape) {
-        // Keep the old layout hidden until Android has delivered the new size.
-        await ready.future.timeout(
-          const Duration(milliseconds: 450),
-          onTimeout: () {},
-        );
-      }
-    } catch (_) {
-      /* The scrollable layout remains usable if rotation is unavailable. */
-    }
-    if (_orientationReady == ready) _orientationReady = null;
+  void _textFocusChanged() {
+    if (!_textFocus.hasFocus || !mounted) return;
+    _reset();
+    setState(() => _editingText = true);
+  }
+
+  void _returnToKeys() {
+    _textFocus.unfocus();
+    _reset();
+    setState(() => _editingText = false);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) unawaited(_stop());
-    if (state == AppLifecycleState.paused &&
-        (_tab == 1 || _keyboardOrientation)) {
-      unawaited(_selectTab(0, animate: false));
-    }
   }
 
   @override
@@ -324,17 +304,12 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     final landscape = size.width > size.height;
     if (_landscape != null && _landscape != landscape) _reset();
     _landscape = landscape;
-    if (landscape == _keyboardOrientation &&
-        _orientationReady?.isCompleted == false) {
-      _orientationReady!.complete();
-    }
   }
 
   @override
   void dispose() {
     ++_startGeneration;
     ++_transitionGeneration;
-    unawaited(_orientKeyboard(false));
     _transition.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _coordinator.removeListener(_refresh);
@@ -346,6 +321,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       unawaited(widget.onStop().catchError((Object _) {}));
     }
     unawaited(WakelockPlus.disable().catchError((Object _) {}));
+    _textFocus.removeListener(_textFocusChanged);
+    _textFocus.dispose();
     _text.dispose();
     super.dispose();
   }
@@ -366,7 +343,10 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     FocusManager.instance.primaryFocus?.unfocus();
     final sent = await _coordinator.sendManualText(_text.text);
     if (!mounted) return;
-    if (sent) _text.clear();
+    if (sent) {
+      _text.clear();
+      _editingText = false;
+    }
     setState(() {
       _error = sent ? null : l10n.mobileControlTextUnconfirmed;
     });
@@ -378,46 +358,43 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   }
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: context.whisperPalette.surfaceCanvas,
-    child: IgnorePointer(
-      ignoring: _transitioning,
-      child: FadeTransition(
-        opacity: CurvedAnimation(
-          parent: _transition,
-          curve: Curves.easeOutCubic,
-        ),
-        child: _buildPage(context),
-      ),
-    ),
-  );
-
-  Widget _buildPage(BuildContext context) {
+  Widget build(BuildContext context) {
     _landscape ??=
         View.of(context).physicalSize.width >
         View.of(context).physicalSize.height;
     final state = _coordinator.state;
     final busy = _starting || _stopping || (_ownsSession && state.isBusy);
     final palette = context.whisperPalette;
-    if (_tab == 1) return _keyboardScreen(busy);
     return Scaffold(
       backgroundColor: palette.surfaceCanvas,
       appBar: AppBar(
         backgroundColor: palette.surfaceCanvas,
+        titleSpacing: 0,
         title: _deviceTitle(),
         actions: [
-          if (_tab == 0)
-            IconButton(
-              tooltip: l10n.mobileControlSettings,
-              onPressed: _showPointerSettings,
-              icon: const Icon(Icons.tune_rounded),
-            ),
+          _toolbarIcon(
+            key: const ValueKey('mobile-control-toggle'),
+            tooltip: _tab == 0
+                ? l10n.mobileControlKeysTab
+                : l10n.mobileControlPointer,
+            icon: _tab == 0 ? Icons.keyboard_outlined : Icons.mouse_outlined,
+            color: Theme.of(context).colorScheme.primary,
+            onPressed: _coordinator.isSendingText || _transitioning
+                ? null
+                : () => _selectTab(_tab == 0 ? 1 : 0),
+          ),
+          const SizedBox(width: 8),
           _sessionAction(busy),
           const SizedBox(width: 8),
+          IconButton(
+            tooltip: l10n.mobileControlSettings,
+            onPressed: _coordinator.isSendingText ? null : _showPointerSettings,
+            icon: const Icon(Icons.tune_rounded),
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             if (_error != null ||
@@ -425,10 +402,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 96),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.all(12),
                   child: Text(
                     _error ?? _failureText(state.errorMessage),
                     style: TextStyle(
@@ -438,47 +412,19 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                 ),
               ),
             Expanded(
-              child: _tab == 0
-                  ? _pointerPanel()
-                  : SingleChildScrollView(child: _textPanel()),
+              child: IgnorePointer(
+                ignoring: _transitioning,
+                child: FadeTransition(
+                  opacity: CurvedAnimation(
+                    parent: _transition,
+                    curve: Curves.easeOutCubic,
+                  ),
+                  child: _tab == 0 ? _pointerPanel() : _keyboardPanel(),
+                ),
+              ),
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        height: 64,
-        backgroundColor: palette.surfaceElevated,
-        indicatorColor: Theme.of(
-          context,
-        ).colorScheme.primary.withValues(alpha: 0.12),
-        selectedIndex: _tab,
-        onDestinationSelected: _coordinator.isSendingText ? null : _selectTab,
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.mouse_outlined),
-            selectedIcon: Icon(
-              Icons.mouse_rounded,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            label: l10n.mobileControlPointer,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.keyboard_outlined),
-            selectedIcon: Icon(
-              Icons.keyboard_rounded,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            label: l10n.mobileControlKeysTab,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.notes_rounded),
-            selectedIcon: Icon(
-              Icons.notes_rounded,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            label: l10n.mobileControlTextTab,
-          ),
-        ],
       ),
     );
   }
@@ -505,47 +451,66 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   );
 
   Future<void> _chooseTarget() async {
+    _textFocus.unfocus();
     _reset();
     final targets = widget.targets!();
     final selected = await showWhisperModalBottomSheet<MobileControlTarget>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
+      sheetAnimationStyle: _controlSheetAnimation,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.mobileControlTarget,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(l10n.mobileControlTargetHint),
-                ],
-              ),
-            ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final target in targets)
-                    ListTile(
-                      leading: const Icon(Icons.desktop_windows_outlined),
-                      title: Text(target.name),
-                      trailing: target.id == _target.id
-                          ? const Icon(Icons.check_rounded)
-                          : null,
-                      onTap: () => Navigator.pop(context, target),
+        top: false,
+        child: Padding(
+          key: const ValueKey('mobile-control-target-sheet'),
+          padding: const EdgeInsets.only(bottom: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.mobileControlTarget,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.mobileControlTargetHint,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.whisperPalette.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final target in targets)
+                      ListTile(
+                        key: ValueKey('mobile-control-target-${target.id}'),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 4,
+                        ),
+                        leading: const Icon(Icons.desktop_windows_outlined),
+                        title: Text(target.name),
+                        trailing: target.id == _target.id
+                            ? const Icon(Icons.check_rounded)
+                            : null,
+                        onTap: () => Navigator.pop(context, target),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -572,6 +537,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         ),
         Text(
           _active ? l10n.mobileControlActive : l10n.mobileControlReady,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: _active
                 ? context.whisperPalette.trusted
@@ -582,33 +549,54 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     ),
   );
 
-  Widget _sessionAction(bool busy) => _ownsSession || _starting
-      ? IconButton(
-          tooltip: l10n.mobileControlStop,
-          onPressed: _stopping ? null : _stop,
-          icon: const Icon(Icons.stop_rounded),
-        )
-      : Tooltip(
-          message: l10n.mobileControlStart,
-          child: TextButton(
-            onPressed: busy ? null : _start,
-            child: Text(l10n.mobileControlStartShort),
-          ),
-        );
+  Widget _toolbarIcon({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+    bool pending = false,
+  }) => SizedBox.square(
+    dimension: 48,
+    child: IconButton(
+      key: key,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        foregroundColor: color,
+        backgroundColor: color.withValues(alpha: .1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      icon: pending
+          ? SizedBox.square(
+              dimension: 22,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            )
+          : Icon(icon, size: 24),
+    ),
+  );
+
+  Widget _sessionAction(bool busy) {
+    final stop = _ownsSession || _starting;
+    return _toolbarIcon(
+      key: const ValueKey('mobile-control-session'),
+      tooltip: stop ? l10n.mobileControlStop : l10n.mobileControlStart,
+      icon: stop ? Icons.stop_rounded : Icons.play_arrow_rounded,
+      color: stop
+          ? context.whisperPalette.danger
+          : context.whisperPalette.trusted,
+      onPressed: stop ? (_stopping ? null : _stop) : (busy ? null : _start),
+      pending: _starting || _stopping,
+    );
+  }
 
   Widget _pointerPanel() => LayoutBuilder(
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      final wide =
-          constraints.maxWidth > 600 &&
-          constraints.maxHeight < 420 &&
-          scale < 1.4;
-      final minimumHeight = wide
-          ? 300.0
-          : scale < 1.4
-          ? 360.0
-          : 480.0 * scale;
-      final height = math.max(constraints.maxHeight, minimumHeight);
+      final height = math.max(
+        constraints.maxHeight,
+        scale < 1.4 ? 360.0 : 400.0 * scale,
+      );
       final panel = SizedBox(
         height: height,
         child: Padding(
@@ -628,42 +616,26 @@ class _MobileControlScreenState extends State<MobileControlScreen>
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: wide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _movementSurface()),
-                          const SizedBox(width: 12),
-                          SizedBox(width: 216, child: _pointerActions()),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Expanded(child: _movementSurface()),
-                          const SizedBox(height: 12),
-                          _pointerActions(),
-                        ],
+                child: Container(
+                  decoration: _surfaceDecoration(),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      Expanded(child: _movementSurface()),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: context.whisperPalette.borderSubtle,
                       ),
-              ),
-              const SizedBox(height: 6),
-              if (_input.air || (_checkedSensor && !_available))
-                Text(
-                  _checkedSensor && !_available
-                      ? l10n.mobileControlSensorUnavailable
-                      : !_active
-                      ? l10n.mobileControlIdleHint
-                      : l10n.mobileControlDragHint,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: context.whisperPalette.textMuted,
+                      _pointerActions(),
+                    ],
                   ),
                 ),
+              ),
             ],
           ),
         ),
       );
-      // Only constrained windows scroll. Each input surface claims its own
-      // pointers, including a second finger used to drag with a held button.
       return height > constraints.maxHeight
           ? SingleChildScrollView(child: panel)
           : panel;
@@ -672,154 +644,116 @@ class _MobileControlScreenState extends State<MobileControlScreen>
 
   Widget _movementSurface() => !_input.air
       ? _touchpad()
-      : Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Semantics(
-                button: true,
-                toggled: _input.moving,
-                enabled: _enabled,
-                child: Material(
-                  color: _input.moving
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.12)
-                      : context.whisperPalette.surfaceElevated,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    side: BorderSide(
-                      color: context.whisperPalette.borderSubtle,
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: _enabled ? _input.toggleMotion : null,
-                    onTapCancel: _enabled ? _input.reset : null,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Center(
-                        child: _SurfaceLabel(
-                          label: _input.moving
-                              ? l10n.mobileControlMotionPause
-                              : l10n.mobileControlMotionStart,
-                          subtitle: _input.moving
-                              ? l10n.mobileControlMotionOnHint
-                              : l10n.mobileControlMotionOffHint,
-                          icon: _input.moving
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          enabled: _enabled,
-                          active: _input.moving,
-                        ),
-                      ),
+      : Semantics(
+          button: true,
+          toggled: _input.moving,
+          enabled: _enabled,
+          child: Material(
+            color: context.whisperPalette.surfaceElevated,
+            child: InkWell(
+              onTap: _enabled ? _input.toggleMotion : null,
+              onTapCancel: _enabled ? _input.reset : null,
+              child: CustomPaint(
+                painter: _PointerTexture(context.whisperPalette.borderSubtle),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: _SurfaceLabel(
+                      label: _input.moving
+                          ? l10n.mobileControlMotionPause
+                          : l10n.mobileControlMotionStart,
+                      subtitle: _input.scrolling
+                          ? l10n.mobileControlHoldScroll
+                          : _input.moving
+                          ? l10n.mobileControlMotionOnHint
+                          : l10n.mobileControlMotionOffHint,
+                      icon: Icons.smartphone_rounded,
+                      enabled: _enabled,
+                      active: _input.moving || _input.scrolling,
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 52,
-              child: Semantics(
-                label: l10n.mobileControlScroll,
-                child: Tooltip(
-                  message: l10n.mobileControlScroll,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onVerticalDragUpdate: _enabled
-                        ? (d) =>
-                              _input.move(Offset(0, d.delta.dy), scroll: true)
-                        : null,
-                    onVerticalDragEnd: (_) => _input.flush(),
-                    onVerticalDragCancel: _input.flush,
-                    child: Container(
-                      decoration: _surfaceDecoration(),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.swipe_vertical_rounded,
-                            color: context.whisperPalette.textMuted,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            l10n.mobileControlScrollRail,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: context.whisperPalette.textMuted,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         );
 
   BoxDecoration _surfaceDecoration() => BoxDecoration(
     color: context.whisperPalette.surfaceElevated,
-    borderRadius: BorderRadius.circular(24),
+    borderRadius: BorderRadius.circular(28),
     border: Border.all(color: context.whisperPalette.borderSubtle),
   );
 
   Widget _pointerActions() {
     final buttonHeight = math.max(
-      _input.air ? 64.0 : 48.0,
-      MediaQuery.textScalerOf(context).scale(14) * 3.2 + 18,
+      88.0,
+      MediaQuery.textScalerOf(context).scale(14) * 4 + 24,
     );
-    Widget button(int number, String label) => Expanded(
+    Widget button(int number, String label, String shortLabel) => Expanded(
       child: _HoldArea(
+        key: ValueKey(number == 0 ? 'mobile-mouse-left' : 'mobile-mouse-right'),
         generation: _gestureGeneration,
         label: label,
+        displayLabel: shortLabel,
         enabled: _enabled,
         onDown: () => _input.button(number, true),
         onUp: () => _input.button(number, false),
       ),
     );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: buttonHeight,
-          child: Row(
-            children: [
-              button(0, l10n.mobileControlLeft),
-              const SizedBox(width: 10),
-              button(1, l10n.mobileControlRight),
-            ],
+    return SizedBox(
+      height: buttonHeight,
+      child: Row(
+        children: [
+          button(0, l10n.mobileControlLeft, l10n.mobileControlLeftShort),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: context.whisperPalette.borderSubtle,
           ),
-        ),
-        if (_input.air) ...[
-          const SizedBox(height: 10),
           SizedBox(
-            height: buttonHeight,
-            width: double.infinity,
+            width: 64,
             child: _HoldArea(
+              key: const ValueKey('mobile-mouse-scroll'),
               generation: _gestureGeneration,
-              label: l10n.mobileControlHoldScroll,
+              label: _input.air
+                  ? l10n.mobileControlHoldScroll
+                  : l10n.mobileControlScroll,
+              displayLabel: l10n.mobileControlScrollShort,
+              icon: Icons.drag_indicator_rounded,
               enabled: _enabled,
               active: _input.scrolling,
-              onDown: () => _input.holdMotion(down: true, scroll: true),
-              onUp: () => _input.holdMotion(down: false, scroll: true),
+              onDown: () {
+                if (_input.air) _input.holdMotion(down: true, scroll: true);
+              },
+              onMove: _input.air
+                  ? null
+                  : (delta) => _input.move(Offset(0, delta.dy), scroll: true),
+              onUp: () {
+                if (_input.air) _input.holdMotion(down: false, scroll: true);
+                _input.flush();
+              },
             ),
           ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: context.whisperPalette.borderSubtle,
+          ),
+          button(1, l10n.mobileControlRight, l10n.mobileControlRightShort),
         ],
-      ],
+      ),
     );
   }
 
   Future<void> _showPointerSettings() async {
+    _textFocus.unfocus();
     _reset();
     await showWhisperModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       useSafeArea: true,
+      sheetAnimationStyle: _controlSheetAnimation,
       builder: (context) => ListenableBuilder(
         listenable: _input,
         builder: (context, _) => MobilePointerSettings(
@@ -830,15 +764,20 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         ),
       ),
     );
-    if (mounted) _reset();
+    if (mounted) {
+      _reset();
+      _syncSensors();
+    }
   }
 
   void _beginCalibration() {
     _reset();
     _input.calibrate();
+    _syncSensors();
     _calibrationTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
       _input.cancelCalibration();
+      _syncSensors();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.mobileControlCalibrationRetry)),
       );
@@ -868,7 +807,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
         child: Container(
           key: const ValueKey('mobile-touchpad'),
           alignment: Alignment.center,
-          decoration: _surfaceDecoration(),
+          color: context.whisperPalette.surfaceElevated,
           padding: const EdgeInsets.all(20),
           child: _SurfaceLabel(
             icon: Icons.touch_app_outlined,
@@ -881,122 +820,108 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     ),
   );
 
-  Widget _keyboardScreen(bool busy) => PopScope(
-    canPop: false,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _selectTab(0);
-    },
-    child: Scaffold(
-      backgroundColor: context.whisperPalette.surfaceCanvas,
-      appBar: AppBar(
-        toolbarHeight: 48,
-        backgroundColor: context.whisperPalette.surfaceCanvas,
-        leading: IconButton(
-          tooltip: l10n.mobileControlPointer,
-          onPressed: () => _selectTab(0),
-          icon: const Icon(Icons.arrow_back_rounded),
-        ),
-        titleSpacing: 4,
-        title: Row(
-          children: [
-            if (View.of(context).physicalSize.width /
-                    View.of(context).devicePixelRatio >
-                550) ...[
-              SizedBox(width: 110, child: _deviceTitle()),
-              const SizedBox(width: 12),
-            ],
-            Expanded(
-              child: _ModeSelector(
-                compact: true,
-                labels: [
-                  l10n.mobileControlMainKeys,
-                  l10n.mobileControlFunctionKeys,
-                ],
-                selected: _keyPage,
-                onSelected: (index) {
-                  _reset();
-                  setState(() => _keyPage = index);
-                },
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: l10n.mobileControlShortcutHint,
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.mobileControlShortcutHint)),
-            ),
-            icon: const Icon(Icons.info_outline_rounded),
+  Widget _keyboardPanel() => SingleChildScrollView(
+    key: const ValueKey('mobile-keyboard-panel'),
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _textPanel(),
+        if (_editingText) ...[
+          const SizedBox(height: 12),
+          Text(
+            _target.platform.toLowerCase().contains('linux')
+                ? l10n.mobileControlLinuxTextHint
+                : l10n.mobileControlTextHint,
+            style: TextStyle(color: context.whisperPalette.textMuted),
           ),
-          _sessionAction(busy),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (_error != null ||
-                _coordinator.state.status == RemoteInputRuntimeStatus.failed)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 64),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(8),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _coordinator.isSendingText ? null : _returnToKeys,
+            child: Text(l10n.mobileControlReturnKeys),
+          ),
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
                   child: Text(
-                    _error ?? _failureText(_coordinator.state.errorMessage),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    l10n.mobileControlDirectKeys,
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
                 ),
-              ),
-            Expanded(
-              child: MobileControlKeyboard(
-                controller: _input,
-                enabled: _enabled,
-                targetPlatform: _target.platform,
-                page: _keyPage,
-              ),
+                Tooltip(
+                  message: l10n.mobileControlShortcutHint,
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: context.whisperPalette.textMuted,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+          MobileControlKeyboard(
+            key: ValueKey('mobile-keyboard-$_keyPage'),
+            controller: _input,
+            enabled: _enabled,
+            targetPlatform: _target.platform,
+            page: _keyPage,
+            onPageChanged: (page) {
+              // Local modifiers may be combined with Fn keys; held repeats may not.
+              _input.cancelRepeat();
+              setState(() => _keyPage = page);
+            },
+          ),
+        ],
+      ],
     ),
   );
 
-  Widget _textPanel() => Padding(
-    padding: const EdgeInsets.all(16),
+  Widget _textPanel() => Container(
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+    decoration: BoxDecoration(
+      color: context.whisperPalette.surfaceElevated,
+      border: Border.all(color: context.whisperPalette.borderSubtle),
+      borderRadius: BorderRadius.circular(18),
+    ),
     child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          _target.platform.toLowerCase().contains('linux')
-              ? l10n.mobileControlLinuxTextHint
-              : l10n.mobileControlTextHint,
-          style: TextStyle(color: context.whisperPalette.textMuted),
+          l10n.mobileControlText,
+          style: Theme.of(context).textTheme.labelLarge,
         ),
-        const SizedBox(height: 16),
         TextField(
           controller: _text,
-          minLines: 6,
-          maxLines: 12,
+          focusNode: _textFocus,
+          minLines: 1,
+          maxLines: 4,
           readOnly: _coordinator.isSendingText,
           decoration: InputDecoration(
-            labelText: l10n.mobileControlText,
-            filled: true,
-            fillColor: context.whisperPalette.surfaceElevated,
+            hintText: l10n.mobileControlDraftHint,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton(
-            onPressed: _enabled ? _sendText : null,
-            child: _coordinator.isSendingText
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(l10n.mobileControlSendText),
+        Align(
+          alignment: Alignment.bottomRight,
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _text,
+            builder: (context, value, _) => FilledButton(
+              onPressed: _enabled && value.text.isNotEmpty ? _sendText : null,
+              child: _coordinator.isSendingText
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(l10n.mobileControlSendText),
+            ),
           ),
         ),
       ],
@@ -1012,6 +937,10 @@ class MobileControlStartException implements Exception {
 
 class _HoldArea extends StatefulWidget {
   const _HoldArea({
+    super.key,
+    this.displayLabel,
+    this.icon,
+    this.onMove,
     required this.label,
     required this.enabled,
     required this.onDown,
@@ -1020,6 +949,9 @@ class _HoldArea extends StatefulWidget {
     required this.generation,
   });
   final String label;
+  final String? displayLabel;
+  final IconData? icon;
+  final ValueChanged<Offset>? onMove;
   final bool enabled, active;
   final int generation;
   final VoidCallback onDown, onUp;
@@ -1074,6 +1006,11 @@ class _HoldAreaState extends State<_HoldArea> {
           widget.onDown();
           setState(() {});
         },
+        onPointerMove: (event) {
+          if (widget.enabled && _pointer == event.pointer) {
+            widget.onMove?.call(event.delta);
+          }
+        },
         onPointerUp: (event) {
           if (_pointer == event.pointer) _release();
         },
@@ -1082,18 +1019,35 @@ class _HoldAreaState extends State<_HoldArea> {
         },
         child: Container(
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: context.whisperPalette.borderSubtle),
             color: (_pointer != null || widget.active) && widget.enabled
                 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
                 : context.whisperPalette.surfaceElevated,
           ),
-          child: _SurfaceLabel(
-            label: widget.label,
-            enabled: widget.enabled,
-            active: _pointer != null || widget.active,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(
+                  widget.icon,
+                  size: 22,
+                  color: context.whisperPalette.textMuted,
+                ),
+                const SizedBox(height: 4),
+              ],
+              Flexible(
+                child: Text(
+                  widget.displayLabel ?? widget.label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: widget.enabled
+                        ? null
+                        : context.whisperPalette.textMuted,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1120,14 +1074,44 @@ class _SurfaceLabel extends StatelessWidget {
       builder: (context, constraints) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null && constraints.maxHeight >= 160) ...[
-            Icon(
-              icon,
-              size: 32,
-              color: active
-                  ? Theme.of(context).colorScheme.primary
-                  : palette.textMuted,
-            ),
+          if (icon != null &&
+              constraints.maxHeight >=
+                  MediaQuery.textScalerOf(
+                    context,
+                  ).scale(icon == Icons.smartphone_rounded ? 280 : 220)) ...[
+            if (icon == Icons.smartphone_rounded)
+              Container(
+                width: 112,
+                height: 112,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: .1)
+                      : palette.surfaceElevated,
+                  border: Border.all(color: palette.borderSubtle),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: palette.borderSubtle),
+                  ),
+                  child: Transform.rotate(
+                    angle: -.15,
+                    child: Icon(
+                      icon,
+                      size: 32,
+                      color: active
+                          ? Theme.of(context).colorScheme.primary
+                          : palette.textMuted,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Icon(icon, size: 32, color: palette.textMuted),
             const SizedBox(height: 16),
           ],
           Text(
@@ -1139,12 +1123,15 @@ class _SurfaceLabel extends StatelessWidget {
           ),
           if (subtitle != null && constraints.maxHeight >= 120) ...[
             const SizedBox(height: 8),
-            Text(
-              subtitle!,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: palette.textMuted),
+            Flexible(
+              child: Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: palette.textMuted),
+              ),
             ),
           ],
         ],
@@ -1159,16 +1146,14 @@ class _ModeSelector extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.disabledIndex,
-    this.compact = false,
   });
-  final bool compact;
   final List<String> labels;
   final int selected;
   final int? disabledIndex;
   final ValueChanged<int> onSelected;
   @override
   Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.all(compact ? 0 : 4),
+    padding: const EdgeInsets.all(4),
     decoration: BoxDecoration(
       color: context.whisperPalette.surfaceMuted,
       borderRadius: BorderRadius.circular(16),
@@ -1195,15 +1180,28 @@ class _ModeSelector extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Text(
-                  labels[i],
-                  textAlign: TextAlign.center,
-                  style: compact ? const TextStyle(fontSize: 12) : null,
-                ),
+                child: Text(labels[i], textAlign: TextAlign.center),
               ),
             ),
           ),
       ],
     ),
   );
+}
+
+class _PointerTexture extends CustomPainter {
+  const _PointerTexture(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (var x = 10.0; x < size.width; x += 20) {
+      for (var y = 10.0; y < size.height; y += 20) {
+        canvas.drawCircle(Offset(x, y), .65, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PointerTexture oldDelegate) => oldDelegate.color != color;
 }
