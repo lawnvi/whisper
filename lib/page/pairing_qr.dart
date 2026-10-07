@@ -243,7 +243,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
           inviteText: inviteText,
           fingerprint: fingerprint,
           l10n: l10n,
-          showHint: useWideLayout,
           compact: compact,
         );
         return SingleChildScrollView(
@@ -279,14 +278,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
                     )
                   : Column(
                       children: <Widget>[
-                        Text(
-                          l10n.qrShowCodeHint,
-                          textAlign: TextAlign.center,
-                          style: compact
-                              ? Theme.of(context).textTheme.bodyMedium
-                              : Theme.of(context).textTheme.titleSmall,
-                        ),
-                        SizedBox(height: compact ? 10 : 18),
                         qrCode,
                         SizedBox(height: compact ? 12 : 22),
                         details,
@@ -333,7 +324,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     required String inviteText,
     required String fingerprint,
     required AppLocalizations l10n,
-    required bool showHint,
     required bool compact,
   }) {
     final theme = Theme.of(context);
@@ -400,16 +390,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (showHint) ...<Widget>[
-          Text(
-            l10n.qrShowCodeHint,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-            textAlign: TextAlign.start,
-          ),
-          const SizedBox(height: 18),
-        ],
         _buildDetailRow(
           icon: Icons.wifi_rounded,
           iconColor: theme.colorScheme.primary,

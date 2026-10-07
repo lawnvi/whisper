@@ -332,7 +332,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get clipboardAutoSyncDesc =>
-      'When off, send manually; when on, sync only to the current trusted device';
+      'Sync to the current trusted device, or connected devices in the keyboard and mouse workspace';
 
   @override
   String get doubleClickRmMessage => 'Delete Message on Double Click';
@@ -1313,7 +1313,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get e2eeEncryptedConnection => 'End-to-end encrypted connection';
 
   @override
-  String get transferAssistantTitle => 'Transfer Assistant';
+  String get transferAssistantTitle => 'Search chat history';
 
   @override
   String get transferAssistantSearchHint => 'Search text messages';
@@ -1325,10 +1325,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transferAssistantSearchResults => 'Search results';
 
   @override
-  String get transferAssistantFavorites => 'Favorite texts';
+  String get transferAssistantFavorites => 'Favorites';
 
   @override
-  String get transferAssistantRecent => 'Recent texts';
+  String get transferAssistantRecent => 'Recent messages';
+
+  @override
+  String get transferAssistantAllMessages => 'All messages';
+
+  @override
+  String get transferAssistantExpandMessage => 'Expand message';
+
+  @override
+  String get transferAssistantCollapseMessage => 'Collapse message';
 
   @override
   String get transferAssistantNoResults => 'No matching text found';
@@ -1770,4 +1779,49 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get mobileControlLinuxTextHint =>
       'Linux can commit only characters available in the computer’s current keyboard layout. For Chinese and emoji, use the virtual keyboard with the computer’s input method. Unsupported text stays in your draft.';
+
+  @override
+  String get manualConnectAddressInvalid =>
+      'Enter a valid LAN IP or .local address';
+
+  @override
+  String get manualConnectPortInvalid => 'Use a port from 1 to 65535';
+
+  @override
+  String get transferStorageHelp =>
+      'Cannot save. Check storage and folder permissions on the receiving device.';
+
+  @override
+  String get transferSourceHelp =>
+      'Cannot read the source. Select the file again.';
+
+  @override
+  String get transferIntegrityHelp =>
+      'File verification failed. Retry the transfer.';
+
+  @override
+  String get transferQueueHelp =>
+      'The receiving device is busy. Try again shortly.';
+
+  @override
+  String get transferTrustHelp => 'Confirm device trust again before sending.';
+
+  @override
+  String get transferRetryHelp =>
+      'Transfer incomplete. Reconnect the devices and retry.';
+
+  @override
+  String get mobileControlTransportHelp =>
+      'The control connection was interrupted. Open Whisper on the computer, then start again.';
+
+  @override
+  String get mobileControlInjectionHelp =>
+      'The computer could not process input. Check its control permissions, then start again.';
+
+  @override
+  String get clipboardAutoSyncAndroidDesc =>
+      'Sync newly copied text to the current trusted device when you return to Whisper';
+
+  @override
+  String get historyLoadFailed => 'Could not load history. Tap to retry.';
 }

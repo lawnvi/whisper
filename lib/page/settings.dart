@@ -599,7 +599,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ? Colors.grey[400]
                               : CupertinoColors.systemGrey,
                         ),
-                        desc: l10n.clipboardAutoSyncDesc,
+                        desc: _isAndroidPlatform
+                            ? l10n.clipboardAutoSyncAndroidDesc
+                            : l10n.clipboardAutoSyncDesc,
                         trailing: CupertinoSwitch(
                           value: _clipboardAutoSync,
                           onChanged: (bool value) async {
@@ -1934,12 +1936,14 @@ class ClientSettingsScreen extends StatefulWidget {
     this.deviceLoader,
     this.isConnected,
     this.deleteDevice,
+    this.onSearchHistory,
   });
 
   final DeviceData device;
   final Future<DeviceData?> Function(String uid)? deviceLoader;
   final bool? isConnected;
   final Future<void> Function(String uid)? deleteDevice;
+  final VoidCallback? onSearchHistory;
 
   @override
   State<ClientSettingsScreen> createState() => _ClientSettingsScreenState();
@@ -2041,6 +2045,26 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                     ),
                   ],
                 ),
+                if (widget.onSearchHistory != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: SettingsSectionSurface(
+                      children: [
+                        _DeviceSettingTile(
+                          title: l10n.transferAssistantTitle,
+                          icon: Icon(
+                            Icons.search_rounded,
+                            color: palette.textMuted,
+                          ),
+                          trailing: Icon(
+                            Icons.chevron_right_rounded,
+                            color: palette.textMuted,
+                          ),
+                          onTap: widget.onSearchHistory,
+                        ),
+                      ],
+                    ),
+                  ),
                 if (!isConnected)
                   _buildClientSettingsSection(
                     l10n.dangerousActions,

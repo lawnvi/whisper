@@ -1204,7 +1204,10 @@ void main() {
     expect(deleted, <String>['android-peer']);
   });
 
-  testWidgets('connected client does not expose delete action', (tester) async {
+  testWidgets('connected client offers history search without delete', (
+    tester,
+  ) async {
+    var searched = false;
     const peer = DeviceData(
       id: 9,
       uid: 'android-peer',
@@ -1233,11 +1236,14 @@ void main() {
           device: peer,
           deviceLoader: (_) async => peer,
           isConnected: true,
+          onSearchHistory: () => searched = true,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Delete Device'), findsNothing);
+    await tester.tap(find.text('Search chat history'));
+    expect(searched, isTrue);
   });
 }

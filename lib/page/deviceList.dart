@@ -66,6 +66,7 @@ import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
+import 'package:whisper/widget/manual_connection_dialog.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
@@ -374,7 +375,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
       unawaited(notifyExistingDownloadsVisibleToAndroidPickers());
     }
 
-    _clipboardText = await getClipboardText() ?? "";
+    if (await LocalSetting().clipboardAutoSync()) {
+      _clipboardText = await getClipboardText() ?? '';
+    }
   }
 
   Future<void> _requestLocalNetworkPermission() async {
@@ -2882,22 +2885,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return DateFormat('yyyy/MM/dd').format(messageTime);
   }
 
-  void _showManualConnectDialog() {
-    showInputAlertDialog(
-      context,
-      title: AppLocalizations.of(context)?.connectDeviceTitle ?? "连接设备",
-      description:
-          AppLocalizations.of(context)?.connectDeviceDesc ?? '输入对方局域网地址与端口',
-      inputHints: [
-        {device?.host ?? "192.168.0.1": false},
-        {"10002": true},
-      ],
-      confirmButtonText: AppLocalizations.of(context)?.connect ?? '连接',
-      cancelButtonText: AppLocalizations.of(context)?.cancel ?? '取消',
-      onConfirm: (List<String> inputValues) async {
-        _connectServer(inputValues[0], int.parse(inputValues[1]));
-      },
-    );
+  Future<void> _showManualConnectDialog() async {
+    final endpoint = await showManualConnectionDialog(context);
+    if (!mounted || endpoint == null) return;
+    _connectServer(endpoint.host, endpoint.port);
   }
 
   Future<void> _openPairingQr() async {
@@ -3830,6 +3821,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       }
     }
     final clipboardAutoSyncEnabled = await LocalSetting().clipboardAutoSync();
+    if (isMobile() && !clipboardAutoSyncEnabled) return;
     if (generation != _clipboardSyncGeneration) {
       return;
     }

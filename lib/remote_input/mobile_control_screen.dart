@@ -93,6 +93,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     'busy' => l10n.remoteInputStopCurrentFirst,
     'trustRequired' => l10n.remoteInputRequiresMutualTrust,
     'unsupported' => l10n.remoteInputPeerUnsupported,
+    'transport' => l10n.mobileControlTransportHelp,
+    'injection' || 'capture' => l10n.mobileControlInjectionHelp,
+    'protocol' => l10n.connectionDiagnosticVersion,
     _ => l10n.connectFailed,
   };
   bool? _landscape;

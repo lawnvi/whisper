@@ -104,17 +104,19 @@ void showInputAlertDialog(
   required String cancelButtonText,
   required Function(List<String>) onConfirm,
 }) {
-  final fields = inputHints.map((hint) {
-    final entry = hint.entries.first;
-    return InputDialogField(
-      initialValue: entry.key,
-      label: entry.key,
-      keyboardType: entry.value ? TextInputType.number : null,
-      inputFormatters: entry.value
-          ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
-          : const <TextInputFormatter>[],
-    );
-  }).toList(growable: false);
+  final fields = inputHints
+      .map((hint) {
+        final entry = hint.entries.first;
+        return InputDialogField(
+          initialValue: entry.key,
+          label: entry.key,
+          keyboardType: entry.value ? TextInputType.number : null,
+          inputFormatters: entry.value
+              ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
+              : const <TextInputFormatter>[],
+        );
+      })
+      .toList(growable: false);
 
   unawaited(() async {
     final values = await showValidatedInputDialog(
@@ -153,6 +155,7 @@ class _ValidatedInputDialog extends StatefulWidget {
 class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
   late final List<TextEditingController> _controllers;
   late final List<String?> _errors;
+  late final List<FocusNode> _focusNodes;
   bool _submitting = false;
 
   @override
@@ -162,12 +165,16 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
         .map((field) => TextEditingController(text: field.initialValue))
         .toList(growable: false);
     _errors = List<String?>.filled(widget.fields.length, null);
+    _focusNodes = List.generate(widget.fields.length, (_) => FocusNode());
   }
 
   @override
   void dispose() {
     for (final controller in _controllers) {
       controller.dispose();
+    }
+    for (final node in _focusNodes) {
+      node.dispose();
     }
     super.dispose();
   }
@@ -195,6 +202,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
     }
     if (hasError) {
       setState(() {});
+      _focusNodes[_errors.indexWhere((error) => error != null)].requestFocus();
       return;
     }
     _submitting = true;
@@ -235,16 +243,21 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                 ),
                 const SizedBox(height: 8),
               ],
-              for (var index = 0;
-                  index < widget.fields.length;
-                  index += 1) ...<Widget>[
+              for (
+                var index = 0;
+                index < widget.fields.length;
+                index += 1
+              ) ...<Widget>[
                 const SizedBox(height: 8),
                 CupertinoTextField(
                   controller: _controllers[index],
+                  focusNode: _focusNodes[index],
                   autofocus: index == 0,
                   keyboardType: widget.fields[index].keyboardType,
                   inputFormatters: widget.fields[index].inputFormatters,
-                  textInputAction: TextInputAction.done,
+                  textInputAction: index < widget.fields.length - 1
+                      ? TextInputAction.next
+                      : TextInputAction.done,
                   placeholder: widget.fields[index].label,
                   style: TextStyle(color: colorScheme.onSurface),
                   decoration: BoxDecoration(
@@ -256,7 +269,13 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  onSubmitted: (_) => _submit(),
+                  onSubmitted: (_) {
+                    if (index < widget.fields.length - 1) {
+                      _focusNodes[index + 1].requestFocus();
+                    } else {
+                      _submit();
+                    }
+                  },
                 ),
                 if (_errors[index] case final error?) ...<Widget>[
                   const SizedBox(height: 4),

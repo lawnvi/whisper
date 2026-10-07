@@ -15,6 +15,8 @@ import 'package:whisper/audio/audio_failure_reason.dart';
 import 'package:whisper/audio/audio_group_coordinator.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/helper/toast.dart';
+import 'package:whisper/helper/transfer_failure_message.dart';
+import 'package:whisper/state/conversation_history_pager.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
@@ -135,6 +137,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
   DeviceData device;
   DeviceData? self;
   List<MessageData> messageList = [];
+  late final _history = ConversationHistoryPager(
+    (beforeId, limit) => db.fetchMessageList(
+      _isLocalhost ? '' : device.uid,
+      beforeId: beforeId,
+      limit: limit,
+    ),
+  );
+  bool _historyReady = false;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _composerFocusNode = FocusNode();
@@ -222,6 +232,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         isInputEmpty = _textController.text.isEmpty;
       });
     });
+    _history.addListener(_historyChanged);
+    _scrollController.addListener(_scrollListener);
     _loadMessages();
     super.initState();
   }
@@ -234,6 +246,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
     _audioCoordinator.removeListener(_handleAudioShareChanged);
     _audioGroupCoordinator.removeListener(_handleAudioGroupChanged);
     _remoteInputCoordinator.removeListener(_handleRemoteInputChanged);
+    _history.removeListener(_historyChanged);
+    _history.dispose();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _composerFocusNode.dispose();
@@ -363,24 +377,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
       storedDevice: storedDevice,
     );
     final isLocal = me.uid == currentDevice.uid;
-    final arr = await db.fetchMessageList(
-      isLocal ? "" : currentDevice.uid,
-      limit: 20,
-    );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       self = me;
       device = currentDevice;
       _isLocalhost = isLocal;
-      // messageList = arr;
+      _historyReady = true;
     });
-
-    _insertItems(0, arr);
-    unawaited(_loadTransferSnapshotsForMessages(arr));
-
-    _scrollController.addListener(_scrollListener);
+    await _loadMoreMessages();
+    if (!mounted) return;
 
     // 开启通知监听
     if (Platform.isAndroid &&
@@ -409,22 +414,27 @@ class _SendMessageScreen extends State<SendMessageScreen>
     await _syncAndroidKeepAliveService();
   }
 
-  void _scrollListener() async {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
-      // 用户滑动到了ListView的底部
-      // 在这里执行你的操作
-      var arr = await LocalDatabase().fetchMessageList(
-        device.uid,
-        beforeId: messageList.last.id,
-        limit: 12,
-      );
-      if (arr.isEmpty) {
-        return;
-      }
+  void _historyChanged() {
+    if (mounted) setState(() {});
+  }
 
-      _insertItems(messageList.length, arr);
+  void _scrollListener() {
+    if (_historyReady &&
+        !_history.failed &&
+        _scrollController.position.extentAfter < 120) {
+      unawaited(_loadMoreMessages());
     }
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (!_historyReady) return;
+    final generation = _history.generation;
+    final page = await _history.load(
+      beforeId: messageList.isEmpty ? 0 : messageList.last.id,
+    );
+    if (!mounted || generation != _history.generation || page.isEmpty) return;
+    _insertItems(messageList.length, page);
+    await _loadTransferSnapshotsForMessages(page);
   }
 
   _insertItem(index, item) {
@@ -444,7 +454,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
   }
 
-  _insertItems(index, items) {
+  void _insertItems(int index, List<MessageData> page) {
+    final items = unseenHistoryMessages(messageList, page);
+    if (items.isEmpty) return;
     messageList.insertAll(index, items);
     key.currentState?.insertAllItems(
       index,
@@ -521,7 +533,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       case FileTransferState.completed:
         return formatSize(message.size);
       case FileTransferState.failed:
-        return l10n.fileTransferFailedRetryable;
+        return transferFailureMessage(l10n, transfer.lastError);
       case FileTransferState.canceled:
         return l10n.fileTransferCanceled;
     }
@@ -550,6 +562,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   _clearItems() {
+    _history.reset();
     key.currentState?.removeAllItems((context, animation) {
       //注意先 build 然后再去删除
       messageList.clear();
@@ -636,6 +649,23 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final content = Column(
       children: [
         if (embedded) _buildEmbeddedHeader(isDark),
+        if (_history.loading)
+          const SizedBox(
+            height: 28,
+            child: Center(
+              child: SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        if (_history.failed)
+          TextButton.icon(
+            onPressed: _loadMoreMessages,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text(l10n.historyLoadFailed),
+          ),
         if (activeTransfer?.state == FileTransferState.verifying)
           LinearProgressIndicator(
             minHeight: 3,
@@ -963,13 +993,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
-    if (Platform.isAndroid && !_isLocalhost && _isConnectedSession &&
+    if (Platform.isAndroid &&
+        !_isLocalhost &&
+        _isConnectedSession &&
         socketManager.supportsManualInputFor(device.uid)) {
-      actions.add(IconButton(
-        tooltip: l10n.mobileControlTitle,
-        icon: const ComputerControlIcon(),
-        onPressed: _openMobileControl,
-      ));
+      actions.add(
+        IconButton(
+          tooltip: l10n.mobileControlTitle,
+          icon: const ComputerControlIcon(),
+          onPressed: _openMobileControl,
+        ),
+      );
     }
     if (_shouldShowRemoteInputAction) {
       final inputState = _remoteInputCoordinator.state;
@@ -1001,17 +1035,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
-    actions.add(
-      IconButton(
-        padding: actionPadding,
-        constraints: actionConstraints,
-        visualDensity: actionVisualDensity,
-        tooltip: l10n.transferAssistantTitle,
-        icon: const Icon(Icons.manage_search_rounded),
-        color: palette.textMuted,
-        onPressed: _openTransferAssistant,
-      ),
-    );
+    if (!compactActions) {
+      actions.add(
+        IconButton(
+          padding: actionPadding,
+          constraints: actionConstraints,
+          visualDensity: actionVisualDensity,
+          tooltip: l10n.transferAssistantTitle,
+          icon: const Icon(Icons.manage_search_rounded),
+          color: palette.textMuted,
+          onPressed: _openTransferAssistant,
+        ),
+      );
+    }
     actions.add(
       IconButton(
         padding: actionPadding,
@@ -1047,6 +1083,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
               builder: (context) => app_settings.ClientSettingsScreen(
                 device: device,
                 deleteDevice: widget.onDeviceDeleted,
+                onSearchHistory: _openTransferAssistant,
               ),
             ),
           );
@@ -1063,10 +1100,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
         await _remoteInputCoordinator.stopLocal();
       }
     }
+
     unawaited(
-      socketManager.sendRemoteInputControlTo(control.sinkPeerId, control).then<void>((sent) async {
-        if (!sent) await stopIfCurrent();
-      }).catchError((Object _) => stopIfCurrent()),
+      socketManager
+          .sendRemoteInputControlTo(control.sinkPeerId, control)
+          .then<void>((sent) async {
+            if (!sent) await stopIfCurrent();
+          })
+          .catchError((Object _) => stopIfCurrent()),
     );
   }
 
@@ -1076,11 +1117,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       builder: (_) => MobileControlScreen(
         peerId: device.uid,
         peerName: device.name,
-        targets: () => [for (final peerId in socketManager.connectedPeerIds)
-          if (socketManager.supportsManualInputFor(peerId))
-            MobileControlTarget(peerId,
-              socketManager.remoteProfileFor(peerId)!.device.name,
-              platform: socketManager.remoteProfileFor(peerId)!.device.platform),
+        targets: () => [
+          for (final peerId in socketManager.connectedPeerIds)
+            if (socketManager.supportsManualInputFor(peerId))
+              MobileControlTarget(
+                peerId,
+                socketManager.remoteProfileFor(peerId)!.device.name,
+                platform: socketManager
+                    .remoteProfileFor(peerId)!
+                    .device
+                    .platform,
+              ),
         ],
         onStart: (peerId) async {
           final local = self ?? await LocalSetting().instance();
@@ -1091,7 +1138,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
           }
           if (stored?.auth != true ||
               !socketManager.remotePeerTrustsPeer(peerId, local.uid)) {
-            throw MobileControlStartException(l10n.remoteInputRequiresMutualTrust);
+            throw MobileControlStartException(
+              l10n.remoteInputRequiresMutualTrust,
+            );
           }
           if (!socketManager.supportsManualInputFor(peerId)) {
             throw MobileControlStartException(l10n.remoteInputPeerUnsupported);
@@ -1108,7 +1157,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
             sendControl: _sendMobileControl,
           );
         },
-        onStop: () => _remoteInputCoordinator.stopSharing(sendControl: _sendMobileControl),
+        onStop: () => _remoteInputCoordinator.stopSharing(
+          sendControl: _sendMobileControl,
+        ),
       ),
     ),
   );

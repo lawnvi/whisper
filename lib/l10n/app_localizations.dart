@@ -655,7 +655,7 @@ abstract class AppLocalizations {
   /// No description provided for @clipboardAutoSyncDesc.
   ///
   /// In zh, this message translates to:
-  /// **'关闭时仅手动发送；开启后只同步到当前可信设备'**
+  /// **'同步到当前可信设备；键鼠工作区中同步到已连接的工作区设备'**
   String get clipboardAutoSyncDesc;
 
   /// No description provided for @doubleClickRmMessage.
@@ -2317,7 +2317,7 @@ abstract class AppLocalizations {
   /// No description provided for @transferAssistantTitle.
   ///
   /// In zh, this message translates to:
-  /// **'传输助手'**
+  /// **'搜索聊天记录'**
   String get transferAssistantTitle;
 
   /// No description provided for @transferAssistantSearchHint.
@@ -2341,14 +2341,32 @@ abstract class AppLocalizations {
   /// No description provided for @transferAssistantFavorites.
   ///
   /// In zh, this message translates to:
-  /// **'收藏文本'**
+  /// **'收藏'**
   String get transferAssistantFavorites;
 
   /// No description provided for @transferAssistantRecent.
   ///
   /// In zh, this message translates to:
-  /// **'最近文本'**
+  /// **'最近消息'**
   String get transferAssistantRecent;
+
+  /// No description provided for @transferAssistantAllMessages.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部消息'**
+  String get transferAssistantAllMessages;
+
+  /// No description provided for @transferAssistantExpandMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开全文'**
+  String get transferAssistantExpandMessage;
+
+  /// No description provided for @transferAssistantCollapseMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起全文'**
+  String get transferAssistantCollapseMessage;
 
   /// No description provided for @transferAssistantNoResults.
   ///
@@ -3081,6 +3099,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Linux 只能发送电脑当前键盘布局支持的字符。中文和 emoji 请通过虚拟键盘配合电脑输入法输入。不支持的文字会保留在草稿中。'**
   String get mobileControlLinuxTextHint;
+
+  /// No description provided for @manualConnectAddressInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的局域网 IP 或 .local 地址'**
+  String get manualConnectAddressInvalid;
+
+  /// No description provided for @manualConnectPortInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'端口范围为 1–65535'**
+  String get manualConnectPortInvalid;
+
+  /// No description provided for @transferStorageHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存，请检查接收端空间和目录权限'**
+  String get transferStorageHelp;
+
+  /// No description provided for @transferSourceHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'源文件无法读取，请重新选择文件'**
+  String get transferSourceHelp;
+
+  /// No description provided for @transferIntegrityHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件校验未通过，请重试传输'**
+  String get transferIntegrityHelp;
+
+  /// No description provided for @transferQueueHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'接收端任务较多，请稍后重试'**
+  String get transferQueueHelp;
+
+  /// No description provided for @transferTrustHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'请重新确认设备信任后再发送'**
+  String get transferTrustHelp;
+
+  /// No description provided for @transferRetryHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输未完成，请确认设备已连接后重试'**
+  String get transferRetryHelp;
+
+  /// No description provided for @mobileControlTransportHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制连接已中断，请确认电脑上的 Whisper 正在运行，再重新开始。'**
+  String get mobileControlTransportHelp;
+
+  /// No description provided for @mobileControlInjectionHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑未能执行输入，请检查系统控制权限后重新开始。'**
+  String get mobileControlInjectionHelp;
+
+  /// No description provided for @clipboardAutoSyncAndroidDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'回到 Whisper 后，将新复制的文字同步到当前可信设备'**
+  String get clipboardAutoSyncAndroidDesc;
+
+  /// No description provided for @historyLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史记录未能加载，点按重试'**
+  String get historyLoadFailed;
 }
 
 class _AppLocalizationsDelegate

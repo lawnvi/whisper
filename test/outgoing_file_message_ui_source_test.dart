@@ -54,7 +54,7 @@ void main() {
     final insertItem = methodBody(
       source,
       '_insertItem(index, item)',
-      '_insertItems(index, items)',
+      'void _insertItems(',
     );
 
     expect(insertItem, contains('indexWhere'));
@@ -84,5 +84,4 @@ void main() {
     expect(cancelPolicy, contains('FileTransferState.paused'));
     expect(cancelPolicy, contains('FileTransferState.waitingReconnect'));
   });
-
 }

@@ -314,7 +314,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clipboardAutoSync => '自动同步剪切板';
 
   @override
-  String get clipboardAutoSyncDesc => '关闭时仅手动发送；开启后只同步到当前可信设备';
+  String get clipboardAutoSyncDesc => '同步到当前可信设备；键鼠工作区中同步到已连接的工作区设备';
 
   @override
   String get doubleClickRmMessage => '双击消息删除';
@@ -1229,7 +1229,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get e2eeEncryptedConnection => '端到端加密连接';
 
   @override
-  String get transferAssistantTitle => '传输助手';
+  String get transferAssistantTitle => '搜索聊天记录';
 
   @override
   String get transferAssistantSearchHint => '搜索文本消息';
@@ -1241,10 +1241,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transferAssistantSearchResults => '搜索结果';
 
   @override
-  String get transferAssistantFavorites => '收藏文本';
+  String get transferAssistantFavorites => '收藏';
 
   @override
-  String get transferAssistantRecent => '最近文本';
+  String get transferAssistantRecent => '最近消息';
+
+  @override
+  String get transferAssistantAllMessages => '全部消息';
+
+  @override
+  String get transferAssistantExpandMessage => '展开全文';
+
+  @override
+  String get transferAssistantCollapseMessage => '收起全文';
 
   @override
   String get transferAssistantNoResults => '没有找到匹配的文本';
@@ -1650,4 +1659,41 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get mobileControlLinuxTextHint =>
       'Linux 只能发送电脑当前键盘布局支持的字符。中文和 emoji 请通过虚拟键盘配合电脑输入法输入。不支持的文字会保留在草稿中。';
+
+  @override
+  String get manualConnectAddressInvalid => '请输入有效的局域网 IP 或 .local 地址';
+
+  @override
+  String get manualConnectPortInvalid => '端口范围为 1–65535';
+
+  @override
+  String get transferStorageHelp => '无法保存，请检查接收端空间和目录权限';
+
+  @override
+  String get transferSourceHelp => '源文件无法读取，请重新选择文件';
+
+  @override
+  String get transferIntegrityHelp => '文件校验未通过，请重试传输';
+
+  @override
+  String get transferQueueHelp => '接收端任务较多，请稍后重试';
+
+  @override
+  String get transferTrustHelp => '请重新确认设备信任后再发送';
+
+  @override
+  String get transferRetryHelp => '传输未完成，请确认设备已连接后重试';
+
+  @override
+  String get mobileControlTransportHelp =>
+      '控制连接已中断，请确认电脑上的 Whisper 正在运行，再重新开始。';
+
+  @override
+  String get mobileControlInjectionHelp => '电脑未能执行输入，请检查系统控制权限后重新开始。';
+
+  @override
+  String get clipboardAutoSyncAndroidDesc => '回到 Whisper 后，将新复制的文字同步到当前可信设备';
+
+  @override
+  String get historyLoadFailed => '历史记录未能加载，点按重试';
 }

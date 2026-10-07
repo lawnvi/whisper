@@ -334,7 +334,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get clipboardAutoSyncDesc =>
-      'Desactivado: envío manual; activado: solo se sincroniza con el dispositivo de confianza actual';
+      'Sincroniza con el dispositivo de confianza actual o con los dispositivos conectados del espacio de teclado y ratón';
 
   @override
   String get doubleClickRmMessage => 'Eliminar mensaje al hacer doble clic';
@@ -1330,7 +1330,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get e2eeEncryptedConnection => 'Conexión cifrada de extremo a extremo';
 
   @override
-  String get transferAssistantTitle => 'Asistente de transferencias';
+  String get transferAssistantTitle => 'Buscar en el historial';
 
   @override
   String get transferAssistantSearchHint => 'Buscar mensajes de texto';
@@ -1342,10 +1342,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get transferAssistantSearchResults => 'Resultados de búsqueda';
 
   @override
-  String get transferAssistantFavorites => 'Textos favoritos';
+  String get transferAssistantFavorites => 'Favoritos';
 
   @override
-  String get transferAssistantRecent => 'Textos recientes';
+  String get transferAssistantRecent => 'Mensajes recientes';
+
+  @override
+  String get transferAssistantAllMessages => 'Todos los mensajes';
+
+  @override
+  String get transferAssistantExpandMessage => 'Expandir mensaje';
+
+  @override
+  String get transferAssistantCollapseMessage => 'Contraer mensaje';
 
   @override
   String get transferAssistantNoResults =>
@@ -1794,4 +1803,51 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mobileControlLinuxTextHint =>
       'Linux solo puede enviar caracteres disponibles en la distribución de teclado del equipo. Para chino y emoji, usa el teclado virtual con el método de entrada del equipo. El texto no compatible se conserva en el borrador.';
+
+  @override
+  String get manualConnectAddressInvalid =>
+      'Introduce una IP de red local o dirección .local válida';
+
+  @override
+  String get manualConnectPortInvalid => 'Usa un puerto entre 1 y 65535';
+
+  @override
+  String get transferStorageHelp =>
+      'No se puede guardar. Revisa el espacio y los permisos de la carpeta del receptor.';
+
+  @override
+  String get transferSourceHelp =>
+      'No se puede leer el archivo de origen. Selecciónalo de nuevo.';
+
+  @override
+  String get transferIntegrityHelp =>
+      'Falló la verificación del archivo. Reintenta la transferencia.';
+
+  @override
+  String get transferQueueHelp =>
+      'El receptor está ocupado. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get transferTrustHelp =>
+      'Confirma de nuevo la confianza del dispositivo antes de enviar.';
+
+  @override
+  String get transferRetryHelp =>
+      'Transferencia incompleta. Conecta los dispositivos y vuelve a intentarlo.';
+
+  @override
+  String get mobileControlTransportHelp =>
+      'Se interrumpió la conexión de control. Abre Whisper en el ordenador y vuelve a iniciar.';
+
+  @override
+  String get mobileControlInjectionHelp =>
+      'El ordenador no pudo procesar la entrada. Revisa los permisos de control y vuelve a iniciar.';
+
+  @override
+  String get clipboardAutoSyncAndroidDesc =>
+      'Sincroniza el texto copiado con el dispositivo de confianza actual al volver a Whisper';
+
+  @override
+  String get historyLoadFailed =>
+      'No se pudo cargar el historial. Toca para reintentar.';
 }
