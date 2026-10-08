@@ -193,8 +193,8 @@ class AndroidDocumentPickerPlugin :
         val width = (call.argument<Number>("width")?.toInt() ?: 1200).coerceIn(64, 2400)
         val height = (call.argument<Number>("height")?.toInt() ?: 1200).coerceIn(64, 2400)
         val uri = Uri.parse(uriText)
-        if (uri.scheme != "content") {
-            result.error("invalid_uri", "Thumbnail source must be a content uri", null)
+        if (uri.scheme != "content" && uri.scheme != "file") {
+            result.error("invalid_uri", "Thumbnail source must be a local uri", null)
             return
         }
         ioExecutor.execute {
@@ -217,6 +217,21 @@ class AndroidDocumentPickerPlugin :
     }
 
     private fun createThumbnail(uri: Uri, width: Int, height: Int): Bitmap? {
+        if (uri.scheme == "file") {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(uri.path)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    retriever.getScaledFrameAtTime(
+                        -1, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, width, height,
+                    )
+                } else {
+                    retriever.frameAtTime?.let { scaleBitmapToFit(it, width, height) }
+                }
+            } finally {
+                retriever.release()
+            }
+        }
         val mimeType = context.contentResolver.getType(uri).orEmpty()
         if (mimeType.startsWith("video/")) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

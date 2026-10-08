@@ -14,6 +14,7 @@ import 'package:whisper/audio/audio_group_session.dart';
 import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_coordinator.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
+import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/android_system_share.dart';
@@ -1378,6 +1379,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<void> _shutdownDesktopResources() {
     return _desktopShutdownFuture ??= _shutdownCoordinator.run([
       CastReceiverManager.shared.stop,
+      PlaybackWindowBridge.videos.close,
       _stopDiscovery,
       _stopBroadcast,
       _stopClipboardWatcher,

@@ -4,14 +4,39 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:whisper/helper/local.dart';
 
 /// Owns one reusable child window in the existing Whisper process.
-class CastPlaybackWindowBridge {
-  CastPlaybackWindowBridge();
+class PlaybackWindowBridge {
+  PlaybackWindowBridge({this.localVideo = false});
 
-  static final shared = CastPlaybackWindowBridge();
-  static const events = WindowMethodChannel(
-    'whisper.cast_playback.events',
-    mode: ChannelMode.unidirectional,
-  );
+  static final shared = PlaybackWindowBridge();
+  static final videos = PlaybackWindowBridge(localVideo: true);
+  final bool localVideo;
+  static WindowMethodChannel eventsFor({bool localVideo = false}) =>
+      WindowMethodChannel(
+        localVideo
+            ? 'whisper.video_playback.events'
+            : 'whisper.cast_playback.events',
+        mode: ChannelMode.unidirectional,
+      );
+
+  late final events = eventsFor(localVideo: localVideo);
+  Future<void> _opening = Future<void>.value();
+
+  Future<void> openVideo(String path, String name) {
+    final opening = _opening.then((_) async {
+      await command('load', {
+        'url': Uri.file(path).toString(),
+        'metadata': name,
+      });
+      await command('play');
+    });
+    _opening = opening.catchError((Object _) {});
+    return opening;
+  }
+
+  Future<void> close() async {
+    await _opening;
+    if (hasWindow) await command('shutdown');
+  }
 
   WindowController? _window;
   Completer<void>? _ready;
@@ -63,9 +88,9 @@ class CastPlaybackWindowBridge {
     _ready = Completer<void>();
     try {
       _window = await WindowController.create(
-        const WindowConfiguration(
+        WindowConfiguration(
           hiddenAtLaunch: true,
-          arguments: 'cast_playback',
+          arguments: localVideo ? 'video_playback' : 'cast_playback',
         ),
       );
     } finally {

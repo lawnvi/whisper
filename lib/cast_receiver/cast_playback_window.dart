@@ -13,7 +13,9 @@ import 'package:whisper/widget/cast_playback_host.dart';
 
 /// Playback-only UI in a child Flutter engine in the existing app process.
 class CastPlaybackWindowApp extends StatefulWidget {
-  const CastPlaybackWindowApp({super.key});
+  const CastPlaybackWindowApp({super.key, this.localVideo = false});
+
+  final bool localVideo;
 
   @override
   State<CastPlaybackWindowApp> createState() => _CastPlaybackWindowAppState();
@@ -69,9 +71,6 @@ class _CastPlaybackWindowAppState extends State<CastPlaybackWindowApp>
               )
               .firstOrNull ??
           const Locale('en');
-      await windowManager.setTitle(
-        'Whisper · ${lookupAppLocalizations(supported).castReceiverTitle}',
-      );
       var failed = false;
       try {
         final command = args['command'] as String;
@@ -84,6 +83,9 @@ class _CastPlaybackWindowAppState extends State<CastPlaybackWindowApp>
             Map<String, Object>.from(args['data'] as Map),
           );
         }
+        await windowManager.setTitle(
+          'Whisper · ${widget.localVideo ? _player.metadata : lookupAppLocalizations(supported).castReceiverTitle}',
+        );
         await _windowOperations;
       } on Object {
         failed = true;
@@ -95,7 +97,9 @@ class _CastPlaybackWindowAppState extends State<CastPlaybackWindowApp>
 
   Future<void> _sendEvent(String name) async {
     try {
-      await CastPlaybackWindowBridge.events.invokeMethod('event', {
+      await PlaybackWindowBridge.eventsFor(
+        localVideo: widget.localVideo,
+      ).invokeMethod('event', {
         'name': name,
         'windowId': _controller.windowId,
         'snapshot': _player.snapshot,
@@ -159,7 +163,8 @@ class _CastPlaybackWindowAppState extends State<CastPlaybackWindowApp>
       supportedLocales: AppLocalizations.supportedLocales,
       home: AnimatedBuilder(
         animation: _player,
-        builder: (context, _) => CastPlaybackView(player: _player),
+        builder: (context, _) =>
+            CastPlaybackView(player: _player, localVideo: widget.localVideo),
       ),
     );
   }

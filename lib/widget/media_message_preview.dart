@@ -10,8 +10,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
+import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
+import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -197,6 +199,8 @@ class MediaMessagePreview extends StatelessWidget {
 
     if (kind == MediaFileKind.video) {
       return _VideoAttachmentPreview(
+        path: path,
+        contentAvailable: contentAvailable,
         name: name,
         status: status,
         progress: progress,
@@ -644,8 +648,10 @@ class _OverlayIconButton extends StatelessWidget {
   }
 }
 
-class _VideoAttachmentPreview extends StatelessWidget {
+class _VideoAttachmentPreview extends StatefulWidget {
   const _VideoAttachmentPreview({
+    required this.path,
+    required this.contentAvailable,
     required this.name,
     required this.status,
     required this.progress,
@@ -655,6 +661,8 @@ class _VideoAttachmentPreview extends StatelessWidget {
     required this.onCancel,
   });
 
+  final String path;
+  final bool contentAvailable;
   final String name;
   final String status;
   final double? progress;
@@ -664,116 +672,177 @@ class _VideoAttachmentPreview extends StatelessWidget {
   final VoidCallback? onCancel;
 
   @override
+  State<_VideoAttachmentPreview> createState() =>
+      _VideoAttachmentPreviewState();
+}
+
+class _VideoAttachmentPreviewState extends State<_VideoAttachmentPreview> {
+  Future<VideoThumbnail?>? _thumbnail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoAttachmentPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.path != oldWidget.path ||
+        widget.contentAvailable != oldWidget.contentAvailable) {
+      _loadThumbnail();
+    }
+  }
+
+  void _loadThumbnail() {
+    _thumbnail = widget.contentAvailable
+        ? VideoThumbnailCache.shared.load(widget.path)
+        : null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.whisperPalette;
-    final transferring = progress != null || verifying;
-    return SizedBox(
-      key: const ValueKey<String>('video-message-card'),
-      width: 248,
-      height: 72,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+    final transferring = widget.progress != null || widget.verifying;
+    final playable = widget.contentAvailable && !transferring && !widget.failed;
+    final l10n = AppLocalizations.of(context);
+    return FutureBuilder<VideoThumbnail?>(
+      future: _thumbnail,
+      builder: (context, snapshot) {
+        final thumbnail = snapshot.connectionState == ConnectionState.done
+            ? snapshot.data
+            : null;
+        return Align(
+          alignment: Alignment.centerLeft,
+          widthFactor: 1,
+          heightFactor: 1,
+          child: MouseRegion(
+            cursor: playable ? SystemMouseCursors.click : MouseCursor.defer,
+            child: Semantics(
+              label: widget.name,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: _AdaptiveVisualMediaFrame(
+                  frameKey: const ValueKey<String>('video-message-card'),
+                  sourceAspectRatio: thumbnail?.aspectRatio ?? 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildCover(context, thumbnail, playable: playable),
+                      if (playable) _buildPlayButton(l10n),
+                      if (!transferring && !widget.failed)
+                        _buildMetadata(thumbnail),
+                      if (transferring || widget.failed)
+                        _TransferStateOverlay(
+                          progress: widget.progress ?? 0,
+                          status: widget.status,
+                          verifying: widget.verifying,
+                          failed: widget.failed,
+                          onRetry: widget.onRetry,
+                        ),
+                      if (widget.onCancel != null)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: _OverlayIconButton(
+                            icon: Icons.close_rounded,
+                            tooltip: l10n?.cancel ?? 'Cancel',
+                            onPressed: widget.onCancel!,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCover(
+    BuildContext context,
+    VideoThumbnail? thumbnail, {
+    required bool playable,
+  }) => ColoredBox(
+    color: context.whisperPalette.surfaceMuted,
+    child: thumbnail == null
+        ? playable
+              ? const SizedBox.shrink()
+              : Icon(
+                  Icons.movie_outlined,
+                  color: context.whisperPalette.textMuted,
+                  size: 38,
+                )
+        : Image(
+            key: const ValueKey<String>('video-message-cover'),
+            image: MemoryBoundedMemoryImage(thumbnail.bytes),
+            fit: BoxFit.cover,
+            excludeFromSemantics: true,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+  );
+
+  Widget _buildPlayButton(AppLocalizations? l10n) => Center(
+    child: Semantics(
+      label: l10n?.mediaActionPlay ?? 'Play',
+      button: true,
+      child: Container(
+        key: const ValueKey<String>('video-message-action'),
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: .38),
+          border: Border.all(color: Colors.white70, width: 1.5),
+        ),
+        child: const Icon(
+          Icons.play_arrow_rounded,
+          size: 34,
+          color: Colors.white,
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildMetadata(VideoThumbnail? thumbnail) => Positioned(
+    left: 0,
+    right: 0,
+    bottom: 0,
+    child: IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 24, 10, 8),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Color(0x99000000)],
+          ),
+        ),
         child: Row(
           children: [
-            SizedBox.square(
-              key: const ValueKey<String>('video-message-action'),
-              dimension: 42,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.11),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: failed
-                    ? IconButton(
-                        padding: EdgeInsets.zero,
-                        tooltip: AppLocalizations.of(context)?.retry ?? '重试',
-                        onPressed: onRetry,
-                        icon: Icon(
-                          Icons.refresh_rounded,
-                          color: palette.danger,
-                          size: 22,
-                        ),
-                      )
-                    : transferring
-                    ? Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox.square(
-                            dimension: 29,
-                            child: CircularProgressIndicator(
-                              value: verifying ? null : progress?.clamp(0, 1),
-                              strokeWidth: 2.4,
-                              color: colorScheme.primary,
-                              backgroundColor: colorScheme.primary.withValues(
-                                alpha: 0.14,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.movie_outlined,
-                            color: colorScheme.primary,
-                            size: 16,
-                          ),
-                        ],
-                      )
-                    : Icon(
-                        Icons.play_arrow_rounded,
-                        color: colorScheme.primary,
-                        size: 27,
-                      ),
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    key: const ValueKey<String>('video-message-name'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    status,
-                    key: const ValueKey<String>('video-message-meta'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: failed
-                          ? palette.danger
-                          : colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
+              child: Text(
+                widget.status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ),
-            if (onCancel != null)
-              IconButton(
-                constraints: const BoxConstraints.tightFor(
-                  width: 32,
-                  height: 32,
+            if (thumbnail != null && thumbnail.duration > Duration.zero)
+              Text(
+                _formatDuration(thumbnail.duration),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
-                padding: EdgeInsets.zero,
-                tooltip: AppLocalizations.of(context)?.cancel ?? '取消',
-                onPressed: onCancel,
-                icon: const Icon(Icons.close_rounded, size: 18),
               ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _AudioTransferPreview extends StatelessWidget {
@@ -1453,6 +1522,19 @@ Future<void> showMediaViewer(
   int initialImageIndex = 0,
 }) {
   if (kind == MediaFileKind.video) {
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      return PlaybackWindowBridge.videos.openVideo(path, name).catchError((
+        Object _,
+      ) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.videoPlaybackFailed),
+            ),
+          );
+        }
+      });
+    }
     onOpenExternally();
     return Future<void>.value();
   }

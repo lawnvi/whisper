@@ -40,8 +40,13 @@ class CastPlaybackHost extends StatelessWidget {
 }
 
 class CastPlaybackView extends StatefulWidget {
-  const CastPlaybackView({super.key, required this.player});
+  const CastPlaybackView({
+    super.key,
+    required this.player,
+    this.localVideo = false,
+  });
   final CastPlayer player;
+  final bool localVideo;
 
   @override
   State<CastPlaybackView> createState() => _CastPlaybackViewState();
@@ -59,6 +64,9 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
   bool _pointerDown = false;
   bool _keyboardControls = false;
   Timer? _hideTimer;
+
+  bool get _showPlay =>
+      widget.player.paused || widget.player.status['state'] == 'STOPPED';
 
   @override
   void initState() {
@@ -198,7 +206,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
             node.hasPrimaryFocus &&
             controller != null &&
             !failed) {
-          unawaited(_command(player.paused ? 'play' : 'pause'));
+          unawaited(_command(_showPlay ? 'play' : 'pause'));
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -235,7 +243,7 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                       onTap: failed
                           ? null
                           : () => unawaited(
-                              _command(player.paused ? 'play' : 'pause'),
+                              _command(_showPlay ? 'play' : 'pause'),
                             ),
                       child: Video(
                         controller: controller,
@@ -249,7 +257,11 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(l10n.castPlaybackFailed),
+                          Text(
+                            widget.localVideo
+                                ? l10n.videoPlaybackFailed
+                                : l10n.castPlaybackFailed,
+                          ),
                           TextButton(
                             onPressed: () => unawaited(_command('play')),
                             child: Text(l10n.retry),
@@ -279,15 +291,21 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                           bottom: false,
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.tv_rounded,
+                              Icon(
+                                widget.localVideo
+                                    ? Icons.movie_outlined
+                                    : Icons.tv_rounded,
                                 size: 18,
                                 color: Colors.white70,
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  l10n.castReceiverTitle,
+                                  widget.localVideo
+                                      ? player.metadata
+                                      : l10n.castReceiverTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -388,15 +406,15 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
                   Row(
                     children: [
                       IconButton(
-                        tooltip: player.paused ? l10n.castPlay : l10n.castPause,
+                        tooltip: _showPlay ? l10n.castPlay : l10n.castPause,
                         onPressed: failed || controller == null
                             ? null
                             : () => unawaited(
-                                _command(player.paused ? 'play' : 'pause'),
+                                _command(_showPlay ? 'play' : 'pause'),
                               ),
                         iconSize: 30,
                         icon: Icon(
-                          player.paused
+                          _showPlay
                               ? Icons.play_arrow_rounded
                               : Icons.pause_rounded,
                         ),

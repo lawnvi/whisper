@@ -13,10 +13,16 @@ void main() {
   late _Engine engine;
   late CastPlayer player;
 
-  Future<void> showPlayer(WidgetTester tester) async {
+  Future<void> showPlayer(
+    WidgetTester tester, {
+    bool localVideo = false,
+  }) async {
     engine = _Engine();
     player = CastPlayer(engineFactory: () async => engine)..activate();
-    await player.command('load', {'url': 'https://example.com/video.mp4'});
+    await player.command('load', {
+      'url': 'https://example.com/video.mp4',
+      'metadata': 'Holiday.mp4',
+    });
     await player.command('play');
     await player.command('volume', {'value': .5});
     engine.volumes.clear();
@@ -35,7 +41,8 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: AnimatedBuilder(
           animation: player,
-          builder: (_, _) => CastPlaybackView(player: player),
+          builder: (_, _) =>
+              CastPlaybackView(player: player, localVideo: localVideo),
         ),
       ),
     );
@@ -46,6 +53,20 @@ void main() {
       (widget) => widget is Semantics && widget.properties.label == 'Volume',
     ),
     matching: find.byType(Slider),
+  );
+
+  testWidgets(
+    'local playback shows the filename and offers replay at the end',
+    (tester) async {
+      await showPlayer(tester, localVideo: true);
+      expect(find.text('Holiday.mp4'), findsOneWidget);
+      expect(find.byIcon(Icons.tv_rounded), findsNothing);
+      engine.completed = true;
+      await player.command('seek', {'seconds': 60.0});
+      await tester.pump();
+      expect(find.byTooltip('Play'), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    },
   );
 
   testWidgets('dragging changes output volume before releasing the pointer', (
@@ -157,12 +178,16 @@ class _Engine implements CastPlaybackEngine {
   final volumes = <double>[];
   Completer<void>? volumeGate;
   bool failVolume = false;
+  bool completed = false;
 
   @override
   VideoController? get videoController => null;
   @override
-  CastPlaybackState get state =>
-      const CastPlaybackState(playing: true, duration: Duration(seconds: 60));
+  CastPlaybackState get state => CastPlaybackState(
+    playing: !completed,
+    completed: completed,
+    duration: const Duration(seconds: 60),
+  );
   @override
   Stream<void> get changes => const Stream.empty();
   @override

@@ -2920,6 +2920,12 @@ abstract class AppLocalizations {
   /// **'全屏'**
   String get castFullscreen;
 
+  /// No description provided for @videoPlaybackFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'视频播放失败，请重试或使用其他应用打开。'**
+  String get videoPlaybackFailed;
+
   /// No description provided for @castPlaybackFailed.
   ///
   /// In zh, this message translates to:

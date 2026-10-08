@@ -41,8 +41,8 @@ void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (arguments.length >= 3 &&
       arguments[0] == 'multi_window' &&
-      arguments[2] == 'cast_playback') {
-    runApp(const CastPlaybackWindowApp());
+      (arguments[2] == 'cast_playback' || arguments[2] == 'video_playback')) {
+    runApp(CastPlaybackWindowApp(localVideo: arguments[2] == 'video_playback'));
     return;
   }
   await applyImageMemoryBudget();

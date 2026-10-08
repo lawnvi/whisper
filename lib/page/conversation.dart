@@ -2531,11 +2531,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _openMessageFile(MessageData message) {
-    final path = _effectiveMessagePath(message);
+    final transfer = _transferForMessage(message);
+    final path = _effectiveMessagePath(message, transfer);
     final kind = mediaFileKindFor(name: message.name, path: path);
+    if (kind == MediaFileKind.video &&
+        !_isMediaContentAvailable(path, transfer)) {
+      return;
+    }
     final isAndroidContentUri = path.startsWith('content://');
     if (kind == MediaFileKind.other ||
-        kind == MediaFileKind.video ||
         (!isAndroidContentUri && !File(path).existsSync())) {
       if (isAndroidContentUri) {
         unawaited(AndroidDocumentPicker.shared.openDocument(path));

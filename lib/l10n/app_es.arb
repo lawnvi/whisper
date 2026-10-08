@@ -782,6 +782,7 @@
   "castMute": "Silenciar",
   "castUnmute": "Activar sonido",
   "castFullscreen": "Pantalla completa",
+  "videoPlaybackFailed": "No se pudo reproducir el vídeo. Reintenta o ábrelo con otra aplicación.",
   "castPlaybackFailed": "No se pudo reproducir el vídeo. Reintenta o vuelve a transmitir desde el teléfono.",
   "castControlFailed": "No se pudo aplicar el control. Inténtalo de nuevo.",
   "castRequestTitle": "¿Permitir la transmisión?",

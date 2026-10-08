@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 
@@ -53,7 +54,7 @@ double _galleryPage(WidgetTester tester, Finder gallery) {
 
 void main() {
   test(
-    'chat previews keep external video playback and mobile avoids decoders',
+    'desktop messages reuse cast playback libraries and mobile avoids decoders',
     () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
       final preview = File(
@@ -69,7 +70,11 @@ void main() {
       expect(pubspec, isNot(contains('media_kit_libs_ios_video:')));
       expect(preview, contains('DeviceFileSource'));
       expect(preview, isNot(contains('VideoController')));
-      expect(conversation, contains('kind == MediaFileKind.video'));
+      expect(preview, contains('PlaybackWindowBridge.videos.openVideo'));
+      expect(
+        conversation,
+        contains('_isMediaContentAvailable(path, transfer)'),
+      );
     },
   );
 
@@ -119,7 +124,7 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(
-        find.text(kind == MediaFileKind.image ? '68%' : '12.8 MB  68%'),
+        find.text(kind == MediaFileKind.audio ? '12.8 MB  68%' : '68%'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
@@ -230,35 +235,126 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('completed video uses a compact system-player attachment', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 280,
-            child: MediaMessagePreview(
-              kind: MediaFileKind.video,
-              path: '/tmp/example.mp4',
-              name: 'example.mp4',
-              status: '8.2 MB',
-              contentAvailable: true,
+  testWidgets(
+    'completed video shows a cover card with a centered play affordance',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 280,
+              child: MediaMessagePreview(
+                kind: MediaFileKind.video,
+                path: '/tmp/example.mp4',
+                name: 'example.mp4',
+                status: '8.2 MB',
+                contentAvailable: true,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(
-      find.byKey(const ValueKey<String>('video-message-card')),
-      findsOneWidget,
-    );
-    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
-    expect(find.text('example.mp4'), findsOneWidget);
-    expect(find.text('8.2 MB'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(
+        find.byKey(const ValueKey<String>('video-message-card')),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+      expect(find.text('example.mp4'), findsNothing);
+      final card = find.byKey(const ValueKey<String>('video-message-card'));
+      final action = find.byKey(const ValueKey<String>('video-message-action'));
+      expect(tester.getCenter(action), tester.getCenter(card));
+      expect(tester.getSize(card).height, closeTo(280 * 9 / 16, .1));
+      expect(find.text('8.2 MB'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'video cover loads after transfer and keeps portrait proportions',
+    (tester) async {
+      final original = VideoThumbnailCache.shared;
+      addTearDown(() => VideoThumbnailCache.shared = original);
+      var loads = 0;
+      VideoThumbnailCache.shared = VideoThumbnailCache(
+        loader: (_) async {
+          loads++;
+          return VideoThumbnail(
+            bytes: _ThumbnailPicker._png,
+            aspectRatio: 9 / 16,
+            duration: const Duration(seconds: 24),
+          );
+        },
+      );
+      Widget card(bool available) => MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 240,
+              child: MediaMessagePreview(
+                kind: MediaFileKind.video,
+                path: 'content://video/portrait',
+                name: 'portrait.mp4',
+                status: available ? '8 MB' : '80%',
+                contentAvailable: available,
+                progress: available ? null : .8,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(card(false));
+      expect(loads, 0);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      expect(find.text('80%'), findsOneWidget);
+      await tester.pumpWidget(card(true));
+      await tester.pumpAndSettle();
+      expect(loads, 1);
+      expect(
+        find.byKey(const ValueKey<String>('video-message-cover')),
+        findsOneWidget,
+      );
+      expect(find.text('0:24'), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+      final size = tester.getSize(
+        find.byKey(const ValueKey<String>('video-message-card')),
+      );
+      expect(size.width / size.height, closeTo(9 / 16, .01));
+      await tester.pumpWidget(card(true));
+      await tester.pump();
+      expect(loads, 1);
+    },
+  );
+
+  testWidgets(
+    'unavailable video has no play affordance and failure can retry',
+    (tester) async {
+      var retries = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 220,
+              child: MediaMessagePreview(
+                kind: MediaFileKind.video,
+                path: '',
+                name: 'clip.mp4',
+                status: 'Failed',
+                contentAvailable: false,
+                failed: true,
+                onRetry: () => retries++,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      await tester.tap(find.byIcon(Icons.refresh_rounded));
+      expect(retries, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   test('audio metadata combines file size and duration', () {
     expect(

@@ -1678,6 +1678,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get castFullscreen => 'Fullscreen';
 
   @override
+  String get videoPlaybackFailed =>
+      'Unable to play this video. Retry or open it with another app.';
+
+  @override
   String get castPlaybackFailed =>
       'Video playback failed. Retry or cast again from your phone.';
 

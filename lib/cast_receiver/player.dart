@@ -11,19 +11,17 @@ class CastPlayer extends ChangeNotifier {
   CastPlayer({
     Future<CastPlaybackEngine> Function()? engineFactory,
     Future<void> Function()? revealWindow,
-    CastPlaybackWindowBridge? windowBridge,
+    PlaybackWindowBridge? windowBridge,
   }) : _engineFactory = engineFactory ?? (() async => MediaKitCastEngine()),
        _revealWindow = revealWindow,
        _windowBridge = windowBridge {
     _windowBridge?.onEvent = _handleWindowEvent;
   }
 
-  static final shared = CastPlayer(
-    windowBridge: CastPlaybackWindowBridge.shared,
-  );
+  static final shared = CastPlayer(windowBridge: PlaybackWindowBridge.shared);
   final Future<CastPlaybackEngine> Function() _engineFactory;
   final Future<void> Function()? _revealWindow;
-  final CastPlaybackWindowBridge? _windowBridge;
+  final PlaybackWindowBridge? _windowBridge;
   CastPlaybackEngine? _engine;
   StreamSubscription<void>? _events;
   Future<void> _pending = Future<void>.value();

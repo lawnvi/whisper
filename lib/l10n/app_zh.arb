@@ -831,6 +831,7 @@
   "castMute": "静音",
   "castUnmute": "取消静音",
   "castFullscreen": "全屏",
+  "videoPlaybackFailed": "视频播放失败，请重试或使用其他应用打开。",
   "castPlaybackFailed": "视频播放失败，请重试或在手机上重新投屏。",
   "castControlFailed": "操作未完成，请重试。",
   "castRequestTitle": "允许这台设备投屏吗？",

@@ -1700,6 +1700,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get castFullscreen => 'Pantalla completa';
 
   @override
+  String get videoPlaybackFailed =>
+      'No se pudo reproducir el vídeo. Reintenta o ábrelo con otra aplicación.';
+
+  @override
   String get castPlaybackFailed =>
       'No se pudo reproducir el vídeo. Reintenta o vuelve a transmitir desde el teléfono.';
 

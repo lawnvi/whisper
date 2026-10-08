@@ -755,6 +755,7 @@
   "castMute": "Mute",
   "castUnmute": "Unmute",
   "castFullscreen": "Fullscreen",
+  "videoPlaybackFailed": "Unable to play this video. Retry or open it with another app.",
   "castPlaybackFailed": "Video playback failed. Retry or cast again from your phone.",
   "castControlFailed": "The control could not be applied. Please retry.",
   "castRequestTitle": "Allow this device to cast?",

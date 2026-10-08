@@ -1565,6 +1565,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get castFullscreen => '全屏';
 
   @override
+  String get videoPlaybackFailed => '视频播放失败，请重试或使用其他应用打开。';
+
+  @override
   String get castPlaybackFailed => '视频播放失败，请重试或在手机上重新投屏。';
 
   @override

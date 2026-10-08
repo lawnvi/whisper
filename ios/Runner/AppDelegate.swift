@@ -27,6 +27,8 @@ import dnssd
                 self?.openDir(call: call, result: result)
             case "availableBytes":
                 self?.availableBytes(call: call, result: result)
+            case "videoThumbnail":
+                self?.videoThumbnail(call: call, result: result)
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -75,6 +77,25 @@ import dnssd
                 // If the folder doesn't exist or isn't readable
                 showAlert("无效的文件夹路径")
                 result("无效的文件夹路径")
+            }
+        }
+    }
+
+    private func videoThumbnail(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String else {
+            result(nil)
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 512, height: 512)
+            let image = try? generator.copyCGImage(at: .zero, actualTime: nil)
+            let bytes = image.flatMap { UIImage(cgImage: $0).jpegData(compressionQuality: 0.8) }
+            DispatchQueue.main.async {
+                result(bytes.map { FlutterStandardTypedData(bytes: $0) })
             }
         }
     }
