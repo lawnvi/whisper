@@ -8,6 +8,86 @@ import 'package:whisper/remote_input/remote_input_key_translation.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 
 void main() {
+  for (final interval in [10000, 8333]) {
+    testWidgets(
+      'movement keeps the ${interval}us sample cadence without delay',
+      (tester) async {
+        final start = tester.binding.clock.now();
+        int now() =>
+            tester.binding.clock.now().difference(start).inMicroseconds;
+        final times = <int>[];
+        var distance = Offset.zero;
+        final input = MobileInputController((type, payload) {
+          times.add(now());
+          distance += Offset(payload['deltaX'], payload['deltaY']);
+          return times.length;
+        }, monotonicMicros: now)..active = true;
+        addTearDown(input.dispose);
+        for (var i = 0; i < 120; i++) {
+          input.move(const Offset(0.25, -0.5));
+          expect(times.lastOrNull, i * interval);
+          await tester.pump(Duration(microseconds: interval));
+        }
+        expect(times, hasLength(120));
+        expect(distance, const Offset(30, -60));
+      },
+    );
+  }
+
+  testWidgets(
+    'movement bursts are capped without losing fractional displacement',
+    (tester) async {
+      final start = tester.binding.clock.now();
+      int now() => tester.binding.clock.now().difference(start).inMicroseconds;
+      final times = <int>[];
+      var distance = Offset.zero;
+      final input = MobileInputController((type, payload) {
+        times.add(now());
+        distance += Offset(payload['deltaX'], payload['deltaY']);
+        return times.length;
+      }, monotonicMicros: now)..active = true;
+      addTearDown(input.dispose);
+      for (var i = 0; i < 1000; i++) {
+        input.move(const Offset(0.125, -0.25));
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+      expect(times.first, 0);
+      expect(times, hasLength(126));
+      for (var i = 1; i < times.length; i++) {
+        expect(times[i] - times[i - 1], 8000);
+      }
+      expect(distance, const Offset(125, -250));
+      await tester.pump(const Duration(seconds: 1));
+      expect(times, hasLength(126));
+    },
+  );
+
+  testWidgets(
+    'pending movement uses the last send deadline and stops on reset',
+    (tester) async {
+      final start = tester.binding.clock.now();
+      int now() => tester.binding.clock.now().difference(start).inMicroseconds;
+      final times = <int>[];
+      final input = MobileInputController((type, payload) {
+        times.add(now());
+        return times.length;
+      }, monotonicMicros: now)..active = true;
+      addTearDown(input.dispose);
+      input.move(const Offset(1, 0));
+      await tester.pump(const Duration(milliseconds: 5));
+      input.move(const Offset(1, 0));
+      await tester.pump(const Duration(milliseconds: 3));
+      expect(times, [0, 8000]);
+      input.move(const Offset(1, 0));
+      input.reset();
+      expect(times, [0, 8000, 8000]);
+      input.move(const Offset(1, 0));
+      expect(times, [0, 8000, 8000, 8000]);
+      await tester.pump(const Duration(seconds: 1));
+      expect(times, hasLength(4));
+    },
+  );
+
   test('motion uses gravity yaw and horizontal pitch without roll', () {
     MotionSample sample(int t, List<double> w) =>
         MotionSample(t, w, [0, 0, 9.8]);
@@ -234,7 +314,7 @@ void main() {
     controller = MobileInputController((type, data) {
       sent.add((type, data));
       return sent.length;
-    })..active = true;
+    }, monotonicMicros: () => 0)..active = true;
   });
   tearDown(() {
     controller.dispose();
@@ -244,19 +324,21 @@ void main() {
   ) async {
     controller.move(const Offset(1, 2));
     controller.move(const Offset(3, 4));
-    expect(sent, isEmpty);
+    controller.move(const Offset(0.25, 0.5));
+    expect(sent.single.$2, {'deltaX': 1.0, 'deltaY': 2.0});
     controller.button(0, true);
     controller.move(const Offset(5, 6));
     controller.button(0, false);
     expect(sent.map((e) => e.$1), [
       RemoteInputEventType.mouseMove,
+      RemoteInputEventType.mouseMove,
       RemoteInputEventType.mouseButton,
       RemoteInputEventType.mouseMove,
       RemoteInputEventType.mouseButton,
     ]);
-    expect(sent.first.$2, {'deltaX': 4.0, 'deltaY': 6.0});
+    expect(sent[1].$2, {'deltaX': 3.25, 'deltaY': 4.5});
     await tester.pump(const Duration(milliseconds: 20));
-    expect(sent, hasLength(4));
+    expect(sent, hasLength(5));
   });
   test('touchpad tap cannot release a separately held left button', () {
     controller.button(0, true);

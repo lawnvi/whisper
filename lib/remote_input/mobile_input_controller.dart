@@ -13,7 +13,8 @@ class MobileInputController extends ChangeNotifier {
   static const keyRepeatDelay = Duration(milliseconds: 400);
   static const _keyRepeatInterval = Duration(milliseconds: 60);
   static const _motionSuppression = Duration(milliseconds: 80);
-  static const _movementFrameInterval = Duration(microseconds: 16667);
+  // Keep 100Hz motion and 120Hz touch samples responsive, while bounding bursts.
+  static const _movementFrameInterval = Duration(milliseconds: 8);
 
   MobileInputController(this.send, {int Function()? monotonicMicros})
     : _monotonicMicros = monotonicMicros;
@@ -34,6 +35,7 @@ class MobileInputController extends ChangeNotifier {
   int _suppressUntil = 0;
   Offset _pending = Offset.zero;
   bool _pendingScroll = false;
+  int? _lastMovementMicros;
   Timer? _flushTimer;
   Timer? _repeatDelay;
   Timer? _repeatTimer;
@@ -133,7 +135,21 @@ class MobileInputController extends ChangeNotifier {
             : fromMotion
             ? 1.0
             : pointerSpeed);
-    _flushTimer ??= Timer(_movementFrameInterval, flush);
+    if (_pending == Offset.zero) return;
+    final last = _lastMovementMicros;
+    final remaining = last == null
+        ? 0
+        : _movementFrameInterval.inMicroseconds - (_nowMicros - last);
+    if (remaining <= 0) {
+      flush();
+    } else {
+      // Count from the last send, not the next sample: otherwise sampling and
+      // batching drift apart and turn 100Hz motion into 50Hz cursor updates.
+      _flushTimer ??= Timer(
+        Duration(milliseconds: (remaining + 999) ~/ 1000),
+        flush,
+      );
+    }
   }
 
   void flush() {
@@ -142,6 +158,7 @@ class MobileInputController extends ChangeNotifier {
     final delta = _pending;
     _pending = Offset.zero;
     if (!_active || delta == Offset.zero) return;
+    _lastMovementMicros = _nowMicros;
     send(
       _pendingScroll
           ? RemoteInputEventType.mouseWheel
@@ -234,6 +251,7 @@ class MobileInputController extends ChangeNotifier {
 
   void reset() {
     flush();
+    _lastMovementMicros = null;
     cancelRepeat();
     for (final button in _buttons.toList()) {
       if (_active) {
