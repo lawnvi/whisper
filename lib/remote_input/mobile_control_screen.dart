@@ -657,32 +657,34 @@ class _MobileControlScreenState extends State<MobileControlScreen>
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: Material(
-                  key: const ValueKey('mobile-pointer-surface'),
-                  color: context.whisperPalette.surfaceElevated,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                    side: BorderSide(
-                      color: context.whisperPalette.borderSubtle,
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: WhisperTabPanels(
-                          key: const ValueKey('mobile-pointer-mode-content'),
-                          selected: _input.air ? 0 : 1,
-                          children: [_airSurface(), _touchpad()],
-                        ),
-                      ),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Material(
+                    key: const ValueKey('mobile-pointer-surface'),
+                    color: context.whisperPalette.surfaceElevated,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                      side: BorderSide(
                         color: context.whisperPalette.borderSubtle,
                       ),
-                      _pointerActions(),
-                    ],
+                    ),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: WhisperTabPanels(
+                            key: const ValueKey('mobile-pointer-mode-content'),
+                            selected: _input.air ? 0 : 1,
+                            children: [_airSurface(), _touchpad()],
+                          ),
+                        ),
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: context.whisperPalette.borderSubtle,
+                        ),
+                        _pointerActions(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -706,7 +708,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       toggled: _input.moving,
       enabled: _enabled,
       child: Material(
-        color: context.whisperPalette.surfaceElevated,
+        type: MaterialType.transparency,
         child: InkWell(
           key: ValueKey(generation),
           onTap: _enabled
@@ -855,6 +857,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       behavior: HitTestBehavior.opaque,
       onPanUpdate: (_) {},
       child: Listener(
+        behavior: HitTestBehavior.opaque,
         onPointerDown: (event) {
           if (acceptsInput()) {
             _pad.down(event.pointer, event.localPosition, event.timeStamp);
@@ -876,7 +879,6 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           child: Container(
             key: const ValueKey('mobile-touchpad'),
             alignment: Alignment.center,
-            color: context.whisperPalette.surfaceElevated,
             padding: const EdgeInsets.all(20),
             child: _SurfaceLabel(
               icon: Icons.touch_app_outlined,

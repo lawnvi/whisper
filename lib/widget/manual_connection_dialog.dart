@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/state/ipv4_address_policy.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -9,11 +10,13 @@ class ManualConnectionForm extends StatefulWidget {
   const ManualConnectionForm({
     super.key,
     required this.onConnect,
+    this.localHost,
     this.fillAvailableHeight = false,
     this.padding = const EdgeInsets.fromLTRB(20, 24, 20, 24),
   });
 
   final ValueChanged<PeerEndpoint> onConnect;
+  final String? localHost;
   final bool fillAvailableHeight;
   final EdgeInsets padding;
 
@@ -24,7 +27,7 @@ class ManualConnectionForm extends StatefulWidget {
 class _ManualConnectionFormState extends State<ManualConnectionForm>
     with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
-  final _address = TextEditingController();
+  late final _address = TextEditingController(text: _initialAddress());
   final _port = TextEditingController(text: '10002');
   final _addressFocus = FocusNode();
   final _portFocus = FocusNode();
@@ -32,6 +35,17 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
 
   @override
   bool get wantKeepAlive => true;
+
+  String _initialAddress() {
+    final local = widget.localHost;
+    if (local == null || Ipv4AddressPolicy.parseCanonical(local) == null) {
+      return '192.168.1.10';
+    }
+    final octets = local.split('.');
+    // Keep the local prefix as an editing convenience, without targeting self.
+    octets[3] = octets[3] == '10' ? '20' : '10';
+    return octets.join('.');
+  }
 
   @override
   void dispose() {
@@ -59,9 +73,8 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
     super.build(context);
     final l10n = AppLocalizations.of(context)!;
     final palette = context.whisperPalette;
-    InputDecoration decoration(String label, {String? hint}) => InputDecoration(
+    InputDecoration decoration(String label) => InputDecoration(
       labelText: label,
-      hintText: hint,
       filled: true,
       fillColor: palette.surfaceElevated,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -90,7 +103,7 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Column(
@@ -105,20 +118,11 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
                         ),
                       if (widget.fillAvailableHeight)
                         const SizedBox(height: 16),
-                    ],
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
                       TextFormField(
                         key: const ValueKey('connection-address'),
                         controller: _address,
                         focusNode: _addressFocus,
-                        decoration: decoration(
-                          l10n.connectionAddressLabel,
-                          hint: '192.168.1.10',
-                        ),
+                        decoration: decoration(l10n.connectionAddressLabel),
                         keyboardType: TextInputType.url,
                         autocorrect: false,
                         enableSuggestions: false,
@@ -139,7 +143,12 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
                         controller: _port,
                         focusNode: _portFocus,
                         decoration: decoration(l10n.port),
-                        keyboardType: TextInputType.number,
+                        // Match the address field so switching focus does not
+                        // resize/reconfigure the IME; the formatter keeps this
+                        // field numeric without changing the keyboard layout.
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        enableSuggestions: false,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
@@ -155,7 +164,9 @@ class _ManualConnectionFormState extends State<ManualConnectionForm>
                     ],
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 24),
+                    padding: EdgeInsets.only(
+                      top: widget.fillAvailableHeight ? 48 : 24,
+                    ),
                     child: FilledButton(
                       key: const ValueKey('connect-by-address'),
                       onPressed: _connect,

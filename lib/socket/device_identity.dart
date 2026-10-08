@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sodium/sodium.dart' as sodium;
 import 'package:synchronized/synchronized.dart';
 import 'package:whisper/helper/local.dart';
 
@@ -141,10 +142,16 @@ final class SecureDeviceIdentitySeedStorage
 }
 
 final class DeviceIdentity {
-  DeviceIdentity._(this._keyPair, Uint8List publicKeyBytes)
+  DeviceIdentity._(this._signMessage, Uint8List publicKeyBytes)
     : _publicKeyBytes = Uint8List.fromList(publicKeyBytes);
 
-  final SimpleKeyPair _keyPair;
+  static sodium.Sodium? _native;
+
+  static void installNativeAcceleration(sodium.Sodium instance) {
+    _native = instance;
+  }
+
+  final Future<List<int>> Function(Uint8List message) _signMessage;
   final Uint8List _publicKeyBytes;
 
   String get publicKeyBase64Url => _encodeBase64Url(_publicKeyBytes);
@@ -155,14 +162,34 @@ final class DeviceIdentity {
     if (seed.length != 32) {
       throw ArgumentError.value(seed.length, 'seed.length', 'must be 32');
     }
+    final native = _native;
+    if (native != null) {
+      final nativeSeed = native.secureCopy(seed);
+      try {
+        final pair = native.crypto.sign.seedKeyPair(nativeSeed);
+        // The signer retains sodium's managed secure key for this identity's
+        // lifetime, avoiding curve arithmetic on Flutter's UI isolate.
+        return DeviceIdentity._(
+          (message) async => native.crypto.sign.detached(
+            message: message,
+            secretKey: pair.secretKey,
+          ),
+          pair.publicKey,
+        );
+      } finally {
+        nativeSeed.dispose();
+      }
+    }
     final keyPair = await Ed25519().newKeyPairFromSeed(seed);
     final publicKey = await keyPair.extractPublicKey();
-    return DeviceIdentity._(keyPair, Uint8List.fromList(publicKey.bytes));
+    return DeviceIdentity._(
+      (message) async => (await Ed25519().sign(message, keyPair: keyPair)).bytes,
+      Uint8List.fromList(publicKey.bytes),
+    );
   }
 
   Future<String> sign(Uint8List message) async {
-    final signature = await Ed25519().sign(message, keyPair: _keyPair);
-    return _encodeBase64Url(signature.bytes);
+    return _encodeBase64Url(await _signMessage(message));
   }
 }
 
@@ -232,6 +259,14 @@ Future<bool> verifyDeviceSignature({
       signatureBase64Url,
       expectedLength: 64,
     );
+    final native = DeviceIdentity._native;
+    if (native != null) {
+      return native.crypto.sign.verifyDetached(
+        message: message,
+        signature: signatureBytes,
+        publicKey: publicKeyBytes,
+      );
+    }
     return await Ed25519().verify(
       message,
       signature: Signature(

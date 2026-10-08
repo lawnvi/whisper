@@ -58,7 +58,7 @@ class LocalSetting {
     return DeviceData(
         id: 0,
         uid: await getSPDefault(_uuid, const Uuid().v4()),
-        name: await getSPDefault(_name, await deviceName()),
+        name: await deviceDisplayName(),
         host: await getLocalIpAddress(),
         port: await getSPDefault(_port, 10002),
         platform: Platform.operatingSystem,
@@ -125,6 +125,9 @@ class LocalSetting {
   }
 
   Future<String> deviceDisplayName() async {
+    final sp = await _preferences();
+    final saved = sp.getString(_name);
+    if (saved != null) return saved;
     return getSPDefault(_name, await deviceName());
   }
 

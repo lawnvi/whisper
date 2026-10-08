@@ -147,6 +147,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     ),
   );
   bool _historyReady = false;
+  bool _isConnecting = false;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _composerFocusNode = FocusNode();
@@ -1074,22 +1075,31 @@ class _SendMessageScreen extends State<SendMessageScreen>
         padding: actionPadding,
         constraints: actionConstraints,
         visualDensity: actionVisualDensity,
-        onPressed: _canToggleConnection ? _toggleConnection : null,
-        tooltip: _isConnectedSession
-            ? (AppLocalizations.of(context)?.disconnect ?? '断开')
-            : (AppLocalizations.of(context)?.connect ?? '连接'),
+        onPressed: _canToggleConnection && !_isConnecting
+            ? _toggleConnection
+            : null,
+        tooltip: _isConnecting
+            ? l10n.connectAlreadyInProgress
+            : _isConnectedSession
+                ? (AppLocalizations.of(context)?.disconnect ?? '断开')
+                : (AppLocalizations.of(context)?.connect ?? '连接'),
         icon: WhisperAnimatedSwitcher(
-          value: (_isConnectedSession, _canToggleConnection),
-          child: Icon(
-            _isConnectedSession
-                ? Icons.wifi_rounded
-                : (_canToggleConnection
-                      ? Icons.wifi_find_rounded
-                      : Icons.wifi_off_rounded),
-            color: _isConnectedSession
-                ? Colors.lightBlue
-                : (_canToggleConnection ? palette.textMuted : Colors.grey),
-          ),
+          value: (_isConnectedSession, _canToggleConnection, _isConnecting),
+          child: _isConnecting
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  _isConnectedSession
+                      ? Icons.wifi_rounded
+                      : (_canToggleConnection
+                            ? Icons.wifi_find_rounded
+                            : Icons.wifi_off_rounded),
+                  color: _isConnectedSession
+                      ? Colors.lightBlue
+                      : (_canToggleConnection ? palette.textMuted : Colors.grey),
+                ),
         ),
       ),
     );
@@ -1604,9 +1614,16 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Future<bool> _connectServer(String host, int port) async {
+    if (!mounted || _isConnecting) return false;
+    setState(() => _isConnecting = true);
     final targetKey = 'peer:${device.uid}';
     final attemptGeneration = _connectionAttempts.begin(targetKey);
     try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted ||
+          !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
+        return false;
+      }
       if (await isLocalhost(host)) {
         if (!_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
           return false;
@@ -1688,6 +1705,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return false;
     } finally {
       _connectionAttempts.complete(targetKey, attemptGeneration);
+      if (mounted) setState(() => _isConnecting = false);
     }
   }
 

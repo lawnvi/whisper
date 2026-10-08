@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper/helper/local.dart';
@@ -25,14 +26,16 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  test('local device never advertises automatic approval from legacy storage',
-      () async {
-    final device = await LocalSetting().instance();
-    final preferences = await SharedPreferences.getInstance();
+  test(
+    'local device never advertises automatic approval from legacy storage',
+    () async {
+      final device = await LocalSetting().instance();
+      final preferences = await SharedPreferences.getInstance();
 
-    expect(device.auth, isFalse);
-    expect(preferences.getBool('_no_auth'), isTrue);
-  });
+      expect(device.auth, isFalse);
+      expect(preferences.getBool('_no_auth'), isTrue);
+    },
+  );
 
   test('local settings no longer expose or read automatic approval', () {
     final source = File('lib/helper/local.dart').readAsStringSync();
@@ -43,4 +46,25 @@ void main() {
     expect(source, isNot(contains('autoApproveNewDevices')));
     expect(source, contains('auth: false'));
   });
+
+  test(
+    'connection profile reuses the saved name without querying native device info',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      const channel = MethodChannel('dev.fluttercommunity.plus/device_info');
+      var requests = 0;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (_) async {
+        requests++;
+        throw PlatformException(code: 'unavailable');
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final device = await LocalSetting().instance();
+      expect(device.name, 'Local device');
+      expect(await LocalSetting().deviceDisplayName(), 'Local device');
+      expect(requests, 0);
+    },
+  );
 }

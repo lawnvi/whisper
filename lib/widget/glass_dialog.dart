@@ -14,6 +14,8 @@ Future<T?> showWhisperDialog<T>(
   required WidgetBuilder builder,
   bool barrierDismissible = true,
   bool useRootNavigator = true,
+  bool useSafeArea = true,
+  bool blurBackground = true,
   RouteSettings? routeSettings,
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -21,7 +23,7 @@ Future<T?> showWhisperDialog<T>(
 
   return Navigator.of(context, rootNavigator: useRootNavigator).push<T>(
     WhisperFrostedPageRoute<T>(
-      barrierBlurSigma: whisperModalBlurSigma(context),
+      barrierBlurSigma: blurBackground ? whisperModalBlurSigma(context) : 0,
       settings: routeSettings,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
@@ -34,8 +36,9 @@ Future<T?> showWhisperDialog<T>(
       reverseTransitionDuration: reduceMotion
           ? Duration.zero
           : whisperDialogExitDuration,
-      pageBuilder: (dialogContext, animation, secondaryAnimation) =>
-          SafeArea(child: builder(dialogContext)),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) => useSafeArea
+          ? SafeArea(child: builder(dialogContext))
+          : builder(dialogContext),
       transitionsBuilder:
           (dialogContext, animation, secondaryAnimation, child) {
             if (reduceMotion) {
@@ -104,6 +107,8 @@ class WhisperGlassDialog extends StatelessWidget {
     this.contentPadding = const EdgeInsets.fromLTRB(24, 0, 24, 8),
     this.actionsPadding = const EdgeInsets.only(top: 12),
     this.borderRadius = 26,
+    this.insetAnimationDuration = const Duration(milliseconds: 100),
+    this.blurBackground = true,
   });
 
   final Widget? title;
@@ -115,11 +120,14 @@ class WhisperGlassDialog extends StatelessWidget {
   final EdgeInsets contentPadding;
   final EdgeInsets actionsPadding;
   final double borderRadius;
+  final Duration insetAnimationDuration;
+  final bool blurBackground;
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       insetPadding: insetPadding,
+      insetAnimationDuration: insetAnimationDuration,
       backgroundColor: Colors.transparent,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
@@ -128,6 +136,7 @@ class WhisperGlassDialog extends StatelessWidget {
         constraints: constraints,
         child: WhisperGlassSurface(
           borderRadius: BorderRadius.circular(borderRadius),
+          blurBackground: blurBackground,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,6 +169,7 @@ class WhisperGlassSurface extends StatelessWidget {
     this.showTopHighlight = true,
     this.showShadow = true,
     this.neutral = false,
+    this.blurBackground = true,
   });
 
   final BorderRadius borderRadius;
@@ -168,6 +178,7 @@ class WhisperGlassSurface extends StatelessWidget {
   final bool showTopHighlight;
   final bool showShadow;
   final bool neutral;
+  final bool blurBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +194,7 @@ class WhisperGlassSurface extends StatelessWidget {
       _ => false,
     };
     final radius = borderRadius;
-    final baseOpacity = highContrast
+    final baseOpacity = highContrast || !blurBackground
         ? 0.98
         : isDark
         ? 0.84
@@ -235,6 +246,7 @@ class WhisperGlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
+          enabled: blurBackground && !highContrast,
           filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: DecoratedBox(
             decoration: BoxDecoration(

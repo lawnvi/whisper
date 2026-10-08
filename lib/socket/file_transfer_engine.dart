@@ -1383,13 +1383,20 @@ class FileTransferEngine {
             (replay.decision == WireMessageReplayDecision.duplicate &&
                 transfer.tempPath.isEmpty &&
                 !isTerminalFileTransferState(transfer.state));
-        await _handleFileTransferV3Offer(
-          message,
-          persistedMessage: replay.message!,
-          transfer: transfer,
-          isNewMessage: shouldDispatchPersistedMessage,
-          requireCurrent: requireCurrent,
-        );
+        try {
+          await _handleFileTransferV3Offer(
+            message,
+            persistedMessage: replay.message!,
+            transfer: transfer,
+            isNewMessage: shouldDispatchPersistedMessage,
+            requireCurrent: requireCurrent,
+          );
+        } on WireInputRejected {
+          rethrow;
+        } catch (error) {
+          requireCurrent();
+          await _handleIncomingFileTransferV3Error(frame.transferId, error);
+        }
         break;
       case WhisperFrameType.fileData:
         final transfer = await _database().fetchFileTransfer(frame.transferId);

@@ -42,6 +42,51 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'receive preparation failure reports a file error and permits the next offer',
+    () async {
+      final database = LocalDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final root = await Directory.systemTemp.createTemp(
+        'whisper-offer-error-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final sent = <WhisperFrameV3>[];
+      var failDirectory = true;
+      final engine = _engine(
+        database,
+        sent,
+        downloadDirectory: () async {
+          if (failDirectory) {
+            throw const FileSystemException('storage unavailable');
+          }
+          return root;
+        },
+      );
+      const checksum =
+          '4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a';
+      await engine.handleFrame(
+        _binding,
+        _offerFrame(_incomingMessage(_firstId, size: 1, checksum: checksum)),
+        requireCurrent: () {},
+      );
+      expect(
+        (await database.fetchFileTransfer(_firstId))?.state,
+        FileTransferState.failed,
+      );
+      expect(sent.single.type, WhisperFrameType.fileError);
+      expect(sent.single.transferId, _firstId);
+      failDirectory = false;
+      await engine.handleFrame(
+        _binding,
+        _offerFrame(_incomingMessage(_secondId, size: 1, checksum: checksum)),
+        requireCurrent: () {},
+      );
+      expect(sent.last.type, WhisperFrameType.fileReady);
+      expect(sent.last.transferId, _secondId);
+    },
+  );
+
+  test(
     'ACK validates durable and actual-sent boundaries before mutation',
     () async {
       final database = LocalDatabase.forTesting(NativeDatabase.memory());

@@ -34,6 +34,15 @@ Future<String?> resolveDiscoveryEndpointHost({
       ? advertised
       : null;
   if (normalizedResolved == null) {
+    // Android NSD advertises names such as Android_XXXX.local. They are valid
+    // Bonjour targets but not strict DNS hostnames; only use their validated
+    // numeric TXT address, never pass the relaxed name to a socket.
+    final localServiceName = resolvedHost?.replaceAll('_', 'a');
+    if (resolvedHost?.contains('_') == true &&
+        localServiceName != null &&
+        _normalizeEndpointHost(localServiceName, port) != null) {
+      return advertisedFallback;
+    }
     return null;
   }
   if (_isNumericHost(normalizedResolved)) {

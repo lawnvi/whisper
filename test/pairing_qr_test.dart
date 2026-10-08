@@ -19,6 +19,45 @@ final _invite = PairingInvite(
 );
 
 void main() {
+  testWidgets(
+    'keyboard animation reuses the hidden QR and fits the form when settled',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PairingQrDialog(localInvite: _invite, startWithAddress: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final qrPaint = find.byWidgetPredicate(
+        (widget) => widget is CustomPaint && widget.painter is QrPainter,
+        skipOffstage: false,
+      );
+      final painter = tester.widget<CustomPaint>(qrPaint).painter;
+      final panel = find.byKey(const ValueKey('pairing-qr-dialog-content'));
+      for (final inset in [80.0, 160.0, 256.0, 160.0, 0.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(tester.widget<CustomPaint>(qrPaint).painter, same(painter));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(panel).bottom, lessThanOrEqualTo(720 - inset));
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.text('QR code'));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+
   Widget buildDialog() => MaterialApp(
     locale: const Locale('en'),
     localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
@@ -149,10 +188,8 @@ void main() {
       final address = find.byKey(const ValueKey('connection-address'));
       await tester.enterText(address, 'desk.local');
       final submit = find.byKey(const ValueKey('connect-by-address'));
-      expect(
-        tester.getRect(panel).bottom - tester.getRect(submit).bottom,
-        inInclusiveRange(16, 28),
-      );
+      final port = find.byKey(const ValueKey('connection-port'));
+      expect(tester.getRect(submit).top - tester.getRect(port).bottom, 48);
       await tester.tap(find.text('QR code'));
       await tester.pumpAndSettle();
       tester.view.physicalSize = const Size(360, 720);

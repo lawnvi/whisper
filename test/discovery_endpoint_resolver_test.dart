@@ -4,6 +4,54 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/state/discovery_endpoint_resolver.dart';
 
 void main() {
+  test(
+    'Android Bonjour names with underscores use the valid IPv4 endpoint',
+    () async {
+      var lookups = 0;
+      final host = await resolveDiscoveryEndpointHost(
+        resolvedHost: 'Android_HZFK229W.local.',
+        advertisedHost: '192.168.1.84',
+        port: 10002,
+        lookup: (_) async {
+          lookups++;
+          return [];
+        },
+      );
+      expect(host, '192.168.1.84');
+      expect(lookups, 0);
+    },
+  );
+
+  test(
+    'Android Bonjour fallback still rejects invalid addresses and ports',
+    () async {
+      for (final address in [
+        '127.0.0.1',
+        '224.0.0.1',
+        '198.18.0.1',
+        'example.com',
+        '192.168.1.84:10002',
+      ]) {
+        expect(
+          await resolveDiscoveryEndpointHost(
+            resolvedHost: 'Android_HZFK229W.local.',
+            advertisedHost: address,
+            port: 10002,
+          ),
+          isNull,
+        );
+      }
+      expect(
+        await resolveDiscoveryEndpointHost(
+          resolvedHost: 'Android_HZFK229W.local.',
+          advertisedHost: '192.168.1.84',
+          port: 0,
+        ),
+        isNull,
+      );
+    },
+  );
+
   test('keeps an already numeric resolved endpoint', () async {
     var lookupCount = 0;
 

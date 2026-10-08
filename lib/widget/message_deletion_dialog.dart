@@ -78,6 +78,7 @@ class _MessageDeletionDialogState extends State<_MessageDeletionDialog> {
                   CheckboxListTile(
                     key: const ValueKey('keep-received-files'),
                     contentPadding: EdgeInsets.zero,
+                    horizontalTitleGap: 0,
                     controlAffinity: ListTileControlAffinity.leading,
                     checkboxShape: const CircleBorder(),
                     shape: RoundedRectangleBorder(

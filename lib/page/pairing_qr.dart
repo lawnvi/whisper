@@ -35,6 +35,10 @@ Future<PairingQrResult?> showPairingQrDialog(
 }) {
   return showWhisperDialog<PairingQrResult>(
     context,
+    useSafeArea: false,
+    blurBackground:
+        defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS,
     builder: (context) => PairingQrDialog(
       localInvite: localInvite,
       localPeerId: localPeerId,
@@ -101,6 +105,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
   bool _copied = false;
   bool _copyFailed = false;
   Timer? _copyResetTimer;
+  ({String data, double size, Widget image})? _qrImageCache;
 
   @override
   void initState() {
@@ -167,81 +172,85 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     final l10n = AppLocalizations.of(context)!;
     final windowSize = MediaQuery.sizeOf(context);
     final compact = windowSize.width < 480;
-    final sideBySide =
-        !_canScan &&
-        windowSize.width >= 600 &&
-        windowSize.height - MediaQuery.viewInsetsOf(context).bottom >= 360;
     final dialogWidth = (windowSize.width - (compact ? 24 : 32)).clamp(
       288.0,
       _canScan || compact ? 440.0 : 640.0,
     );
-    final availableHeight =
-        (windowSize.height -
-                MediaQuery.viewInsetsOf(context).bottom -
-                MediaQuery.paddingOf(context).vertical -
-                (compact ? 24 : 32))
-            .clamp(0.0, double.infinity);
-    // Mobile tabs share one frame; only viewport or text-size changes resize it.
-    final mobileQrSize = (dialogWidth - 96).clamp(160.0, 240.0);
     final textGrowth = (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(
       0.0,
       double.infinity,
     );
-    final dialogHeight = _canScan
-        ? (mobileQrSize + (compact ? 224 : 256) + textGrowth * 5).clamp(
-            0.0,
-            availableHeight,
-          )
-        : sideBySide
-        ? availableHeight.clamp(0.0, 420.0)
-        : null;
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (availableHeight < 280)
-          Row(
-            children: [
-              Expanded(child: _buildModeSwitcher(l10n, compact: true)),
-              IconButton(
-                tooltip: l10n.close,
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ],
-          )
-        else ...[
-          _buildHeader(l10n, compact: compact),
-          if (!sideBySide) _buildModeSwitcher(l10n, compact: compact),
-        ],
-        Flexible(
-          fit: _canScan || sideBySide ? FlexFit.tight : FlexFit.loose,
-          child: sideBySide
-              ? _buildDesktopPanels(l10n)
-              : _buildCompactPanels(l10n, compact: compact),
-        ),
-      ],
-    );
+    final header = _buildHeader(l10n, compact: compact);
+    final switcher = _buildModeSwitcher(l10n, compact: compact);
+    final panels = _buildCompactPanels(l10n, compact: compact);
     return SafeArea(
+      maintainBottomViewPadding: _canScan,
       minimum: EdgeInsets.all(compact ? 12 : 16),
       child: WhisperGlassDialog(
         insetPadding: EdgeInsets.zero,
+        insetAnimationDuration: whisperMotionDuration(context),
+        blurBackground: !_canScan,
         borderRadius: compact ? 18 : 26,
         constraints: BoxConstraints(
           minWidth: dialogWidth,
           maxWidth: dialogWidth,
-          maxHeight: dialogHeight ?? availableHeight,
         ),
         contentPadding: EdgeInsets.zero,
-        content: AnimatedSize(
-          duration: whisperMotionDuration(context),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            key: const ValueKey<String>('pairing-qr-dialog-content'),
-            width: dialogWidth,
-            height: dialogHeight,
-            child: content,
-          ),
+        // Derive content size from the Dialog's animated constraints. Reading
+        // the final keyboard inset here would resize before its position moves.
+        content: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableHeight = constraints.maxHeight;
+            final sideBySide =
+                !_canScan && windowSize.width >= 600 && availableHeight >= 328;
+            final mobileQrSize = (dialogWidth - 96).clamp(160.0, 200.0);
+            final dialogHeight = _canScan
+                ? (mobileQrSize + (compact ? 224 : 256) + textGrowth * 5).clamp(
+                    0.0,
+                    availableHeight,
+                  )
+                : sideBySide
+                ? availableHeight.clamp(0.0, 420.0)
+                : null;
+            final content = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (availableHeight < 280)
+                  Row(
+                    children: [
+                      Expanded(child: _buildModeSwitcher(l10n, compact: true)),
+                      IconButton(
+                        tooltip: l10n.close,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  )
+                else ...[
+                  header,
+                  if (!sideBySide) switcher,
+                ],
+                Flexible(
+                  fit: _canScan || sideBySide ? FlexFit.tight : FlexFit.loose,
+                  child: sideBySide ? _buildDesktopPanels(l10n) : panels,
+                ),
+              ],
+            );
+            final frame = SizedBox(
+              key: const ValueKey<String>('pairing-qr-dialog-content'),
+              width: dialogWidth,
+              height: dialogHeight,
+              child: content,
+            );
+            return _canScan
+                ? frame
+                : AnimatedSize(
+                    duration: whisperMotionDuration(context),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: frame,
+                  );
+          },
         ),
       ),
     );
@@ -253,6 +262,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
       if (_canScan) _buildScanner(l10n, compact: compact),
       ManualConnectionForm(
         key: _manualFormKey,
+        localHost: widget.localInvite?.host,
         fillAvailableHeight: _canScan,
         padding: EdgeInsets.fromLTRB(
           compact ? 16 : 24,
@@ -375,6 +385,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
                       ),
                       ManualConnectionForm(
                         key: _manualFormKey,
+                        localHost: widget.localInvite?.host,
                         padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                         onConnect: (endpoint) => Navigator.of(
                           context,
@@ -407,7 +418,9 @@ class _PairingQrDialogState extends State<PairingQrDialog>
       builder: (context, constraints) {
         final useWideLayout = !compact && constraints.maxWidth >= 560;
         final qrSize = compact
-            ? (constraints.maxWidth - 96).clamp(160.0, 240.0).toDouble()
+            ? (constraints.maxWidth - 96)
+                  .clamp(160.0, _canScan ? 200.0 : 240.0)
+                  .toDouble()
             : useWideLayout
             ? 224.0
             : (constraints.maxWidth - 88).clamp(144.0, 224.0).toDouble();
@@ -472,6 +485,27 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     required bool compact,
   }) {
     final palette = context.whisperPalette;
+    if (_qrImageCache?.data != inviteText || _qrImageCache?.size != size) {
+      // QrImageView re-encodes and rebuilds its matrix on every build, even
+      // offstage. Keep its widget and constraints stable during keyboard insets.
+      _qrImageCache = (
+        data: inviteText,
+        size: size,
+        image: RepaintBoundary(
+          child: SizedBox.square(
+            dimension: size,
+            child: QrImageView(
+              data: inviteText,
+              version: QrVersions.auto,
+              size: size,
+              padding: const EdgeInsets.all(12),
+              gapless: true,
+              backgroundColor: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
     return Semantics(
       label: l10n.qrMyCode,
       image: true,
@@ -484,14 +518,7 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         ),
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: QrImageView(
-            data: inviteText,
-            version: QrVersions.auto,
-            size: size,
-            padding: const EdgeInsets.all(12),
-            gapless: true,
-            backgroundColor: Colors.white,
-          ),
+          child: _qrImageCache!.image,
         ),
       ),
     );
