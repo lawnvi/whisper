@@ -14,6 +14,7 @@ import 'package:whisper/remote_input/remote_input_packet_transport.dart';
 import 'package:whisper/remote_input/remote_input_platform.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/segmented_tabs.dart';
 
 class _Sensor extends MobileMotionSensor {
   _Sensor(this.supported);
@@ -103,6 +104,8 @@ void main() {
     ThemeData? theme,
     double scale = 1,
     bool reduceMotion = true,
+    EdgeInsets padding = EdgeInsets.zero,
+    EdgeInsets systemGestureInsets = EdgeInsets.zero,
     Locale locale = const Locale('en'),
     List<MobileControlTarget> Function()? targets,
   }) => MaterialApp(
@@ -114,6 +117,9 @@ void main() {
       data: MediaQueryData(
         textScaler: TextScaler.linear(scale),
         disableAnimations: reduceMotion,
+        padding: padding,
+        viewPadding: padding,
+        systemGestureInsets: systemGestureInsets,
       ),
       child: MobileControlScreen(
         peerId: 'mac',
@@ -147,12 +153,10 @@ void main() {
         ),
       );
       expect(find.byKey(const ValueKey('mobile-touchpad')), findsOneWidget);
-      expect(
-        tester
-            .widget<TextButton>(find.widgetWithText(TextButton, 'Air mouse'))
-            .onPressed,
-        isNull,
-      );
+      await tester.tap(find.widgetWithText(Tab, 'Air mouse'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
+      expect(find.byKey(const ValueKey('mobile-touchpad')), findsOneWidget);
       await tester.tap(find.byTooltip('Start control'));
       await tester.pump();
       expect(find.text('Trust required'), findsOneWidget);
@@ -466,6 +470,97 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+  for (final reduceMotion in [false, true]) {
+    testWidgets(
+      'pointer tabs reuse connection transitions and keep input current, reduced=$reduceMotion',
+      (tester) async {
+        sensor = _Sensor(true);
+        await mount(tester, app(reduceMotion: reduceMotion));
+        await tester.tap(find.byTooltip('Start control'));
+        await tester.pumpAndSettle();
+        final air = find.widgetWithText(Tab, 'Air mouse');
+        final touchpad = find.widgetWithText(Tab, 'Touchpad');
+        final surface = find.byKey(const ValueKey('mobile-pointer-surface'));
+        final bounds = tester.getRect(surface);
+        expect(find.byType(WhisperTabBar), findsOneWidget);
+        expect(find.byType(WhisperTabPanels), findsOneWidget);
+        final tabs = tester.widget<TabBar>(find.byType(TabBar));
+        final controller = tabs.controller!;
+        expect(tabs.indicatorAnimation, TabIndicatorAnimation.elastic);
+        expect(
+          (tabs.indicator! as ShapeDecoration).shape,
+          isA<StadiumBorder>(),
+        );
+        final held = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('mobile-mouse-left'))),
+          pointer: 7,
+        );
+        await tester.tap(touchpad);
+        await tester.pump();
+        expect(sensor.events.hasListener, isFalse);
+        expect(
+          transport.sent
+              .where((p) => p.eventType == RemoteInputEventType.mouseButton)
+              .map((p) => jsonDecode(utf8.decode(p.payload))['down']),
+          [true, false],
+        );
+        await held.up();
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(tester.getRect(surface), bounds);
+        final pad = find.byKey(const ValueKey('mobile-touchpad'));
+        if (reduceMotion) {
+          expect(controller.animation!.value, 1);
+          expect(tester.getTopLeft(pad).dx, closeTo(bounds.left, .1));
+        } else {
+          expect(controller.animation!.value, inExclusiveRange(0, 1));
+          final airBounds = tester.getRect(
+            find.byKey(const ValueKey('mobile-air-surface')),
+          );
+          expect(bounds.left - airBounds.left, inExclusiveRange(0, 12));
+          expect(pad, findsNothing);
+          await tester.pump(const Duration(milliseconds: 80));
+          expect(
+            tester.getTopLeft(pad).dx - bounds.left,
+            inExclusiveRange(0, 12),
+          );
+          expect(
+            find.byKey(const ValueKey('mobile-air-surface')),
+            findsNothing,
+          );
+        }
+        await tester.pumpAndSettle();
+        final oldTouch = await tester.startGesture(
+          tester.getCenter(pad),
+          pointer: 11,
+        );
+        await tester.tap(air);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.tap(touchpad);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        final newTouch = await tester.startGesture(
+          tester.getCenter(pad),
+          pointer: 12,
+        );
+        transport.sent.clear();
+        await oldTouch.cancel();
+        await newTouch.moveBy(const Offset(20, 0));
+        await tester.pump(const Duration(milliseconds: 20));
+        final moves = transport.sent.where(
+          (p) => p.eventType == RemoteInputEventType.mouseMove,
+        );
+        expect(moves, hasLength(1));
+        expect(jsonDecode(utf8.decode(moves.single.payload))['deltaX'], 20);
+        await newTouch.up();
+        await tester.pumpAndSettle();
+        expect(controller.animation!.value, 1);
+        expect(find.text('Enable motion'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
   testWidgets('motion toggles without holding and pauses on mode change', (
     tester,
   ) async {
@@ -533,17 +628,40 @@ void main() {
     await mount(tester, app());
     await tester.tap(find.byTooltip('Keyboard'));
     await tester.pump();
-    for (final width in [390.0, 320.0]) {
-      tester.view.physicalSize = Size(width, 640);
+    for (final (size, bottomInset, gestureInset, bottomGap) in [
+      (const Size(390, 844), 0.0, 0.0, 24.0),
+      (const Size(390, 844), 24.0, 24.0, 40.0),
+      (const Size(390, 844), 0.0, 24.0, 40.0),
+      (const Size(390, 844), 34.0, 0.0, 50.0),
+      (const Size(390, 844), 48.0, 0.0, 64.0),
+      (const Size(320, 640), 0.0, 0.0, 24.0),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        app(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          systemGestureInsets: EdgeInsets.only(bottom: gestureInset),
+        ),
+      );
+      await tester.pump();
+      final scroll = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('mobile-keyboard-panel')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      scroll.position.jumpTo(scroll.position.maxScrollExtent);
       await tester.pump();
       for (final letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')) {
         final bounds = tester.getRect(
           find.byKey(ValueKey('mobile-key-key$letter')),
         );
         expect(bounds.left, greaterThanOrEqualTo(0));
-        expect(bounds.right, lessThanOrEqualTo(width));
+        expect(bounds.right, lessThanOrEqualTo(size.width));
         expect(bounds.height, greaterThanOrEqualTo(48));
-        expect(bounds.bottom, lessThanOrEqualTo(640));
+        expect(bounds.bottom, lessThanOrEqualTo(size.height - bottomInset));
       }
       final q = tester.getRect(find.byKey(const ValueKey('mobile-key-keyQ')));
       final a = tester.getRect(find.byKey(const ValueKey('mobile-key-keyA')));
@@ -551,7 +669,7 @@ void main() {
       expect(a.width, closeTo(q.width, 2));
       expect(
         tester.getRect(find.byKey(const ValueKey('mobile-key-enter'))).bottom,
-        lessThanOrEqualTo(640),
+        closeTo(size.height - bottomGap, .1),
       );
       expect(tester.takeException(), isNull);
     }

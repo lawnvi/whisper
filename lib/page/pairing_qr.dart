@@ -12,6 +12,7 @@ import 'package:whisper/widget/manual_connection_dialog.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/subtle_motion.dart';
+import 'package:whisper/widget/segmented_tabs.dart';
 
 final class PairingQrResult {
   PairingQrResult.qr(PairingInvite value)
@@ -96,7 +97,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
   int? _selectedTab;
   bool _handlingScan = false;
   String? _scanError;
-  double _tabDirection = 1;
   bool _copying = false;
   bool _copied = false;
   bool _copyFailed = false;
@@ -136,7 +136,6 @@ class _PairingQrDialogState extends State<PairingQrDialog>
       _handlingScan = false;
     }
     if (_selectedTab != _tabController.index) {
-      _tabDirection = _tabController.index > _selectedTab! ? 1 : -1;
       _selectedTab = _tabController.index;
       FocusScope.of(context).unfocus();
     }
@@ -265,59 +264,10 @@ class _PairingQrDialogState extends State<PairingQrDialog>
             Navigator.of(context).pop(PairingQrResult.manual(endpoint)),
       ),
     ];
-    // Retain one instance of each page for drafts; outgoing content is inert.
-    return Stack(
+    return WhisperTabPanels(
+      selected: _selectedTab!,
       fit: _canScan ? StackFit.expand : StackFit.loose,
-      alignment: Alignment.topCenter,
-      clipBehavior: Clip.hardEdge,
-      children: [
-        for (var index = 0; index < pages.length; index++)
-          TweenAnimationBuilder<double>(
-            tween: Tween(
-              begin: index == _selectedTab ? 1 : 0,
-              end: index == _selectedTab ? 1 : 0,
-            ),
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 240),
-            curve: Curves.easeInOutCubic,
-            builder: (context, progress, child) {
-              final active = index == _selectedTab;
-              // Fade through, so QR pixels never show through the incoming form.
-              final opacity =
-                  ((progress - (active ? .35 : .65)) / (active ? .65 : .35))
-                      .clamp(0.0, 1.0);
-              return Offstage(
-                offstage: opacity == 0,
-                child: Opacity(
-                  opacity: Curves.easeOutCubic.transform(opacity),
-                  child: Transform.translate(
-                    offset: Offset(
-                      (1 - progress) *
-                          12 *
-                          (active ? _tabDirection : -_tabDirection),
-                      0,
-                    ),
-                    child: child,
-                  ),
-                ),
-              );
-            },
-            child: IgnorePointer(
-              ignoring: index != _selectedTab,
-              child: ExcludeFocus(
-                excluding: index != _selectedTab,
-                child: ExcludeSemantics(
-                  excluding: index != _selectedTab,
-                  child: TickerMode(
-                    enabled: index == _selectedTab,
-                    child: pages[index],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+      children: pages,
     );
   }
 
@@ -360,71 +310,28 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     required bool compact,
     bool desktopPanel = false,
   }) {
-    final theme = Theme.of(context);
-    final palette = context.whisperPalette;
     final scrollTabs =
         MediaQuery.textScalerOf(context).scale(14) > 18 &&
         (_canScan || compact || desktopPanel);
-    final radius = BorderRadius.circular(999);
     return Padding(
       padding: desktopPanel
           ? EdgeInsets.zero
           : compact
           ? const EdgeInsets.fromLTRB(16, 0, 16, 0)
           : const EdgeInsets.fromLTRB(24, 10, 24, 0),
-      child: Material(
-        color: palette.surfaceMuted,
-        borderRadius: radius,
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(16) + 32,
-            child: TabBar(
-              controller: _tabController,
-              dividerColor: Colors.transparent,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicatorAnimation: TabIndicatorAnimation.elastic,
-              indicator: ShapeDecoration(
-                color: palette.surfaceElevated,
-                shape: const StadiumBorder(),
-              ),
-              splashBorderRadius: radius,
-              splashFactory: NoSplash.splashFactory,
-              overlayColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.pressed)) {
-                  return theme.colorScheme.primary.withValues(alpha: .10);
-                }
-                if (states.contains(WidgetState.hovered) ||
-                    states.contains(WidgetState.focused)) {
-                  return theme.colorScheme.primary.withValues(alpha: .06);
-                }
-                return Colors.transparent;
-              }),
-              labelColor: theme.colorScheme.onSurface,
-              unselectedLabelColor: palette.textMuted,
-              labelStyle: theme.textTheme.labelLarge,
-              labelPadding: EdgeInsets.symmetric(
-                horizontal: scrollTabs ? 12 : 4,
-              ),
-              isScrollable: scrollTabs,
-              tabAlignment: scrollTabs ? TabAlignment.start : TabAlignment.fill,
-              tabs: <Widget>[
-                Tab(
-                  child: Text(
-                    desktopPanel
-                        ? l10n.connectionDetailsTab
-                        : l10n.connectionQrTab,
-                    maxLines: 1,
-                  ),
-                ),
-                if (_canScan)
-                  Tab(child: Text(l10n.connectionScanTab, maxLines: 1)),
-                Tab(child: Text(l10n.connectionAddressTab, maxLines: 1)),
-              ],
+      child: WhisperTabBar(
+        controller: _tabController,
+        scrollable: scrollTabs,
+        tabs: [
+          Tab(
+            child: Text(
+              desktopPanel ? l10n.connectionDetailsTab : l10n.connectionQrTab,
+              maxLines: 1,
             ),
           ),
-        ),
+          if (_canScan) Tab(child: Text(l10n.connectionScanTab, maxLines: 1)),
+          Tab(child: Text(l10n.connectionAddressTab, maxLines: 1)),
+        ],
       ),
     );
   }
