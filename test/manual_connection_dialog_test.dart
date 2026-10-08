@@ -110,7 +110,7 @@ void main() {
   );
 
   testWidgets(
-    'compact dialog keeps its size above the keyboard and retains port focus',
+    'compact dialog keeps its size while smoothing keyboard inset changes',
     (tester) async {
       tester.view.physicalSize = const Size(375, 817);
       tester.view.devicePixelRatio = 1;
@@ -141,11 +141,13 @@ void main() {
       tester.view.padding = const FakeViewPadding(top: 24);
       await tester.pump();
       expect(tester.getRect(panel), initial);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getRect(panel), initial);
       await tester.pump(const Duration(milliseconds: 80));
-      final during = tester.getRect(panel);
-      expect(during.top, lessThan(initial.top));
+      expect(tester.getRect(panel).top, lessThan(initial.top));
       await tester.pumpAndSettle();
       final keyboardOpen = tester.getRect(panel);
+      expect(keyboardOpen.top, lessThan(initial.top));
       expect(keyboardOpen.bottom, lessThanOrEqualTo(817 - 300));
       expect(keyboardOpen.size, initial.size);
       expect(
@@ -158,11 +160,8 @@ void main() {
       expect(tester.getRect(panel), keyboardOpen);
       tester.view.viewInsets = const FakeViewPadding(bottom: 336);
       await tester.pump();
-      expect(tester.getRect(panel), keyboardOpen);
-      await tester.pump(const Duration(milliseconds: 80));
-      expect(tester.getRect(panel).top, lessThan(keyboardOpen.top));
-      await tester.pumpAndSettle();
       final settled = tester.getRect(panel);
+      expect(settled.top, lessThan(keyboardOpen.top));
       expect(settled.bottom, lessThanOrEqualTo(817 - 336));
       expect(settled.size, initial.size);
       expect(

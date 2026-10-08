@@ -221,14 +221,20 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
       child: WhisperGlassDialog(
         constraints: const BoxConstraints(
           minWidth: 300,
-          maxWidth: 420,
+          maxWidth: 460,
           maxHeight: 680,
         ),
+        titlePadding: const EdgeInsets.fromLTRB(24, 28, 24, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        actionsPadding: EdgeInsets.zero,
         title: Text(
           widget.title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontSize: 20,
+            height: 1.3,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -236,19 +242,21 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               if (widget.description?.isNotEmpty ?? false) ...<Widget>[
-                const SizedBox(height: 6),
                 Text(
                   widget.description!,
-                  style: TextStyle(color: palette.textMuted),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: palette.textMuted,
+                    height: 1.5,
+                  ),
                 ),
-                const SizedBox(height: 8),
               ],
               for (
                 var index = 0;
                 index < widget.fields.length;
                 index += 1
               ) ...<Widget>[
-                const SizedBox(height: 8),
+                SizedBox(height: index == 0 ? 20 : 12),
                 CupertinoTextField(
                   controller: _controllers[index],
                   focusNode: _focusNodes[index],
@@ -259,7 +267,17 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                       ? TextInputAction.next
                       : TextInputAction.done,
                   placeholder: widget.fields[index].label,
-                  style: TextStyle(color: colorScheme.onSurface),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontSize: 17,
+                    height: 1.4,
+                  ),
+                  placeholderStyle: TextStyle(color: palette.textMuted),
+                  cursorColor: colorScheme.primary,
                   decoration: BoxDecoration(
                     color: palette.surfaceElevated,
                     border: Border.all(
@@ -267,7 +285,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                           ? palette.borderSubtle
                           : palette.danger,
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   onSubmitted: (_) {
                     if (index < widget.fields.length - 1) {
@@ -278,7 +296,7 @@ class _ValidatedInputDialogState extends State<_ValidatedInputDialog> {
                   },
                 ),
                 if (_errors[index] case final error?) ...<Widget>[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Text(
                     error,
                     style: TextStyle(color: palette.danger, fontSize: 12),

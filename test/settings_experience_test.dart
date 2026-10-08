@@ -608,7 +608,7 @@ void main() {
     expect(find.byKey(mainKey), findsNothing);
   });
 
-  testWidgets('compact theme picker keeps the full-width Apple action sheet', (
+  testWidgets('compact theme picker leaves room around its floating cards', (
     tester,
   ) async {
     await _pumpAt(tester, width: 390, height: 844);
@@ -625,7 +625,7 @@ void main() {
             ),
           )
           .width,
-      closeTo(390, 0.01),
+      closeTo(374, 0.01),
     );
     expect(find.byType(WhisperGlassActionSheetAction), findsNWidgets(4));
   });

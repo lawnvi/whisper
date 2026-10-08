@@ -186,71 +186,76 @@ class _PairingQrDialogState extends State<PairingQrDialog>
     return SafeArea(
       maintainBottomViewPadding: _canScan,
       minimum: EdgeInsets.all(compact ? 12 : 16),
-      child: WhisperGlassDialog(
-        insetPadding: EdgeInsets.zero,
-        insetAnimationDuration: whisperMotionDuration(context),
-        blurBackground: !_canScan,
-        borderRadius: compact ? 18 : 26,
-        constraints: BoxConstraints(
-          minWidth: dialogWidth,
-          maxWidth: dialogWidth,
-        ),
-        contentPadding: EdgeInsets.zero,
-        // Derive content size from the Dialog's animated constraints. Reading
-        // the final keyboard inset here would resize before its position moves.
-        content: LayoutBuilder(
-          builder: (context, constraints) {
-            final availableHeight = constraints.maxHeight;
-            final sideBySide =
-                !_canScan && windowSize.width >= 600 && availableHeight >= 328;
-            final mobileQrSize = (dialogWidth - 96).clamp(160.0, 200.0);
-            final dialogHeight = _canScan
-                ? (mobileQrSize + (compact ? 224 : 256) + textGrowth * 5).clamp(
-                    0.0,
-                    availableHeight,
-                  )
-                : sideBySide
-                ? availableHeight.clamp(0.0, 420.0)
-                : null;
-            final content = Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (availableHeight < 280)
-                  Row(
-                    children: [
-                      Expanded(child: _buildModeSwitcher(l10n, compact: true)),
-                      IconButton(
-                        tooltip: l10n.close,
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  )
-                else ...[
-                  header,
-                  if (!sideBySide) switcher,
+      child: _KeyboardInsetAnimation(
+        builder: (insetDuration) => WhisperGlassDialog(
+          insetPadding: EdgeInsets.zero,
+          insetAnimationDuration: insetDuration,
+          blurBackground: !_canScan,
+          borderRadius: compact ? 18 : 26,
+          constraints: BoxConstraints(
+            minWidth: dialogWidth,
+            maxWidth: dialogWidth,
+          ),
+          contentPadding: EdgeInsets.zero,
+          // Derive content size from the Dialog's animated constraints. Reading
+          // the final keyboard inset here would resize before its position moves.
+          content: LayoutBuilder(
+            builder: (context, constraints) {
+              final availableHeight = constraints.maxHeight;
+              final sideBySide =
+                  !_canScan &&
+                  windowSize.width >= 600 &&
+                  availableHeight >= 328;
+              final mobileQrSize = (dialogWidth - 96).clamp(160.0, 200.0);
+              final dialogHeight = _canScan
+                  ? (mobileQrSize + (compact ? 224 : 256) + textGrowth * 5)
+                        .clamp(0.0, availableHeight)
+                  : sideBySide
+                  ? availableHeight.clamp(0.0, 420.0)
+                  : null;
+              final content = Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (availableHeight < 280)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildModeSwitcher(l10n, compact: true),
+                        ),
+                        IconButton(
+                          tooltip: l10n.close,
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    header,
+                    if (!sideBySide) switcher,
+                  ],
+                  Flexible(
+                    fit: _canScan || sideBySide ? FlexFit.tight : FlexFit.loose,
+                    child: sideBySide ? _buildDesktopPanels(l10n) : panels,
+                  ),
                 ],
-                Flexible(
-                  fit: _canScan || sideBySide ? FlexFit.tight : FlexFit.loose,
-                  child: sideBySide ? _buildDesktopPanels(l10n) : panels,
-                ),
-              ],
-            );
-            final frame = SizedBox(
-              key: const ValueKey<String>('pairing-qr-dialog-content'),
-              width: dialogWidth,
-              height: dialogHeight,
-              child: content,
-            );
-            return _canScan
-                ? frame
-                : AnimatedSize(
-                    duration: whisperMotionDuration(context),
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.topCenter,
-                    child: frame,
-                  );
-          },
+              );
+              final frame = SizedBox(
+                key: const ValueKey<String>('pairing-qr-dialog-content'),
+                width: dialogWidth,
+                height: dialogHeight,
+                // Moving above the keyboard can reuse the unchanged tab content.
+                child: RepaintBoundary(child: content),
+              );
+              return _canScan
+                  ? frame
+                  : AnimatedSize(
+                      duration: whisperMotionDuration(context),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: frame,
+                    );
+            },
+          ),
         ),
       ),
     );
@@ -882,5 +887,86 @@ class _PairingQrDialogState extends State<PairingQrDialog>
         });
       }
     }
+  }
+}
+
+/// Keep Android's early final inset from interrupting the keyboard animation.
+class _KeyboardInsetAnimation extends StatefulWidget {
+  const _KeyboardInsetAnimation({required this.builder});
+
+  final Widget Function(Duration duration) builder;
+
+  @override
+  State<_KeyboardInsetAnimation> createState() =>
+      _KeyboardInsetAnimationState();
+}
+
+class _KeyboardInsetAnimationState extends State<_KeyboardInsetAnimation> {
+  bool _initialized = false;
+  double _bottomInset = 0;
+  double? _pendingOpeningInset;
+  Timer? _openingInsetTimer;
+  Duration _duration = Duration.zero;
+
+  void _cancelPendingOpening() {
+    _openingInsetTimer?.cancel();
+    _openingInsetTimer = null;
+    _pendingOpeningInset = null;
+  }
+
+  @override
+  void dispose() {
+    _cancelPendingOpening();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final duration = whisperMotionDuration(context);
+    if (!_initialized || duration == Duration.zero) {
+      _initialized = true;
+      _cancelPendingOpening();
+      _bottomInset = inset;
+      _duration = Duration.zero;
+      return;
+    }
+    if (_bottomInset == 0 && inset > 80) {
+      // Restarting an IME can report its full height briefly, then return to
+      // zero and animate normally. Wait for that progress before moving; if
+      // only a final height arrives, interpolate it after this short grace.
+      _pendingOpeningInset = inset;
+      _openingInsetTimer ??= Timer(const Duration(milliseconds: 100), () {
+        final pending = _pendingOpeningInset;
+        _cancelPendingOpening();
+        if (!mounted || pending == null) return;
+        setState(() {
+          _bottomInset = pending;
+          _duration = duration;
+        });
+      });
+      return;
+    }
+    _cancelPendingOpening();
+    if (inset != _bottomInset) {
+      _duration = (inset - _bottomInset).abs() > 80 ? duration : Duration.zero;
+      _bottomInset = inset;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return widget.builder(whisperMotionDuration(context));
+    }
+    final mediaQuery = MediaQuery.of(context);
+    return MediaQuery(
+      data: mediaQuery.copyWith(
+        viewInsets: mediaQuery.viewInsets.copyWith(bottom: _bottomInset),
+      ),
+      child: widget.builder(_duration),
+    );
   }
 }

@@ -188,8 +188,8 @@ void main() {
       final address = find.byKey(const ValueKey('connection-address'));
       await tester.enterText(address, 'desk.local');
       final submit = find.byKey(const ValueKey('connect-by-address'));
-      final port = find.byKey(const ValueKey('connection-port'));
-      expect(tester.getRect(submit).top - tester.getRect(port).bottom, 48);
+      final fields = find.byKey(const ValueKey('connection-input-group'));
+      expect(tester.getRect(submit).top - tester.getRect(fields).bottom, 40);
       await tester.tap(find.text('QR code'));
       await tester.pumpAndSettle();
       tester.view.physicalSize = const Size(360, 720);

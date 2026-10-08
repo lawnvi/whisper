@@ -135,16 +135,30 @@ class WhisperGlassActionSheet extends StatelessWidget {
       alpha: isDark ? 0.70 : 0.86,
     );
     final radius = BorderRadius.circular(14);
+    final safePadding = mediaQuery.padding;
+    // Like CupertinoActionSheet, the safe area consumes the minimum bottom gap.
+    final outerPadding = isCompact
+        ? EdgeInsets.fromLTRB(
+            safePadding.left + 8,
+            safePadding.top + 8,
+            safePadding.right + 8,
+            math.max(
+              8,
+              math.max(safePadding.bottom, mediaQuery.viewInsets.bottom),
+            ),
+          )
+        : EdgeInsets.only(bottom: safePadding.bottom + 8);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = isCompact
-            ? constraints.maxWidth
+            ? math.min(
+                constraints.maxWidth - outerPadding.horizontal,
+                mediaQuery.size.shortestSide - 16,
+              )
             : math.min(maxWidth, constraints.maxWidth * desktopWidthFactor);
         return Padding(
-          padding: EdgeInsets.only(
-            bottom: mediaQuery.padding.bottom + (isCompact ? 0 : 8),
-          ),
+          padding: outerPadding,
           child: Material(
             color: Colors.transparent,
             child: SizedBox(
@@ -153,49 +167,54 @@ class WhisperGlassActionSheet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  WhisperGlassSurface(
-                    key: const ValueKey<String>(
-                      'whisper-glass-action-sheet-main',
-                    ),
-                    borderRadius: radius,
-                    shadowOffset: const Offset(0, 10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 13.5,
-                          ),
-                          child: DefaultTextStyle.merge(
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: palette.textMuted,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: WhisperGlassSurface(
+                      key: const ValueKey<String>(
+                        'whisper-glass-action-sheet-main',
+                      ),
+                      borderRadius: radius,
+                      shadowOffset: const Offset(0, 10),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 13.5,
+                              ),
+                              child: DefaultTextStyle.merge(
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: palette.textMuted,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                child: Center(child: title),
+                              ),
                             ),
-                            child: Center(child: title),
-                          ),
+                            if (actions.isNotEmpty)
+                              SizedBox(
+                                height: 0.75,
+                                child: ColoredBox(color: dividerColor),
+                              ),
+                            for (
+                              var index = 0;
+                              index < actions.length;
+                              index += 1
+                            ) ...<Widget>[
+                              if (index > 0)
+                                SizedBox(
+                                  height: 0.75,
+                                  child: ColoredBox(color: dividerColor),
+                                ),
+                              actions[index],
+                            ],
+                          ],
                         ),
-                        if (actions.isNotEmpty)
-                          SizedBox(
-                            height: 0.75,
-                            child: ColoredBox(color: dividerColor),
-                          ),
-                        for (
-                          var index = 0;
-                          index < actions.length;
-                          index += 1
-                        ) ...<Widget>[
-                          if (index > 0)
-                            SizedBox(
-                              height: 0.75,
-                              child: ColoredBox(color: dividerColor),
-                            ),
-                          actions[index],
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
