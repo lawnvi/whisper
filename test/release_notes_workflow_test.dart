@@ -21,6 +21,18 @@ void main() {
     expect(workflow, contains('name: Generate release notes'));
     expect(workflow, contains('script/generate_release_notes.sh'));
     expect(taggedRelease, contains('body_path: release-notes.md'));
+    expect(workflow, contains('github.rest.repos.getReleaseByTag'));
+    expect(
+      workflow,
+      contains("writeFileSync('release-notes.md', release.body ?? '')"),
+    );
+    expect(workflow, contains("if (error.status !== 404) throw error"));
+    expect(
+      workflow,
+      contains("steps.release-metadata.outputs.exists != 'true'"),
+    );
+    expect(taggedRelease, contains('steps.release-metadata.outputs.name'));
+    expect(taggedRelease, contains('steps.release-metadata.outputs.prerelease'));
     expect(manualRelease, isNot(contains('body_path:')));
   });
 
