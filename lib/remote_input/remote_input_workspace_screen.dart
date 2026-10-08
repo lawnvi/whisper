@@ -13,6 +13,7 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
+import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_graph.dart';
 import 'package:whisper/socket/svrmanager.dart';
@@ -61,8 +62,31 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   bool _starting = false;
 
   bool get _hasLegacySession =>
+      !_legacyCoordinator.isManual &&
+      _socketManager.isConnectedTo(_legacyCoordinator.state.peerId) &&
+      _legacyCoordinator.state.sessionId.isNotEmpty &&
+      _legacyCoordinator.state.role != RemoteInputRuntimeRole.none &&
       _legacyCoordinator.state.status != RemoteInputRuntimeStatus.idle &&
       _legacyCoordinator.state.status != RemoteInputRuntimeStatus.failed;
+
+  RemoteInputPeerActivity? _activityForPeer(String peerId) =>
+      RemoteInputPeerActivity.forPeer(
+        peerId: peerId,
+        isConnected: _socketManager.isConnectedTo(peerId),
+        legacy: _legacyCoordinator.state,
+        isManual: _legacyCoordinator.isManual,
+        workspace: _workspaceCoordinator.snapshot,
+      );
+
+  RemoteInputPeerActivity? get _manualActivity {
+    final activity = _activityForPeer(_legacyCoordinator.state.peerId);
+    return activity?.isManual == true ? activity : null;
+  }
+
+  String _peerName(String peerId) =>
+      _socketManager.remoteProfileFor(peerId)?.device.name ??
+      _devices.where((device) => device.uid == peerId).firstOrNull?.name ??
+      peerId;
 
   DeviceData? get _focusedDevice =>
       _devices.where((device) => device.uid == _focusedPeerId).firstOrNull;
@@ -502,25 +526,97 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                   );
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    child: Column(
                       children: [
-                        SizedBox(
-                          width: devicePanelWidth,
-                          child: _buildDevicePanel(l10n),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildCanvasPanel(l10n)),
-                        if (showDetails) ...[
-                          const SizedBox(width: 12),
-                          SizedBox(width: 288, child: _buildDetailsPanel(l10n)),
+                        if (_manualActivity case final activity?) ...[
+                          _buildManualSessionNotice(l10n, activity),
+                          const SizedBox(height: 12),
                         ],
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: devicePanelWidth,
+                                child: _buildDevicePanel(l10n),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildCanvasPanel(l10n)),
+                              if (showDetails) ...[
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: 288,
+                                  child: _buildDetailsPanel(l10n),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   );
                 },
               ),
       ),
+    );
+  }
+
+  Widget _buildManualSessionNotice(
+    AppLocalizations l10n,
+    RemoteInputPeerActivity activity,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.06),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.20)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.phone_android_rounded, color: colors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${l10n.remoteInputManualSessionTitle} · '
+                    '${activity.description(l10n, _peerName(activity.peerId))}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.remoteInputManualSessionHint,
+                    style: TextStyle(color: context.whisperPalette.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: () => _stopManualSession(activity),
+            icon: const Icon(Icons.stop_rounded, size: 18),
+            label: Text(l10n.mobileControlStop),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _stopManualSession(RemoteInputPeerActivity activity) async {
+    final current = _manualActivity;
+    if (current?.peerId != activity.peerId ||
+        current?.sessionId != activity.sessionId) {
+      return;
+    }
+    await _legacyCoordinator.stopSharing(
+      sendControl: (control) =>
+          _socketManager.sendRemoteInputControlTo(activity.peerId, control),
     );
   }
 
@@ -551,7 +647,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       );
     }
     return FilledButton.icon(
-      onPressed: _starting ? null : _toggleWorkspace,
+      onPressed: _starting || _manualActivity != null ? null : _toggleWorkspace,
       style: FilledButton.styleFrom(shape: const StadiumBorder()),
       icon: icon,
       label: label,
@@ -826,6 +922,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required Set<String> reachablePeerIds,
   }) {
     final palette = context.whisperPalette;
+    final activity = _activityForPeer(device.uid);
+    if (activity != null && !activity.isManual) {
+      return activity.isActive ? palette.connected : palette.textMuted;
+    }
     if (!_socketManager.isConnectedTo(device.uid) ||
         !_selectedPeerIds.contains(device.uid)) {
       return palette.textMuted;
@@ -1075,6 +1175,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required bool conflict,
     required bool reachable,
   }) {
+    final l10n = AppLocalizations.of(context)!;
+    final activity = _activityForPeer(device.uid);
     final displays = _peerDisplaysForLayout(device, layout);
     final bounds = _peerLayoutBounds(device, layout);
     final offset = toCanvas(bounds.x, bounds.y);
@@ -1136,9 +1238,12 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                     child: _ScreenBlock(
                       title: display.name.isEmpty ? device.name : display.name,
                       subtitle: _displaySizeLabel(display),
-                      badge: AppLocalizations.of(
-                        context,
-                      )!.remoteInputWorkspaceRemoteBadge,
+                      badge:
+                          activity != null &&
+                              activity.isActive &&
+                              !activity.isManual
+                          ? activity.label(l10n)
+                          : l10n.remoteInputWorkspaceRemoteBadge,
                       selected: _focusedPeerId == device.uid,
                       conflict: conflict,
                       invalidLayout: invalidLayout,
@@ -1321,18 +1426,13 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
   ) {
     final palette = context.whisperPalette;
     if (_hasLegacySession) {
-      final state = _legacyCoordinator.state;
-      final isSink = state.role == RemoteInputRuntimeRole.sink;
+      final activity = _activityForPeer(_legacyCoordinator.state.peerId)!;
       return _WorkspaceStatusPresentation(
         icon: Icons.keyboard_alt_outlined,
-        label: state.isBusy
-            ? (isSink
-                  ? l10n.remoteInputSinkConnecting
-                  : l10n.remoteInputSourceConnecting)
-            : (isSink
-                  ? l10n.remoteInputSinkActiveStop
-                  : l10n.remoteInputSourceActiveStop),
-        color: state.isBusy ? palette.warning : palette.connected,
+        label: activity.description(l10n, _peerName(activity.peerId)),
+        color: activity.phase == RemoteInputPeerPhase.connecting
+            ? palette.warning
+            : palette.connected,
       );
     }
     final snapshot = _workspaceCoordinator.snapshot;
@@ -1369,6 +1469,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
 
   Future<void> _toggleWorkspace() async {
     final l10n = AppLocalizations.of(context)!;
+    if (_manualActivity != null) {
+      showAppToast(l10n.remoteInputStopCurrentFirst);
+      return;
+    }
     if (_workspaceCoordinator.snapshot.isControllerLive) {
       await _workspaceCoordinator.stopControllerWorkspace(
         sendControlTo: _socketManager.sendRemoteInputControlTo,
@@ -1798,6 +1902,8 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
     required RemoteInputWorkspaceGraph graph,
     required Set<String> reachablePeerIds,
   }) {
+    final activity = _activityForPeer(device.uid);
+    if (activity != null && !activity.isManual) return activity.label(l10n);
     if (_selectedPeerIds.contains(device.uid)) {
       if (!_socketManager.isConnectedTo(device.uid)) {
         return l10n.remoteInputWorkspaceDisconnected;
@@ -2325,23 +2431,29 @@ class _ScreenBlock extends StatelessWidget {
                       if (showChrome)
                         Positioned(
                           left: 10,
+                          right: selected || conflict || !reachable ? 36 : 10,
                           top: 9,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: (isDark ? Colors.white : Colors.black)
-                                  .withValues(alpha: isDark ? 0.08 : 0.045),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              badge,
-                              style: TextStyle(
-                                color: palette.textMuted,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (isDark ? Colors.white : Colors.black)
+                                    .withValues(alpha: isDark ? 0.08 : 0.045),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                badge,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: palette.textMuted,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),

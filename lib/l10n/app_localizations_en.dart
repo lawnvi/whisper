@@ -61,6 +61,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mobileControlActive => 'Controlling';
 
   @override
+  String get remoteInputPeerControlling => 'Controlling this device';
+
+  @override
+  String get remoteInputPeerReceiving => 'Controlling this computer';
+
+  @override
+  String get remoteInputPeerReady => 'Ready, waiting for entry';
+
+  @override
+  String get remoteInputManualSessionTitle => 'Phone control';
+
+  @override
+  String get remoteInputManualSessionHint =>
+      'Phone control is separate from the desktop workspace below.';
+
+  @override
   String get mobileControlPreparing => 'Preparing control';
 
   @override

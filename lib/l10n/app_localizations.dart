@@ -202,6 +202,36 @@ abstract class AppLocalizations {
   /// **'正在控制'**
   String get mobileControlActive;
 
+  /// No description provided for @remoteInputPeerControlling.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制此设备'**
+  String get remoteInputPeerControlling;
+
+  /// No description provided for @remoteInputPeerReceiving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在控制本机'**
+  String get remoteInputPeerReceiving;
+
+  /// No description provided for @remoteInputPeerReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已就绪，等待切入'**
+  String get remoteInputPeerReady;
+
+  /// No description provided for @remoteInputManualSessionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机键鼠'**
+  String get remoteInputManualSessionTitle;
+
+  /// No description provided for @remoteInputManualSessionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机控制独立于下方的桌面键鼠工作区。'**
+  String get remoteInputManualSessionHint;
+
   /// No description provided for @mobileControlPreparing.
   ///
   /// In zh, this message translates to:

@@ -166,7 +166,7 @@ void main() {
         throwsA(isA<RemoteInputBusyException>()),
       );
       expect(pair.state.role, RemoteInputRuntimeRole.sink);
-      expect(pair.state.status, RemoteInputRuntimeStatus.active);
+      expect(pair.state.status, RemoteInputRuntimeStatus.armed);
       expect(manager.onPacket, isNotNull);
     },
   );
@@ -203,7 +203,7 @@ void main() {
     expect(workspace.snapshot.isControllerLive, isFalse);
     await offerToSink();
     expect(pair.state.role, RemoteInputRuntimeRole.sink);
-    expect(pair.state.isActive, isTrue);
+    expect(pair.state.status, RemoteInputRuntimeStatus.armed);
     expect(workspace.snapshot.role, RemoteInputWorkspaceRole.idle);
     await workspace.handlePeerReconnected(
       peerId: 'peer',

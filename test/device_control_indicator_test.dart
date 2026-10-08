@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/computer_control_icon.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
 
 Widget tile({
-  VoidCallback? onStop,
+  String name = 'My Android phone',
+  VoidCallback? onControl,
   VoidCallback? onSelect,
   bool connecting = false,
+  RemoteInputPeerActivity? activity,
 }) => DesktopDeviceSessionTile(
-  name: 'My Android phone',
+  name: name,
   identity: 'Android · 123456',
   statusLabel: 'Connected',
   preview: 'Latest message',
@@ -21,8 +24,19 @@ Widget tile({
   selected: true,
   trusted: true,
   onTap: onSelect ?? () {},
-  onStopControl: onStop,
-  controlConnecting: connecting,
+  onControlAction: onControl,
+  controlActivity:
+      activity ??
+      (onControl == null
+          ? null
+          : RemoteInputPeerActivity(
+              peerId: 'phone',
+              sessionId: 'manual-1',
+              isManual: true,
+              phase: connecting
+                  ? RemoteInputPeerPhase.connecting
+                  : RemoteInputPeerPhase.receiving,
+            )),
 );
 
 Widget app(
@@ -56,9 +70,9 @@ void main() {
       var stops = 0;
       var selections = 0;
       await tester.pumpWidget(
-        app(tile(onStop: () => stops++, onSelect: () => selections++)),
+        app(tile(onControl: () => stops++, onSelect: () => selections++)),
       );
-      expect(find.text('Controlling'), findsOneWidget);
+      expect(find.text('Controlling this computer'), findsOneWidget);
       expect(find.text('Latest message'), findsNothing);
       expect(find.byType(ComputerControlIcon), findsOneWidget);
       final stop = find.byTooltip(
@@ -75,7 +89,7 @@ void main() {
       await tester.pumpWidget(app(tile()));
       expect(find.byType(ComputerControlIcon), findsNothing);
       await tester.pumpAndSettle();
-      expect(find.text('Controlling'), findsNothing);
+      expect(find.text('Controlling this computer'), findsNothing);
       expect(find.text('Latest message'), findsOneWidget);
     },
   );
@@ -85,7 +99,7 @@ void main() {
     (tester) async {
       final semantics = tester.ensureSemantics();
       var stops = 0;
-      await tester.pumpWidget(app(tile(onStop: () => stops++)));
+      await tester.pumpWidget(app(tile(onControl: () => stops++)));
       final label = find.bySemanticsLabel(
         'This computer is controlled by My Android phone\nStop control',
       );
@@ -121,7 +135,7 @@ void main() {
           for (final connecting in [true, false]) {
             await tester.pumpWidget(
               app(
-                tile(onStop: () {}, connecting: connecting),
+                tile(onControl: () {}, connecting: connecting),
                 language: language,
                 dark: dark,
                 textScale: 2,
@@ -134,7 +148,7 @@ void main() {
               find.text(
                 connecting
                     ? l10n.mobileControlPreparing
-                    : l10n.mobileControlActive,
+                    : l10n.remoteInputPeerReceiving,
               ),
               findsOneWidget,
             );
@@ -146,4 +160,36 @@ void main() {
       );
     }
   }
+
+  testWidgets(
+    'desktop indicator opens the workspace without selecting the row',
+    (tester) async {
+      var opened = 0;
+      var selections = 0;
+      const activity = RemoteInputPeerActivity(
+        peerId: 'desktop',
+        sessionId: 'desktop-1',
+        phase: RemoteInputPeerPhase.controlling,
+      );
+      await tester.pumpWidget(
+        app(
+          tile(
+            name: 'My desktop',
+            activity: activity,
+            onControl: () => opened++,
+            onSelect: () => selections++,
+          ),
+        ),
+      );
+      expect(find.text('Controlling this device'), findsOneWidget);
+      expect(find.text('Latest message'), findsNothing);
+      expect(find.byType(ComputerControlIcon), findsOneWidget);
+      await tester.tap(
+        find.byTooltip('Controlling My desktop\nKeyboard and mouse workspace'),
+      );
+      expect(opened, 1);
+      expect(selections, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

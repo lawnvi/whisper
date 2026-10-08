@@ -41,8 +41,9 @@ import 'package:whisper/helper/whisper_file_picker.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
-import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/remote_input/remote_clipboard_transfer.dart';
+import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/remote_input/remote_input_workspace_coordinator.dart';
 import 'package:whisper/remote_input/remote_input_workspace_screen.dart';
 import 'package:whisper/state/app_shutdown.dart';
@@ -2226,6 +2227,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // disconnected. Do not leave the toolbar highlighted unless the session
     // still has a live authenticated peer behind it.
     final legacyLive =
+        !_remoteInputCoordinator.isManual &&
         legacyState.status != RemoteInputRuntimeStatus.idle &&
         legacyState.status != RemoteInputRuntimeStatus.failed &&
         legacyState.peerId.isNotEmpty &&
@@ -2733,8 +2735,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required bool selected,
   }) {
     final peer = session.device;
-    final inputState = _remoteInputCoordinator.state;
-    final receivingControl = _isReceivingMobileControl(peer.uid);
+    final activity = _inputActivityForPeer(peer.uid);
     final shortId = peer.uid.length > 6
         ? peer.uid.substring(peer.uid.length - 6)
         : peer.uid;
@@ -2749,23 +2750,30 @@ class _DeviceListScreen extends State<DeviceListScreen>
         statusColor: _sessionStatusColor(session),
         selected: selected,
         trusted: _isTrustedDevice(peer),
-        controlConnecting: receivingControl && inputState.isBusy,
-        onStopControl: receivingControl
-            ? () => _stopMobileControl(peer.uid, inputState.sessionId)
-            : null,
+        controlActivity: activity,
+        onControlAction: activity == null
+            ? null
+            : activity.isManual
+            ? () => _stopMobileControl(peer.uid, activity.sessionId)
+            : _openRemoteInputWorkspace,
         onTap: () => setState(() => _selectedDesktopPeerId = peer.uid),
       ),
       items: _buildSessionContextActions(peer),
     );
   }
 
-  bool _isReceivingMobileControl(String peerId) {
-    final state = _remoteInputCoordinator.state;
-    return _remoteInputCoordinator.isManual &&
-        state.role == RemoteInputRuntimeRole.sink &&
-        state.isForPeer(peerId) &&
-        (state.isActive || state.isBusy);
-  }
+  RemoteInputPeerActivity? _inputActivityForPeer(String peerId) =>
+      RemoteInputPeerActivity.forPeer(
+        peerId: peerId,
+        isConnected: socketManager.isConnectedTo(peerId),
+        legacy: _remoteInputCoordinator.state,
+        isManual: _remoteInputCoordinator.isManual,
+        workspace: _remoteInputWorkspaceCoordinator.snapshot,
+      );
+
+  bool _isReceivingMobileControl(String peerId) =>
+      _inputActivityForPeer(peerId)?.isManual == true &&
+      _remoteInputCoordinator.state.role == RemoteInputRuntimeRole.sink;
 
   Future<void> _stopMobileControl(String peerId, String sessionId) async {
     if (!_isReceivingMobileControl(peerId) ||

@@ -971,6 +971,10 @@ class RemoteInputCoordinator extends ChangeNotifier {
             _trace(RemoteInputDiagnosticKind.earlyReleaseIgnored);
             return;
           }
+          if (release.activationSequence == 0 ||
+              release.activationSequence == _latestSinkActivationSequence) {
+            _setSinkActivity(message.sessionId, active: false);
+          }
           sendControl(
             RemoteInputControlMessage(
               action: RemoteInputControlAction.release,
@@ -1043,17 +1047,27 @@ class RemoteInputCoordinator extends ChangeNotifier {
       }
       final routing = _sinkControlMessage ?? message;
       final routedPacket = _routeSinkActiveStartPacket(packet, routing);
-      if (packet.sessionId == message.sessionId &&
-          packet.sequence > _latestSinkPacketSequence) {
+      final isNewSinkPacket =
+          packet.sessionId == message.sessionId &&
+          packet.sequence > _latestSinkPacketSequence;
+      if (isNewSinkPacket) {
         _latestSinkPacketSequence = packet.sequence;
       }
       if (packet.sessionId == message.sessionId &&
           _isActivationStartPacket(packet)) {
         _latestSinkActivationSequence = packet.sequence;
         _sinkEntryTravel = 0;
+        if (isNewSinkPacket && !isManual) {
+          _setSinkActivity(message.sessionId, active: true);
+        }
       } else if (packet.sessionId == message.sessionId &&
           _latestSinkActivationSequence > 0) {
         _sinkEntryTravel += _sinkEntryDelta(packet, routing.layoutEdge);
+      }
+      if (isNewSinkPacket &&
+          !isManual &&
+          packet.eventType == RemoteInputEventType.release) {
+        _setSinkActivity(message.sessionId, active: false);
       }
       final scrollNormalized = RemoteInputScrollNormalizer.normalizeForTarget(
         routedPacket,
@@ -1094,7 +1108,9 @@ class RemoteInputCoordinator extends ChangeNotifier {
     };
     _setState(
       RemoteInputRuntimeState(
-        status: RemoteInputRuntimeStatus.active,
+        status: isManual
+            ? RemoteInputRuntimeStatus.active
+            : RemoteInputRuntimeStatus.armed,
         role: RemoteInputRuntimeRole.sink,
         sessionId: message.sessionId,
         peerId: message.sourcePeerId,
@@ -1102,6 +1118,26 @@ class RemoteInputCoordinator extends ChangeNotifier {
     );
     _trace(RemoteInputDiagnosticKind.injectionActive);
     return true;
+  }
+
+  void _setSinkActivity(String sessionId, {required bool active}) {
+    if (_state.sessionId != sessionId ||
+        _state.role != RemoteInputRuntimeRole.sink ||
+        (_state.status != RemoteInputRuntimeStatus.armed && !_state.isActive)) {
+      return;
+    }
+    final status = active
+        ? RemoteInputRuntimeStatus.active
+        : RemoteInputRuntimeStatus.armed;
+    if (_state.status == status) return;
+    _setState(
+      RemoteInputRuntimeState(
+        status: status,
+        role: _state.role,
+        sessionId: sessionId,
+        peerId: _state.peerId,
+      ),
+    );
   }
 
   FutureOr<List<RemoteInputPacketFrame>> _interceptRemoteClipboardPaste(

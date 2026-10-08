@@ -61,6 +61,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mobileControlActive => 'Controlando';
 
   @override
+  String get remoteInputPeerControlling => 'Controlando este dispositivo';
+
+  @override
+  String get remoteInputPeerReceiving => 'Controlando este equipo';
+
+  @override
+  String get remoteInputPeerReady => 'Listo, esperando la entrada';
+
+  @override
+  String get remoteInputManualSessionTitle => 'Control desde el móvil';
+
+  @override
+  String get remoteInputManualSessionHint =>
+      'El control desde el móvil es independiente del espacio de trabajo de abajo.';
+
+  @override
   String get mobileControlPreparing => 'Preparando control';
 
   @override

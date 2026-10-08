@@ -61,6 +61,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mobileControlActive => '正在控制';
 
   @override
+  String get remoteInputPeerControlling => '正在控制此设备';
+
+  @override
+  String get remoteInputPeerReceiving => '正在控制本机';
+
+  @override
+  String get remoteInputPeerReady => '已就绪，等待切入';
+
+  @override
+  String get remoteInputManualSessionTitle => '手机键鼠';
+
+  @override
+  String get remoteInputManualSessionHint => '手机控制独立于下方的桌面键鼠工作区。';
+
+  @override
   String get mobileControlPreparing => '正在连接控制';
 
   @override

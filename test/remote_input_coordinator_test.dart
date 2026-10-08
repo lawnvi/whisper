@@ -1636,7 +1636,7 @@ void main() {
       expect(coordinator.debugPendingInjectionItems, 0);
     });
 
-    test('sink sends an edge release control without stopping injection',
+    test('sink activity follows entry and release without stopping injection',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
       final manager = RemoteInputManager();
@@ -1664,6 +1664,7 @@ void main() {
         sendControl: sentControls.add,
       );
 
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
       manager.handlePacketBytes(
         RemoteInputPacketFrame(
           sessionId: 'input-release-1',
@@ -1688,6 +1689,7 @@ void main() {
         ).encode(),
       );
       await Future<void>.delayed(Duration.zero);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
 
       await platform.handleNativeMethodCall(
         const MethodCall('onRelease', <String, dynamic>{
@@ -1703,9 +1705,39 @@ void main() {
       expect(sentControls.last.releaseReason, 'edge');
       expect(sentControls.last.releaseSequence, 9);
       expect(sentControls.last.releaseActivationSequence, 7);
-      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
       expect(
           calls.map((call) => call.method), isNot(contains('stopInjection')));
+
+      await _deliverPacket(manager, _eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 10,
+        eventType: RemoteInputEventType.mouseMove,
+        payload: const {'activeStart': true},
+      ));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      await _deliverPacket(manager, _eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 11,
+        eventType: RemoteInputEventType.mouseMove,
+        payload: const {'deltaX': 32, 'deltaY': 0, 'edge': 'right'},
+      ));
+      await platform.handleNativeMethodCall(const MethodCall('onRelease', {
+        'sessionId': 'input-release-1',
+        'reason': 'edge',
+        'activationSequence': 7,
+      }));
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+      await _deliverPacket(manager, _eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 12,
+        eventType: RemoteInputEventType.release,
+        payload: const {},
+      ));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
+      await coordinator.stopLocal();
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.idle);
     });
 
     test('sink ignores an edge release immediately after entry activation',

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/l10n/app_localizations.dart';
+import 'package:whisper/remote_input/remote_input_peer_activity.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/computer_control_icon.dart';
 import 'package:whisper/widget/subtle_motion.dart';
@@ -149,8 +150,8 @@ class DesktopDeviceSessionTile extends StatelessWidget {
     required this.selected,
     required this.trusted,
     required this.onTap,
-    this.onStopControl,
-    this.controlConnecting = false,
+    this.controlActivity,
+    this.onControlAction,
   });
 
   final String name, identity, statusLabel, preview, time;
@@ -158,22 +159,21 @@ class DesktopDeviceSessionTile extends StatelessWidget {
   final Color statusColor;
   final bool selected, trusted;
   final VoidCallback onTap;
-  final VoidCallback? onStopControl;
-  final bool controlConnecting;
+  final RemoteInputPeerActivity? controlActivity;
+  final VoidCallback? onControlAction;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final l10n = AppLocalizations.of(context)!;
-    final receivingControl = onStopControl != null;
-    final controlLabel = controlConnecting
-        ? l10n.mobileControlPreparing
-        : l10n.mobileControlActive;
-    final controlDescription = controlConnecting
-        ? l10n.remoteInputSinkConnecting
-        : l10n.mobileControlReceiving(name);
-    final controlActionLabel = '$controlDescription\n${l10n.mobileControlStop}';
+    final hasControl = controlActivity != null;
+    final controlLabel = controlActivity?.label(l10n);
+    final controlDescription = controlActivity?.description(l10n, name);
+    final actionLabel = controlActivity?.isManual == true
+        ? l10n.mobileControlStop
+        : l10n.remoteInputWorkspaceTooltip;
+    final controlActionLabel = '$controlDescription\n$actionLabel';
     return Material(
       color: selected
           ? (colors.brightness == Brightness.dark
@@ -239,25 +239,21 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Tooltip(
-                            message: receivingControl
-                                ? controlDescription
-                                : '$statusLabel · $identity',
+                            message:
+                                controlDescription ??
+                                '$statusLabel · $identity',
                             child: Semantics(
-                              liveRegion: receivingControl,
+                              liveRegion: hasControl,
                               child: WhisperAnimatedSwitcher(
-                                value: (
-                                  receivingControl,
-                                  controlConnecting,
-                                  statusLabel,
-                                ),
+                                value: (controlActivity?.phase, statusLabel),
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  receivingControl ? controlLabel : preview,
+                                  controlLabel ?? preview,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: receivingControl
+                                    color: hasControl
                                         ? colors.primary
                                         : palette.textMuted,
                                   ),
@@ -271,11 +267,11 @@ class DesktopDeviceSessionTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (receivingControl) ...[
+              if (hasControl && onControlAction != null) ...[
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: controlActionLabel,
-                  onPressed: onStopControl,
+                  onPressed: onControlAction,
                   style: IconButton.styleFrom(
                     fixedSize: const Size.square(48),
                     foregroundColor: colors.primary,
