@@ -297,3 +297,22 @@ Android 回退版已构建并覆盖安装。实机确认两行设备列表、顶
 - 日志：`/tmp/whisper-search-copy-tests.log`、`/tmp/whisper-search-copy-analyze.log`、`/tmp/whisper-search-copy-android.log`、`/tmp/whisper-search-copy-install.log`、`/tmp/whisper-search-copy-macos.log`。
 
 收藏的选中颜色随后统一为主题主色，与顶部收藏筛选一致：浅色模式使用蓝色，深色模式使用浅蓝色。18 项页面测试、静态分析、Android debug 构建安装和 macOS `--verify` 再次通过，日志位于 `/tmp/whisper-favorite-color-*.log`。
+
+## Windows 字体与小字号可读性（2026-10-09）
+
+- 真机确认测试窗口为 1200×800、96 DPI（100% 缩放）。设置页原先在 Windows 取消标题字重，且中文依赖系统逐字回退；仅加粗后的系统字体仍有字形不协调的主观反馈，因此最终采用内置 Noto Sans SC 可变字体，统一中英文与标点，并使用真实的连续字重。
+- `app_theme.dart` 为 Windows 全局指定该字体及缺字/emoji 的系统后备字体；其他平台保持原有系统字体。`settings.dart` 去掉页面内的 `SF Pro Display` 和 Windows 空字重特例，设置项为 16/600，说明为 13/400，分组标题为 13/600；统一行高，保留原来的列表宽度和布局。页面标题明确为 22/600，避免未合并字号的主题样式退回 14。
+- `app_typography.dart` 在首帧前加载字体，`main.dart` 的主窗口及独立播放窗口共用此初始化；异常时记录错误类型并回退系统字体，不阻止启动。`pubspec.yaml` 使用平台资源过滤，仅 Windows 包含字体和 OFL 许可，运行时无需下载或安装系统字体。字体原始体积 17,772,300 字节，未做裁剪，当前中文 ARB 中的 524 个汉字全部覆盖；来源、固定提交和 SHA-256 记录在 `assets/fonts/README.md`。
+- 在 `192.168.31.41` 的 `D:\dev\whisper` 使用 Flutter **3.44.9**：`flutter analyze --no-pub` 无问题，主题、字体加载/许可、设置、公共弹窗、连接、历史搜索和手机控制共 **112 项相关测试通过**；包含深浅主题、100%–200% 文字缩放、其他平台不加载 Windows 字体、手机小屏/横屏回归。Windows debug 构建成功，新进程已启动，实际截图检查了 100% 缩放下的设置页。调整测试中的滚动后等待，确保点击关于入口时它已进入视口。
+- 使用 Flutter 3.44.9 的实际 `AssetBundle` 构建器核对 Windows、Android、macOS、Linux、iOS 五种目标：字体及许可只出现在 Windows 资源表中；Windows 成品包的字体 SHA-256 与仓库一致。`flutter build bundle --target-platform=android-arm64` 因该 Windows 测试机未安装 Android SDK 未完成，资源过滤验证由上述资源构建器单独完成，不能等同于 Android APK 验证。
+- 本轮没有重新执行全量 Flutter 测试、Android APK、macOS `./script/build_and_run.sh --verify`、Linux/iOS 原生构建，也没有修改 CI、依赖版本/锁文件或签名资产。Windows 构建仍输出既有 `super_native_extensions` 读取隐藏 AppData 目录的提示，但最终退出码为 0、生成可执行文件；本轮没有为此改动依赖缓存或插件。
+- Windows 日志：`D:\dev\whisper-typography-{analyze,tests,build}.log`；实机截图：`/tmp/whisper-typography-noto-settings.png`。本轮深色及大字号验证来自组件测试，未将远程截图过程中的其他页面操作当作完整原生验收。
+
+后续按用户要求删除本轮新增的 5 个测试用例及 `app_typography_test.dart` 文件，撤去仅供新用例使用的测试参数和断言；仅保留原有“关于”用例在滚动后等待进入视口的两行修正。Windows 上复验原有主题/设置测试 **29 项通过**，字体与界面实现保持不变。字体文件实际覆盖 30,890 个 Unicode 码位，并非仅包含界面上的 524 个汉字；现有中英西 ARB 文本全部覆盖。新增语言仍需检查对应文字系统与地区字形，缺字依赖系统后备字体，不能保证全部 Unicode 字符可用。按现有 NSIS 默认 zlib 方式，单独字体压缩实测 11,276,551 字节，预计安装包增量约 11 MB；安装后的字体占用 17,772,300 字节（约 16.95 MiB）。这不是发布安装包前后对比值，本轮未重新制作发布安装包。
+
+### Windows 字体体积精简
+
+- 按后续体积反馈，将全量字体替换为 `NotoSansSC-Compact.ttf`。仅限制 400–700 字重时，zlib 压缩体积仍为 10,588,157 字节，因此最终保留 100–900 连续字重，改为完整 GB2312 的 6,763 个汉字加上原字体全部 2,990 个非汉字码位，共 9,753 个字符。字符集不从当前界面文案提取；现有中英西文案全部覆盖。生僻字及许多繁体字需要系统回退，未来语言仍需检查字库与地区字形，不能保证与内置字体完全一致。
+- 新字体为 **4,669,224 字节**（原 17,772,300）；单文件 zlib 压缩为 **2,974,995 字节**（原 11,276,551），减少约 **74%**。预计 Windows 安装包增量约 3 MB、安装后增量约 4.7 MB；这仍是字体压缩估算，没有制作发布安装包前后对照。Android、macOS、Linux、iOS 不包含该字体资产。
+- `script/build_windows_font.py` 固定上游 SHA-256，以开发环境中的 `fonttools==4.61.1` 可重复生成；不增加应用依赖或运行时下载。来源、修改范围、许可、生成方法与成品 hash 更新在 `assets/fonts/README.md`。逐字比较了 9,753 个保留字符的轮廓、水平指标及可变字重数据，均与原文件一致。
+- Windows 测试机使用 Flutter 3.44.9：原有主题/设置 **29 项测试通过**，`flutter analyze --no-pub` 通过，Windows debug 构建及启动成功（本次 PID 3552）。成品字体 hash 匹配，资源目录只含精简字体与许可，没有遗留全量字体；五平台 `AssetBundle` 核对再次确认仅 Windows 包含字体。未新增测试用例，未重跑全量测试及其他平台原生构建，未修改 CI、锁文件或签名资产。

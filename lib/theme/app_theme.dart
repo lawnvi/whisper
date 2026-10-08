@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/whisper_motion.dart';
+import 'package:whisper/theme/app_typography.dart';
 
 abstract final class WhisperUi {
   static const settingsMaxWidth = 760.0;
@@ -146,9 +148,9 @@ class AppTheme {
     return brightness == Brightness.dark ? _darkPalette : _lightPalette;
   }
 
-  static final ThemeData lightTheme = _buildTheme(_lightScheme, _lightPalette);
+  static ThemeData get lightTheme => _buildTheme(_lightScheme, _lightPalette);
 
-  static final ThemeData darkTheme = _buildTheme(_darkScheme, _darkPalette);
+  static ThemeData get darkTheme => _buildTheme(_darkScheme, _darkPalette);
 
   static ThemeData _buildTheme(
     ColorScheme colorScheme,
@@ -157,6 +159,19 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      // Use one family for Chinese and Latin text so CJK glyphs do not mix
+      // weights and metrics through per-character system fallback.
+      fontFamily: defaultTargetPlatform == TargetPlatform.windows
+          ? AppTypography.windowsFontFamily
+          : null,
+      fontFamilyFallback: defaultTargetPlatform == TargetPlatform.windows
+          ? const <String>[
+              'Microsoft YaHei UI',
+              'Microsoft YaHei',
+              'Segoe UI',
+              'Segoe UI Emoji',
+            ]
+          : null,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{
           TargetPlatform.android: ZoomPageTransitionsBuilder(),
@@ -231,6 +246,15 @@ class AppTheme {
 
     return base.copyWith(
       extensions: <ThemeExtension<dynamic>>[palette],
+      appBarTheme: base.appBarTheme.copyWith(
+        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+          fontSize: 22,
+          height: 28 / 22,
+          letterSpacing: 0,
+          fontWeight: FontWeight.w600,
+          color: colorScheme.onSurface,
+        ),
+      ),
       textTheme: base.textTheme.apply(
         bodyColor: colorScheme.onSurface,
         displayColor: colorScheme.onSurface,

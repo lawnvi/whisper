@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:toastification/toastification.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/theme/app_typography.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'helper/helper.dart';
@@ -37,10 +38,20 @@ const MethodChannel _windowThemeChannel = MethodChannel(
   'com.vireen.whisper/window_theme',
 );
 
-enum AppDiagnosticKind { desktopWindowTheme }
+enum AppDiagnosticKind { desktopWindowTheme, windowsTypography }
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await AppTypography.initialize();
+  } catch (error) {
+    // A missing font should fall back to system fonts, not block startup.
+    privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
+      PrivacyField.kind: AppDiagnosticKind.windowsTypography,
+      PrivacyField.state: LocalOperationState.failed,
+      PrivacyField.errorType: privacyLog.errorType(error),
+    });
+  }
   if (arguments.length >= 3 &&
       arguments[0] == 'multi_window' &&
       (arguments[2] == 'cast_playback' || arguments[2] == 'video_playback')) {

@@ -1611,8 +1611,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12.5,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontSize: 13,
+          height: 1.4,
+          letterSpacing: 0,
           fontWeight: FontWeight.w600,
           color: palette.textMuted,
         ),
@@ -1693,30 +1695,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16.5,
-                            color: colorScheme.onSurface,
-                            fontWeight: Platform.isWindows
-                                ? null
-                                : FontWeight.w500,
-                            fontFamily: Platform.isWindows
-                                ? null
-                                : 'SF Pro Display',
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontSize: 16,
+                                height: 1.5,
+                                letterSpacing: 0,
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                         if (resolvedSubtitle != null) ...<Widget>[
                           const SizedBox(height: 4),
                           DefaultTextStyle(
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: palette.textMuted,
-                              fontWeight: Platform.isWindows
-                                  ? null
-                                  : FontWeight.w400,
-                              fontFamily: Platform.isWindows
-                                  ? null
-                                  : 'SF Pro Display',
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall!
+                                .copyWith(
+                                  fontSize: 13,
+                                  height: 1.5,
+                                  letterSpacing: 0,
+                                  color: palette.textMuted,
+                                  fontWeight: FontWeight.w400,
+                                ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             child: resolvedSubtitle,
@@ -2191,11 +2189,12 @@ class _DeviceSettingTile extends StatelessWidget {
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16.5,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontSize: 16,
+                      height: 1.5,
+                      letterSpacing: 0,
                       color: colorScheme.onSurface,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: Platform.isWindows ? null : 'SF Pro Display',
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),

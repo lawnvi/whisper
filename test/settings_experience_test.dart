@@ -426,6 +426,8 @@ void main() {
       500,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('About Whisper'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('About Whisper'));
     await tester.pumpAndSettle();
 
