@@ -1813,6 +1813,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Widget _buildMobileScaffold(bool isDark) {
     return Scaffold(
+      // Inputs live in separate routes; their keyboards must not move the
+      // device list or briefly expose the welcome icon behind a dialog.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         leading: IconButton(
           tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',

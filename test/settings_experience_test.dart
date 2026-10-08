@@ -625,7 +625,7 @@ void main() {
             ),
           )
           .width,
-      closeTo(374, 0.01),
+      closeTo(358, 0.01),
     );
     expect(find.byType(WhisperGlassActionSheetAction), findsNWidgets(4));
   });

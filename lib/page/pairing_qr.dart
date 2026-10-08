@@ -36,9 +36,6 @@ Future<PairingQrResult?> showPairingQrDialog(
   return showWhisperDialog<PairingQrResult>(
     context,
     useSafeArea: false,
-    blurBackground:
-        defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.iOS,
     builder: (context) => PairingQrDialog(
       localInvite: localInvite,
       localPeerId: localPeerId,

@@ -354,27 +354,9 @@ class _ConfirmationDialogState extends State<_ConfirmationDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.whisperPalette;
-
-    return WhisperGlassDialog(
-      constraints: const BoxConstraints(
-        minWidth: 300,
-        maxWidth: 420,
-        maxHeight: 620,
-      ),
-      title: Text(
-        widget.title,
-        style: Theme.of(
-          context,
-        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(widget.description, style: TextStyle(color: palette.textMuted)),
-        ],
-      ),
+    return WhisperAlertDialog(
+      title: widget.title,
+      content: Text(widget.description),
       actions: <Widget>[
         WhisperDialogButton(
           onPressed: _submitting ? null : () => _complete(false),
@@ -402,32 +384,18 @@ Future<void> showLoadingDialog(
   required VoidCallback onCancel,
   required Function(VoidCallback onCancel) task,
 }) async {
-  final palette = context.whisperPalette;
-
   unawaited(
     showWhisperDialog<void>(
       context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return WhisperGlassDialog(
-          constraints: const BoxConstraints(
-            minWidth: 300,
-            maxWidth: 420,
-            maxHeight: 620,
-          ),
-          title: Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-          ),
+        return WhisperAlertDialog(
+          title: title,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const SizedBox(height: 12),
-              if (isLoading) icon,
-              const SizedBox(height: 8),
-              Text(description, style: TextStyle(color: palette.textMuted)),
+              if (isLoading) ...[icon, const SizedBox(height: 16)],
+              Text(description),
             ],
           ),
           actions: <Widget>[

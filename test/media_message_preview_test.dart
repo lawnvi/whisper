@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/widget/context_menu_region.dart';
+import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 
 Future<Finder> _openImageGallery(
@@ -483,7 +484,7 @@ void main() {
     await tester.longPress(find.byKey(const ValueKey('menu-target')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(WhisperGlassActionSheet), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();

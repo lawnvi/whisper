@@ -160,6 +160,49 @@ class WhisperGlassDialog extends StatelessWidget {
   }
 }
 
+/// Shared layout for short confirmations and informational alerts.
+class WhisperAlertDialog extends StatelessWidget {
+  const WhisperAlertDialog({
+    super.key,
+    required this.title,
+    required this.content,
+    required this.actions,
+  });
+
+  final String title;
+  final Widget content;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) => WhisperGlassDialog(
+    constraints: const BoxConstraints(maxWidth: 420, maxHeight: 620),
+    borderRadius: 22,
+    titlePadding: const EdgeInsets.fromLTRB(24, 26, 24, 8),
+    contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+    actionsPadding: EdgeInsets.zero,
+    title: Text(
+      title,
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+        fontSize: 20,
+        height: 1.3,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    content: SingleChildScrollView(
+      child: DefaultTextStyle.merge(
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: context.whisperPalette.textMuted,
+          height: 1.5,
+        ),
+        child: content,
+      ),
+    ),
+    actions: actions,
+  );
+}
+
 class WhisperGlassSurface extends StatelessWidget {
   const WhisperGlassSurface({
     super.key,
@@ -388,7 +431,7 @@ class WhisperDialogButton extends StatelessWidget {
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 52)),
         padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-          EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         ),
         shape: const WidgetStatePropertyAll<OutlinedBorder>(
           RoundedRectangleBorder(),
@@ -421,7 +464,11 @@ class WhisperDialogButton extends StatelessWidget {
         splashFactory: NoSplash.splashFactory,
         animationDuration: const Duration(milliseconds: 120),
         textStyle: WidgetStatePropertyAll<TextStyle>(
-          TextStyle(fontWeight: prominent ? FontWeight.w600 : FontWeight.w400),
+          TextStyle(
+            fontSize: 17,
+            height: 1.25,
+            fontWeight: prominent ? FontWeight.w600 : FontWeight.w400,
+          ),
         ),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),

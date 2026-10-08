@@ -106,14 +106,14 @@ Future<T?> showWhisperModalBottomSheet<T>({
 class WhisperGlassActionSheet extends StatelessWidget {
   const WhisperGlassActionSheet({
     super.key,
-    required this.title,
+    this.title,
     required this.actions,
     required this.cancelButton,
     this.maxWidth = 840,
     this.desktopWidthFactor = 0.82,
   });
 
-  final Widget title;
+  final Widget? title;
   final List<Widget> actions;
   final Widget cancelButton;
   final double maxWidth;
@@ -136,15 +136,15 @@ class WhisperGlassActionSheet extends StatelessWidget {
     );
     final radius = BorderRadius.circular(14);
     final safePadding = mediaQuery.padding;
-    // Like CupertinoActionSheet, the safe area consumes the minimum bottom gap.
+    // Leave room beyond the gesture area for devices with large screen corners.
     final outerPadding = isCompact
         ? EdgeInsets.fromLTRB(
-            safePadding.left + 8,
+            safePadding.left + 16,
             safePadding.top + 8,
-            safePadding.right + 8,
+            safePadding.right + 16,
             math.max(
-              8,
-              math.max(safePadding.bottom, mediaQuery.viewInsets.bottom),
+              24,
+              math.max(safePadding.bottom, mediaQuery.viewInsets.bottom) + 12,
             ),
           )
         : EdgeInsets.only(bottom: safePadding.bottom + 8);
@@ -154,7 +154,7 @@ class WhisperGlassActionSheet extends StatelessWidget {
         final width = isCompact
             ? math.min(
                 constraints.maxWidth - outerPadding.horizontal,
-                mediaQuery.size.shortestSide - 16,
+                mediaQuery.size.shortestSide - 32,
               )
             : math.min(maxWidth, constraints.maxWidth * desktopWidthFactor);
         return Padding(
@@ -180,22 +180,23 @@ class WhisperGlassActionSheet extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: <Widget>[
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 13.5,
-                              ),
-                              child: DefaultTextStyle.merge(
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: palette.textMuted,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                            if (title != null)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 13.5,
                                 ),
-                                child: Center(child: title),
+                                child: DefaultTextStyle.merge(
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: palette.textMuted,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  child: Center(child: title),
+                                ),
                               ),
-                            ),
-                            if (actions.isNotEmpty)
+                            if (title != null && actions.isNotEmpty)
                               SizedBox(
                                 height: 0.75,
                                 child: ColoredBox(color: dividerColor),
@@ -243,12 +244,14 @@ class WhisperGlassActionSheetAction extends StatelessWidget {
     required this.onPressed,
     this.destructive = false,
     this.defaultAction = false,
+    this.icon,
   });
 
   final String label;
   final VoidCallback onPressed;
   final bool destructive;
   final bool defaultAction;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -266,8 +269,11 @@ class WhisperGlassActionSheetAction extends StatelessWidget {
           onPressed: onPressed,
           style: ButtonStyle(
             minimumSize: const WidgetStatePropertyAll<Size>(Size(0, 57)),
-            padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-              EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
+              EdgeInsets.symmetric(
+                horizontal: icon == null ? 10 : 18,
+                vertical: 8,
+              ),
             ),
             shape: const WidgetStatePropertyAll<OutlinedBorder>(
               RoundedRectangleBorder(),
@@ -292,18 +298,26 @@ class WhisperGlassActionSheetAction extends StatelessWidget {
             animationDuration: const Duration(milliseconds: 120),
             textStyle: WidgetStatePropertyAll<TextStyle>(
               TextStyle(
-                fontSize: 21,
+                fontSize: icon == null ? 21 : 17,
                 fontWeight: defaultAction ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          child: Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
+          child: icon == null
+              ? Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                )
+              : Row(
+                  children: [
+                    Expanded(child: Text(label)),
+                    const SizedBox(width: 16),
+                    Icon(icon, size: 21),
+                  ],
+                ),
         ),
       ),
     );
