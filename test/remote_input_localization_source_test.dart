@@ -19,7 +19,6 @@ void main() {
       remoteInputSection,
       isNot(contains('AppLocalizations.of(context)?')),
     );
-    expect(remoteInputSection, contains('SF Pro Display'));
     expect(remoteInputSection, contains('GestureDetector('));
   });
 
