@@ -6,7 +6,8 @@ void main() {
   test('Bonjour broadcast advertises the configured local nickname', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 
-    expect(source, contains("'name': device?.name ?? await deviceName()"));
+    expect(source, contains('final name = device?.name ?? await deviceName()'));
+    expect(source, contains("'name': name"));
     expect(source, isNot(contains("'name': await deviceName()")));
     expect(source, contains('localProfileUpdate'));
     expect(source, contains('device!.name != temp.name'));

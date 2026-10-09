@@ -40,7 +40,7 @@ const MethodChannel _windowThemeChannel = MethodChannel(
 
 enum AppDiagnosticKind { desktopWindowTheme, windowsTypography }
 
-void main(List<String> arguments) async {
+Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await AppTypography.initialize();
@@ -77,7 +77,8 @@ void main(List<String> arguments) async {
     // Staging cleanup is best-effort and must not prevent app startup.
   }
 
-  if (isMobile()) {
+  // iOS uses the runner's phone/tablet orientation policies; iPad can multitask.
+  if (Platform.isAndroid) {
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 

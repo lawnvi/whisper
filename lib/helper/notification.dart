@@ -1,7 +1,6 @@
 // 导入包
 import 'dart:io';
 
-
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
 import 'package:installed_apps/installed_apps.dart';
@@ -31,16 +30,21 @@ class NotificationHelper {
         AndroidInitializationSettings('@mipmap/ic_launcher');
     // 15.1是DarwinInitializationSettings，旧版本好像是IOSInitializationSettings（有些例子中就是这个）
     const DarwinInitializationSettings initializationSettingsIOS =
-        DarwinInitializationSettings();
+        DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        );
     // 初始化
     const InitializationSettings initializationSettings =
         InitializationSettings(
-            android: initializationSettingsAndroid,
-            iOS: initializationSettingsIOS,
-            macOS: initializationSettingsIOS,
-            linux: LinuxInitializationSettings(
-              defaultActionName: 'open notification',
-            ));
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+          macOS: DarwinInitializationSettings(),
+          linux: LinuxInitializationSettings(
+            defaultActionName: 'open notification',
+          ),
+        );
     await _notificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (response) {
@@ -51,9 +55,20 @@ class NotificationHelper {
     );
   }
 
-//  显示通知
-  Future<void> showNotification(
-      {required String title, required String body}) async {
+  Future<void> requestIOSPermissions() async {
+    if (!Platform.isIOS) return;
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
+  }
+
+  //  显示通知
+  Future<void> showNotification({
+    required String title,
+    required String body,
+  }) async {
     // 安卓的通知
     // 'your channel id'：用于指定通知通道的ID。
     // 'your channel name'：用于指定通知通道的名称。
@@ -64,31 +79,30 @@ class NotificationHelper {
     final l10n = resolveNotificationL10n();
     final AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
-            'whisper.channel.id', l10n.notificationChannelGeneral,
-            channelDescription: l10n.notificationChannelGeneralDesc,
-            importance: Importance.max,
-            priority: Priority.high,
-            ticker: 'ticker');
+          'whisper.channel.id',
+          l10n.notificationChannelGeneral,
+          channelDescription: l10n.notificationChannelGeneralDesc,
+          importance: Importance.max,
+          priority: Priority.high,
+          ticker: 'ticker',
+        );
 
     // ios的通知
     const String darwinNotificationCategoryPlain = 'plainCategory';
     const DarwinNotificationDetails iosNotificationDetails =
         DarwinNotificationDetails(
-            categoryIdentifier: darwinNotificationCategoryPlain);
+          categoryIdentifier: darwinNotificationCategoryPlain,
+        );
 
     // 创建跨平台通知
     final NotificationDetails platformChannelSpecifics = NotificationDetails(
-        android: androidNotificationDetails,
-        iOS: iosNotificationDetails,
-        macOS: iosNotificationDetails);
+      android: androidNotificationDetails,
+      iOS: iosNotificationDetails,
+      macOS: iosNotificationDetails,
+    );
 
     // 发起一个通知
-    await _notificationsPlugin.show(
-      1,
-      title,
-      body,
-      platformChannelSpecifics,
-    );
+    await _notificationsPlugin.show(1, title, body, platformChannelSpecifics);
   }
 }
 
@@ -115,29 +129,56 @@ bool filterNotification(NotificationEvent event) {
   if (event.packageName == null && event.title == null && event.text == null) {
     return false;
   }
-  switch(event.packageName) {
-    case "com.vireen.whisper": {
-      return false;
-    }
-    case "android": {
-      return !["选择输入法"].contains(event.title);
-    }
+  switch (event.packageName) {
+    case "com.vireen.whisper":
+      {
+        return false;
+      }
+    case "android":
+      {
+        return !["选择输入法"].contains(event.title);
+      }
   }
   return true;
 }
 
 bool supportNotification() {
-  return Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux;
+  return Platform.isAndroid ||
+      Platform.isIOS ||
+      Platform.isMacOS ||
+      Platform.isLinux;
 }
 
 String pkg2name(String? pkg) {
   if (pkg == null) {
     return "通知";
   }
-  return androidPackage[pkg]?? "通知";
+  return androidPackage[pkg] ?? "通知";
 }
 
-var androidPackage = {'android': '系统', 'com.tencent.mm': '微信', 'com.tencent.mobileqq': 'QQ', 'com.eg.android.AlipayGphone': '支付宝', 'com.taobao.taobao': '淘宝', 'com.jingdong.app.mall': '京东', 'com.ss.android.ugc.aweme': '抖音', 'com.smile.gifmaker': '快手', 'com.sina.weibo': '微博', 'tv.danmaku.bili': '哔哩哔哩', 'com.netease.cloudmusic': '网易云音乐', 'com.tencent.qqlive': '腾讯视频', 'com.youku.phone': '优酷', 'com.qiyi.video': '爱奇艺', 'com.sankuai.meituan': '美团', 'com.sdu.didi.psnger': '滴滴出行', 'com.ss.android.lark': '飞书', 'com.android.mms': '短信', 'com.coolapk.market': '酷安', 'com.sankuai.meituan.takeoutnew': '美团外卖', 'com.taobao.idlefish': '闲鱼'};
+var androidPackage = {
+  'android': '系统',
+  'com.tencent.mm': '微信',
+  'com.tencent.mobileqq': 'QQ',
+  'com.eg.android.AlipayGphone': '支付宝',
+  'com.taobao.taobao': '淘宝',
+  'com.jingdong.app.mall': '京东',
+  'com.ss.android.ugc.aweme': '抖音',
+  'com.smile.gifmaker': '快手',
+  'com.sina.weibo': '微博',
+  'tv.danmaku.bili': '哔哩哔哩',
+  'com.netease.cloudmusic': '网易云音乐',
+  'com.tencent.qqlive': '腾讯视频',
+  'com.youku.phone': '优酷',
+  'com.qiyi.video': '爱奇艺',
+  'com.sankuai.meituan': '美团',
+  'com.sdu.didi.psnger': '滴滴出行',
+  'com.ss.android.lark': '飞书',
+  'com.android.mms': '短信',
+  'com.coolapk.market': '酷安',
+  'com.sankuai.meituan.takeoutnew': '美团外卖',
+  'com.taobao.idlefish': '闲鱼',
+};
 
 Future<String> appName(String? package) async {
   if (package == null) {

@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/cast_receiver/receiver_name.dart' as cast;
 import 'package:whisper/model/LocalDatabase.dart';
 
 import 'helper.dart';
+import 'ios_sandbox_path.dart';
 
 class LocalSetting {
   // 创建一个私有的静态实例变量
@@ -56,19 +58,20 @@ class LocalSetting {
 
   Future<DeviceData> instance({bool online = false}) async {
     return DeviceData(
-        id: 0,
-        uid: await getSPDefault(_uuid, const Uuid().v4()),
-        name: await deviceDisplayName(),
-        host: await getLocalIpAddress(),
-        port: await getSPDefault(_port, 10002),
-        platform: Platform.operatingSystem,
-        isServer: await getSPDefault(_isServer, false),
-        lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        online: online,
-        password: await getSPDefault(_password, ""),
-        clipboard: await getSPDefault(_clipboard, true),
-        auth: false,
-        around: false);
+      id: 0,
+      uid: await getSPDefault(_uuid, const Uuid().v4()),
+      name: await deviceDisplayName(),
+      host: await getLocalIpAddress(),
+      port: await getSPDefault(_port, 10002),
+      platform: Platform.operatingSystem,
+      isServer: await getSPDefault(_isServer, false),
+      lastTime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      online: online,
+      password: await getSPDefault(_password, ""),
+      clipboard: await getSPDefault(_clipboard, true),
+      auth: false,
+      around: false,
+    );
   }
 
   Future<T> getSPDefault<T>(String key, T value) async {
@@ -212,17 +215,18 @@ class LocalSetting {
 
   Future<Map<String, int>> listenAppNotifyList() async {
     final raw = await getSPDefault(_notifyAppMap, "");
-    final uniquePackages =
-        raw.split(":").where((item) => item.isNotEmpty).toSet();
-    return {
-      for (final packageName in uniquePackages) packageName: 1,
-    };
+    final uniquePackages = raw
+        .split(":")
+        .where((item) => item.isNotEmpty)
+        .toSet();
+    return {for (final packageName in uniquePackages) packageName: 1};
   }
 
-  Future<void> modifyListenNotifyApp(
-      {List<String> packages = const [],
-      bool add = true,
-      bool clear = false}) async {
+  Future<void> modifyListenNotifyApp({
+    List<String> packages = const [],
+    bool add = true,
+    bool clear = false,
+  }) async {
     if (clear) {
       await _setSP(_notifyAppMap, "");
       return;
@@ -240,7 +244,14 @@ class LocalSetting {
   }
 
   Future<String> savePath() async {
-    return await getSPDefault(_savePath, '');
+    final path = await getSPDefault(_savePath, '');
+    if (!Platform.isIOS || path.isEmpty) return path;
+    final rebased = rebaseIosSandboxPath(
+      path,
+      (await getApplicationDocumentsDirectory()).path,
+    );
+    if (rebased != path) await _setSP(_savePath, rebased);
+    return rebased;
   }
 
   Future<void> modifySavePath(String path) async {

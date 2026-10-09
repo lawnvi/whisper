@@ -89,17 +89,19 @@ void _logConversationFailure(ConversationOperationKind kind, Object error) {
 class SendMessageScreen extends StatefulWidget {
   final DeviceData device;
   final bool embedded;
+  final VoidCallback? onBack;
   final Future<void> Function(String uid)? onDeviceDeleted;
 
   const SendMessageScreen({
     super.key,
     required this.device,
     this.embedded = false,
+    this.onBack,
     this.onDeviceDeleted,
   });
 
   @override
-  _SendMessageScreen createState() => _SendMessageScreen(device, embedded);
+  _SendMessageScreen createState() => _SendMessageScreen(device);
 }
 
 DeviceData resolveConversationDeviceSnapshot({
@@ -163,7 +165,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
   final key = GlobalKey<AnimatedListState>();
   bool _isLocalhost = false;
   bool _isLoading = false; // loading file
-  final bool embedded;
+  bool get embedded => widget.embedded;
   bool _resumeReconnectPending = false;
   bool _pickerReconnectPending = false;
   bool _composerSendInFlight = false;
@@ -206,7 +208,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     );
   }
 
-  _SendMessageScreen(this.device, this.embedded);
+  _SendMessageScreen(this.device);
 
   void _traceRemoteInputStart({
     required bool trusted,
@@ -842,6 +844,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       leading: CupertinoNavigationBarBackButton(
         color: colorScheme.primary,
         onPressed: () {
+          if (widget.onBack != null) {
+            widget.onBack!();
+            return;
+          }
           Navigator.popUntil(context, (route) {
             return route.isFirst;
           });
@@ -996,6 +1002,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
       final isBusy = isCurrentAudioSession && audioState.isBusy;
       final role = isCurrentAudioSession
           ? audioState.role
+          : isCurrentAudioGroup && _audioGroupCoordinator.isPlaybackActive
+          ? AudioShareRuntimeRole.sink
           : AudioShareRuntimeRole.source;
       actions.add(
         IconButton(
@@ -1003,9 +1011,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
           constraints: actionConstraints,
           visualDensity: actionVisualDensity,
           onPressed: isBusy ? null : _toggleAudioShare,
-          tooltip: isCurrentAudioGroup
-              ? l10n.audioShareCaptureActiveStop
-              : _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
+          tooltip: _audioShareTooltip(role, isActive: isActive, isBusy: isBusy),
           icon: Icon(_audioShareIcon(role)),
           color: _audioShareIconColor(
             isActive: isActive,
@@ -1015,7 +1021,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
-    if (Platform.isAndroid &&
+    if (supportsManualRemoteInputSource() &&
         !_isLocalhost &&
         _isConnectedSession &&
         socketManager.supportsManualInputFor(device.uid)) {
@@ -1081,8 +1087,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         tooltip: _isConnecting
             ? l10n.connectAlreadyInProgress
             : _isConnectedSession
-                ? (AppLocalizations.of(context)?.disconnect ?? '断开')
-                : (AppLocalizations.of(context)?.connect ?? '连接'),
+            ? (AppLocalizations.of(context)?.disconnect ?? '断开')
+            : (AppLocalizations.of(context)?.connect ?? '连接'),
         icon: WhisperAnimatedSwitcher(
           value: (_isConnectedSession, _canToggleConnection, _isConnecting),
           child: _isConnecting
@@ -1098,7 +1104,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
                             : Icons.wifi_off_rounded),
                   color: _isConnectedSession
                       ? Colors.lightBlue
-                      : (_canToggleConnection ? palette.textMuted : Colors.grey),
+                      : (_canToggleConnection
+                            ? palette.textMuted
+                            : Colors.grey),
                 ),
         ),
       ),
@@ -2188,28 +2196,11 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
   }
 
-  // 获取设备横向宽度
-  double _screenWidth({physically = false}) {
-    if (!physically) {
-      return MediaQuery.of(context).size.width;
-    }
-    return min(
-      MediaQuery.of(context).size.width,
-      MediaQuery.of(context).size.height,
-    );
-  }
-
   Widget _buildTextMessage(
     MessageData messageData,
     bool isOpponent,
     Widget? trailingAction,
   ) {
-    double screenWidth = _screenWidth();
-    if (isDesktop()) {
-      screenWidth *= 0.6;
-    } else {
-      screenWidth *= 0.78;
-    }
     var content = messageData.content ?? "";
     if (messageData.type == MessageEnum.Notification) {
       var data = jsonDecode(messageData.content ?? "{}");
@@ -2250,42 +2241,39 @@ class _SendMessageScreen extends State<SendMessageScreen>
           isOpponent ? 18 : 2,
           2,
         ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: screenWidth),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: isOpponent ? receivedBubbleColor : sentBubbleColor,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isOpponent ? receivedBorderColor : sentBorderColor,
-              ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: isOpponent ? receivedBubbleColor : sentBubbleColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isOpponent ? receivedBorderColor : sentBorderColor,
             ),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                14,
-                verticalPadding,
-                trailingAction == null ? 14 : 8,
-                verticalPadding,
-              ),
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(
-                      right: trailingAction == null ? 0 : actionReserve,
-                    ),
-                    child: MessageLinkText(
-                      text: content,
-                      style: textStyle,
-                      linkStyle: linkStyle,
-                      linksEnabled: !_messageSelectionActive,
-                      onOpen: _openMessageLink,
-                      textAlign: TextAlign.left,
-                    ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              14,
+              verticalPadding,
+              trailingAction == null ? 14 : 8,
+              verticalPadding,
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    right: trailingAction == null ? 0 : actionReserve,
                   ),
-                  if (trailingAction != null)
-                    Positioned(right: 0, bottom: 0, child: trailingAction),
-                ],
-              ),
+                  child: MessageLinkText(
+                    text: content,
+                    style: textStyle,
+                    linkStyle: linkStyle,
+                    linksEnabled: !_messageSelectionActive,
+                    onOpen: _openMessageLink,
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+                if (trailingAction != null)
+                  Positioned(right: 0, bottom: 0, child: trailingAction),
+              ],
             ),
           ),
         ),
@@ -2308,10 +2296,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   Widget _buildFileMessage(MessageData message, bool isOpponent) {
-    double screenWidth = 300;
-    if (isMobile()) {
-      screenWidth = 0.618 * _screenWidth(physically: false);
-    }
     final transfer = _transferForMessage(message);
     final messagePath = _effectiveMessagePath(message, transfer);
     final isActiveTransfer =
@@ -2365,7 +2349,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         transfer: transfer,
         kind: mediaKind,
         path: messagePath,
-        width: screenWidth,
         cardColor: cardColor,
         contentAvailable: contentAvailable,
         failed: failed || showRetry,
@@ -2379,7 +2362,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
-        width: screenWidth,
+        width: double.infinity,
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(18),
@@ -2442,18 +2425,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      width: screenWidth - 80,
-                      child: Text(
-                        message.name,
-                        overflow: TextOverflow.clip,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                        ),
-                        maxLines: 4,
-                        softWrap: true,
+                    Text(
+                      message.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
                       ),
+                      maxLines: 2,
+                      softWrap: true,
                     ),
                     const SizedBox(height: 4),
                     WhisperAnimatedSwitcher(
@@ -2503,7 +2483,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
     required TransferSnapshot? transfer,
     required MediaFileKind kind,
     required String path,
-    required double width,
     required Color cardColor,
     required bool contentAvailable,
     required bool failed,
@@ -2530,7 +2509,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
       child: Container(
-        constraints: BoxConstraints(maxWidth: width),
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(14),
@@ -2721,7 +2699,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     if (deviceData.uid != device.uid) {
-      if (!embedded) {
+      if (!embedded && widget.onBack == null) {
         Navigator.push(
           context,
           MaterialPageRoute(

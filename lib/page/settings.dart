@@ -109,6 +109,9 @@ class SettingsSectionSurface extends StatelessWidget {
       showTopHighlight: false,
       showShadow: false,
       neutral: true,
+      // These cards cover a solid page, so backdrop sampling adds no detail
+      // and repaints every visible group throughout the iOS slide transition.
+      blurBackground: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
@@ -193,6 +196,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _updateDownloadProgress = 0;
   AppUpdateCheckResult? _updateResult;
   int _presentationLoadGeneration = 0;
+  Animation<double>? _openingAnimation;
+  Completer<void>? _openingTransition;
 
   @override
   void initState() {
@@ -202,6 +207,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   AppUpdateManager get _updateManager =>
       widget.updateManager ?? AppUpdateService.shared;
+
+  Future<void> _waitForOpeningTransition() {
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.status != AnimationStatus.forward) {
+      return Future<void>.value();
+    }
+    _openingTransition ??= Completer<void>();
+    if (_openingAnimation == null) {
+      _openingAnimation = animation;
+      animation.addStatusListener(_handleOpeningTransition);
+    }
+    return _openingTransition!.future;
+  }
+
+  void _handleOpeningTransition(AnimationStatus status) {
+    if (status == AnimationStatus.forward) return;
+    _openingAnimation?.removeStatusListener(_handleOpeningTransition);
+    _openingAnimation = null;
+    if (_openingTransition?.isCompleted == false) {
+      _openingTransition!.complete();
+    }
+  }
+
+  @override
+  void dispose() {
+    _handleOpeningTransition(AnimationStatus.dismissed);
+    super.dispose();
+  }
 
   Future<void> _initialize() async {
     await _refreshDevice(showLoading: true);
@@ -286,6 +319,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted || generation != _presentationLoadGeneration) {
         return;
       }
+      // Load data during the push, then lay out the settings after the slide
+      // finishes instead of replacing the whole list halfway through a frame.
+      await _waitForOpeningTransition();
+      if (!mounted || generation != _presentationLoadGeneration) return;
       setState(() {
         device = presentation.device;
         _path = presentation.saveDirectoryPath;

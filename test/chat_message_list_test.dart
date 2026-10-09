@@ -6,6 +6,69 @@ import 'package:whisper/model/message.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 
 void main() {
+  testWidgets('file and text bubbles use conversation width beside a sidebar', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final listKey = GlobalKey<AnimatedListState>();
+    final messages = [
+      _message(id: 101, content: '').copyWith(type: MessageEnum.File),
+      _message(
+        id: 102,
+        content: '',
+      ).copyWith(type: MessageEnum.File, sender: 'me', receiver: 'peer'),
+      _message(id: 103, content: 'long text'),
+    ];
+    for (final width in [704.0, 320.0]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Row(
+              children: [
+                const SizedBox(width: 50),
+                SizedBox(
+                  width: width,
+                  child: ChatMessageList(
+                    buildFileMessage: (_, __) =>
+                        const SizedBox(width: 10000, height: 60),
+                    buildTextMessage: (_, __, ___) =>
+                        const SizedBox(width: 10000, height: 40),
+                    controller: controller,
+                    listKey: listKey,
+                    messages: messages,
+                    onOpenContainingFolder: (_) {},
+                    onOpenFile: (_) {},
+                    onCopyText: (_) {},
+                    onDeleteMessage: (_, {deleteFile = false}) async {},
+                    onDeleteMessages: (_, {deleteFiles = false}) async {},
+                    selfUid: 'me',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      final incoming = tester.getRect(
+        find.byKey(const ValueKey('message-bubble-101')),
+      );
+      final outgoing = tester.getRect(
+        find.byKey(const ValueKey('message-bubble-102')),
+      );
+      final text = tester.getSize(
+        find.byKey(const ValueKey('message-bubble-103')),
+      );
+      expect(incoming.width, lessThanOrEqualTo(360));
+      expect(incoming.width, lessThanOrEqualTo((width - 28) * 0.618));
+      expect(text.width, lessThanOrEqualTo((width - 28) * 0.78));
+      expect(incoming.left, 50 + 14);
+      expect(outgoing.right, 50 + width - 14);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('keeps breathing room below the newest message', (tester) async {
     final listKey = GlobalKey<AnimatedListState>();
     final controller = ScrollController();

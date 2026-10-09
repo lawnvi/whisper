@@ -11,6 +11,7 @@ import 'package:whisper/socket/auth_protocol.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
 
 import '../helper/helper.dart';
+import '../helper/ios_sandbox_path.dart';
 import 'device.dart';
 import 'favorite_text.dart';
 import 'file_transfer.dart';
@@ -134,8 +135,63 @@ class LocalDatabase extends _$LocalDatabase {
       await _ensureMessageUuidIndex();
       await _ensureFileTransferMessageRowIndexes();
       await _ensureMessageSearchIndex();
+      if (Platform.isIOS) {
+        await rebaseIosFilePaths(
+          (await getApplicationDocumentsDirectory()).path,
+        );
+      }
     },
   );
+
+  Future<void> rebaseIosFilePaths(
+    String documentsDirectory,
+  ) => transaction(() async {
+    final files =
+        await (selectOnly(message)
+              ..addColumns([message.id, message.path])
+              ..where(message.path.like('%/Containers/Data/Application/%')))
+            .get();
+    for (final row in files) {
+      final original = row.read(message.path)!;
+      final rebased = rebaseIosSandboxPath(original, documentsDirectory);
+      if (rebased != original) {
+        await (update(message)
+              ..where((m) => m.id.equals(row.read(message.id)!)))
+            .write(MessageCompanion(path: Value(rebased)));
+      }
+    }
+    final transfers =
+        await (selectOnly(fileTransfer)
+              ..addColumns([
+                fileTransfer.transferId,
+                fileTransfer.finalPath,
+                fileTransfer.tempPath,
+              ])
+              ..where(
+                fileTransfer.finalPath.like('%/Containers/Data/Application/%') |
+                    fileTransfer.tempPath.like(
+                      '%/Containers/Data/Application/%',
+                    ),
+              ))
+            .get();
+    for (final row in transfers) {
+      final originalFinal = row.read(fileTransfer.finalPath)!;
+      final originalTemp = row.read(fileTransfer.tempPath)!;
+      final finalPath = rebaseIosSandboxPath(originalFinal, documentsDirectory);
+      final tempPath = rebaseIosSandboxPath(originalTemp, documentsDirectory);
+      if (finalPath != originalFinal || tempPath != originalTemp) {
+        await (update(fileTransfer)..where(
+              (t) => t.transferId.equals(row.read(fileTransfer.transferId)!),
+            ))
+            .write(
+              FileTransferCompanion(
+                finalPath: Value(finalPath),
+                tempPath: Value(tempPath),
+              ),
+            );
+      }
+    }
+  });
 
   Future<void> _ensureMessageSearchIndex({bool rebuild = false}) async {
     final messageColumns = await customSelect(

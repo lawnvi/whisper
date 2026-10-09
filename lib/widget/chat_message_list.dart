@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -292,26 +293,41 @@ class _ChatMessageListState extends State<ChatMessageList> {
                               isOpponent: isOpponent,
                               isFile: isFile,
                             ),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          if (_deleting) return;
-                          if (_selectionMode) {
-                            _toggleSelection(message);
-                          } else if (isFile) {
-                            widget.onOpenFile(message);
-                          }
-                        },
-                        child: isFile
-                            ? widget.buildFileMessage(message, isOpponent)
-                            : widget.buildTextMessage(
-                                message,
-                                isOpponent,
-                                _selectionMode ||
-                                        message.type != MessageEnum.Text
-                                    ? null
-                                    : _buildCopyButton(context, message),
-                              ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => ConstrainedBox(
+                          key: ValueKey('message-bubble-${message.id}'),
+                          constraints: BoxConstraints(
+                            maxWidth: isFile
+                                ? math.min(
+                                    isDesktop() ? 300.0 : 360.0,
+                                    constraints.maxWidth *
+                                        (isDesktop() ? 0.6 : 0.618),
+                                  )
+                                : constraints.maxWidth *
+                                      (isDesktop() ? 0.6 : 0.78),
+                          ),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              if (_deleting) return;
+                              if (_selectionMode) {
+                                _toggleSelection(message);
+                              } else if (isFile) {
+                                widget.onOpenFile(message);
+                              }
+                            },
+                            child: isFile
+                                ? widget.buildFileMessage(message, isOpponent)
+                                : widget.buildTextMessage(
+                                    message,
+                                    isOpponent,
+                                    _selectionMode ||
+                                            message.type != MessageEnum.Text
+                                        ? null
+                                        : _buildCopyButton(context, message),
+                                  ),
+                          ),
+                        ),
                       ),
                     ),
                   ),

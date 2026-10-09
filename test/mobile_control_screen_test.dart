@@ -106,6 +106,7 @@ void main() {
     bool reduceMotion = true,
     EdgeInsets padding = EdgeInsets.zero,
     EdgeInsets systemGestureInsets = EdgeInsets.zero,
+    EdgeInsets? viewInsets,
     Locale locale = const Locale('en'),
     List<MobileControlTarget> Function()? targets,
   }) => MaterialApp(
@@ -113,27 +114,34 @@ void main() {
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     theme: theme ?? AppTheme.lightTheme,
-    home: MediaQuery(
-      data: MediaQueryData(
-        textScaler: TextScaler.linear(scale),
-        disableAnimations: reduceMotion,
-        padding: padding,
-        viewPadding: padding,
-        systemGestureInsets: systemGestureInsets,
-      ),
-      child: MobileControlScreen(
-        peerId: 'mac',
-        peerName: 'My Mac',
-        targets: targets,
-        coordinator: coordinator,
-        sensor: sensor,
-        onStart: onStart ?? (_) => start(),
-        onStop: () => coordinator.stopSharing(sendControl: controls.add),
+    home: Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(scale),
+          disableAnimations: reduceMotion,
+          padding: padding,
+          viewPadding: padding,
+          systemGestureInsets: systemGestureInsets,
+          viewInsets: viewInsets,
+        ),
+        child: MobileControlScreen(
+          peerId: 'mac',
+          peerName: 'My Mac',
+          targets: targets,
+          coordinator: coordinator,
+          sensor: sensor,
+          onStart: onStart ?? (_) => start(),
+          onStop: () => coordinator.stopSharing(sendControl: controls.add),
+        ),
       ),
     ),
   );
-  Future<void> mount(WidgetTester tester, Widget child) async {
-    tester.view.physicalSize = const Size(390, 844);
+  Future<void> mount(
+    WidgetTester tester,
+    Widget child, {
+    Size size = const Size(390, 844),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1135,6 +1143,85 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets('iPad landscape shows pointer and keyboard together', (
+    tester,
+  ) async {
+    await mount(tester, app(), size: const Size(1024, 768));
+    expect(find.byKey(const ValueKey('mobile-control-split')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-touchpad')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-keyboard-panel')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'iPad 中文🙂');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('mobile-control-split')), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('iPad 中文🙂'), findsOneWidget);
+    await tester.pumpWidget(
+      app(viewInsets: const EdgeInsets.only(bottom: 300)),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'iPad split resizing releases held mouse input without rotation',
+    (tester) async {
+      await mount(tester, app(), size: const Size(1024, 768));
+      await tester.tap(find.byTooltip('Start control'));
+      await tester.pump();
+      final held = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('mobile-mouse-left'))),
+      );
+      tester.view.physicalSize = const Size(880, 768);
+      await tester.pump();
+      expect(
+        transport.sent
+            .where((p) => p.eventType == RemoteInputEventType.mouseButton)
+            .map((p) => jsonDecode(utf8.decode(p.payload))['down']),
+        [true, false],
+      );
+      await held.up();
+      for (final size in [const Size(768, 1024), const Size(320, 700)]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('mobile-control-split')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('iPad motion pauses for typing and resumes beside the keyboard', (
+    tester,
+  ) async {
+    sensor = _Sensor(true);
+    await mount(tester, app(), size: const Size(1024, 768));
+    await tester.tap(find.byTooltip('Start control'));
+    await tester.pump();
+    expect(sensor.events.hasListener, isTrue);
+    await tester.enterText(find.byType(TextField), 'keep draft');
+    await tester.pump();
+    expect(sensor.events.hasListener, isFalse);
+    await tester.tap(find.text('Return to direct keys'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('mobile-control-split')), findsOneWidget);
+    expect(sensor.events.hasListener, isTrue);
+    tester.view.physicalSize = const Size(507, 768);
+    await tester.pump();
+    expect(sensor.events.hasListener, isFalse);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'keep draft',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('permission failure explains the Mac setting', (tester) async {
     await mount(

@@ -101,7 +101,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     'protocol' => l10n.connectionDiagnosticVersion,
     _ => l10n.connectFailed,
   };
-  bool? _landscape;
+  Size? _viewportSize;
+  final _keyboardPanelKey = GlobalKey();
 
   int _gestureGeneration = 0;
 
@@ -165,7 +166,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   void _syncSensors() {
     if (_enabled &&
         _available &&
-        ((_input.air && _tab == 0) || _input.motion.calibrating)) {
+        ((_input.air && (_tab == 0 || _showBothControls)) ||
+            _input.motion.calibrating)) {
       _samples ??= _sensor.samples().listen(
         (sample) {
           final calibrating = _input.motion.calibrating;
@@ -288,15 +290,33 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   }
 
   void _textFocusChanged() {
-    if (!_textFocus.hasFocus || !mounted) return;
+    if (!_textFocus.hasFocus || !mounted || _editingText) return;
     _reset();
-    setState(() => _editingText = true);
+    setState(() {
+      _tab = 1;
+      _editingText = true;
+    });
+    _syncSensors();
   }
 
   void _returnToKeys() {
     _textFocus.unfocus();
     _reset();
     setState(() => _editingText = false);
+    _syncSensors();
+  }
+
+  bool get _showBothControls {
+    final query = MediaQuery.of(context);
+    return query.size.width >= 840 &&
+        query.size.height - query.viewInsets.bottom >= 450 &&
+        !_editingText;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncSensors();
   }
 
   @override
@@ -307,9 +327,8 @@ class _MobileControlScreenState extends State<MobileControlScreen>
   @override
   void didChangeMetrics() {
     final size = View.of(context).physicalSize;
-    final landscape = size.width > size.height;
-    if (_landscape != null && _landscape != landscape) _reset();
-    _landscape = landscape;
+    if (_viewportSize != null && _viewportSize != size) _reset();
+    _viewportSize = size;
   }
 
   @override
@@ -365,12 +384,11 @@ class _MobileControlScreenState extends State<MobileControlScreen>
 
   @override
   Widget build(BuildContext context) {
-    _landscape ??=
-        View.of(context).physicalSize.width >
-        View.of(context).physicalSize.height;
+    _viewportSize ??= View.of(context).physicalSize;
     final state = _coordinator.state;
     final busy = _starting || _stopping || (_ownsSession && state.isBusy);
     final palette = context.whisperPalette;
+    final showBothControls = _showBothControls;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         systemNavigationBarColor: palette.surfaceCanvas,
@@ -388,17 +406,20 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           titleSpacing: 0,
           title: _deviceTitle(),
           actions: [
-            _toolbarIcon(
-              key: const ValueKey('mobile-control-toggle'),
-              tooltip: _tab == 0
-                  ? l10n.mobileControlKeysTab
-                  : l10n.mobileControlPointer,
-              icon: _tab == 0 ? Icons.keyboard_outlined : Icons.mouse_outlined,
-              color: Theme.of(context).colorScheme.primary,
-              onPressed: _coordinator.isSendingText || _transitioning
-                  ? null
-                  : () => _selectTab(_tab == 0 ? 1 : 0),
-            ),
+            if (!showBothControls)
+              _toolbarIcon(
+                key: const ValueKey('mobile-control-toggle'),
+                tooltip: _tab == 0
+                    ? l10n.mobileControlKeysTab
+                    : l10n.mobileControlPointer,
+                icon: _tab == 0
+                    ? Icons.keyboard_outlined
+                    : Icons.mouse_outlined,
+                color: Theme.of(context).colorScheme.primary,
+                onPressed: _coordinator.isSendingText || _transitioning
+                    ? null
+                    : () => _selectTab(_tab == 0 ? 1 : 0),
+              ),
             const SizedBox(width: 8),
             _sessionAction(busy),
             const SizedBox(width: 8),
@@ -448,7 +469,22 @@ class _MobileControlScreenState extends State<MobileControlScreen>
                       parent: _transition,
                       curve: Curves.easeOutCubic,
                     ),
-                    child: _tab == 0 ? _pointerPanel() : _keyboardPanel(),
+                    child: showBothControls
+                        ? Row(
+                            key: const ValueKey('mobile-control-split'),
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _pointerPanel()),
+                              VerticalDivider(
+                                width: 1,
+                                color: palette.borderSubtle,
+                              ),
+                              Expanded(child: _keyboardPanel()),
+                            ],
+                          )
+                        : _tab == 0
+                        ? _pointerPanel()
+                        : _keyboardPanel(),
                   ),
                 ),
               ),
@@ -892,43 +928,49 @@ class _MobileControlScreenState extends State<MobileControlScreen>
     );
   }
 
-  Widget _keyboardPanel() => LayoutBuilder(
-    builder: (context, constraints) {
-      const padding = EdgeInsets.fromLTRB(12, 8, 12, 16);
-      return SingleChildScrollView(
-        key: const ValueKey('mobile-keyboard-panel'),
-        padding: padding,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: math.max(0, constraints.maxHeight - padding.vertical),
+  Widget _keyboardPanel() => KeyedSubtree(
+    // Keep the input connection and composing text when the iPad layout changes.
+    key: _keyboardPanelKey,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        const padding = EdgeInsets.fromLTRB(12, 8, 12, 16);
+        return SingleChildScrollView(
+          key: const ValueKey('mobile-keyboard-panel'),
+          padding: padding,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: math.max(0, constraints.maxHeight - padding.vertical),
+            ),
+            child: Column(
+              mainAxisAlignment: _editingText
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _textPanel(),
+                if (_editingText) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _target.platform.toLowerCase().contains('linux')
+                        ? l10n.mobileControlLinuxTextHint
+                        : l10n.mobileControlTextHint,
+                    style: TextStyle(color: context.whisperPalette.textMuted),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _coordinator.isSendingText
+                        ? null
+                        : _returnToKeys,
+                    child: Text(l10n.mobileControlReturnKeys),
+                  ),
+                ] else
+                  _directKeyboard(),
+              ],
+            ),
           ),
-          child: Column(
-            mainAxisAlignment: _editingText
-                ? MainAxisAlignment.start
-                : MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _textPanel(),
-              if (_editingText) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _target.platform.toLowerCase().contains('linux')
-                      ? l10n.mobileControlLinuxTextHint
-                      : l10n.mobileControlTextHint,
-                  style: TextStyle(color: context.whisperPalette.textMuted),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _coordinator.isSendingText ? null : _returnToKeys,
-                  child: Text(l10n.mobileControlReturnKeys),
-                ),
-              ] else
-                _directKeyboard(),
-            ],
-          ),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 
   Widget _directKeyboard() => Column(

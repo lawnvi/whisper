@@ -3,47 +3,74 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('mobile app locks orientation to portrait only', () {
+  test('only Android forces orientation from Dart', () {
     final mainSource = File('lib/main.dart').readAsStringSync();
     final mobileOrientationBlock = RegExp(
-      r'if\s*\(\s*isMobile\(\)\s*\)\s*\{[\s\S]*?SystemChrome\.setPreferredOrientations\([\s\S]*?\);\s*\}',
+      r'if\s*\(\s*Platform\.isAndroid\s*\)\s*\{[\s\S]*?SystemChrome\.setPreferredOrientations\([\s\S]*?\);\s*\}',
     ).firstMatch(mainSource)?.group(0);
 
     expect(mobileOrientationBlock, isNotNull);
     expect(mobileOrientationBlock, contains('DeviceOrientation.portraitUp'));
-    expect(mobileOrientationBlock,
-        isNot(contains('DeviceOrientation.portraitDown')));
-    expect(mobileOrientationBlock,
-        isNot(contains('DeviceOrientation.landscapeLeft')));
-    expect(mobileOrientationBlock,
-        isNot(contains('DeviceOrientation.landscapeRight')));
+    expect(
+      mobileOrientationBlock,
+      isNot(contains('DeviceOrientation.portraitDown')),
+    );
+    expect(
+      mobileOrientationBlock,
+      isNot(contains('DeviceOrientation.landscapeLeft')),
+    );
+    expect(
+      mobileOrientationBlock,
+      isNot(contains('DeviceOrientation.landscapeRight')),
+    );
   });
 
-  test('native mobile runners declare portrait only orientation', () {
-    final manifest =
-        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
-    final mainActivity = RegExp(
-      r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>',
-    ).firstMatch(manifest)!.group(0)!;
+  test(
+    'phones keep portrait while iPad supports rotation and multitasking',
+    () {
+      final manifest = File(
+        'android/app/src/main/AndroidManifest.xml',
+      ).readAsStringSync();
+      final mainActivity = RegExp(
+        r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>',
+      ).firstMatch(manifest)!.group(0)!;
 
-    expect(mainActivity, contains('android:screenOrientation="portrait"'));
+      expect(mainActivity, contains('android:screenOrientation="portrait"'));
 
-    final iosPlist = File('ios/Runner/Info.plist').readAsStringSync();
-    final phoneOrientations =
-        _plistArrayFor(iosPlist, 'UISupportedInterfaceOrientations');
-    final ipadOrientations =
-        _plistArrayFor(iosPlist, 'UISupportedInterfaceOrientations~ipad');
+      final iosPlist = File('ios/Runner/Info.plist').readAsStringSync();
+      final phoneOrientations = _plistArrayFor(
+        iosPlist,
+        'UISupportedInterfaceOrientations',
+      );
+      final ipadOrientations = _plistArrayFor(
+        iosPlist,
+        'UISupportedInterfaceOrientations~ipad',
+      );
 
-    for (final orientations in [phoneOrientations, ipadOrientations]) {
-      expect(orientations, contains('UIInterfaceOrientationPortrait'));
-      expect(orientations,
-          isNot(contains('UIInterfaceOrientationPortraitUpsideDown')));
+      expect(phoneOrientations, contains('UIInterfaceOrientationPortrait'));
       expect(
-          orientations, isNot(contains('UIInterfaceOrientationLandscapeLeft')));
-      expect(orientations,
-          isNot(contains('UIInterfaceOrientationLandscapeRight')));
-    }
-  });
+        phoneOrientations,
+        isNot(contains('UIInterfaceOrientationPortraitUpsideDown')),
+      );
+      expect(
+        phoneOrientations,
+        isNot(contains('UIInterfaceOrientationLandscape')),
+      );
+      expect(
+        ipadOrientations,
+        contains('UIInterfaceOrientationPortraitUpsideDown'),
+      );
+      expect(ipadOrientations, contains('UIInterfaceOrientationLandscapeLeft'));
+      expect(
+        ipadOrientations,
+        contains('UIInterfaceOrientationLandscapeRight'),
+      );
+      expect(
+        iosPlist,
+        matches(RegExp(r'<key>UIRequiresFullScreen</key>\s*<false/>')),
+      );
+    },
+  );
 }
 
 String _plistArrayFor(String source, String key) {

@@ -51,6 +51,8 @@ PODS:
     - FlutterMacOS
   - irondash_engine_context (0.0.1):
     - Flutter
+  - media_kit_video (0.0.1):
+    - Flutter
   - open_filex (0.0.2):
     - Flutter
   - opus_codec_ios (3.0.5):
@@ -110,6 +112,7 @@ DEPENDENCIES:
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - irondash_engine_context (from `.symlinks/plugins/irondash_engine_context/ios`)
+  - media_kit_video (from `.symlinks/plugins/media_kit_video/ios`)
   - open_filex (from `.symlinks/plugins/open_filex/ios`)
   - opus_codec_ios (from `.symlinks/plugins/opus_codec_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
@@ -148,6 +151,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
   irondash_engine_context:
     :path: ".symlinks/plugins/irondash_engine_context/ios"
+  media_kit_video:
+    :path: ".symlinks/plugins/media_kit_video/ios"
   open_filex:
     :path: ".symlinks/plugins/open_filex/ios"
   opus_codec_ios:
@@ -181,6 +186,7 @@ SPEC CHECKSUMS:
   flutter_local_notifications: 395056b3175ba4f08480a7c5de30cd36d69827e4
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   irondash_engine_context: 8e58ca8e0212ee9d1c7dc6a42121849986c88486
+  media_kit_video: f3b0d035d89def15cfbbcf7dc2ae278f201e2f83
   open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
   opus_codec_ios: 92a104ce4500126b25cf0abddf379af393846fd2
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
@@ -195,6 +201,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
 
-PODFILE CHECKSUM: 4e418cf793378ac78ebbd933a0a48b7133da9d50
+PODFILE CHECKSUM: 22e5a815f524d8d239c26b3ea1ddce04f62ed8b5
 
 COCOAPODS: 1.16.2

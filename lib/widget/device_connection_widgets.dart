@@ -96,6 +96,8 @@ class DeviceConnectionWelcome extends StatelessWidget {
 }
 
 class DeviceToolbarButton extends StatelessWidget {
+  static const double width = 32;
+
   const DeviceToolbarButton({
     super.key,
     required this.icon,
@@ -111,7 +113,7 @@ class DeviceToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 32,
+    width: width,
     height: 32,
     child: Semantics(
       label: label,

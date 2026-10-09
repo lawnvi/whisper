@@ -29,7 +29,7 @@ class AudioMediaSessionBridge {
     required AudioGroupCoordinator coordinator,
     required AudioPlatform platform,
   }) {
-    if (!Platform.isAndroid) {
+    if (!Platform.isAndroid && !Platform.isIOS) {
       return;
     }
     _coordinator?.removeListener(_sync);
@@ -102,8 +102,11 @@ class AudioMediaSessionBridge {
     if (sourcePeerId.isEmpty) {
       return 'Whisper';
     }
-    final deviceName =
-        WsSvrManager().remoteProfileFor(sourcePeerId)?.device.name.trim();
+    final deviceName = WsSvrManager()
+        .remoteProfileFor(sourcePeerId)
+        ?.device
+        .name
+        .trim();
     if (deviceName != null && deviceName.isNotEmpty) {
       return deviceName;
     }

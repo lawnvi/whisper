@@ -1,2 +1,6 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
+
+// Flutter 3.41 verifies all simulator slices in one lipo call, which fails on
+// Xcode 27. Debug simulators only need the host architecture.
+ARCHS[sdk=iphonesimulator*] = $(NATIVE_ARCH_ACTUAL)

@@ -68,6 +68,8 @@ import 'package:whisper/widget/app_dialogs.dart' as app_dialogs;
 import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
+import 'package:whisper/widget/device_sidebar_toolbar.dart';
+import 'package:whisper/widget/device_workspace_layout.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
@@ -92,6 +94,7 @@ enum DeviceListOperationKind {
   desktopShutdown,
   socketDialog,
   serverStart,
+  clipboardWatcher,
 }
 
 enum DiscoveryDiagnosticKind {
@@ -191,12 +194,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
     with WidgetsBindingObserver
     implements ISocketEvent, TrayListener, WindowListener, ClipboardListener {
   static const double _desktopToolbarPillHeight = 38;
-  static const double _desktopToolbarGap = 10;
-  static const double _desktopToolbarToolGroupWidth = 140;
-  static const Duration _desktopToolbarAnimationDuration = Duration(
-    milliseconds: 220,
-  );
-  static const Curve _desktopToolbarAnimationCurve = Curves.easeOutCubic;
 
   final db = LocalDatabase();
   final socketManager = WsSvrManager();
@@ -320,9 +317,38 @@ class _DeviceListScreen extends State<DeviceListScreen>
       unawaited(_initializeDesktopQuickSend());
     }
     clipboardWatcher.addListener(this);
-    // start watch
-    clipboardWatcher.start();
+    unawaited(_syncClipboardWatcher());
     super.initState();
+  }
+
+  int _clipboardWatcherGeneration = 0;
+  bool? _iosClipboardWatching;
+
+  Future<void> _syncClipboardWatcher() async {
+    try {
+      if (!Platform.isIOS) {
+        await clipboardWatcher.start();
+        return;
+      }
+      final generation = ++_clipboardWatcherGeneration;
+      final enabled = await LocalSetting().clipboardAutoSync();
+      if (!mounted ||
+          generation != _clipboardWatcherGeneration ||
+          enabled == _iosClipboardWatching) {
+        return;
+      }
+      _iosClipboardWatching = enabled;
+      // The iOS plugin reads the pasteboard as soon as watching starts.
+      // Only do that when the user has enabled automatic clipboard sync.
+      if (enabled) {
+        await clipboardWatcher.start();
+      } else {
+        await clipboardWatcher.stop();
+      }
+    } catch (error) {
+      _iosClipboardWatching = null;
+      _logDeviceListFailure(DeviceListOperationKind.clipboardWatcher, error);
+    }
   }
 
   Future<void> _initializeAndroidSystemShare() async {
@@ -383,8 +409,18 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _requestLocalNetworkPermission() async {
+    if (Platform.isIOS) {
+      // Native prompts can suspend rendering, so show the actual app first.
+      await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+      if (!mounted) return;
+    }
     if (Platform.isAndroid || Platform.isIOS) {
       await LocalNetworkPermission().ensureGranted();
+    }
+    if (Platform.isIOS && mounted) {
+      unawaited(
+        NotificationHelper().requestIOSPermissions().catchError((Object _) {}),
+      );
     }
   }
 
@@ -531,6 +567,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void dispose() {
+    ++_clipboardWatcherGeneration;
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -1401,6 +1438,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   void _broadcastService({port}) async {
     final wifiIP = await getLocalIpAddress();
+    if (!mounted) return;
 
     if (wifiIP == "127.0.0.1") {
       _isBroadcasting = false;
@@ -1408,6 +1446,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
 
     await _stopBroadcast(close: false);
+    if (!mounted) return;
+    final name = device?.name ?? await deviceName();
+    if (!mounted) return;
     BonsoirService service = BonsoirService(
       name: buildWhisperServiceName(serviceName, device?.uid ?? ""),
       type: serviceType,
@@ -1415,46 +1456,60 @@ class _DeviceListScreen extends State<DeviceListScreen>
       attributes: {
         'host': wifiIP,
         'port': (port ?? device?.port ?? 10002).toString(),
-        'name': device?.name ?? await deviceName(),
+        'name': name,
         'platform': device?.platform ?? "未知",
         'uid': device?.uid ?? "",
       },
     );
 
     // And now we can broadcast it :
-    _broadcast = BonsoirBroadcast(service: service);
-    await _broadcast!.ready;
+    final broadcast = BonsoirBroadcast(service: service);
+    _broadcast = broadcast;
+    await broadcast.ready;
+    if (!mounted || !identical(_broadcast, broadcast)) {
+      await broadcast.stop();
+      return;
+    }
 
     _broadcastSubscription?.cancel();
-    _broadcastSubscription = _broadcast!.eventStream!.listen((event) {
+    _broadcastSubscription = broadcast.eventStream!.listen((event) {
       _logDiscovery(DiscoveryDiagnosticKind.broadcastEvent, state: event.type);
     });
 
-    await _broadcast!.start();
-    _isBroadcasting = true;
+    await broadcast.start();
+    if (mounted && identical(_broadcast, broadcast)) _isBroadcasting = true;
   }
 
   Future<void> _stopBroadcast({close = true}) async {
     _broadcastRestartTimer?.cancel();
     _broadcastRestartTimer = null;
-    await _broadcastSubscription?.cancel();
+    final subscription = _broadcastSubscription;
+    final broadcast = _broadcast;
     _broadcastSubscription = null;
-    await _broadcast?.stop();
     _broadcast = null;
     _isBroadcasting = !close;
+    await subscription?.cancel();
+    await broadcast?.stop();
   }
 
   Future<void> _discoverService() async {
     await _stopDiscovery();
+    if (!mounted) return;
     // This is the type of service we're looking for :
 
     // Once defined, we can start the discovery :
-    _discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
-    await _discovery!.ready;
+    final discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
+    _discovery = discovery;
+    await discovery.ready;
+    if (!mounted || !identical(_discovery, discovery)) {
+      await discovery.stop();
+      return;
+    }
 
     // If you want to listen to the discovery :
     _discoverySubscription?.cancel();
-    _discoverySubscription = _discovery?.eventStream!.listen((event) async {
+    _discoverySubscription = discovery.eventStream!.listen((event) async {
+      if (!mounted || !identical(_discovery, discovery)) return;
       _logDiscovery(DiscoveryDiagnosticKind.discoveryEvent, state: event.type);
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
@@ -1464,7 +1519,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             _logDiscovery(DiscoveryDiagnosticKind.serviceFound);
             if (service.name.startsWith(serviceName) &&
                 _shouldResolveService(service)) {
-              event.service!.resolve(_discovery!.serviceResolver);
+              event.service!.resolve(discovery.serviceResolver);
             }
             break;
           case BonsoirDiscoveryEventType.discoveryStarted:
@@ -1512,6 +1567,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
                 advertisedHost: host,
                 port: port,
               );
+              if (!mounted || !identical(_discovery, discovery)) return;
               if (host == null) {
                 _logDiscovery(DiscoveryDiagnosticKind.serviceSkipped);
                 return;
@@ -1545,6 +1601,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               return;
             }
             final temp = await db.fetchDevice(uid);
+            if (!mounted || !identical(_discovery, discovery)) return;
             if (isLost && temp == null) {
               return;
             }
@@ -1568,6 +1625,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
               visibleDevice,
               discovered: !isLost,
             );
+            if (!mounted || !identical(_discovery, discovery)) return;
             if (!isLost && host != null) {
               try {
                 socketManager.updateReconnectEndpoint(uid, host, port);
@@ -1597,17 +1655,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
     });
 
     // Start discovery **after** having listened to discovery events :
-    await _discovery?.start();
-    _isDiscovering = true;
+    await discovery.start();
+    if (mounted && identical(_discovery, discovery)) _isDiscovering = true;
   }
 
   Future<void> _stopDiscovery() async {
-    await _discoverySubscription?.cancel();
+    final subscription = _discoverySubscription;
+    final discovery = _discovery;
     _discoverySubscription = null;
-    await _discovery?.stop();
     _discovery = null;
     _discoveryPresence.clear();
     _isDiscovering = false;
+    await subscription?.cancel();
+    await discovery?.stop();
   }
 
   DeviceData buildDevice({
@@ -1663,6 +1723,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _refreshDevice({isFirst = false}) async {
+    if (!mounted) return;
+    if (Platform.isIOS) unawaited(_syncClipboardWatcher());
     if (isFirst) {
       await _localNetworkPermissionBootstrap;
       if (!mounted) {
@@ -1681,6 +1743,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     };
     await ConnectionCoordinator().bootstrap(temp.uid);
     await ConnectionCoordinator().syncKnownDevices(arr);
+    if (!mounted) return;
     var newArr = <DeviceData>[];
     var aroundIds = <String>{};
     for (var item in devices) {
@@ -1723,6 +1786,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final latestMessages = await db.fetchLatestMessagesByPeers(
       newArr.map((item) => item.uid).toList(),
     );
+    if (!mounted) return;
     final sessions = ChatSessionListBuilder.build(
       devices: newArr,
       latestMessages: latestMessages,
@@ -1803,12 +1867,37 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDesk = isDesktop();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (isDesk) {
-      return _buildDesktopScaffold(isDark);
-    }
-    return _buildMobileScaffold(isDark);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final split = usesSplitDeviceWorkspace(
+          width: constraints.maxWidth,
+          desktop: isDesktop(),
+          ios: Platform.isIOS,
+        );
+        if (split ||
+            (_usesTabletWorkspace && _selectedDesktopSession() != null)) {
+          return _buildDesktopScaffold(isDark, compact: !split);
+        }
+        return _buildMobileScaffold(isDark);
+      },
+    );
+  }
+
+  bool get _usesSplitWorkspace => usesSplitDeviceWorkspace(
+    width: MediaQuery.sizeOf(context).width,
+    desktop: isDesktop(),
+    ios: Platform.isIOS,
+  );
+
+  bool get _usesTabletWorkspace {
+    if (!Platform.isIOS) return false;
+    final view = View.of(context);
+    return usesRetainedTabletWorkspace(
+      ios: true,
+      displayShortestSide:
+          view.display.size.shortestSide / view.devicePixelRatio,
+    );
   }
 
   Widget _buildMobileScaffold(bool isDark) {
@@ -1862,32 +1951,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
         ),
         // automaticallyImplyLeading: true, // 隐藏返回按钮
         actions: [
-          if (false)
-            CupertinoButton(
-              // 使用CupertinoButton
-              padding: EdgeInsets.zero,
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                size: 26,
-                color: Colors.black45,
-              ),
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SendMessageScreen(
-                      device: buildDevice(
-                        uid: LocalUuid.v4(),
-                        name: "",
-                        port: -1,
-                        host: "localhost",
-                      ),
-                    ),
-                  ),
-                );
-                _refreshDevice();
-              },
-            ),
           CupertinoButton(
             // 使用CupertinoButton
             padding: EdgeInsets.zero,
@@ -1926,7 +1989,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildDesktopScaffold(bool isDark) {
+  Widget _buildDesktopScaffold(bool isDark, {bool compact = false}) {
     final selectedSession = _selectedDesktopSession();
     final visibleSessions = _visibleSessions();
     final palette = context.whisperPalette;
@@ -1935,50 +1998,56 @@ class _DeviceListScreen extends State<DeviceListScreen>
       body: SafeArea(
         child: Row(
           children: [
-            SizedBox(
-              width: 340,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: palette.surfaceCanvas,
-                  border: Border(
-                    right: BorderSide(color: palette.borderSubtle),
+            if (!compact)
+              SizedBox(
+                width: isDesktop() ? 340 : 320,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: palette.surfaceCanvas,
+                    border: Border(
+                      right: BorderSide(color: palette.borderSubtle),
+                    ),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    _buildDesktopSidebarToolbar(),
-                    Expanded(
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(
-                          context,
-                        ).copyWith(scrollbars: false),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                          itemCount: visibleSessions.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
-                          itemBuilder: (context, index) {
-                            final session = visibleSessions[index];
-                            return _buildDesktopSessionTile(
-                              session,
-                              selected:
-                                  session.device.uid == _selectedDesktopPeerId,
-                            );
-                          },
+                  child: Column(
+                    children: [
+                      _buildDesktopSidebarToolbar(),
+                      Expanded(
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(
+                            context,
+                          ).copyWith(scrollbars: false),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                            itemCount: visibleSessions.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (context, index) {
+                              final session = visibleSessions[index];
+                              return _buildDesktopSessionTile(
+                                session,
+                                selected:
+                                    session.device.uid ==
+                                    _selectedDesktopPeerId,
+                              );
+                            },
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
             Expanded(
+              key: const ValueKey('workspace-conversation'),
               child: selectedSession == null
                   ? _buildDesktopPlaceholder(isDark)
                   : SendMessageScreen(
                       key: ValueKey('desktop-${selectedSession.device.uid}'),
                       device: selectedSession.device,
-                      embedded: true,
+                      embedded: !compact,
+                      onBack: compact
+                          ? () => setState(() => _selectedDesktopPeerId = null)
+                          : null,
                       onDeviceDeleted: _removeDevice,
                     ),
             ),
@@ -1989,50 +2058,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Widget _buildDesktopSidebarToolbar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      child: SizedBox(
-        height: 40,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final maxWidth = constraints.maxWidth;
-            final collapsedSearchWidth =
-                (maxWidth - _desktopToolbarGap - _desktopToolbarToolGroupWidth)
-                    .clamp(0.0, maxWidth)
-                    .toDouble();
-            final searchWidth = _isDesktopSearchExpanded
-                ? maxWidth
-                : collapsedSearchWidth;
-            final gapWidth = _isDesktopSearchExpanded
-                ? 0.0
-                : _desktopToolbarGap;
-            final toolGroupWidth = _isDesktopSearchExpanded
-                ? 0.0
-                : _desktopToolbarToolGroupWidth;
-
-            return ClipRect(
-              child: Row(
-                children: [
-                  AnimatedContainer(
-                    duration: _desktopToolbarAnimationDuration,
-                    curve: _desktopToolbarAnimationCurve,
-                    width: searchWidth,
-                    child: _buildDesktopSearchPill(
-                      expanded: _isDesktopSearchExpanded,
-                    ),
-                  ),
-                  AnimatedContainer(
-                    duration: _desktopToolbarAnimationDuration,
-                    curve: _desktopToolbarAnimationCurve,
-                    width: gapWidth,
-                  ),
-                  _buildCollapsibleDesktopToolGroup(width: toolGroupWidth),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+    return DeviceSidebarToolbar(
+      searchExpanded: _isDesktopSearchExpanded,
+      search: _buildDesktopSearchPill(expanded: _isDesktopSearchExpanded),
+      tools: _buildDesktopTools(),
     );
   }
 
@@ -2139,75 +2168,33 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildCollapsibleDesktopToolGroup({required double width}) {
-    return ClipRect(
-      child: AnimatedContainer(
-        duration: _desktopToolbarAnimationDuration,
-        curve: _desktopToolbarAnimationCurve,
-        width: width,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: OverflowBox(
-            alignment: Alignment.centerRight,
-            minWidth: _desktopToolbarToolGroupWidth,
-            maxWidth: _desktopToolbarToolGroupWidth,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 140),
-              opacity: _isDesktopSearchExpanded ? 0 : 1,
-              child: IgnorePointer(
-                ignoring: _isDesktopSearchExpanded,
-                child: _buildDesktopToolGroup(),
+  List<Widget> _buildDesktopTools() {
+    return [
+      _buildDesktopToolButton(
+        icon: Icons.qr_code_scanner_rounded,
+        tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
+        onPressed: _openPairingQr,
+      ),
+      if (isDesktop()) ...[
+        _buildDesktopAudioShareAction(),
+        _buildDesktopRemoteInputWorkspaceAction(),
+      ],
+      _buildDesktopToolButton(
+        icon: Icons.settings_outlined,
+        tooltip: AppLocalizations.of(context)?.setting ?? '设置',
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => app_settings.SettingsScreen(
+                exitForUpdate: _shutdownAndDestroyWindow,
               ),
             ),
-          ),
-        ),
+          );
+          _refreshDevice();
+        },
       ),
-    );
-  }
-
-  Widget _buildDesktopToolGroup() {
-    return SizedBox(
-      width: _desktopToolbarToolGroupWidth,
-      child: Container(
-        height: _desktopToolbarPillHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(
-          color: _desktopToolbarPillColor,
-          borderRadius: _desktopToolbarPillRadius,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildDesktopToolButton(
-              icon: Icons.qr_code_scanner_rounded,
-              tooltip:
-                  AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
-              onPressed: _openPairingQr,
-            ),
-            const SizedBox(width: 2),
-            _buildDesktopAudioShareAction(),
-            const SizedBox(width: 2),
-            _buildDesktopRemoteInputWorkspaceAction(),
-            const SizedBox(width: 2),
-            _buildDesktopToolButton(
-              icon: Icons.settings_outlined,
-              tooltip: AppLocalizations.of(context)?.setting ?? '设置',
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => app_settings.SettingsScreen(
-                      exitForUpdate: _shutdownAndDestroyWindow,
-                    ),
-                  ),
-                );
-                _refreshDevice();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+    ];
   }
 
   Widget _buildDesktopAudioShareAction() {
@@ -2960,7 +2947,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (socketManager.isConnectedTo(deviceItem.uid)) {
       socketManager.selectPeer(deviceItem.uid);
     }
-    if (isDesktop()) {
+    if (_usesSplitWorkspace ||
+        (_usesTabletWorkspace &&
+            _sessionItems.any((s) => s.device.uid == deviceItem.uid))) {
       setState(() {
         _selectedDesktopPeerId = deviceItem.uid;
       });
@@ -3354,7 +3343,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
             !_connectionAttempts.isCurrent(targetKey, attemptGeneration)) {
           return;
         }
-        if (isDesktop()) {
+        if (_usesSplitWorkspace || _usesTabletWorkspace) {
           setState(() {
             _selectedDesktopPeerId = connectedDevice.uid;
           });
@@ -3573,7 +3562,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     if (!mounted) {
       return;
     }
-    if (isDesktop()) {
+    if (_usesSplitWorkspace || _usesTabletWorkspace) {
       setState(() {
         _selectedDesktopPeerId = deviceData.uid;
       });

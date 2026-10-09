@@ -4847,7 +4847,7 @@ class WsSvrManager {
         fileTransferV3: true,
         systemAudioSourceV1: supportsNativeSystemAudio(),
         speakerSinkV1: true,
-        remoteInputManualSourceV1: Platform.isAndroid,
+        remoteInputManualSourceV1: supportsManualRemoteInputSource(),
         remoteInputManualSinkV1: supportsManualRemoteInputSink(),
         remoteInputSourceV1: supportsNativeRemoteInput(),
         remoteInputSinkV1: supportsNativeRemoteInput(),
@@ -5327,7 +5327,8 @@ class WsSvrManager {
   ) {
     if (control.mode == RemoteInputMode.manual &&
         control.action == RemoteInputControlAction.offer &&
-        (!Platform.isAndroid || !supportsManualInputFor(peerId))) {
+        (!supportsManualRemoteInputSource() ||
+            !supportsManualInputFor(peerId))) {
       return Future<bool>.value(false);
     }
     if (!_validateOutgoingControlSession(

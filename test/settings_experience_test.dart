@@ -72,6 +72,7 @@ Finder _settingRow(String title) =>
     find.ancestor(of: find.text(title), matching: find.byType(Semantics)).first;
 
 Widget _host({
+  Widget? home,
   Locale locale = const Locale('en'),
   double textScale = 1,
   TargetPlatform? platform,
@@ -106,25 +107,44 @@ Widget _host({
       ).copyWith(textScaler: TextScaler.linear(textScale)),
       child: child!,
     ),
-    home: SettingsScreen(
-      presentationLoader: loader ?? () async => presentation,
-      changeDirectory: () async => '/tmp/Whisper',
-      openDirectory: (_) async {},
-      updateNickname: (_) async {},
-      updateServerPort: (_) async {},
-      updateNotificationForwarding: updateNotificationForwarding,
-      writeNotificationForwarding: writeNotificationForwarding,
-      readNotificationForwarding: readNotificationForwarding,
-      syncNotificationForwardingListener: syncNotificationForwardingListener,
-      refreshNotificationRegistry: refreshNotificationRegistry,
-      openNotificationApps: openNotificationApps,
-      showMessage: showMessage,
-      updateManager: updateManager,
-      exitForUpdate: exitForUpdate,
-      autoCheckForUpdates: autoCheckForUpdates,
-    ),
+    home:
+        home ??
+        SettingsScreen(
+          presentationLoader: loader ?? () async => presentation,
+          changeDirectory: () async => '/tmp/Whisper',
+          openDirectory: (_) async {},
+          updateNickname: (_) async {},
+          updateServerPort: (_) async {},
+          updateNotificationForwarding: updateNotificationForwarding,
+          writeNotificationForwarding: writeNotificationForwarding,
+          readNotificationForwarding: readNotificationForwarding,
+          syncNotificationForwardingListener:
+              syncNotificationForwardingListener,
+          refreshNotificationRegistry: refreshNotificationRegistry,
+          openNotificationApps: openNotificationApps,
+          showMessage: showMessage,
+          updateManager: updateManager,
+          exitForUpdate: exitForUpdate,
+          autoCheckForUpdates: autoCheckForUpdates,
+        ),
   );
 }
+
+Widget _settingsNavigationHome() => Builder(
+  builder: (context) => Scaffold(
+    body: TextButton(
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SettingsScreen(
+            presentationLoader: () async => _presentation,
+            autoCheckForUpdates: false,
+          ),
+        ),
+      ),
+      child: const Text('open settings'),
+    ),
+  ),
+);
 
 class _FakeUpdateManager implements AppUpdateManager {
   _FakeUpdateManager({
@@ -239,6 +259,33 @@ Future<void> _pumpAt(
 }
 
 void main() {
+  testWidgets('settings data does not replace the list during the page slide', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(home: _settingsNavigationHome()));
+    await tester.tap(find.text('open settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+    expect(find.text('Theme Mode'), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.text('Theme Mode'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closing settings during the opening slide cancels its wait', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(home: _settingsNavigationHome()));
+    await tester.tap(find.text('open settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
