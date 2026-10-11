@@ -39,7 +39,7 @@ const _presentation = SettingsPresentation(
   themeMode: ThemeMode.system,
 );
 
-const _title = 'Keyboard and mouse on the lock screen';
+const _title = 'Keyboard and mouse on the lock screen and UAC';
 
 class _NoUpdates implements AppUpdateManager {
   @override
@@ -50,15 +50,19 @@ void main() {
   const channel = MethodChannel('test/windows_input_service_setting');
   final calls = <String>[];
   late List<String> states;
+  late bool elevated;
 
   Future<WindowsInputServiceController> pumpSettings(
-    WidgetTester tester,
-  ) async {
+    WidgetTester tester, {
+    bool elevatedAllowed = false,
+  }) async {
     calls.clear();
+    elevated = elevatedAllowed;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
       calls.add(call.method);
+      if (call.method == 'getElevatedInputAllowed') return elevated;
       if (call.method != 'getInputServiceState') return null;
       return states.length > 1 ? states.removeAt(0) : states.single;
     });
@@ -229,4 +233,80 @@ void main() {
       expect(find.text('Running'), findsOneWidget);
     });
   }
+
+  CupertinoSwitch elevatedSwitch(WidgetTester tester) => tester.widget(
+    find.descendant(
+      of: find.byType(WindowsElevatedInputSwitch),
+      matching: find.byType(CupertinoSwitch),
+    ),
+  );
+
+  testWidgets('the UAC switch is off and inert unless the service runs', (
+    tester,
+  ) async {
+    states = <String>['stopped'];
+    final controller = await pumpSettings(tester, elevatedAllowed: true);
+
+    expect(controller.elevatedAllowed, isFalse);
+    expect(elevatedSwitch(tester).value, isFalse);
+    expect(elevatedSwitch(tester).onChanged, isNull);
+  });
+
+  testWidgets('turning the UAC switch on warns before anything runs', (
+    tester,
+  ) async {
+    states = <String>['running'];
+    final controller = await pumpSettings(tester);
+    expect(elevatedSwitch(tester).value, isFalse);
+
+    await tester.tap(find.byType(WindowsElevatedInputSwitch));
+    await tester.pumpAndSettle();
+    // The confirmation spells out the UAC risk before the elevated run.
+    expect(find.textContaining('get past UAC'), findsOneWidget);
+    expect(calls, isEmpty);
+
+    elevated = true;
+    await tester.tap(find.text('Turn on'));
+    await tester.pumpAndSettle();
+
+    // The switch never installs or removes the service.
+    expect(calls.first, 'enableElevatedInput');
+    expect(calls, isNot(contains('uninstallInputService')));
+    expect(controller.elevatedAllowed, isTrue);
+    expect(elevatedSwitch(tester).value, isTrue);
+  });
+
+  testWidgets('declining the UAC warning changes nothing', (tester) async {
+    states = <String>['running'];
+    final controller = await pumpSettings(tester);
+
+    await tester.tap(find.byType(WindowsElevatedInputSwitch));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(calls, isEmpty);
+    expect(controller.elevatedAllowed, isFalse);
+  });
+
+  testWidgets('uninstalling from the row also switches UAC control off', (
+    tester,
+  ) async {
+    states = <String>['running', 'notInstalled'];
+    final controller = await pumpSettings(tester, elevatedAllowed: true);
+    expect(elevatedSwitch(tester).value, isTrue);
+
+    // Tapping the row is the service's action, not the switch's.
+    await tester.tap(find.text(_title));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('lock screen and UAC prompts'), findsOneWidget);
+    await tester.tap(find.text('Uninstall'));
+    await tester.pumpAndSettle();
+
+    expect(calls.first, 'uninstallInputService');
+    expect(calls, isNot(contains('disableElevatedInput')));
+    expect(controller.elevatedAllowed, isFalse);
+    expect(elevatedSwitch(tester).value, isFalse);
+    expect(elevatedSwitch(tester).onChanged, isNull);
+  });
 }

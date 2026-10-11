@@ -103,3 +103,69 @@ Future<void> changeWindowsLockScreenInput(
     showAppToast(l10n.windowsLockScreenInputFailed);
   }
 }
+
+/// Whether a running service also reaches UAC prompts, which appear once the
+/// session is unlocked. It sits at the end of the service's row, apart from
+/// the row's own install and uninstall action.
+class WindowsElevatedInputSwitch extends StatelessWidget {
+  const WindowsElevatedInputSwitch({super.key, required this.controller});
+
+  final WindowsInputServiceController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final available =
+            controller.state == WindowsInputServiceState.running &&
+            !controller.busy;
+        return Tooltip(
+          message: l10n.windowsElevatedInput,
+          child: CupertinoSwitch(
+            value: controller.elevatedAllowed,
+            onChanged: available
+                ? (value) => unawaited(
+                    changeWindowsElevatedInput(
+                      context,
+                      value,
+                      controller: controller,
+                    ),
+                  )
+                : null,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Confirms, spelling out the risk of turning it on, and then changes whether
+/// the service reaches UAC prompts. Either way ends in a UAC prompt.
+Future<void> changeWindowsElevatedInput(
+  BuildContext context,
+  bool enable, {
+  WindowsInputServiceController? controller,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final service = controller ?? WindowsInputServiceController.shared;
+  if (service.busy) return;
+  final confirmed = await confirmAction(
+    context,
+    title: l10n.windowsElevatedInput,
+    description: enable
+        ? l10n.windowsElevatedInputEnableDesc
+        : l10n.windowsElevatedInputDisableDesc,
+    confirmButtonText: enable
+        ? l10n.windowsElevatedInputEnable
+        : l10n.windowsElevatedInputDisable,
+    cancelButtonText: l10n.cancel,
+    isDestructive: enable,
+  );
+  if (!confirmed) return;
+  final result = await service.setElevatedAllowed(enable);
+  if (result == WindowsInputServiceResult.failed) {
+    showAppToast(l10n.windowsElevatedInputFailed);
+  }
+}

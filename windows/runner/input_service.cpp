@@ -3,6 +3,8 @@
 //
 //   --install-input-service / --uninstall-input-service
 //                            elevated, started by the app or the uninstaller
+//   --enable-elevated-input / --disable-elevated-input
+//                            elevated, started by the app
 //   --input-service          LocalSystem service that supervises the agent
 //   --input-agent <pid>      LocalSystem process inside the console session
 //
@@ -190,13 +192,15 @@ class Agent {
                : whisper_input_service::kStatusFailed;
   }
 
-  // The agent holds LocalSystem rights, so it only types where the runner
-  // cannot and where nothing can be elevated: the lock screen of a locked
-  // session and the screen saver. UAC consent and Ctrl+Alt+Del share the
-  // Winlogon desktop but appear while the session is unlocked, and the user's
-  // own desktop is the runner's job, so both stay out of reach.
+  // The agent holds LocalSystem rights, so by default it only types where the
+  // runner cannot and where nothing can be elevated: the lock screen of a
+  // locked session and the screen saver. UAC consent and Ctrl+Alt+Del share
+  // the Winlogon desktop but appear while the session is unlocked, and
+  // administrator windows sit on the user's own desktop, so those stay out of
+  // reach until an administrator allows them.
   bool MayInject(const std::wstring& desktop) {
-    if (IsDesktop(desktop, kScreenSaverDesktop)) {
+    if (IsDesktop(desktop, kScreenSaverDesktop) ||
+        whisper_input_service::ElevatedInputAllowed()) {
       return true;
     }
     if (!IsDesktop(desktop, kLockDesktop)) {
@@ -624,6 +628,14 @@ DWORD Install() {
   return error;
 }
 
+DWORD SetElevatedPolicy(bool allow) {
+  const DWORD value = allow ? 1 : 0;
+  return static_cast<DWORD>(RegSetKeyValueW(
+      HKEY_LOCAL_MACHINE, whisper_input_service::kPolicyRegistryKey,
+      whisper_input_service::kAllowElevatedValue, REG_DWORD, &value,
+      sizeof(value)));
+}
+
 void RemoveInstalledFile(const std::wstring& path) {
   if (!RetryFileOperation(DeleteExisting, path, std::wstring())) {
     MoveFileExW(path.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
@@ -651,6 +663,9 @@ DWORD Uninstall() {
     error = GetLastError();
   }
   CloseServiceHandle(manager);
+
+  // A later install starts out limited to the lock screen again.
+  RegDeleteKeyW(HKEY_LOCAL_MACHINE, whisper_input_service::kPolicyRegistryKey);
 
   const std::wstring directory = InstallDirectory();
   if (!directory.empty()) {
@@ -693,6 +708,12 @@ std::optional<int> RunInputServiceCommand() {
   }
   if (mode == whisper_input_service::kUninstallArgument) {
     return static_cast<int>(Uninstall());
+  }
+  if (mode == whisper_input_service::kEnableElevatedArgument) {
+    return static_cast<int>(SetElevatedPolicy(true));
+  }
+  if (mode == whisper_input_service::kDisableElevatedArgument) {
+    return static_cast<int>(SetElevatedPolicy(false));
   }
   if (IsInstalledCopy()) {
     return static_cast<int>(ERROR_INVALID_PARAMETER);

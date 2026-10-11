@@ -11,6 +11,7 @@ void main() {
     const channel = MethodChannel('test/windows_input_service');
     final calls = <String>[];
     late List<String> states;
+    late bool elevated;
     PlatformException? elevationError;
 
     WindowsInputServiceController controller({bool supported = true}) {
@@ -25,6 +26,7 @@ void main() {
     setUp(() {
       calls.clear();
       states = <String>['notInstalled'];
+      elevated = false;
       elevationError = null;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -32,6 +34,7 @@ void main() {
             if (call.method == 'getInputServiceState') {
               return states.length > 1 ? states.removeAt(0) : states.single;
             }
+            if (call.method == 'getElevatedInputAllowed') return elevated;
             if (elevationError != null) throw elevationError!;
             return null;
           });
@@ -106,6 +109,69 @@ void main() {
       expect(service.state, WindowsInputServiceState.notInstalled);
       expect(calls, contains('uninstallInputService'));
     });
+
+    test(
+      'elevated control stays off until a running service reports it',
+      () async {
+        states = <String>['stopped'];
+        final service = controller();
+        elevated = true;
+        await service.refresh();
+        // A flag set while the service is not running must not read as allowed.
+        expect(service.elevatedAllowed, isFalse);
+
+        states = <String>['running'];
+        await service.refresh();
+        expect(service.elevatedAllowed, isTrue);
+      },
+    );
+
+    test('uninstalling withdraws elevated control with the service', () async {
+      states = <String>['running'];
+      elevated = true;
+      final service = controller();
+      await service.refresh();
+      expect(service.elevatedAllowed, isTrue);
+
+      states = <String>['notInstalled'];
+      final result = await service.uninstall();
+
+      expect(result, WindowsInputServiceResult.applied);
+      expect(service.elevatedAllowed, isFalse);
+      expect(calls, isNot(contains('disableElevatedInput')));
+    });
+
+    test('turns elevated control on through the elevated helper', () async {
+      states = <String>['running'];
+      final service = controller();
+      await service.refresh();
+      expect(service.elevatedAllowed, isFalse);
+
+      elevated = true;
+      final result = await service.setElevatedAllowed(true);
+
+      expect(result, WindowsInputServiceResult.applied);
+      expect(service.elevatedAllowed, isTrue);
+      expect(calls, contains('enableElevatedInput'));
+      expect(calls, isNot(contains('disableElevatedInput')));
+    });
+
+    test(
+      'a declined elevated-control prompt does not change the flag',
+      () async {
+        states = <String>['running'];
+        elevated = true;
+        final service = controller();
+        await service.refresh();
+
+        elevationError = PlatformException(code: 'cancelled');
+        final result = await service.setElevatedAllowed(false);
+
+        expect(result, WindowsInputServiceResult.cancelled);
+        expect(service.elevatedAllowed, isTrue);
+        expect(calls, contains('disableElevatedInput'));
+      },
+    );
   });
 
   group('Windows input service source', () {
@@ -125,7 +191,16 @@ void main() {
         r'bool MayInject\(const std::wstring& desktop\)[\s\S]*?\n  }',
       ).firstMatch(service)!.group(0)!;
       // UAC consent and Ctrl+Alt+Del share the Winlogon desktop while the
-      // session is unlocked, and the user's own desktop is never served.
+      // session is unlocked, and the user's own desktop is never served,
+      // unless an administrator has allowed it.
+      expect(
+        mayInject,
+        contains(
+          'if (IsDesktop(desktop, kScreenSaverDesktop) ||\n'
+          '        whisper_input_service::ElevatedInputAllowed()) {\n'
+          '      return true;',
+        ),
+      );
       expect(mayInject, contains('if (!IsDesktop(desktop, kLockDesktop)) {'));
       expect(mayInject, contains('SessionIsLocked(session_id_)'));
       expect(service, contains('WTS_SESSIONSTATE_LOCK'));
@@ -154,6 +229,98 @@ void main() {
       expect(copyInput, contains('source.type == INPUT_KEYBOARD'));
       expect(copyInput, isNot(contains('dwExtraInfo')));
       expect(copyInput, contains('return false;'));
+    });
+
+    test('reaching UAC prompts is an administrator-only policy', () {
+      // Kept under HKLM, where only an elevated role can write it, and read
+      // from there by the agent rather than taken from a request.
+      expect(
+        protocol,
+        contains(r'kPolicyRegistryKey[] = L"SOFTWARE\\Whisper\\InputService"'),
+      );
+      final allowed = RegExp(
+        r'inline bool ElevatedInputAllowed\(\)[\s\S]*?\n}',
+      ).firstMatch(protocol)!.group(0)!;
+      expect(allowed, contains('RegGetValueW(HKEY_LOCAL_MACHINE,'));
+      expect(allowed, contains('value != 0;'));
+
+      final policy = RegExp(
+        r'DWORD SetElevatedPolicy\(bool allow\)[\s\S]*?\n}',
+      ).firstMatch(service)!.group(0)!;
+      expect(policy, contains('RegSetKeyValueW(\n      HKEY_LOCAL_MACHINE,'));
+
+      final dispatch = service.substring(
+        service.indexOf('std::optional<int> RunInputServiceCommand()'),
+      );
+      expect(
+        dispatch,
+        contains(
+          'if (mode == whisper_input_service::kEnableElevatedArgument) {\n'
+          '    return static_cast<int>(SetElevatedPolicy(true));',
+        ),
+      );
+      expect(
+        dispatch,
+        contains(
+          'if (mode == whisper_input_service::kDisableElevatedArgument) {\n'
+          '    return static_cast<int>(SetElevatedPolicy(false));',
+        ),
+      );
+
+      // Removing the service withdraws it, so a reinstall starts without it.
+      final uninstall = RegExp(
+        r'DWORD Uninstall\(\)[\s\S]*?\n}',
+      ).firstMatch(service)!.group(0)!;
+      expect(
+        uninstall,
+        contains(
+          'RegDeleteKeyW(HKEY_LOCAL_MACHINE, '
+          'whisper_input_service::kPolicyRegistryKey);',
+        ),
+      );
+      final install = RegExp(
+        r'DWORD Install\(\)[\s\S]*?\n}',
+      ).firstMatch(service)!.group(0)!;
+      expect(install, isNot(contains('kPolicyRegistryKey')));
+    });
+
+    test('the app changes the policy only behind a UAC prompt', () {
+      expect(plugin, contains('whisper_input_service::ElevatedInputAllowed()'));
+      final change = RegExp(
+        r'if \(method == "enableElevatedInput" \|\| '
+        r'method == "disableElevatedInput"\) \{[\s\S]*?\n    }',
+      ).firstMatch(plugin)!.group(0)!;
+      expect(change, contains('RunInputServiceElevated('));
+      expect(change, contains('kEnableElevatedArgument'));
+      expect(change, contains('kDisableElevatedArgument'));
+      expect(plugin, isNot(contains('RegSetKeyValueW(HKEY_LOCAL_MACHINE')));
+      expect(client, isNot(contains('HKEY_LOCAL_MACHINE')));
+    });
+
+    test('an older service is still recognised as outdated', () {
+      // The version check relies on the reply keeping the size the first
+      // service shipped with; a longer one fails the read instead.
+      expect(protocol, contains('constexpr DWORD kVersion = 2;'));
+      expect(
+        protocol,
+        contains(
+          'struct Response {\n'
+          '  DWORD version;\n'
+          '  DWORD status;\n'
+          '  DWORD sent;\n'
+          '  POINT cursor;\n'
+          '};',
+        ),
+      );
+      expect(client, contains('read == sizeof(*response)'));
+      expect(
+        client,
+        contains(
+          'if (Transact(&hello, &response) &&\n'
+          '        response.version != whisper_input_service::kVersion) {\n'
+          '      state = State::kOutdated;',
+        ),
+      );
     });
 
     test('the pipe is limited to the signed-in user of the session', () {
@@ -328,17 +495,28 @@ void main() {
       );
     });
 
-    test('the setting shows the state as a value, not a switch', () {
+    test('one row: its state opens the action, its switch is for UAC', () {
       final settings = File('lib/page/settings.dart').readAsStringSync();
-      final row = RegExp(
-        r'if \(_windowsInputService\.supported\)[\s\S]*?\n                          \),\n',
-      ).firstMatch(settings)!.group(0)!;
+      final row = settings.substring(
+        settings.indexOf('if (_windowsInputService.supported)'),
+        settings.indexOf('l10n.close2tray,'),
+      );
       // A machine-wide service behind a UAC prompt has more states than on
       // and off, and installing it is not a preference to flip.
+      expect(
+        RegExp(r'_windowsInputService\.supported').allMatches(settings),
+        hasLength(1),
+      );
       expect(row, isNot(contains('CupertinoSwitch')));
       expect(row, contains('trailing: WindowsLockScreenInputStatus('));
       expect(row, contains('changeWindowsLockScreenInput('));
       expect(row, contains('enabled: !service.busy,'));
+      // The switch sits beside the row instead of being its trailing widget,
+      // so tapping the row never toggles it.
+      expect(
+        row.indexOf('child: WindowsElevatedInputSwitch('),
+        greaterThan(row.indexOf('trailing: WindowsLockScreenInputStatus(')),
+      );
       expect(
         settings,
         contains(
@@ -355,9 +533,12 @@ void main() {
       expect(control, contains('shape: BoxShape.circle'));
       expect(control, isNot(contains('FilledButton')));
       // One standard confirmation, then UAC.
-      expect(control, contains('await confirmAction('));
       expect(control, contains('isDestructive: uninstall,'));
       expect(control, contains('l10n.windowsLockScreenInputFailed'));
+      expect(control, contains('value: controller.elevatedAllowed,'));
+      expect(control, contains('isDestructive: enable,'));
+      expect(control, contains('l10n.windowsElevatedInputFailed'));
+      expect('await confirmAction('.allMatches(control), hasLength(2));
 
       for (final path in [
         'lib/l10n/app_zh.arb',
@@ -379,6 +560,12 @@ void main() {
           'windowsLockScreenInputUninstall',
           'windowsLockScreenInputWorking',
           'windowsLockScreenInputFailed',
+          'windowsElevatedInput',
+          'windowsElevatedInputEnableDesc',
+          'windowsElevatedInputDisableDesc',
+          'windowsElevatedInputEnable',
+          'windowsElevatedInputDisable',
+          'windowsElevatedInputFailed',
         ]) {
           expect(arb, contains('"$key"'), reason: '$path lacks $key');
         }

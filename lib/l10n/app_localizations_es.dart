@@ -603,19 +603,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowsLockScreenInput =>
-      'Teclado y ratón en la pantalla de bloqueo';
+      'Teclado y ratón en la pantalla de bloqueo y UAC';
 
   @override
   String get windowsLockScreenInputHint =>
-      'Instala un servicio del sistema para que los dispositivos de confianza puedan escribir la contraseña en la pantalla de bloqueo de este PC';
+      'Escribe en la pantalla de bloqueo. El interruptor añade los avisos de UAC';
 
   @override
   String get windowsLockScreenInputDesc =>
-      'Se instalará un servicio del sistema que permite a los dispositivos de confianza escribir la contraseña en la pantalla de bloqueo de este PC. Requiere aprobación de administrador; los avisos de UAC y las ventanas ejecutadas como administrador siguen fuera de alcance.';
+      'Se instalará un servicio del sistema para que los dispositivos de confianza puedan escribir en la pantalla de bloqueo de este PC. Requiere aprobación de administrador.';
 
   @override
   String get windowsLockScreenInputUninstallDesc =>
-      'Tras desinstalarlo, otros dispositivos ya no podrán escribir en la pantalla de bloqueo de este PC. Requiere aprobación de administrador.';
+      'Tras desinstalarlo, ya no se podrán controlar la pantalla de bloqueo ni los avisos de UAC de este PC. Requiere aprobación de administrador.';
 
   @override
   String get windowsLockScreenInputNotInstalled => 'No instalado';
@@ -645,6 +645,27 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get windowsLockScreenInputFailed =>
       'No se pudo cambiar el servicio de entrada de la pantalla de bloqueo';
+
+  @override
+  String get windowsElevatedInput => 'Responder a avisos de UAC';
+
+  @override
+  String get windowsElevatedInputEnableDesc =>
+      'Los dispositivos de confianza podrán responder a los avisos de UAC, pero cualquier programa que se ejecute como tú en este PC podrá saltarse UAC del mismo modo. Requiere aprobación de administrador.';
+
+  @override
+  String get windowsElevatedInputDisableDesc =>
+      'Los dispositivos de confianza ya no podrán responder a los avisos de UAC. La pantalla de bloqueo no cambia. Requiere aprobación de administrador.';
+
+  @override
+  String get windowsElevatedInputEnable => 'Activar';
+
+  @override
+  String get windowsElevatedInputDisable => 'Desactivar';
+
+  @override
+  String get windowsElevatedInputFailed =>
+      'No se pudo cambiar el control de UAC';
 
   @override
   String get launchAtStartup => 'Iniciar al arrancar';

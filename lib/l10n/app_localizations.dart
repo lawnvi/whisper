@@ -1135,25 +1135,25 @@ abstract class AppLocalizations {
   /// No description provided for @windowsLockScreenInput.
   ///
   /// In zh, this message translates to:
-  /// **'锁屏时接收键鼠'**
+  /// **'锁屏与 UAC 时接收键鼠'**
   String get windowsLockScreenInput;
 
   /// No description provided for @windowsLockScreenInputHint.
   ///
   /// In zh, this message translates to:
-  /// **'安装系统服务后，互信设备可在本机锁屏时输入密码'**
+  /// **'锁屏时可输入密码，开关控制 UAC 提示'**
   String get windowsLockScreenInputHint;
 
   /// No description provided for @windowsLockScreenInputDesc.
   ///
   /// In zh, this message translates to:
-  /// **'将安装一个系统服务，让互信设备可以在本机锁屏时输入密码。需要管理员确认；UAC 提示和以管理员身份运行的窗口仍不可控制。'**
+  /// **'将安装系统服务，让互信设备可在本机锁屏时输入密码。需要管理员确认。'**
   String get windowsLockScreenInputDesc;
 
   /// No description provided for @windowsLockScreenInputUninstallDesc.
   ///
   /// In zh, this message translates to:
-  /// **'卸载后，其他设备将无法在本机锁屏时输入。卸载需要管理员确认。'**
+  /// **'卸载后将无法操作本机的锁屏和 UAC 提示。需要管理员确认。'**
   String get windowsLockScreenInputUninstallDesc;
 
   /// No description provided for @windowsLockScreenInputNotInstalled.
@@ -1209,6 +1209,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'锁屏键鼠服务设置失败'**
   String get windowsLockScreenInputFailed;
+
+  /// No description provided for @windowsElevatedInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作 UAC 提示'**
+  String get windowsElevatedInput;
+
+  /// No description provided for @windowsElevatedInputEnableDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后互信设备可操作 UAC 提示，但本机上以你身份运行的程序也能借此绕过 UAC。需要管理员确认。'**
+  String get windowsElevatedInputEnableDesc;
+
+  /// No description provided for @windowsElevatedInputDisableDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭后互信设备无法操作 UAC 提示，锁屏输入不受影响。需要管理员确认。'**
+  String get windowsElevatedInputDisableDesc;
+
+  /// No description provided for @windowsElevatedInputEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启'**
+  String get windowsElevatedInputEnable;
+
+  /// No description provided for @windowsElevatedInputDisable.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get windowsElevatedInputDisable;
+
+  /// No description provided for @windowsElevatedInputFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'UAC 控制设置失败'**
+  String get windowsElevatedInputFailed;
 
   /// No description provided for @launchAtStartup.
   ///

@@ -597,19 +597,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Mutual trust has not been established';
 
   @override
-  String get windowsLockScreenInput => 'Keyboard and mouse on the lock screen';
+  String get windowsLockScreenInput =>
+      'Keyboard and mouse on the lock screen and UAC';
 
   @override
   String get windowsLockScreenInputHint =>
-      'Install a system service so trusted devices can type the password on this PC\'s lock screen';
+      'Type on the lock screen. The switch adds UAC prompts';
 
   @override
   String get windowsLockScreenInputDesc =>
-      'This installs a system service that lets trusted devices type the password on this PC\'s lock screen. Administrator approval is required; UAC prompts and windows running as administrator stay out of reach.';
+      'This installs a system service so trusted devices can type on this PC\'s lock screen. Administrator approval is required.';
 
   @override
   String get windowsLockScreenInputUninstallDesc =>
-      'After uninstalling, other devices can no longer type on this PC\'s lock screen. Administrator approval is required.';
+      'After uninstalling, this PC\'s lock screen and UAC prompts can no longer be controlled. Administrator approval is required.';
 
   @override
   String get windowsLockScreenInputNotInstalled => 'Not installed';
@@ -638,6 +639,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get windowsLockScreenInputFailed =>
       'Could not change the lock screen input service';
+
+  @override
+  String get windowsElevatedInput => 'Answer UAC prompts';
+
+  @override
+  String get windowsElevatedInputEnableDesc =>
+      'Trusted devices will be able to answer UAC prompts, but any program running as you on this PC can then get past UAC the same way. Administrator approval is required.';
+
+  @override
+  String get windowsElevatedInputDisableDesc =>
+      'Trusted devices can no longer answer UAC prompts. The lock screen is not affected. Administrator approval is required.';
+
+  @override
+  String get windowsElevatedInputEnable => 'Turn on';
+
+  @override
+  String get windowsElevatedInputDisable => 'Turn off';
+
+  @override
+  String get windowsElevatedInputFailed => 'Could not change UAC control';
 
   @override
   String get launchAtStartup => 'Launch at startup';

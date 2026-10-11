@@ -1251,24 +1251,50 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
 
+    if (method == "getElevatedInputAllowed") {
+      result->Success(flutter::EncodableValue(
+          whisper_input_service::ElevatedInputAllowed()));
+      return;
+    }
+
     if (method == "installInputService" || method == "uninstallInputService") {
-      // Returns once the UAC prompt is answered; Dart polls for the outcome.
       const bool uninstall = method == "uninstallInputService";
-      const DWORD error = input_service_.RunElevated(
-          uninstall ? whisper_input_service::kUninstallArgument
-                    : whisper_input_service::kInstallArgument);
-      if (error == ERROR_SUCCESS) {
+      if (RunInputServiceElevated(
+              uninstall ? whisper_input_service::kUninstallArgument
+                        : whisper_input_service::kInstallArgument,
+              result.get())) {
         RemoteInputServiceClient::RememberOptOut(uninstall);
-        result->Success();
-      } else if (error == ERROR_CANCELLED) {
-        result->Error("cancelled", "The elevation prompt was declined");
-      } else {
-        result->Error("input-service-unavailable", std::to_string(error));
       }
       return;
     }
 
+    if (method == "enableElevatedInput" || method == "disableElevatedInput") {
+      RunInputServiceElevated(
+          method == "enableElevatedInput"
+              ? whisper_input_service::kEnableElevatedArgument
+              : whisper_input_service::kDisableElevatedArgument,
+          result.get());
+      return;
+    }
+
     result->NotImplemented();
+  }
+
+  // Returns once the UAC prompt is answered; Dart polls for the outcome.
+  bool RunInputServiceElevated(
+      const wchar_t* argument,
+      flutter::MethodResult<flutter::EncodableValue>* result) {
+    const DWORD error = input_service_.RunElevated(argument);
+    if (error == ERROR_SUCCESS) {
+      result->Success();
+      return true;
+    }
+    if (error == ERROR_CANCELLED) {
+      result->Error("cancelled", "The elevation prompt was declined");
+    } else {
+      result->Error("input-service-unavailable", std::to_string(error));
+    }
+    return false;
   }
 
   static const char* InputServiceStateName(

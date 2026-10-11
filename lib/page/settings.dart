@@ -603,27 +603,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               // Installing a system service is not a
                               // preference to flip, so the row shows its
                               // state and opens the action that state allows.
-                              return _buildSettingItem(
-                                l10n.windowsLockScreenInput,
-                                Icon(
-                                  Icons.lock_outline_rounded,
-                                  color: isDark
-                                      ? Colors.grey[400]
-                                      : CupertinoColors.systemGrey,
-                                ),
-                                desc: service.busy
-                                    ? l10n.windowsLockScreenInputWorking
-                                    : l10n.windowsLockScreenInputHint,
-                                enabled: !service.busy,
-                                onTap: () => unawaited(
-                                  changeWindowsLockScreenInput(
-                                    context,
-                                    controller: service,
+                              // Whether that service also reaches UAC prompts
+                              // is a preference, and gets the switch.
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSettingItem(
+                                      l10n.windowsLockScreenInput,
+                                      Icon(
+                                        Icons.lock_outline_rounded,
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : CupertinoColors.systemGrey,
+                                      ),
+                                      desc: service.busy
+                                          ? l10n.windowsLockScreenInputWorking
+                                          : l10n.windowsLockScreenInputHint,
+                                      enabled: !service.busy,
+                                      onTap: () => unawaited(
+                                        changeWindowsLockScreenInput(
+                                          context,
+                                          controller: service,
+                                        ),
+                                      ),
+                                      trailing: WindowsLockScreenInputStatus(
+                                        controller: service,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                trailing: WindowsLockScreenInputStatus(
-                                  controller: service,
-                                ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 12),
+                                    child: WindowsElevatedInputSwitch(
+                                      controller: service,
+                                    ),
+                                  ),
+                                ],
                               );
                             },
                           ),

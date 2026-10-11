@@ -82,9 +82,9 @@ class RemoteInputServiceClient {
     return state;
   }
 
-  // Runs this executable again behind a UAC prompt to install or remove the
-  // service. Success only means the user accepted the prompt; the caller
-  // polls QueryState for the outcome.
+  // Runs this executable again behind a UAC prompt, in one of the elevated
+  // roles. Success only means the user accepted the prompt; the caller polls
+  // for the outcome.
   DWORD RunElevated(const wchar_t* argument) {
     Disconnect();
     std::wstring path(32768, L'\0');
