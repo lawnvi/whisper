@@ -372,12 +372,12 @@ void main() {
     test('clamps injected mouse movement through the Windows input queue', () {
       expect(source, contains('POINT CurrentCursorPoint() const'));
       expect(source, contains('POINT ClampToVirtualScreen(POINT point) const'));
-      expect(source, contains('void MoveCursorToPoint(POINT point)'));
+      expect(source, contains('bool MoveCursorToPoint(POINT point)'));
       expect(source, contains('MOUSEEVENTF_ABSOLUTE'));
       expect(source, contains('MOUSEEVENTF_VIRTUALDESK'));
 
       final clampToVirtualScreen = RegExp(
-        r'POINT ClampToVirtualScreen\(POINT point\) const[\s\S]*?\n  void MoveCursorToPoint',
+        r'POINT ClampToVirtualScreen\(POINT point\) const[\s\S]*?\n  bool MoveCursorToPoint',
       ).firstMatch(source)!.group(0)!;
       expect(clampToVirtualScreen, contains('VirtualScreenArea()'));
       expect(clampToVirtualScreen, isNot(contains('InjectionArea()')));
@@ -395,9 +395,104 @@ void main() {
         contains('POINT target = {current.x + delta_x, current.y + delta_y};'),
       );
       expect(mouseMoveCase, contains('target = ClampToVirtualScreen(target);'));
-      expect(mouseMoveCase, contains('MoveCursorToPoint(target);'));
+      expect(mouseMoveCase, contains('MoveCursorToPoint(target)'));
       expect(mouseMoveCase, isNot(contains('SetCursorPos')));
       expect(mouseMoveCase, isNot(contains('MOUSEEVENTF_MOVE')));
+    });
+
+    test(
+      'releases to the source when the Windows input desktop is blocked',
+      () {
+        final injectEvent = RegExp(
+          r'void InjectEvent\([\s\S]*?\n  bool IsInjectionReverseRelease',
+        ).firstMatch(source)!.group(0)!;
+        final mouseMoveCase = RegExp(
+          r'if \(event_type == "mouseMove"\)[\s\S]*?\n      return;',
+        ).firstMatch(injectEvent)!.group(0)!;
+        // The lock screen makes GetCursorPos and SendInput fail; a silent
+        // fallback to the screen centre could never cross the reverse edge.
+        expect(
+          mouseMoveCase,
+          contains('if (GetCursorPos(&current) != TRUE) {'),
+        );
+        expect(
+          mouseMoveCase,
+          contains('ReleaseBlockedInjection(BlockedInjectionPoint(json));'),
+        );
+        expect(mouseMoveCase, contains('if (!MoveCursorToPoint(current)) {'));
+        expect(
+          mouseMoveCase,
+          contains('if (!MoveCursorToPoint(target) && !manual_injection_) {'),
+        );
+        expect(
+          RegExp(r'ReleaseBlockedInjection\(').allMatches(mouseMoveCase),
+          hasLength(3),
+        );
+        expect(
+          mouseMoveCase.indexOf('if (GetCursorPos(&current) != TRUE) {'),
+          lessThan(mouseMoveCase.indexOf('ReverseInjectionSourceEdgeUnit')),
+        );
+
+        final moveCursor = RegExp(
+          r'bool MoveCursorToPoint\(POINT point\)[\s\S]*?\n  }',
+        ).firstMatch(source)!.group(0)!;
+        expect(
+          moveCursor,
+          contains('if (SendInput(1, &input, sizeof(INPUT)) != 1) {'),
+        );
+        expect(moveCursor, contains('last_injected_point_ = point;'));
+
+        final release = RegExp(
+          r'void ReleaseBlockedInjection\(POINT point\)[\s\S]*?\n  }',
+        ).firstMatch(source)!.group(0)!;
+        expect(source, contains('kInjectionBlockedReason[] = "blocked"'));
+        expect(release, contains('kInjectionBlockedReason'));
+        expect(release, contains('route.route_id != injection_route_id_'));
+        expect(release, contains('route.source_segment'));
+        expect(release, contains('InjectionEdgeUnit(point)'));
+      },
+    );
+
+    test('recovers keys the Windows lock screen left pressed', () {
+      final keyCase = RegExp(
+        r'if \(event_type == "key"\)[\s\S]*?\n  }',
+      ).firstMatch(source)!.group(0)!;
+      expect(keyCase, contains('if (SendKeyboardKey(key, down)) {'));
+      expect(keyCase, contains('} else if (!down) {'));
+      expect(keyCase, contains('injection_blocked_ = true;'));
+      expect(source, contains('bool SendKeyboardKey(WORD key, bool down)'));
+      expect(
+        source,
+        contains('return SendInput(1, &input, sizeof(INPUT)) == 1;'),
+      );
+
+      final releaseKeys = RegExp(
+        r'void ReleaseInjectedKeys\(\)[\s\S]*?\n  }',
+      ).firstMatch(source)!.group(0)!;
+      expect(releaseKeys, contains('if (!SendKeyboardKey(*it, false)) {'));
+      expect(
+        releaseKeys,
+        contains('injected_keys_.insert(injected_keys_.begin(), *it);'),
+      );
+
+      final recover = RegExp(
+        r'void RecoverBlockedInjection\(\)[\s\S]*?\n  }',
+      ).firstMatch(source)!.group(0)!;
+      expect(recover, contains('ReleaseInjectedKeys();'));
+      expect(recover, contains('ReleaseCommonModifierKeys();'));
+      expect(source, contains('} else if (injection_blocked_) {'));
+      expect(source, contains('wparam == WTS_SESSION_UNLOCK'));
+      expect(
+        source,
+        contains(
+          'WTSRegisterSessionNotification(window_, NOTIFY_FOR_THIS_SESSION)',
+        ),
+      );
+      expect(source, contains('WTSUnRegisterSessionNotification(window_)'));
+      expect(
+        File('windows/runner/CMakeLists.txt').readAsStringSync(),
+        contains('"wtsapi32.lib"'),
+      );
     });
 
     test('coalesces simple mouse clicks before injecting them on Windows', () {

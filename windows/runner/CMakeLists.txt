@@ -42,6 +42,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app flutter_wrapper_plugin)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "ole32.lib" "windowscodecs.lib" "winmm.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "msimg32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "wtsapi32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

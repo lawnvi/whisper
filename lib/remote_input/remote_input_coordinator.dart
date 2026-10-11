@@ -64,6 +64,7 @@ enum RemoteInputDiagnosticKind {
   captureFailed,
   injectionStarted,
   earlyReleaseIgnored,
+  injectionBlocked,
   platformError,
   platformDiagnostic,
   packetObserved,
@@ -965,9 +966,14 @@ class RemoteInputCoordinator extends ChangeNotifier {
     _releaseSubscription = _platform.releases.listen((release) {
       if (release.sessionId == message.sessionId) {
         final routing = _sinkControlMessage ?? message;
-        if (release.reason == 'edge') {
+        // The sink cannot inject at all (locked screen, secure desktop), so it
+        // hands the pointer back even if it never travelled into the screen.
+        final blocked = release.reason == 'blocked';
+        if (release.reason == 'edge' || blocked) {
           if (isManual) return;
-          if (_isEarlySinkEdgeRelease(release)) {
+          if (blocked) {
+            _trace(RemoteInputDiagnosticKind.injectionBlocked);
+          } else if (_isEarlySinkEdgeRelease(release)) {
             _trace(RemoteInputDiagnosticKind.earlyReleaseIgnored);
             return;
           }
@@ -981,7 +987,8 @@ class RemoteInputCoordinator extends ChangeNotifier {
               sessionId: message.sessionId,
               sourcePeerId: message.sourcePeerId,
               sinkPeerId: message.sinkPeerId,
-              releaseReason: release.reason,
+              // Sources only pause capture for an edge release.
+              releaseReason: 'edge',
               releaseSequence: release.sequence > 0
                   ? release.sequence
                   : _latestSinkPacketSequence,

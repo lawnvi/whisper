@@ -7,6 +7,8 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <wtsapi32.h>
+
 #include <algorithm>
 #include <atomic>
 #include <array>
@@ -31,6 +33,10 @@ constexpr int kEdgeThreshold = 6;
 constexpr UINT kKeyboardInputMessage = WM_APP + 0x575;
 constexpr UINT kMouseInputMessage = WM_APP + 0x576;
 constexpr UINT kRawMouseInputMessage = WM_APP + 0x577;
+// The lock screen, Ctrl+Alt+Del and UAC prompts take input to a desktop this
+// process cannot join. GetCursorPos and SendInput then fail with
+// ERROR_ACCESS_DENIED, so the reverse edge can never be crossed.
+constexpr char kInjectionBlockedReason[] = "blocked";
 
 struct LowLevelMousePacket {
   WPARAM message;
@@ -899,6 +905,9 @@ class RemoteInputPlugin : public flutter::Plugin {
   ~RemoteInputPlugin() override {
     StopInjection();
     StopCapture();
+    if (session_notifications_registered_) {
+      WTSUnRegisterSessionNotification(window_);
+    }
   }
 
   bool HandleLowLevelMouse(WPARAM wparam, const MSLLHOOKSTRUCT* mouse) {
@@ -1017,6 +1026,12 @@ class RemoteInputPlugin : public flutter::Plugin {
         raw_mouse_message_posted_ = false;
       }
       return true;
+    }
+    if (message == WM_WTSSESSION_CHANGE) {
+      if (wparam == WTS_SESSION_UNLOCK) {
+        RecoverBlockedInjection();
+      }
+      return false;
     }
     if (message != WM_INPUT || capture_session_id_.empty()) {
       return false;
@@ -1149,6 +1164,8 @@ class RemoteInputPlugin : public flutter::Plugin {
       ReleaseInjectedButtons();
       ReleaseInjectedKeys();
       ReleaseCommonModifierKeys();
+      EnsureSessionNotifications();
+      last_injected_point_.reset();
       manual_injection_ = mode != nullptr && *mode == "manual";
       manual_remainder_x_ = manual_remainder_y_ = 0;
       injection_session_id_ = *session_id;
@@ -1351,6 +1368,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     manual_injection_ = false;
     manual_remainder_x_ = manual_remainder_y_ = 0;
     injected_cursor_entered_interior_ = false;
+    last_injected_point_.reset();
     ResetInjectedScrollState();
     injection_display_id_.clear();
     injection_edge_.clear();
@@ -2344,7 +2362,7 @@ class RemoteInputPlugin : public flutter::Plugin {
     return point;
   }
 
-  void MoveCursorToPoint(POINT point) {
+  bool MoveCursorToPoint(POINT point) {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
     const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -2363,7 +2381,12 @@ class RemoteInputPlugin : public flutter::Plugin {
         static_cast<double>(unit_height)));
     input.mi.dwFlags =
         MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
-    if (SendInput(1, &input, sizeof(INPUT)) == 1) remote_cursor_.Update(point);
+    if (SendInput(1, &input, sizeof(INPUT)) != 1) {
+      return false;
+    }
+    last_injected_point_ = point;
+    remote_cursor_.Update(point);
+    return true;
   }
 
   int ConsumeInjectedScrollDelta(double delta, double* remainder) {
@@ -2512,9 +2535,9 @@ class RemoteInputPlugin : public flutter::Plugin {
     SyncInjectedButtons(0);
   }
 
-  void SendKeyboardKey(WORD key, bool down) {
+  bool SendKeyboardKey(WORD key, bool down) {
     if (key == 0) {
-      return;
+      return true;
     }
     const UINT scan_code = MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
     INPUT input = {};
@@ -2532,7 +2555,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
       }
     }
-    SendInput(1, &input, sizeof(INPUT));
+    return SendInput(1, &input, sizeof(INPUT)) == 1;
   }
 
   bool IsExtendedKeyboardKey(WORD key) const {
@@ -2583,7 +2606,11 @@ class RemoteInputPlugin : public flutter::Plugin {
     const auto keys = injected_keys_;
     injected_keys_.clear();
     for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
-      SendKeyboardKey(*it, false);
+      if (!SendKeyboardKey(*it, false)) {
+        // Still down for Windows; retried by RecoverBlockedInjection.
+        injected_keys_.insert(injected_keys_.begin(), *it);
+        injection_blocked_ = true;
+      }
     }
   }
 
@@ -2651,7 +2678,16 @@ class RemoteInputPlugin : public flutter::Plugin {
         manual_remainder_x_ = raw_x - delta_x;
         manual_remainder_y_ = raw_y - delta_y;
       }
-      POINT current = CurrentCursorPoint();
+      POINT current = {};
+      if (GetCursorPos(&current) != TRUE) {
+        if (!manual_injection_) {
+          ReleaseBlockedInjection(BlockedInjectionPoint(json));
+          return;
+        }
+        current = CurrentCursorPoint();
+      } else if (injection_blocked_) {
+        RecoverBlockedInjection();
+      }
       const auto routed_edge_unit =
           !manual_injection_ && !JsonBool(json, "activeStart") && injected_cursor_entered_interior_ &&
                   injected_buttons_ == 0 && pending_injected_buttons_ == 0
@@ -2687,7 +2723,10 @@ class RemoteInputPlugin : public flutter::Plugin {
       }
       if (!manual_injection_ && JsonBool(json, "activeStart")) {
         current = CursorPointForEntry(json);
-        MoveCursorToPoint(current);
+        if (!MoveCursorToPoint(current)) {
+          ReleaseBlockedInjection(current);
+          return;
+        }
         injected_cursor_entered_interior_ = false;
       }
       POINT final_point = current;
@@ -2699,7 +2738,10 @@ class RemoteInputPlugin : public flutter::Plugin {
         FlushPendingInjectedButtons();
         POINT target = {current.x + delta_x, current.y + delta_y};
         target = ClampToVirtualScreen(target);
-        MoveCursorToPoint(target);
+        if (!MoveCursorToPoint(target) && !manual_injection_) {
+          ReleaseBlockedInjection(current);
+          return;
+        }
         final_point = target;
       }
       UpdateInjectedCursorInteriorState(json, final_point);
@@ -2757,8 +2799,70 @@ class RemoteInputPlugin : public flutter::Plugin {
       const WORD key = windows_key.has_value()
                            ? static_cast<WORD>(raw_key)
                            : MacVirtualKeyToWindows(raw_key);
-      SendKeyboardKey(key, down);
-      SetInjectedKey(key, down);
+      if (SendKeyboardKey(key, down)) {
+        SetInjectedKey(key, down);
+      } else if (!down) {
+        // Windows never saw this key-up, so the key stays tracked.
+        injection_blocked_ = true;
+      }
+    }
+  }
+
+  // Where the pointer returns to the source: the entry point when the block is
+  // hit while entering, otherwise the last point injection reached.
+  POINT BlockedInjectionPoint(const std::string& json) {
+    if (JsonBool(json, "activeStart")) {
+      return CursorPointForEntry(json);
+    }
+    return last_injected_point_.value_or(CurrentCursorPoint());
+  }
+
+  // Injection cannot reach the input desktop, so hand the pointer back to the
+  // source instead of leaving it captured by a screen that cannot move.
+  void ReleaseBlockedInjection(POINT point) {
+    const std::string release_session_id = injection_session_id_;
+    injection_blocked_ = true;
+    remote_cursor_.Reset();
+    ReleaseInjectedButtons();
+    ReleaseInjectedKeys();
+    ReleaseCommonModifierKeys();
+    for (const auto& route : injection_routes_) {
+      if (route.route_id.empty() || route.route_id != injection_route_id_) {
+        continue;
+      }
+      EmitReleaseForSession(
+          release_session_id,
+          kInjectionBlockedReason,
+          EdgeUnitForPoint(point, route.sink_edge, route.sink_segment),
+          true,
+          route.route_id,
+          route.source_display_id,
+          route.source_edge,
+          route.source_segment);
+      return;
+    }
+    EmitReleaseForSession(release_session_id, kInjectionBlockedReason,
+                          InjectionEdgeUnit(point));
+  }
+
+  // Key-ups sent while the input desktop was unreachable never landed, so
+  // Windows still holds those keys (Win after a remote Win+L, for example).
+  void RecoverBlockedInjection() {
+    if (!injection_blocked_) {
+      return;
+    }
+    injection_blocked_ = false;
+    ReleaseInjectedKeys();
+    ReleaseCommonModifierKeys();
+  }
+
+  // Remote Desktop Services may not be ready when the app starts at logon, so
+  // registration is retried whenever an injection session starts.
+  void EnsureSessionNotifications() {
+    if (!session_notifications_registered_) {
+      session_notifications_registered_ =
+          WTSRegisterSessionNotification(window_, NOTIFY_FOR_THIS_SESSION) ==
+          TRUE;
     }
   }
 
@@ -2962,6 +3066,9 @@ class RemoteInputPlugin : public flutter::Plugin {
   int injected_buttons_ = 0;
   int pending_injected_buttons_ = 0;
   bool injected_cursor_entered_interior_ = false;
+  bool injection_blocked_ = false;
+  bool session_notifications_registered_ = false;
+  std::optional<POINT> last_injected_point_;
   double injected_scroll_remainder_x_ = 0;
   double injected_scroll_remainder_y_ = 0;
   std::vector<WORD> injected_keys_;

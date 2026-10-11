@@ -1831,6 +1831,62 @@ void main() {
           calls.map((call) => call.method), isNot(contains('stopInjection')));
     });
 
+    test('sink hands control back when native injection is blocked', () async {
+      final sentControls = <RemoteInputControlMessage>[];
+      final manager = RemoteInputManager();
+      final coordinator = RemoteInputCoordinator(
+        manager: manager,
+        platform: platform,
+        transportFactory: (_) async => _FakeRemoteInputTransport(),
+      );
+
+      final offer = manager.createOffer(
+        sourcePeerId: 'mac',
+        sinkPeerId: 'win',
+        layoutEdge: RemoteInputEdge.right,
+        releaseHotkey: 'ctrl+alt+esc',
+      );
+
+      await coordinator.handleControlMessage(
+        offer,
+        localPeerId: 'win',
+        remoteHost: 'mac.local',
+        remotePort: 10002,
+        isMutuallyTrusted: true,
+        localCanInject: true,
+        sendControl: sentControls.add,
+      );
+
+      // A locked sink rejects the entry itself, before any travel that the
+      // early-release guard would otherwise wait for.
+      await _deliverPacket(manager, _eventFrameBytes(
+        sessionId: offer.sessionId,
+        sequence: 7,
+        eventType: RemoteInputEventType.mouseMove,
+        payload: const {'activeStart': true},
+      ));
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.active);
+
+      await platform.handleNativeMethodCall(
+        MethodCall('onRelease', <String, dynamic>{
+          'sessionId': offer.sessionId,
+          'reason': 'blocked',
+          'edgeUnit': 0.25,
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sentControls, hasLength(2));
+      expect(sentControls.last.action, RemoteInputControlAction.release);
+      // Sources, including older builds, only pause capture for 'edge'.
+      expect(sentControls.last.releaseReason, 'edge');
+      expect(sentControls.last.releaseActivationSequence, 7);
+      expect(sentControls.last.releaseEdgeUnit, 0.25);
+      expect(coordinator.state.status, RemoteInputRuntimeStatus.armed);
+      expect(
+          calls.map((call) => call.method), isNot(contains('stopInjection')));
+    });
+
     test('sink routes active entry to the matching remote display segment',
         () async {
       final sentControls = <RemoteInputControlMessage>[];
