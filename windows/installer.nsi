@@ -17,6 +17,14 @@
   !define APP_EXE "whisper.exe"
 !endif
 
+!ifndef INPUT_SERVICE_NAME
+  !define INPUT_SERVICE_NAME "WhisperInputService"
+!endif
+
+!ifndef INPUT_SERVICE_OPT_OUT
+  !define INPUT_SERVICE_OPT_OUT "InputServiceOptOut"
+!endif
+
 !ifndef INSTALL_ROOT
   !define INSTALL_ROOT "$LocalAppData\Programs\${APP_NAME}"
 !endif
@@ -91,9 +99,25 @@ Section "Install"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "EstimatedSize" "$0"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+
+  ; The lock screen input service comes with the app and is brought up to date
+  ; on every upgrade, which takes one elevation prompt. Whoever removed it from
+  ; the app's settings is not asked again.
+  ReadRegDWORD $0 HKCU "Software\${APP_NAME}" "${INPUT_SERVICE_OPT_OUT}"
+  StrCmp $0 "1" input_service_installed
+  DetailPrint "Installing the lock screen input service (administrator approval required)..."
+  ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--install-input-service" SW_HIDE
+  input_service_installed:
 SectionEnd
 
 Section "Uninstall"
+  ; The optional lock screen input service is installed machine-wide from
+  ; inside the app, so removing it needs one elevation prompt of its own.
+  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\${INPUT_SERVICE_NAME}" "ImagePath"
+  StrCmp $0 "" input_service_removed
+  ExecShellWait "runas" "$INSTDIR\${APP_EXE}" "--uninstall-input-service" SW_HIDE
+  input_service_removed:
+
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} Quick Send.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"

@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "desktop_clipboard_image_plugin.cpp"
   "desktop_quick_send_plugin.cpp"
   "flutter_window.cpp"
+  "input_service.cpp"
   "main.cpp"
   "remote_input_plugin.cpp"
   "screenshot_plugin.cpp"

@@ -1,5 +1,6 @@
 #include "remote_input_plugin.h"
 #include "remote_input_cursor.h"
+#include "remote_input_service_client.h"
 
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -1244,7 +1245,45 @@ class RemoteInputPlugin : public flutter::Plugin {
       return;
     }
 
+    if (method == "getInputServiceState") {
+      result->Success(flutter::EncodableValue(
+          InputServiceStateName(input_service_.QueryState())));
+      return;
+    }
+
+    if (method == "installInputService" || method == "uninstallInputService") {
+      // Returns once the UAC prompt is answered; Dart polls for the outcome.
+      const bool uninstall = method == "uninstallInputService";
+      const DWORD error = input_service_.RunElevated(
+          uninstall ? whisper_input_service::kUninstallArgument
+                    : whisper_input_service::kInstallArgument);
+      if (error == ERROR_SUCCESS) {
+        RemoteInputServiceClient::RememberOptOut(uninstall);
+        result->Success();
+      } else if (error == ERROR_CANCELLED) {
+        result->Error("cancelled", "The elevation prompt was declined");
+      } else {
+        result->Error("input-service-unavailable", std::to_string(error));
+      }
+      return;
+    }
+
     result->NotImplemented();
+  }
+
+  static const char* InputServiceStateName(
+      RemoteInputServiceClient::State state) {
+    switch (state) {
+      case RemoteInputServiceClient::State::kStopped:
+        return "stopped";
+      case RemoteInputServiceClient::State::kRunning:
+        return "running";
+      case RemoteInputServiceClient::State::kOutdated:
+        return "outdated";
+      case RemoteInputServiceClient::State::kNotInstalled:
+        break;
+    }
+    return "notInstalled";
   }
 
   std::optional<std::string> StartCapture(std::string session_id,
@@ -2334,7 +2373,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   POINT CurrentCursorPoint() const {
     const ScreenArea area = InjectionArea();
     POINT current = {};
-    if (GetCursorPos(&current) != TRUE) {
+    if (!InjectionCursorPos(&current)) {
       current.x = area.left + area.width() / 2;
       current.y = area.top + area.height() / 2;
     }
@@ -2362,6 +2401,21 @@ class RemoteInputPlugin : public flutter::Plugin {
     return point;
   }
 
+  // The lock screen's desktop rejects this process, so the optional input
+  // service delivers there instead. Anywhere else it refuses, and the caller
+  // falls back to handing the pointer back.
+  UINT InjectInput(UINT count, INPUT* inputs) {
+    const UINT sent = SendInput(count, inputs, sizeof(INPUT));
+    if (sent != 0) {
+      return sent;
+    }
+    return input_service_.SendInput(inputs, count) ? count : 0;
+  }
+
+  bool InjectionCursorPos(POINT* point) const {
+    return GetCursorPos(point) == TRUE || input_service_.CursorPos(point);
+  }
+
   bool MoveCursorToPoint(POINT point) {
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -2381,7 +2435,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         static_cast<double>(unit_height)));
     input.mi.dwFlags =
         MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
-    if (SendInput(1, &input, sizeof(INPUT)) != 1) {
+    if (InjectInput(1, &input) != 1) {
       return false;
     }
     last_injected_point_ = point;
@@ -2409,7 +2463,7 @@ class RemoteInputPlugin : public flutter::Plugin {
 
   void SendMouseButton(int button, bool down) {
     INPUT input = MouseButtonInput(button, down);
-    SendInput(1, &input, sizeof(INPUT));
+    InjectInput(1, &input);
   }
 
   INPUT MouseButtonInput(int button, bool down) const {
@@ -2430,7 +2484,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         MouseButtonInput(button, true),
         MouseButtonInput(button, false),
     };
-    SendInput(2, inputs, sizeof(INPUT));
+    InjectInput(2, inputs);
   }
 
   int MouseButtonBit(int button) const {
@@ -2555,7 +2609,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
       }
     }
-    return SendInput(1, &input, sizeof(INPUT)) == 1;
+    return InjectInput(1, &input) == 1;
   }
 
   bool IsExtendedKeyboardKey(WORD key) const {
@@ -2652,9 +2706,9 @@ class RemoteInputPlugin : public flutter::Plugin {
         events[unit * 2 + 1].ki.dwFlags |= KEYEVENTF_KEYUP;
       }
       const UINT count = static_cast<UINT>(units * 2);
-      if (SendInput(count, events, sizeof(INPUT)) != count) {
+      if (InjectInput(count, events) != count) {
         // A partial batch must never leave the Enter key held.
-        for (size_t unit = 0; unit < units; ++unit) SendInput(1, &events[unit * 2 + 1], sizeof(INPUT));
+        for (size_t unit = 0; unit < units; ++unit) InjectInput(1, &events[unit * 2 + 1]);
         return false;
       }
       i += units - 1;
@@ -2679,7 +2733,7 @@ class RemoteInputPlugin : public flutter::Plugin {
         manual_remainder_y_ = raw_y - delta_y;
       }
       POINT current = {};
-      if (GetCursorPos(&current) != TRUE) {
+      if (!InjectionCursorPos(&current)) {
         if (!manual_injection_) {
           ReleaseBlockedInjection(BlockedInjectionPoint(json));
           return;
@@ -2779,14 +2833,14 @@ class RemoteInputPlugin : public flutter::Plugin {
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_WHEEL;
         input.mi.mouseData = delta_y;
-        SendInput(1, &input, sizeof(INPUT));
+        InjectInput(1, &input);
       }
       if (delta_x != 0) {
         INPUT input = {};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = MOUSEEVENTF_HWHEEL;
         input.mi.mouseData = delta_x;
-        SendInput(1, &input, sizeof(INPUT));
+        InjectInput(1, &input);
       }
       return;
     }
@@ -3077,6 +3131,7 @@ class RemoteInputPlugin : public flutter::Plugin {
   uint64_t sequence_ = 0;
   uint64_t capture_activation_sequence_ = 0;
   RemoteInputCursor remote_cursor_;
+  mutable RemoteInputServiceClient input_service_;
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;
   std::thread keyboard_hook_thread_;

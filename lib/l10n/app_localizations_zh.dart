@@ -572,6 +572,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mutualTrustNotEstablished => '尚未形成双向互信';
 
   @override
+  String get windowsLockScreenInput => '锁屏时接收键鼠';
+
+  @override
+  String get windowsLockScreenInputHint => '安装系统服务后，互信设备可在本机锁屏时输入密码';
+
+  @override
+  String get windowsLockScreenInputDesc =>
+      '将安装一个系统服务，让互信设备可以在本机锁屏时输入密码。需要管理员确认；UAC 提示和以管理员身份运行的窗口仍不可控制。';
+
+  @override
+  String get windowsLockScreenInputUninstallDesc =>
+      '卸载后，其他设备将无法在本机锁屏时输入。卸载需要管理员确认。';
+
+  @override
+  String get windowsLockScreenInputNotInstalled => '未安装';
+
+  @override
+  String get windowsLockScreenInputRunning => '运行中';
+
+  @override
+  String get windowsLockScreenInputStopped => '未运行';
+
+  @override
+  String get windowsLockScreenInputOutdated => '需更新';
+
+  @override
+  String get windowsLockScreenInputInstall => '安装';
+
+  @override
+  String get windowsLockScreenInputRepair => '修复';
+
+  @override
+  String get windowsLockScreenInputUninstall => '卸载';
+
+  @override
+  String get windowsLockScreenInputWorking => '正在等待系统服务就绪…';
+
+  @override
+  String get windowsLockScreenInputFailed => '锁屏键鼠服务设置失败';
+
+  @override
   String get launchAtStartup => '开机自启动';
 
   @override

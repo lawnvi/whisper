@@ -88,6 +88,7 @@ CI currently runs `flutter pub get`, `flutter analyze`, and `flutter test` on pu
 - Release signing uses GitHub secrets such as `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `KEY_PASSWORD`, and `STORE_PASSWORD`.
 - Local macOS signing can use `WHISPER_MACOS_*` environment variables from `script/build_and_run.sh`; never include secret values in docs or commits.
 - `WHISPER_REMOTE_INPUT_TRACE=1` enables verbose remote-input tracing and may expose device/session details in logs.
+- The optional Windows lock screen input service (`windows/runner/input_service.cpp`) is `whisper.exe` itself, copied into Program Files and run as LocalSystem. It only injects while the session is locked; do not widen it to UAC prompts, elevated windows, or the user's desktop, or run it from a user-writable folder, without an explicit security review. Its roles must return from `wWinMain` before anything touches Flutter, which is delay-loaded so the copy can start on its own.
 
 ## Collaboration Rules
 

@@ -597,6 +597,49 @@ class AppLocalizationsEn extends AppLocalizations {
       'Mutual trust has not been established';
 
   @override
+  String get windowsLockScreenInput => 'Keyboard and mouse on the lock screen';
+
+  @override
+  String get windowsLockScreenInputHint =>
+      'Install a system service so trusted devices can type the password on this PC\'s lock screen';
+
+  @override
+  String get windowsLockScreenInputDesc =>
+      'This installs a system service that lets trusted devices type the password on this PC\'s lock screen. Administrator approval is required; UAC prompts and windows running as administrator stay out of reach.';
+
+  @override
+  String get windowsLockScreenInputUninstallDesc =>
+      'After uninstalling, other devices can no longer type on this PC\'s lock screen. Administrator approval is required.';
+
+  @override
+  String get windowsLockScreenInputNotInstalled => 'Not installed';
+
+  @override
+  String get windowsLockScreenInputRunning => 'Running';
+
+  @override
+  String get windowsLockScreenInputStopped => 'Stopped';
+
+  @override
+  String get windowsLockScreenInputOutdated => 'Needs update';
+
+  @override
+  String get windowsLockScreenInputInstall => 'Install';
+
+  @override
+  String get windowsLockScreenInputRepair => 'Repair';
+
+  @override
+  String get windowsLockScreenInputUninstall => 'Uninstall';
+
+  @override
+  String get windowsLockScreenInputWorking => 'Waiting for the system service…';
+
+  @override
+  String get windowsLockScreenInputFailed =>
+      'Could not change the lock screen input service';
+
+  @override
   String get launchAtStartup => 'Launch at startup';
 
   @override

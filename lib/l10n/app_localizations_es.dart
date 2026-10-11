@@ -602,6 +602,51 @@ class AppLocalizationsEs extends AppLocalizations {
       'La confianza mutua aun no esta establecida';
 
   @override
+  String get windowsLockScreenInput =>
+      'Teclado y ratón en la pantalla de bloqueo';
+
+  @override
+  String get windowsLockScreenInputHint =>
+      'Instala un servicio del sistema para que los dispositivos de confianza puedan escribir la contraseña en la pantalla de bloqueo de este PC';
+
+  @override
+  String get windowsLockScreenInputDesc =>
+      'Se instalará un servicio del sistema que permite a los dispositivos de confianza escribir la contraseña en la pantalla de bloqueo de este PC. Requiere aprobación de administrador; los avisos de UAC y las ventanas ejecutadas como administrador siguen fuera de alcance.';
+
+  @override
+  String get windowsLockScreenInputUninstallDesc =>
+      'Tras desinstalarlo, otros dispositivos ya no podrán escribir en la pantalla de bloqueo de este PC. Requiere aprobación de administrador.';
+
+  @override
+  String get windowsLockScreenInputNotInstalled => 'No instalado';
+
+  @override
+  String get windowsLockScreenInputRunning => 'En ejecución';
+
+  @override
+  String get windowsLockScreenInputStopped => 'Detenido';
+
+  @override
+  String get windowsLockScreenInputOutdated => 'Requiere actualización';
+
+  @override
+  String get windowsLockScreenInputInstall => 'Instalar';
+
+  @override
+  String get windowsLockScreenInputRepair => 'Reparar';
+
+  @override
+  String get windowsLockScreenInputUninstall => 'Desinstalar';
+
+  @override
+  String get windowsLockScreenInputWorking =>
+      'Esperando al servicio del sistema…';
+
+  @override
+  String get windowsLockScreenInputFailed =>
+      'No se pudo cambiar el servicio de entrada de la pantalla de bloqueo';
+
+  @override
   String get launchAtStartup => 'Iniciar al arrancar';
 
   @override

@@ -18,6 +18,7 @@ import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/notification.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/toast.dart';
+import 'package:whisper/helper/windows_input_service.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
@@ -33,6 +34,7 @@ import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/glass_settings_slider.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
+import 'package:whisper/widget/windows_input_service_setting.dart';
 
 typedef SettingsPresentationLoader = Future<SettingsPresentation> Function();
 
@@ -141,6 +143,7 @@ class SettingsScreen extends StatefulWidget {
     this.updateManager,
     this.exitForUpdate,
     this.autoCheckForUpdates = true,
+    this.windowsInputService,
   });
 
   final SettingsPresentationLoader? presentationLoader;
@@ -158,6 +161,7 @@ class SettingsScreen extends StatefulWidget {
   final AppUpdateManager? updateManager;
   final Future<void> Function()? exitForUpdate;
   final bool autoCheckForUpdates;
+  final WindowsInputServiceController? windowsInputService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -208,6 +212,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppUpdateManager get _updateManager =>
       widget.updateManager ?? AppUpdateService.shared;
 
+  WindowsInputServiceController get _windowsInputService =>
+      widget.windowsInputService ?? WindowsInputServiceController.shared;
+
   Future<void> _waitForOpeningTransition() {
     final animation = ModalRoute.of(context)?.animation;
     if (animation == null || animation.status != AnimationStatus.forward) {
@@ -237,6 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _initialize() async {
+    unawaited(_windowsInputService.refresh());
     await _refreshDevice(showLoading: true);
     if (widget.autoCheckForUpdates &&
         (widget.presentationLoader == null || widget.updateManager != null)) {
@@ -586,6 +594,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 }
                               },
                             ),
+                          ),
+                        if (_windowsInputService.supported)
+                          AnimatedBuilder(
+                            animation: _windowsInputService,
+                            builder: (context, _) {
+                              final service = _windowsInputService;
+                              // Installing a system service is not a
+                              // preference to flip, so the row shows its
+                              // state and opens the action that state allows.
+                              return _buildSettingItem(
+                                l10n.windowsLockScreenInput,
+                                Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: isDark
+                                      ? Colors.grey[400]
+                                      : CupertinoColors.systemGrey,
+                                ),
+                                desc: service.busy
+                                    ? l10n.windowsLockScreenInputWorking
+                                    : l10n.windowsLockScreenInputHint,
+                                enabled: !service.busy,
+                                onTap: () => unawaited(
+                                  changeWindowsLockScreenInput(
+                                    context,
+                                    controller: service,
+                                  ),
+                                ),
+                                trailing: WindowsLockScreenInputStatus(
+                                  controller: service,
+                                ),
+                              );
+                            },
                           ),
                         if (!_isMobilePlatform)
                           _buildSettingItem(
@@ -1712,58 +1752,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                // A switch sits beside the title. Arrows and other
+                // accessories centre on the whole row, as iOS settings do.
+                crossAxisAlignment: toggle != null
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
                 children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: icon is Icon
-                        ? Icon(icon.icon, color: palette.textMuted)
-                        : IconTheme.merge(
-                            data: IconThemeData(color: palette.textMuted),
-                            child: icon,
-                          ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontSize: 16,
-                                height: 1.5,
-                                letterSpacing: 0,
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        if (resolvedSubtitle != null) ...<Widget>[
-                          const SizedBox(height: 4),
-                          DefaultTextStyle(
-                            style: Theme.of(context).textTheme.bodySmall!
-                                .copyWith(
-                                  fontSize: 13,
-                                  height: 1.5,
-                                  letterSpacing: 0,
-                                  color: palette.textMuted,
-                                  fontWeight: FontWeight.w400,
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: icon is Icon
+                              ? Icon(icon.icon, color: palette.textMuted)
+                              : IconTheme.merge(
+                                  data: IconThemeData(color: palette.textMuted),
+                                  child: icon,
                                 ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            child: resolvedSubtitle,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontSize: 16,
+                                      height: 1.5,
+                                      letterSpacing: 0,
+                                      color: colorScheme.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                              if (resolvedSubtitle != null) ...<Widget>[
+                                const SizedBox(height: 4),
+                                DefaultTextStyle(
+                                  style: Theme.of(context).textTheme.bodySmall!
+                                      .copyWith(
+                                        fontSize: 13,
+                                        height: 1.5,
+                                        letterSpacing: 0,
+                                        color: palette.textMuted,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  child: resolvedSubtitle,
+                                ),
+                              ],
+                            ],
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
                   if (trailing != null) ...<Widget>[
                     const SizedBox(width: 6),
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.only(top: toggle != null ? 2 : 0),
                       child: ExcludeFocus(
                         child: ExcludeSemantics(child: trailing),
                       ),

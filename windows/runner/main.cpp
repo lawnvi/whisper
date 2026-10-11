@@ -4,11 +4,18 @@
 
 #include "desktop_quick_send_plugin.h"
 #include "flutter_window.h"
+#include "input_service.h"
 #include "single_instance.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // The lock screen input service is this same executable, copied on its own
+  // into Program Files. Its roles return here, before Flutter is loaded.
+  if (const std::optional<int> service_exit_code = RunInputServiceCommand()) {
+    return *service_exit_code;
+  }
+
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
   SingleInstanceLock single_instance_lock;

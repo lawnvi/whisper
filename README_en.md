@@ -153,6 +153,8 @@ Enable clipboard auto-sync to paste across devices. Copy text, images, or files,
 
 On macOS, grant the requested permissions, including Accessibility. Linux keyboard/mouse sharing currently requires X11; screenshot support on Wayland does not imply keyboard/mouse sharing support.
 
+When a controlled Windows device locks, ordinary processes cannot inject input into the lock screen, so the pointer is handed back to the controlling device. The Windows installer installs a system service along with the app and updates it on every upgrade (one administrator prompt each time), which lets trusted devices type the password on the lock screen. Settings → System behavior → "Keyboard and mouse on the lock screen" shows the service state and offers uninstall and repair; once uninstalled there, later upgrades do not bring it back. The service only acts while the session is locked: UAC prompts, the Ctrl+Alt+Del screen, and windows running as administrator stay out of reach, and so does the sign-in screen after a restart, because Whisper is not running before login.
+
 ### Control a Computer from Android
 
 Update both devices to versions that support the phone controller, connect them on the LAN, and establish mutual trust. The computer must be logged in with Whisper running, and you should be able to see its screen. In the Android conversation with that computer, select "Control computer", then tap the start button in the top bar.

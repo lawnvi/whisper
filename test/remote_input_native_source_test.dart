@@ -44,11 +44,8 @@ void main() {
         expect(text, contains('text->size() > 4096'));
         expect(text, contains('MB_ERR_INVALID_CHARS'));
         expect(text, contains('KEYEVENTF_UNICODE'));
-        expect(
-          text,
-          contains('SendInput(count, events, sizeof(INPUT)) != count'),
-        );
-        expect(text, contains('SendInput(1, &events[unit * 2 + 1]'));
+        expect(text, contains('InjectInput(count, events) != count'));
+        expect(text, contains('InjectInput(1, &events[unit * 2 + 1]'));
         expect(text, isNot(contains('SetClipboardData')));
       },
     );
@@ -411,10 +408,7 @@ void main() {
         ).firstMatch(injectEvent)!.group(0)!;
         // The lock screen makes GetCursorPos and SendInput fail; a silent
         // fallback to the screen centre could never cross the reverse edge.
-        expect(
-          mouseMoveCase,
-          contains('if (GetCursorPos(&current) != TRUE) {'),
-        );
+        expect(mouseMoveCase, contains('if (!InjectionCursorPos(&current)) {'));
         expect(
           mouseMoveCase,
           contains('ReleaseBlockedInjection(BlockedInjectionPoint(json));'),
@@ -429,17 +423,14 @@ void main() {
           hasLength(3),
         );
         expect(
-          mouseMoveCase.indexOf('if (GetCursorPos(&current) != TRUE) {'),
+          mouseMoveCase.indexOf('if (!InjectionCursorPos(&current)) {'),
           lessThan(mouseMoveCase.indexOf('ReverseInjectionSourceEdgeUnit')),
         );
 
         final moveCursor = RegExp(
           r'bool MoveCursorToPoint\(POINT point\)[\s\S]*?\n  }',
         ).firstMatch(source)!.group(0)!;
-        expect(
-          moveCursor,
-          contains('if (SendInput(1, &input, sizeof(INPUT)) != 1) {'),
-        );
+        expect(moveCursor, contains('if (InjectInput(1, &input) != 1) {'));
         expect(moveCursor, contains('last_injected_point_ = point;'));
 
         final release = RegExp(
@@ -461,10 +452,7 @@ void main() {
       expect(keyCase, contains('} else if (!down) {'));
       expect(keyCase, contains('injection_blocked_ = true;'));
       expect(source, contains('bool SendKeyboardKey(WORD key, bool down)'));
-      expect(
-        source,
-        contains('return SendInput(1, &input, sizeof(INPUT)) == 1;'),
-      );
+      expect(source, contains('return InjectInput(1, &input) == 1;'));
 
       final releaseKeys = RegExp(
         r'void ReleaseInjectedKeys\(\)[\s\S]*?\n  }',

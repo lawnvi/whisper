@@ -1132,6 +1132,84 @@ abstract class AppLocalizations {
   /// **'尚未形成双向互信'**
   String get mutualTrustNotEstablished;
 
+  /// No description provided for @windowsLockScreenInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'锁屏时接收键鼠'**
+  String get windowsLockScreenInput;
+
+  /// No description provided for @windowsLockScreenInputHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装系统服务后，互信设备可在本机锁屏时输入密码'**
+  String get windowsLockScreenInputHint;
+
+  /// No description provided for @windowsLockScreenInputDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将安装一个系统服务，让互信设备可以在本机锁屏时输入密码。需要管理员确认；UAC 提示和以管理员身份运行的窗口仍不可控制。'**
+  String get windowsLockScreenInputDesc;
+
+  /// No description provided for @windowsLockScreenInputUninstallDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载后，其他设备将无法在本机锁屏时输入。卸载需要管理员确认。'**
+  String get windowsLockScreenInputUninstallDesc;
+
+  /// No description provided for @windowsLockScreenInputNotInstalled.
+  ///
+  /// In zh, this message translates to:
+  /// **'未安装'**
+  String get windowsLockScreenInputNotInstalled;
+
+  /// No description provided for @windowsLockScreenInputRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get windowsLockScreenInputRunning;
+
+  /// No description provided for @windowsLockScreenInputStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'未运行'**
+  String get windowsLockScreenInputStopped;
+
+  /// No description provided for @windowsLockScreenInputOutdated.
+  ///
+  /// In zh, this message translates to:
+  /// **'需更新'**
+  String get windowsLockScreenInputOutdated;
+
+  /// No description provided for @windowsLockScreenInputInstall.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装'**
+  String get windowsLockScreenInputInstall;
+
+  /// No description provided for @windowsLockScreenInputRepair.
+  ///
+  /// In zh, this message translates to:
+  /// **'修复'**
+  String get windowsLockScreenInputRepair;
+
+  /// No description provided for @windowsLockScreenInputUninstall.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载'**
+  String get windowsLockScreenInputUninstall;
+
+  /// No description provided for @windowsLockScreenInputWorking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等待系统服务就绪…'**
+  String get windowsLockScreenInputWorking;
+
+  /// No description provided for @windowsLockScreenInputFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'锁屏键鼠服务设置失败'**
+  String get windowsLockScreenInputFailed;
+
   /// No description provided for @launchAtStartup.
   ///
   /// In zh, this message translates to:

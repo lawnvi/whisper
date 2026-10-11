@@ -57,6 +57,19 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# whisper.exe is also the lock screen input service: installing that copies
+# the executable on its own into Program Files, where it has to start without
+# Flutter or any plugin beside it. Loading those on first use keeps the copy
+# standalone, and keeps them out of a LocalSystem process altogether.
+get_filename_component(FLUTTER_LIBRARY_NAME "${FLUTTER_LIBRARY}" NAME)
+target_link_libraries(${BINARY_NAME} PRIVATE "delayimp.lib")
+target_link_options(${BINARY_NAME} PRIVATE
+  "/DELAYLOAD:${FLUTTER_LIBRARY_NAME}")
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  target_link_options(${BINARY_NAME} PRIVATE
+    "/DELAYLOAD:$<TARGET_FILE_NAME:${plugin}_plugin>")
+endforeach()
+
 # The audio plugin still uses C++/WinRT's C++17 coroutine fallback, which
 # MSVC 14.51 requires opting into until the plugin adopts standard coroutines.
 if(MSVC_VERSION GREATER_EQUAL 1951 AND TARGET audioplayers_windows_plugin)
