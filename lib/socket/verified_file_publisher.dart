@@ -345,7 +345,7 @@ Future<DownloadFileReservation> publishVerifiedDownload(
         movedStat = await published.stat();
         if (await FileSystemEntity.type(destination, followLinks: false) !=
                 FileSystemEntityType.file ||
-            !_sameFileContentStat(snapshot._pathStat, movedStat) ||
+            !sameFileContentAcrossRename(snapshot._pathStat, movedStat) ||
             await snapshot._handle.length() != snapshot.length) {
           throw FileSystemException(
             'transfer changed during publication',
@@ -387,7 +387,7 @@ Future<DownloadFileReservation> publishVerifiedDownload(
           await _capturePartialReservationOwnership(reservation);
           await discardDownloadReservation(reservation);
         } else if (movedStat != null &&
-            _sameFileContentStat(snapshot._pathStat, movedStat) &&
+            sameFileContentAcrossRename(snapshot._pathStat, movedStat) &&
             _sameStableFileStat(movedStat, await published.stat())) {
           // Never overwrite a source path recreated while publication failed.
           if (linked) {
@@ -770,6 +770,29 @@ bool _sameFileContentStat(FileStat first, FileStat second) =>
     first.mode == second.mode &&
     first.size == second.size &&
     first.modified == second.modified;
+
+const int _executeModeBits = 0x49; // 0o111
+
+/// Whether [moved] is still the file that [source] described under its
+/// earlier name.
+///
+/// Windows has no execute permission, so the C runtime behind [FileStat]
+/// makes one up from the extension. A download therefore changes mode when it
+/// takes a final name ending in .exe, .bat, .cmd or .com, with the file
+/// itself untouched.
+bool sameFileContentAcrossRename(
+  FileStat source,
+  FileStat moved, {
+  bool? executeBitsFollowName,
+}) {
+  final ignored = (executeBitsFollowName ?? Platform.isWindows)
+      ? _executeModeBits
+      : 0;
+  return source.type == moved.type &&
+      (source.mode | ignored) == (moved.mode | ignored) &&
+      source.size == moved.size &&
+      source.modified == moved.modified;
+}
 
 bool _equalBytes(List<int> first, List<int> second) {
   if (first.length != second.length) return false;

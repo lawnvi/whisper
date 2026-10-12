@@ -28,6 +28,103 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  group('a download that takes its final name', () {
+    final modified = DateTime.utc(2026, 10, 12);
+    _Stat stat(int mode, {int size = 4096, DateTime? at}) =>
+        _Stat(mode: mode, size: size, modified: at ?? modified);
+    // What Windows reports for the same file as received.part and as an .exe.
+    const plain = 0x81b6; // 0o100666
+    const executable = 0x81ff; // 0o100777
+    const readOnly = 0x8124; // 0o100444
+
+    test('is the same file on Windows when only the extension changed', () {
+      expect(
+        sameFileContentAcrossRename(
+          stat(plain),
+          stat(executable),
+          executeBitsFollowName: true,
+        ),
+        isTrue,
+      );
+      expect(
+        sameFileContentAcrossRename(
+          stat(executable),
+          stat(plain),
+          executeBitsFollowName: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('is still rejected on Windows when the file itself changed', () {
+      for (final moved in <_Stat>[
+        stat(readOnly),
+        stat(executable, size: 4097),
+        stat(executable, at: modified.add(const Duration(seconds: 2))),
+      ]) {
+        expect(
+          sameFileContentAcrossRename(
+            stat(plain),
+            moved,
+            executeBitsFollowName: true,
+          ),
+          isFalse,
+        );
+      }
+    });
+
+    test('keeps its execute bits where they are a real permission', () {
+      expect(
+        sameFileContentAcrossRename(
+          stat(plain),
+          stat(executable),
+          executeBitsFollowName: false,
+        ),
+        isFalse,
+      );
+      expect(
+        sameFileContentAcrossRename(
+          stat(plain),
+          stat(plain),
+          executeBitsFollowName: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('is how the fast path compares the two names', () {
+      final source = File(
+        'lib/socket/verified_file_publisher.dart',
+      ).readAsStringSync();
+      final publish = RegExp(
+        r'Future<DownloadFileReservation> publishVerifiedDownload\([\s\S]*?\n\}\n',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        'sameFileContentAcrossRename(snapshot._pathStat, movedStat)'.allMatches(
+          publish,
+        ),
+        hasLength(2),
+      );
+      expect(
+        publish,
+        isNot(contains('_sameFileContentStat(snapshot._pathStat, movedStat)')),
+      );
+    });
+  });
+
+  test('a download named like a Windows program is published', () async {
+    final reservation = await publishVerifiedDownload(
+      snapshot,
+      root,
+      'installer.exe',
+    );
+    addTearDown(() => releaseDownloadReservation(reservation));
+
+    expect(p.basename(reservation.path), 'installer.exe');
+    expect(await File(reservation.path).readAsBytes(), bytes);
+    expect(await source.exists(), isFalse);
+  });
+
   test('unsupported moves fall back to the verified copy path', () async {
     final reservation = await publishVerifiedDownload(
       snapshot,
@@ -211,4 +308,23 @@ void main() {
       expect(await destination.readAsString(), 'keep');
     });
   }, skip: !Platform.isMacOS && !Platform.isLinux);
+}
+
+final class _Stat implements FileStat {
+  _Stat({required this.mode, required this.size, required this.modified});
+
+  @override
+  final int mode;
+  @override
+  final int size;
+  @override
+  final DateTime modified;
+  @override
+  FileSystemEntityType get type => FileSystemEntityType.file;
+  @override
+  DateTime get changed => modified;
+  @override
+  DateTime get accessed => modified;
+  @override
+  String modeString() => mode.toRadixString(8);
 }
