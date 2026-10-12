@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
+import 'package:uuid/uuid.dart';
 import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
+import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/parallel_streaming_checksum.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -20,6 +23,10 @@ import 'package:whisper/socket/authenticated_frame.dart';
 import 'package:whisper/socket/file_path_policy.dart';
 import 'package:whisper/socket/file_transfer_source.dart';
 import 'package:whisper/socket/file_transfer_v3.dart';
+import 'package:whisper/socket/folder_transfer_scan.dart';
+import 'package:whisper/socket/folder_transfer_sink.dart';
+import 'package:whisper/socket/folder_write_pool.dart';
+import 'package:whisper/socket/folder_transfer_source.dart';
 import 'package:whisper/socket/outgoing_progress_estimator.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/peer_transfer_runtime.dart';
@@ -116,6 +123,44 @@ final class _TransferAdmissionRejected implements Exception {
 }
 
 enum _IncomingReadyResult { retained, sendFailed, unavailable }
+
+/// How an attempt to send a folder ended, for the caller to explain.
+enum FolderSendOutcome {
+  sent,
+  notConnected,
+  peerUnsupported,
+  invalidName,
+  unreadable,
+  tooManyEntries,
+  tooLarge,
+  rejected,
+}
+
+/// A folder being received: the worker writing it, and how much of its
+/// stream the sender has been told is safe.
+final class _IncomingFolder {
+  _IncomingFolder({required this.session, required this.ackedOffset});
+
+  final FolderReceiveSession session;
+  int ackedOffset;
+  bool ackPending = false;
+
+  /// Repeats the last acknowledgement while the worker is busy, see
+  /// [FileTransferEngine._keepIncomingFolderAlive].
+  Timer? keepAlive;
+  bool acknowledgedSinceKeepAlive = false;
+
+  /// Whether the sender was told to send in this session. It was not if
+  /// staging already held the whole folder.
+  bool announced = false;
+}
+
+/// What one file or directory is assumed to cost on disk beyond its bytes
+/// when deciding whether a folder fits: the usual allocation block.
+const int _folderEntryStorageOverhead = 4096;
+
+Future<FolderScanResult> _scanFolderInBackground(String path) =>
+    Isolate.run(() => scanFolderForTransfer(path));
 
 enum FileTransferDiagnosticKind {
   outgoingFailed,
@@ -216,6 +261,13 @@ class FileTransferEngine {
     FileTransferV3FlowParameters? flowLimits,
     DateTime Function()? now,
     TransferAckTimerFactory? progressTimerFactory,
+    FolderTransferStore folderStore = const FolderTransferStore(),
+    Future<FolderScanResult> Function(String path)? scanFolder,
+    bool? caseInsensitiveFolderNames,
+    Duration folderCheckpointInterval = const Duration(seconds: 1),
+    Duration folderKeepAliveInterval = const Duration(seconds: 5),
+    Duration folderQuietLimit = const Duration(minutes: 5),
+    int? folderWriteWorkers,
     LocalDatabase Function() database = LocalDatabase.new,
   }) : _currentConnectionBinding = currentConnectionBinding,
        _authenticatedIdentityHashForConnection =
@@ -253,6 +305,14 @@ class FileTransferEngine {
                : FileTransferV3FlowParameters.desktop),
        _now = now ?? DateTime.now,
        _progressTimerFactory = progressTimerFactory ?? Timer.new,
+       _folderStore = folderStore,
+       _scanFolder = scanFolder ?? _scanFolderInBackground,
+       _caseInsensitiveFolderNames =
+           caseInsensitiveFolderNames ?? !Platform.isLinux,
+       _folderCheckpointInterval = folderCheckpointInterval,
+       _folderKeepAliveInterval = folderKeepAliveInterval,
+       _folderQuietLimit = folderQuietLimit,
+       _folderWriteWorkers = folderWriteWorkers ?? defaultFolderWriteWorkers(),
        _database = database;
 
   static const int defaultTransferChunkSize = fileTransferV3FramePayloadSize;
@@ -296,6 +356,25 @@ class FileTransferEngine {
   _setPublishedFileTimestamp;
   final PrivacyLog _privacyLogger;
   final FileTransferV3FlowParameters _flowLimits;
+  final FolderTransferStore _folderStore;
+  final Future<FolderScanResult> Function(String path) _scanFolder;
+
+  /// Whether the download volume treats `A.txt` and `a.txt` as one file.
+  final bool _caseInsensitiveFolderNames;
+
+  /// How often a folder being received reports durable progress, so a
+  /// sender waiting on many small files keeps hearing from us.
+  final Duration _folderCheckpointInterval;
+
+  /// How often a receiver that is still writing says so, and for how long
+  /// the sender takes that in place of progress. One file can hold the
+  /// receiver up far longer than the acknowledgement timeout: a virus
+  /// scanner working through what was just written, slow storage.
+  final Duration _folderKeepAliveInterval;
+  final Duration _folderQuietLimit;
+
+  /// Isolates writing the small files of a received folder side by side.
+  final int _folderWriteWorkers;
   final LocalDatabase Function() _database;
 
   final _sendFileLock = Lock();
@@ -313,6 +392,8 @@ class FileTransferEngine {
       <String, VerifiedTransferSnapshot>{};
   final Map<String, int> _receivingTransferOffsets = <String, int>{};
   final Map<String, int> _receivingTransferSequences = <String, int>{};
+  final Map<String, _IncomingFolder> _incomingFolders =
+      <String, _IncomingFolder>{};
   final Map<String, int> _incomingProgressDispatchTimes = <String, int>{};
   final DateTime Function() _now;
   final TransferAckTimerFactory _progressTimerFactory;
@@ -343,8 +424,17 @@ class FileTransferEngine {
   final Map<String, int> _outgoingIntentEpochs = <String, int>{};
   final Set<String> _blockedOutgoingPeers = <String>{};
 
+  /// Transfers asked to stop sending. A window is sent inside the transfer's
+  /// lane, and for a folder of small files reading one can take seconds; a
+  /// cancellation waiting for that lane sets this so the window ends at the
+  /// next frame instead of running to its end first.
+  final Set<String> _outgoingStopRequests = <String>{};
+
   bool _supportsFileTransferV3For(String peerId) =>
       _remoteProfileFor(peerId)?.capabilities.fileTransferV3 == true;
+
+  bool _isFolderTransfer(FileTransferData transfer) =>
+      transfer.checksumAlgorithm == fileTransferFolderChecksumAlgorithm;
 
   void _logFailure(
     FileTransferDiagnosticKind kind,
@@ -445,6 +535,18 @@ class FileTransferEngine {
         _incomingConnectionBindings[transferId] ??
         _currentConnectionBinding(initial.peerUid) ??
         TransferConnectionBinding(peerId: initial.peerUid, generation: 0);
+    _outgoingStopRequests.add(transferId);
+    try {
+      await _cancelTransferInLane(transferId, connection);
+    } finally {
+      _outgoingStopRequests.remove(transferId);
+    }
+  }
+
+  Future<void> _cancelTransferInLane(
+    String transferId,
+    TransferConnectionBinding connection,
+  ) async {
     await _runTransferOperation<void>(
       transferId,
       connection: connection,
@@ -792,6 +894,95 @@ class FileTransferEngine {
     );
   }
 
+  /// Sends the folder at [path] as one transfer. The folder is scanned
+  /// first; its files then follow each other in a single stream, so a tree
+  /// of many small files costs no handshake, acknowledgement or database row
+  /// per file.
+  Future<FolderSendOutcome> sendFolderTo(String peerId, String path) async {
+    if (peerId.isEmpty || path.isEmpty) {
+      return FolderSendOutcome.rejected;
+    }
+    final intentEpoch = _outgoingIntentEpochs[peerId] ?? 0;
+    if (_blockedOutgoingPeers.contains(peerId)) {
+      return FolderSendOutcome.rejected;
+    }
+    if (_currentConnectionBinding(peerId) == null ||
+        (!_isConnectedTo(peerId) && !_hasLegacySinkFor(peerId))) {
+      return FolderSendOutcome.notConnected;
+    }
+    if (!_supportsFileTransferV3For(peerId)) {
+      return FolderSendOutcome.peerUnsupported;
+    }
+    final folderName = p.basename(p.normalize(p.absolute(path)));
+    if (!validateIncomingFileName(folderName)) {
+      return FolderSendOutcome.invalidName;
+    }
+    final String rootPath;
+    try {
+      // The folder itself may be reached through a link; nothing below it is.
+      rootPath = await Directory(path).resolveSymbolicLinks();
+    } on FileSystemException {
+      return FolderSendOutcome.unreadable;
+    }
+    final FolderScanResult scan;
+    try {
+      scan = await _scanFolder(rootPath);
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.outgoingFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
+      return FolderSendOutcome.unreadable;
+    }
+    switch (scan.failure) {
+      case FolderScanFailure.unreadable:
+        return FolderSendOutcome.unreadable;
+      case FolderScanFailure.tooManyEntries:
+        return FolderSendOutcome.tooManyEntries;
+      case FolderScanFailure.tooLarge:
+        return FolderSendOutcome.tooLarge;
+      case null:
+        break;
+    }
+    final transferId = const Uuid().v4();
+    try {
+      await _folderStore.writeManifest(transferId, scan.manifest);
+      await _folderStore.addSkipped(transferId, scan.skipped);
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.outgoingFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
+      await _folderStore.deleteManifest(transferId);
+      return FolderSendOutcome.rejected;
+    }
+    final admitted = await _persistAndOfferOutgoingTransfer(
+      peerId: peerId,
+      sourcePath: rootPath,
+      fileName: folderName,
+      size: scan.streamSize,
+      fileTimestamp: scan.rootModifiedMs,
+      checksumValue: scan.manifestSha256,
+      checksumDeferred: false,
+      messageId: transferId,
+      intentEpoch: intentEpoch,
+      folder: FolderOfferSummary(
+        manifestLength: scan.manifest.length,
+        fileCount: scan.fileCount,
+        directoryCount: scan.directoryCount,
+        totalBytes: scan.totalBytes,
+        skippedAtSource: scan.skippedCount,
+      ),
+    );
+    if (!admitted) {
+      await _folderStore.deleteManifest(transferId);
+      return FolderSendOutcome.rejected;
+    }
+    return FolderSendOutcome.sent;
+  }
+
   Future<bool> _persistAndOfferOutgoingTransfer({
     required String peerId,
     required String sourcePath,
@@ -804,6 +995,7 @@ class FileTransferEngine {
     required int intentEpoch,
     String? expectedPublicKeyHash,
     TransferConnectionBinding? expectedConnection,
+    FolderOfferSummary? folder,
   }) {
     return _sendFileLock.synchronized(() async {
       if (_blockedOutgoingPeers.contains(peerId) ||
@@ -816,10 +1008,14 @@ class FileTransferEngine {
         return false;
       }
       final metadata = FileTransferV3Metadata(
+        checksumAlgorithm: folder == null
+            ? fileTransferV3ChecksumAlgorithm
+            : fileTransferFolderChecksumAlgorithm,
         checksumValue: checksumValue,
         checksumDeferred: checksumDeferred,
         maxChunkSize: _flowLimits.chunkSize,
         maxWindowSize: _flowLimits.windowSize,
+        folder: folder,
       );
       final content = jsonEncode(metadata.toJson());
       final draft = _buildMessage(
@@ -1610,6 +1806,21 @@ class FileTransferEngine {
 
   void _dispatchTransferData(FileTransferData data) {
     var snapshot = _database().snapshotForTransfer(data);
+    final incomingFolder = _incomingFolders[data.transferId];
+    if (incomingFolder != null &&
+        data.direction == FileTransferDirection.incoming &&
+        data.state == FileTransferState.transferring) {
+      // The row holds the acknowledged offset; what has been written is
+      // ahead of it, and the progress shown must not step back to it.
+      snapshot = _snapshotWithProgress(
+        data,
+        math.max(
+          data.committedBytes,
+          math.min(incomingFolder.session.latest.processedOffset, data.size),
+        ),
+        filesDone: incomingFolder.session.latest.filesSettled,
+      );
+    }
     final tracker = _outgoingProgressTrackers[data.transferId];
     if (tracker != null && data.direction == FileTransferDirection.outgoing) {
       tracker.transfer = data;
@@ -1639,6 +1850,12 @@ class FileTransferEngine {
       sentEnd: sentEnd,
       size: transfer.size,
     );
+    // A folder's display walks towards what the receiver has confirmed and
+    // is deliberately a little behind it; see the estimator.
+    final committedBytes = tracker.estimator.followsConfirmed
+        ? displayed
+        : math.max(displayed, transfer.committedBytes);
+    final source = _outgoingTransferSources[transfer.transferId];
     return TransferSnapshot(
       transferId: transfer.transferId,
       messageUuid: transfer.messageUuid,
@@ -1648,9 +1865,12 @@ class FileTransferEngine {
       finalPath: transfer.finalPath,
       tempPath: transfer.tempPath,
       size: transfer.size,
-      committedBytes: math.max(displayed, transfer.committedBytes),
+      committedBytes: committedBytes,
       lastError: transfer.lastError,
       updatedAt: nowMs,
+      filesDone: source is FolderTransferSource
+          ? source.filesBefore(committedBytes)
+          : null,
     );
   }
 
@@ -1670,6 +1890,7 @@ class FileTransferEngine {
           durableOffset: durableOffset,
           nowMs: nowMs,
           seedRateBytesPerMs: _lastOutgoingRateByPeer[transfer.peerUid] ?? 0,
+          followsConfirmed: _isFolderTransfer(transfer),
         ),
       );
     }
@@ -1780,7 +2001,9 @@ class FileTransferEngine {
     if (updated.direction == FileTransferDirection.outgoing &&
         (updated.state == FileTransferState.completed ||
             updated.state == FileTransferState.canceled)) {
-      if (isAndroidSystemShareStagedUri(updated.finalPath)) {
+      if (_isFolderTransfer(updated)) {
+        await _folderStore.deleteManifest(updated.transferId);
+      } else if (isAndroidSystemShareStagedUri(updated.finalPath)) {
         await releaseAndroidSystemShareStagedItem(updated.finalPath);
       } else {
         await releaseStagedFolderTransferArchive(updated.finalPath);
@@ -2001,12 +2224,21 @@ class FileTransferEngine {
     if (transfer.tempPath.isEmpty) {
       final root = await _downloadDirectory();
       requireCurrent();
-      final tempPath = await safeTransferTempPath(root, message.uuid);
+      final tempPath = metadata.isFolder
+          ? await safeFolderStagingPath(root, message.uuid)
+          : await safeTransferTempPath(root, message.uuid);
       requireCurrent();
       final availableBytes = await _availableBytesForDownloadPath(root.path);
       requireCurrent();
+      // Each entry of a folder takes at least a block of its own on disk,
+      // which for many tiny files is far more than their bytes add up to.
+      final folder = metadata.folder;
+      final entryOverhead = folder == null
+          ? 0
+          : (folder.fileCount + folder.directoryCount) *
+                _folderEntryStorageOverhead;
       if (!hasEnoughStorageForFile(
-        fileSize: message.size,
+        fileSize: message.size + entryOverhead,
         availableBytes: availableBytes,
       )) {
         await _updateTransfer(
@@ -2098,6 +2330,9 @@ class FileTransferEngine {
             : transfer.committedBytes,
         size: transfer.size,
         failureReason: failureReason,
+        skippedEntries: transfer.state == FileTransferState.completed
+            ? transfer.skippedEntries ?? 0
+            : 0,
       ),
     );
   }
@@ -2173,6 +2408,15 @@ class FileTransferEngine {
     );
     if (decision == TransferRuntimeDecision.queued) {
       return _IncomingReadyResult.retained;
+    }
+    if (_isFolderTransfer(transfer)) {
+      return _sendFolderTransferReady(
+        transfer,
+        flow: flow,
+        connection: connection,
+        requireCurrent: requireCurrent,
+        startNextOnFailure: startNextOnFailure,
+      );
     }
     var tempFile = await _validatedIncomingTempFile(transfer);
     if (!await tempFile.exists()) {
@@ -2406,10 +2650,14 @@ class FileTransferEngine {
     if (control.durableOffset > 0) {
       late final String sourceProof;
       try {
-        sourceProof = await resumeProofHashForTransferSource(
-          source,
-          resumeOffset: control.durableOffset,
-        );
+        // A folder is resumed against its manifest: each file carries its
+        // own digest, so there is no window of stream bytes to compare.
+        sourceProof = source is FolderTransferSource
+            ? source.manifestSha256
+            : await resumeProofHashForTransferSource(
+                source,
+                resumeOffset: control.durableOffset,
+              );
       } catch (error) {
         requireCurrent();
         await _handleOutgoingTransferError(transfer, error);
@@ -2582,6 +2830,9 @@ class FileTransferEngine {
           transfer.transferId) {
         return null;
       }
+      if (_outgoingStopRequests.contains(transfer.transferId)) {
+        return cursor;
+      }
       final expectedWindow = armWatchdog
           ? _ackWatchdog.currentWindow(transfer.transferId)
           : null;
@@ -2602,7 +2853,8 @@ class FileTransferEngine {
       );
       if (_transferRuntime.activeOutgoingFor(transfer.peerUid) !=
               transfer.transferId ||
-          _outgoingConnectionBindings[transfer.transferId] != connection) {
+          _outgoingConnectionBindings[transfer.transferId] != connection ||
+          _outgoingStopRequests.contains(transfer.transferId)) {
         return cursor;
       }
       if (expectedWindow != null &&
@@ -2640,6 +2892,13 @@ class FileTransferEngine {
         connection: connection,
       );
       if (!sent) {
+        if (_currentConnectionBinding(transfer.peerUid) != connection ||
+            !_isConnectedTo(transfer.peerUid)) {
+          // The connection went away under the frame. The transfer is put
+          // on hold with the rest of that connection's work and continues
+          // on the next one.
+          return null;
+        }
         throw StateError('generation-bound transfer send failed');
       }
       cursor += payload.length;
@@ -2737,6 +2996,7 @@ class FileTransferEngine {
       sentEnd: sentEnd,
       retransmit: (timeout) => _retransmitTimedOutWindow(timeout, message),
       markUnresponsive: _markTimedOutTransferUnresponsive,
+      quietLimit: _isFolderTransfer(transfer) ? _folderQuietLimit : null,
     );
   }
 
@@ -2767,6 +3027,12 @@ class FileTransferEngine {
             isTerminalFileTransferState(transfer.state) ||
             transfer.committedBytes != timeout.durableOffset) {
           return null;
+        }
+        if (_isFolderTransfer(transfer)) {
+          // A folder's receiver holds everything this connection carried
+          // and writes it at its own pace; frames it already has would be
+          // a protocol error to it. All there is to do is wait once more.
+          return timeout.sentEnd;
         }
         _outgoingWindowEndOffsets[timeout.transferId] = timeout.durableOffset;
         try {
@@ -2827,6 +3093,22 @@ class FileTransferEngine {
     final expectedOffset =
         _receivingTransferOffsets[transfer.transferId] ??
         transfer.committedBytes;
+    if (_isFolderTransfer(transfer)) {
+      final incoming = _incomingFolders[transfer.transferId];
+      if (incoming == null) {
+        throw StateError('incoming folder has no writer');
+      }
+      if (frame.offset != expectedOffset) {
+        await _sendFileTransferV3Ack(transfer, incoming.ackedOffset);
+        return;
+      }
+      // The worker writes and verifies; progress, acknowledgements and the
+      // end of the folder come back from it as events.
+      incoming.session.add(frame.payload);
+      _receivingTransferOffsets[transfer.transferId] =
+          frame.offset + frame.payload.length;
+      return;
+    }
     if (frame.offset != expectedOffset) {
       final durableOffset = await _flushIncomingFileTransferV3(
         transfer,
@@ -2960,9 +3242,17 @@ class FileTransferEngine {
       return;
     }
 
-    const failureReason = FileTransferFailureReason.receiver;
-    final durableOffset =
-        _receivingTransferOffsets[transferId] ?? transfer.committedBytes;
+    final failureReason = switch (error) {
+      FolderReceiveException(kind: FolderReceiveFailureKind.manifest) =>
+        FileTransferFailureReason.invalidMetadata,
+      FolderReceiveException(kind: FolderReceiveFailureKind.storage) =>
+        FileTransferFailureReason.storage,
+      _ => FileTransferFailureReason.receiver,
+    };
+    // For a folder the received offset runs ahead of what has been written.
+    final durableOffset = _isFolderTransfer(transfer)
+        ? transfer.committedBytes
+        : _receivingTransferOffsets[transferId] ?? transfer.committedBytes;
     _logFailure(
       FileTransferDiagnosticKind.incomingFailed,
       error,
@@ -2999,6 +3289,7 @@ class FileTransferEngine {
     FileTransferData transfer, {
     required int committedBytes,
     required FileTransferState state,
+    int? filesDone,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final previous = _incomingProgressDispatchTimes[transfer.transferId];
@@ -3021,6 +3312,7 @@ class FileTransferEngine {
         committedBytes: committedBytes,
         lastError: transfer.lastError,
         updatedAt: now,
+        filesDone: filesDone,
       ),
     );
   }
@@ -3341,6 +3633,10 @@ class FileTransferEngine {
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
     if (transfer != null) {
+      if (_isFolderTransfer(transfer) &&
+          transfer.state == FileTransferState.completed) {
+        await _recordOutgoingFolderOutcome(transfer, control.skippedEntries);
+      }
       await _releaseOutgoingAndStartNext(
         transfer,
         connection: _operationConnectionBindings[control.transferId],
@@ -3412,10 +3708,16 @@ class FileTransferEngine {
       }
       var prefixMatches = false;
       try {
-        final tempFile = await _validatedIncomingTempFile(existing);
-        prefixMatches =
-            await tempFile.exists() &&
-            await tempFile.length() == control.durableOffset;
+        if (_isFolderTransfer(existing)) {
+          prefixMatches = await (await _validatedIncomingStagingDirectory(
+            existing,
+          )).exists();
+        } else {
+          final tempFile = await _validatedIncomingTempFile(existing);
+          prefixMatches =
+              await tempFile.exists() &&
+              await tempFile.length() == control.durableOffset;
+        }
       } catch (_) {
         prefixMatches = false;
       }
@@ -3441,10 +3743,24 @@ class FileTransferEngine {
         }
       }
     }
+    // A peer from before folder transfer cannot read the offer and answers
+    // it as bad metadata, before ever getting ready for data.
+    final failureReason =
+        existing != null &&
+            existing.direction == FileTransferDirection.outgoing &&
+            _isFolderTransfer(existing) &&
+            existing.state != FileTransferState.transferring &&
+            existing.state != FileTransferState.verifying &&
+            control.durableOffset == 0 &&
+            (control.failureReason ==
+                    FileTransferFailureReason.invalidMetadata ||
+                control.failureReason == FileTransferFailureReason.invalidSize)
+        ? FileTransferFailureReason.folderUnsupported
+        : control.failureReason;
     await _updateTransfer(
       control.transferId,
       state: FileTransferState.failed,
-      lastError: control.failureReason.wireCode,
+      lastError: failureReason.wireCode,
       requireCurrent: requireCurrent,
     );
     final transfer = await _database().fetchFileTransfer(control.transferId);
@@ -3462,8 +3778,8 @@ class FileTransferEngine {
         );
       }
     }
-    if (control.failureReason != FileTransferFailureReason.none) {
-      _notify(control.failureReason.wireCode);
+    if (failureReason != FileTransferFailureReason.none) {
+      _notify(failureReason.wireCode);
     }
   }
 
@@ -3479,22 +3795,31 @@ class FileTransferEngine {
     }
     requireCurrent();
     try {
-      await _closeReceivingTransferFile(transfer.transferId, flush: false);
-      var tempFile = await _validatedIncomingTempFile(transfer);
-      await tempFile.parent.create(recursive: true);
-      tempFile = await _validatedIncomingTempFile(transfer);
-      if (!await tempFile.exists()) {
+      if (_isFolderTransfer(transfer)) {
+        // The sender is on another manifest; nothing staged can be kept.
+        await _closeIncomingFolder(transfer.transferId);
+        final staging = await _validatedIncomingStagingDirectory(transfer);
+        if (await staging.exists()) {
+          await staging.delete(recursive: true);
+        }
+      } else {
+        await _closeReceivingTransferFile(transfer.transferId, flush: false);
+        var tempFile = await _validatedIncomingTempFile(transfer);
+        await tempFile.parent.create(recursive: true);
         tempFile = await _validatedIncomingTempFile(transfer);
-        await tempFile.create(exclusive: true);
-      }
-      tempFile = await _validatedIncomingTempFile(transfer);
-      final writer = await tempFile.open(mode: FileMode.append);
-      try {
-        await _validatedIncomingTempFile(transfer);
-        await writer.truncate(0);
-        await writer.flush();
-      } finally {
-        await writer.close();
+        if (!await tempFile.exists()) {
+          tempFile = await _validatedIncomingTempFile(transfer);
+          await tempFile.create(exclusive: true);
+        }
+        tempFile = await _validatedIncomingTempFile(transfer);
+        final writer = await tempFile.open(mode: FileMode.append);
+        try {
+          await _validatedIncomingTempFile(transfer);
+          await writer.truncate(0);
+          await writer.flush();
+        } finally {
+          await writer.close();
+        }
       }
     } on FileSystemException catch (error) {
       _logFailure(FileTransferDiagnosticKind.resumeResetDeferred, error);
@@ -3684,7 +4009,15 @@ class FileTransferEngine {
   ) {
     return _outgoingTransferSources.putIfAbsent(
       transfer.transferId,
-      () => _sourceFor(message.path, transfer.size),
+      () => _isFolderTransfer(transfer)
+          ? FolderTransferSource(
+              rootPath: message.path,
+              manifestPath: () =>
+                  _folderStore.manifestPath(transfer.transferId),
+              manifestSha256: transfer.checksumValue,
+              expectedSize: transfer.size,
+            )
+          : _sourceFor(message.path, transfer.size),
     );
   }
 
@@ -3692,6 +4025,463 @@ class FileTransferEngine {
     final source = _outgoingTransferSources.remove(transferId);
     if (source != null) {
       await closeTransferSource(source);
+    }
+  }
+
+  Future<Directory> _validatedIncomingStagingDirectory(
+    FileTransferData transfer,
+  ) async {
+    if (transfer.direction != FileTransferDirection.incoming ||
+        transfer.tempPath.isEmpty) {
+      throw StateError('incoming folder staging path is unavailable');
+    }
+    final root = await _downloadDirectory();
+    return revalidateFolderStagingDirectory(
+      root: root,
+      transferId: transfer.transferId,
+      expectedPath: transfer.tempPath,
+    );
+  }
+
+  TransferSnapshot _snapshotWithProgress(
+    FileTransferData transfer,
+    int committedBytes, {
+    int? filesDone,
+  }) {
+    return TransferSnapshot(
+      transferId: transfer.transferId,
+      messageUuid: transfer.messageUuid,
+      peerUid: transfer.peerUid,
+      direction: transfer.direction,
+      state: transfer.state,
+      finalPath: transfer.finalPath,
+      tempPath: transfer.tempPath,
+      size: transfer.size,
+      committedBytes: committedBytes,
+      lastError: transfer.lastError,
+      updatedAt: transfer.updatedAt,
+      skippedEntries: transfer.skippedEntries ?? 0,
+      filesDone: filesDone,
+    );
+  }
+
+  /// Opens the worker for an incoming folder, which finds out from staging
+  /// how much of the stream is already there, and tells the sender where to
+  /// continue.
+  Future<_IncomingReadyResult> _sendFolderTransferReady(
+    FileTransferData transfer, {
+    required FileTransferV3FlowParameters flow,
+    required TransferConnectionBinding? connection,
+    required void Function()? requireCurrent,
+    required bool startNextOnFailure,
+  }) async {
+    final transferId = transfer.transferId;
+    final message = await _database().fetchAssociatedFileTransferMessage(
+      transfer,
+    );
+    requireCurrent?.call();
+    FolderOfferSummary? folder;
+    if (message != null) {
+      try {
+        folder = FileTransferV3Metadata.parseOffer(
+          message.content,
+          size: message.size,
+        ).folder;
+      } on FileTransferV3MetadataException {
+        folder = null;
+      }
+    }
+    if (folder == null) {
+      return _IncomingReadyResult.unavailable;
+    }
+    await _closeIncomingFolder(transferId);
+    final staging = await _validatedIncomingStagingDirectory(transfer);
+    final session = await FolderReceiveSession.start(
+      FolderReceiveConfig(
+        stagingPath: staging.path,
+        streamSize: transfer.size,
+        manifestLength: folder.manifestLength,
+        manifestSha256: transfer.checksumValue,
+        fileCount: folder.fileCount,
+        directoryCount: folder.directoryCount,
+        totalBytes: folder.totalBytes,
+        caseInsensitiveNames: _caseInsensitiveFolderNames,
+        pathSeparator: Platform.pathSeparator,
+        checkpointIntervalBytes: flow.ackIntervalSize,
+        checkpointIntervalMs: _folderCheckpointInterval.inMilliseconds,
+        writeWorkers: _folderWriteWorkers,
+      ),
+    );
+    final durableOffset = session.resume.processedOffset;
+    final FileTransferData? updated;
+    try {
+      requireCurrent?.call();
+      updated = await _updateTransfer(
+        transferId,
+        state: durableOffset == transfer.size
+            ? FileTransferState.verifying
+            : FileTransferState.negotiating,
+        committedBytes: durableOffset,
+        lastError: '',
+        requireCurrent: requireCurrent,
+      );
+      requireCurrent?.call();
+    } catch (_) {
+      await session.close();
+      rethrow;
+    }
+    if (updated == null) {
+      await session.close();
+      await _releaseFailedIncomingReadyAttempt(
+        transfer,
+        connection: connection,
+        startNext: startNextOnFailure,
+      );
+      return _IncomingReadyResult.unavailable;
+    }
+    _receivingTransfers[transferId] = updated;
+    _receivingTransferOffsets[transferId] = durableOffset;
+    _receivingTransferSequences[transferId] = 0;
+    final incoming = _IncomingFolder(
+      session: session,
+      ackedOffset: durableOffset,
+    );
+    _incomingFolders[transferId] = incoming;
+    session.onProgress = (progress) =>
+        _handleIncomingFolderProgress(transferId, incoming, progress);
+    unawaited(
+      session.finished.then<void>(
+        (summary) => _runIncomingFolderOperation(
+          transferId,
+          incoming,
+          () => _finalizeIncomingFolderTransfer(transferId, incoming, summary),
+        ),
+        onError: (Object error, StackTrace _) => _runIncomingFolderOperation(
+          transferId,
+          incoming,
+          () => throw error,
+        ),
+      ),
+    );
+    if (durableOffset == updated.size) {
+      // Everything had arrived before the interruption; the worker reports
+      // the folder as finished and it is published from there.
+      return _IncomingReadyResult.retained;
+    }
+    final sent = await _sendFileTransferV3ControlTo(
+      transfer.peerUid,
+      FileTransferV3Control(
+        action: FileTransferV3Action.ready,
+        transferId: transferId,
+        durableOffset: durableOffset,
+        size: transfer.size,
+        failureReason: FileTransferFailureReason.none,
+        resumeProofSha256: durableOffset == 0 ? '' : transfer.checksumValue,
+        resumeProofLength: math.min(
+          fileTransferV3ResumeProofWindowSize,
+          durableOffset,
+        ),
+        chunkSize: flow.negotiated ? flow.chunkSize : 0,
+        ackIntervalSize: flow.negotiated ? flow.ackIntervalSize : 0,
+        windowSize: flow.negotiated ? flow.windowSize : 0,
+      ),
+      connection: connection,
+    );
+    if (sent) {
+      incoming.announced = true;
+      incoming.keepAlive = Timer.periodic(
+        _folderKeepAliveInterval,
+        (_) => _keepIncomingFolderAlive(transferId, incoming),
+      );
+      return _IncomingReadyResult.retained;
+    }
+    await _updateTransfer(
+      transferId,
+      state: FileTransferState.waitingReconnect,
+      lastError: '',
+    );
+    await _releaseFailedIncomingReadyAttempt(
+      updated,
+      connection: connection,
+      startNext: startNextOnFailure,
+    );
+    return _IncomingReadyResult.sendFailed;
+  }
+
+  /// Repeats the last acknowledgement when none went out since the previous
+  /// tick although the worker still has part of the stream to write. The
+  /// sender reads it as the folder still being worked on rather than the
+  /// peer having stopped.
+  void _keepIncomingFolderAlive(String transferId, _IncomingFolder incoming) {
+    if (!identical(_incomingFolders[transferId], incoming)) {
+      incoming.keepAlive?.cancel();
+      return;
+    }
+    if (incoming.acknowledgedSinceKeepAlive) {
+      incoming.acknowledgedSinceKeepAlive = false;
+      return;
+    }
+    final received = _receivingTransferOffsets[transferId] ?? 0;
+    if (incoming.ackPending || received <= incoming.ackedOffset) {
+      return;
+    }
+    unawaited(
+      _runIncomingFolderOperation(transferId, incoming, () async {
+        final current = _receivingTransfers[transferId];
+        if (current == null || incoming.ackedOffset >= current.size) {
+          return;
+        }
+        await _sendFileTransferV3Ack(current, incoming.ackedOffset);
+      }),
+    );
+  }
+
+  void _handleIncomingFolderProgress(
+    String transferId,
+    _IncomingFolder incoming,
+    FolderReceiveProgress progress,
+  ) {
+    if (!identical(_incomingFolders[transferId], incoming)) {
+      return;
+    }
+    final transfer = _receivingTransfers[transferId];
+    if (transfer == null || progress.processedOffset >= transfer.size) {
+      return;
+    }
+    _dispatchTransferProgress(
+      transfer,
+      committedBytes: progress.processedOffset,
+      state: FileTransferState.transferring,
+      filesDone: progress.filesSettled,
+    );
+    if (progress.durableOffset > incoming.ackedOffset && !incoming.ackPending) {
+      incoming.ackPending = true;
+      unawaited(
+        _runIncomingFolderOperation(
+          transferId,
+          incoming,
+          () => _acknowledgeIncomingFolder(transferId, incoming),
+        ).whenComplete(() => incoming.ackPending = false),
+      );
+    }
+  }
+
+  /// Runs [operation] in the transfer's lane, unless the folder has been
+  /// closed or replaced in the meantime. A failure fails the transfer.
+  Future<void> _runIncomingFolderOperation(
+    String transferId,
+    _IncomingFolder incoming,
+    Future<void> Function() operation,
+  ) async {
+    if (!identical(_incomingFolders[transferId], incoming)) {
+      return;
+    }
+    final peerId = _receivingTransfers[transferId]?.peerUid;
+    final connection =
+        _incomingConnectionBindings[transferId] ??
+        (peerId == null ? null : _currentConnectionBinding(peerId));
+    if (connection == null) {
+      return;
+    }
+    try {
+      await _runTransferOperation<void>(
+        transferId,
+        connection: connection,
+        operation: () async {
+          if (!identical(_incomingFolders[transferId], incoming)) {
+            return;
+          }
+          try {
+            await operation();
+          } catch (error) {
+            await _handleIncomingFileTransferV3Error(transferId, error);
+          }
+        },
+      );
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.incomingFailed,
+        error,
+        direction: FileTransferDirection.incoming,
+      );
+    }
+  }
+
+  /// Tells the sender how far the folder has been written. This follows the
+  /// worker's checkpoints rather than a byte count, because a tree of small
+  /// files takes long to add up to one and the sender gives up on a peer
+  /// that stays silent.
+  Future<void> _acknowledgeIncomingFolder(
+    String transferId,
+    _IncomingFolder incoming,
+  ) async {
+    final current = _receivingTransfers[transferId];
+    final durableOffset = incoming.session.latest.durableOffset;
+    if (current == null ||
+        durableOffset <= incoming.ackedOffset ||
+        durableOffset >= current.size) {
+      return;
+    }
+    final updated = await _updateTransfer(
+      transferId,
+      state: FileTransferState.transferring,
+      committedBytes: durableOffset,
+      lastError: '',
+    );
+    if (updated == null || !identical(_incomingFolders[transferId], incoming)) {
+      return;
+    }
+    _receivingTransfers[transferId] = updated;
+    incoming.ackedOffset = durableOffset;
+    incoming.acknowledgedSinceKeepAlive = true;
+    await _sendFileTransferV3Ack(updated, durableOffset);
+  }
+
+  /// The whole stream has been written and each file checked against its
+  /// trailer: move the folder out of staging and report how it turned out.
+  Future<void> _finalizeIncomingFolderTransfer(
+    String transferId,
+    _IncomingFolder incoming,
+    FolderReceiveSummary summary,
+  ) async {
+    final stored = await _database().fetchFileTransfer(transferId);
+    if (stored == null ||
+        stored.direction != FileTransferDirection.incoming ||
+        isTerminalFileTransferState(stored.state)) {
+      return;
+    }
+    final transfer = await _updateTransfer(
+      transferId,
+      state: FileTransferState.verifying,
+      committedBytes: stored.size,
+      lastError: '',
+    );
+    if (transfer == null) {
+      return;
+    }
+    incoming.ackedOffset = transfer.size;
+    if (incoming.announced) {
+      await _sendFileTransferV3Ack(transfer, transfer.size);
+    }
+    final message = await _database().fetchAssociatedFileTransferMessage(
+      transfer,
+    );
+    if (message == null) {
+      throw StateError('incoming folder message is missing');
+    }
+    final root = await _downloadDirectory();
+    final staging = await _validatedIncomingStagingDirectory(transfer);
+    // The worker has to let go of the tree before it can be renamed.
+    await _closeIncomingFolder(transferId);
+    final tree = Directory(p.join(staging.path, folderStagingTreeName));
+    final published = await publishStagedDirectory(tree, root, message.name);
+    late final FileTransferData completed;
+    try {
+      completed = await _database().completeIncomingFileTransfer(
+        transferId: transferId,
+        finalPath: published.path,
+        size: transfer.size,
+      );
+    } catch (_) {
+      try {
+        await published.rename(tree.path);
+      } catch (cleanupError) {
+        _logFailure(
+          FileTransferDiagnosticKind.reservationCleanupFailed,
+          cleanupError,
+        );
+      }
+      rethrow;
+    }
+    try {
+      final withOutcome = await _database().setFileTransferSkippedEntries(
+        transferId,
+        summary.filesSkipped,
+      );
+      await _folderStore.addSkipped(transferId, summary.skipped);
+      _dispatchTransferData(withOutcome ?? completed);
+    } catch (error) {
+      _logFailure(FileTransferDiagnosticKind.completionDispatchFailed, error);
+    }
+    try {
+      await staging.delete(recursive: true);
+    } catch (error) {
+      _logFailure(FileTransferDiagnosticKind.temporaryFileCleanupFailed, error);
+    }
+    try {
+      await _notifyFileVisible(published.path);
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.visibilityNotificationFailed,
+        error,
+      );
+    }
+    try {
+      await _sendFileTransferV3ControlTo(
+        transfer.peerUid,
+        FileTransferV3Control(
+          action: FileTransferV3Action.complete,
+          transferId: transferId,
+          durableOffset: transfer.size,
+          size: transfer.size,
+          failureReason: FileTransferFailureReason.none,
+          skippedEntries: summary.filesSkipped,
+        ),
+      );
+    } finally {
+      await _releaseIncomingAndStartNext(
+        transfer,
+        flush: false,
+        connection: _operationConnectionBindings[transferId],
+      );
+    }
+  }
+
+  Future<void> _closeIncomingFolder(String transferId) async {
+    final incoming = _incomingFolders.remove(transferId);
+    if (incoming == null) {
+      return;
+    }
+    incoming.keepAlive?.cancel();
+    incoming.session.onProgress = null;
+    try {
+      await incoming.session.close();
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.temporaryFileCleanupFailed,
+        error,
+        direction: FileTransferDirection.incoming,
+      );
+    }
+  }
+
+  /// The sender's side of a finished folder: what the receiver reported as
+  /// missing, and which files could not be read here.
+  Future<void> _recordOutgoingFolderOutcome(
+    FileTransferData transfer,
+    int skippedEntries,
+  ) async {
+    try {
+      final source = _outgoingTransferSources[transfer.transferId];
+      if (source is FolderTransferSource) {
+        await _folderStore.addSkipped(
+          transfer.transferId,
+          await source.unavailableEntries(limit: folderSkippedEntryListLimit),
+        );
+      }
+      final updated = await _database().setFileTransferSkippedEntries(
+        transfer.transferId,
+        skippedEntries,
+      );
+      if (updated != null && skippedEntries > 0) {
+        _dispatchTransferData(updated);
+      }
+    } catch (error) {
+      _logFailure(
+        FileTransferDiagnosticKind.completionDispatchFailed,
+        error,
+        direction: FileTransferDirection.outgoing,
+      );
     }
   }
 
@@ -4008,6 +4798,7 @@ class FileTransferEngine {
     bool flush = false,
   }) async {
     await _closeReceivingTransferFile(transferId, flush: flush);
+    await _closeIncomingFolder(transferId);
     await _sealedIncomingSnapshots.remove(transferId)?.close();
     _receivingTransfers.remove(transferId);
     await _receivingChecksums.remove(transferId)?.dispose();
@@ -4048,6 +4839,13 @@ class FileTransferEngine {
       return;
     }
     try {
+      if (_isFolderTransfer(transfer)) {
+        final staging = await _validatedIncomingStagingDirectory(transfer);
+        if (await staging.exists()) {
+          await staging.delete(recursive: true);
+        }
+        return;
+      }
       var tempFile = await _validatedIncomingTempFile(transfer);
       if (await tempFile.exists()) {
         tempFile = await _validatedIncomingTempFile(transfer);
@@ -4064,6 +4862,9 @@ class FileTransferEngine {
 
   Future<void> _closeResumableHandles() async {
     await _closeAllReceivingTransferFiles(flush: true);
+    for (final transferId in _incomingFolders.keys.toList(growable: false)) {
+      await _closeIncomingFolder(transferId);
+    }
     for (final snapshot in _sealedIncomingSnapshots.values) {
       await snapshot.close();
     }

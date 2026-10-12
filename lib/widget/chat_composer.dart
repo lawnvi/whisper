@@ -10,6 +10,7 @@ import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
+import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/screenshot_controls.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 
@@ -48,6 +49,10 @@ class ChatComposer extends StatelessWidget {
   final List<ClipboardImageDraft> pendingClipboardImages;
   final List<ClipboardFileDraft> pendingClipboardFiles;
   final Future<void> Function() onPickFiles;
+
+  /// When set on a desktop layout, the attachment button offers a folder
+  /// beside files.
+  final Future<void> Function()? onPickFolder;
   final Future<void> Function() onSendClipboard;
   final Future<bool> Function(String text) onSendText;
   final Future<String?> Function()? onPasteClipboard;
@@ -70,6 +75,7 @@ class ChatComposer extends StatelessWidget {
     this.pendingClipboardImages = const <ClipboardImageDraft>[],
     this.pendingClipboardFiles = const <ClipboardFileDraft>[],
     required this.onPickFiles,
+    this.onPickFolder,
     required this.onSendClipboard,
     required this.onSendText,
     this.onPasteClipboard,
@@ -531,37 +537,43 @@ class ChatComposer extends StatelessWidget {
     return WhisperAnimatedSwitcher(
       value: (showsAttachmentAction, isLoading),
       scale: true,
-      child: IconButton(
-        key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
-        onPressed: enabled ? () => _handlePrimaryAction(context) : null,
-        style: IconButton.styleFrom(
-          minimumSize: Size(buttonSize, buttonSize),
-          maximumSize: Size(buttonSize, buttonSize),
-          backgroundColor: backgroundColor,
-          foregroundColor: foregroundColor,
-          shape: const CircleBorder(),
-          padding: EdgeInsets.zero,
-          elevation: 0,
-          side: showsAttachmentAction
-              ? BorderSide.none
-              : BorderSide(color: enabled ? accentColor : disabledBorderColor),
-          splashFactory: NoSplash.splashFactory,
-          overlayColor: Colors.transparent,
-        ),
-        icon: isLoading
-            ? SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: CupertinoActivityIndicator(
-                  color: showsAttachmentAction ? accentColor : Colors.white,
+      // The builder's context is the button's own, which is where the
+      // attachment menu opens from.
+      child: Builder(
+        builder: (buttonContext) => IconButton(
+          key: showsAttachmentAction ? attachmentButtonKey : sendButtonKey,
+          onPressed: enabled ? () => _handlePrimaryAction(buttonContext) : null,
+          style: IconButton.styleFrom(
+            minimumSize: Size(buttonSize, buttonSize),
+            maximumSize: Size(buttonSize, buttonSize),
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            shape: const CircleBorder(),
+            padding: EdgeInsets.zero,
+            elevation: 0,
+            side: showsAttachmentAction
+                ? BorderSide.none
+                : BorderSide(
+                    color: enabled ? accentColor : disabledBorderColor,
+                  ),
+            splashFactory: NoSplash.splashFactory,
+            overlayColor: Colors.transparent,
+          ),
+          icon: isLoading
+              ? SizedBox(
+                  width: iconSize,
+                  height: iconSize,
+                  child: CupertinoActivityIndicator(
+                    color: showsAttachmentAction ? accentColor : Colors.white,
+                  ),
+                )
+              : Icon(
+                  showsAttachmentAction
+                      ? Icons.add_rounded
+                      : Icons.arrow_upward_rounded,
+                  size: iconSize,
                 ),
-              )
-            : Icon(
-                showsAttachmentAction
-                    ? Icons.add_rounded
-                    : Icons.arrow_upward_rounded,
-                size: iconSize,
-              ),
+        ),
       ),
     );
   }
@@ -598,7 +610,33 @@ class ChatComposer extends StatelessWidget {
       return;
     }
     if (_showsAttachmentAction) {
-      await onPickFiles();
+      final pickFolder = onPickFolder;
+      final button = context.findRenderObject();
+      if (!isDesktopStyle ||
+          pickFolder == null ||
+          button is! RenderBox ||
+          !button.hasSize) {
+        await onPickFiles();
+        return;
+      }
+      final localizations = AppLocalizations.of(context);
+      await showWhisperActionMenu(
+        context,
+        anchor: button.localToGlobal(Offset.zero) & button.size,
+        above: true,
+        items: <ContextMenuActionItem>[
+          ContextMenuActionItem(
+            label: localizations?.attachFile ?? 'File',
+            icon: Icons.insert_drive_file_outlined,
+            onSelected: () => unawaited(onPickFiles()),
+          ),
+          ContextMenuActionItem(
+            label: localizations?.attachFolder ?? 'Folder',
+            icon: Icons.folder_outlined,
+            onSelected: () => unawaited(pickFolder()),
+          ),
+        ],
+      );
       return;
     }
 

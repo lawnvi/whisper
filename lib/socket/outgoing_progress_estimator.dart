@@ -19,9 +19,12 @@ final class OutgoingProgressEstimator {
     required int durableOffset,
     required int nowMs,
     double seedRateBytesPerMs = 0,
+    this.followsConfirmed = false,
   }) : _durableOffset = durableOffset,
        _displayed = durableOffset,
        _lastTickMs = nowMs,
+       _followFrom = durableOffset,
+       _followStartMs = nowMs,
        _seedRateBytesPerMs = seedRateBytesPerMs > 0 ? seedRateBytesPerMs : 0 {
     _samples.add(_AckSample(offset: durableOffset, atMs: nowMs));
   }
@@ -29,11 +32,26 @@ final class OutgoingProgressEstimator {
   /// 求平均速率时回看的时长;至少覆盖两三个 ACK 间隔才能抹平快慢交替。
   static const int _rateWindowMs = 4000;
 
+  /// 跟随模式下从一个确认点走到下一个确认点所用时长的上下限。
+  static const int _minFollowMs = 200;
+  static const int _maxFollowMs = 1500;
+
+  /// 跟随模式:显示值只在对端已确认的范围内移动。
+  ///
+  /// 文件夹的接收端每秒确认一次,而它写小文件时可以比已发出的字节落后
+  /// 一整个窗口,按均速外推会让发送端显示 100% 而对端才写到 80%。这里
+  /// 改为每收到一次 ACK,就用上一个 ACK 间隔那么长的时间从当前显示值
+  /// 匀速走到新的确认点:不超前,落后不超过一个间隔,也不会一秒一跳。
+  final bool followsConfirmed;
+
   final Queue<_AckSample> _samples = Queue<_AckSample>();
   final double _seedRateBytesPerMs;
   int _durableOffset;
   int _displayed;
   int _lastTickMs;
+  int _followFrom;
+  int _followStartMs;
+  int _followDurationMs = _maxFollowMs;
 
   int get durableOffset => _durableOffset;
   int get displayed => _displayed;
@@ -58,13 +76,22 @@ final class OutgoingProgressEstimator {
     if (offset < _durableOffset) {
       return;
     }
+    if (followsConfirmed) {
+      // 从此刻显示到的位置出发,按上一个 ACK 间隔的时长走向新的确认点。
+      _displayed = _followed(nowMs);
+      _followFrom = _displayed;
+      _followDurationMs = (nowMs - _samples.last.atMs).clamp(
+        _minFollowMs,
+        _maxFollowMs,
+      );
+      _followStartMs = nowMs;
+    }
     _durableOffset = offset;
     _samples.add(_AckSample(offset: offset, atMs: nowMs));
-    while (_samples.length > 2 &&
-        nowMs - _samples.first.atMs > _rateWindowMs) {
+    while (_samples.length > 2 && nowMs - _samples.first.atMs > _rateWindowMs) {
       _samples.removeFirst();
     }
-    if (_displayed < offset) {
+    if (!followsConfirmed && _displayed < offset) {
       // 显示值被 ACK 向上对齐后,积分基准也要同步前移,否则下一次
       // estimate 会把 ACK 之前那段时间再算一遍。
       _displayed = offset;
@@ -78,14 +105,34 @@ final class OutgoingProgressEstimator {
     _durableOffset = offset;
     _displayed = offset;
     _lastTickMs = nowMs;
+    _followFrom = offset;
+    _followStartMs = nowMs;
     _samples
       ..clear()
       ..add(_AckSample(offset: offset, atMs: nowMs));
   }
 
+  /// 跟随模式下此刻的显示值:在 [_followDurationMs] 内从 [_followFrom]
+  /// 匀速走到 [_durableOffset],单调不回退。
+  int _followed(int nowMs) {
+    final elapsed = nowMs - _followStartMs;
+    final value = elapsed >= _followDurationMs
+        ? _durableOffset
+        : _followFrom +
+              (_durableOffset - _followFrom) *
+                  math.max(0, elapsed) ~/
+                  _followDurationMs;
+    return math.max(_displayed, value);
+  }
+
   /// 当前应显示的字节数:自上次调用起按均速推进,下限为 durableOffset,
-  /// 上限为 `min(sentEnd, size)`,单调不回退。
+  /// 上限为 `min(sentEnd, size)`,单调不回退。跟随模式见 [followsConfirmed]。
   int estimate({required int nowMs, required int sentEnd, required int size}) {
+    if (followsConfirmed) {
+      _lastTickMs = nowMs;
+      _displayed = math.min(_followed(nowMs), size);
+      return _displayed;
+    }
     final elapsed = math.max(0, nowMs - _lastTickMs);
     _lastTickMs = nowMs;
     final ceiling = math.max(_durableOffset, math.min(sentEnd, size));

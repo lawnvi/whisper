@@ -614,7 +614,7 @@ void main() {
         );
         expect(await _hasUniqueUidIndex(database), isTrue);
         expect(await _hasMessageUuidIndex(database), isTrue);
-        expect(database.schemaVersion, 10);
+        expect(database.schemaVersion, 11);
       } finally {
         await database.close();
       }

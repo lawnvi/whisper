@@ -88,17 +88,37 @@ void main() {
     }
   });
 
-  test('folder packaging is absent from quick send and conversation', () {
+  test('folders are never packaged into an archive before sending', () {
     for (final path in <String>[
       'lib/state/desktop_quick_send_inbox.dart',
       'lib/page/deviceList.dart',
       'lib/page/conversation.dart',
       'lib/widget/chat_composer.dart',
+      'lib/socket/file_transfer_engine.dart',
+      'lib/socket/folder_transfer_source.dart',
     ]) {
       final source = File(path).readAsStringSync();
       expect(source, isNot(contains('stageDirectory')), reason: path);
-      expect(source, isNot(contains('sendFolder')), reason: path);
-      expect(source, isNot(contains('folderSendFailed')), reason: path);
+      expect(source, isNot(contains('ZipEncoder')), reason: path);
+      expect(source, isNot(contains('package:archive')), reason: path);
     }
+  });
+
+  test('a folder is sent from a conversation, not from quick send', () {
+    // Quick send still passes directories by; a conversation streams them.
+    for (final path in <String>[
+      'lib/state/desktop_quick_send_inbox.dart',
+      'lib/page/deviceList.dart',
+    ]) {
+      expect(
+        File(path).readAsStringSync(),
+        isNot(contains('sendFolder')),
+        reason: path,
+      );
+    }
+    expect(
+      File('lib/page/conversation.dart').readAsStringSync(),
+      contains('socketManager.sendFolderTo(device.uid, path)'),
+    );
   });
 }

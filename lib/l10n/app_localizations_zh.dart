@@ -1792,4 +1792,113 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get qrCopyFailed => '复制失败，请重试';
+
+  @override
+  String get attachFile => '文件';
+
+  @override
+  String get attachFolder => '文件夹';
+
+  @override
+  String folderFileCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString 个文件',
+      zero: '空文件夹',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String folderSkippedCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString 项未传';
+  }
+
+  @override
+  String get folderSkippedTitle => '未传输的项目';
+
+  @override
+  String folderSkippedMore(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '另有 $countString 项的详情需要在对方设备上查看';
+  }
+
+  @override
+  String get folderSkipSymlink => '链接不会被发送';
+
+  @override
+  String get folderSkipSpecial => '不是普通文件';
+
+  @override
+  String get folderSkipInvalidName => '名称在其他系统上不可用';
+
+  @override
+  String get folderSkipPathTooLong => '路径过长或层级过深';
+
+  @override
+  String get folderSkipTooLarge => '文件过大';
+
+  @override
+  String get folderSkipUnreadable => '无法读取';
+
+  @override
+  String get folderSkipSourceUnavailable => '发送时已被移动、修改或无法读取';
+
+  @override
+  String get folderSkipWriteFailed => '无法保存到这台设备';
+
+  @override
+  String get folderSkipNameCollision => '与同目录的另一项只有大小写不同';
+
+  @override
+  String get folderSkipIntegrity => '校验未通过';
+
+  @override
+  String get folderSendFailed => '无法发送这个文件夹';
+
+  @override
+  String get folderSendUnsupported => '对方的 Whisper 版本不支持接收文件夹，请先升级对方';
+
+  @override
+  String get folderSendInvalidName => '文件夹名称在其他系统上不可用，请改名后再发';
+
+  @override
+  String get folderSendUnreadable => '无法读取这个文件夹';
+
+  @override
+  String folderSendTooManyEntries(int limit) {
+    final intl.NumberFormat limitNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String limitString = limitNumberFormat.format(limit);
+
+    return '文件夹内超过 $limitString 项，请分批发送';
+  }
+
+  @override
+  String get folderSendTooLarge => '文件夹超过 1 TB，无法发送';
+
+  @override
+  String folderFileProgress(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '$doneString/$totalString 个文件';
+  }
 }

@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/native_streaming_sha256.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/windows_disk_space.dart';
 
 enum FileOperationKind {
   storageQuery,
@@ -138,7 +139,9 @@ void openFile(String path) async {
 
 Future<void> openDir(String path, {bool parent = false}) async {
   var file = File(path);
-  if (!file.existsSync()) {
+  // A received folder is opened as itself, or shown inside its parent.
+  final isDirectory = path.isNotEmpty && Directory(path).existsSync();
+  if (!isDirectory && !file.existsSync()) {
     var dir = await downloadDir();
     path = dir.path;
   } else if (parent) {
@@ -555,29 +558,17 @@ Future<int?> _availableBytesFromDf(String path) async {
 }
 
 Future<int?> _availableBytesOnWindows(String path) async {
-  final root = p.rootPrefix(path);
-  final drive = root
-      .replaceAll('\\', '')
-      .replaceAll('/', '')
-      .replaceAll(':', '');
-  if (drive.isEmpty) {
-    return null;
+  // The folder itself answers for mounted volumes and network shares; one
+  // that does not exist yet is answered for by its drive.
+  final root = p.windows.rootPrefix(path);
+  for (final candidate in <String>[path, if (root.isNotEmpty) root]) {
+    final available = windowsAvailableBytes(candidate);
+    if (available != null) {
+      return available;
+    }
   }
-
-  final result = await Process.run('powershell', [
-    '-NoProfile',
-    '-Command',
-    "(Get-PSDrive -Name '$drive').Free",
-  ]);
-  if (result.exitCode != 0) {
-    _logFileOperation(
-      FileOperationKind.storageQuery,
-      exitCode: result.exitCode,
-    );
-    return null;
-  }
-
-  return int.tryParse(result.stdout.toString().trim());
+  _logFileOperation(FileOperationKind.storageQuery);
+  return null;
 }
 
 void _logFileOperation(FileOperationKind kind, {Object? error, int? exitCode}) {

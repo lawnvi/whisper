@@ -118,11 +118,14 @@ void main() {
       root,
       'installer.exe',
     );
-    addTearDown(() => releaseDownloadReservation(reservation));
+    // Windows holds the reservation's lock against every other reader.
+    await releaseDownloadReservation(reservation);
 
     expect(p.basename(reservation.path), 'installer.exe');
     expect(await File(reservation.path).readAsBytes(), bytes);
-    expect(await source.exists(), isFalse);
+    // A move takes the source with it; Windows publishes through a hard
+    // link instead and leaves the source for the caller to remove.
+    expect(await source.exists(), !reservation.sourceWasMoved);
   });
 
   test('unsupported moves fall back to the verified copy path', () async {

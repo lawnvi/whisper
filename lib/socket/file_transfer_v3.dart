@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:whisper/socket/folder_transfer_manifest.dart';
+
 const int fileTransferV3ProtocolVersion = 3;
 const int fileTransferV3LegacyFramePayloadSize = 512 * 1024;
 const int fileTransferV3LegacyAckIntervalSize = 2 * 1024 * 1024;
@@ -15,6 +17,12 @@ const int fileTransferV3MobileWindowSize = 16 * 1024 * 1024;
 const int fileTransferV3ResumeProofWindowSize = 1024 * 1024;
 const int fileTransferV3MaxFileSize = 100 * 1024 * 1024 * 1024;
 const String fileTransferV3ChecksumAlgorithm = 'sha256';
+
+/// Marks an offer as a folder stream: the offer's checksum is the SHA-256 of
+/// the manifest, and each file is verified by the trailer that follows it.
+/// A peer that predates folder transfer does not know this name and turns
+/// the offer down as invalid metadata instead of saving the stream as a file.
+const String fileTransferFolderChecksumAlgorithm = 'sha256-folder-v1';
 
 final RegExp _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
 
@@ -87,6 +95,7 @@ enum FileTransferFailureReason {
   messageAssociationConflict,
   staleQueue,
   remoteFailure,
+  folderUnsupported,
 }
 
 extension FileTransferFailureReasonWire on FileTransferFailureReason {
@@ -111,6 +120,7 @@ extension FileTransferFailureReasonWire on FileTransferFailureReason {
       'message_association_conflict',
     FileTransferFailureReason.staleQueue => 'stale_queue',
     FileTransferFailureReason.remoteFailure => 'remote_failure',
+    FileTransferFailureReason.folderUnsupported => 'folder_unsupported',
   };
 }
 
@@ -133,6 +143,7 @@ const Set<String> fileTransferFailureWireCodes = <String>{
   'message_association_conflict',
   'stale_queue',
   'remote_failure',
+  'folder_unsupported',
 };
 
 FileTransferFailureReason? fileTransferFailureReasonFromWire(String value) =>
@@ -157,6 +168,7 @@ FileTransferFailureReason? fileTransferFailureReasonFromWire(String value) =>
         FileTransferFailureReason.messageAssociationConflict,
       'stale_queue' => FileTransferFailureReason.staleQueue,
       'remote_failure' => FileTransferFailureReason.remoteFailure,
+      'folder_unsupported' => FileTransferFailureReason.folderUnsupported,
       _ => null,
     };
 
@@ -173,6 +185,7 @@ class FileTransferV3Control {
     this.chunkSize = 0,
     this.ackIntervalSize = 0,
     this.windowSize = 0,
+    this.skippedEntries = 0,
     this.protocolVersion = fileTransferV3ProtocolVersion,
   });
 
@@ -188,6 +201,10 @@ class FileTransferV3Control {
   final int chunkSize;
   final int ackIntervalSize;
   final int windowSize;
+
+  /// With `complete` for a folder: how many of its files the receiver did
+  /// not end up with.
+  final int skippedEntries;
 
   bool get hasFlowParameters => chunkSize > 0;
 
@@ -210,6 +227,7 @@ class FileTransferV3Control {
       'ackIntervalSize': ackIntervalSize,
       'windowSize': windowSize,
     },
+    if (skippedEntries > 0) 'skippedEntries': skippedEntries,
   };
 
   factory FileTransferV3Control.fromJson(Map<String, dynamic> json) {
@@ -226,6 +244,7 @@ class FileTransferV3Control {
     final chunkSize = json['chunkSize'] ?? 0;
     final ackIntervalSize = json['ackIntervalSize'] ?? 0;
     final windowSize = json['windowSize'] ?? 0;
+    final skippedEntries = json['skippedEntries'] ?? 0;
     if (protocolVersion is! int ||
         actionName is! String ||
         transferId is! String ||
@@ -238,7 +257,8 @@ class FileTransferV3Control {
         checksumValue is! String ||
         chunkSize is! int ||
         ackIntervalSize is! int ||
-        windowSize is! int) {
+        windowSize is! int ||
+        skippedEntries is! int) {
       throw const FormatException('invalid file transfer control fields');
     }
     FileTransferV3Action action;
@@ -280,6 +300,9 @@ class FileTransferV3Control {
         !proofIsValid ||
         !checksumIsValid ||
         !flowIsValid ||
+        skippedEntries < 0 ||
+        skippedEntries > folderManifestMaxEntries ||
+        (skippedEntries != 0 && action != FileTransferV3Action.complete) ||
         (action == FileTransferV3Action.verify && durableOffset != size)) {
       throw const FormatException('invalid file transfer resume proof');
     }
@@ -296,6 +319,71 @@ class FileTransferV3Control {
       chunkSize: chunkSize,
       ackIntervalSize: ackIntervalSize,
       windowSize: windowSize,
+      skippedEntries: skippedEntries,
+    );
+  }
+}
+
+/// What a folder offer says about the folder before any of it has arrived.
+final class FolderOfferSummary {
+  const FolderOfferSummary({
+    required this.manifestLength,
+    required this.fileCount,
+    required this.directoryCount,
+    required this.totalBytes,
+    this.skippedAtSource = 0,
+  });
+
+  final int manifestLength;
+  final int fileCount;
+  final int directoryCount;
+
+  /// The files' own bytes, without manifest and trailers.
+  final int totalBytes;
+
+  /// Entries the sender left out while scanning: links, special files and
+  /// names other platforms cannot hold.
+  final int skippedAtSource;
+
+  int get streamSize =>
+      manifestLength + totalBytes + fileCount * folderTrailerLength;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'manifestLength': manifestLength,
+    'fileCount': fileCount,
+    'directoryCount': directoryCount,
+    'totalBytes': totalBytes,
+    'skippedAtSource': skippedAtSource,
+  };
+
+  static FolderOfferSummary? tryParse(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final manifestLength = json['manifestLength'];
+    final fileCount = json['fileCount'];
+    final directoryCount = json['directoryCount'];
+    final totalBytes = json['totalBytes'];
+    final skippedAtSource = json['skippedAtSource'] ?? 0;
+    if (manifestLength is! int ||
+        fileCount is! int ||
+        directoryCount is! int ||
+        totalBytes is! int ||
+        skippedAtSource is! int ||
+        manifestLength < folderManifestHeaderLength ||
+        manifestLength > folderManifestMaxBytes ||
+        fileCount < 0 ||
+        directoryCount < 0 ||
+        fileCount + directoryCount > folderManifestMaxEntries ||
+        totalBytes < 0 ||
+        totalBytes > folderStreamMaxSize ||
+        skippedAtSource < 0) {
+      return null;
+    }
+    return FolderOfferSummary(
+      manifestLength: manifestLength,
+      fileCount: fileCount,
+      directoryCount: directoryCount,
+      totalBytes: totalBytes,
+      skippedAtSource: skippedAtSource,
     );
   }
 }
@@ -316,6 +404,7 @@ final class FileTransferV3Metadata {
     this.windowSize = fileTransferV3LegacyWindowSize,
     this.maxChunkSize,
     this.maxWindowSize,
+    this.folder,
   });
 
   final int protocolVersion;
@@ -326,6 +415,11 @@ final class FileTransferV3Metadata {
   final int windowSize;
   final int? maxChunkSize;
   final int? maxWindowSize;
+
+  /// Set when the transfer is a folder stream rather than one file.
+  final FolderOfferSummary? folder;
+
+  bool get isFolder => folder != null;
 
   bool get supportsFlowNegotiation =>
       maxChunkSize != null && maxWindowSize != null;
@@ -341,13 +435,14 @@ final class FileTransferV3Metadata {
       'maxChunkSize': maxChunkSize!,
       'maxWindowSize': maxWindowSize!,
     },
+    if (folder != null) 'folder': folder!.toJson(),
   };
 
   static FileTransferV3Metadata parseOffer(
     String? content, {
     required int size,
   }) {
-    if (size < 0 || size > fileTransferV3MaxFileSize) {
+    if (size < 0 || size > folderStreamMaxSize) {
       throw const FileTransferV3MetadataException('invalid_size');
     }
     try {
@@ -366,8 +461,21 @@ final class FileTransferV3Metadata {
       final maxChunkSize = decoded['maxChunkSize'];
       final maxWindowSize = decoded['maxWindowSize'];
       final hasCompleteFlowExtension = hasMaxChunkSize && hasMaxWindowSize;
+      final isFolder = checksumAlgorithm == fileTransferFolderChecksumAlgorithm;
+      final folder = isFolder
+          ? FolderOfferSummary.tryParse(decoded['folder'])
+          : null;
+      if (!isFolder && size > fileTransferV3MaxFileSize) {
+        throw const FileTransferV3MetadataException('invalid_size');
+      }
+      if (isFolder &&
+          (folder == null ||
+              folder.streamSize != size ||
+              checksumDeferred != false)) {
+        throw const FileTransferV3MetadataException('invalid_metadata');
+      }
       if (protocolVersion != fileTransferV3ProtocolVersion ||
-          checksumAlgorithm != fileTransferV3ChecksumAlgorithm ||
+          (!isFolder && checksumAlgorithm != fileTransferV3ChecksumAlgorithm) ||
           checksumValue is! String ||
           checksumDeferred is! bool ||
           (checksumDeferred
@@ -394,12 +502,16 @@ final class FileTransferV3Metadata {
         throw const FileTransferV3MetadataException('invalid_metadata');
       }
       return FileTransferV3Metadata(
+        checksumAlgorithm: isFolder
+            ? fileTransferFolderChecksumAlgorithm
+            : fileTransferV3ChecksumAlgorithm,
         checksumValue: checksumValue,
         checksumDeferred: checksumDeferred,
         chunkSize: chunkSize,
         windowSize: windowSize,
         maxChunkSize: hasCompleteFlowExtension ? maxChunkSize as int : null,
         maxWindowSize: hasCompleteFlowExtension ? maxWindowSize as int : null,
+        folder: folder,
       );
     } on FileTransferV3MetadataException {
       rethrow;

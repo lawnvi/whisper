@@ -38,16 +38,24 @@ import 'package:whisper/widget/computer_control_icon.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_protocol.dart';
+import 'package:whisper/socket/file_transfer_engine.dart'
+    show FolderSendOutcome;
+import 'package:whisper/socket/folder_transfer_manifest.dart'
+    show folderManifestMaxEntries;
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_attempt.dart';
 import 'package:whisper/state/connection_coordinator.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
+import 'package:whisper/state/folder_message.dart';
+import 'package:whisper/state/transfer_speed_meter.dart';
 import 'package:whisper/state/pairing_request.dart';
 import 'package:whisper/state/peer_endpoint.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/chat_composer.dart';
 import 'package:whisper/widget/chat_message_list.dart';
 import 'package:whisper/widget/desktop_file_drag_source.dart';
+import 'package:whisper/widget/file_message_card.dart';
+import 'package:whisper/widget/folder_skipped_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
 import 'package:whisper/widget/media_message_preview.dart';
 import 'package:whisper/widget/message_link_text.dart';
@@ -118,7 +126,7 @@ DeviceData resolveConversationDeviceSnapshot({
 class _SendMessageScreen extends State<SendMessageScreen>
     with WidgetsBindingObserver
     implements ISocketEvent {
-  static const int _transferUiSpeedRefreshMs = 300;
+  static const int _transferUiSpeedRefreshMs = 500;
   static const Duration _transferProgressAnimationDuration = Duration(
     milliseconds: 180,
   );
@@ -156,8 +164,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
   bool isInputEmpty = true;
   double percent = 0;
   String _speed = "";
-  int _sentSize = 0;
-  int _lastUpdateTime = 0;
+  final TransferSpeedMeter _speedMeter = TransferSpeedMeter();
+  int _speedShownAt = 0;
   final Map<String, TransferSnapshot> _transferSnapshots =
       <String, TransferSnapshot>{};
   String? _activeTransferId;
@@ -501,10 +509,54 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   bool _canDragFileMessage(MessageData message, TransferSnapshot? transfer) {
     final path = _effectiveMessagePath(message, transfer);
-    if (!isDesktop() || path.isEmpty || !File(path).existsSync()) {
+    if (!isDesktop() || !_localEntityExists(path)) {
       return false;
     }
     return transfer == null || transfer.state == FileTransferState.completed;
+  }
+
+  /// Whether [path] is still there, as a file or as a received folder.
+  bool _localEntityExists(String path) {
+    return path.isNotEmpty &&
+        FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound;
+  }
+
+  /// A file's size, or for a folder how many files it holds and their size.
+  String _messageSizeLabel(MessageData message) {
+    final folder = folderOfferOf(message);
+    if (folder == null) {
+      return formatSize(message.size);
+    }
+    if (folder.fileCount == 0) {
+      return l10n.folderFileCount(0);
+    }
+    return '${l10n.folderFileCount(folder.fileCount)} · '
+        '${formatSize(folder.totalBytes)}';
+  }
+
+  /// While a folder is under way its file count reads as progress, such as
+  /// "3,214/14,797 files", once the transfer knows how far it has got.
+  String _transferringSizeLabel(
+    MessageData message,
+    TransferSnapshot transfer,
+  ) {
+    final folder = folderOfferOf(message);
+    final filesDone = transfer.filesDone;
+    if (folder == null || filesDone == null || folder.fileCount == 0) {
+      return _messageSizeLabel(message);
+    }
+    return '${l10n.folderFileProgress(filesDone.clamp(0, folder.fileCount), folder.fileCount)} · '
+        '${formatSize(folder.totalBytes)}';
+  }
+
+  /// Entries of a folder that were left out, by either device.
+  int _folderSkippedCount(MessageData message, TransferSnapshot? transfer) {
+    final folder = folderOfferOf(message);
+    if (folder == null ||
+        (transfer != null && transfer.state != FileTransferState.completed)) {
+      return 0;
+    }
+    return folder.skippedAtSource + (transfer?.skippedEntries ?? 0);
   }
 
   String _fileStatusText(
@@ -513,7 +565,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
     double? progressOverride,
   }) {
     if (transfer == null) {
-      return formatSize(message.size);
+      return _messageSizeLabel(message);
     }
     final progress = progressOverride ?? transfer.progress;
     switch (transfer.state) {
@@ -526,7 +578,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
               )
             : l10n.fileTransferNegotiating;
       case FileTransferState.transferring:
-        return '${formatSize(message.size)}  ${(progress * 100).toStringAsFixed(0)}%';
+        return '${_transferringSizeLabel(message, transfer)}  '
+            '${(progress * 100).toStringAsFixed(0)}%';
       case FileTransferState.waitingReconnect:
         return l10n.fileTransferWaitingReconnect(
           (progress * 100).toStringAsFixed(0),
@@ -538,7 +591,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             ? l10n.fileTransferWaitingPeerVerification
             : l10n.fileTransferVerifying;
       case FileTransferState.completed:
-        return formatSize(message.size);
+        return _messageSizeLabel(message);
       case FileTransferState.failed:
         return transferFailureMessage(l10n, transfer.lastError);
       case FileTransferState.canceled:
@@ -557,7 +610,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
       showAppToast(l10n.fileCopyFailed, tone: AppToastTone.error);
       return;
     }
-    final kind = mediaFileKindFor(name: message.name, path: path);
+    final kind = folderOfferOf(message) != null
+        ? MediaFileKind.other
+        : mediaFileKindFor(name: message.name, path: path);
     final copied = await _clipboardFileWriter.writeFilePaths(<String>[
       path,
     ], asImage: kind == MediaFileKind.image);
@@ -802,8 +857,14 @@ class _SendMessageScreen extends State<SendMessageScreen>
     }
     try {
       for (final path in paths) {
-        if (await FileSystemEntity.type(path, followLinks: false) !=
-            FileSystemEntityType.file) {
+        final type = await FileSystemEntity.type(path, followLinks: false);
+        if (type == FileSystemEntityType.directory) {
+          if (!await _sendFolder(path)) {
+            return;
+          }
+          continue;
+        }
+        if (type != FileSystemEntityType.file) {
           if (mounted) {
             showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
           }
@@ -822,6 +883,56 @@ class _SendMessageScreen extends State<SendMessageScreen>
       );
       if (mounted) {
         showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
+      }
+    }
+  }
+
+  /// Sends a folder as one transfer. Scanning a large tree takes a moment,
+  /// during which the composer shows that it is busy.
+  Future<bool> _sendFolder(String path) async {
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+    final FolderSendOutcome outcome;
+    try {
+      outcome = await socketManager.sendFolderTo(device.uid, path);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+    if (outcome == FolderSendOutcome.sent) {
+      return true;
+    }
+    if (mounted) {
+      showAppToast(switch (outcome) {
+        FolderSendOutcome.peerUnsupported => l10n.folderSendUnsupported,
+        FolderSendOutcome.invalidName => l10n.folderSendInvalidName,
+        FolderSendOutcome.unreadable => l10n.folderSendUnreadable,
+        FolderSendOutcome.tooManyEntries => l10n.folderSendTooManyEntries(
+          folderManifestMaxEntries,
+        ),
+        FolderSendOutcome.tooLarge => l10n.folderSendTooLarge,
+        _ => l10n.folderSendFailed,
+      }, tone: AppToastTone.error);
+    }
+    return false;
+  }
+
+  Future<void> _pickFolderAndSend() async {
+    if (!_canSendCurrentDevice || _isLocalhost) {
+      return;
+    }
+    try {
+      final path = await WhisperFilePicker.pickFolder();
+      if (path == null || !mounted) {
+        return;
+      }
+      await _sendFolder(path);
+    } catch (error) {
+      _logConversationFailure(ConversationOperationKind.pickFiles, error);
+      if (mounted) {
+        showAppToast(l10n.filePickerOpenFailed, tone: AppToastTone.error);
       }
     }
   }
@@ -1336,6 +1447,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       pendingClipboardFiles: _pendingClipboardFiles,
       pendingClipboardImages: _pendingClipboardImages,
       onPickFiles: _pickFilesAndSend,
+      onPickFolder: isDesktop() && !_isLocalhost ? _pickFolderAndSend : null,
       onSendClipboard: () async {
         await _sendText("", isClipboard: true);
       },
@@ -2311,11 +2423,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         transfer != null &&
         !_isTransferTerminal(transfer.state) &&
         transfer.state != FileTransferState.queued;
+    final isFolder = folderOfferOf(message) != null;
+    final skippedCount = _folderSkippedCount(message, transfer);
     final missingLocalFile =
         isOpponent &&
         messagePath.isNotEmpty &&
         (transfer == null || transfer.state == FileTransferState.completed) &&
-        !File(messagePath).existsSync();
+        !_localEntityExists(messagePath);
     var failed =
         !isOpponent &&
         !_isConnectedSession &&
@@ -2340,17 +2454,15 @@ class _SendMessageScreen extends State<SendMessageScreen>
         (transfer.direction == FileTransferDirection.outgoing ||
             (transfer.state != FileTransferState.paused &&
                 transfer.state != FileTransferState.waitingReconnect));
-    final colorScheme = Theme.of(context).colorScheme;
     final palette = context.whisperPalette;
     final cardColor = isOpponent
         ? palette.messageIncoming
         : palette.messageOutgoing;
     final cardBorderColor = palette.borderSubtle;
-    final fileStatusStyle = TextStyle(
-      color: colorScheme.onSurfaceVariant,
-      fontSize: 12,
-    );
-    final mediaKind = mediaFileKindFor(name: message.name, path: message.path);
+    // A folder is never previewed as media, whatever its name ends in.
+    final mediaKind = isFolder
+        ? MediaFileKind.other
+        : mediaFileKindFor(name: message.name, path: message.path);
     if (mediaKind != MediaFileKind.other) {
       final contentAvailable = _isMediaContentAvailable(messagePath, transfer);
       return _buildMediaMessage(
@@ -2370,119 +2482,33 @@ class _SendMessageScreen extends State<SendMessageScreen>
       path: messagePath,
       name: message.name,
       enabled: _canDragFileMessage(message, transfer),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: cardBorderColor),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox.square(
-                dimension: 40,
-                child: WhisperAnimatedSwitcher(
-                  value: failed
-                      ? 'failed'
-                      : isActiveTransfer
-                      ? (transfer.state == FileTransferState.verifying
-                            ? 'verifying'
-                            : 'progress')
-                      : 'file',
-                  child: failed
-                      ? const Icon(
-                          Icons.error_outline_rounded,
-                          color: Colors.redAccent,
-                          size: 24,
-                        )
-                      : isActiveTransfer
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: transfer.state == FileTransferState.verifying
-                              ? CircularProgressIndicator(
-                                  value: null,
-                                  strokeWidth: 2.4,
-                                  color: colorScheme.primary,
-                                  backgroundColor: colorScheme.primary
-                                      .withValues(alpha: 0.18),
-                                )
-                              : _buildAnimatedTransferProgress(
-                                  value: transfer.progress,
-                                  builder: (context, value) =>
-                                      CircularProgressIndicator(
-                                        value: value,
-                                        strokeWidth: 2.4,
-                                        color: colorScheme.primary,
-                                        backgroundColor: colorScheme.primary
-                                            .withValues(alpha: 0.18),
-                                      ),
-                                ),
-                        )
-                      : Icon(
-                          Icons.insert_drive_file,
-                          color: colorScheme.primary.withValues(alpha: 0.86),
-                          size: 34,
-                        ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      message.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                      maxLines: 2,
-                      softWrap: true,
-                    ),
-                    const SizedBox(height: 4),
-                    WhisperAnimatedSwitcher(
-                      value: (failed, transfer?.state),
-                      alignment: Alignment.centerLeft,
-                      child: isActiveTransfer
-                          ? _buildAnimatedTransferProgress(
-                              value: transfer.progress,
-                              builder: (context, value) => Text(
-                                _fileStatusText(
-                                  message,
-                                  transfer,
-                                  progressOverride: value,
-                                ),
-                                style: fileStatusStyle,
-                              ),
-                            )
-                          : Text(
-                              _fileStatusText(message, transfer),
-                              style: fileStatusStyle,
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              if (showRetry)
-                IconButton(
-                  tooltip: l10n.retry,
-                  onPressed: () => _retryTransfer(message.uuid),
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
-                ),
-              if (showCancel)
-                IconButton(
-                  tooltip: l10n.cancel,
-                  onPressed: () => _cancelTransfer(message.uuid),
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                ),
-            ],
+      child: FileMessageCard(
+        name: message.name,
+        isFolder: isFolder,
+        failed: failed,
+        active: isActiveTransfer,
+        verifying: transfer?.state == FileTransferState.verifying,
+        progress: transfer?.progress ?? 0,
+        statusKey: (failed, transfer?.state),
+        statusText: (progress) =>
+            _fileStatusText(message, transfer, progressOverride: progress),
+        cardColor: cardColor,
+        borderColor: cardBorderColor,
+        animationDuration: _transferProgressAnimationDuration,
+        skippedLabel: skippedCount > 0
+            ? l10n.folderSkippedCount(skippedCount)
+            : null,
+        onShowSkipped: () => unawaited(
+          showFolderSkippedDialog(
+            context,
+            transferId: message.uuid,
+            skippedCount: skippedCount,
           ),
         ),
+        retryTooltip: l10n.retry,
+        cancelTooltip: l10n.cancel,
+        onRetry: showRetry ? () => _retryTransfer(message.uuid) : null,
+        onCancel: showCancel ? () => _cancelTransfer(message.uuid) : null,
       ),
     );
   }
@@ -2538,6 +2564,12 @@ class _SendMessageScreen extends State<SendMessageScreen>
   void _openMessageFile(MessageData message) {
     final transfer = _transferForMessage(message);
     final path = _effectiveMessagePath(message, transfer);
+    if (folderOfferOf(message) != null) {
+      if (_localEntityExists(path)) {
+        unawaited(openDir(path));
+      }
+      return;
+    }
     final kind = mediaFileKindFor(name: message.name, path: path);
     if (kind == MediaFileKind.video &&
         !_isMediaContentAvailable(path, transfer)) {
@@ -2751,22 +2783,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
       return;
     }
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_activeTransferId == snapshot.transferId &&
-        now - _lastUpdateTime >= _transferUiSpeedRefreshMs &&
-        snapshot.state == FileTransferState.transferring) {
-      if (_lastUpdateTime > 0) {
-        final speed = formatSize(
-          1000 *
-              (snapshot.committedBytes - _sentSize) ~/
-              (now - _lastUpdateTime),
-        );
-        _speed = '$speed/s ';
+    if (_activeTransferId != snapshot.transferId) {
+      _speedMeter.reset();
+    }
+    if (snapshot.state == FileTransferState.transferring) {
+      _speedMeter.add(now, snapshot.committedBytes);
+      final bytesPerSecond = _speedMeter.bytesPerSecond;
+      if (bytesPerSecond != null &&
+          now - _speedShownAt >= _transferUiSpeedRefreshMs) {
+        _speed = '${formatSize(bytesPerSecond)}/s ';
+        _speedShownAt = now;
       }
-      _lastUpdateTime = now;
-      _sentSize = snapshot.committedBytes;
-    } else if (_activeTransferId != snapshot.transferId) {
-      _lastUpdateTime = now;
-      _sentSize = snapshot.committedBytes;
     }
 
     if (_isTransferTerminal(snapshot.state)) {
@@ -2774,8 +2801,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _activeTransferId = null;
         percent = 0;
         _speed = '';
-        _lastUpdateTime = 0;
-        _sentSize = 0;
+        _speedMeter.reset();
+        _speedShownAt = 0;
       }
     } else {
       _activeTransferId = snapshot.transferId;

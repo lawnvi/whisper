@@ -56,6 +56,57 @@ Future<File> revalidateTransferTempFile({
   return File(safePath);
 }
 
+/// Where an incoming folder is assembled before it is published: a
+/// directory of its own beside the `.part` files, on the same volume as the
+/// downloads so that publishing is a rename.
+Future<String> safeFolderStagingPath(Directory root, String transferId) async {
+  if (!_canonicalTransferId.hasMatch(transferId)) {
+    throw const FormatException('invalid transfer id');
+  }
+  final canonicalRoot = p.normalize(await root.resolveSymbolicLinks());
+  final canonicalTransferDirectory = await _resolveChildDirectoryWithoutCreate(
+    canonicalRoot,
+    const <String>['.whisper', 'transfers'],
+  );
+  if (!_isWithinOrEqual(canonicalRoot, canonicalTransferDirectory)) {
+    throw FileSystemException(
+      'transfer directory escapes download root',
+      canonicalTransferDirectory,
+    );
+  }
+  final candidate = p.normalize(
+    p.join(canonicalTransferDirectory, '$transferId.folder'),
+  );
+  if (p.dirname(candidate) != canonicalTransferDirectory ||
+      !p.isWithin(canonicalRoot, candidate)) {
+    throw FileSystemException('transfer path escapes download root', candidate);
+  }
+  final candidateType = await FileSystemEntity.type(
+    candidate,
+    followLinks: false,
+  );
+  if (candidateType != FileSystemEntityType.notFound &&
+      candidateType != FileSystemEntityType.directory) {
+    throw FileSystemException('folder staging is not a directory', candidate);
+  }
+  return candidate;
+}
+
+Future<Directory> revalidateFolderStagingDirectory({
+  required Directory root,
+  required String transferId,
+  required String expectedPath,
+}) async {
+  final safePath = await safeFolderStagingPath(root, transferId);
+  if (!p.equals(p.normalize(expectedPath), safePath)) {
+    throw FileSystemException(
+      'folder staging path changed outside its download root',
+      expectedPath,
+    );
+  }
+  return Directory(safePath);
+}
+
 Future<String> _resolveChildDirectoryWithoutCreate(
   String canonicalRoot,
   List<String> segments,

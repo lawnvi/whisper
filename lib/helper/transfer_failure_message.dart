@@ -14,6 +14,7 @@ String? _reasonHelp(AppLocalizations l10n, String reason) => switch (reason) {
   'source' => l10n.transferSourceHelp,
   'integrity' || 'resume_proof_mismatch' => l10n.transferIntegrityHelp,
   'queue_full' => l10n.transferQueueHelp,
+  'folder_unsupported' => l10n.folderSendUnsupported,
   'trust_revoked' ||
   'device_deleted' ||
   'identity_replaced' => l10n.transferTrustHelp,

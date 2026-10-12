@@ -1955,4 +1955,120 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get qrCopyFailed => 'No se pudo copiar. Inténtalo de nuevo.';
+
+  @override
+  String get attachFile => 'Archivo';
+
+  @override
+  String get attachFolder => 'Carpeta';
+
+  @override
+  String folderFileCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString archivos',
+      one: '1 archivo',
+      zero: 'Carpeta vacía',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String folderSkippedCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString sin transferir';
+  }
+
+  @override
+  String get folderSkippedTitle => 'Elementos no transferidos';
+
+  @override
+  String folderSkippedMore(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Los detalles de $countString más están en el otro dispositivo';
+  }
+
+  @override
+  String get folderSkipSymlink => 'Los enlaces no se envían';
+
+  @override
+  String get folderSkipSpecial => 'No es un archivo normal';
+
+  @override
+  String get folderSkipInvalidName =>
+      'El nombre no es válido en otros sistemas';
+
+  @override
+  String get folderSkipPathTooLong => 'La ruta es demasiado larga o profunda';
+
+  @override
+  String get folderSkipTooLarge => 'El archivo es demasiado grande';
+
+  @override
+  String get folderSkipUnreadable => 'No se pudo leer';
+
+  @override
+  String get folderSkipSourceUnavailable =>
+      'Se movió, cambió o no se pudo leer al enviar';
+
+  @override
+  String get folderSkipWriteFailed => 'No se pudo guardar en este dispositivo';
+
+  @override
+  String get folderSkipNameCollision =>
+      'Solo se diferencia de otro elemento por mayúsculas';
+
+  @override
+  String get folderSkipIntegrity => 'No superó la verificación';
+
+  @override
+  String get folderSendFailed => 'No se pudo enviar esta carpeta';
+
+  @override
+  String get folderSendUnsupported =>
+      'El Whisper del otro dispositivo es demasiado antiguo para recibir carpetas. Actualízalo primero';
+
+  @override
+  String get folderSendInvalidName =>
+      'El nombre de esta carpeta no es válido en otros sistemas. Cámbialo e inténtalo de nuevo';
+
+  @override
+  String get folderSendUnreadable => 'No se pudo leer esta carpeta';
+
+  @override
+  String folderSendTooManyEntries(int limit) {
+    final intl.NumberFormat limitNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String limitString = limitNumberFormat.format(limit);
+
+    return 'Esta carpeta tiene más de $limitString elementos. Envíala por partes';
+  }
+
+  @override
+  String get folderSendTooLarge =>
+      'Esta carpeta supera 1 TB y no se puede enviar';
+
+  @override
+  String folderFileProgress(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '$doneString de $totalString archivos';
+  }
 }

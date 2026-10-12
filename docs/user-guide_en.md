@@ -37,6 +37,8 @@ To send without opening a conversation first:
 
 An interrupted file transfer continues from the last confirmed position.
 
+On desktop you can also send a whole folder: drop it into the conversation, or choose "Folder" from the attachment button. A folder goes as one transfer, without being archived first, and arrives with the same structure. Links are not sent. If some files could not be transferred, the message shows how many; open it to see which. If Whisper on the other device is too old, you are asked to update it first.
+
 ## Search, favorite, and delete
 
 Open "Search chat history" from the conversation settings; wide desktop windows also have a search button. Search covers the text of the current conversation, and results let you select text, expand long messages, favorite, or copy everything. The "Favorites" filter at the top shows saved text.

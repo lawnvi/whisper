@@ -417,6 +417,52 @@ Future<DownloadFileReservation> publishVerifiedDownload(
   }
 }
 
+/// Moves a fully received folder from staging to a free name under [root].
+/// An existing file or folder is never replaced: the name gets a numeric
+/// suffix instead, as received files do.
+Future<Directory> publishStagedDirectory(
+  Directory staged,
+  Directory root,
+  String folderName, {
+  Duration retryDelay = const Duration(milliseconds: 150),
+}) {
+  if (!validateIncomingFileName(folderName)) {
+    throw ArgumentError.value(folderName, 'folderName', 'invalid folder name');
+  }
+  return _downloadReservationLock.synchronized(() async {
+    final canonicalRoot = p.normalize(await root.resolveSymbolicLinks());
+    if (await FileSystemEntity.type(staged.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw FileSystemException('staged folder is missing', staged.path);
+    }
+    for (var suffix = 0; ; suffix++) {
+      final name = suffix == 0 ? folderName : '$folderName-$suffix';
+      final destination = p.join(canonicalRoot, name);
+      if (p.dirname(destination) != canonicalRoot) {
+        throw FileSystemException('folder escapes download root', destination);
+      }
+      if (await FileSystemEntity.type(destination, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        continue;
+      }
+      // A scanner still holding one of the new files makes the rename fail
+      // on Windows for a moment.
+      for (var attempt = 0; ; attempt++) {
+        try {
+          return await staged.rename(destination);
+        } on FileSystemException {
+          if (await FileSystemEntity.type(destination, followLinks: false) !=
+              FileSystemEntityType.notFound) {
+            break;
+          }
+          if (attempt >= 20) rethrow;
+          await Future<void>.delayed(retryDelay);
+        }
+      }
+    }
+  });
+}
+
 Future<File> publishVerifiedSnapshot(
   VerifiedTransferSnapshot snapshot,
   DownloadFileReservation reservation, {

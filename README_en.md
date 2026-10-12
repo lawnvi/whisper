@@ -25,6 +25,7 @@ Whisper is a LAN collaboration app. Paired devices connect to each other directl
 | Feature | What it does |
 | --- | --- |
 | **Text and files** | Send them like chat messages; file transfers resume after a disconnect and are verified on arrival |
+| **Folders** | Send a whole folder from a desktop without archiving it first; it arrives with the same structure |
 | **Quick send** | Use the Android share sheet, a desktop context menu, or a global hotkey without opening a conversation |
 | **Clipboard sync** | Copy on one device, paste on another (off by default) |
 | **Keyboard and mouse sharing** | Use one keyboard and mouse across several computers; move the pointer past a screen edge to switch |
@@ -65,6 +66,7 @@ The iOS / iPadOS build has not been validated on real devices yet.
 | --- | --- |
 | Send what is on the clipboard | Press `Cmd+Option+V` on macOS, `Ctrl+Alt+V` on Windows / Linux |
 | Send from another app | Use the Android share sheet, or the file context menu on desktop |
+| Send a folder | On desktop, drop the folder into the conversation, or choose "Folder" from the attachment button |
 | Start keyboard/mouse sharing | Open the workspace, drag the other screen next to this one, and select "Start" |
 | Leave keyboard/mouse sharing | Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) |
 | Control a computer from a phone | In the Android conversation, select "Control computer", then the start button at the top |
@@ -77,6 +79,7 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Feature | Android | macOS | Windows | Linux |
 | --- | :---: | :---: | :---: | :---: |
 | Text and files | ✅ | ✅ | ✅ | ✅ |
+| Folders | Receive only | ✅ | ✅ | ✅ |
 | Clipboard sync | Text only, in the foreground | ✅ | ✅ | ✅ |
 | Keyboard and mouse sharing | — | ✅ | ✅ | X11 only |
 | Phone controller | Controls | Controlled | Controlled | Controlled, X11 only |

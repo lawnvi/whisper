@@ -917,5 +917,72 @@
   "connectionAddressLabel": "IP 地址或主机名",
   "connectionDetailsTab": "本机信息",
   "connectionAddressHint": "填写对方 Whisper 首页显示的地址和端口。两台设备需连接同一局域网。",
-  "qrCopyFailed": "复制失败，请重试"
+  "qrCopyFailed": "复制失败，请重试",
+  "attachFile": "文件",
+  "attachFolder": "文件夹",
+  "folderFileCount": "{count, plural, =0{空文件夹} other{{count} 个文件}}",
+  "@folderFileCount": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "folderSkippedCount": "{count} 项未传",
+  "@folderSkippedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "folderSkippedTitle": "未传输的项目",
+  "folderSkippedMore": "另有 {count} 项的详情需要在对方设备上查看",
+  "@folderSkippedMore": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "folderSkipSymlink": "链接不会被发送",
+  "folderSkipSpecial": "不是普通文件",
+  "folderSkipInvalidName": "名称在其他系统上不可用",
+  "folderSkipPathTooLong": "路径过长或层级过深",
+  "folderSkipTooLarge": "文件过大",
+  "folderSkipUnreadable": "无法读取",
+  "folderSkipSourceUnavailable": "发送时已被移动、修改或无法读取",
+  "folderSkipWriteFailed": "无法保存到这台设备",
+  "folderSkipNameCollision": "与同目录的另一项只有大小写不同",
+  "folderSkipIntegrity": "校验未通过",
+  "folderSendFailed": "无法发送这个文件夹",
+  "folderSendUnsupported": "对方的 Whisper 版本不支持接收文件夹，请先升级对方",
+  "folderSendInvalidName": "文件夹名称在其他系统上不可用，请改名后再发",
+  "folderSendUnreadable": "无法读取这个文件夹",
+  "folderSendTooManyEntries": "文件夹内超过 {limit} 项，请分批发送",
+  "@folderSendTooManyEntries": {
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "folderSendTooLarge": "文件夹超过 1 TB，无法发送",
+  "folderFileProgress": "{done}/{total} 个文件",
+  "@folderFileProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "total": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  }
 }

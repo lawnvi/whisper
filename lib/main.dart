@@ -9,12 +9,14 @@ import 'package:sodium/sodium.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
 import 'package:whisper/helper/desktop_screenshot.dart';
 import 'package:whisper/helper/folder_transfer_stager.dart';
+import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/image_memory_budget.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/system_power.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
+import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
@@ -40,6 +42,18 @@ const MethodChannel _windowThemeChannel = MethodChannel(
 );
 
 enum AppDiagnosticKind { desktopWindowTheme, windowsTypography }
+
+/// Removes what folder transfers left behind that can no longer be
+/// continued. Best-effort; whatever fails is tried again at the next start.
+Future<void> _removeFolderTransferLeftovers() async {
+  try {
+    final database = LocalDatabase();
+    await const FolderTransferStore().removeLeftovers(database);
+    await removeAbandonedFolderStaging(database, await downloadDir());
+  } catch (_) {
+    // See above.
+  }
+}
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,6 +91,8 @@ Future<void> main(List<String> arguments) async {
   } catch (_) {
     // Staging cleanup is best-effort and must not prevent app startup.
   }
+  // Off the startup path: a folder left half received can be large.
+  unawaited(_removeFolderTransferLeftovers());
 
   // iOS uses the runner's phone/tablet orientation policies; iPad can multitask.
   if (Platform.isAndroid) {

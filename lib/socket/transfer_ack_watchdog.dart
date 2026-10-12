@@ -78,10 +78,15 @@ final class TransferAckWatchdog {
   /// 否则接收端磁盘卡死但网络栈持续回同 durableOffset ACK 时,
   /// 每个 ACK 都换来一个全新的完整计时,markUnresponsive 永远不会
   /// 触发。只有 durable 进度推进或超时重传才重新起算完整超时。
-  final Map<String, ({int durableOffset, DateTime deadline})> _deadlines =
-      <String, ({int durableOffset, DateTime deadline})>{};
+  final Map<String, ({int durableOffset, DateTime since, DateTime deadline})>
+      _deadlines =
+      <String, ({int durableOffset, DateTime since, DateTime deadline})>{};
   bool _closed = false;
 
+  /// [quietLimit] 给"对端还在回 ACK、只是 durable 进度暂时不动"的传输
+  /// 留出余地:在这段时间内,无进度的 ACK 也换来一轮全新的完整计时并把
+  /// 尝试计数复位。超过后退回默认语义(只继承剩余时间),所以磁盘彻底
+  /// 卡死的对端最多多拖 [quietLimit]。为 null 时无进度 ACK 不续命。
   TransferAckWindow armWindow({
     required String transferId,
     required TransferConnectionBinding connection,
@@ -89,6 +94,7 @@ final class TransferAckWatchdog {
     required int sentEnd,
     required TransferAckRetransmit retransmit,
     required TransferAckUnresponsive markUnresponsive,
+    Duration? quietLimit,
   }) {
     if (_closed) {
       throw StateError('Transfer ACK watchdog is closed');
@@ -96,19 +102,22 @@ final class TransferAckWatchdog {
     if (durableOffset < 0 || sentEnd < durableOffset) {
       throw ArgumentError('Invalid ACK window bounds');
     }
+    final answered = _answerBuysTime(transferId, durableOffset, quietLimit);
     final window = TransferAckWindow(
       transferId: transferId,
       connection: connection,
       durableOffset: durableOffset,
       sentEnd: sentEnd,
-      attempt: _initialAttemptFor(transferId, durableOffset),
+      attempt: answered ? 1 : _initialAttemptFor(transferId, durableOffset),
     );
     _replaceEntry(
       window: window,
       retransmit: retransmit,
       markUnresponsive: markUnresponsive,
       armTimer: true,
-      delay: _claimDeadline(transferId, durableOffset),
+      delay: answered
+          ? _restartDeadline(transferId, durableOffset)
+          : _claimDeadline(transferId, durableOffset),
     );
     return window;
   }
@@ -161,12 +170,37 @@ final class TransferAckWatchdog {
     if (current == null || current.durableOffset != durableOffset) {
       _deadlines[transferId] = (
         durableOffset: durableOffset,
+        since: now,
         deadline: now.add(timeout),
       );
       return timeout;
     }
     final remaining = current.deadline.difference(now);
     return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  /// 同一 durableOffset 上的重挂只会发生在收到无进度 ACK 之后,
+  /// 即对端仍在应答;在 [quietLimit] 内这算作存活证明。
+  bool _answerBuysTime(
+    String transferId,
+    int durableOffset,
+    Duration? quietLimit,
+  ) {
+    final current = _deadlines[transferId];
+    return quietLimit != null &&
+        current != null &&
+        current.durableOffset == durableOffset &&
+        _now().difference(current.since) < quietLimit;
+  }
+
+  Duration _restartDeadline(String transferId, int durableOffset) {
+    final now = _now();
+    _deadlines[transferId] = (
+      durableOffset: durableOffset,
+      since: _deadlines[transferId]?.since ?? now,
+      deadline: now.add(timeout),
+    );
+    return timeout;
   }
 
   TransferAckWindow? currentWindow(String transferId) =>
@@ -271,9 +305,11 @@ final class TransferAckWatchdog {
     );
     // 超时重传开启新一轮完整计时:截止时间从重传时刻重新起算,
     // 之后无进度的 ACK 只能继承这一轮的剩余时间。
+    final restarted = _now();
     _deadlines[next.transferId] = (
       durableOffset: next.durableOffset,
-      deadline: _now().add(timeout),
+      since: _deadlines[next.transferId]?.since ?? restarted,
+      deadline: restarted.add(timeout),
     );
     _replaceEntry(
       window: next,

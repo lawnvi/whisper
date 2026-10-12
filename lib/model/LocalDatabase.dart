@@ -93,7 +93,7 @@ class LocalDatabase extends _$LocalDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -128,6 +128,9 @@ class LocalDatabase extends _$LocalDatabase {
       if (from < 10) {
         await m.createTable(favoriteText);
         await _ensureMessageSearchIndex(rebuild: true);
+      }
+      if (from < 11) {
+        await _addFileTransferSkippedEntriesColumn(m);
       }
     },
     beforeOpen: (_) async {
@@ -297,6 +300,18 @@ class LocalDatabase extends _$LocalDatabase {
         )
     ''');
     await _ensureFileTransferMessageRowIndexes();
+  }
+
+  Future<void> _addFileTransferSkippedEntriesColumn(Migrator migrator) async {
+    final columns = await customSelect(
+      'PRAGMA table_info(file_transfer)',
+    ).get();
+    // An upgrade from before the table existed has just created it whole.
+    if (columns.isEmpty ||
+        columns.any((row) => row.read<String>('name') == 'skipped_entries')) {
+      return;
+    }
+    await migrator.addColumn(fileTransfer, fileTransfer.skippedEntries);
   }
 
   Future<void> _backfillUncontestedFileTransferMessageRows() async {
@@ -1765,6 +1780,21 @@ class LocalDatabase extends _$LocalDatabase {
     });
   }
 
+  /// Records how many files of a folder did not reach the receiver. This
+  /// applies to a finished transfer too: the count is only known once the
+  /// receiver has reported how the folder turned out.
+  Future<FileTransferData?> setFileTransferSkippedEntries(
+    String transferId,
+    int skippedEntries,
+  ) async {
+    if (skippedEntries > 0) {
+      await (update(fileTransfer)
+            ..where((item) => item.transferId.equals(transferId)))
+          .write(FileTransferCompanion(skippedEntries: Value(skippedEntries)));
+    }
+    return fetchFileTransfer(transferId);
+  }
+
   Future<MessageData?> fetchMessageById(int id) {
     if (id <= 0) {
       return Future<MessageData?>.value();
@@ -1980,6 +2010,7 @@ class LocalDatabase extends _$LocalDatabase {
       committedBytes: data.committedBytes,
       lastError: data.lastError,
       updatedAt: data.updatedAt,
+      skippedEntries: data.skippedEntries ?? 0,
     );
   }
 }

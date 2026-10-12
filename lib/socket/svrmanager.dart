@@ -17,6 +17,7 @@ import 'package:whisper/audio/audio_protocol.dart';
 import 'package:whisper/audio/audio_share_manager.dart';
 import 'package:whisper/helper/clipboard_sync.dart';
 import 'package:whisper/helper/connection_request_notifications.dart';
+import 'package:whisper/helper/folder_transfer_store.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/whisper_file_picker.dart';
@@ -306,6 +307,8 @@ class WsSvrManager {
     Duration mediaProofTimeout = const Duration(seconds: 3),
     int maxProvisionalMediaSockets = 32,
     SecureRandomBytes? mediaProofRandomBytes,
+    Future<Directory> Function()? transferDownloadDirectory,
+    FolderTransferStore? folderTransferStore,
   }) : _admission = admission ?? SocketAdmissionController(),
        _audioManager = audioManager ?? AudioShareManager.shared,
        _remoteInputManager = remoteInputManager ?? RemoteInputManager.shared,
@@ -332,7 +335,10 @@ class WsSvrManager {
          maxProvisionalMediaSockets,
        ),
        _mediaProofRandomBytes =
-           mediaProofRandomBytes ?? _secureMediaProofRandomBytes;
+           mediaProofRandomBytes ?? _secureMediaProofRandomBytes,
+       _transferDownloadDirectory = transferDownloadDirectory,
+       _folderTransferStore =
+           folderTransferStore ?? const FolderTransferStore();
 
   @visibleForTesting
   WsSvrManager.forTesting({
@@ -356,6 +362,8 @@ class WsSvrManager {
     Duration mediaProofTimeout = const Duration(seconds: 3),
     int maxProvisionalMediaSockets = 32,
     SecureRandomBytes? mediaProofRandomBytes,
+    Future<Directory> Function()? transferDownloadDirectory,
+    FolderTransferStore? folderTransferStore,
   }) : this._internal(
          admission: admission,
          audioManager: audioManager,
@@ -377,6 +385,8 @@ class WsSvrManager {
          mediaProofTimeout: mediaProofTimeout,
          maxProvisionalMediaSockets: maxProvisionalMediaSockets,
          mediaProofRandomBytes: mediaProofRandomBytes,
+         transferDownloadDirectory: transferDownloadDirectory,
+         folderTransferStore: folderTransferStore,
        );
 
   // 工厂构造函数，返回单例实例
@@ -456,6 +466,8 @@ class WsSvrManager {
   final Duration _mediaProofTimeout;
   final int _maxProvisionalMediaSockets;
   final SecureRandomBytes _mediaProofRandomBytes;
+  final Future<Directory> Function()? _transferDownloadDirectory;
+  final FolderTransferStore _folderTransferStore;
   int _provisionalMediaSocketCount = 0;
   final Map<String, PeerReconnectController> _reconnectControllers =
       <String, PeerReconnectController>{};
@@ -531,6 +543,8 @@ class WsSvrManager {
     dispatchOutgoingMessage: _dispatchOutgoingMessage,
     ackMessage: _ackMessage,
     wireMessageReplayGuard: _wireMessageReplayGuard,
+    downloadDirectory: _transferDownloadDirectory,
+    folderStore: _folderTransferStore,
     database: () => _database,
   );
   late final RemoteClipboardTransferEngine _remoteClipboardTransfer =
@@ -5998,6 +6012,9 @@ class WsSvrManager {
 
   Future<bool> sendFileTo(String peerId, String path, {String? messageId}) =>
       _transferEngine.sendFileTo(peerId, path, messageId: messageId);
+
+  Future<FolderSendOutcome> sendFolderTo(String peerId, String path) =>
+      _transferEngine.sendFolderTo(peerId, path);
 
   Future<bool> sendQuickFileToDurably(
     String peerId,

@@ -361,6 +361,59 @@ void main() {
       expect(watchdog.currentWindow('transfer-1'), isNull);
     });
 
+    test('within its quiet limit a peer acking in place is given more time',
+        () async {
+      final scheduler = _FakeTimerScheduler();
+      final clock = _FakeClock();
+      final unresponsive = <TransferAckWindow>[];
+      final watchdog = TransferAckWatchdog(
+        timerFactory: scheduler.createTimer,
+        now: clock.now,
+      );
+      TransferAckWindow arm() => watchdog.armWindow(
+            transferId: 'transfer-1',
+            connection: binding,
+            durableOffset: 1024,
+            sentEnd: 5120,
+            retransmit: (timeout) => timeout.sentEnd,
+            markUnresponsive: unresponsive.add,
+            quietLimit: const Duration(seconds: 60),
+          );
+
+      // 对端还在写:durable 不动,但每 10s 原地 ACK 一次。
+      // 每次都换来完整的 15s,尝试计数停在 1。
+      var window = arm();
+      for (var elapsed = 10; elapsed <= 50; elapsed += 10) {
+        clock.advance(const Duration(seconds: 10));
+        expect(watchdog.acknowledge(window), isTrue);
+        window = arm();
+        expect(window.attempt, 1);
+        expect(scheduler.delays.last, const Duration(seconds: 15));
+      }
+
+      // 一次超时后对端又应答:仍在限额内,计数复位。
+      clock.advance(const Duration(seconds: 5));
+      await scheduler.fireNext();
+      window = watchdog.currentWindow('transfer-1')!;
+      expect(window.attempt, 2);
+      expect(watchdog.acknowledge(window), isTrue);
+      window = arm();
+      expect(window.attempt, 1);
+      expect(scheduler.delays.last, const Duration(seconds: 15));
+
+      // t65 起超过限额:原地 ACK 不再续命,按默认规则走到判失活。
+      clock.advance(const Duration(seconds: 10));
+      expect(watchdog.acknowledge(window), isTrue);
+      window = arm();
+      expect(window.attempt, 1);
+      expect(scheduler.delays.last, const Duration(seconds: 5));
+      for (var attempt = 1; attempt <= 3; attempt += 1) {
+        expect(watchdog.currentWindow('transfer-1')!.attempt, attempt);
+        await scheduler.fireNext();
+      }
+      expect(unresponsive.map((timeout) => timeout.attempt), <int>[3]);
+    });
+
     test('a timeout retransmission renews the deadline for the next attempt',
         () async {
       final scheduler = _FakeTimerScheduler();

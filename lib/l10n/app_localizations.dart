@@ -3357,6 +3357,144 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'复制失败，请重试'**
   String get qrCopyFailed;
+
+  /// No description provided for @attachFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get attachFile;
+
+  /// No description provided for @attachFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹'**
+  String get attachFolder;
+
+  /// No description provided for @folderFileCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, =0{空文件夹} other{{count} 个文件}}'**
+  String folderFileCount(int count);
+
+  /// No description provided for @folderSkippedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 项未传'**
+  String folderSkippedCount(int count);
+
+  /// No description provided for @folderSkippedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未传输的项目'**
+  String get folderSkippedTitle;
+
+  /// No description provided for @folderSkippedMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有 {count} 项的详情需要在对方设备上查看'**
+  String folderSkippedMore(int count);
+
+  /// No description provided for @folderSkipSymlink.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接不会被发送'**
+  String get folderSkipSymlink;
+
+  /// No description provided for @folderSkipSpecial.
+  ///
+  /// In zh, this message translates to:
+  /// **'不是普通文件'**
+  String get folderSkipSpecial;
+
+  /// No description provided for @folderSkipInvalidName.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称在其他系统上不可用'**
+  String get folderSkipInvalidName;
+
+  /// No description provided for @folderSkipPathTooLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'路径过长或层级过深'**
+  String get folderSkipPathTooLong;
+
+  /// No description provided for @folderSkipTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件过大'**
+  String get folderSkipTooLarge;
+
+  /// No description provided for @folderSkipUnreadable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取'**
+  String get folderSkipUnreadable;
+
+  /// No description provided for @folderSkipSourceUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送时已被移动、修改或无法读取'**
+  String get folderSkipSourceUnavailable;
+
+  /// No description provided for @folderSkipWriteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存到这台设备'**
+  String get folderSkipWriteFailed;
+
+  /// No description provided for @folderSkipNameCollision.
+  ///
+  /// In zh, this message translates to:
+  /// **'与同目录的另一项只有大小写不同'**
+  String get folderSkipNameCollision;
+
+  /// No description provided for @folderSkipIntegrity.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验未通过'**
+  String get folderSkipIntegrity;
+
+  /// No description provided for @folderSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法发送这个文件夹'**
+  String get folderSendFailed;
+
+  /// No description provided for @folderSendUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方的 Whisper 版本不支持接收文件夹，请先升级对方'**
+  String get folderSendUnsupported;
+
+  /// No description provided for @folderSendInvalidName.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹名称在其他系统上不可用，请改名后再发'**
+  String get folderSendInvalidName;
+
+  /// No description provided for @folderSendUnreadable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取这个文件夹'**
+  String get folderSendUnreadable;
+
+  /// No description provided for @folderSendTooManyEntries.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹内超过 {limit} 项，请分批发送'**
+  String folderSendTooManyEntries(int limit);
+
+  /// No description provided for @folderSendTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹超过 1 TB，无法发送'**
+  String get folderSendTooLarge;
+
+  /// No description provided for @folderFileProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'{done}/{total} 个文件'**
+  String folderFileProgress(int done, int total);
 }
 
 class _AppLocalizationsDelegate

@@ -1606,6 +1606,17 @@ class $FileTransferTable extends FileTransfer
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _skippedEntriesMeta = const VerificationMeta(
+    'skippedEntries',
+  );
+  @override
+  late final GeneratedColumn<int> skippedEntries = GeneratedColumn<int>(
+    'skipped_entries',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1645,6 +1656,7 @@ class $FileTransferTable extends FileTransfer
     committedBytes,
     resumeProofResetCount,
     lastError,
+    skippedEntries,
     createdAt,
     updatedAt,
   ];
@@ -1768,6 +1780,15 @@ class $FileTransferTable extends FileTransfer
         lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
       );
     }
+    if (data.containsKey('skipped_entries')) {
+      context.handle(
+        _skippedEntriesMeta,
+        skippedEntries.isAcceptableOrUnknown(
+          data['skipped_entries']!,
+          _skippedEntriesMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1857,6 +1878,10 @@ class $FileTransferTable extends FileTransfer
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
       )!,
+      skippedEntries: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_entries'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -1898,6 +1923,9 @@ class FileTransferData extends DataClass
   final int committedBytes;
   final int resumeProofResetCount;
   final String lastError;
+
+  /// For a folder: how many of its files did not reach the receiver.
+  final int? skippedEntries;
   final int createdAt;
   final int updatedAt;
   const FileTransferData({
@@ -1916,6 +1944,7 @@ class FileTransferData extends DataClass
     required this.committedBytes,
     required this.resumeProofResetCount,
     required this.lastError,
+    this.skippedEntries,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -1945,6 +1974,9 @@ class FileTransferData extends DataClass
     map['committed_bytes'] = Variable<int>(committedBytes);
     map['resume_proof_reset_count'] = Variable<int>(resumeProofResetCount);
     map['last_error'] = Variable<String>(lastError);
+    if (!nullToAbsent || skippedEntries != null) {
+      map['skipped_entries'] = Variable<int>(skippedEntries);
+    }
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
@@ -1967,6 +1999,9 @@ class FileTransferData extends DataClass
       committedBytes: Value(committedBytes),
       resumeProofResetCount: Value(resumeProofResetCount),
       lastError: Value(lastError),
+      skippedEntries: skippedEntries == null && nullToAbsent
+          ? const Value.absent()
+          : Value(skippedEntries),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -1999,6 +2034,7 @@ class FileTransferData extends DataClass
         json['resumeProofResetCount'],
       ),
       lastError: serializer.fromJson<String>(json['lastError']),
+      skippedEntries: serializer.fromJson<int?>(json['skippedEntries']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
@@ -2026,6 +2062,7 @@ class FileTransferData extends DataClass
       'committedBytes': serializer.toJson<int>(committedBytes),
       'resumeProofResetCount': serializer.toJson<int>(resumeProofResetCount),
       'lastError': serializer.toJson<String>(lastError),
+      'skippedEntries': serializer.toJson<int?>(skippedEntries),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
@@ -2047,6 +2084,7 @@ class FileTransferData extends DataClass
     int? committedBytes,
     int? resumeProofResetCount,
     String? lastError,
+    Value<int?> skippedEntries = const Value.absent(),
     int? createdAt,
     int? updatedAt,
   }) => FileTransferData(
@@ -2065,6 +2103,9 @@ class FileTransferData extends DataClass
     committedBytes: committedBytes ?? this.committedBytes,
     resumeProofResetCount: resumeProofResetCount ?? this.resumeProofResetCount,
     lastError: lastError ?? this.lastError,
+    skippedEntries: skippedEntries.present
+        ? skippedEntries.value
+        : this.skippedEntries,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -2099,6 +2140,9 @@ class FileTransferData extends DataClass
           ? data.resumeProofResetCount.value
           : this.resumeProofResetCount,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      skippedEntries: data.skippedEntries.present
+          ? data.skippedEntries.value
+          : this.skippedEntries,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2122,6 +2166,7 @@ class FileTransferData extends DataClass
           ..write('committedBytes: $committedBytes, ')
           ..write('resumeProofResetCount: $resumeProofResetCount, ')
           ..write('lastError: $lastError, ')
+          ..write('skippedEntries: $skippedEntries, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2145,6 +2190,7 @@ class FileTransferData extends DataClass
     committedBytes,
     resumeProofResetCount,
     lastError,
+    skippedEntries,
     createdAt,
     updatedAt,
   );
@@ -2167,6 +2213,7 @@ class FileTransferData extends DataClass
           other.committedBytes == this.committedBytes &&
           other.resumeProofResetCount == this.resumeProofResetCount &&
           other.lastError == this.lastError &&
+          other.skippedEntries == this.skippedEntries &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2187,6 +2234,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
   final Value<int> committedBytes;
   final Value<int> resumeProofResetCount;
   final Value<String> lastError;
+  final Value<int?> skippedEntries;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<int> rowid;
@@ -2206,6 +2254,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     this.committedBytes = const Value.absent(),
     this.resumeProofResetCount = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.skippedEntries = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2226,6 +2275,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     this.committedBytes = const Value.absent(),
     this.resumeProofResetCount = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.skippedEntries = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.rowid = const Value.absent(),
@@ -2255,6 +2305,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     Expression<int>? committedBytes,
     Expression<int>? resumeProofResetCount,
     Expression<String>? lastError,
+    Expression<int>? skippedEntries,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
@@ -2276,6 +2327,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
       if (resumeProofResetCount != null)
         'resume_proof_reset_count': resumeProofResetCount,
       if (lastError != null) 'last_error': lastError,
+      if (skippedEntries != null) 'skipped_entries': skippedEntries,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2298,6 +2350,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     Value<int>? committedBytes,
     Value<int>? resumeProofResetCount,
     Value<String>? lastError,
+    Value<int?>? skippedEntries,
     Value<int>? createdAt,
     Value<int>? updatedAt,
     Value<int>? rowid,
@@ -2319,6 +2372,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
       resumeProofResetCount:
           resumeProofResetCount ?? this.resumeProofResetCount,
       lastError: lastError ?? this.lastError,
+      skippedEntries: skippedEntries ?? this.skippedEntries,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2379,6 +2433,9 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
+    if (skippedEntries.present) {
+      map['skipped_entries'] = Variable<int>(skippedEntries.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -2409,6 +2466,7 @@ class FileTransferCompanion extends UpdateCompanion<FileTransferData> {
           ..write('committedBytes: $committedBytes, ')
           ..write('resumeProofResetCount: $resumeProofResetCount, ')
           ..write('lastError: $lastError, ')
+          ..write('skippedEntries: $skippedEntries, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -4654,6 +4712,7 @@ typedef $$FileTransferTableCreateCompanionBuilder =
       Value<int> committedBytes,
       Value<int> resumeProofResetCount,
       Value<String> lastError,
+      Value<int?> skippedEntries,
       required int createdAt,
       required int updatedAt,
       Value<int> rowid,
@@ -4675,6 +4734,7 @@ typedef $$FileTransferTableUpdateCompanionBuilder =
       Value<int> committedBytes,
       Value<int> resumeProofResetCount,
       Value<String> lastError,
+      Value<int?> skippedEntries,
       Value<int> createdAt,
       Value<int> updatedAt,
       Value<int> rowid,
@@ -4767,6 +4827,11 @@ class $$FileTransferTableFilterComposer
 
   ColumnFilters<String> get lastError => $composableBuilder(
     column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedEntries => $composableBuilder(
+    column: $table.skippedEntries,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4865,6 +4930,11 @@ class $$FileTransferTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get skippedEntries => $composableBuilder(
+    column: $table.skippedEntries,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -4945,6 +5015,11 @@ class $$FileTransferTableAnnotationComposer
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
 
+  GeneratedColumn<int> get skippedEntries => $composableBuilder(
+    column: $table.skippedEntries,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -5002,6 +5077,7 @@ class $$FileTransferTableTableManager
                 Value<int> committedBytes = const Value.absent(),
                 Value<int> resumeProofResetCount = const Value.absent(),
                 Value<String> lastError = const Value.absent(),
+                Value<int?> skippedEntries = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5021,6 +5097,7 @@ class $$FileTransferTableTableManager
                 committedBytes: committedBytes,
                 resumeProofResetCount: resumeProofResetCount,
                 lastError: lastError,
+                skippedEntries: skippedEntries,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -5042,6 +5119,7 @@ class $$FileTransferTableTableManager
                 Value<int> committedBytes = const Value.absent(),
                 Value<int> resumeProofResetCount = const Value.absent(),
                 Value<String> lastError = const Value.absent(),
+                Value<int?> skippedEntries = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -5061,6 +5139,7 @@ class $$FileTransferTableTableManager
                 committedBytes: committedBytes,
                 resumeProofResetCount: resumeProofResetCount,
                 lastError: lastError,
+                skippedEntries: skippedEntries,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

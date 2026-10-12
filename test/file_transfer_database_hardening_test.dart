@@ -594,7 +594,7 @@ void main() {
     try {
       final associated = await database.fetchFileTransfer(_transferId);
       final ambiguous = await database.fetchFileTransfer(_otherTransferId);
-      expect(database.schemaVersion, 10);
+      expect(database.schemaVersion, 11);
       expect(associated?.messageRowId, 1);
       expect(associated?.resumeProofResetCount, 0);
       expect(ambiguous?.messageRowId, 0);
@@ -701,7 +701,7 @@ void main() {
       final completed = await database.fetchFileTransfer(_transferId);
       final canceled = await database.fetchFileTransfer(_otherTransferId);
       final active = await database.fetchFileTransfer(_contendedMessageId);
-      expect(database.schemaVersion, 10);
+      expect(database.schemaVersion, 11);
       expect((completed?.messageRowId, completed?.state, completed?.lastError),
           (0, FileTransferState.completed, 'remote_failure'));
       expect((canceled?.messageRowId, canceled?.state, canceled?.lastError),

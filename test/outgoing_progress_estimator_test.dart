@@ -85,4 +85,80 @@ void main() {
     expect(estimator.durableOffset, 8 * mb);
     expect(estimator.rateBytesPerMs, 0);
   });
+
+  group('following what the peer confirmed', () {
+    OutgoingProgressEstimator follower() => OutgoingProgressEstimator(
+      durableOffset: 0,
+      nowMs: 0,
+      seedRateBytesPerMs: 64 * mb / 1000,
+      followsConfirmed: true,
+    );
+    int shown(OutgoingProgressEstimator estimator, int nowMs) =>
+        estimator.estimate(nowMs: nowMs, sentEnd: 512 * mb, size: 1024 * mb);
+
+    test('nothing is shown before the peer confirms anything', () {
+      final estimator = follower();
+
+      // 种子速率和已发出的字节都不算数。
+      expect(shown(estimator, 500), 0);
+      expect(shown(estimator, 3000), 0);
+    });
+
+    test('walks to each confirmed offset over one acknowledgement gap', () {
+      final estimator = follower();
+      estimator.onAck(10 * mb, 1000);
+
+      expect(shown(estimator, 1000), 0);
+      expect(shown(estimator, 1250), closeTo(2.5 * mb, 1));
+      expect(shown(estimator, 1500), 5 * mb);
+      // 下一次 ACK 到达时正好走到上一个确认点,接着往新的走,中间不停。
+      estimator.onAck(50 * mb, 2000);
+      expect(shown(estimator, 2000), 10 * mb);
+      expect(shown(estimator, 2500), 30 * mb);
+      expect(shown(estimator, 3000), 50 * mb);
+    });
+
+    test('never passes what was confirmed, however long the peer is quiet', () {
+      final estimator = follower();
+      estimator.onAck(10 * mb, 1000);
+      estimator.onAck(20 * mb, 2000);
+
+      expect(shown(estimator, 3000), 20 * mb);
+      expect(shown(estimator, 60000), 20 * mb);
+      // 原地重复的 ACK(对端只是在说自己还在写)不让显示值动。
+      estimator.onAck(20 * mb, 61000);
+      expect(shown(estimator, 61500), 20 * mb);
+    });
+
+    test('an acknowledgement that comes early is caught up with smoothly', () {
+      final estimator = follower();
+      estimator.onAck(10 * mb, 1000);
+      // 才走到一半就来了新的确认:从 5MB 处接着走,不跳也不回退。
+      estimator.onAck(30 * mb, 1500);
+
+      expect(shown(estimator, 1500), 5 * mb);
+      expect(shown(estimator, 1750), closeTo(17.5 * mb, 1));
+      expect(shown(estimator, 2000), 30 * mb);
+    });
+
+    test('a long gap between acknowledgements is not replayed in full', () {
+      final estimator = follower();
+      estimator.onAck(10 * mb, 1000);
+      // 对端停了 20 秒才又确认:最多用 1.5 秒追上。
+      estimator.onAck(40 * mb, 21000);
+
+      expect(shown(estimator, 21750), 25 * mb);
+      expect(shown(estimator, 22500), 40 * mb);
+    });
+
+    test('reset moves the starting point for a resumed transfer', () {
+      final estimator = follower();
+      estimator.onAck(10 * mb, 1000);
+      estimator.reset(4 * mb, 5000);
+
+      expect(shown(estimator, 5000), 4 * mb);
+      estimator.onAck(8 * mb, 6000);
+      expect(shown(estimator, 6500), 6 * mb);
+    });
+  });
 }

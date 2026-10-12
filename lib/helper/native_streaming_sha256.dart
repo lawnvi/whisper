@@ -92,6 +92,25 @@ final class NativeStreamingSha256 {
     }
   }
 
+  /// The digest as raw bytes, for callers that compare it rather than print
+  /// it. Ends the checksum like [close].
+  Uint8List closeBytes() {
+    final state = _state;
+    if (state == null) {
+      throw StateError('Native SHA-256 state is unavailable');
+    }
+    final output = calloc<Uint8>(digestLength);
+    try {
+      if (_sha256Final(state, output) != 0) {
+        throw StateError('Native SHA-256 finalization failed');
+      }
+      return Uint8List.fromList(output.asTypedList(digestLength));
+    } finally {
+      calloc.free(output);
+      _release();
+    }
+  }
+
   void dispose() {
     _release();
   }

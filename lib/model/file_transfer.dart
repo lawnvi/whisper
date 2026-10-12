@@ -68,6 +68,10 @@ class FileTransfer extends Table {
       .withDefault(const Constant(0))();
   TextColumn get lastError =>
       text().named('last_error').withDefault(const Constant(''))();
+
+  /// For a folder: how many of its files did not reach the receiver.
+  IntColumn get skippedEntries =>
+      integer().named('skipped_entries').nullable()();
   IntColumn get createdAt => integer().named('created_at')();
   IntColumn get updatedAt => integer().named('updated_at')();
 
@@ -88,6 +92,8 @@ class TransferSnapshot {
     required this.committedBytes,
     required this.lastError,
     required this.updatedAt,
+    this.skippedEntries = 0,
+    this.filesDone,
   });
 
   final String transferId;
@@ -101,6 +107,11 @@ class TransferSnapshot {
   final int committedBytes;
   final String lastError;
   final int updatedAt;
+  final int skippedEntries;
+
+  /// For a folder under way: how many of its files the transfer has moved
+  /// past. Null for a single file and wherever the count is not known.
+  final int? filesDone;
 
   double get progress {
     if (size <= 0) {

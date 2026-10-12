@@ -1927,4 +1927,119 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get qrCopyFailed => 'Could not copy. Try again.';
+
+  @override
+  String get attachFile => 'File';
+
+  @override
+  String get attachFolder => 'Folder';
+
+  @override
+  String folderFileCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+      zero: 'Empty folder',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String folderSkippedCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$countString not transferred';
+  }
+
+  @override
+  String get folderSkippedTitle => 'Items not transferred';
+
+  @override
+  String folderSkippedMore(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Details for $countString more are on the other device';
+  }
+
+  @override
+  String get folderSkipSymlink => 'Links are not sent';
+
+  @override
+  String get folderSkipSpecial => 'Not a regular file';
+
+  @override
+  String get folderSkipInvalidName => 'Name is not valid on other systems';
+
+  @override
+  String get folderSkipPathTooLong => 'Path is too long or too deep';
+
+  @override
+  String get folderSkipTooLarge => 'File is too large';
+
+  @override
+  String get folderSkipUnreadable => 'Could not be read';
+
+  @override
+  String get folderSkipSourceUnavailable =>
+      'Moved, changed or unreadable while sending';
+
+  @override
+  String get folderSkipWriteFailed => 'Could not be saved on this device';
+
+  @override
+  String get folderSkipNameCollision =>
+      'Differs from another item only by letter case';
+
+  @override
+  String get folderSkipIntegrity => 'Failed verification';
+
+  @override
+  String get folderSendFailed => 'This folder could not be sent';
+
+  @override
+  String get folderSendUnsupported =>
+      'Whisper on the other device is too old to receive folders. Update it first';
+
+  @override
+  String get folderSendInvalidName =>
+      'This folder\'s name is not valid on other systems. Rename it and try again';
+
+  @override
+  String get folderSendUnreadable => 'This folder could not be read';
+
+  @override
+  String folderSendTooManyEntries(int limit) {
+    final intl.NumberFormat limitNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String limitString = limitNumberFormat.format(limit);
+
+    return 'This folder has more than $limitString items. Send it in parts';
+  }
+
+  @override
+  String get folderSendTooLarge =>
+      'This folder is larger than 1 TB and cannot be sent';
+
+  @override
+  String folderFileProgress(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '$doneString of $totalString files';
+  }
 }

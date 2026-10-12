@@ -22,6 +22,131 @@ class ContextMenuActionItem {
   final bool destructive;
 }
 
+const double _menuItemHeight = 44;
+const double _menuDividerHeight = 9;
+const double _menuVerticalPadding = 5;
+const double _menuMinWidth = 224;
+
+/// Shows [items] as a desktop menu at [anchor], given in global
+/// coordinates. The menu opens from the anchor's top-left corner, or with
+/// [above] sits over the anchor and ends at its right edge, the way a menu
+/// opens from a button at the bottom of the window.
+Future<void> showWhisperActionMenu(
+  BuildContext context, {
+  required Rect anchor,
+  required List<ContextMenuActionItem> items,
+  bool above = false,
+}) async {
+  final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+  if (overlay is! RenderBox) {
+    return;
+  }
+
+  final enabledItems = <int, ContextMenuActionItem>{};
+  final entries = <PopupMenuEntry<int>>[];
+  final palette = context.whisperPalette;
+  final colorScheme = Theme.of(context).colorScheme;
+
+  for (var i = 0; i < items.length; i++) {
+    final item = items[i];
+    if (!item.enabled) {
+      continue;
+    }
+    if (enabledItems.isNotEmpty &&
+        item.destructive != enabledItems.values.last.destructive) {
+      entries.add(
+        PopupMenuDivider(
+          height: _menuDividerHeight,
+          thickness: 0.75,
+          indent: 14,
+          endIndent: 14,
+          color: palette.borderSubtle,
+        ),
+      );
+    }
+    enabledItems[i] = item;
+    entries.add(
+      PopupMenuItem<int>(
+        value: i,
+        height: _menuItemHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                item.label,
+                style: TextStyle(
+                  color: item.destructive
+                      ? palette.danger
+                      : colorScheme.onSurface,
+                  fontSize: 15,
+                  height: 1.3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Icon(
+              item.icon,
+              size: 19,
+              color: item.destructive
+                  ? palette.danger
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  if (entries.isEmpty) {
+    return;
+  }
+
+  var position = Rect.fromPoints(
+    overlay.globalToLocal(anchor.topLeft),
+    overlay.globalToLocal(anchor.bottomRight),
+  );
+  if (above) {
+    final height =
+        _menuVerticalPadding * 2 +
+        enabledItems.length * _menuItemHeight +
+        (entries.length - enabledItems.length) * _menuDividerHeight;
+    position = Rect.fromLTWH(
+      position.right - _menuMinWidth,
+      position.top - height - 6,
+      _menuMinWidth,
+      0,
+    );
+  }
+  final selected = await showMenu<int>(
+    context: context,
+    position: RelativeRect.fromRect(position, Offset.zero & overlay.size),
+    items: entries,
+    color: palette.surfaceElevated,
+    surfaceTintColor: Colors.transparent,
+    elevation: 8,
+    shadowColor: Colors.black.withValues(alpha: 0.18),
+    clipBehavior: Clip.antiAlias,
+    menuPadding: const EdgeInsets.symmetric(vertical: _menuVerticalPadding),
+    popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : const AnimationStyle(
+            duration: Duration(milliseconds: 180),
+            reverseDuration: Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+          ),
+    constraints: const BoxConstraints(minWidth: _menuMinWidth, maxWidth: 304),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(14),
+      side: BorderSide(color: palette.borderSubtle),
+    ),
+  );
+
+  if (selected != null) {
+    enabledItems[selected]?.onSelected();
+  }
+}
+
 class ContextMenuRegion extends StatefulWidget {
   const ContextMenuRegion({
     super.key,
@@ -67,102 +192,11 @@ class _ContextMenuRegionState extends State<ContextMenuRegion> {
       return;
     }
 
-    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
-    if (overlay is! RenderBox) {
-      return;
-    }
-
-    final enabledItems = <int, ContextMenuActionItem>{};
-    final entries = <PopupMenuEntry<int>>[];
-    final palette = context.whisperPalette;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    for (var i = 0; i < widget.items.length; i++) {
-      final item = widget.items[i];
-      if (!item.enabled) {
-        continue;
-      }
-      if (enabledItems.isNotEmpty &&
-          item.destructive != enabledItems.values.last.destructive) {
-        entries.add(
-          PopupMenuDivider(
-            height: 9,
-            thickness: 0.75,
-            indent: 14,
-            endIndent: 14,
-            color: palette.borderSubtle,
-          ),
-        );
-      }
-      enabledItems[i] = item;
-      entries.add(
-        PopupMenuItem<int>(
-          value: i,
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: item.destructive
-                        ? palette.danger
-                        : colorScheme.onSurface,
-                    fontSize: 15,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Icon(
-                item.icon,
-                size: 19,
-                color: item.destructive
-                    ? palette.danger
-                    : colorScheme.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (entries.isEmpty) {
-      return;
-    }
-
-    final anchor = overlay.globalToLocal(globalPosition);
-    final selected = await showMenu<int>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(anchor.dx, anchor.dy, 0, 0),
-        Offset.zero & overlay.size,
-      ),
-      items: entries,
-      color: palette.surfaceElevated,
-      surfaceTintColor: Colors.transparent,
-      elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.18),
-      clipBehavior: Clip.antiAlias,
-      menuPadding: const EdgeInsets.symmetric(vertical: 5),
-      popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
-          ? AnimationStyle.noAnimation
-          : const AnimationStyle(
-              duration: Duration(milliseconds: 180),
-              reverseDuration: Duration(milliseconds: 120),
-              curve: Curves.easeOutCubic,
-            ),
-      constraints: const BoxConstraints(minWidth: 224, maxWidth: 304),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: palette.borderSubtle),
-      ),
+    await showWhisperActionMenu(
+      context,
+      anchor: globalPosition & Size.zero,
+      items: widget.items,
     );
-
-    if (selected != null) {
-      enabledItems[selected]?.onSelected();
-    }
   }
 
   Future<void> _showMobileMenu(BuildContext context) async {

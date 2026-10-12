@@ -74,7 +74,7 @@ void main() {
     final retryStart = fileMessage.indexOf('final showRetry =');
     final retryEnd = fileMessage.indexOf('final showCancel', retryStart);
     final retryPolicy = fileMessage.substring(retryStart, retryEnd);
-    final cancelEnd = fileMessage.indexOf('final colorScheme', retryEnd);
+    final cancelEnd = fileMessage.indexOf('final palette', retryEnd);
     final cancelPolicy = fileMessage.substring(retryEnd, cancelEnd);
 
     expect(

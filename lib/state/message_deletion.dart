@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
+import 'package:whisper/state/folder_message.dart';
 
 bool canDeleteReceivedMessageFile(MessageData message, String? selfUid) =>
     selfUid != null &&
@@ -17,6 +18,20 @@ Future<void> deleteReceivedMessageFile(
   // Enforce ownership here as well as in the confirmation UI. Sent originals
   // and the transfer assistant's local files must never be removed.
   if (!canDeleteReceivedMessageFile(message, selfUid) || path.isEmpty) return;
+  if (folderOfferOf(message) != null) {
+    // Only a folder message may take a directory with it, and only the
+    // directory itself: a link standing in its place is left alone.
+    if (await FileSystemEntity.type(path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      return;
+    }
+    try {
+      await Directory(path).delete(recursive: true);
+    } on FileSystemException {
+      if (await Directory(path).exists()) rethrow;
+    }
+    return;
+  }
   final file = File(path);
   if (!await file.exists()) return;
   try {

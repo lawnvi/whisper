@@ -212,7 +212,7 @@ void main() {
         'peer-a',
         query: '历史文本',
       );
-      expect(database.schemaVersion, 10);
+      expect(database.schemaVersion, 11);
       expect(results.single.message.content, '迁移后的历史文本');
       await database.favoriteTextMessage(
         results.single.message,
