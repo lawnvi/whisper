@@ -406,6 +406,7 @@
   "remoteInputWorkspaceSelectTargets": "Control targets",
   "remoteInputWorkspaceCanvasTitle": "Screen arrangement",
   "remoteInputWorkspaceCanvasHint": "Drag a remote screen against an edge of this device",
+  "remoteInputWorkspaceExitShortcut": "Press {shortcut} to stop sharing",
   "remoteInputWorkspaceSelectTargetHint": "Select at least one control target from the left",
   "remoteInputWorkspaceLocalBadge": "This device",
   "remoteInputWorkspaceRemoteBadge": "Remote",

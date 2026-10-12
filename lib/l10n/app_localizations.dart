@@ -1798,6 +1798,12 @@ abstract class AppLocalizations {
   /// **'拖动远端屏幕并贴近本机屏幕边缘'**
   String get remoteInputWorkspaceCanvasHint;
 
+  /// No description provided for @remoteInputWorkspaceExitShortcut.
+  ///
+  /// In zh, this message translates to:
+  /// **'按 {shortcut} 退出共享'**
+  String remoteInputWorkspaceExitShortcut(String shortcut);
+
   /// No description provided for @remoteInputWorkspaceSelectTargetHint.
   ///
   /// In zh, this message translates to:

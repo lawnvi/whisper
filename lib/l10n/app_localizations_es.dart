@@ -1007,6 +1007,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Arrastra una pantalla remota hasta un borde de este equipo';
 
   @override
+  String remoteInputWorkspaceExitShortcut(String shortcut) {
+    return 'Pulsa $shortcut para dejar de compartir';
+  }
+
+  @override
   String get remoteInputWorkspaceSelectTargetHint =>
       'Selecciona al menos un equipo controlado a la izquierda';
 

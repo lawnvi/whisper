@@ -936,6 +936,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteInputWorkspaceCanvasHint => '拖动远端屏幕并贴近本机屏幕边缘';
 
   @override
+  String remoteInputWorkspaceExitShortcut(String shortcut) {
+    return '按 $shortcut 退出共享';
+  }
+
+  @override
   String get remoteInputWorkspaceSelectTargetHint => '从左侧选择至少一台被控设备';
 
   @override

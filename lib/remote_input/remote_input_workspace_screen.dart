@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
@@ -11,6 +12,7 @@ import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
+import 'package:whisper/remote_input/remote_input_exit_shortcut.dart';
 import 'package:whisper/remote_input/remote_input_failure_reason.dart';
 import 'package:whisper/remote_input/remote_input_layout.dart';
 import 'package:whisper/remote_input/remote_input_peer_activity.dart';
@@ -351,7 +353,7 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       layoutVersion: 3,
       layoutJson: '',
       edgeThresholdPx: 6,
-      releaseHotkey: 'ctrl+alt+esc',
+      releaseHotkey: remoteInputReleaseHotkey,
       updatedAt: now,
     );
     await LocalDatabase().upsertRemoteInputLayout(layout);
@@ -1026,6 +1028,26 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
                           reachablePeerIds: reachablePeerIds,
                         );
                       },
+                    ),
+                  ),
+                  // The stop button cannot be clicked while the pointer is on
+                  // another screen, so the way back is always in view here.
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: IgnorePointer(
+                        child: _WorkspaceNoticeChip(
+                          icon: Icons.keyboard_outlined,
+                          label: l10n.remoteInputWorkspaceExitShortcut(
+                            remoteInputReleaseHotkeyLabel(
+                              macOS:
+                                  defaultTargetPlatform == TargetPlatform.macOS,
+                            ),
+                          ),
+                          color: palette.textMuted,
+                        ),
+                      ),
                     ),
                   ),
                   if (_devices.isNotEmpty && selectedDevices.isEmpty)

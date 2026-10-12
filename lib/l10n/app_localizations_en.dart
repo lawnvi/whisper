@@ -997,6 +997,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Drag a remote screen against an edge of this device';
 
   @override
+  String remoteInputWorkspaceExitShortcut(String shortcut) {
+    return 'Press $shortcut to stop sharing';
+  }
+
+  @override
   String get remoteInputWorkspaceSelectTargetHint =>
       'Select at least one control target from the left';
 

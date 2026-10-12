@@ -433,6 +433,7 @@
   "remoteInputWorkspaceSelectTargets": "Equipos controlados",
   "remoteInputWorkspaceCanvasTitle": "Distribucion de pantalla",
   "remoteInputWorkspaceCanvasHint": "Arrastra una pantalla remota hasta un borde de este equipo",
+  "remoteInputWorkspaceExitShortcut": "Pulsa {shortcut} para dejar de compartir",
   "remoteInputWorkspaceSelectTargetHint": "Selecciona al menos un equipo controlado a la izquierda",
   "remoteInputWorkspaceLocalBadge": "Este equipo",
   "remoteInputWorkspaceRemoteBadge": "Remoto",
