@@ -35,11 +35,17 @@
     <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- requestRawExternalStorageAccess: on Android 12+ every file created under
+         shared storage is otherwise registered in MediaStore one by one, which
+         caps a received folder at a few dozen files per second. Whisper asks
+         the media scanner to index what it saved once the transfer is done. -->
     <application
         android:label="whisper"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
+        android:requestRawExternalStorageAccess="true"
+        tools:targetApi="s"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

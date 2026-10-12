@@ -652,6 +652,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
             selfUid: self?.uid,
             path: _effectiveMessagePath(message),
           );
+          unawaited(
+            notifyFileRemovedFromAndroidPickers(_effectiveMessagePath(message)),
+          );
         } on FileSystemException catch (error) {
           _logConversationFailure(ConversationOperationKind.deleteFile, error);
           rethrow;

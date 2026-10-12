@@ -103,6 +103,11 @@ Future<void> notifyFileVisibleToAndroidPickers(String path) async {
   }
 }
 
+/// Rescanning a path that is gone drops it from MediaStore, which does not
+/// follow what Whisper does on shared storage file by file.
+Future<void> notifyFileRemovedFromAndroidPickers(String path) =>
+    notifyFileVisibleToAndroidPickers(path);
+
 Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
   if (!Platform.isAndroid) {
     return;
@@ -113,7 +118,9 @@ Future<void> notifyExistingDownloadsVisibleToAndroidPickers() async {
     if (!dir.existsSync()) {
       return;
     }
-    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+    // Received folders are indexed as a whole when they arrive; walking into
+    // them here would queue one scan per file on every launch.
+    await for (final entity in dir.list(followLinks: false)) {
       if (entity is! File) {
         continue;
       }
