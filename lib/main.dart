@@ -13,6 +13,7 @@ import 'package:whisper/helper/file.dart';
 import 'package:whisper/helper/image_memory_budget.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/system_power.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
@@ -116,6 +117,7 @@ Future<void> main(List<String> arguments) async {
   await notificationHelper.initialize();
   await ConnectionRequestNotifier().initialize(notificationHelper.plugin);
   TransferNotificationBridge().attach();
+  SystemPowerBridge().attach();
   AudioMediaSessionBridge().attach(
     coordinator: AudioGroupCoordinator.shared,
     platform: AudioPlatform.shared,

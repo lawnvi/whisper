@@ -126,6 +126,7 @@ enum PeerDisconnectCause {
   protocolFailure,
   localFailure,
   managerClose,
+  systemSleep,
 }
 
 enum _PeerPolicyDisposition { manualDisconnect, trustRevoked, deviceDeleted }
@@ -484,6 +485,11 @@ class WsSvrManager {
   bool _closeOperationQueued = false;
   bool _acceptingUpgrades = false;
   bool _acceptingOutgoingConnections = true;
+  // Set from the system's sleep notice until it is awake again. Nothing may
+  // connect in between, or the peer ends up talking to a host that has
+  // stopped answering.
+  bool _systemSleeping = false;
+  final Set<String> _systemSleepReconnectPeerIds = <String>{};
   HttpServer? _serverClosing;
   Timer? _clientTimer;
   PeerProfile? _remoteProfile;
@@ -1375,7 +1381,7 @@ class WsSvrManager {
       if (origin?.trim().isNotEmpty == true) {
         return shelf.Response.forbidden('Forbidden');
       }
-      if (!_acceptingUpgrades) {
+      if (!_acceptingUpgrades || _systemSleeping) {
         return shelf.Response(
           HttpStatus.serviceUnavailable,
           body: 'Service Unavailable',
@@ -2423,7 +2429,7 @@ class WsSvrManager {
     int protocolVersion,
   ) async {
     final request = attempt.request;
-    if (!_acceptingOutgoingConnections) {
+    if (!_acceptingOutgoingConnections || _systemSleeping) {
       return ConnectionAttemptResult.cancelled(
         requestId: request.requestId,
         reason: ConnectionAttemptReason.managerClosed,
@@ -2964,6 +2970,58 @@ class WsSvrManager {
     );
     await _waitForPeerAuthentication(peerId);
     await _removePeerConnection(peerId, PeerDisconnectCause.manual);
+  }
+
+  /// A sleeping host keeps its sockets open without answering them. A peer
+  /// that is driving this device's keyboard and mouse then never gets its
+  /// pointer back, so every peer is let go while there is still time to tell
+  /// them.
+  Future<void> prepareForSystemSleep() async {
+    if (_systemSleeping) {
+      return;
+    }
+    _systemSleeping = true;
+    for (final entry in _reconnectControllers.entries) {
+      if (entry.value.hasPendingAttempt || entry.value.isAttemptInFlight) {
+        _systemSleepReconnectPeerIds.add(entry.key);
+      }
+    }
+    _cancelPendingOutgoingConnections();
+    // A handshake that was already under way can finish while the first
+    // peers are closing, hence the second pass.
+    for (var pass = 0; pass < 2 && _systemSleeping; pass += 1) {
+      final peerIds = connectedPeerIds.toList(growable: false);
+      if (peerIds.isEmpty) {
+        break;
+      }
+      _systemSleepReconnectPeerIds.addAll(peerIds);
+      await Future.wait(
+        peerIds.map(
+          (peerId) =>
+              _removePeerConnection(peerId, PeerDisconnectCause.systemSleep),
+        ),
+      );
+    }
+  }
+
+  /// Lets peers back in and redials the ones [prepareForSystemSleep] dropped.
+  void resumeFromSystemSleep() {
+    if (!_systemSleeping) {
+      return;
+    }
+    _systemSleeping = false;
+    final peerIds = _systemSleepReconnectPeerIds.toList(growable: false);
+    _systemSleepReconnectPeerIds.clear();
+    if (_reconnectManagerClosed) {
+      return;
+    }
+    for (final peerId in peerIds) {
+      final controller = _reconnectControllers[peerId];
+      final target = controller?.target;
+      if (controller != null && target != null) {
+        controller.scheduleReconnect(target);
+      }
+    }
   }
 
   Future<void> _removePeerConnection(

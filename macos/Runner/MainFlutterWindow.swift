@@ -6,6 +6,7 @@ import CoreMedia
 import FlutterMacOS
 import IOKit
 import IOKit.hid
+import IOKit.pwr_mgt
 import OSLog
 import ScreenCaptureKit
 import window_manager
@@ -114,6 +115,7 @@ class MainFlutterWindow: NSWindow {
   private var windowThemeChannel: FlutterMethodChannel?
   private var fileManagerChannel: FlutterMethodChannel?
   private var desktopQuickSendChannel: FlutterMethodChannel?
+  private var systemPowerChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
     migrateSandboxedPreferencesIfNeeded()
@@ -137,8 +139,17 @@ class MainFlutterWindow: NSWindow {
     registerWindowThemeChannel(with: flutterViewController)
     registerFileManagerChannel(with: flutterViewController)
     registerDesktopQuickSendChannel(with: flutterViewController)
+    registerSystemPowerChannel(with: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func registerSystemPowerChannel(with controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "com.vireen.whisper/system_power",
+      binaryMessenger: controller.engine.binaryMessenger)
+    SystemPowerBridge.shared.attach(channel: channel)
+    systemPowerChannel = channel
   }
 
   private func registerDesktopQuickSendChannel(with controller: FlutterViewController) {
@@ -228,6 +239,113 @@ class MainFlutterWindow: NSWindow {
       super.order(place, relativeTo: otherWin)
       hiddenWindowAtLaunch()
   }
+}
+
+// IOMessage.h defines these as macros, which Swift does not import.
+private let systemPowerCanSleepMessage: UInt32 = 0xE000_0270
+private let systemPowerWillSleepMessage: UInt32 = 0xE000_0280
+private let systemPowerHasPoweredOnMessage: UInt32 = 0xE000_0300
+
+/// Tells Dart when the system sleeps and wakes. A sleeping Mac keeps its
+/// sockets open without answering them, so sleep is held until Dart has let
+/// its peers go.
+final class SystemPowerBridge: NSObject {
+  static let shared = SystemPowerBridge()
+
+  // Sleep goes ahead after this long even if Dart has not answered.
+  private let sleepHold: TimeInterval = 2
+  private var channel: FlutterMethodChannel?
+  private var rootDomain: io_connect_t = 0
+  private var notificationPort: IONotificationPortRef?
+  private var notifier: io_object_t = 0
+  private var asleep = false
+
+  func attach(channel: FlutterMethodChannel) {
+    self.channel = channel
+    guard rootDomain == 0 else {
+      return
+    }
+    rootDomain = IORegisterForSystemPower(
+      Unmanaged.passUnretained(self).toOpaque(),
+      &notificationPort,
+      systemPowerCallback,
+      &notifier)
+    guard rootDomain != 0, let port = notificationPort else {
+      return
+    }
+    CFRunLoopAddSource(
+      CFRunLoopGetMain(),
+      IONotificationPortGetRunLoopSource(port).takeUnretainedValue(),
+      .commonModes)
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self,
+      selector: #selector(screensDidWake),
+      name: NSWorkspace.screensDidWakeNotification,
+      object: nil)
+  }
+
+  fileprivate func handle(messageType: UInt32, argument: UnsafeMutableRawPointer?) {
+    let notificationId = Int(bitPattern: argument)
+    switch messageType {
+    case systemPowerCanSleepMessage:
+      // Only asks whether an idle sleep may start. Left unanswered, it stalls
+      // that sleep for 30 seconds.
+      IOAllowPowerChange(rootDomain, notificationId)
+    case systemPowerWillSleepMessage:
+      asleep = true
+      holdSleep(notificationId: notificationId)
+    case systemPowerHasPoweredOnMessage:
+      // Maintenance wakes power the system on with the display still asleep
+      // and are over within seconds, so peers stay away until the display
+      // comes back.
+      if CGDisplayIsAsleep(CGMainDisplayID()) == 0 {
+        announceWake()
+      }
+    default:
+      break
+    }
+  }
+
+  private func holdSleep(notificationId: Int) {
+    let rootDomain = self.rootDomain
+    var allowed = false
+    let allow = {
+      guard !allowed else {
+        return
+      }
+      allowed = true
+      IOAllowPowerChange(rootDomain, notificationId)
+    }
+    guard let channel = channel else {
+      allow()
+      return
+    }
+    channel.invokeMethod("willSleep", arguments: nil) { _ in
+      allow()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + sleepHold, execute: allow)
+  }
+
+  @objc private func screensDidWake() {
+    announceWake()
+  }
+
+  private func announceWake() {
+    guard asleep else {
+      return
+    }
+    asleep = false
+    channel?.invokeMethod("didWake", arguments: nil)
+  }
+}
+
+private let systemPowerCallback: IOServiceInterestCallback = {
+  refcon, _, messageType, argument in
+  guard let refcon = refcon else {
+    return
+  }
+  Unmanaged<SystemPowerBridge>.fromOpaque(refcon).takeUnretainedValue()
+    .handle(messageType: messageType, argument: argument)
 }
 
 final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {

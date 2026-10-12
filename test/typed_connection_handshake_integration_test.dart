@@ -563,6 +563,63 @@ void main() {
     },
   );
 
+  test('system sleep lets the peer go and redials it after waking', () async {
+    final harness = await _HandshakeHarness.start();
+    final connected = await harness.connect('sleep-seed');
+    expect(connected.isAuthenticated, isTrue);
+
+    await harness.client.prepareForSystemSleep();
+
+    expect(harness.client.isConnectedTo('server-peer'), isFalse);
+    await _waitUntil(() => !harness.server.isConnectedTo('client-peer'));
+    // Redialling now would reconnect a host that is about to stop answering.
+    expect(harness.clientReconnects.activeTimerCount, 0);
+
+    harness.client.resumeFromSystemSleep();
+
+    expect(harness.clientReconnects.activeTimerCount, 1);
+    await harness.clientReconnects.fireNext();
+    await _waitUntil(() => harness.client.isConnectedTo('server-peer'));
+    expect(harness.server.isConnectedTo('client-peer'), isTrue);
+  });
+
+  test('nothing connects to or from a sleeping system', () async {
+    final harness = await _HandshakeHarness.start();
+
+    await harness.server.prepareForSystemSleep();
+    final refused = await harness.connect('sleeping-server');
+    expect(refused.isAuthenticated, isFalse);
+    expect(harness.server.isConnectedTo('client-peer'), isFalse);
+
+    harness.server.resumeFromSystemSleep();
+    await harness.client.prepareForSystemSleep();
+    final cancelled = await harness.connect('sleeping-client');
+    expect(cancelled.status, ConnectionAttemptStatus.cancelled);
+
+    harness.client.resumeFromSystemSleep();
+    final connected = await harness.connect('awake-again');
+    expect(connected.isAuthenticated, isTrue);
+  });
+
+  test('a retry interrupted by system sleep resumes after waking', () async {
+    final harness = await _HandshakeHarness.start();
+    final connected = await harness.connect('sleep-retry-seed');
+    expect(connected.isAuthenticated, isTrue);
+    expect(await harness.server.debugDropPeerTransport('client-peer'), isTrue);
+    await _waitUntil(() => harness.clientReconnects.activeTimerCount == 1);
+
+    await harness.client.prepareForSystemSleep();
+    await harness.clientReconnects.fireNext();
+    expect(harness.client.isConnectedTo('server-peer'), isFalse);
+    expect(harness.clientReconnects.activeTimerCount, 0);
+
+    harness.client.resumeFromSystemSleep();
+
+    expect(harness.clientReconnects.activeTimerCount, 1);
+    await harness.clientReconnects.fireNext();
+    await _waitUntil(() => harness.client.isConnectedTo('server-peer'));
+  });
+
   for (final mutation in <String>['manual', 'delete']) {
     test('$mutation disconnect suppresses reconnect', () async {
       final harness = await _HandshakeHarness.start();
