@@ -571,7 +571,7 @@ BOOL CALLBACK EnumMonitorDisplayProc(HMONITOR monitor,
   return TRUE;
 }
 
-std::vector<MonitorDisplay> MonitorDisplays() {
+std::vector<MonitorDisplay> EnumerateMonitorDisplays() {
   std::vector<MonitorDisplay> displays;
   EnumDisplayMonitors(nullptr, nullptr, EnumMonitorDisplayProc,
                       reinterpret_cast<LPARAM>(&displays));
@@ -584,6 +584,31 @@ std::vector<MonitorDisplay> MonitorDisplays() {
     displays.push_back(fallback);
   }
   return displays;
+}
+
+std::mutex g_monitor_displays_mutex;
+std::vector<MonitorDisplay> g_monitor_displays;
+ULONGLONG g_monitor_displays_tick = 0;
+
+void ForgetMonitorDisplays() {
+  std::lock_guard<std::mutex> lock(g_monitor_displays_mutex);
+  g_monitor_displays.clear();
+}
+
+// Capture and injection look monitors up several times for every mouse
+// event, and each enumeration is a round trip into the window manager. The
+// layout only changes with a WM_DISPLAYCHANGE, which forgets the answer; the
+// age limit covers a change that arrives without one.
+std::vector<MonitorDisplay> MonitorDisplays() {
+  constexpr ULONGLONG kMaxAgeMs = 1000;
+  std::lock_guard<std::mutex> lock(g_monitor_displays_mutex);
+  const ULONGLONG now = GetTickCount64();
+  if (g_monitor_displays.empty() ||
+      now - g_monitor_displays_tick >= kMaxAgeMs) {
+    g_monitor_displays = EnumerateMonitorDisplays();
+    g_monitor_displays_tick = now;
+  }
+  return g_monitor_displays;
 }
 
 std::optional<MonitorDisplay> MonitorDisplayForId(const std::string& id) {
@@ -1034,6 +1059,10 @@ class RemoteInputPlugin : public flutter::Plugin {
       }
       return false;
     }
+    if (message == WM_DISPLAYCHANGE) {
+      ForgetMonitorDisplays();
+      return false;
+    }
     if (message != WM_INPUT || capture_session_id_.empty()) {
       return false;
     }
@@ -1442,65 +1471,86 @@ class RemoteInputPlugin : public flutter::Plugin {
     injection_routes_.clear();
   }
 
+  // Windows runs a low-level hook on the thread that installed it and waits
+  // for the answer before it moves the pointer or delivers the key. Flutter
+  // builds frames and runs Dart on the window's thread, so both hooks live on
+  // a thread that does nothing else. Otherwise the whole system's pointer
+  // stutters whenever the app is busy.
   bool InstallHooks(std::string* error_message) {
-    bool installed = true;
-    if (mouse_hook_ == nullptr) {
+    if (hook_thread_.joinable()) {
+      return mouse_hook_ != nullptr && keyboard_hook_ != nullptr;
+    }
+    struct HookErrors {
+      DWORD mouse = ERROR_SUCCESS;
+      DWORD keyboard = ERROR_SUCCESS;
+    };
+    std::promise<HookErrors> ready;
+    auto status = ready.get_future();
+    hook_thread_ = std::thread([this, ready = std::move(ready)]() mutable {
+      MSG message{};
+      PeekMessage(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+      hook_thread_id_ = GetCurrentThreadId();
+      // The callbacks only read a few flags and post a message, so they
+      // should never have to wait for a time slice either.
+      SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+      for (size_t key = 0; key < hook_pressed_keys_.size(); ++key) {
+        hook_pressed_keys_[key] = (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
+      }
+      // The hook reports left/right modifiers. Do not retain the aggregate
+      // startup state after a side-specific key-up.
+      hook_pressed_keys_[VK_CONTROL] = false;
+      hook_pressed_keys_[VK_MENU] = false;
+      HookErrors errors;
       mouse_hook_ = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
                                      GetModuleHandle(nullptr), 0);
-      if (mouse_hook_ == nullptr) {
-        installed = false;
-        if (error_message != nullptr) {
-          *error_message += " mouseHook=" + std::to_string(GetLastError());
-        }
+      if (mouse_hook_ == nullptr) errors.mouse = GetLastError();
+      keyboard_hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                       GetModuleHandle(nullptr), 0);
+      if (keyboard_hook_ == nullptr) errors.keyboard = GetLastError();
+      const bool installed = mouse_hook_ != nullptr && keyboard_hook_ != nullptr;
+      if (!installed) {
+        // Capture needs both, so do not leave one behind.
+        RemoveHooks();
+      }
+      ready.set_value(errors);
+      if (!installed) return;
+      while (GetMessage(&message, nullptr, 0, 0) > 0) {
+        TranslateMessage(&message);
+        DispatchMessage(&message);
+      }
+      RemoveHooks();
+    });
+    const HookErrors errors = status.get();
+    if (error_message != nullptr) {
+      if (errors.mouse != ERROR_SUCCESS) {
+        *error_message += " mouseHook=" + std::to_string(errors.mouse);
+      }
+      if (errors.keyboard != ERROR_SUCCESS) {
+        *error_message += " keyboardHook=" + std::to_string(errors.keyboard);
       }
     }
-    if (!keyboard_hook_thread_.joinable()) {
-      std::promise<DWORD> ready;
-      auto status = ready.get_future();
-      keyboard_hook_thread_ = std::thread([this, ready = std::move(ready)]() mutable {
-        // Low-level hooks must return promptly. Flutter rendering and platform
-        // calls cannot run on this thread or Windows may silently remove it.
-        MSG message{};
-        PeekMessage(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-        keyboard_hook_thread_id_ = GetCurrentThreadId();
-        for (size_t key = 0; key < hook_pressed_keys_.size(); ++key) {
-          hook_pressed_keys_[key] = (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
-        }
-        // The hook reports left/right modifiers. Do not retain the aggregate
-        // startup state after a side-specific key-up.
-        hook_pressed_keys_[VK_CONTROL] = false;
-        hook_pressed_keys_[VK_MENU] = false;
-        keyboard_hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
-                                         GetModuleHandle(nullptr), 0);
-        const DWORD error = keyboard_hook_ ? ERROR_SUCCESS : GetLastError();
-        ready.set_value(error);
-        if (error != ERROR_SUCCESS) return;
-        while (GetMessage(&message, nullptr, 0, 0) > 0) {
-          TranslateMessage(&message);
-          DispatchMessage(&message);
-        }
-        UnhookWindowsHookEx(keyboard_hook_);
-      });
-      const DWORD error = status.get();
-      if (error != ERROR_SUCCESS) {
-        installed = false;
-        if (error_message) *error_message += " keyboardHook=" + std::to_string(error);
-      }
-    }
-    return installed;
+    return errors.mouse == ERROR_SUCCESS && errors.keyboard == ERROR_SUCCESS;
+  }
+
+  // The hooks only answer for the window's thread, which does the real work
+  // and is the one that sees the release hotkey. If it has stopped, holding
+  // events back would leave the machine without a keyboard or mouse.
+  bool HookOwnerIsHung() const { return IsHungAppWindow(window_) != FALSE; }
+
+  // Runs on the hook thread: a hook can only be removed where it was set.
+  void RemoveHooks() {
+    if (mouse_hook_ != nullptr) UnhookWindowsHookEx(mouse_hook_);
+    if (keyboard_hook_ != nullptr) UnhookWindowsHookEx(keyboard_hook_);
+    mouse_hook_ = nullptr;
+    keyboard_hook_ = nullptr;
   }
 
   void UninstallHooks() {
-    if (mouse_hook_ != nullptr) {
-      UnhookWindowsHookEx(mouse_hook_);
-      mouse_hook_ = nullptr;
+    if (hook_thread_.joinable()) {
+      PostThreadMessage(hook_thread_id_, WM_QUIT, 0, 0);
+      hook_thread_.join();
     }
-    if (keyboard_hook_thread_.joinable()) {
-      PostThreadMessage(keyboard_hook_thread_id_, WM_QUIT, 0, 0);
-      keyboard_hook_thread_.join();
-    }
-    keyboard_hook_ = nullptr;
-    keyboard_hook_thread_id_ = 0;
+    hook_thread_id_ = 0;
     MSG mouse_message{};
     while (PeekMessage(&mouse_message, window_, kMouseInputMessage,
                        kMouseInputMessage, PM_REMOVE)) {
@@ -1529,9 +1579,11 @@ class RemoteInputPlugin : public flutter::Plugin {
       // needs to suppress the local cursor. While armed, probe the edge; when
       // paused, keep probing until the cursor has re-entered the interior.
       if (g_plugin->hook_suppress_keyboard_.load()) {
-        return 1;
+        return g_plugin->HookOwnerIsHung()
+                   ? CallNextHookEx(nullptr, code, wparam, lparam)
+                   : 1;
       }
-      if (!g_plugin->capture_requires_interior_rearm_ &&
+      if (!g_plugin->capture_requires_interior_rearm_.load() &&
           !g_plugin->IsHookCursorAtCaptureEdge()) {
         return CallNextHookEx(nullptr, code, wparam, lparam);
       }
@@ -1562,8 +1614,10 @@ class RemoteInputPlugin : public flutter::Plugin {
             keyboard->vkCode == VK_ESCAPE &&
             (pressed[VK_CONTROL] || pressed[VK_LCONTROL] || pressed[VK_RCONTROL]) &&
             (pressed[VK_MENU] || pressed[VK_LMENU] || pressed[VK_RMENU]);
-        const bool suppress = g_plugin->hook_suppress_keyboard_.load() || release ||
-            g_plugin->IsHookCursorAtCaptureEdge();
+        const bool suppress =
+            (g_plugin->hook_suppress_keyboard_.load() || release ||
+             g_plugin->IsHookCursorAtCaptureEdge()) &&
+            !g_plugin->HookOwnerIsHung();
         const WPARAM key = keyboard->vkCode |
             (g_plugin->keyboard_hook_generation_ << 16);
         if (suppress && PostMessage(g_plugin->window_, kKeyboardInputMessage, key,
@@ -2307,6 +2361,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   }
 
   flutter::EncodableValue DisplayTopologyValue() const {
+    // Peers lay their screens out against this, so it is always read fresh.
+    ForgetMonitorDisplays();
     flutter::EncodableList displays;
     for (const auto& display : MonitorDisplays()) {
       flutter::EncodableMap item;
@@ -3138,7 +3194,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   std::vector<InjectionRoute> injection_routes_;
   std::string release_hotkey_ = "ctrl+alt+esc";
   bool capture_active_ = false;
-  bool capture_requires_interior_rearm_ = false;
+  // Also read by the mouse hook, which runs on the hook thread.
+  std::atomic<bool> capture_requires_interior_rearm_{false};
   bool pending_active_start_ = false;
   int capture_buttons_ = 0;
   int event_diagnostic_count_ = 0;
@@ -3160,8 +3217,8 @@ class RemoteInputPlugin : public flutter::Plugin {
   mutable RemoteInputServiceClient input_service_;
   HHOOK mouse_hook_ = nullptr;
   HHOOK keyboard_hook_ = nullptr;
-  std::thread keyboard_hook_thread_;
-  DWORD keyboard_hook_thread_id_ = 0;
+  std::thread hook_thread_;
+  DWORD hook_thread_id_ = 0;
   WPARAM keyboard_hook_generation_ = 0;
   std::atomic<bool> hook_suppress_keyboard_{false};
   std::atomic<bool> hook_can_activate_keyboard_{false};

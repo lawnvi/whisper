@@ -101,7 +101,7 @@ void main() {
 
     test('captures all keyboard events in the low-level hook', () {
       expect(source, contains('kKeyboardInputMessage'));
-      expect(source, contains('keyboard_hook_thread_ = std::thread'));
+      expect(source, contains('hook_thread_ = std::thread'));
       expect(source, contains('hook_suppress_keyboard_.store(true)'));
       expect(source, isNot(contains('LLKHF_INJECTED')));
 
@@ -187,7 +187,7 @@ void main() {
       expect(callback, isNot(contains('EmitInputEvent(')));
       expect(callback, isNot(contains('InvokeMethod(')));
       expect(callback, contains('hook_pressed_keys_'));
-      expect(source, contains('keyboard_hook_thread_.join()'));
+      expect(source, contains('hook_thread_.join()'));
       expect(source, contains('(wparam >> 16) != keyboard_hook_generation_'));
     });
 
@@ -199,6 +199,102 @@ void main() {
       expect(callback, contains('LowLevelMousePacket'));
       expect(callback, isNot(contains('HandleLowLevelMouse(')));
       expect(source, contains('delete reinterpret_cast<LowLevelMousePacket*>'));
+    });
+
+    test('gives input back when the window thread has stopped', () {
+      // The hooks answer on their own thread, so nothing else would ever
+      // release a keyboard and mouse held for a thread that is not running.
+      expect(
+        source,
+        contains(
+          'bool HookOwnerIsHung() const { '
+          'return IsHungAppWindow(window_) != FALSE; }',
+        ),
+      );
+      final mouseCallback = RegExp(
+        r'static LRESULT CALLBACK LowLevelMouseProc\([\s\S]*?\n  static LRESULT CALLBACK LowLevelKeyboardProc',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        mouseCallback,
+        contains(
+          'return g_plugin->HookOwnerIsHung()\n'
+          '                   ? CallNextHookEx(nullptr, code, wparam, lparam)\n'
+          '                   : 1;',
+        ),
+      );
+      final keyboardCallback = RegExp(
+        r'static LRESULT CALLBACK LowLevelKeyboardProc\([\s\S]*?\n  bool RegisterRawInput',
+      ).firstMatch(source)!.group(0)!;
+      // Checked before the key is queued: a key the local machine received
+      // must not also reach the peer once the thread recovers.
+      expect(
+        keyboardCallback.indexOf('!g_plugin->HookOwnerIsHung();'),
+        inInclusiveRange(
+          0,
+          keyboardCallback.indexOf('if (suppress && PostMessage('),
+        ),
+      );
+    });
+
+    test('does not enumerate monitors again for every mouse event', () {
+      final lookup = RegExp(
+        r'std::vector<MonitorDisplay> MonitorDisplays\(\) \{[\s\S]*?\n\}',
+      ).firstMatch(source)!.group(0)!;
+      expect(lookup, isNot(contains('EnumDisplayMonitors(')));
+      expect(
+        lookup,
+        contains('g_monitor_displays = EnumerateMonitorDisplays()'),
+      );
+      expect(lookup, contains('now - g_monitor_displays_tick >= kMaxAgeMs'));
+      expect(RegExp(r'EnumDisplayMonitors\(').allMatches(source), hasLength(1));
+
+      // A changed layout must not be served from the old answer.
+      final messages = RegExp(
+        r'bool HandleWindowMessage\([\s\S]*?\n private:',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        messages,
+        contains(
+          'if (message == WM_DISPLAYCHANGE) {\n      ForgetMonitorDisplays();',
+        ),
+      );
+      final topology = RegExp(
+        r'flutter::EncodableValue DisplayTopologyValue\(\) const \{[\s\S]*?\n  \}',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        topology.indexOf('ForgetMonitorDisplays();'),
+        lessThan(topology.indexOf('MonitorDisplays())')),
+      );
+      expect(topology.indexOf('ForgetMonitorDisplays();'), isNot(-1));
+    });
+
+    test('runs both low-level hooks off the Flutter thread', () {
+      // Windows waits on the installing thread before moving the pointer, and
+      // Flutter runs Dart and builds frames on the window's thread.
+      final install = RegExp(
+        r'bool InstallHooks\([\s\S]*?\n  void RemoveHooks',
+      ).firstMatch(source)!.group(0)!;
+      final threadStart = install.indexOf('hook_thread_ = std::thread(');
+      final threadReady = install.indexOf('ready.set_value(errors)');
+      expect(threadStart, greaterThanOrEqualTo(0));
+      for (final hook in <String>['WH_MOUSE_LL', 'WH_KEYBOARD_LL']) {
+        final installed = install.indexOf('SetWindowsHookEx($hook');
+        expect(installed, greaterThan(threadStart), reason: hook);
+        expect(installed, lessThan(threadReady), reason: hook);
+      }
+      expect(RegExp(r'SetWindowsHookEx\(').allMatches(source).length, 2);
+
+      final mouseCallback = RegExp(
+        r'static LRESULT CALLBACK LowLevelMouseProc\([\s\S]*?\n  static LRESULT CALLBACK LowLevelKeyboardProc',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        mouseCallback,
+        contains('capture_requires_interior_rearm_.load()'),
+      );
+      expect(
+        source,
+        contains('std::atomic<bool> capture_requires_interior_rearm_{false};'),
+      );
     });
 
     test('coalesces raw mouse input so it cannot starve keyboard messages', () {
