@@ -149,9 +149,13 @@ On desktop, open the keyboard/mouse sharing workspace and arrange the local and 
 
 Both the controller and the controlled device can stop sharing. Disconnecting a target releases its input control. Single-device sharing and multi-device workspaces share local input ownership: a controlled device cannot start another controller session at the same time. Stop the current session before switching roles.
 
+While the pointer is on another device you cannot click the local stop button. Press `Ctrl+Alt+Esc` on the controlling device (`Control+Option+Esc` on macOS) to leave keyboard/mouse sharing; input returns to that device immediately. The shortcut is always shown at the bottom of the workspace's screen arrangement area.
+
 Enable clipboard auto-sync to paste across devices. Copy text, images, or files, then paste on the target device. Screenshots can also be pasted into the Whisper composer for review before sending; larger images and files need time to transfer over the LAN.
 
 On macOS, grant the requested permissions, including Accessibility. Linux keyboard/mouse sharing currently requires X11; screenshot support on Wayland does not imply keyboard/mouse sharing support.
+
+If the pointer moves in small jumps on a Windows device, or file transfers there swing between fast and slow, check Settings → System → Projecting to this PC first. While that feature is on, the wireless adapter may have to keep a Wi-Fi Direct network alive as well, which adds periodic delay to the Wi-Fi connection; set it to "Always Off" when you do not need wireless projection.
 
 When a controlled Windows device locks, ordinary processes cannot inject input into the lock screen, so the pointer is handed back to the controlling device. The Windows installer installs a system service along with the app and updates it on every upgrade (one administrator prompt each time), which lets trusted devices type the password on the lock screen. Settings → System behavior → "Keyboard and mouse on the lock screen and UAC" shows the service state, and tapping the row uninstalls or repairs it; once uninstalled there, later upgrades do not bring it back.
 
