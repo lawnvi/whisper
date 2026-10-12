@@ -371,6 +371,43 @@ package_release_dmg() {
   hdiutil verify "$DMG_PATH"
 }
 
+# The project keeps a deployment target that newer Xcode releases refuse to
+# build. When the installed SDK needs a later one, raise it for this build
+# only, so that an Xcode which still accepts the project's target, such as the
+# one release builds run on, keeps producing an app for the older systems.
+apply_macos_deployment_target_floor() {
+  local sdk_path
+  local sdk_minimum
+  local project_target
+  local override_dir
+
+  sdk_path="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
+  sdk_minimum="$(
+    /usr/bin/plutil -extract SupportedTargets.macosx.MinimumDeploymentTarget \
+      raw "$sdk_path/SDKSettings.json" 2>/dev/null || true
+  )"
+  project_target="$(
+    sed -n 's/^[[:space:]]*MACOSX_DEPLOYMENT_TARGET = \([0-9.]*\);$/\1/p' \
+      macos/Runner.xcodeproj/project.pbxproj | sort -V | head -n 1
+  )"
+  if [[ ! "$sdk_minimum" =~ ^[0-9]+(\.[0-9]+)*$ || -z "$project_target" ]]; then
+    return
+  fi
+  if [[ "$(printf '%s\n%s\n' "$sdk_minimum" "$project_target" |
+    sort -V | head -n 1)" == "$sdk_minimum" ]]; then
+    return
+  fi
+
+  override_dir="$(mktemp -d)"
+  TEMP_DIRS+=("$override_dir")
+  printf 'MACOSX_DEPLOYMENT_TARGET = %s\n' "$sdk_minimum" \
+    >"$override_dir/deployment-target.xcconfig"
+  # xcodebuild applies this file over every target, plugins included.
+  export XCODE_XCCONFIG_FILE="$override_dir/deployment-target.xcconfig"
+  echo "This Xcode builds for macOS $sdk_minimum or later;" \
+    "using that instead of the project's $project_target." >&2
+}
+
 open_app() {
   /usr/bin/open -n "$DEBUG_APP_BUNDLE"
 }
@@ -380,6 +417,8 @@ run_debug_app() {
   build_debug_app
   open_app
 }
+
+apply_macos_deployment_target_floor
 
 case "$MODE" in
   run)

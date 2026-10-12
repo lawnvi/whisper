@@ -22,6 +22,34 @@ void main() {
     expect(workflow, contains('WHISPER_MACOS_REQUIRE_STABLE_SIGNING: "1"'));
   });
 
+  test('only an Xcode that needs it gets a later deployment target', () {
+    final script = File('script/build_and_run.sh').readAsStringSync();
+    final project = File(
+      'macos/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+
+    // Release builds keep supporting the systems the project targets.
+    expect(project, contains('MACOSX_DEPLOYMENT_TARGET = 10.15;'));
+    expect(project, isNot(contains('MACOSX_DEPLOYMENT_TARGET = 12')));
+
+    final floor = RegExp(
+      r'apply_macos_deployment_target_floor\(\) \{[\s\S]*?\n\}',
+    ).firstMatch(script)!.group(0)!;
+    expect(floor, contains('SupportedTargets.macosx.MinimumDeploymentTarget'));
+    final override = floor.indexOf('export XCODE_XCCONFIG_FILE=');
+    expect(override, isNot(-1));
+    // Both ways out come first: an unreadable SDK, and one that still accepts
+    // the project's target.
+    expect(
+      RegExp(r'\n    return\n').allMatches(floor.substring(0, override)),
+      hasLength(2),
+    );
+    expect(
+      script,
+      contains('\napply_macos_deployment_target_floor\n\ncase "\$MODE" in'),
+    );
+  });
+
   test(
     'release workflow disables experimental Flutter Swift Package Manager',
     () {
