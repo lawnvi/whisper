@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -176,8 +177,9 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     } catch (_) {
       await _load(showProgress: false);
       if (mounted) {
-        _showSnackBar(
+        showAppToast(
           AppLocalizations.of(context)!.transferAssistantFavoriteFailed,
+          tone: AppToastTone.error,
         );
       }
     } finally {
@@ -211,8 +213,9 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     } catch (_) {
       await _load(showProgress: false);
       if (mounted) {
-        _showSnackBar(
+        showAppToast(
           AppLocalizations.of(context)!.transferAssistantFavoriteFailed,
+          tone: AppToastTone.error,
         );
       }
     } finally {
@@ -229,12 +232,6 @@ class _TransferAssistantScreenState extends State<TransferAssistantScreen> {
     } catch (_) {
       return false;
     }
-  }
-
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _setFavoritesOnly(bool selected) {

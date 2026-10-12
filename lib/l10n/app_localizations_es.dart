@@ -675,9 +675,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Inicia Whisper automaticamente al iniciar sesion para reconectar dispositivos de confianza';
 
   @override
-  String launchAtStartupFailed(String error) {
-    return 'No se pudo actualizar el inicio automatico: $error';
-  }
+  String get launchAtStartupFailed =>
+      'No se pudo actualizar el inicio automatico';
 
   @override
   String get androidBackgroundKeepAlive =>
@@ -729,7 +728,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esperando verificacion del otro dispositivo';
 
   @override
-  String get fileTransferFailedRetryable => 'Error, se puede reintentar';
+  String get fileTransferFailedNotice => 'No se pudo transferir el archivo';
 
   @override
   String get fileTransferCanceled => 'Cancelada';
@@ -753,13 +752,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get audioShareStart =>
       'Compartir el audio de este dispositivo con el otro';
-
-  @override
-  String get audioSharePlaybackStopped =>
-      'Se detuvo la reproduccion del audio compartido';
-
-  @override
-  String get audioShareCaptureStopped => 'Se detuvo el audio compartido';
 
   @override
   String get audioSharePlaybackGainTitle => 'Ganancia del altavoz compartido';
@@ -791,10 +783,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este dispositivo no admite captura de audio del sistema';
 
   @override
-  String get audioShareRequestingPlayback =>
-      'Solicitando al otro dispositivo que reproduzca este audio';
-
-  @override
   String get audioGroupShareStart => 'Sincronizar con varios altavoces';
 
   @override
@@ -824,10 +812,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioGroupRoleMono => 'Mono';
-
-  @override
-  String get audioGroupRequestingPlayback =>
-      'Solicitando reproduccion sincronizada en los dispositivos seleccionados';
 
   @override
   String get audioGroupSelectAtLeastOne =>
@@ -918,9 +902,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get remoteInputStart => 'Activar compartir teclado y mouse';
-
-  @override
-  String get remoteInputStopped => 'Se detuvo compartir teclado y mouse';
 
   @override
   String get remoteInputStopCurrentFirst =>

@@ -7,6 +7,7 @@ import 'package:installed_apps/installed_apps.dart';
 import 'package:whisper/helper/android_privacy_permission.dart';
 import 'package:whisper/helper/helper.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 
@@ -232,11 +233,7 @@ class _AppListScreenState extends State<AppListScreen> {
         _isSaving = false;
       });
       final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.appListSaveFailed)),
-        );
+      showAppToast(l10n.appListSaveFailed, tone: AppToastTone.error);
     }
   }
 

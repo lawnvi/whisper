@@ -21,7 +21,7 @@ void main() {
     );
     expect(source, contains('l10n.launchAtStartup'));
     expect(source, contains('l10n.launchAtStartupDesc'));
-    expect(source, contains('l10n.launchAtStartupFailed('));
+    expect(source, contains('l10n.launchAtStartupFailed,'));
 
     final desktopSection = RegExp(
       r'if \(_isDesktopPlatform\)[\s\S]*?l10n\.launchAtStartup[\s\S]*?CupertinoSwitch',

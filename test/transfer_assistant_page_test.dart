@@ -4,6 +4,8 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -267,7 +269,12 @@ void main() {
   testWidgets('a failed favorite restores the row state and allows retry', (
     tester,
   ) async {
-    await _pumpPage(tester, database, copiedTexts);
+    await _pumpPage(
+      tester,
+      database,
+      copiedTexts,
+      navigatorKey: appNavigatorKey,
+    );
     database.failFavorite = true;
     final favorite = find.byKey(
       transferAssistantMessageFavoriteKey(searchableMessage.id),
@@ -276,6 +283,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Couldn't update favorites. Try again"), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
+    toastification.dismissAll(delayForAnimation: false);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     database.failFavorite = false;
     await tester.tap(favorite);
     await tester.pumpAndSettle();
@@ -453,9 +463,11 @@ Future<void> _pumpPage(
   double textScale = 1,
   bool disableAnimations = false,
   Future<void> Function(String)? copyText,
+  GlobalKey<NavigatorState>? navigatorKey,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      navigatorKey: navigatorKey,
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

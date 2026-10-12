@@ -19,6 +19,7 @@ import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/toast.dart';
+import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_notification_listener_plus/flutter_notification_listener_plus.dart';
@@ -671,6 +672,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!registered) {
         showAppToast(
           AppLocalizations.of(context)!.desktopQuickSendShortcutUnavailable,
+          tone: AppToastTone.warning,
         );
       }
       _scheduleDesktopQuickSendPresentation();
@@ -713,7 +715,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       DesktopQuickSendRejectionReason.clipboardSnapshotUnavailable =>
         l10n.desktopQuickSendClipboardSnapshotUnavailable,
     };
-    showAppToast(message);
+    showAppToast(message, tone: AppToastTone.warning);
     unawaited(_desktopQuickSendInbox.acknowledgePresentedRejection());
   }
 
@@ -825,7 +827,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
         .where((candidate) => candidate.id == peerId)
         .firstOrNull;
     if (target == null || !target.isConnected) {
-      showAppToast(l10n.desktopQuickSendFailedRetained);
+      showAppToast(
+        l10n.desktopQuickSendFailedRetained,
+        tone: AppToastTone.error,
+      );
       return;
     }
     try {
@@ -845,18 +850,31 @@ class _DeviceListScreen extends State<DeviceListScreen>
       if (!mounted) {
         return;
       }
-      final message = switch (result.outcome) {
-        DesktopQuickSendOutcome.completed => l10n.desktopQuickSendSent,
-        DesktopQuickSendOutcome.targetConflict =>
+      final (message, tone) = switch (result.outcome) {
+        DesktopQuickSendOutcome.completed => (
+          l10n.desktopQuickSendSent,
+          AppToastTone.success,
+        ),
+        DesktopQuickSendOutcome.targetConflict => (
           l10n.desktopQuickSendTargetConflict,
-        DesktopQuickSendOutcome.targetIdentityInvalid =>
+          AppToastTone.warning,
+        ),
+        DesktopQuickSendOutcome.targetIdentityInvalid => (
           l10n.desktopQuickSendTargetNeedsReselection,
-        DesktopQuickSendOutcome.retained => l10n.desktopQuickSendFailedRetained,
+          AppToastTone.warning,
+        ),
+        DesktopQuickSendOutcome.retained => (
+          l10n.desktopQuickSendFailedRetained,
+          AppToastTone.error,
+        ),
       };
-      showAppToast(message);
+      showAppToast(message, tone: tone);
     } on Object {
       if (mounted) {
-        showAppToast(l10n.desktopQuickSendFailedRetained);
+        showAppToast(
+          l10n.desktopQuickSendFailedRetained,
+          tone: AppToastTone.error,
+        );
       }
     }
   }
@@ -891,10 +909,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
             return;
           }
           final l10n = AppLocalizations.of(context)!;
-          _showAndroidSystemShareSnack(
+          _showAndroidSystemShareToast(
             failure.reason == AndroidSystemShareFailureReason.queueFull
                 ? l10n.androidSystemShareQueueFull
                 : l10n.androidSystemShareRejected,
+            tone: AppToastTone.error,
           );
         });
       }
@@ -1023,7 +1042,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     if (targetPeerId == null) {
       _deferredAndroidSystemShareEventIds.add(event.id);
-      _showAndroidSystemShareSnack(
+      _showAndroidSystemShareToast(
         AppLocalizations.of(context)!.androidSystemShareStillPending,
         actionLabel: AppLocalizations.of(
           context,
@@ -1039,7 +1058,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _deferredAndroidSystemShareEventIds.remove(event.id);
     final targetName = _androidSystemShareTargetName(targetPeerId);
     if (socketManager.isConnectedTo(targetPeerId)) {
-      _showAndroidSystemShareSnack(
+      _showAndroidSystemShareToast(
         AppLocalizations.of(context)!.androidSystemShareSendingTo(targetName),
       );
     }
@@ -1264,22 +1283,19 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return peerId;
   }
 
-  void _showAndroidSystemShareSnack(
+  void _showAndroidSystemShareToast(
     String message, {
+    AppToastTone tone = AppToastTone.info,
     String? actionLabel,
     VoidCallback? onAction,
   }) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          action: actionLabel == null || onAction == null
-              ? null
-              : SnackBarAction(label: actionLabel, onPressed: onAction),
-        ),
-      );
+    showAppToast(
+      message,
+      tone: tone,
+      action: actionLabel == null || onAction == null
+          ? null
+          : AppToastAction(label: actionLabel, onPressed: onAction),
+    );
   }
 
   void _handleAndroidSystemShareRouteResult(
@@ -1289,25 +1305,30 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final l10n = AppLocalizations.of(context)!;
     switch (result.outcome) {
       case AndroidSystemShareRouteOutcome.completed:
-        _showAndroidSystemShareSnack(l10n.androidSystemShareSentTo(targetName));
+        _showAndroidSystemShareToast(
+          l10n.androidSystemShareSentTo(targetName),
+          tone: AppToastTone.success,
+        );
         break;
       case AndroidSystemShareRouteOutcome.waitingForConnection:
-        _showAndroidSystemShareSnack(
+        _showAndroidSystemShareToast(
           l10n.androidSystemShareWaitingForDevice(targetName),
         );
         break;
       case AndroidSystemShareRouteOutcome.failed ||
           AndroidSystemShareRouteOutcome.targetConflict:
-        _showAndroidSystemShareSnack(
+        _showAndroidSystemShareToast(
           l10n.androidSystemShareFailedRetained,
+          tone: AppToastTone.error,
           actionLabel: l10n.retry,
           onAction: () => unawaited(_retryAndroidSystemShare(result.eventId)),
         );
         break;
       case AndroidSystemShareRouteOutcome.targetIdentityInvalid:
         _deferredAndroidSystemShareEventIds.add(result.eventId);
-        _showAndroidSystemShareSnack(
+        _showAndroidSystemShareToast(
           l10n.androidSystemShareTargetNeedsReselection,
+          tone: AppToastTone.warning,
           actionLabel: l10n.androidSystemShareChooseAction,
           onAction: () {
             _deferredAndroidSystemShareEventIds.remove(result.eventId);
@@ -1334,7 +1355,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     final targetName = _androidSystemShareTargetName(peerId);
     if (socketManager.isConnectedTo(peerId)) {
-      _showAndroidSystemShareSnack(
+      _showAndroidSystemShareToast(
         AppLocalizations.of(context)!.androidSystemShareSendingTo(targetName),
       );
     }
@@ -2288,22 +2309,17 @@ class _DeviceListScreen extends State<DeviceListScreen>
       final audioState = _audioCoordinator.state;
       if (audioState.status != AudioShareRuntimeStatus.idle &&
           audioState.status != AudioShareRuntimeStatus.failed) {
-        final role = audioState.role;
         await _audioCoordinator.stopSharing(
           sendControl: socketManager.sendAudioControl,
         );
-        if (mounted) {
-          showAppToast(
-            role == AudioShareRuntimeRole.sink
-                ? l10n.audioSharePlaybackStopped
-                : l10n.audioShareCaptureStopped,
-          );
-        }
         return;
       }
 
       if (!supportsNativeSystemAudio()) {
-        showAppToast(l10n.audioShareUnsupportedCapture);
+        showAppToast(
+          l10n.audioShareUnsupportedCapture,
+          tone: AppToastTone.warning,
+        );
         return;
       }
 
@@ -2350,7 +2366,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
         final detail = reason == AudioFailureReason.unsupported
             ? l10n.audioShareUnsupportedCapture
             : l10n.connectFailed;
-        showAppToast(l10n.audioShareFailed(detail));
+        showAppToast(l10n.audioShareFailed(detail), tone: AppToastTone.error);
       }
     }
   }
@@ -2398,13 +2414,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _stopDesktopAudioShare() async {
-    final l10n = AppLocalizations.of(context)!;
     await _audioGroupCoordinator.stopGroup(
       sendControl: socketManager.sendAudioGroupControlTo,
     );
-    if (mounted) {
-      showAppToast(l10n.audioShareCaptureStopped);
-    }
   }
 
   Future<void> _applyDesktopAudioGroupSelection({
@@ -2412,15 +2424,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required Map<String, AudioChannelRole> sinks,
     bool replaceActive = false,
   }) async {
-    final l10n = AppLocalizations.of(context)!;
     if (replaceActive && _audioGroupCoordinator.session?.isLive == true) {
       await _audioGroupCoordinator.updateGroup(
         sinks: sinks,
         sendControl: socketManager.sendAudioGroupControlTo,
       );
-      if (mounted) {
-        showAppToast(l10n.audioGroupRequestingPlayback);
-      }
       return;
     }
     _audioGroupCoordinator.startGroup(
@@ -2429,9 +2437,6 @@ class _DeviceListScreen extends State<DeviceListScreen>
       format: AudioShareCoordinator.defaultFormat,
       sendControl: socketManager.sendAudioGroupControlTo,
     );
-    if (mounted) {
-      showAppToast(l10n.audioGroupRequestingPlayback);
-    }
   }
 
   Future<void> _openRemoteInputWorkspace() async {
@@ -3634,7 +3639,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
     } catch (error) {
       _logDeviceListFailure(DeviceListOperationKind.socketDialog, error);
       if (mounted) {
-        showAppToast(l10n?.connectFailed ?? 'Connection Failed');
+        showAppToast(
+          l10n?.connectFailed ?? 'Connection Failed',
+          tone: AppToastTone.error,
+        );
       }
     } finally {
       _isAlert = false;
@@ -3643,9 +3651,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void onNotice(String message) {
+    final l10n = AppLocalizations.of(context);
     showAppToast(
-      AppLocalizations.of(context)?.fileTransferFailedRetryable ??
-          'Transfer failed',
+      l10n == null ? 'Transfer failed' : transferFailureNotice(l10n, message),
+      tone: AppToastTone.error,
     );
   }
 

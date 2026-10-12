@@ -1499,7 +1499,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       await _workspaceCoordinator.stopControllerWorkspace(
         sendControlTo: _socketManager.sendRemoteInputControlTo,
       );
-      showAppToast(l10n.remoteInputStopped);
       return;
     }
     if (_hasLegacySession) {
@@ -1508,7 +1507,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         sendControl: (control) =>
             _socketManager.sendRemoteInputControlTo(peerId, control),
       );
-      showAppToast(l10n.remoteInputStopped);
       return;
     }
     if (_selectedPeerIds.isEmpty) {
@@ -1516,7 +1514,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
       return;
     }
     if (!isDesktop() || !supportsNativeRemoteInput()) {
-      showAppToast(l10n.remoteInputLocalUnsupported);
+      showAppToast(
+        l10n.remoteInputLocalUnsupported,
+        tone: AppToastTone.warning,
+      );
       return;
     }
     setState(() {
@@ -1557,7 +1558,6 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
         sendControlTo: _socketManager.sendRemoteInputControlTo,
         workspaceRoutes: activeGraph.routes,
       );
-      showAppToast(l10n.remoteInputEnabledMoveToEdge);
     } catch (error) {
       final reason = remoteInputFailureReasonFor(
         error,
@@ -1569,7 +1569,10 @@ class _RemoteInputWorkspaceScreenState extends State<RemoteInputWorkspaceScreen>
             PrivacyField.reason: reason,
             PrivacyField.errorType: privacyLog.errorType(error),
           });
-      showAppToast(l10n.remoteInputFailed(_failureDetail(l10n, reason.name)));
+      showAppToast(
+        l10n.remoteInputFailed(_failureDetail(l10n, reason.name)),
+        tone: AppToastTone.error,
+      );
     } finally {
       if (mounted) {
         setState(() {

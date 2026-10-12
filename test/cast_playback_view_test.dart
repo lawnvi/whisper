@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:toastification/toastification.dart';
 import 'package:whisper/cast_receiver/playback_engine.dart';
 import 'package:whisper/cast_receiver/player.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/cast_playback_host.dart';
@@ -34,15 +36,19 @@ void main() {
       player.dispose();
     });
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: AnimatedBuilder(
-          animation: player,
-          builder: (_, _) =>
-              CastPlaybackView(player: player, localVideo: localVideo),
+      ToastificationWrapper(
+        config: appToastConfig,
+        child: MaterialApp(
+          navigatorKey: appNavigatorKey,
+          theme: AppTheme.darkTheme,
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: AnimatedBuilder(
+            animation: player,
+            builder: (_, _) =>
+                CastPlaybackView(player: player, localVideo: localVideo),
+          ),
         ),
       ),
     );
@@ -138,7 +144,17 @@ void main() {
     await tester.pump();
     expect(engine.volume, .5);
     expect(tester.widget<Slider>(slider).value, .5);
-    expect(find.byType(SnackBar), findsOneWidget);
+    // The drag and its release each failed; only the later toast stays.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text('The control could not be applied. Please retry.'),
+      findsOneWidget,
+    );
+    toastification.dismissAll(delayForAnimation: false);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     engine.failVolume = false;
     gesture = await tester.startGesture(tester.getCenter(slider));

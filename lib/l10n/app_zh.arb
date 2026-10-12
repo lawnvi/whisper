@@ -308,14 +308,7 @@
   "windowsElevatedInputFailed": "UAC 控制设置失败",
   "launchAtStartup": "开机自启动",
   "launchAtStartupDesc": "登录桌面后自动启动 Whisper，便于自动连接互信设备",
-  "launchAtStartupFailed": "开机自启动设置失败：{error}",
-  "@launchAtStartupFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "launchAtStartupFailed": "开机自启动设置失败",
   "androidBackgroundKeepAlive": "后台保活连接",
   "androidBackgroundKeepAliveDesc": "保持局域网接收服务运行，便于在后台或锁屏时收到连接请求",
   "androidBackgroundKeepAliveActiveTitle": "Whisper 正在监听局域网连接",
@@ -343,15 +336,13 @@
   "fileTransferPaused": "已暂停",
   "fileTransferVerifying": "校验中",
   "fileTransferWaitingPeerVerification": "等待对端校验",
-  "fileTransferFailedRetryable": "失败，可重试",
+  "fileTransferFailedNotice": "文件传输失败",
   "fileTransferCanceled": "已取消",
   "audioShareCaptureConnecting": "采集端：正在连接远端扬声器",
   "audioSharePlaybackPreparing": "播放端：正在准备播放共享声音",
   "audioShareCaptureActiveStop": "采集端：正在共享本机声音，点击停止",
   "audioSharePlaybackActiveStop": "播放端：正在作为扬声器播放，点击停止",
   "audioShareStart": "把本机声音共享给对端",
-  "audioSharePlaybackStopped": "已停止播放共享声音",
-  "audioShareCaptureStopped": "已停止共享声音",
   "audioSharePlaybackGainTitle": "共享扬声器增益",
   "audioSharePlaybackGainSetting": "共享扬声器增益：{gain}",
   "@audioSharePlaybackGainSetting": {
@@ -373,7 +364,6 @@
   },
   "remoteInputScrollMultiplierDesc": "只影响本机作为被控端时接收的远端滚轮事件",
   "audioShareUnsupportedCapture": "当前设备不支持系统音频采集",
-  "audioShareRequestingPlayback": "正在请求对端播放本机声音",
   "audioGroupShareStart": "同步到多台扬声器",
   "audioGroupAdjust": "调整音频共享",
   "audioGroupSelectSinks": "选择播放设备",
@@ -384,7 +374,6 @@
   "audioGroupRoleLeft": "左声道",
   "audioGroupRoleRight": "右声道",
   "audioGroupRoleMono": "单声道",
-  "audioGroupRequestingPlayback": "正在请求多台设备同步播放",
   "audioGroupSelectAtLeastOne": "至少选择一台播放设备",
   "audioGroupSyncCalibrating": "正在估算同步",
   "audioGroupSyncGood": "同步良好",
@@ -436,7 +425,6 @@
   "remoteInputSourceActiveStop": "键鼠共享：正在控制对端，点击停止",
   "remoteInputSinkActiveStop": "键鼠共享：正在接收控制，点击停止",
   "remoteInputStart": "启用键鼠共享",
-  "remoteInputStopped": "已停止键鼠共享",
   "remoteInputStopCurrentFirst": "请先停止当前键鼠共享会话",
   "remoteInputLocalUnsupported": "当前设备不支持键鼠共享",
   "remoteInputPeerUnsupported": "当前连接设备不支持键鼠共享",

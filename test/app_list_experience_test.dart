@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:installed_apps/app_category.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/platform_type.dart';
+import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -59,8 +61,10 @@ Widget _host({
   double textScale = 1,
   AppSelectionWriter? selectionWriter,
   AppListPermissionRequester? permissionRequester,
+  GlobalKey<NavigatorState>? navigatorKey,
 }) {
   return MaterialApp(
+    navigatorKey: navigatorKey,
     theme: AppTheme.lightTheme,
     locale: locale,
     localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
@@ -195,6 +199,7 @@ void main() {
       ..devicePixelRatio = 1;
     await tester.pumpWidget(
       _host(
+        navigatorKey: appNavigatorKey,
         loader: () async => const AppListPresentation(
           apps: <AppInfo>[_mail, _messages],
           selectedPackages: <String>{},
@@ -231,6 +236,9 @@ void main() {
     expect(find.text('Could not save the notification app selection'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
+    toastification.dismissAll(delayForAnimation: false);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets(

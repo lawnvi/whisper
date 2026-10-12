@@ -17,7 +17,10 @@ void main() {
       section.indexOf('if (!mounted) {'),
       lessThan(section.indexOf('AppLocalizations.of(context)')),
     );
-    expect(section, contains('final confirmed = await app_dialogs.confirmAction('));
+    expect(
+      section,
+      contains('final confirmed = await app_dialogs.confirmAction('),
+    );
     expect(section, contains('await WsSvrManager().close();'));
     expect(section, contains('catch (error)'));
     expect(section, contains('if (mounted) {'));
@@ -29,7 +32,12 @@ void main() {
     );
     expect(
       section,
-      contains("showAppToast(l10n?.connectFailed ?? 'Connection Failed');"),
+      matches(
+        RegExp(
+          r"showAppToast\(\s*l10n\?\.connectFailed \?\? 'Connection Failed',"
+          r'\s*tone: AppToastTone\.error,\s*\);',
+        ),
+      ),
     );
     expect(section, isNot(contains('error.toString()')));
     expect(section, isNot(contains('showConfirmationDialog(')));

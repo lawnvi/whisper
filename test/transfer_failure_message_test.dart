@@ -16,4 +16,19 @@ void main() {
       expect(transferFailureMessage(l10n, 'unknown'), l10n.transferRetryHelp);
     },
   );
+
+  test('a toast keeps known help but does not blame the connection', () {
+    final l10n = AppLocalizationsEn();
+    expect(transferFailureNotice(l10n, 'storage'), l10n.transferStorageHelp);
+    expect(transferFailureNotice(l10n, 'queue_full'), l10n.transferQueueHelp);
+    expect(
+      transferFailureNotice(l10n, 'receiver'),
+      l10n.fileTransferFailedNotice,
+    );
+    // The engine also passes free text for failures that never get a bubble.
+    expect(
+      transferFailureNotice(l10n, '文件传输队列已满'),
+      l10n.fileTransferFailedNotice,
+    );
+  });
 }

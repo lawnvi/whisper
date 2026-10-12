@@ -638,9 +638,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get launchAtStartupDesc => '登录桌面后自动启动 Whisper，便于自动连接互信设备';
 
   @override
-  String launchAtStartupFailed(String error) {
-    return '开机自启动设置失败：$error';
-  }
+  String get launchAtStartupFailed => '开机自启动设置失败';
 
   @override
   String get androidBackgroundKeepAlive => '后台保活连接';
@@ -687,7 +685,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileTransferWaitingPeerVerification => '等待对端校验';
 
   @override
-  String get fileTransferFailedRetryable => '失败，可重试';
+  String get fileTransferFailedNotice => '文件传输失败';
 
   @override
   String get fileTransferCanceled => '已取消';
@@ -706,12 +704,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioShareStart => '把本机声音共享给对端';
-
-  @override
-  String get audioSharePlaybackStopped => '已停止播放共享声音';
-
-  @override
-  String get audioShareCaptureStopped => '已停止共享声音';
 
   @override
   String get audioSharePlaybackGainTitle => '共享扬声器增益';
@@ -737,9 +729,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioShareUnsupportedCapture => '当前设备不支持系统音频采集';
-
-  @override
-  String get audioShareRequestingPlayback => '正在请求对端播放本机声音';
 
   @override
   String get audioGroupShareStart => '同步到多台扬声器';
@@ -770,9 +759,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioGroupRoleMono => '单声道';
-
-  @override
-  String get audioGroupRequestingPlayback => '正在请求多台设备同步播放';
 
   @override
   String get audioGroupSelectAtLeastOne => '至少选择一台播放设备';
@@ -857,9 +843,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get remoteInputStart => '启用键鼠共享';
-
-  @override
-  String get remoteInputStopped => '已停止键鼠共享';
 
   @override
   String get remoteInputStopCurrentFirst => '请先停止当前键鼠共享会话';

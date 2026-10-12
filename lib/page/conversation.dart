@@ -554,14 +554,17 @@ class _SendMessageScreen extends State<SendMessageScreen>
     final transfer = _transferForMessage(message);
     final path = _effectiveMessagePath(message, transfer);
     if (!_canDragFileMessage(message, transfer)) {
-      showAppToast(l10n.fileCopyFailed);
+      showAppToast(l10n.fileCopyFailed, tone: AppToastTone.error);
       return;
     }
     final kind = mediaFileKindFor(name: message.name, path: path);
     final copied = await _clipboardFileWriter.writeFilePaths(<String>[
       path,
     ], asImage: kind == MediaFileKind.image);
-    showAppToast(copied ? l10n.fileCopied : l10n.fileCopyFailed);
+    showAppToast(
+      copied ? l10n.fileCopied : l10n.fileCopyFailed,
+      tone: copied ? AppToastTone.success : AppToastTone.error,
+    );
   }
 
   Future<void> _cancelTransfer(String transferId) async {
@@ -759,7 +762,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         );
         if (paths.any((path) => path == null)) {
           if (mounted) {
-            showAppToast(l10n.fileDropRejected);
+            showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
           }
           return;
         }
@@ -802,13 +805,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         if (await FileSystemEntity.type(path, followLinks: false) !=
             FileSystemEntityType.file) {
           if (mounted) {
-            showAppToast(l10n.fileDropRejected);
+            showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
           }
           return;
         }
         final sent = await socketManager.sendFileTo(device.uid, path);
         if (!sent && mounted) {
-          showAppToast(l10n.fileDropRejected);
+          showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
           return;
         }
       }
@@ -818,7 +821,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error,
       );
       if (mounted) {
-        showAppToast(l10n.fileDropRejected);
+        showAppToast(l10n.fileDropRejected, tone: AppToastTone.error);
       }
     }
   }
@@ -1476,7 +1479,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         _pendingClipboardFiles = remaining;
       });
       if (remaining.isNotEmpty) {
-        showAppToast(l10n.clipboardFilesSendFailed);
+        showAppToast(l10n.clipboardFilesSendFailed, tone: AppToastTone.error);
       }
     } catch (error) {
       _logConversationFailure(
@@ -1487,7 +1490,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         setState(() {
           _pendingClipboardFiles = drafts.skip(currentIndex).toList();
         });
-        showAppToast(l10n.clipboardFilesSendFailed);
+        showAppToast(l10n.clipboardFilesSendFailed, tone: AppToastTone.error);
       }
     } finally {
       if (mounted) {
@@ -1526,7 +1529,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             .toList(growable: false);
       });
       if (failed) {
-        showAppToast(l10n.clipboardImageSendFailed);
+        showAppToast(l10n.clipboardImageSendFailed, tone: AppToastTone.error);
       }
     } catch (error) {
       _logConversationFailure(
@@ -1539,7 +1542,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
               .where((draft) => !sentPaths.contains(draft.path))
               .toList(growable: false);
         });
-        showAppToast(l10n.clipboardImageSendFailed);
+        showAppToast(l10n.clipboardImageSendFailed, tone: AppToastTone.error);
       }
     } finally {
       if (mounted) {
@@ -1574,6 +1577,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
             showAppToast(
               AppLocalizations.of(context)?.connectFailed ??
                   'Connection Failed',
+              tone: AppToastTone.error,
             );
           }
           return;
@@ -1588,6 +1592,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
         showAppToast(
           AppLocalizations.of(context)?.filePickerOpenFailed ??
               'Unable to open the file picker',
+          tone: AppToastTone.error,
         );
       }
     } finally {
@@ -1743,27 +1748,19 @@ class _SendMessageScreen extends State<SendMessageScreen>
         await _audioGroupCoordinator.stopGroup(
           sendControl: socketManager.sendAudioGroupControlTo,
         );
-        if (mounted) {
-          showAppToast(l10n.audioShareCaptureStopped);
-        }
         return;
       }
       if (isCurrentAudioSession) {
-        final role = audioState.role;
         await _audioCoordinator.stopSharing(
           sendControl: socketManager.sendAudioControl,
         );
-        if (mounted) {
-          showAppToast(
-            role == AudioShareRuntimeRole.sink
-                ? l10n.audioSharePlaybackStopped
-                : l10n.audioShareCaptureStopped,
-          );
-        }
         return;
       }
       if (!supportsNativeSystemAudio()) {
-        showAppToast(l10n.audioShareUnsupportedCapture);
+        showAppToast(
+          l10n.audioShareUnsupportedCapture,
+          tone: AppToastTone.warning,
+        );
         return;
       }
       final self = this.self ?? await LocalSetting().instance();
@@ -1796,9 +1793,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
           format: AudioShareCoordinator.defaultFormat,
           sendControl: socketManager.sendAudioGroupControlTo,
         );
-        if (mounted) {
-          showAppToast(l10n.audioGroupRequestingPlayback);
-        }
         return;
       }
       await _audioCoordinator.startSharingToConnectedPeer(
@@ -1808,9 +1802,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         sinkPort: device.port,
         sendControl: socketManager.sendAudioControl,
       );
-      if (mounted) {
-        showAppToast(l10n.audioShareRequestingPlayback);
-      }
     } catch (error) {
       final reason = audioFailureReasonFor(
         error,
@@ -1818,7 +1809,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       );
       _logConversationFailure(ConversationOperationKind.audioToggle, error);
       if (mounted) {
-        showAppToast(l10n.audioShareFailed(_audioFailureDetail(reason)));
+        showAppToast(
+          l10n.audioShareFailed(_audioFailureDetail(reason)),
+          tone: AppToastTone.error,
+        );
       }
     }
   }
@@ -1970,9 +1964,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         await _remoteInputCoordinator.stopSharing(
           sendControl: socketManager.sendRemoteInputControl,
         );
-        if (mounted && showToast) {
-          showAppToast(l10n.remoteInputStopped);
-        }
         return;
       }
       if (inputState.status != RemoteInputRuntimeStatus.idle &&
@@ -1984,7 +1975,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       if (!isDesktop()) {
         if (showToast) {
-          showAppToast(l10n.remoteInputLocalUnsupported);
+          showAppToast(
+            l10n.remoteInputLocalUnsupported,
+            tone: AppToastTone.warning,
+          );
         }
         return;
       }
@@ -2010,7 +2004,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       if (!socketManager.supportsRemoteInputFor(device.uid)) {
         if (showToast) {
-          showAppToast(l10n.remoteInputPeerUnsupported);
+          showAppToast(
+            l10n.remoteInputPeerUnsupported,
+            tone: AppToastTone.warning,
+          );
         }
         return;
       }
@@ -2093,7 +2090,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         edgeMappings: topologyMappings,
       );
       if (mounted && showToast) {
-        showAppToast(l10n.remoteInputEnabledMoveToEdge);
+        showAppToast(
+          l10n.remoteInputEnabledMoveToEdge,
+          tone: AppToastTone.success,
+        );
       }
     } catch (error) {
       final reason = remoteInputFailureReasonFor(
@@ -2105,7 +2105,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         error,
       );
       if (mounted && showToast) {
-        showAppToast(l10n.remoteInputFailed(_remoteInputFailureDetail(reason)));
+        showAppToast(
+          l10n.remoteInputFailed(_remoteInputFailureDetail(reason)),
+          tone: AppToastTone.error,
+        );
       }
     }
   }
@@ -2174,7 +2177,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
       }
       if (!socketManager.isConnectedTo(device.uid)) {
         if (mounted) {
-          showAppToast(l10n.messageSendFailed);
+          showAppToast(l10n.messageSendFailed, tone: AppToastTone.error);
         }
         return false;
       }
@@ -2184,13 +2187,13 @@ class _SendMessageScreen extends State<SendMessageScreen>
         clipboard: isClipboard,
       );
       if (!sent && mounted) {
-        showAppToast(l10n.messageSendFailed);
+        showAppToast(l10n.messageSendFailed, tone: AppToastTone.error);
       }
       return sent;
     } catch (error) {
       _logConversationFailure(ConversationOperationKind.sendText, error);
       if (mounted) {
-        showAppToast(l10n.messageSendFailed);
+        showAppToast(l10n.messageSendFailed, tone: AppToastTone.error);
       }
       return false;
     }
@@ -2285,12 +2288,18 @@ class _SendMessageScreen extends State<SendMessageScreen>
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && mounted) {
-        showAppToast(AppLocalizations.of(context)!.messageLinkOpenFailed);
+        showAppToast(
+          AppLocalizations.of(context)!.messageLinkOpenFailed,
+          tone: AppToastTone.error,
+        );
       }
     } catch (error) {
       _logConversationFailure(ConversationOperationKind.openLink, error);
       if (mounted) {
-        showAppToast(AppLocalizations.of(context)!.messageLinkOpenFailed);
+        showAppToast(
+          AppLocalizations.of(context)!.messageLinkOpenFailed,
+          tone: AppToastTone.error,
+        );
       }
     }
   }
@@ -2690,7 +2699,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
     if (!_isCurrentRoute) {
       return;
     }
-    showAppToast(l10n.fileTransferFailedRetryable);
+    showAppToast(
+      transferFailureNotice(l10n, message),
+      tone: AppToastTone.error,
+    );
   }
 
   @override

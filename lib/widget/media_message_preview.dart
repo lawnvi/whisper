@@ -13,6 +13,7 @@ import 'package:mime/mime.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/memory_bounded_image.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/helper/video_thumbnail.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
@@ -1527,10 +1528,9 @@ Future<void> showMediaViewer(
         Object _,
       ) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context)!.videoPlaybackFailed),
-            ),
+          showAppToast(
+            AppLocalizations.of(context)!.videoPlaybackFailed,
+            tone: AppToastTone.error,
           );
         }
       });

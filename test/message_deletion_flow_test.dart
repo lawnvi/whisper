@@ -5,6 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:whisper/widget/subtle_motion.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/widget/chat_message_list.dart';
@@ -34,6 +36,7 @@ Future<void> _pump(
   required List<MessageData> messages,
   required Future<void> Function(List<MessageData>, bool) delete,
   bool desktopWorkspace = false,
+  GlobalKey<NavigatorState>? navigatorKey,
 }) async {
   final controller = ScrollController();
   addTearDown(controller.dispose);
@@ -41,6 +44,7 @@ Future<void> _pump(
   var selecting = false;
   await tester.pumpWidget(
     MaterialApp(
+      navigatorKey: navigatorKey,
       home: StatefulBuilder(
         builder: (context, setState) {
           final list = ChatMessageList(
@@ -345,6 +349,7 @@ void main() {
       tester,
       messages: [_message(1)],
       delete: (_, _) async => throw StateError('test failure'),
+      navigatorKey: appNavigatorKey,
     );
     await _action(tester, '多选');
     await tester.tap(find.byKey(const ValueKey('delete-selected-messages')));
@@ -354,6 +359,9 @@ void main() {
     expect(find.text('删除未完成，请重试。'), findsOneWidget);
     expect(find.text('已选 1 条'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    toastification.dismissAll(delayForAnimation: false);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('Escape cannot leave selection during an in-flight deletion', (

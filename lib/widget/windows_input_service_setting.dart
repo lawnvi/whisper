@@ -100,7 +100,7 @@ Future<void> changeWindowsLockScreenInput(
   if (!confirmed) return;
   final result = await (uninstall ? service.uninstall() : service.install());
   if (result == WindowsInputServiceResult.failed) {
-    showAppToast(l10n.windowsLockScreenInputFailed);
+    showAppToast(l10n.windowsLockScreenInputFailed, tone: AppToastTone.error);
   }
 }
 
@@ -166,6 +166,6 @@ Future<void> changeWindowsElevatedInput(
   if (!confirmed) return;
   final result = await service.setElevatedAllowed(enable);
   if (result == WindowsInputServiceResult.failed) {
-    showAppToast(l10n.windowsElevatedInputFailed);
+    showAppToast(l10n.windowsElevatedInputFailed, tone: AppToastTone.error);
   }
 }

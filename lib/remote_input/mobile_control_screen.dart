@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper/helper/local.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/remote_input/mobile_control_keyboard.dart';
 import 'package:whisper/remote_input/mobile_input_controller.dart';
@@ -175,8 +176,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           if (calibrating && !_input.motion.calibrating && mounted) {
             _calibrationTimer?.cancel();
             _syncSensors();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.mobileControlCalibrationDone)),
+            showAppToast(
+              l10n.mobileControlCalibrationDone,
+              tone: AppToastTone.success,
             );
           }
         },
@@ -376,9 +378,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       _error = sent ? null : l10n.mobileControlTextUnconfirmed;
     });
     if (sent) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.mobileControlTextSent)));
+      showAppToast(l10n.mobileControlTextSent, tone: AppToastTone.success);
     }
   }
 
@@ -877,8 +877,9 @@ class _MobileControlScreenState extends State<MobileControlScreen>
       if (!mounted) return;
       _input.cancelCalibration();
       _syncSensors();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.mobileControlCalibrationRetry)),
+      showAppToast(
+        l10n.mobileControlCalibrationRetry,
+        tone: AppToastTone.warning,
       );
     });
   }

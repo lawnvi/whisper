@@ -1261,8 +1261,8 @@ abstract class AppLocalizations {
   /// No description provided for @launchAtStartupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'开机自启动设置失败：{error}'**
-  String launchAtStartupFailed(String error);
+  /// **'开机自启动设置失败'**
+  String get launchAtStartupFailed;
 
   /// No description provided for @androidBackgroundKeepAlive.
   ///
@@ -1342,11 +1342,11 @@ abstract class AppLocalizations {
   /// **'等待对端校验'**
   String get fileTransferWaitingPeerVerification;
 
-  /// No description provided for @fileTransferFailedRetryable.
+  /// No description provided for @fileTransferFailedNotice.
   ///
   /// In zh, this message translates to:
-  /// **'失败，可重试'**
-  String get fileTransferFailedRetryable;
+  /// **'文件传输失败'**
+  String get fileTransferFailedNotice;
 
   /// No description provided for @fileTransferCanceled.
   ///
@@ -1383,18 +1383,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'把本机声音共享给对端'**
   String get audioShareStart;
-
-  /// No description provided for @audioSharePlaybackStopped.
-  ///
-  /// In zh, this message translates to:
-  /// **'已停止播放共享声音'**
-  String get audioSharePlaybackStopped;
-
-  /// No description provided for @audioShareCaptureStopped.
-  ///
-  /// In zh, this message translates to:
-  /// **'已停止共享声音'**
-  String get audioShareCaptureStopped;
 
   /// No description provided for @audioSharePlaybackGainTitle.
   ///
@@ -1437,12 +1425,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前设备不支持系统音频采集'**
   String get audioShareUnsupportedCapture;
-
-  /// No description provided for @audioShareRequestingPlayback.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在请求对端播放本机声音'**
-  String get audioShareRequestingPlayback;
 
   /// No description provided for @audioGroupShareStart.
   ///
@@ -1503,12 +1485,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'单声道'**
   String get audioGroupRoleMono;
-
-  /// No description provided for @audioGroupRequestingPlayback.
-  ///
-  /// In zh, this message translates to:
-  /// **'正在请求多台设备同步播放'**
-  String get audioGroupRequestingPlayback;
 
   /// No description provided for @audioGroupSelectAtLeastOne.
   ///
@@ -1647,12 +1623,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'启用键鼠共享'**
   String get remoteInputStart;
-
-  /// No description provided for @remoteInputStopped.
-  ///
-  /// In zh, this message translates to:
-  /// **'已停止键鼠共享'**
-  String get remoteInputStopped;
 
   /// No description provided for @remoteInputStopCurrentFirst.
   ///

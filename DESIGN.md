@@ -191,6 +191,7 @@ The app should rely on tonal surfaces and subtle borders more than shadows. Exis
 - Transfer progress: show file name, direction, progress, speed, and recoverable state clearly; failures need a visible retry or explanation when available.
 - Remote input and audio controls: make role, active peer, and stop/release actions obvious because these features affect another device.
 - Settings: group by user outcome, not implementation detail. Keep dangerous or privacy-sensitive toggles separated and clearly labeled.
+- Toasts: use `showAppToast` for every transient message, never a raw `SnackBar`. It shows one capsule at the top centre; set the tone (`info`, `success`, `warning`, `error`) so the icon matches the outcome. Do not toast a state the screen already shows, such as a button that has just changed to its active or stopped look.
 - Web product sections: use the same blue/neutral palette, screenshots, concise feature blocks, and real capability language.
 
 ## Accessibility And Responsiveness

@@ -4,9 +4,11 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:toastification/toastification.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:whisper/cast_receiver/playback_window.dart';
 import 'package:whisper/cast_receiver/player.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/cast_playback_host.dart';
@@ -150,21 +152,27 @@ class _CastPlaybackWindowAppState extends State<CastPlaybackWindowApp>
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      locale: _locale,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: AnimatedBuilder(
-        animation: _player,
-        builder: (context, _) =>
-            CastPlaybackView(player: _player, localVideo: widget.localVideo),
+    return ToastificationWrapper(
+      config: appToastConfig,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        // This window runs its own engine, so the key is not the main
+        // window's: it only gives toasts an overlay to appear in here.
+        navigatorKey: appNavigatorKey,
+        theme: AppTheme.darkTheme,
+        locale: _locale,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AnimatedBuilder(
+          animation: _player,
+          builder: (context, _) =>
+              CastPlaybackView(player: _player, localVideo: widget.localVideo),
+        ),
       ),
     );
   }

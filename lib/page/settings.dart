@@ -587,9 +587,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     });
                                   }
                                   showAppToast(
-                                    l10n.launchAtStartupFailed(
-                                      l10n.connectFailed,
-                                    ),
+                                    l10n.launchAtStartupFailed,
+                                    tone: AppToastTone.error,
                                   );
                                 }
                               },
@@ -1055,7 +1054,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _updateResult = result;
       });
       if (!silent && !result.hasUpdate) {
-        showAppToast(AppLocalizations.of(context)!.updateUpToDate);
+        showAppToast(
+          AppLocalizations.of(context)!.updateUpToDate,
+          tone: AppToastTone.success,
+        );
       }
       return result;
     } catch (error) {
@@ -1067,7 +1069,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _checkingForUpdates = false;
       });
       if (!silent) {
-        showAppToast(AppLocalizations.of(context)!.updateCheckFailed);
+        showAppToast(
+          AppLocalizations.of(context)!.updateCheckFailed,
+          tone: AppToastTone.error,
+        );
       }
       return null;
     }
@@ -1174,10 +1179,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       final l10n = AppLocalizations.of(context)!;
+      final installed = disposition == AppUpdateInstallDisposition.installed;
       showAppToast(
-        disposition == AppUpdateInstallDisposition.installed
-            ? l10n.updateInstalledRestart
-            : l10n.updateInstallerOpened,
+        installed ? l10n.updateInstalledRestart : l10n.updateInstallerOpened,
+        tone: installed ? AppToastTone.success : AppToastTone.info,
       );
     } catch (error) {
       _logSettingsFailure(SettingsOperationKind.updateInstall, error);
@@ -1205,7 +1210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       } else {
-        showAppToast(l10n.updateInstallFailed);
+        showAppToast(l10n.updateInstallFailed, tone: AppToastTone.error);
       }
     }
   }
@@ -1418,7 +1423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (showMessage != null) {
         showMessage(message);
       } else {
-        showAppToast(message);
+        showAppToast(message, tone: AppToastTone.error);
       }
     }
   }

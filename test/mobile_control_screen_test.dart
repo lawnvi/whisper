@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:toastification/toastification.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/remote_input/mobile_control_screen.dart';
 import 'package:whisper/remote_input/mobile_motion.dart';
@@ -109,7 +111,9 @@ void main() {
     EdgeInsets? viewInsets,
     Locale locale = const Locale('en'),
     List<MobileControlTarget> Function()? targets,
+    GlobalKey<NavigatorState>? navigatorKey,
   }) => MaterialApp(
+    navigatorKey: navigatorKey,
     locale: locale,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
@@ -1098,7 +1102,7 @@ void main() {
     'keyboard settings can calibrate without leaving sensors running',
     (tester) async {
       sensor = _Sensor(true);
-      await mount(tester, app());
+      await mount(tester, app(navigatorKey: appNavigatorKey));
       await tester.tap(find.byTooltip('Start control'));
       await tester.pump();
       await tester.tap(find.byTooltip('Keyboard'));
@@ -1113,8 +1117,13 @@ void main() {
         sensor.events.add(MotionSample(i * 10000, [0, 0, 0], [0, 0, 9.8]));
       }
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Calibration complete'), findsOneWidget);
       expect(sensor.events.hasListener, isFalse);
+      toastification.dismissAll(delayForAnimation: false);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
       await tester.pumpWidget(const SizedBox());
     },
   );

@@ -668,9 +668,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Start Whisper automatically after desktop login to reconnect trusted devices';
 
   @override
-  String launchAtStartupFailed(String error) {
-    return 'Failed to update launch at startup: $error';
-  }
+  String get launchAtStartupFailed => 'Failed to update launch at startup';
 
   @override
   String get androidBackgroundKeepAlive =>
@@ -722,7 +720,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Waiting for peer verification';
 
   @override
-  String get fileTransferFailedRetryable => 'Failed, retry available';
+  String get fileTransferFailedNotice => 'File transfer failed';
 
   @override
   String get fileTransferCanceled => 'Canceled';
@@ -745,12 +743,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioShareStart => 'Share this device\'s audio to peer';
-
-  @override
-  String get audioSharePlaybackStopped => 'Stopped playing shared audio';
-
-  @override
-  String get audioShareCaptureStopped => 'Stopped sharing audio';
 
   @override
   String get audioSharePlaybackGainTitle => 'Shared speaker gain';
@@ -782,10 +774,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'This device does not support system audio capture';
 
   @override
-  String get audioShareRequestingPlayback =>
-      'Requesting peer to play this device\'s audio';
-
-  @override
   String get audioGroupShareStart => 'Sync to multiple speakers';
 
   @override
@@ -814,10 +802,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioGroupRoleMono => 'Mono';
-
-  @override
-  String get audioGroupRequestingPlayback =>
-      'Requesting synced playback on selected devices';
 
   @override
   String get audioGroupSelectAtLeastOne =>
@@ -908,9 +892,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteInputStart => 'Enable keyboard and mouse sharing';
-
-  @override
-  String get remoteInputStopped => 'Stopped keyboard and mouse sharing';
 
   @override
   String get remoteInputStopCurrentFirst =>

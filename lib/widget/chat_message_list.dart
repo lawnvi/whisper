@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:whisper/helper/helper.dart';
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/message.dart';
@@ -176,12 +177,9 @@ class _ChatMessageListState extends State<ChatMessageList> {
       if (mounted && selection) _setSelectionMode(false);
     } on Object {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context)?.messageDeleteFailed ?? '删除未完成，请重试。',
-            ),
-          ),
+        showAppToast(
+          AppLocalizations.of(context)?.messageDeleteFailed ?? '删除未完成，请重试。',
+          tone: AppToastTone.error,
         );
       }
     } finally {

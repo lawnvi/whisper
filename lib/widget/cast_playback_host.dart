@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:whisper/cast_receiver/player.dart';
 import 'package:whisper/cast_receiver/request_gate.dart';
 import 'package:whisper/cast_receiver/upnp.dart' show timeText;
+import 'package:whisper/helper/toast.dart';
 import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/cast_request_prompt.dart';
@@ -111,10 +112,9 @@ class _CastPlaybackViewState extends State<CastPlaybackView>
       await widget.player.command(command, data);
     } on Object {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.castControlFailed),
-        ),
+      showAppToast(
+        AppLocalizations.of(context)!.castControlFailed,
+        tone: AppToastTone.error,
       );
     }
   }

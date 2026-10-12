@@ -199,13 +199,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           final context = appNavigatorKey.currentContext;
           if (context == null) return;
           final l10n = AppLocalizations.of(context)!;
-          showAppToast(switch (notice) {
-            ScreenshotNotice.copied => l10n.screenshotCopied,
-            ScreenshotNotice.permissionDenied =>
+          final (message, tone) = switch (notice) {
+            ScreenshotNotice.copied => (
+              l10n.screenshotCopied,
+              AppToastTone.success,
+            ),
+            ScreenshotNotice.permissionDenied => (
               l10n.screenshotPermissionDenied,
-            ScreenshotNotice.unavailable => l10n.screenshotUnavailable,
-            ScreenshotNotice.failed => l10n.screenshotFailed,
-          });
+              AppToastTone.warning,
+            ),
+            ScreenshotNotice.unavailable => (
+              l10n.screenshotUnavailable,
+              AppToastTone.error,
+            ),
+            ScreenshotNotice.failed => (
+              l10n.screenshotFailed,
+              AppToastTone.error,
+            ),
+          };
+          showAppToast(message, tone: tone);
         };
       });
     }
@@ -279,6 +291,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return ToastificationWrapper(
+      config: appToastConfig,
       child: MaterialApp(
         title: 'Whisper',
         navigatorKey: appNavigatorKey,
