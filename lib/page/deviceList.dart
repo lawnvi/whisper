@@ -19,6 +19,7 @@ import 'package:whisper/helper/android_background.dart';
 import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/android_system_share.dart';
 import 'package:whisper/helper/toast.dart';
+import 'package:whisper/helper/windows_system_theme.dart';
 import 'package:whisper/helper/transfer_failure_message.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -238,6 +239,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
   final TextEditingController _desktopSearchController =
       TextEditingController();
   final FocusNode _desktopSearchFocusNode = FocusNode();
+
+  final WindowsTrayIconWatch _windowsTrayIcon = WindowsTrayIconWatch(
+    apply: (asset) => trayManager.setIcon(asset, iconSize: 18),
+  );
   final AppShutdownCoordinator _shutdownCoordinator = AppShutdownCoordinator();
   final ConnectionAttemptTracker _connectionAttempts =
       ConnectionAttemptTracker();
@@ -467,11 +472,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     await windowManager.setPreventClose(true);
-    await trayManager.setIcon(
-      Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png',
-      isTemplate: Platform.isMacOS,
-      iconSize: 18,
-    );
+    await _showTrayIcon();
 
     Menu menu = Menu(
       items: [
@@ -575,6 +576,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _connectionAttempts.cancelAll();
     unawaited(_stopDiscovery());
     unawaited(_stopBroadcast());
+    _windowsTrayIcon.stop();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     clipboardWatcher.removeListener(this);
@@ -635,8 +637,23 @@ class _DeviceListScreen extends State<DeviceListScreen>
   }
 
   Future<void> _destroyTray() async {
+    _windowsTrayIcon.stop();
     trayManager.removeListener(this);
     await trayManager.destroy();
+  }
+
+  /// The tray icon is white, which a light Windows taskbar swallows; there
+  /// the icon follows the taskbar instead.
+  Future<void> _showTrayIcon() async {
+    if (Platform.isWindows) {
+      await _windowsTrayIcon.start();
+      return;
+    }
+    await trayManager.setIcon(
+      'assets/tray_icon.png',
+      isTemplate: Platform.isMacOS,
+      iconSize: 18,
+    );
   }
 
   void _handleDesktopSearchFocusChanged() {
