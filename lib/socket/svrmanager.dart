@@ -1321,7 +1321,7 @@ class WsSvrManager {
           peerId: provisionalClaim.peerId,
           connectionGeneration: provisionalClaim.connectionGeneration,
         );
-        mediaHandler = webSocketHandler((WebSocketChannel channel) {
+        mediaHandler = webSocketHandler((WebSocketChannel channel, _) {
           try {
             provisionalClaim.withMediaMacKey(
               (mediaMacKey) => MediaUpgradeServerSession(
@@ -1487,7 +1487,7 @@ class WsSvrManager {
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
       final chatHandler = webSocketHandler(
-        (WebSocketChannel webSocket) {
+        (WebSocketChannel webSocket, _) {
           _trackIncomingSocketAttachment(
             webSocket,
             lease,

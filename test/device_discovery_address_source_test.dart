@@ -7,19 +7,20 @@ void main() {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
     final discovery = source.substring(
       source.indexOf(
-        'case BonsoirDiscoveryEventType.discoveryServiceResolved',
+        'case BonsoirDiscoveryServiceResolvedEvent() ||',
       ),
       source.indexOf(
-          'case BonsoirDiscoveryEventType.discoveryServiceResolveFailed'),
+          'case BonsoirDiscoveryServiceResolveFailedEvent():'),
     );
 
     expect(source, contains('_mergeStoredDeviceWithDiscovery'));
     expect(discovery, contains('final visibleDevice'));
     expect(discovery, contains('await db.upsertDevice(visibleDevice)'));
     expect(discovery, contains('if (!isLost)'));
-    expect(discovery, contains('svr is ResolvedBonsoirService'));
+    expect(discovery, contains('BonsoirDiscoveryServiceUpdatedEvent() ||'));
     expect(discovery, contains('await resolveDiscoveryEndpointHost('));
-    expect(discovery, contains('resolvedHost: resolvedHost'));
+    expect(discovery, contains('resolvedHost: svr.hostname'));
+    expect(discovery, contains('resolvedAddresses: svr.hostAddresses'));
     expect(discovery, contains('advertisedHost: host'));
     expect(discovery, contains('port: port'));
   });
@@ -53,10 +54,10 @@ void main() {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
     final discovery = source.substring(
       source.indexOf(
-        'case BonsoirDiscoveryEventType.discoveryServiceResolved',
+        'case BonsoirDiscoveryServiceResolvedEvent() ||',
       ),
       source.indexOf(
-        'case BonsoirDiscoveryEventType.discoveryServiceResolveFailed',
+        'case BonsoirDiscoveryServiceResolveFailedEvent():',
       ),
     );
     final refresh = source.substring(

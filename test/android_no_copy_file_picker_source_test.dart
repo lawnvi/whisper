@@ -33,12 +33,13 @@ void main() {
     expect(conversation, contains('helper/whisper_file_picker.dart'));
     expect(conversation, contains('WhisperFilePicker.pickFiles'));
     expect(conversation, contains('sendPickedFileTo(device.uid, item)'));
+    // The plugin's own picker, not the app's wrapper of the same name.
     expect(
       conversation,
-      isNot(contains('FilePicker.platform.pickFiles(allowMultiple: true)')),
+      isNot(contains(RegExp(r'(?<!Whisper)FilePicker\.pickFiles\('))),
     );
     expect(picker, contains('AndroidDocumentPicker'));
-    expect(picker, contains('FilePicker.platform.pickFiles'));
+    expect(picker, contains('FilePicker.pickFiles'));
   });
 
   test('socket transfer source can read Android content uri ranges', () {

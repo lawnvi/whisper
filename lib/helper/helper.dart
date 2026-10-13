@@ -357,9 +357,9 @@ bool shouldIgnoreClipboardSync(String content) {
 }
 
 void pickFile(var callback) async {
-  await FilePicker.platform.getDirectoryPath();
+  await FilePicker.getDirectoryPath();
   // 打开文件选择器
-  FilePickerResult? result = await FilePicker.platform.pickFiles();
+  FilePickerResult? result = await FilePicker.pickFiles();
 
   if (result != null) {
     PlatformFile file = result.files.first;

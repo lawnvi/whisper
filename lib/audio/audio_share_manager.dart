@@ -547,7 +547,7 @@ class AudioShareManager {
     Duration pingInterval = const Duration(seconds: 15),
     void Function()? onAttachmentComplete,
   }) {
-    return shelf_ws.webSocketHandler((WebSocketChannel channel) {
+    return shelf_ws.webSocketHandler((WebSocketChannel channel, _) {
       try {
         attachChannel(
           channel,

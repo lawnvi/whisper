@@ -113,7 +113,7 @@ void main() {
     expect(native, contains('whisper_pairing_alerts_v2'));
     expect(notifier, contains("'answerShowsUserInterface': true"));
     expect(native, contains('CHANNEL_ID = "whisper.incoming_connection.v3"'));
-    expect(notifier, contains('deleteNotificationChannel(obsoleteChannelId)'));
+    expect(notifier, contains('channelId: obsoleteChannelId'));
     expect(notifier, contains("'whisper.incoming_connection.v2'"));
     expect(notifier, contains("'whisper.incoming_connection.v1'"));
     expect(notifier, contains("'whisper.connect_request'"));

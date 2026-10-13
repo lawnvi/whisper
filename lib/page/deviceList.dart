@@ -109,6 +109,41 @@ enum DiscoveryDiagnosticKind {
   serviceLost,
 }
 
+/// What a discovery or broadcast event was, for the diagnostic log.
+enum DiscoveryEventState {
+  started,
+  serviceFound,
+  serviceResolved,
+  serviceUpdated,
+  serviceResolveFailed,
+  serviceLost,
+  nameAlreadyExists,
+  stopped,
+  unknown;
+
+  static DiscoveryEventState ofDiscovery(BonsoirDiscoveryEvent event) {
+    return switch (event) {
+      BonsoirDiscoveryStartedEvent() => started,
+      BonsoirDiscoveryServiceFoundEvent() => serviceFound,
+      BonsoirDiscoveryServiceResolvedEvent() => serviceResolved,
+      BonsoirDiscoveryServiceUpdatedEvent() => serviceUpdated,
+      BonsoirDiscoveryServiceResolveFailedEvent() => serviceResolveFailed,
+      BonsoirDiscoveryServiceLostEvent() => serviceLost,
+      BonsoirDiscoveryStoppedEvent() => stopped,
+      BonsoirDiscoveryUnknownEvent() => unknown,
+    };
+  }
+
+  static DiscoveryEventState ofBroadcast(BonsoirBroadcastEvent event) {
+    return switch (event) {
+      BonsoirBroadcastStartedEvent() => started,
+      BonsoirBroadcastNameAlreadyExistsEvent() => nameAlreadyExists,
+      BonsoirBroadcastStoppedEvent() => stopped,
+      _ => unknown,
+    };
+  }
+}
+
 const String _androidNotificationPortName =
     'whisper.android.notification.forwarding';
 ReceivePort? _androidNotificationReceivePort;
@@ -464,7 +499,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _setDesktopWindow() async {
     if (isMobile()) {
-      final cleared = await FilePicker.platform.clearTemporaryFiles();
+      final cleared = await FilePicker.clearTemporaryFiles();
       privacyLog.event(PrivacyEvent.localOperation, <PrivacyField, Object>{
         PrivacyField.kind: DeviceListOperationKind.temporaryFileCleanup,
         PrivacyField.success: cleared ?? false,
@@ -505,7 +540,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
           key: 'pick_file',
           label: AppLocalizations.of(context)?.menuSendFile ?? "发送文件",
           onClick: (MenuItem item) async {
-            FilePickerResult? result = await FilePicker.platform.pickFiles(
+            FilePickerResult? result = await FilePicker.pickFiles(
               allowMultiple: true,
             );
             if (result != null) {
@@ -1527,7 +1562,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // And now we can broadcast it :
     final broadcast = BonsoirBroadcast(service: service);
     _broadcast = broadcast;
-    await broadcast.ready;
+    await broadcast.initialize();
     if (!mounted || !identical(_broadcast, broadcast)) {
       await broadcast.stop();
       return;
@@ -1535,7 +1570,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
     _broadcastSubscription?.cancel();
     _broadcastSubscription = broadcast.eventStream!.listen((event) {
-      _logDiscovery(DiscoveryDiagnosticKind.broadcastEvent, state: event.type);
+      _logDiscovery(
+        DiscoveryDiagnosticKind.broadcastEvent,
+        state: DiscoveryEventState.ofBroadcast(event),
+      );
     });
 
     await broadcast.start();
@@ -1562,7 +1600,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     // Once defined, we can start the discovery :
     final discovery = BonsoirDiscovery(type: serviceType, printLogs: false);
     _discovery = discovery;
-    await discovery.ready;
+    await discovery.initialize();
     if (!mounted || !identical(_discovery, discovery)) {
       await discovery.stop();
       return;
@@ -1572,26 +1610,31 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _discoverySubscription?.cancel();
     _discoverySubscription = discovery.eventStream!.listen((event) async {
       if (!mounted || !identical(_discovery, discovery)) return;
-      _logDiscovery(DiscoveryDiagnosticKind.discoveryEvent, state: event.type);
+      _logDiscovery(
+        DiscoveryDiagnosticKind.discoveryEvent,
+        state: DiscoveryEventState.ofDiscovery(event),
+      );
       // `eventStream` is not null as the discovery instance is "ready" !
       final service = event.service;
       if (service != null) {
-        switch (event.type) {
-          case BonsoirDiscoveryEventType.discoveryServiceFound:
+        switch (event) {
+          case BonsoirDiscoveryServiceFoundEvent():
             _logDiscovery(DiscoveryDiagnosticKind.serviceFound);
             if (service.name.startsWith(serviceName) &&
                 _shouldResolveService(service)) {
-              event.service!.resolve(discovery.serviceResolver);
+              unawaited(service.resolve(discovery.serviceResolver));
             }
             break;
-          case BonsoirDiscoveryEventType.discoveryStarted:
+          case BonsoirDiscoveryStartedEvent():
             _logDiscovery(DiscoveryDiagnosticKind.discoveryStarted);
             break;
-          case BonsoirDiscoveryEventType.discoveryServiceResolved ||
-              BonsoirDiscoveryEventType.discoveryServiceLost:
+          // An update carries what changed since the service was resolved,
+          // its TXT record or its addresses, and is taken the same way.
+          case BonsoirDiscoveryServiceResolvedEvent() ||
+              BonsoirDiscoveryServiceUpdatedEvent() ||
+              BonsoirDiscoveryServiceLostEvent():
             final svr = service;
-            final isLost =
-                event.type == BonsoirDiscoveryEventType.discoveryServiceLost;
+            final isLost = event is BonsoirDiscoveryServiceLostEvent;
             final serviceKey = _serviceResolveKey(svr);
             final advertisedUid = svr.attributes['uid'];
             final String uid;
@@ -1617,15 +1660,13 @@ class _DeviceListScreen extends State<DeviceListScreen>
               uid = advertisedUid;
               _discoveryPresence.resolved(serviceKey: serviceKey, peerId: uid);
             }
-            final resolvedHost = svr is ResolvedBonsoirService
-                ? svr.host
-                : null;
             var host = svr.attributes["host"];
             final port =
                 int.tryParse(svr.attributes["port"] ?? "10002") ?? 10002;
             if (!isLost) {
               host = await resolveDiscoveryEndpointHost(
-                resolvedHost: resolvedHost,
+                resolvedHost: svr.hostname,
+                resolvedAddresses: svr.hostAddresses,
                 advertisedHost: host,
                 port: port,
               );
@@ -1706,11 +1747,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
               await _attemptAutoConnect();
             }
             break;
-          case BonsoirDiscoveryEventType.discoveryServiceResolveFailed:
+          case BonsoirDiscoveryServiceResolveFailedEvent():
           // TODO: Handle this case.
-          case BonsoirDiscoveryEventType.discoveryStopped:
+          case BonsoirDiscoveryStoppedEvent():
           // TODO: Handle this case.
-          case BonsoirDiscoveryEventType.unknown:
+          case BonsoirDiscoveryUnknownEvent():
           // TODO: Handle this case.
         }
       }

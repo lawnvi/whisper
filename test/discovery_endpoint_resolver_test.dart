@@ -52,6 +52,64 @@ void main() {
     },
   );
 
+  test('uses the addresses the platform resolved without a lookup', () async {
+    var lookups = 0;
+    Future<String?> resolve({
+      required List<String> addresses,
+      String? advertised,
+      String? name = 'peer.local',
+    }) {
+      return resolveDiscoveryEndpointHost(
+        resolvedHost: name,
+        resolvedAddresses: addresses,
+        advertisedHost: advertised,
+        port: 10002,
+        lookup: (_) async {
+          lookups++;
+          return [InternetAddress('192.168.1.200')];
+        },
+      );
+    }
+
+    // The advertised address wins when the platform confirms it.
+    expect(
+      await resolve(
+        addresses: ['192.168.1.16', '192.168.1.84'],
+        advertised: '192.168.1.84',
+      ),
+      '192.168.1.84',
+    );
+    // Otherwise the first IPv4 the chat server can be reached on, wherever
+    // it comes in the list.
+    expect(
+      await resolve(
+        addresses: ['fe80::1%en0', '198.18.0.7', '192.168.1.16'],
+        advertised: '192.168.1.99',
+      ),
+      '192.168.1.16',
+    );
+    expect(
+      await resolve(addresses: ['192.168.1.16'], name: null),
+      '192.168.1.16',
+    );
+    // IPv6 only, or only fake-IP answers: the advertised IPv4 if there is one.
+    expect(
+      await resolve(addresses: ['fe80::1%en0'], advertised: '192.168.1.84'),
+      '192.168.1.84',
+    );
+    expect(
+      await resolve(addresses: ['198.18.0.7'], advertised: '192.168.1.84'),
+      '192.168.1.84',
+    );
+    expect(await resolve(addresses: ['fe80::1%en0']), 'fe80::1%en0');
+    expect(lookups, 0);
+
+    // Nothing usable from the platform: the name is looked up as before.
+    expect(await resolve(addresses: const []), '192.168.1.200');
+    expect(await resolve(addresses: ['127.0.0.1', 'bogus']), '192.168.1.200');
+    expect(lookups, 2);
+  });
+
   test('keeps an already numeric resolved endpoint', () async {
     var lookupCount = 0;
 

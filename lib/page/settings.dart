@@ -1579,7 +1579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final changeDirectory = widget.changeDirectory;
     final selectDir = changeDirectory != null
         ? await changeDirectory()
-        : await FilePicker.platform.getDirectoryPath();
+        : await FilePicker.getDirectoryPath();
     if (selectDir == null) {
       return;
     }

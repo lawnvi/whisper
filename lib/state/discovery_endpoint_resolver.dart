@@ -14,8 +14,13 @@ typedef DiscoveryAddressLookup =
 /// fails, resolves to IPv6, or system DNS returns only benchmark fake-IP
 /// answers. Discovery must not select an address the IPv4 chat server cannot
 /// accept.
+///
+/// [resolvedAddresses] are the addresses the platform resolved for the
+/// service itself. When it has any that can be used, they stand in for
+/// looking [resolvedHost] up.
 Future<String?> resolveDiscoveryEndpointHost({
   required String? resolvedHost,
+  List<String> resolvedAddresses = const <String>[],
   required String? advertisedHost,
   required int port,
   DiscoveryAddressLookup? lookup,
@@ -33,6 +38,34 @@ Future<String?> resolveDiscoveryEndpointHost({
           !Ipv4AddressPolicy.isBenchmarking(advertised)
       ? advertised
       : null;
+  final resolvedIpv4 = <String>[];
+  final resolvedIpv6 = <String>[];
+  for (final address in resolvedAddresses) {
+    final normalized = _normalizeEndpointHost(address, port);
+    if (normalized == null || !_isNumericHost(normalized)) {
+      continue;
+    }
+    final targets = _isIpv4Host(normalized) ? resolvedIpv4 : resolvedIpv6;
+    if (!targets.contains(normalized)) {
+      targets.add(normalized);
+    }
+  }
+  if (resolvedIpv4.isNotEmpty || resolvedIpv6.isNotEmpty) {
+    if (advertised != null &&
+        (resolvedIpv4.contains(advertised) ||
+            resolvedIpv6.contains(advertised))) {
+      return advertised;
+    }
+    for (final address in resolvedIpv4) {
+      if (!Ipv4AddressPolicy.isBenchmarking(address)) {
+        return address;
+      }
+    }
+    // Only IPv6 or fake-IP answers: the same choice as for a single numeric
+    // target below.
+    return advertisedFallback ??
+        (resolvedIpv4.isNotEmpty ? resolvedIpv4.first : resolvedIpv6.first);
+  }
   if (normalizedResolved == null) {
     // Android NSD advertises names such as Android_XXXX.local. They are valid
     // Bonjour targets but not strict DNS hostnames; only use their validated

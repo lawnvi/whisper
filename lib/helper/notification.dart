@@ -24,6 +24,11 @@ class NotificationHelper {
 
   // 初始化函数
   Future<void> initialize() async {
+    // Nothing is shown through this plugin on Windows, and there it refuses
+    // to start without Windows settings; the app starts up after this call.
+    if (!supportNotification()) {
+      return;
+    }
     // AndroidInitializationSettings是一个用于设置Android上的本地通知初始化的类
     // 使用了app_icon作为参数，这意味着在Android上，应用程序的图标将被用作本地通知的图标。
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -46,7 +51,7 @@ class NotificationHelper {
           ),
         );
     await _notificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (response) {
         ConnectionRequestNotifier().handleNotificationResponse(response);
       },
@@ -102,7 +107,12 @@ class NotificationHelper {
     );
 
     // 发起一个通知
-    await _notificationsPlugin.show(1, title, body, platformChannelSpecifics);
+    await _notificationsPlugin.show(
+      id: 1,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
+    );
   }
 }
 

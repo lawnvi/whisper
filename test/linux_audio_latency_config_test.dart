@@ -24,6 +24,8 @@ void main() {
     expect(debScript, contains('libgstreamer1.0-0'));
     expect(debScript, contains('gstreamer1.0-plugins-good'));
     expect(debScript, contains('gstreamer1.0-libav'));
+    // The file and folder dialogs are the desktop portal's.
+    expect(debScript, contains('xdg-desktop-portal'));
     expect(debScript, contains('--root-owner-group'));
   });
 

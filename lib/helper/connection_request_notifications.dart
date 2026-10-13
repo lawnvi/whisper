@@ -178,7 +178,7 @@ class ConnectionRequestNotifier {
             AndroidFlutterLocalNotificationsPlugin
           >();
       for (final obsoleteChannelId in _obsoleteChannelIds) {
-        await android?.deleteNotificationChannel(obsoleteChannelId);
+        await android?.deleteNotificationChannel(channelId: obsoleteChannelId);
       }
       await android?.createNotificationChannel(
         AndroidNotificationChannel(
@@ -295,10 +295,10 @@ class ConnectionRequestNotifier {
           );
       if (!shownAsProminentAlert) {
         await plugin.show(
-          notificationId,
-          fallbackTitle,
-          fallbackBody,
-          NotificationDetails(
+          id: notificationId,
+          title: fallbackTitle,
+          body: fallbackBody,
+          notificationDetails: NotificationDetails(
             android: AndroidNotificationDetails(
               channelId,
               l10n.connectRequest,
@@ -488,7 +488,7 @@ class ConnectionRequestNotifier {
         // Always continue with local notification cleanup.
       }
     }
-    await _plugin?.cancel(notificationId);
+    await _plugin?.cancel(id: notificationId);
   }
 }
 

@@ -27,7 +27,7 @@ class WhisperFilePicker {
 
   /// Lets the user choose a folder to send; null when they cancel.
   static Future<String?> pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath();
+    final path = await FilePicker.getDirectoryPath();
     return path == null || path.isEmpty ? null : path;
   }
 
@@ -51,9 +51,7 @@ class WhisperFilePicker {
           .toList(growable: false);
     }
 
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: allowMultiple,
-    );
+    final result = await FilePicker.pickFiles(allowMultiple: allowMultiple);
     if (result == null) {
       return const <PickedTransferFile>[];
     }
