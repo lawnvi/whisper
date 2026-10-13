@@ -164,6 +164,9 @@ final class DesktopQuickSendBridge {
 class AppDelegate: FlutterAppDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.servicesProvider = self
+    // An install over the same version keeps the old Finder service entry
+    // until the services cache is rebuilt; launching alone does not do it.
+    NSUpdateDynamicServices()
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

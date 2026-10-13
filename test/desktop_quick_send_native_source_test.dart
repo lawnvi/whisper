@@ -58,6 +58,14 @@ void main() {
     );
     expect(plist, isNot(contains('NSFilenamesPboardType')));
     expect(appDelegate, contains('NSApp.servicesProvider = self'));
+    // A same-version reinstall leaves the old entry until the cache rebuilds.
+    final didFinishLaunching = appDelegate.substring(
+      appDelegate.indexOf('func applicationDidFinishLaunching('),
+      appDelegate.indexOf(
+        'func applicationShouldTerminateAfterLastWindowClosed(',
+      ),
+    );
+    expect(didFinishLaunching, contains('NSUpdateDynamicServices()'));
     expect(
       appDelegate,
       isNot(contains('super.applicationDidFinishLaunching(notification)')),
