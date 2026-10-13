@@ -45,15 +45,8 @@ abstract interface class FolderDeferredWrites {
 }
 
 /// How many isolates write small files side by side on this machine.
-///
-/// None on Windows for now: writing through one handle already brought a
-/// small file there down to about 1.3 ms, and the pool has not been run on
-/// a real Windows machine, where file system behaviour has surprised this
-/// code before.
-int defaultFolderWriteWorkers() {
-  if (Platform.isWindows) return 0;
-  return math.max(0, math.min(4, Platform.numberOfProcessors - 2));
-}
+int defaultFolderWriteWorkers() =>
+    math.max(0, math.min(4, Platform.numberOfProcessors - 2));
 
 /// Writes small files from a few isolates at once.
 ///
@@ -61,6 +54,9 @@ int defaultFolderWriteWorkers() {
 /// is waiting on the system rather than work. On an Android 13 phone, where
 /// shared storage goes through a FUSE daemon, 1,500 files of 4 KiB took
 /// 4.1 ms each written one after another and 0.75 ms each from four isolates.
+/// On Windows 11 with real-time protection on it depends on the machine:
+/// 14,797 source files took 40 to 45 s without the pool and 15 to 16 s with
+/// it on one, 17.3 to 18.8 s against 16.3 s on a faster one.
 final class FolderWritePool implements FolderDeferredWrites {
   FolderWritePool({
     required int workers,
