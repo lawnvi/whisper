@@ -12,12 +12,14 @@ import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/native_streaming_sha256.dart';
 import 'package:whisper/helper/privacy_log.dart';
 import 'package:whisper/helper/windows_disk_space.dart';
+import 'package:whisper/helper/windows_shell_open.dart';
 
 enum FileOperationKind {
   storageQuery,
   pickerScan,
   fileManagerOpen,
   fileManagerReveal,
+  fileOpen,
   platformChannel,
 }
 
@@ -141,6 +143,14 @@ void openFile(String path) async {
       await Permission.requestInstallPackages.request();
     }
   }
+  if (Platform.isWindows) {
+    // Not through open_filex here, which builds a cmd command line out of
+    // the path; see [openWithWindowsShell].
+    if (!openWithWindowsShell(path)) {
+      _logFileOperation(FileOperationKind.fileOpen);
+    }
+    return;
+  }
   OpenFilex.open(path);
 }
 
@@ -167,9 +177,32 @@ Future<void> openDir(String path, {bool parent = false}) async {
   } else if (Platform.isIOS) {
     // openFileExplorer(path);
     await openIosDir(path);
-  } else if (Platform.isWindows || Platform.isLinux) {
+  } else if (Platform.isLinux) {
+    await openLinuxDirectory(path);
+  } else if (Platform.isWindows) {
     final openDirPlugin = OpenDir();
     await openDirPlugin.openNativeDir(path: path);
+  }
+}
+
+/// Opens [path] in the desktop's file manager, handing it to `xdg-open` as
+/// an argument of its own. The plugin used on Windows builds a shell command
+/// line out of the path on Linux, and a received folder carries the name its
+/// sender gave it: `$(...)` in that name would be run.
+Future<void> openLinuxDirectory(
+  String path, {
+  FileManagerProcessRunner processRunner = Process.run,
+}) async {
+  try {
+    final result = await processRunner('xdg-open', <String>[path]);
+    if (result.exitCode != 0) {
+      _logFileOperation(
+        FileOperationKind.fileManagerOpen,
+        exitCode: result.exitCode,
+      );
+    }
+  } on ProcessException catch (error) {
+    _logFileOperation(FileOperationKind.fileManagerOpen, error: error);
   }
 }
 

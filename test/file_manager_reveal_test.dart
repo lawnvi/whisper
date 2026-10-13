@@ -36,6 +36,34 @@ void main() {
     expect(calls.single.arguments, <String>['-R', file.path]);
   });
 
+  test('Linux opens a folder without a shell reading its name', () async {
+    // What a sender could name a folder so that a shell would run part of it.
+    final folder = '${tempDirectory.path}/notes \$(touch pwned) `id`; ls';
+    final calls = <FileManagerCommand>[];
+
+    await openLinuxDirectory(
+      folder,
+      processRunner: (executable, arguments) async {
+        calls.add(FileManagerCommand(executable, arguments));
+        return ProcessResult(1, 0, '', '');
+      },
+    );
+
+    expect(calls, hasLength(1));
+    expect(calls.single.executable, 'xdg-open');
+    expect(calls.single.arguments, <String>[folder]);
+
+    // The plugin that does this on Windows pastes the path into a command
+    // line for `sh` on Linux, so it must stay out of the Linux branch.
+    final source = File('lib/helper/file.dart').readAsStringSync();
+    final linuxBranch = source.substring(
+      source.indexOf('} else if (Platform.isLinux) {\n    await open'),
+      source.indexOf('} else if (Platform.isWindows) {\n    final openDir'),
+    );
+    expect(linuxBranch, contains('openLinuxDirectory(path)'));
+    expect(linuxBranch, isNot(contains('OpenDir')));
+  });
+
   test('macOS native bridge reports whether Finder selected the file', () {
     final source = File(
       'macos/Runner/MainFlutterWindow.swift',
