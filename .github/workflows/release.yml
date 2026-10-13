@@ -61,6 +61,17 @@ jobs:
             exit 1
           fi
 
+      - name: Verify manually published version matches pubspec version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          pubspec_version="$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)(\+[0-9]+)?[[:space:]]*$/\1/p' pubspec.yaml)"
+          if [[ "$REQUESTED_VERSION" != "$pubspec_version" ]]; then
+            echo "Requested version ($REQUESTED_VERSION) must match pubspec.yaml version ($pubspec_version)" >&2
+            exit 1
+          fi
+
   build-on-macos:
     name: macOS Apple Silicon + iOS
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'macos' }}
@@ -90,12 +101,20 @@ jobs:
           pod install --project-directory=ios
 
       - name: Set release version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             PACKAGE_VERSION="${GITHUB_REF_NAME##*-}"
             PACKAGE_VERSION="${PACKAGE_VERSION#v}"
+          elif [[ -n "$REQUESTED_VERSION" ]]; then
+            PACKAGE_VERSION="$REQUESTED_VERSION"
           else
             PACKAGE_VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid package version: $PACKAGE_VERSION" >&2
+            exit 1
           fi
           if [[ "${GITHUB_REF_NAME}" == release-v* ]]; then
             UPDATE_CHANNEL="stable"
@@ -528,6 +547,13 @@ jobs:
             inputs.publish &&
             inputs.version != '' &&
             (
+              (
+                inputs.target == 'all' &&
+                needs.build-on-macos.result == 'success' &&
+                needs.build-on-macos-intel.result == 'success' &&
+                needs.build-on-windows.result == 'success' &&
+                needs.build-on-linux.result == 'success'
+              ) ||
               (
                 inputs.target == 'macos-intel' &&
                 needs.build-on-macos-intel.result == 'success'

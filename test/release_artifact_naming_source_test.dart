@@ -36,7 +36,6 @@ void main() {
       workflow,
       contains(r'whisper-${PACKAGE_VERSION}-android-x86_64.apk'),
     );
-
   });
 
   test('release assets are published once for each release trigger', () {
@@ -62,6 +61,34 @@ void main() {
     expect(
       workflow,
       contains("if: \${{ github.event_name == 'workflow_dispatch' }}"),
+    );
+  });
+
+  test('a manual run of every platform replaces the whole dev release', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    final publish = workflow.substring(workflow.indexOf('  publish-release:'));
+    final allTarget = publish.substring(
+      publish.indexOf("inputs.target == 'all' &&"),
+      publish.indexOf("inputs.target == 'macos-intel' &&"),
+    );
+
+    for (final job in <String>[
+      'build-on-macos',
+      'build-on-macos-intel',
+      'build-on-windows',
+      'build-on-linux',
+    ]) {
+      expect(allTarget, contains("needs.$job.result == 'success'"));
+    }
+    // The Apple Silicon package keeps the requested version in its name.
+    final appleSilicon = workflow.substring(
+      workflow.indexOf('  build-on-macos:'),
+      workflow.indexOf('  build-on-macos-intel:'),
+    );
+    expect(appleSilicon, contains(r'PACKAGE_VERSION="$REQUESTED_VERSION"'));
+    expect(
+      workflow,
+      contains('Verify manually published version matches pubspec version'),
     );
   });
 
