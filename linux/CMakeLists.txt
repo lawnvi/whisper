@@ -132,6 +132,28 @@ if(TARGET tray_manager_plugin)
   target_compile_options(tray_manager_plugin PRIVATE -Wno-deprecated-declarations)
 endif()
 
+# The video plugin is built against libmpv's headers but not linked to it.
+# Linked, the app fails to start wherever the libmpv.so.N of the build
+# machine is missing, and distributions disagree on N. The plugin's calls
+# bind on first use instead, after lib/helper/desktop_video_library.dart has
+# loaded whichever libmpv the system has.
+if(TARGET media_kit_video_plugin)
+  get_target_property(WHISPER_VIDEO_PLUGIN_LIBRARIES
+    media_kit_video_plugin LINK_LIBRARIES)
+  if("PkgConfig::mpv" IN_LIST WHISPER_VIDEO_PLUGIN_LIBRARIES)
+    list(REMOVE_ITEM WHISPER_VIDEO_PLUGIN_LIBRARIES PkgConfig::mpv)
+    set_target_properties(media_kit_video_plugin PROPERTIES
+      LINK_LIBRARIES "${WHISPER_VIDEO_PLUGIN_LIBRARIES}")
+    pkg_check_modules(WHISPER_MPV_HEADERS REQUIRED mpv)
+    target_include_directories(media_kit_video_plugin PRIVATE
+      ${WHISPER_MPV_HEADERS_INCLUDE_DIRS})
+    target_compile_options(media_kit_video_plugin PRIVATE
+      ${WHISPER_MPV_HEADERS_CFLAGS_OTHER})
+    # The executable links the plugin, whose libmpv symbols stay open.
+    target_link_options(${BINARY_NAME} PRIVATE -Wl,--allow-shlib-undefined)
+  endif()
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

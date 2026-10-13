@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:whisper/helper/desktop_video_library.dart';
 
 class CastPlaybackState {
   const CastPlaybackState({
@@ -36,7 +37,9 @@ abstract class CastPlaybackEngine {
 /// Created only when media starts inside the dedicated playback window.
 class MediaKitCastEngine implements CastPlaybackEngine {
   MediaKitCastEngine() {
-    MediaKit.ensureInitialized();
+    if (!ensureDesktopVideoLibrary()) {
+      throw StateError('This system has no libmpv to play video with');
+    }
     _player = Player(
       configuration: const PlayerConfiguration(
         title: 'Whisper',

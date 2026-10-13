@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:whisper/helper/android_document_picker.dart';
+import 'package:whisper/helper/desktop_video_library.dart';
 
 class VideoThumbnail {
   const VideoThumbnail({
@@ -128,7 +129,9 @@ Future<VideoThumbnail?> _thumbnailFromBytes(
 }
 
 Future<VideoThumbnail?> extractDesktopVideoThumbnail(String path) async {
-  MediaKit.ensureInitialized();
+  if (!ensureDesktopVideoLibrary()) {
+    return null;
+  }
   final player = Player(
     configuration: const PlayerConfiguration(
       muted: true,

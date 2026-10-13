@@ -88,7 +88,7 @@ The [user guide](docs/user-guide_en.md) covers every feature in full.
 | Desktop screenshots | — | ✅ | ✅ | Depends on the desktop environment |
 | TV casting receiver | — | ✅ | ✅ | ✅ |
 
-On Linux, discovery depends on Avahi and TV casting needs libmpv installed.
+On Linux, discovery depends on Avahi. Video previews and TV casting need libmpv installed; everything else works without it.
 
 ## Troubleshooting
 
