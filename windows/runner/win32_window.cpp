@@ -5,6 +5,7 @@
 
 #include "resource.h"
 #include "single_instance.h"
+#include "window_theme_plugin.h"
 
 namespace {
 
@@ -202,6 +203,7 @@ Win32Window::MessageHandler(HWND hwnd,
 
   switch (message) {
     case WM_DESTROY:
+      WindowThemeForget(hwnd);
       window_handle_ = nullptr;
       Destroy();
       if (quit_on_close_) {
@@ -295,16 +297,23 @@ void Win32Window::OnDestroy() {
 }
 
 void Win32Window::UpdateTheme(HWND const window) {
-  DWORD light_mode;
-  DWORD light_mode_size = sizeof(light_mode);
-  LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,
-                               kGetPreferredBrightnessRegValue,
-                               RRF_RT_REG_DWORD, nullptr, &light_mode,
-                               &light_mode_size);
-
-  if (result == ERROR_SUCCESS) {
-    BOOL enable_dark_mode = light_mode == 0;
-    DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                          &enable_dark_mode, sizeof(enable_dark_mode));
+  BOOL enable_dark_mode = FALSE;
+  // Windows reports a colour change for the accent colour and the wallpaper
+  // too, at moments the app does not see. Once the app has chosen its own
+  // brightness the title bar keeps that one: going by the system here left
+  // a light window with white caption buttons whenever the two differ.
+  if (!WindowThemeChosenDarkMode(window, &enable_dark_mode)) {
+    DWORD light_mode;
+    DWORD light_mode_size = sizeof(light_mode);
+    LSTATUS result =
+        RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,
+                    kGetPreferredBrightnessRegValue, RRF_RT_REG_DWORD, nullptr,
+                    &light_mode, &light_mode_size);
+    if (result != ERROR_SUCCESS) {
+      return;
+    }
+    enable_dark_mode = light_mode == 0;
   }
+  DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        &enable_dark_mode, sizeof(enable_dark_mode));
 }

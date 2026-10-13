@@ -163,7 +163,12 @@ Future<void> _applyDesktopWindowTheme(ThemeMode mode) async {
   final brightness = _brightnessForThemeMode(mode);
   final windowBackground = AppTheme.fallbackPalette(brightness).surfaceCanvas;
   try {
-    await windowManager.setBrightness(brightness);
+    // On Windows the window plugin darkens the title bar only while the
+    // system is dark as well. The channel below sets it from the app's own
+    // theme, so the plugin's answer is not asked for there.
+    if (!Platform.isWindows) {
+      await windowManager.setBrightness(brightness);
+    }
     if (Platform.isWindows || Platform.isMacOS) {
       await _windowThemeChannel.invokeMethod<void>('setBrightness', {
         'brightness': brightness.name,
