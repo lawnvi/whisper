@@ -1,203 +1,33 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
-import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/glass_dialog.dart';
-
-class DesktopQuickSendPeer {
-  const DesktopQuickSendPeer({
-    required this.id,
-    required this.name,
-    required this.isConnected,
-  });
-
-  final String id;
-  final String name;
-  final bool isConnected;
-}
+import 'package:whisper/widget/quick_send_chooser.dart';
 
 Future<String?> showDesktopQuickSendDialog(
   BuildContext context, {
   required List<DesktopQuickSendDraft> drafts,
-  required List<DesktopQuickSendPeer> peers,
+  required ValueListenable<List<QuickSendTarget>> targets,
   String? initialPeerId,
 }) {
   return showWhisperDialog<String>(
     context,
-    builder: (context) => _DesktopQuickSendDialog(
-      drafts: drafts,
-      peers: peers,
-      initialPeerId: initialPeerId,
+    builder: (context) => QuickSendChooser(
+      layout: QuickSendChooserLayout.dialog,
+      items: desktopQuickSendItems(drafts),
+      targets: targets,
+      initialTargetId: initialPeerId,
     ),
   );
 }
 
-class _DesktopQuickSendDialog extends StatefulWidget {
-  const _DesktopQuickSendDialog({
-    required this.drafts,
-    required this.peers,
-    required this.initialPeerId,
-  });
-
-  final List<DesktopQuickSendDraft> drafts;
-  final List<DesktopQuickSendPeer> peers;
-  final String? initialPeerId;
-
-  @override
-  State<_DesktopQuickSendDialog> createState() =>
-      _DesktopQuickSendDialogState();
-}
-
-class _DesktopQuickSendDialogState extends State<_DesktopQuickSendDialog> {
-  String? _selectedPeerId;
-
-  @override
-  void initState() {
-    super.initState();
-    final preferred = widget.peers
-        .where((peer) => peer.id == widget.initialPeerId && peer.isConnected)
-        .firstOrNull;
-    _selectedPeerId =
-        preferred?.id ??
-        widget.peers.where((peer) => peer.isConnected).firstOrNull?.id;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final textCount = widget.drafts
-        .where((draft) => draft.text.isNotEmpty)
-        .length;
-    final fileCount = widget.drafts.fold<int>(
-      0,
-      (count, draft) => count + draft.filePaths.length,
-    );
-    final palette = context.whisperPalette;
-    return WhisperGlassDialog(
-      constraints: const BoxConstraints(
-        minWidth: 280,
-        maxWidth: 540,
-        maxHeight: 720,
-      ),
-      title: Row(
-        children: [
-          const Icon(Icons.outbox_rounded),
-          const SizedBox(width: 10),
-          Expanded(child: Text(l10n.desktopQuickSendTitle)),
-        ],
-      ),
-      content: SizedBox(
-        width: 460,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.desktopQuickSendSummary(textCount, fileCount),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: palette.textMuted),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    ...widget.drafts.take(4).map(_buildDraftRow),
-                    if (widget.drafts.length > 4)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-                        child: Text(
-                          l10n.desktopQuickSendMore(widget.drafts.length - 4),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: palette.textMuted),
-                        ),
-                      ),
-                    const Divider(height: 24),
-                    Text(
-                      l10n.desktopQuickSendChooseDevice,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    if (widget.peers.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          l10n.desktopQuickSendNoTrustedDevices,
-                          style: TextStyle(color: palette.textMuted),
-                        ),
-                      ),
-                    ...widget.peers.map(_buildPeerRow),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        WhisperDialogButton(
-          onPressed: () => Navigator.of(context).pop(),
-          label: l10n.desktopQuickSendLater,
-        ),
-        WhisperDialogButton(
-          onPressed: _selectedPeerId == null
-              ? null
-              : () => Navigator.of(context).pop(_selectedPeerId),
-          icon: Icons.send_rounded,
-          label: l10n.desktopQuickSendSend,
-          prominent: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDraftRow(DesktopQuickSendDraft draft) {
-    final theme = Theme.of(context);
-    final palette = context.whisperPalette;
-    final title = draft.text.isNotEmpty
-        ? draft.text.replaceAll(RegExp(r'\s+'), ' ').trim()
-        : draft.filePaths.isEmpty
-        ? ''
-        : p.basename(draft.filePaths.first);
-    final fileCount = draft.filePaths.length;
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      leading: Icon(
-        draft.text.isNotEmpty ? Icons.text_snippet_outlined : Icons.attach_file,
-        color: theme.colorScheme.primary,
-      ),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: fileCount == 0
-          ? null
-          : Text(
-              AppLocalizations.of(context)!.desktopQuickSendFiles(fileCount),
-              style: TextStyle(color: palette.textMuted),
-            ),
-    );
-  }
-
-  Widget _buildPeerRow(DesktopQuickSendPeer peer) {
-    final l10n = AppLocalizations.of(context)!;
-    return RadioListTile<String>(
-      value: peer.id,
-      groupValue: _selectedPeerId,
-      onChanged: peer.isConnected
-          ? (value) => setState(() => _selectedPeerId = value)
-          : null,
-      contentPadding: EdgeInsets.zero,
-      secondary: Icon(
-        peer.isConnected ? Icons.lock_rounded : Icons.lock_clock_outlined,
-        size: 20,
-      ),
-      title: Text(peer.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: peer.isConnected
-          ? null
-          : Text(l10n.desktopQuickSendDeviceOffline),
-    );
-  }
+List<QuickSendItem> desktopQuickSendItems(List<DesktopQuickSendDraft> drafts) {
+  return <QuickSendItem>[
+    for (final draft in drafts) ...[
+      if (draft.text.isNotEmpty) QuickSendItem.text(draft.text),
+      for (final path in draft.filePaths)
+        QuickSendItem.file(name: p.basename(path), source: path),
+    ],
+  ];
 }

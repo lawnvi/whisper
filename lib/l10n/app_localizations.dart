@@ -2692,41 +2692,41 @@ abstract class AppLocalizations {
   /// **'配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。'**
   String get connectionDiagnosticPairing;
 
-  /// No description provided for @androidSystemShareTitle.
+  /// No description provided for @quickSendTitle.
   ///
   /// In zh, this message translates to:
-  /// **'发送分享内容'**
-  String get androidSystemShareTitle;
+  /// **'快捷发送'**
+  String get quickSendTitle;
 
-  /// No description provided for @androidSystemShareChooseTrustedDevice.
+  /// No description provided for @quickSendTargets.
   ///
   /// In zh, this message translates to:
-  /// **'选择可信设备，确认前不会发送任何内容'**
-  String get androidSystemShareChooseTrustedDevice;
+  /// **'发送到'**
+  String get quickSendTargets;
 
-  /// No description provided for @androidSystemShareOnline.
+  /// No description provided for @quickSendNoConnectedDevices.
   ///
   /// In zh, this message translates to:
-  /// **'在线'**
-  String get androidSystemShareOnline;
+  /// **'还没有已连接的设备，连接后即可发送'**
+  String get quickSendNoConnectedDevices;
 
-  /// No description provided for @androidSystemShareOffline.
+  /// No description provided for @quickSendMoreFiles.
   ///
   /// In zh, this message translates to:
-  /// **'离线'**
-  String get androidSystemShareOffline;
+  /// **'另有 {count} 个文件'**
+  String quickSendMoreFiles(int count);
 
-  /// No description provided for @androidSystemShareNoTrustedDevices.
+  /// No description provided for @quickSendLater.
   ///
   /// In zh, this message translates to:
-  /// **'没有可选的可信设备，请先完成配对并确认设备身份'**
-  String get androidSystemShareNoTrustedDevices;
+  /// **'稍后'**
+  String get quickSendLater;
 
-  /// No description provided for @androidSystemShareConfirmTarget.
+  /// No description provided for @quickSendSend.
   ///
   /// In zh, this message translates to:
-  /// **'确认发送目标'**
-  String get androidSystemShareConfirmTarget;
+  /// **'发送'**
+  String get quickSendSend;
 
   /// No description provided for @androidSystemShareWaitingForDevice.
   ///
@@ -2781,66 +2781,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'选择设备'**
   String get androidSystemShareChooseAction;
-
-  /// No description provided for @androidSystemShareMoreFiles.
-  ///
-  /// In zh, this message translates to:
-  /// **'另有 {count} 个文件'**
-  String androidSystemShareMoreFiles(int count);
-
-  /// No description provided for @desktopQuickSendTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'快捷发送'**
-  String get desktopQuickSendTitle;
-
-  /// No description provided for @desktopQuickSendSummary.
-  ///
-  /// In zh, this message translates to:
-  /// **'{textCount} 条文本 · {fileCount} 个文件'**
-  String desktopQuickSendSummary(int textCount, int fileCount);
-
-  /// No description provided for @desktopQuickSendMore.
-  ///
-  /// In zh, this message translates to:
-  /// **'还有 {count} 项'**
-  String desktopQuickSendMore(int count);
-
-  /// No description provided for @desktopQuickSendFiles.
-  ///
-  /// In zh, this message translates to:
-  /// **'{count} 个文件'**
-  String desktopQuickSendFiles(int count);
-
-  /// No description provided for @desktopQuickSendChooseDevice.
-  ///
-  /// In zh, this message translates to:
-  /// **'发送到可信设备'**
-  String get desktopQuickSendChooseDevice;
-
-  /// No description provided for @desktopQuickSendNoTrustedDevices.
-  ///
-  /// In zh, this message translates to:
-  /// **'没有可信设备，请先完成配对'**
-  String get desktopQuickSendNoTrustedDevices;
-
-  /// No description provided for @desktopQuickSendDeviceOffline.
-  ///
-  /// In zh, this message translates to:
-  /// **'设备离线，内容会保留到重新连接'**
-  String get desktopQuickSendDeviceOffline;
-
-  /// No description provided for @desktopQuickSendLater.
-  ///
-  /// In zh, this message translates to:
-  /// **'稍后'**
-  String get desktopQuickSendLater;
-
-  /// No description provided for @desktopQuickSendSend.
-  ///
-  /// In zh, this message translates to:
-  /// **'发送'**
-  String get desktopQuickSendSend;
 
   /// No description provided for @desktopQuickSendSent.
   ///

@@ -1430,22 +1430,24 @@ class AppLocalizationsZh extends AppLocalizations {
       '配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。';
 
   @override
-  String get androidSystemShareTitle => '发送分享内容';
+  String get quickSendTitle => '快捷发送';
 
   @override
-  String get androidSystemShareChooseTrustedDevice => '选择可信设备，确认前不会发送任何内容';
+  String get quickSendTargets => '发送到';
 
   @override
-  String get androidSystemShareOnline => '在线';
+  String get quickSendNoConnectedDevices => '还没有已连接的设备，连接后即可发送';
 
   @override
-  String get androidSystemShareOffline => '离线';
+  String quickSendMoreFiles(int count) {
+    return '另有 $count 个文件';
+  }
 
   @override
-  String get androidSystemShareNoTrustedDevices => '没有可选的可信设备，请先完成配对并确认设备身份';
+  String get quickSendLater => '稍后';
 
   @override
-  String get androidSystemShareConfirmTarget => '确认发送目标';
+  String get quickSendSend => '发送';
 
   @override
   String androidSystemShareWaitingForDevice(String device) {
@@ -1479,44 +1481,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get androidSystemShareChooseAction => '选择设备';
-
-  @override
-  String androidSystemShareMoreFiles(int count) {
-    return '另有 $count 个文件';
-  }
-
-  @override
-  String get desktopQuickSendTitle => '快捷发送';
-
-  @override
-  String desktopQuickSendSummary(int textCount, int fileCount) {
-    return '$textCount 条文本 · $fileCount 个文件';
-  }
-
-  @override
-  String desktopQuickSendMore(int count) {
-    return '还有 $count 项';
-  }
-
-  @override
-  String desktopQuickSendFiles(int count) {
-    return '$count 个文件';
-  }
-
-  @override
-  String get desktopQuickSendChooseDevice => '发送到可信设备';
-
-  @override
-  String get desktopQuickSendNoTrustedDevices => '没有可信设备，请先完成配对';
-
-  @override
-  String get desktopQuickSendDeviceOffline => '设备离线，内容会保留到重新连接';
-
-  @override
-  String get desktopQuickSendLater => '稍后';
-
-  @override
-  String get desktopQuickSendSend => '发送';
 
   @override
   String get desktopQuickSendSent => '已加入加密传输队列';

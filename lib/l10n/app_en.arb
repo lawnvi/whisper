@@ -660,12 +660,15 @@
   "connectionDiagnosticIdentity": "The device identity does not match the QR code, so Whisper stopped the connection. Ask the other device to show a new code; do not bypass this check.",
   "connectionDiagnosticVersion": "The devices use incompatible protocol versions. Update Whisper to the same recent version, then retry.",
   "connectionDiagnosticPairing": "Pairing did not finish. Keep Whisper open on both devices and compare the pairing code again.",
-  "androidSystemShareTitle": "Send shared content",
-  "androidSystemShareChooseTrustedDevice": "Choose a trusted device. Nothing is sent until you confirm",
-  "androidSystemShareOnline": "Online",
-  "androidSystemShareOffline": "Offline",
-  "androidSystemShareNoTrustedDevices": "No trusted devices are available. Pair a device and confirm its identity first",
-  "androidSystemShareConfirmTarget": "Confirm destination",
+  "quickSendTitle": "Quick send",
+  "quickSendTargets": "Send to",
+  "quickSendNoConnectedDevices": "No device is connected yet. Connect one to send.",
+  "quickSendMoreFiles": "{count} more files",
+  "@quickSendMoreFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "quickSendLater": "Later",
+  "quickSendSend": "Send",
   "androidSystemShareWaitingForDevice": "Waiting for {device}; sending will start when it connects",
   "@androidSystemShareWaitingForDevice": {
     "placeholders": {
@@ -696,35 +699,6 @@
   "androidSystemShareRejected": "The shared content exceeded a limit or could not be read completely, so it was not added",
   "androidSystemShareTargetNeedsReselection": "The target device's identity changed or is no longer trusted. Choose it again",
   "androidSystemShareChooseAction": "Choose device",
-  "androidSystemShareMoreFiles": "{count} more files",
-  "@androidSystemShareMoreFiles": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "desktopQuickSendTitle": "Quick send",
-  "desktopQuickSendSummary": "{textCount} text items · {fileCount} files",
-  "@desktopQuickSendSummary": {
-    "placeholders": {
-      "textCount": { "type": "int" },
-      "fileCount": { "type": "int" }
-    }
-  },
-  "desktopQuickSendMore": "{count} more items",
-  "@desktopQuickSendMore": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendFiles": "{count} files",
-  "@desktopQuickSendFiles": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendChooseDevice": "Send to a trusted device",
-  "desktopQuickSendNoTrustedDevices": "No trusted devices. Pair a device first.",
-  "desktopQuickSendDeviceOffline": "Offline; the content will remain pending",
-  "desktopQuickSendLater": "Later",
-  "desktopQuickSendSend": "Send",
   "desktopQuickSendSent": "Added to the encrypted transfer queue",
   "desktopQuickSendFailedRetained": "Sending did not finish; the content was retained",
   "desktopQuickSendEmptyClipboard": "The clipboard has no supported content",

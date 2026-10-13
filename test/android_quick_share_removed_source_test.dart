@@ -79,8 +79,8 @@ void main() {
     );
     expect(deviceList, contains('_androidSystemShareInbox.initialize()'));
     expect(deviceList, contains('_androidSystemShareInbox.removeListener('));
-    expect(deviceList, contains('showWhisperModalBottomSheet<String>'));
-    expect(deviceList, contains('onlineTargets.length == 1'));
+    expect(deviceList, contains('showQuickSendSheet('));
+    expect(deviceList, contains('targets: _quickSendTargets'));
     expect(deviceList, contains('locallyTrusted'));
     expect(deviceList, contains('socketManager.sendMessageTo'));
     expect(deviceList, contains('socketManager.sendQuickPickedFileToDurably'));
@@ -101,7 +101,7 @@ void main() {
       transferEngine,
       contains('releaseAndroidSystemShareStagedItem(updated.finalPath)'),
     );
-    expect(zhArb, contains('"androidSystemShareChooseTrustedDevice"'));
+    expect(zhArb, contains('"quickSendTargets"'));
     expect(zhArb, contains('"androidSystemShareFailedRetained"'));
   });
 }

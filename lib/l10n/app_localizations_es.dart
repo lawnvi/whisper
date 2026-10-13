@@ -1545,24 +1545,25 @@ class AppLocalizationsEs extends AppLocalizations {
       'El emparejamiento no terminó. Mantén Whisper abierto en ambos dispositivos y compara de nuevo el código.';
 
   @override
-  String get androidSystemShareTitle => 'Enviar contenido compartido';
+  String get quickSendTitle => 'Envío rápido';
 
   @override
-  String get androidSystemShareChooseTrustedDevice =>
-      'Elige un dispositivo de confianza. No se enviará nada hasta que confirmes';
+  String get quickSendTargets => 'Enviar a';
 
   @override
-  String get androidSystemShareOnline => 'En línea';
+  String get quickSendNoConnectedDevices =>
+      'Aún no hay ningún dispositivo conectado. Conecta uno para enviar.';
 
   @override
-  String get androidSystemShareOffline => 'Sin conexión';
+  String quickSendMoreFiles(int count) {
+    return '$count archivos más';
+  }
 
   @override
-  String get androidSystemShareNoTrustedDevices =>
-      'No hay dispositivos de confianza disponibles. Empareja uno y confirma primero su identidad';
+  String get quickSendLater => 'Más tarde';
 
   @override
-  String get androidSystemShareConfirmTarget => 'Confirmar destino';
+  String get quickSendSend => 'Enviar';
 
   @override
   String androidSystemShareWaitingForDevice(String device) {
@@ -1601,47 +1602,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get androidSystemShareChooseAction => 'Elegir dispositivo';
-
-  @override
-  String androidSystemShareMoreFiles(int count) {
-    return '$count archivos más';
-  }
-
-  @override
-  String get desktopQuickSendTitle => 'Envío rápido';
-
-  @override
-  String desktopQuickSendSummary(int textCount, int fileCount) {
-    return '$textCount textos · $fileCount archivos';
-  }
-
-  @override
-  String desktopQuickSendMore(int count) {
-    return '$count elementos más';
-  }
-
-  @override
-  String desktopQuickSendFiles(int count) {
-    return '$count archivos';
-  }
-
-  @override
-  String get desktopQuickSendChooseDevice =>
-      'Enviar a un dispositivo de confianza';
-
-  @override
-  String get desktopQuickSendNoTrustedDevices =>
-      'No hay dispositivos de confianza. Empareja uno primero.';
-
-  @override
-  String get desktopQuickSendDeviceOffline =>
-      'Sin conexión; el contenido seguirá pendiente';
-
-  @override
-  String get desktopQuickSendLater => 'Más tarde';
-
-  @override
-  String get desktopQuickSendSend => 'Enviar';
 
   @override
   String get desktopQuickSendSent =>

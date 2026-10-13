@@ -736,12 +736,15 @@
   "connectionDiagnosticIdentity": "设备身份与二维码不一致，Whisper 已停止连接。请在对方设备重新出示二维码，切勿绕过此检查。",
   "connectionDiagnosticVersion": "两台设备的协议版本不兼容，请将 Whisper 更新到相同的新版本后重试。",
   "connectionDiagnosticPairing": "配对未完成。请保持两台设备上的 Whisper 打开，并重新核对配对码。",
-  "androidSystemShareTitle": "发送分享内容",
-  "androidSystemShareChooseTrustedDevice": "选择可信设备，确认前不会发送任何内容",
-  "androidSystemShareOnline": "在线",
-  "androidSystemShareOffline": "离线",
-  "androidSystemShareNoTrustedDevices": "没有可选的可信设备，请先完成配对并确认设备身份",
-  "androidSystemShareConfirmTarget": "确认发送目标",
+  "quickSendTitle": "快捷发送",
+  "quickSendTargets": "发送到",
+  "quickSendNoConnectedDevices": "还没有已连接的设备，连接后即可发送",
+  "quickSendMoreFiles": "另有 {count} 个文件",
+  "@quickSendMoreFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "quickSendLater": "稍后",
+  "quickSendSend": "发送",
   "androidSystemShareWaitingForDevice": "已选择 {device}，连接后将自动发送",
   "@androidSystemShareWaitingForDevice": {
     "placeholders": {
@@ -772,35 +775,6 @@
   "androidSystemShareRejected": "分享内容超过限制或无法完整读取，未加入队列",
   "androidSystemShareTargetNeedsReselection": "目标设备身份已变化或不再可信，请重新选择",
   "androidSystemShareChooseAction": "选择设备",
-  "androidSystemShareMoreFiles": "另有 {count} 个文件",
-  "@androidSystemShareMoreFiles": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "desktopQuickSendTitle": "快捷发送",
-  "desktopQuickSendSummary": "{textCount} 条文本 · {fileCount} 个文件",
-  "@desktopQuickSendSummary": {
-    "placeholders": {
-      "textCount": { "type": "int" },
-      "fileCount": { "type": "int" }
-    }
-  },
-  "desktopQuickSendMore": "还有 {count} 项",
-  "@desktopQuickSendMore": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendFiles": "{count} 个文件",
-  "@desktopQuickSendFiles": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendChooseDevice": "发送到可信设备",
-  "desktopQuickSendNoTrustedDevices": "没有可信设备，请先完成配对",
-  "desktopQuickSendDeviceOffline": "设备离线，内容会保留到重新连接",
-  "desktopQuickSendLater": "稍后",
-  "desktopQuickSendSend": "发送",
   "desktopQuickSendSent": "已加入加密传输队列",
   "desktopQuickSendFailedRetained": "发送未完成，内容已保留",
   "desktopQuickSendEmptyClipboard": "剪贴板中没有可发送的内容",

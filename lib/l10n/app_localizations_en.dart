@@ -1523,24 +1523,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pairing did not finish. Keep Whisper open on both devices and compare the pairing code again.';
 
   @override
-  String get androidSystemShareTitle => 'Send shared content';
+  String get quickSendTitle => 'Quick send';
 
   @override
-  String get androidSystemShareChooseTrustedDevice =>
-      'Choose a trusted device. Nothing is sent until you confirm';
+  String get quickSendTargets => 'Send to';
 
   @override
-  String get androidSystemShareOnline => 'Online';
+  String get quickSendNoConnectedDevices =>
+      'No device is connected yet. Connect one to send.';
 
   @override
-  String get androidSystemShareOffline => 'Offline';
+  String quickSendMoreFiles(int count) {
+    return '$count more files';
+  }
 
   @override
-  String get androidSystemShareNoTrustedDevices =>
-      'No trusted devices are available. Pair a device and confirm its identity first';
+  String get quickSendLater => 'Later';
 
   @override
-  String get androidSystemShareConfirmTarget => 'Confirm destination';
+  String get quickSendSend => 'Send';
 
   @override
   String androidSystemShareWaitingForDevice(String device) {
@@ -1579,46 +1580,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get androidSystemShareChooseAction => 'Choose device';
-
-  @override
-  String androidSystemShareMoreFiles(int count) {
-    return '$count more files';
-  }
-
-  @override
-  String get desktopQuickSendTitle => 'Quick send';
-
-  @override
-  String desktopQuickSendSummary(int textCount, int fileCount) {
-    return '$textCount text items · $fileCount files';
-  }
-
-  @override
-  String desktopQuickSendMore(int count) {
-    return '$count more items';
-  }
-
-  @override
-  String desktopQuickSendFiles(int count) {
-    return '$count files';
-  }
-
-  @override
-  String get desktopQuickSendChooseDevice => 'Send to a trusted device';
-
-  @override
-  String get desktopQuickSendNoTrustedDevices =>
-      'No trusted devices. Pair a device first.';
-
-  @override
-  String get desktopQuickSendDeviceOffline =>
-      'Offline; the content will remain pending';
-
-  @override
-  String get desktopQuickSendLater => 'Later';
-
-  @override
-  String get desktopQuickSendSend => 'Send';
 
   @override
   String get desktopQuickSendSent => 'Added to the encrypted transfer queue';

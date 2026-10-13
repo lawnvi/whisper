@@ -687,12 +687,15 @@
   "connectionDiagnosticIdentity": "La identidad no coincide con el código QR y Whisper detuvo la conexión. Pide un código nuevo; no omitas esta comprobación.",
   "connectionDiagnosticVersion": "Los dispositivos usan versiones de protocolo incompatibles. Actualiza Whisper a la misma versión reciente y vuelve a intentarlo.",
   "connectionDiagnosticPairing": "El emparejamiento no terminó. Mantén Whisper abierto en ambos dispositivos y compara de nuevo el código.",
-  "androidSystemShareTitle": "Enviar contenido compartido",
-  "androidSystemShareChooseTrustedDevice": "Elige un dispositivo de confianza. No se enviará nada hasta que confirmes",
-  "androidSystemShareOnline": "En línea",
-  "androidSystemShareOffline": "Sin conexión",
-  "androidSystemShareNoTrustedDevices": "No hay dispositivos de confianza disponibles. Empareja uno y confirma primero su identidad",
-  "androidSystemShareConfirmTarget": "Confirmar destino",
+  "quickSendTitle": "Envío rápido",
+  "quickSendTargets": "Enviar a",
+  "quickSendNoConnectedDevices": "Aún no hay ningún dispositivo conectado. Conecta uno para enviar.",
+  "quickSendMoreFiles": "{count} archivos más",
+  "@quickSendMoreFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "quickSendLater": "Más tarde",
+  "quickSendSend": "Enviar",
   "androidSystemShareWaitingForDevice": "Esperando a {device}; el envío comenzará cuando se conecte",
   "@androidSystemShareWaitingForDevice": {
     "placeholders": {
@@ -723,35 +726,6 @@
   "androidSystemShareRejected": "El contenido superó un límite o no se pudo leer por completo, por lo que no se añadió",
   "androidSystemShareTargetNeedsReselection": "La identidad del dispositivo cambió o ya no es de confianza. Vuelve a elegirlo",
   "androidSystemShareChooseAction": "Elegir dispositivo",
-  "androidSystemShareMoreFiles": "{count} archivos más",
-  "@androidSystemShareMoreFiles": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "desktopQuickSendTitle": "Envío rápido",
-  "desktopQuickSendSummary": "{textCount} textos · {fileCount} archivos",
-  "@desktopQuickSendSummary": {
-    "placeholders": {
-      "textCount": { "type": "int" },
-      "fileCount": { "type": "int" }
-    }
-  },
-  "desktopQuickSendMore": "{count} elementos más",
-  "@desktopQuickSendMore": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendFiles": "{count} archivos",
-  "@desktopQuickSendFiles": {
-    "placeholders": { "count": { "type": "int" } }
-  },
-  "desktopQuickSendChooseDevice": "Enviar a un dispositivo de confianza",
-  "desktopQuickSendNoTrustedDevices": "No hay dispositivos de confianza. Empareja uno primero.",
-  "desktopQuickSendDeviceOffline": "Sin conexión; el contenido seguirá pendiente",
-  "desktopQuickSendLater": "Más tarde",
-  "desktopQuickSendSend": "Enviar",
   "desktopQuickSendSent": "Añadido a la cola de transferencia cifrada",
   "desktopQuickSendFailedRetained": "El envío no terminó; el contenido se ha conservado",
   "desktopQuickSendEmptyClipboard": "El portapapeles no tiene contenido compatible",

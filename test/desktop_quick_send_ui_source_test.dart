@@ -59,8 +59,8 @@ void main() {
       'lib/l10n/app_es.arb',
     ]) {
       final source = File(path).readAsStringSync();
-      expect(source, contains('"desktopQuickSendTitle"'), reason: path);
-      expect(source, contains('"desktopQuickSendChooseDevice"'), reason: path);
+      expect(source, contains('"quickSendTitle"'), reason: path);
+      expect(source, contains('"quickSendTargets"'), reason: path);
       expect(
         source,
         contains('"desktopQuickSendFailedRetained"'),

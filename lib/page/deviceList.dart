@@ -74,6 +74,7 @@ import 'package:whisper/widget/device_sidebar_toolbar.dart';
 import 'package:whisper/widget/device_workspace_layout.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
+import 'package:whisper/widget/quick_send_chooser.dart';
 import 'package:whisper/widget/glass_dialog.dart';
 import 'package:whisper/widget/pairing_dialog.dart';
 import 'package:window_manager/window_manager.dart';
@@ -213,13 +214,6 @@ class _AudioGroupSetupResult {
   final Map<String, AudioChannelRole> sinks;
 }
 
-class _AndroidSystemShareTarget {
-  const _AndroidSystemShareTarget({required this.device, required this.online});
-
-  final DeviceData device;
-  final bool online;
-}
-
 class DeviceListScreen extends StatefulWidget {
   const DeviceListScreen({super.key});
 
@@ -294,6 +288,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
   bool _androidSystemShareRetrying = false;
   final Set<String> _deferredAndroidSystemShareEventIds = <String>{};
   bool _desktopQuickSendTargetsLoaded = false;
+  // Connected, trusted devices; open quick send pickers follow it live.
+  final ValueNotifier<List<QuickSendTarget>> _quickSendTargets =
+      ValueNotifier<List<QuickSendTarget>>(const <QuickSendTarget>[]);
   bool _desktopQuickSendDialogVisible = false;
   bool _desktopQuickSendPresentationScheduled = false;
   String? _lastPresentedDesktopQuickSendDraftId;
@@ -635,6 +632,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     }
     _desktopSearchController.dispose();
     _desktopSearchFocusNode.dispose();
+    _quickSendTargets.dispose();
     // stop watch
     unawaited(clipboardWatcher.stop());
     super.dispose();
@@ -832,27 +830,23 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return null;
   }
 
-  List<DesktopQuickSendPeer> _trustedDesktopQuickSendPeers() {
-    final peers = <DesktopQuickSendPeer>[];
+  /// Quick send only offers devices it can deliver to right now.
+  List<QuickSendTarget> _connectedQuickSendTargets() {
+    final targetsById = <String, QuickSendTarget>{};
     for (final candidate in devices) {
-      if (_trustedDeviceIdentityHash(candidate.uid) == null) {
+      if (!socketManager.isConnectedTo(candidate.uid) ||
+          _trustedDeviceIdentityHash(candidate.uid) == null) {
         continue;
       }
-      peers.add(
-        DesktopQuickSendPeer(
-          id: candidate.uid,
-          name: candidate.name,
-          isConnected: socketManager.isConnectedTo(candidate.uid),
-        ),
+      targetsById[candidate.uid] = QuickSendTarget(
+        id: candidate.uid,
+        name: candidate.name,
+        platform: candidate.platform,
       );
     }
-    peers.sort((left, right) {
-      if (left.isConnected != right.isConnected) {
-        return left.isConnected ? -1 : 1;
-      }
-      return left.name.compareTo(right.name);
-    });
-    return peers;
+    final targets = targetsById.values.toList()
+      ..sort((left, right) => left.name.compareTo(right.name));
+    return List<QuickSendTarget>.unmodifiable(targets);
   }
 
   Future<void> _presentDesktopQuickSend({bool force = false}) async {
@@ -870,10 +864,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
     _desktopQuickSendDialogVisible = true;
     String? peerId;
     try {
+      _quickSendTargets.value = _connectedQuickSendTargets();
       peerId = await showDesktopQuickSendDialog(
         context,
         drafts: _desktopQuickSendInbox.drafts,
-        peers: _trustedDesktopQuickSendPeers(),
+        targets: _quickSendTargets,
         initialPeerId:
             _desktopQuickSendInbox.drafts.first.preferredTargetPeerId ??
             _selectedDesktopPeerId,
@@ -891,10 +886,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   Future<void> _sendDesktopQuickSend(String peerId) async {
     final l10n = AppLocalizations.of(context)!;
-    final target = _trustedDesktopQuickSendPeers()
-        .where((candidate) => candidate.id == peerId)
-        .firstOrNull;
-    if (target == null || !target.isConnected) {
+    if (!_connectedQuickSendTargets().any(
+      (candidate) => candidate.id == peerId,
+    )) {
       showAppToast(
         l10n.desktopQuickSendFailedRetained,
         tone: AppToastTone.error,
@@ -1143,203 +1137,21 @@ class _DeviceListScreen extends State<DeviceListScreen>
   Future<String?> _showAndroidSystemShareTargetSheet(
     AndroidSystemShareEvent event,
   ) {
-    final targets = _trustedAndroidSystemShareTargets();
-    final onlineTargets = targets.where((target) => target.online).toList();
-    String? selectedPeerId = onlineTargets.length == 1
-        ? onlineTargets.single.device.uid
-        : null;
-    final l10n = AppLocalizations.of(context)!;
-    final normalizedText = event.text.trim();
-    final textPreview = normalizedText.length <= 500
-        ? normalizedText
-        : normalizedText.substring(0, 500);
-    return showWhisperModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    l10n.androidSystemShareTitle,
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    l10n.androidSystemShareChooseTrustedDevice,
-                    style: Theme.of(sheetContext).textTheme.bodyMedium
-                        ?.copyWith(
-                          color: sheetContext.whisperPalette.textMuted,
-                        ),
-                  ),
-                  if (textPreview.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.text_snippet_outlined, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            textPreview,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (event.items.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    ...event.items
-                        .take(3)
-                        .map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.insert_drive_file_outlined,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    item.displayName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    if (event.items.length > 3)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          l10n.androidSystemShareMoreFiles(
-                            event.items.length - 3,
-                          ),
-                          style: Theme.of(sheetContext).textTheme.bodySmall
-                              ?.copyWith(
-                                color: sheetContext.whisperPalette.textMuted,
-                              ),
-                        ),
-                      ),
-                  ],
-                  const SizedBox(height: 16),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 320),
-                    child: targets.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Text(
-                              l10n.androidSystemShareNoTrustedDevices,
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: targets.length,
-                            itemBuilder: (context, index) {
-                              final target = targets[index];
-                              final selected =
-                                  selectedPeerId == target.device.uid;
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  selected
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_unchecked,
-                                  color: selected
-                                      ? Theme.of(
-                                          sheetContext,
-                                        ).colorScheme.primary
-                                      : null,
-                                ),
-                                title: Text(
-                                  target.device.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  target.online
-                                      ? l10n.androidSystemShareOnline
-                                      : l10n.androidSystemShareOffline,
-                                ),
-                                trailing: Icon(
-                                  target.online
-                                      ? Icons.wifi_rounded
-                                      : Icons.wifi_off_rounded,
-                                  size: 20,
-                                  color: target.online
-                                      ? sheetContext.whisperPalette.trusted
-                                      : sheetContext.whisperPalette.textMuted,
-                                ),
-                                onTap: () => setSheetState(
-                                  () => selectedPeerId = target.device.uid,
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        child: Text(targets.isEmpty ? l10n.close : l10n.cancel),
-                      ),
-                      if (targets.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          onPressed: selectedPeerId == null
-                              ? null
-                              : () => Navigator.of(
-                                  sheetContext,
-                                ).pop(selectedPeerId),
-                          icon: const Icon(Icons.send_rounded, size: 18),
-                          label: Text(l10n.androidSystemShareConfirmTarget),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+    _quickSendTargets.value = _connectedQuickSendTargets();
+    return showQuickSendSheet(
+      context,
+      items: <QuickSendItem>[
+        if (event.text.trim().isNotEmpty) QuickSendItem.text(event.text),
+        for (final item in event.items)
+          QuickSendItem.file(
+            name: item.displayName,
+            source: item.uri,
+            mimeType: item.mimeType,
+            size: item.size,
+          ),
+      ],
+      targets: _quickSendTargets,
     );
-  }
-
-  List<_AndroidSystemShareTarget> _trustedAndroidSystemShareTargets() {
-    final targetsById = <String, _AndroidSystemShareTarget>{};
-    for (final candidate in devices) {
-      if (_trustedDeviceIdentityHash(candidate.uid) == null) {
-        continue;
-      }
-      targetsById[candidate.uid] = _AndroidSystemShareTarget(
-        device: candidate,
-        online: socketManager.isConnectedTo(candidate.uid),
-      );
-    }
-    final targets = targetsById.values.toList(growable: false);
-    targets.sort((left, right) {
-      if (left.online != right.online) {
-        return left.online ? -1 : 1;
-      }
-      return left.device.name.compareTo(right.device.name);
-    });
-    return targets;
   }
 
   String _androidSystemShareTargetName(String peerId) {
@@ -1916,6 +1728,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
       _androidSystemShareTargetsLoaded = true;
       _desktopQuickSendTargetsLoaded = true;
     });
+    _quickSendTargets.value = _connectedQuickSendTargets();
 
     if (Platform.isAndroid) {
       _scheduleAndroidSystemSharePresentation();
