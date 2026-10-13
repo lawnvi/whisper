@@ -237,6 +237,16 @@ class AndroidDocumentPickerPlugin :
         try {
             (activity ?: context).startActivity(intent)
             result.success(true)
+        } catch (_: SecurityException) {
+            // A media store entry read through storage access may not be ours
+            // to grant; gallery and player apps read the media store anyway.
+            intent.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            try {
+                (activity ?: context).startActivity(intent)
+                result.success(true)
+            } catch (_: Exception) {
+                result.success(false)
+            }
         } catch (_: Exception) {
             result.success(false)
         }

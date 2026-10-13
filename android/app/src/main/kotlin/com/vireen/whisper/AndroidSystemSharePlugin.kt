@@ -241,6 +241,18 @@ class AndroidSystemSharePlugin :
             throw ShareRejectionException(FAILURE_ITEM_TOO_LARGE)
         }
         val displayName = withTypeExtension(metadata.displayName, metadata.mimeType)
+        SharedMediaStoreSource.resolve(
+            context,
+            sourceUri,
+            metadata.displayName,
+            metadata.size
+        )?.let { stored ->
+            return JSONObject()
+                .put("uri", stored.uri.toString())
+                .put("displayName", displayName.take(MAX_DISPLAY_NAME_LENGTH))
+                .put("mimeType", metadata.mimeType.take(MAX_MIME_TYPE_LENGTH))
+                .put("size", stored.size)
+        }
         val suffix = safeExtension(displayName)
         val stagedFile = File(eventDirectory, "item-${index.toString().padStart(2, '0')}$suffix")
         val partialFile = File(eventDirectory, "${stagedFile.name}.part")
@@ -386,7 +398,9 @@ class AndroidSystemSharePlugin :
             .put("targetPeerId", "")
             .put("targetPublicKeyHash", "")
             .put("sentItemUris", JSONArray())
-        val items = event.optJSONArray("items") ?: JSONArray()
+        // Items sent straight from the media store have no copy to release.
+        val items = stagedItems(event.optJSONArray("items") ?: JSONArray())
+        event.put("items", items)
         if (items.length() == 0) {
             eventDirectory.deleteRecursively()
         } else {
@@ -446,6 +460,17 @@ class AndroidSystemSharePlugin :
             return true
         }
         return false
+    }
+
+    private fun stagedItems(items: JSONArray): JSONArray {
+        val staged = JSONArray()
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            if (stagedFileFor(item.optString("uri")) != null) {
+                staged.put(item)
+            }
+        }
+        return staged
     }
 
     private fun stagedFileFor(uriText: String): File? {
