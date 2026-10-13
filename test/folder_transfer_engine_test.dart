@@ -19,6 +19,7 @@ import 'package:whisper/socket/folder_transfer_scan.dart';
 import 'package:whisper/socket/peer_connection.dart';
 import 'package:whisper/socket/transfer_ack_watchdog.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
+import 'package:whisper/socket/wire_input_policy.dart';
 import 'package:whisper/socket/wire_message_replay.dart';
 import 'package:whisper/state/peer_profile.dart';
 
@@ -117,6 +118,8 @@ final class _Device {
     },
     markPeerUnresponsive: (_) {
       unresponsiveVerdicts += 1;
+      // As in the app, a peer that was given up on is disconnected.
+      linked = false;
       return false;
     },
     ackWatchdog: ackTimeout == null
@@ -641,14 +644,14 @@ void main() {
   group('a receiver still writing what it has', () {
     // The last frame is held back, so the receiver sits on data it has not
     // made durable yet for as long as the test wants: a long write.
-    Future<String> sendWithLastFrameHeld(Duration hold) async {
+    Future<String> sendWithLastFrameHeld(Future<void> Function() hold) async {
       _writeTree(source, <String, List<int>>{
         'clip.bin': _pattern(1900 * _kib, 9),
       });
       sender.beforeDeliver = (frame) async {
         if (frame.type == WhisperFrameType.fileData &&
             frame.offset >= 1536 * _kib) {
-          await Future<void>.delayed(hold);
+          await hold();
         }
       };
       await sender.engine.sendFolderTo('receiver', source.path);
@@ -664,7 +667,7 @@ void main() {
       );
       // Three timeouts in a row would have passed long before the hold ends.
       final transferId = await sendWithLastFrameHeld(
-        const Duration(milliseconds: 1500),
+        () => Future<void>.delayed(const Duration(milliseconds: 1500)),
       );
       final received = await receiver.waitForState(
         transferId,
@@ -691,8 +694,13 @@ void main() {
         ackIntervalSize: 4096 * _kib,
         quietLimit: const Duration(milliseconds: 400),
       );
-      await sendWithLastFrameHeld(const Duration(milliseconds: 2500));
-      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      // Held until the test is over, so only the sender can end the wait.
+      // How soon it does depends on how busy the machine is: the receiver
+      // has to get ready first, which was seen to take 0.6 s on its own.
+      final release = Completer<void>();
+      addTearDown(release.complete);
+      await sendWithLastFrameHeld(() => release.future);
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
       while (sender.unresponsiveVerdicts == 0 &&
           DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -700,7 +708,18 @@ void main() {
 
       expect(sender.unresponsiveVerdicts, 1);
       expect(receiver.rejections, isEmpty);
-      expect(sender.rejections, isEmpty);
+      // The receiver goes on saying it is still writing until the connection
+      // is gone. One such message can reach the sender between its giving
+      // up and the disconnect; it finds no transfer waiting and is refused.
+      expect(
+        sender.rejections.every(
+          (error) =>
+              error is WireInputRejected &&
+              error.reason == WireInputReason.sessionNotCurrent,
+        ),
+        isTrue,
+        reason: '${sender.rejections}',
+      );
     });
   });
 

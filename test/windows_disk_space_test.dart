@@ -30,9 +30,13 @@ void main() {
         'whisper-no-such-folder',
       );
 
+      // The two readings are taken a moment apart on a disk in use.
       expect(
         await availableBytesForPath(missing),
-        windowsAvailableBytes(p.windows.rootPrefix(missing)),
+        closeTo(
+          windowsAvailableBytes(p.windows.rootPrefix(missing))!,
+          256 * 1024 * 1024,
+        ),
       );
     },
   );
