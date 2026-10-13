@@ -4,17 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ColorSpace
-import android.graphics.ImageDecoder
-import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.Looper
-import android.util.Size
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -199,7 +193,10 @@ class AndroidDocumentPickerPlugin :
         }
         ioExecutor.execute {
             try {
-                val bitmap = createThumbnail(uri, width, height)
+                val bitmap = createThumbnailOrNull(uri, width, height)
+                    // A shared photo keeps a small preview after its staged
+                    // copy is released, so the chat can still show it.
+                    ?: AndroidSystemSharePreviews.load(context, uri, width, height)
                     ?: throw IllegalStateException("Unable to decode media thumbnail")
                 val output = ByteArrayOutputStream()
                 val format = if (bitmap.hasAlpha()) {
@@ -216,93 +213,12 @@ class AndroidDocumentPickerPlugin :
         }
     }
 
-    private fun createThumbnail(uri: Uri, width: Int, height: Int): Bitmap? {
-        if (uri.scheme == "file") {
-            val retriever = MediaMetadataRetriever()
-            return try {
-                retriever.setDataSource(uri.path)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    retriever.getScaledFrameAtTime(
-                        -1, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, width, height,
-                    )
-                } else {
-                    retriever.frameAtTime?.let { scaleBitmapToFit(it, width, height) }
-                }
-            } finally {
-                retriever.release()
-            }
+    private fun createThumbnailOrNull(uri: Uri, width: Int, height: Int): Bitmap? =
+        try {
+            MediaThumbnails.create(context, uri, width, height)
+        } catch (_: Exception) {
+            null
         }
-        val mimeType = context.contentResolver.getType(uri).orEmpty()
-        if (mimeType.startsWith("video/")) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                return context.contentResolver.loadThumbnail(uri, Size(width, height), null)
-            }
-            val retriever = MediaMetadataRetriever()
-            return try {
-                retriever.setDataSource(context, uri)
-                retriever.frameAtTime?.let { scaleBitmapToFit(it, width, height) }
-            } finally {
-                retriever.release()
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return ImageDecoder.decodeBitmap(
-                ImageDecoder.createSource(context.contentResolver, uri),
-            ) { decoder, info, _ ->
-                val sourceWidth = info.size.width
-                val sourceHeight = info.size.height
-                val scale = minOf(
-                    1f,
-                    width.toFloat() / sourceWidth.toFloat(),
-                    height.toFloat() / sourceHeight.toFloat(),
-                )
-                decoder.setTargetSize(
-                    (sourceWidth * scale).toInt().coerceAtLeast(1),
-                    (sourceHeight * scale).toInt().coerceAtLeast(1),
-                )
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
-            }
-        }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri).use { input ->
-            BitmapFactory.decodeStream(input, null, bounds)
-        }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-            return null
-        }
-        var sampleSize = 1
-        while (bounds.outWidth / (sampleSize * 2) >= width &&
-            bounds.outHeight / (sampleSize * 2) >= height) {
-            sampleSize *= 2
-        }
-        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-        val decoded = context.contentResolver.openInputStream(uri).use { input ->
-            BitmapFactory.decodeStream(input, null, options)
-        } ?: return null
-        return scaleBitmapToFit(decoded, width, height)
-    }
-
-    private fun scaleBitmapToFit(bitmap: Bitmap, width: Int, height: Int): Bitmap {
-        val scale = minOf(
-            1f,
-            width.toFloat() / bitmap.width.toFloat(),
-            height.toFloat() / bitmap.height.toFloat(),
-        )
-        if (scale >= 1f) {
-            return bitmap
-        }
-        val scaled = Bitmap.createScaledBitmap(
-            bitmap,
-            (bitmap.width * scale).toInt().coerceAtLeast(1),
-            (bitmap.height * scale).toInt().coerceAtLeast(1),
-            true,
-        )
-        if (scaled !== bitmap) {
-            bitmap.recycle()
-        }
-        return scaled
-    }
 
     private fun openDocument(call: MethodCall, result: MethodChannel.Result) {
         val uriText = call.argument<String>("uri") ?: ""

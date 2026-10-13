@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.AtomicFile
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -239,7 +240,8 @@ class AndroidSystemSharePlugin :
         if (metadata.size != null && metadata.size > MAX_STAGED_ITEM_BYTES) {
             throw ShareRejectionException(FAILURE_ITEM_TOO_LARGE)
         }
-        val suffix = safeExtension(metadata.displayName)
+        val displayName = withTypeExtension(metadata.displayName, metadata.mimeType)
+        val suffix = safeExtension(displayName)
         val stagedFile = File(eventDirectory, "item-${index.toString().padStart(2, '0')}$suffix")
         val partialFile = File(eventDirectory, "${stagedFile.name}.part")
         var copied = 0L
@@ -289,7 +291,7 @@ class AndroidSystemSharePlugin :
         }
         return JSONObject()
             .put("uri", stagedUri.toString())
-            .put("displayName", metadata.displayName.take(MAX_DISPLAY_NAME_LENGTH))
+            .put("displayName", displayName.take(MAX_DISPLAY_NAME_LENGTH))
             .put("mimeType", metadata.mimeType.take(MAX_MIME_TYPE_LENGTH))
             .put("size", copied)
     }
@@ -419,6 +421,13 @@ class AndroidSystemSharePlugin :
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index) ?: continue
                 if (item.optString("uri") == uriText) {
+                    AndroidSystemSharePreviews.retain(
+                        context,
+                        uri,
+                        item.optString("mimeType").ifBlank {
+                            context.contentResolver.getType(uri).orEmpty()
+                        }
+                    )
                     stagedFileFor(item.optString("uri"))?.delete()
                     released = true
                 } else {
@@ -616,6 +625,25 @@ class AndroidSystemSharePlugin :
             return null
         }
         return File(stagingRoot(), canonicalId)
+    }
+
+    /**
+     * Some apps share photos under bare ids such as "1234". Without an
+     * extension neither this device nor the receiver can tell it is an image,
+     * so no preview is shown and the file cannot be opened.
+     */
+    private fun withTypeExtension(displayName: String, mimeType: String): String {
+        if (safeExtension(displayName).isNotEmpty()) {
+            return displayName
+        }
+        val extension = MimeTypeMap.getSingleton()
+            .getExtensionFromMimeType(mimeType.lowercase())
+            ?.takeIf { suffix ->
+                suffix.isNotEmpty() && suffix.length <= MAX_EXTENSION_LENGTH &&
+                    suffix.all { it.isLetterOrDigit() }
+            }
+            ?: return displayName
+        return "$displayName.$extension"
     }
 
     private fun safeExtension(displayName: String): String {
