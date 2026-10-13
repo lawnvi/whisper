@@ -46,6 +46,17 @@ void main() {
 
     expect(plist, contains('<key>NSServices</key>'));
     expect(plist, contains('<string>receiveQuickSendService</string>'));
+    // Without NSRequiredContext macOS registers the service but never shows
+    // it; Finder offers file services only through NSSendFileTypes.
+    expect(plist, contains('<key>NSRequiredContext</key>\n\t\t\t<dict/>'));
+    expect(
+      plist,
+      contains(
+        '<key>NSSendFileTypes</key>\n\t\t\t<array>\n'
+        '\t\t\t\t<string>public.data</string>',
+      ),
+    );
+    expect(plist, isNot(contains('NSFilenamesPboardType')));
     expect(appDelegate, contains('NSApp.servicesProvider = self'));
     expect(
       appDelegate,

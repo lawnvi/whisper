@@ -50,11 +50,15 @@
 			<string>receiveQuickSendService</string>
 			<key>NSPortName</key>
 			<string>$(PRODUCT_NAME)</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.data</string>
+			</array>
 			<key>NSSendTypes</key>
 			<array>
-				<string>NSFilenamesPboardType</string>
 				<string>NSStringPboardType</string>
-				<string>public.file-url</string>
 				<string>public.utf8-plain-text</string>
 			</array>
 		</dict>
