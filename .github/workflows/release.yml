@@ -342,15 +342,21 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Flutter
+      # The Linux packages are built with 3.41.7. With the Linux engine of
+      # 3.44.9 the app crashes within seconds of starting on some machines
+      # (seen on Arch with Mesa 24: 14 of 36 starts, none of 24 with 3.41.7,
+      # same source). Android keeps the version of the other platforms.
+      - name: Set up Flutter for Linux
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.9'
+          flutter-version: '3.41.7'
           channel: stable
           architecture: x64
           cache: true
 
-      - name: Install dependencies
+      - name: Install dependencies for Linux
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'linux' }}
         run: flutter pub get
 
       - name: Install system packages
@@ -442,6 +448,19 @@ jobs:
             build/linux/deb/whisper-*-linux-amd64.deb
             build/linux/appimage/whisper-*-linux-x86_64.AppImage
           retention-days: 7
+
+      - name: Set up Flutter for Android
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          architecture: x64
+          cache: true
+
+      - name: Install dependencies for Android
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
+        run: flutter pub get
 
       - name: Ensure Android SDK packages
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'android' }}
