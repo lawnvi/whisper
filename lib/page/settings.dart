@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -1200,6 +1201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.updateInstallFailed),
             content: SelectableText(
               l10n.updatePackageSaved(downloaded!.file.path),
+              selectionWidthStyle: BoxWidthStyle.tight,
             ),
             actions: [
               WhisperDialogButton(

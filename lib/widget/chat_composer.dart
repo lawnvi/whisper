@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -175,6 +176,7 @@ class ChatComposer extends StatelessWidget {
                     textInputAction: TextInputAction.newline,
                     minLines: 1,
                     maxLines: 5,
+                    selectionWidthStyle: BoxWidthStyle.tight,
                     autofocus: isDesktop(),
                     autocorrect: true,
                     cursorColor: accentColor,
@@ -283,6 +285,7 @@ class ChatComposer extends StatelessWidget {
                 autocorrect: true,
                 minLines: 1,
                 maxLines: 6,
+                selectionWidthStyle: BoxWidthStyle.tight,
                 style: TextStyle(
                   color: colorScheme.onSurface,
                   fontSize: 16,

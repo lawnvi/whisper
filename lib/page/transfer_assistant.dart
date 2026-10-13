@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -720,6 +721,7 @@ class _HistoryTextTileState extends State<_HistoryTextTile> {
                         theme.colorScheme,
                       ),
                       style: style,
+                      selectionWidthStyle: BoxWidthStyle.tight,
                     )
                   : Semantics(
                       button: true,

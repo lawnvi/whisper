@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1033,6 +1034,7 @@ class _MobileControlScreenState extends State<MobileControlScreen>
           focusNode: _textFocus,
           minLines: 1,
           maxLines: 4,
+          selectionWidthStyle: BoxWidthStyle.tight,
           readOnly: _coordinator.isSendingText,
           decoration: InputDecoration(
             hintText: l10n.mobileControlDraftHint,

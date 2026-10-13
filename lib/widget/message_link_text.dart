@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -182,6 +183,7 @@ class _MessageLinkTextState extends State<MessageLinkText> {
             .toList(growable: false),
       ),
       textAlign: widget.textAlign,
+      selectionWidthStyle: BoxWidthStyle.tight,
       contextMenuBuilder: (context, editableTextState) {
         return AdaptiveTextSelectionToolbar(
           anchors: editableTextState.contextMenuAnchors,
