@@ -6,9 +6,10 @@ void main() {
   test('Windows ends the process itself once its own things are closed', () {
     final source = File('lib/page/deviceList.dart').readAsStringSync();
 
-    // Taking the discovery plugin down crashes the app on Windows, at the
-    // stop itself or when the engine frees the plugin, and Windows spends a
-    // couple of seconds on every crash. Both are kept out of the way out.
+    // Left to the engine, taking the plugins down ends every exit on Windows
+    // in a crash, and Windows spends a couple of seconds on each one. Older
+    // versions of the discovery plugin also crashed when stopped. Both are
+    // kept out of the way out.
     final resources = source.substring(
       source.indexOf('Future<void> _shutdownDesktopResources() {'),
       source.indexOf('Future<void> _shutdownAndDestroyWindow() async {'),
