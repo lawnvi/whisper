@@ -627,8 +627,26 @@ class _DeviceListScreen extends State<DeviceListScreen>
           PrivacyField.errorType: privacyLog.errorType(error),
         });
       }
+      _endWindowsProcess();
     }
     return AppExitResponse.exit;
+  }
+
+  /// On Windows the process is ended here, once everything of ours is
+  /// closed, instead of letting the engine take the plugins down.
+  ///
+  /// The discovery plugin does not survive being taken down there: stopping
+  /// a browse hands Windows' DNS component a pointer into a stack frame long
+  /// gone, and its callbacks arrive on other threads after the plugin has
+  /// been freed. Every exit ended in an access violation, in DNSAPI.dll or
+  /// in the engine, and the couple of seconds Windows spends on a crash are
+  /// what closing the app seemed to take. Seen in the crash records of
+  /// 0.0.53 to 0.0.56. For the same reason discovery is not stopped on the
+  /// way out; see [_shutdownDesktopResources].
+  void _endWindowsProcess() {
+    if (Platform.isWindows) {
+      exit(0);
+    }
   }
 
   Future<void> _stopClipboardWatcher() async {
@@ -1456,7 +1474,9 @@ class _DeviceListScreen extends State<DeviceListScreen>
     return _desktopShutdownFuture ??= _shutdownCoordinator.run([
       CastReceiverManager.shared.stop,
       PlaybackWindowBridge.videos.close,
-      _stopDiscovery,
+      // Left running on Windows, where stopping it crashes the app; the
+      // process ends right after the rest. See [_endWindowsProcess].
+      if (!Platform.isWindows) _stopDiscovery,
       _stopBroadcast,
       _stopClipboardWatcher,
       _stopSocketServer,
@@ -1470,7 +1490,11 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     _isDestroyingWindow = true;
-    await _shutdownDesktopResources();
+    try {
+      await _shutdownDesktopResources();
+    } finally {
+      _endWindowsProcess();
+    }
     await windowManager.destroy();
   }
 
