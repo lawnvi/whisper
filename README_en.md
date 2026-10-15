@@ -10,7 +10,7 @@ Move text, files, clipboard, audio, and keyboard/mouse input directly between yo
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [中文](./README.md)
+[Website](https://whisper.127014.xyz/en) · [Download](https://github.com/lawnvi/whisper/releases) · [User guide](docs/user-guide_en.md) · [中文](./README.md)
 
 </div>
 
@@ -50,7 +50,7 @@ Get the installer for your platform from the [Releases](https://github.com/lawnv
 | Windows | 10 / 11, 64-bit | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`, `.rpm`, or `.AppImage` |
 
-The iOS / iPadOS build has not been validated on real devices yet.
+iOS / iPadOS: the project has no paid Apple Developer account and no iOS device to test on, so the app is not on the App Store. Every release includes an unsigned `ios-unsigned.ipa` that you can sign with your own Apple ID using a tool such as AltStore or Sideloadly (apps signed with a free Apple ID must be re-signed every 7 days). It has not been tested on a real device, so please report any problems.
 
 ## Quick start
 

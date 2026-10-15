@@ -10,7 +10,7 @@
 ![Platform](https://img.shields.io/badge/platform-Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-[下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [English](./README_en.md)
+[官网](https://whisper.127014.xyz/zh) · [下载](https://github.com/lawnvi/whisper/releases) · [使用指南](docs/user-guide.md) · [English](./README_en.md)
 
 </div>
 
@@ -50,7 +50,7 @@ Whisper 是一个局域网协作工具。设备配对后通过加密通道直接
 | Windows | 10 / 11，64 位 | `windows-x86_64.exe` |
 | Linux | x86_64 | `.deb`、`.rpm` 或 `.AppImage` |
 
-iOS / iPadOS 版本尚未完成真机验证。
+iOS / iPadOS：项目没有付费的 Apple 开发者账号，也没有 iOS 设备可以测试，所以不上架 App Store。每次发布附带一个未签名的 `ios-unsigned.ipa`，可以用 AltStore、Sideloadly 等工具以自己的 Apple ID 签名安装（免费 Apple ID 签的应用每 7 天要重签一次）。它没有经过真机测试，遇到问题欢迎反馈。
 
 ## 快速开始
 
