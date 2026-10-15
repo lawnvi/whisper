@@ -46,6 +46,9 @@ abstract class AndroidDocumentPickerPlatform {
   }) async => Uint8List(0);
 
   Future<bool> openDocument(String uri) async => false;
+
+  /// Opens a local file in another app; false when it couldn't be handed over.
+  Future<bool> openFile(String path) async => false;
 }
 
 class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
@@ -119,6 +122,14 @@ class AndroidDocumentPicker implements AndroidDocumentPickerPlatform {
   Future<bool> openDocument(String uri) async {
     return await _channel.invokeMethod<bool>('openDocument', <String, Object?>{
           'uri': uri,
+        }) ??
+        false;
+  }
+
+  @override
+  Future<bool> openFile(String path) async {
+    return await _channel.invokeMethod<bool>('openFile', <String, Object?>{
+          'path': path,
         }) ??
         false;
   }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Received files are saved under shared storage: /Download/whisper by
+         default, or the folder chosen in settings. -->
+    <external-path
+        name="external"
+        path="." />
+</paths>

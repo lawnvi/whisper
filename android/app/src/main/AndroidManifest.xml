@@ -97,6 +97,19 @@
                 android:resource="@xml/android_system_share_paths" />
         </provider>
 
+        <!-- Opens local files in other apps. open_filex wants READ_MEDIA_* for an
+             image, video or audio file outside the app's folders, and those are
+             removed above, so it would refuse them without a word. -->
+        <provider
+            android:name=".LocalFileProvider"
+            android:authorities="${applicationId}.local_files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/android_local_file_paths" />
+        </provider>
+
         <service android:name="im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
             android:exported="false"
             android:label="@string/notification_listener_label"

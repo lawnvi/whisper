@@ -8,6 +8,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/native_streaming_sha256.dart';
 import 'package:whisper/helper/privacy_log.dart';
@@ -150,6 +151,19 @@ void openFile(String path) async {
       _logFileOperation(FileOperationKind.fileOpen);
     }
     return;
+  }
+  if (Platform.isAndroid) {
+    // Through the app's own file provider: open_filex asks for READ_MEDIA_*
+    // before handing over an image, video or audio file outside the app's
+    // folders, and the manifest removes those, so received media would not
+    // open at all. It still takes what the provider can't reach.
+    try {
+      if (await AndroidDocumentPicker.shared.openFile(path)) {
+        return;
+      }
+    } on PlatformException catch (error) {
+      _logFileOperation(FileOperationKind.platformChannel, error: error);
+    }
   }
   OpenFilex.open(path);
 }

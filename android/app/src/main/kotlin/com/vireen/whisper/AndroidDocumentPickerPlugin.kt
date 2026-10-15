@@ -9,6 +9,7 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -16,6 +17,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
@@ -78,6 +80,7 @@ class AndroidDocumentPickerPlugin :
             "metadata" -> metadata(call, result)
             "loadThumbnail" -> loadThumbnail(call, result)
             "openDocument" -> openDocument(call, result)
+            "openFile" -> openFile(call, result)
             else -> result.notImplemented()
         }
     }
@@ -227,6 +230,28 @@ class AndroidDocumentPickerPlugin :
             result.success(false)
             return
         }
+        result.success(view(uri))
+    }
+
+    // A local file is handed over through [LocalFileProvider], which grants
+    // the chosen app this one file; it needs no storage access of its own.
+    private fun openFile(call: MethodCall, result: MethodChannel.Result) {
+        val file = File(call.argument<String>("path") ?: "")
+        if (!file.isFile) {
+            result.success(false)
+            return
+        }
+        val uri = try {
+            FileProvider.getUriForFile(context, "${context.packageName}.local_files", file)
+        } catch (_: IllegalArgumentException) {
+            // Outside the shared storage the provider covers, e.g. a memory card.
+            result.success(false)
+            return
+        }
+        result.success(view(uri))
+    }
+
+    private fun view(uri: Uri): Boolean {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -234,21 +259,21 @@ class AndroidDocumentPickerPlugin :
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         }
-        try {
+        return try {
             (activity ?: context).startActivity(intent)
-            result.success(true)
+            true
         } catch (_: SecurityException) {
             // A media store entry read through storage access may not be ours
             // to grant; gallery and player apps read the media store anyway.
             intent.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             try {
                 (activity ?: context).startActivity(intent)
-                result.success(true)
+                true
             } catch (_: Exception) {
-                result.success(false)
+                false
             }
         } catch (_: Exception) {
-            result.success(false)
+            false
         }
     }
 

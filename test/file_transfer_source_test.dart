@@ -163,6 +163,9 @@ class _FakeAndroidDocumentPicker implements AndroidDocumentPickerPlatform {
   Future<bool> openDocument(String uri) async => false;
 
   @override
+  Future<bool> openFile(String path) async => false;
+
+  @override
   Future<Uint8List> readBytes({
     required String uri,
     required int offset,
