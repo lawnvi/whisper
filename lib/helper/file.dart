@@ -12,6 +12,7 @@ import 'package:whisper/helper/android_document_picker.dart';
 import 'package:whisper/helper/local.dart';
 import 'package:whisper/helper/native_streaming_sha256.dart';
 import 'package:whisper/helper/privacy_log.dart';
+import 'package:whisper/helper/user_directories.dart';
 import 'package:whisper/helper/windows_disk_space.dart';
 import 'package:whisper/helper/windows_shell_open.dart';
 
@@ -505,14 +506,15 @@ Future<Directory> downloadDir() async {
   } else if (Platform.isAndroid) {
     dir = Directory("/sdcard/Download/whisper");
   } else {
-    dir = await getDownloadsDirectory();
+    dir = await userDownloadsDirectory();
     if (dir == null) {
-      return await getApplicationDocumentsDirectory();
+      return await userDocumentsDirectory();
     }
     dir = Directory(p.join(dir.path, 'whisper'));
   }
   if (!dir.existsSync()) {
-    dir.createSync();
+    // Where Linux has no downloads folder set up, it may not exist yet.
+    dir.createSync(recursive: true);
   }
   return dir;
 }

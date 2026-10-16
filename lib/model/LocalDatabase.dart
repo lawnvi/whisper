@@ -12,6 +12,7 @@ import 'package:whisper/socket/file_transfer_v3.dart';
 
 import '../helper/helper.dart';
 import '../helper/ios_sandbox_path.dart';
+import '../helper/user_directories.dart';
 import 'device.dart';
 import 'favorite_text.dart';
 import 'file_transfer.dart';
@@ -2133,7 +2134,7 @@ Future<Directory> _databaseDirectory() async {
     }
     return currentDirectory;
   }
-  return getApplicationDocumentsDirectory();
+  return userDocumentsDirectory();
 }
 
 Future<bool> migrateLegacyMacOSDatabase({
