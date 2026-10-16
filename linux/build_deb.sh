@@ -41,7 +41,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCHITECTURE}
-Depends: libpulse0, libepoxy0, libsecret-1-0, libkeybinder-3.0-0, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
+Depends: libpulse0, libepoxy0, libsecret-1-0, libkeybinder-3.0-0, libayatana-appindicator3-1, libjsoncpp26 | libjsoncpp25 | libjsoncpp24 | libjsoncpp1, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-good, gstreamer1.0-libav
 Recommends: libmpv2 | libmpv1, xdg-desktop-portal
 Maintainer: lawnvi
 Homepage: https://github.com/lawnvi/whisper
