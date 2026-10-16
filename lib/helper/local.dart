@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:whisper/cast_receiver/receiver_name.dart' as cast;
+import 'package:whisper/l10n/app_localizations.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 
 import 'helper.dart';
@@ -205,8 +207,15 @@ class LocalSetting {
     await _setSP(_windowWidth, width);
   }
 
+  /// The language picked in the settings. Until one is picked, the app
+  /// follows the system, so nothing is stored here. Earlier versions stored
+  /// Chinese on first start, which keeps their users in Chinese.
   Future<String> localization() async {
-    return await getSPDefault(_localization, 'zh');
+    final picked = (await _preferences()).get(_localization);
+    if (picked is String && picked.isNotEmpty) {
+      return picked;
+    }
+    return systemLanguageCode(PlatformDispatcher.instance.locales);
   }
 
   Future<void> setLocalization(String local) async {
@@ -405,4 +414,13 @@ class LocalSetting {
     }
     await _setSP(_themeMode, num);
   }
+}
+
+/// The app's language that comes first in [systemLocales], or English when
+/// the app has none of them.
+String systemLanguageCode(List<Locale> systemLocales) {
+  return basicLocaleListResolution(
+    systemLocales,
+    AppLocalizations.supportedLocales,
+  ).languageCode;
 }
