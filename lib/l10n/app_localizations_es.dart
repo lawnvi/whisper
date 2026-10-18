@@ -2630,6 +2630,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get windowStreamOfferIgnore => 'Descartar';
 
   @override
+  String get deviceDetailsTitle => 'Detalles del dispositivo';
+
+  @override
+  String get deviceFeaturesSection => 'Funciones';
+
+  @override
+  String get deviceFeatureFlowDetail =>
+      'Usa sus apps y ventanas o envíale ventanas';
+
+  @override
+  String get deviceFeatureFilesDetail => 'Explora y copia sus archivos';
+
+  @override
+  String get deviceFeatureNeedsConnection => 'Disponible al conectar';
+
+  @override
   String get windowStreamSwitcherRotate => 'Girar';
 
   @override
@@ -3340,6 +3356,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get windowStreamShareSettingDesc =>
       'Los dispositivos de confianza pueden abrir y usar las ventanas de este ordenador en sus pantallas';
+
+  @override
+  String get deviceFilesAlwaysAllowed =>
+      'Permitir siempre explorar mis archivos';
 
   @override
   String windowStreamCloseStillOpen(String app) {

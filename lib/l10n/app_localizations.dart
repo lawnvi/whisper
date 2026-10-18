@@ -4438,6 +4438,36 @@ abstract class AppLocalizations {
   /// **'忽略'**
   String get windowStreamOfferIgnore;
 
+  /// No description provided for @deviceDetailsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备详情'**
+  String get deviceDetailsTitle;
+
+  /// No description provided for @deviceFeaturesSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'功能'**
+  String get deviceFeaturesSection;
+
+  /// No description provided for @deviceFeatureFlowDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'用它的应用和窗口，或把窗口送过去'**
+  String get deviceFeatureFlowDetail;
+
+  /// No description provided for @deviceFeatureFilesDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览和拷贝它的文件'**
+  String get deviceFeatureFilesDetail;
+
+  /// No description provided for @deviceFeatureNeedsConnection.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接后可用'**
+  String get deviceFeatureNeedsConnection;
+
   /// No description provided for @windowStreamSwitcherRotate.
   ///
   /// In zh, this message translates to:
@@ -5511,6 +5541,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已信任的设备可以在它们那边打开并操作这台电脑上的窗口'**
   String get windowStreamShareSettingDesc;
+
+  /// Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier "Always allow".
+  ///
+  /// In zh, this message translates to:
+  /// **'始终允许浏览我的文件'**
+  String get deviceFilesAlwaysAllowed;
 
   /// Toast after closing a window from the recents: the window stayed open on its device (for example a save prompt).
   ///

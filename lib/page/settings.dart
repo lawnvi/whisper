@@ -25,6 +25,7 @@ import 'package:whisper/main.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/appList.dart';
 import 'package:whisper/page/window_stream/android_service/android_service_page.dart';
+import 'package:whisper/remote_files/fs_host.dart';
 import 'package:whisper/remote_input/remote_input_coordinator.dart';
 import 'package:whisper/socket/svrmanager.dart';
 import 'package:whisper/state/connection_coordinator.dart';
@@ -2082,6 +2083,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+/// Something this device can do, as a row on its page (流转, 文件, …).
+class DeviceFeature {
+  const DeviceFeature({
+    required this.icon,
+    required this.title,
+    required this.onOpen,
+    this.unavailable,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onOpen;
+
+  /// Why it cannot be used now (not connected, say); the row is dimmed.
+  final String? unavailable;
+}
+
+/// A device's own page: what it can do (流转, 文件, 设备控制, 搜索) on
+/// top, then how it is shared with, then removing it.
 class ClientSettingsScreen extends StatefulWidget {
   const ClientSettingsScreen({
     super.key,
@@ -2090,6 +2110,7 @@ class ClientSettingsScreen extends StatefulWidget {
     this.isConnected,
     this.deleteDevice,
     this.onSearchHistory,
+    this.features = const [],
   });
 
   final DeviceData device;
@@ -2097,6 +2118,7 @@ class ClientSettingsScreen extends StatefulWidget {
   final bool? isConnected;
   final Future<void> Function(String uid)? deleteDevice;
   final VoidCallback? onSearchHistory;
+  final List<DeviceFeature> features;
 
   @override
   State<ClientSettingsScreen> createState() => _ClientSettingsScreenState();
@@ -2105,11 +2127,36 @@ class ClientSettingsScreen extends StatefulWidget {
 class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   late DeviceData device;
 
+  /// Whether this device browses my files without asking; null until read.
+  bool? _filesAlwaysAllowed;
+
   @override
   void initState() {
     super.initState();
     device = widget.device;
     _refreshDevice();
+    unawaited(_loadFilesAlwaysAllowed());
+  }
+
+  Future<void> _loadFilesAlwaysAllowed() async {
+    final allowed = await FileBrowseHost.shared.permissions.isAlways(
+      device.uid,
+    );
+    if (mounted) {
+      setState(() => _filesAlwaysAllowed = allowed);
+    }
+  }
+
+  Future<void> _setFilesAlwaysAllowed(bool allowed) async {
+    final host = FileBrowseHost.shared;
+    if (allowed) {
+      await host.permissions.setAlways(device.uid, true);
+    } else {
+      await host.revokeAlways(device.uid);
+    }
+    if (mounted) {
+      setState(() => _filesAlwaysAllowed = allowed);
+    }
   }
 
   Future<void> _refreshDevice() async {
@@ -2147,7 +2194,9 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           ),
         ),
         title: Text(
-          l10n.setting,
+          device.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(color: colorScheme.onSurface),
         ),
       ),
@@ -2166,6 +2215,25 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                 16,
               ),
               children: [
+                if (widget.features.isNotEmpty ||
+                    widget.onSearchHistory != null)
+                  _buildClientSettingsSection(l10n.deviceFeaturesSection, '', [
+                    for (final feature in widget.features)
+                      _featureTile(feature, palette),
+                    if (widget.onSearchHistory != null)
+                      _DeviceSettingTile(
+                        title: l10n.transferAssistantTitle,
+                        icon: Icon(
+                          Icons.search_rounded,
+                          color: palette.textMuted,
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          color: palette.textMuted,
+                        ),
+                        onTap: widget.onSearchHistory,
+                      ),
+                  ]),
                 _buildClientSettingsSection(
                   l10n.settingsSectionPermissionsSharing,
                   l10n.settingsSectionPermissionsSharingDesc,
@@ -2196,28 +2264,21 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         },
                       ),
                     ),
+                    if (_filesAlwaysAllowed case final allowed?)
+                      _DeviceSettingTile(
+                        title: l10n.deviceFilesAlwaysAllowed,
+                        icon: Icon(
+                          Icons.folder_outlined,
+                          color: palette.textMuted,
+                        ),
+                        trailing: CupertinoSwitch(
+                          value: allowed,
+                          onChanged: (value) =>
+                              unawaited(_setFilesAlwaysAllowed(value)),
+                        ),
+                      ),
                   ],
                 ),
-                if (widget.onSearchHistory != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: SettingsSectionSurface(
-                      children: [
-                        _DeviceSettingTile(
-                          title: l10n.transferAssistantTitle,
-                          icon: Icon(
-                            Icons.search_rounded,
-                            color: palette.textMuted,
-                          ),
-                          trailing: Icon(
-                            Icons.chevron_right_rounded,
-                            color: palette.textMuted,
-                          ),
-                          onTap: widget.onSearchHistory,
-                        ),
-                      ],
-                    ),
-                  ),
                 if (!isConnected)
                   _buildClientSettingsSection(
                     l10n.dangerousActions,
@@ -2264,6 +2325,24 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: page,
+    );
+  }
+
+  Widget _featureTile(DeviceFeature feature, WhisperPalette palette) {
+    final reason = feature.unavailable;
+    return Opacity(
+      opacity: reason == null ? 1 : 0.5,
+      child: _DeviceSettingTile(
+        title: feature.title,
+        icon: Icon(feature.icon, color: palette.textMuted),
+        trailing: reason == null
+            ? Icon(Icons.chevron_right_rounded, color: palette.textMuted)
+            : Text(
+                reason,
+                style: TextStyle(fontSize: 13, color: palette.textMuted),
+              ),
+        onTap: reason == null ? feature.onOpen : null,
+      ),
     );
   }
 

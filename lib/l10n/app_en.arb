@@ -1260,6 +1260,11 @@
   "windowStreamCloseWindow": "Close Window",
   "windowStreamCloseFailed": "Couldn’t close this window",
   "windowStreamOfferIgnore": "Dismiss",
+  "deviceDetailsTitle": "Device Details",
+  "deviceFeaturesSection": "Features",
+  "deviceFeatureFlowDetail": "Use its apps and windows, or send windows to it",
+  "deviceFeatureFilesDetail": "Browse and copy its files",
+  "deviceFeatureNeedsConnection": "Available when connected",
   "windowStreamSwitcherRotate": "Rotate",
   "remoteFilesCopyStarting": "Getting ready…",
   "remoteFilesCopyItems": "{count} items",
@@ -2129,6 +2134,10 @@
   "windowStreamShareSettingDesc": "Trusted devices can open and use this computer's windows on their screens",
   "@windowStreamShareSettingDesc": {
     "description": "Detail under the window sharing settings switch"
+  },
+  "deviceFilesAlwaysAllowed": "Always Allow Browsing My Files",
+  "@deviceFilesAlwaysAllowed": {
+    "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
   },
   "windowStreamCloseStillOpen": "“{app}” is still open — it may be asking whether to save.",
   "@windowStreamCloseStillOpen": {

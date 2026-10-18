@@ -1380,6 +1380,11 @@
   "windowStreamCloseWindow": "关闭窗口",
   "windowStreamCloseFailed": "没能关闭这个窗口",
   "windowStreamOfferIgnore": "忽略",
+  "deviceDetailsTitle": "设备详情",
+  "deviceFeaturesSection": "功能",
+  "deviceFeatureFlowDetail": "用它的应用和窗口，或把窗口送过去",
+  "deviceFeatureFilesDetail": "浏览和拷贝它的文件",
+  "deviceFeatureNeedsConnection": "连接后可用",
   "windowStreamSwitcherRotate": "旋转",
   "remoteFilesCopyStarting": "正在准备…",
   "remoteFilesCopyItems": "{count} 个项目",
@@ -2269,6 +2274,10 @@
   "windowStreamShareSettingDesc": "已信任的设备可以在它们那边打开并操作这台电脑上的窗口",
   "@windowStreamShareSettingDesc": {
     "description": "Detail under the window sharing settings switch"
+  },
+  "deviceFilesAlwaysAllowed": "始终允许浏览我的文件",
+  "@deviceFilesAlwaysAllowed": {
+    "description": "Device page switch: this device may browse my files without asking each time. Turning it off takes back an earlier \"Always allow\"."
   },
   "windowStreamCloseStillOpen": "“{app}”还没有关闭，可能在问你是否保存",
   "@windowStreamCloseStillOpen": {

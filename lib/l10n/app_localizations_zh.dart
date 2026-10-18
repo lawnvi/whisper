@@ -2445,6 +2445,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get windowStreamOfferIgnore => '忽略';
 
   @override
+  String get deviceDetailsTitle => '设备详情';
+
+  @override
+  String get deviceFeaturesSection => '功能';
+
+  @override
+  String get deviceFeatureFlowDetail => '用它的应用和窗口，或把窗口送过去';
+
+  @override
+  String get deviceFeatureFilesDetail => '浏览和拷贝它的文件';
+
+  @override
+  String get deviceFeatureNeedsConnection => '连接后可用';
+
+  @override
   String get windowStreamSwitcherRotate => '旋转';
 
   @override
@@ -3104,6 +3119,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamShareSettingDesc => '已信任的设备可以在它们那边打开并操作这台电脑上的窗口';
+
+  @override
+  String get deviceFilesAlwaysAllowed => '始终允许浏览我的文件';
 
   @override
   String windowStreamCloseStillOpen(String app) {

@@ -1143,18 +1143,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
         ),
       );
     }
-    if (supportsManualRemoteInputSource() &&
-        !_isLocalhost &&
-        _isConnectedSession &&
-        socketManager.supportsManualInputFor(device.uid)) {
-      actions.add(
-        IconButton(
-          tooltip: l10n.mobileControlTitle,
-          icon: const ComputerControlIcon(),
-          onPressed: _openMobileControl,
-        ),
-      );
-    }
     if (_shouldShowRemoteInputAction) {
       final inputState = _remoteInputCoordinator.state;
       final isCurrentInputSession = inputState.isForPeer(device.uid);
@@ -1182,19 +1170,6 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 isCurrentInputSession &&
                 inputState.status == RemoteInputRuntimeStatus.armed,
           ),
-        ),
-      );
-    }
-    if (!compactActions) {
-      actions.add(
-        IconButton(
-          padding: actionPadding,
-          constraints: actionConstraints,
-          visualDensity: actionVisualDensity,
-          tooltip: l10n.transferAssistantTitle,
-          icon: const Icon(Icons.manage_search_rounded),
-          color: palette.textMuted,
-          onPressed: _openTransferAssistant,
         ),
       );
     }
@@ -1238,8 +1213,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
         padding: actionPadding,
         constraints: actionConstraints,
         visualDensity: actionVisualDensity,
-        tooltip: AppLocalizations.of(context)?.setting ?? '设置',
-        icon: Icon(Icons.settings_outlined, color: palette.textMuted),
+        // This device's page: what it can do (流转, 文件, 设备控制, 搜索)
+        // and how it is shared with.
+        tooltip: l10n.deviceDetailsTitle,
+        icon: Icon(CupertinoIcons.ellipsis_circle, color: palette.textMuted),
         onPressed: () async {
           await Navigator.push(
             context,
@@ -1248,6 +1225,7 @@ class _SendMessageScreen extends State<SendMessageScreen>
                 device: device,
                 deleteDevice: widget.onDeviceDeleted,
                 onSearchHistory: _openTransferAssistant,
+                features: _deviceFeatures(),
               ),
             ),
           );
@@ -1256,6 +1234,61 @@ class _SendMessageScreen extends State<SendMessageScreen>
       ),
     );
     return actions;
+  }
+
+  /// What this device can do from here, for its page. Rows show while it
+  /// is offline too, dimmed, so where to find them stays the same.
+  List<app_settings.DeviceFeature> _deviceFeatures() {
+    final capabilities = socketManager
+        .remoteProfileFor(device.uid)
+        ?.capabilities;
+    final connected = _isConnectedSession;
+    final offline = connected ? null : l10n.deviceFeatureNeedsConnection;
+    bool offers(bool? capability) => !connected || capability == true;
+    return [
+      if (!_isLocalhost &&
+          offers(
+            capabilities == null
+                ? null
+                : capabilities.windowStreamSourceV1 ||
+                      capabilities.windowStreamSinkV1,
+          ))
+        app_settings.DeviceFeature(
+          icon: CupertinoIcons.rectangle_stack,
+          title: l10n.windowStreamSpaceTitle,
+          unavailable: offline,
+          onOpen: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => FlowSpacePage(focusPeerId: device.uid),
+            ),
+          ),
+        ),
+      if (!_isLocalhost &&
+          canOfferRemoteFiles() &&
+          offers(capabilities?.remoteFilesV1))
+        app_settings.DeviceFeature(
+          icon: CupertinoIcons.folder,
+          title: l10n.remoteFilesTitle,
+          unavailable: offline,
+          onOpen: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  RemoteFilesPage(peerId: device.uid, deviceName: device.name),
+            ),
+          ),
+        ),
+      if (supportsManualRemoteInputSource() &&
+          !_isLocalhost &&
+          (!connected || socketManager.supportsManualInputFor(device.uid)))
+        app_settings.DeviceFeature(
+          icon: CupertinoIcons.device_laptop,
+          title: l10n.mobileControlTitle,
+          unavailable: offline,
+          onOpen: () => unawaited(_openMobileControl()),
+        ),
+    ];
   }
 
   void _sendMobileControl(RemoteInputControlMessage control) {
