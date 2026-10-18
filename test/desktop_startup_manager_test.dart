@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whisper/helper/desktop_startup.dart';
 
@@ -10,7 +12,7 @@ void main() {
 
     expect(entry, contains('[Desktop Entry]'));
     expect(entry, contains('Name=Whisper'));
-    expect(entry, contains('Exec="/opt/Whisper/whisper desktop"'));
+    expect(entry, contains('Exec="/opt/Whisper/whisper desktop" --hidden'));
     expect(entry, contains('X-GNOME-Autostart-enabled=true'));
   });
 
@@ -24,6 +26,9 @@ void main() {
         plist, contains('<string>com.vireen.whisper.launch-at-login</string>'));
     expect(plist, contains('<string>/usr/bin/open</string>'));
     expect(plist, contains('<string>/Applications/Whisper.app</string>'));
+    // Started at login, the app stays in the tray without a window.
+    expect(plist, contains('<string>--args</string>'));
+    expect(plist, contains('<string>--hidden</string>'));
     expect(plist, isNot(contains('<string>-a</string>')));
     expect(plist, contains('<key>RunAtLoad</key>'));
   });
@@ -41,7 +46,19 @@ void main() {
   test('windows startup command quotes executable path', () {
     expect(
       buildWindowsStartupCommand(r'C:\Program Files\Whisper\whisper.exe'),
-      r'"C:\Program Files\Whisper\whisper.exe"',
+      r'"C:\Program Files\Whisper\whisper.exe" --hidden',
     );
+  });
+
+  test('a window is only shown when not started at login', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(
+      main,
+      contains('if (arguments.contains(desktopStartupHiddenArgument))'),
+    );
+    final runner = File(
+      'macos/Runner/MainFlutterWindow.swift',
+    ).readAsStringSync();
+    expect(runner, contains('project.dartEntrypointArguments'));
   });
 }

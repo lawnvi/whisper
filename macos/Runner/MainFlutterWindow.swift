@@ -119,7 +119,12 @@ class MainFlutterWindow: NSWindow {
 
   override func awakeFromNib() {
     migrateSandboxedPreferencesIfNeeded()
-    let flutterViewController = FlutterViewController()
+    // Dart's main() gets the launch arguments, as on Windows and Linux
+    // (e.g. --hidden when started at login).
+    let project = FlutterDartProject()
+    project.dartEntrypointArguments = Array(CommandLine.arguments.dropFirst())
+      .filter { !$0.hasPrefix("-psn_") }
+    let flutterViewController = FlutterViewController(project: project)
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)

@@ -18,6 +18,7 @@ import 'package:whisper/helper/system_power.dart';
 import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/deviceList.dart';
+import 'package:whisper/helper/desktop_startup.dart';
 import 'package:whisper/state/desktop_quick_send_inbox.dart';
 import 'package:whisper/cast_receiver/cast_receiver_manager.dart';
 import 'package:whisper/cast_receiver/cast_playback_window.dart';
@@ -100,6 +101,9 @@ Future<void> main(List<String> arguments) async {
   }
 
   if (!isMobile()) {
+    unawaited(
+      const DesktopStartupManager().refresh().catchError((Object _) {}),
+    );
     // 必须加上这一行。
     await windowManager.ensureInitialized();
     var width = await LocalSetting().windowWidth();
@@ -122,6 +126,10 @@ Future<void> main(List<String> arguments) async {
       await _applyDesktopWindowTheme(themeMode);
       if (Platform.isWindows) {
         await windowManager.setMinimizable(true);
+      }
+      // Started at login: stay in the tray until someone opens the window.
+      if (arguments.contains(desktopStartupHiddenArgument)) {
+        return;
       }
       await windowManager.show();
       await windowManager.focus();

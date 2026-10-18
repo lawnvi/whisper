@@ -51,6 +51,14 @@ class DesktopStartupManager {
     return false;
   }
 
+  /// Rewrites an enabled login entry in the current form (entries made by
+  /// older versions start the app with its window open).
+  Future<void> refresh() async {
+    if (isSupported && await isEnabled()) {
+      await _enable();
+    }
+  }
+
   Future<void> setEnabled(bool enabled) async {
     if (!isSupported) {
       throw const DesktopStartupException(
@@ -181,7 +189,7 @@ String buildLinuxAutostartDesktopEntry({
 [Desktop Entry]
 Type=Application
 Name=$appName
-Exec=${_desktopEntryQuote(executablePath)}
+Exec=${_desktopEntryQuote(executablePath)} $desktopStartupHiddenArgument
 Terminal=false
 X-GNOME-Autostart-enabled=true
 ''';
@@ -204,6 +212,8 @@ String buildMacOSLaunchAgentPlist({
   <array>
     <string>/usr/bin/open</string>
     <string>$escapedAppPath</string>
+    <string>--args</string>
+    <string>$desktopStartupHiddenArgument</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -222,8 +232,11 @@ String macOSAppPathFromExecutable(String executablePath) {
 }
 
 String buildWindowsStartupCommand(String executablePath) {
-  return '"${executablePath.replaceAll('"', r'\"')}"';
+  return '"${executablePath.replaceAll('"', r'\"')}" $desktopStartupHiddenArgument';
 }
+
+/// Started at login: run in the background (tray), no window.
+const desktopStartupHiddenArgument = '--hidden';
 
 String _desktopEntryQuote(String value) {
   final escaped = value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
