@@ -4414,6 +4414,18 @@ abstract class AppLocalizations {
   /// **'把窗口挪到 {device} 上'**
   String windowStreamSendToDetail(String device);
 
+  /// No description provided for @toolbarMoreTools.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多功能'**
+  String get toolbarMoreTools;
+
+  /// No description provided for @toolbarFewerTools.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get toolbarFewerTools;
+
   /// No description provided for @windowStreamStreaming.
   ///
   /// In zh, this message translates to:

@@ -2618,6 +2618,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get toolbarMoreTools => 'Más funciones';
+
+  @override
+  String get toolbarFewerTools => 'Mostrar menos';
+
+  @override
   String get windowStreamStreaming => 'Abierta aquí';
 
   @override

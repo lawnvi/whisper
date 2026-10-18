@@ -15,14 +15,18 @@ void main() {
     'remote input toolbar does not highlight disconnected stale sessions',
     () {
       final source = File('lib/page/deviceList.dart').readAsStringSync();
+      final active = RegExp(
+        r'bool get _isDesktopRemoteInputActive \{[\s\S]*?\n  \}',
+      ).firstMatch(source)!.group(0)!;
+      expect(
+        active,
+        contains('socketManager.isConnectedTo(legacyState.peerId)'),
+      );
+      expect(active, contains('target.isConnected'));
       final action = RegExp(
         r'Widget _buildDesktopRemoteInputWorkspaceAction\(\) \{[\s\S]*?\n  \}',
       ).firstMatch(source)!.group(0)!;
-      expect(
-        action,
-        contains('socketManager.isConnectedTo(legacyState.peerId)'),
-      );
-      expect(action, contains('target.isConnected'));
+      expect(action, contains('_isDesktopRemoteInputActive'));
       expect(action, contains('iconColor: isActive ? Colors.lightBlue'));
     },
   );

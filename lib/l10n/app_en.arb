@@ -1256,6 +1256,8 @@
       }
     }
   },
+  "toolbarMoreTools": "More Tools",
+  "toolbarFewerTools": "Show Less",
   "windowStreamStreaming": "Open here",
   "windowStreamCloseWindow": "Close Window",
   "windowStreamCloseFailed": "Couldn’t close this window",

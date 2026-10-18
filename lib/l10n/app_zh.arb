@@ -1376,6 +1376,8 @@
       }
     }
   },
+  "toolbarMoreTools": "更多功能",
+  "toolbarFewerTools": "收起",
   "windowStreamStreaming": "流转中",
   "windowStreamCloseWindow": "关闭窗口",
   "windowStreamCloseFailed": "没能关闭这个窗口",

@@ -2588,6 +2588,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get toolbarMoreTools => 'More Tools';
+
+  @override
+  String get toolbarFewerTools => 'Show Less';
+
+  @override
   String get windowStreamStreaming => 'Open here';
 
   @override

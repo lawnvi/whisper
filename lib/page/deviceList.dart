@@ -290,6 +290,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
   List<ChatSessionItem> _sessionItems = const [];
   String _desktopSearchQuery = "";
   bool _isDesktopSearchExpanded = false;
+
+  /// The toolbar beside the search shows every tool, not just the everyday
+  /// ones (and whatever is running).
+  bool _toolsExpanded = false;
   String? _selectedDesktopPeerId;
   String? _pendingAutoConnectPeerId;
   Future<void>? _desktopShutdownFuture;
@@ -2104,18 +2108,45 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
+  /// Flow (window streaming) runs on this device.
+  /// Everyday tools stay out; the rest (and new features as they come)
+  /// slide in from the left as the search makes room. A tool that is
+  /// running stays visible either way.
   List<Widget> _buildDesktopTools() {
+    final l10n = AppLocalizations.of(context)!;
+    final expanded = _toolsExpanded;
+    final audioRunning =
+        isDesktop() && (_isDesktopAudioShareActive || _isDesktopAudioShareBusy);
+    final inputRunning = isDesktop() && _isDesktopRemoteInputActive;
+    // 流转 and 文件 belong to a device: they are on its page (the … in its
+    // conversation), not here.
     return [
+      if (isDesktop())
+        _buildDesktopToolButton(
+          key: const ValueKey('tool-toggle'),
+          icon: Icons.chevron_left_rounded,
+          iconTurns: expanded ? 0.5 : 0,
+          tooltip: expanded ? l10n.toolbarFewerTools : l10n.toolbarMoreTools,
+          onPressed: () => setState(() => _toolsExpanded = !expanded),
+        ),
+      if (isDesktop() && (expanded || audioRunning))
+        KeyedSubtree(
+          key: const ValueKey('tool-audio'),
+          child: _buildDesktopAudioShareAction(),
+        ),
+      if (isDesktop() && (expanded || inputRunning))
+        KeyedSubtree(
+          key: const ValueKey('tool-input'),
+          child: _buildDesktopRemoteInputWorkspaceAction(),
+        ),
       _buildDesktopToolButton(
+        key: const ValueKey('tool-qr'),
         icon: Icons.qr_code_scanner_rounded,
         tooltip: AppLocalizations.of(context)?.connectDeviceTitle ?? '连接设备',
         onPressed: _openPairingQr,
       ),
-      if (isDesktop()) ...[
-        _buildDesktopAudioShareAction(),
-        _buildDesktopRemoteInputWorkspaceAction(),
-      ],
       _buildDesktopToolButton(
+        key: const ValueKey('tool-settings'),
         icon: Icons.settings_outlined,
         tooltip: AppLocalizations.of(context)?.setting ?? '设置',
         onPressed: () async {
@@ -2145,8 +2176,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
     );
   }
 
-  Widget _buildDesktopRemoteInputWorkspaceAction() {
-    final palette = context.whisperPalette;
+  bool get _isDesktopRemoteInputActive {
     final snapshot = _remoteInputWorkspaceCoordinator.snapshot;
     final legacyState = _remoteInputCoordinator.state;
     // A stale offering/armed state can survive briefly while a peer is being
@@ -2161,7 +2191,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     final workspaceLive =
         snapshot.isControllerLive &&
         snapshot.targets.values.any((target) => target.isConnected);
-    final isActive = workspaceLive || snapshot.isControlledLive || legacyLive;
+    return workspaceLive || snapshot.isControlledLive || legacyLive;
+  }
+
+  Widget _buildDesktopRemoteInputWorkspaceAction() {
+    final palette = context.whisperPalette;
+    final isActive = _isDesktopRemoteInputActive;
     return _buildDesktopToolButton(
       icon: Icons.keyboard_alt_outlined,
       tooltip:
@@ -2176,8 +2211,12 @@ class _DeviceListScreen extends State<DeviceListScreen>
     required VoidCallback? onPressed,
     Color? iconColor,
     String? tooltip,
+    Key? key,
+    double iconTurns = 0,
   }) {
     return DeviceToolbarButton(
+      key: key,
+      iconTurns: iconTurns,
       icon: icon,
       label: tooltip ?? '',
       iconColor: iconColor,

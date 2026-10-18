@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:whisper/theme/app_theme.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
@@ -15,7 +17,7 @@ class DeviceSidebarToolbar extends StatelessWidget {
   final List<Widget> tools;
   final bool searchExpanded;
 
-  static const _duration = Duration(milliseconds: 220);
+  static const _duration = Duration(milliseconds: 340);
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +66,15 @@ class DeviceSidebarToolbar extends StatelessWidget {
                               index++
                             ) ...[
                               if (index > 0) const SizedBox(width: 2),
-                              tools[index],
+                              ToolEntrance(
+                                key: tools[index].key == null
+                                    ? null
+                                    : ValueKey(('entrance', tools[index].key)),
+                                // Tools coming in arrive one after another,
+                                // from the toggle outwards.
+                                delay: Duration(milliseconds: 35 * index),
+                                child: tools[index],
+                              ),
                             ],
                           ],
                         ),
@@ -76,6 +86,59 @@ class DeviceSidebarToolbar extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A tool that just appeared fades and scales in after [delay]; tools that
+/// were already there stay as they are.
+class ToolEntrance extends StatefulWidget {
+  const ToolEntrance({super.key, required this.delay, required this.child});
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<ToolEntrance> createState() => ToolEntranceState();
+}
+
+class ToolEntranceState extends State<ToolEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  );
+  Timer? _start;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = Timer(widget.delay, () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _start?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    );
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      child: ScaleTransition(
+        scale: Tween(begin: 0.6, end: 1.0).animate(curve),
+        child: widget.child,
       ),
     );
   }

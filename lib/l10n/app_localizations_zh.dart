@@ -2433,6 +2433,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get toolbarMoreTools => '更多功能';
+
+  @override
+  String get toolbarFewerTools => '收起';
+
+  @override
   String get windowStreamStreaming => '流转中';
 
   @override

@@ -104,12 +104,16 @@ class DeviceToolbarButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.iconColor,
+    this.iconTurns = 0,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
   final Color? iconColor;
+
+  /// Turns the icon (animated), e.g. a chevron flipping as a row expands.
+  final double iconTurns;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -127,10 +131,15 @@ class DeviceToolbarButton extends StatelessWidget {
           padding: EdgeInsets.zero,
           borderRadius: BorderRadius.circular(11),
           onPressed: onPressed,
-          child: Icon(
-            icon,
-            size: 20,
-            color: iconColor ?? context.whisperPalette.textMuted,
+          child: AnimatedRotation(
+            turns: iconTurns,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            child: Icon(
+              icon,
+              size: 20,
+              color: iconColor ?? context.whisperPalette.textMuted,
+            ),
           ),
         ),
       ),

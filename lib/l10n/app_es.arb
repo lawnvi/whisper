@@ -1029,6 +1029,8 @@
   "windowStreamTextSize": "Tamaño del texto",
   "windowStreamOpenHereDetail": "Usa las apps de {device}",
   "windowStreamSendToDetail": "Mueve una ventana a {device}",
+  "toolbarMoreTools": "Más funciones",
+  "toolbarFewerTools": "Mostrar menos",
   "windowStreamStreaming": "Abierta aquí",
   "windowStreamCloseWindow": "Cerrar ventana",
   "windowStreamCloseFailed": "No se pudo cerrar la ventana",
