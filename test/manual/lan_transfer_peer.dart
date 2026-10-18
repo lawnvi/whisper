@@ -1,6 +1,7 @@
 // Opt-in two-machine test driver; intentionally excluded from *_test.dart discovery.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -99,6 +100,9 @@ void main() {
           'platform': Platform.operatingSystem,
           'pid': pid,
           'nativeAead': WhisperAead.nativeAccelerationEnabled,
+          // With `flutter test --enable-vmservice`, for tool/cpu_profile.dart.
+          'vmService': (await developer.Service.getInfo()).serverWebSocketUri
+              ?.toString(),
         });
         final commandFile = File(p.join(root.path, 'command.json'));
         // A restarted peer waits for a fresh command instead of replaying a

@@ -40,6 +40,7 @@ import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+import 'package:whisper/socket/no_delay_socket.dart';
 import 'package:whisper/socket/transport_close_guard.dart';
 import 'package:whisper/socket/whisper_frame_v3.dart';
 import 'package:whisper/socket/wire_message_codec.dart';
@@ -397,6 +398,21 @@ class WsSvrManager {
   Uuid uuid = LocalUuid;
 
   HttpServer? _server;
+
+  /// What [_server] listens on, for routes that tune their connection.
+  NoDelayServerSocket? _acceptedSockets;
+  final _listeningSockets = Expando<ServerSocket>('listening socket');
+
+  Future<void> _closeHttpServer(
+    HttpServer server, {
+    required bool force,
+  }) async {
+    final listening = _listeningSockets[server];
+    _listeningSockets[server] = null;
+    await listening?.close();
+    await server.close(force: force);
+  }
+
   WebSocketSink? _sink;
   final PeerConnectionRegistry _peerConnections = PeerConnectionRegistry();
   final Set<String> _deletedPeerDiscoverySuppressions = <String>{};
@@ -1484,6 +1500,13 @@ class WsSvrManager {
       if (lease == null) {
         return shelf.Response(429, body: 'Too Many Requests');
       }
+      // Files travel on this connection.
+      final accepted = connectionInfo == null
+          ? null
+          : _acceptedSockets?.claim(connectionInfo);
+      if (accepted != null) {
+        widenTransferBuffers(accepted);
+      }
       final pendingUpgrade = Completer<void>();
       _pendingSocketAttachments.add(pendingUpgrade.future);
       final chatHandler = webSocketHandler(
@@ -1516,12 +1539,15 @@ class WsSvrManager {
     }
 
     try {
-      final server = await shelf_io.serve(
-        handler,
-        '0.0.0.0',
-        port,
-        shared: true,
-      );
+      // Small packets (input, control, audio) go out at once instead of
+      // waiting for the previous one's acknowledgement (Nagle).
+      final listening = await ServerSocket.bind('0.0.0.0', port, shared: true);
+      final accepting = _acceptedSockets = NoDelayServerSocket(listening);
+      final server = HttpServer.listenOn(accepting);
+      // listenOn leaves the listening socket to its owner: it closes with
+      // the server (see _closeHttpServer).
+      _listeningSockets[server] = listening;
+      shelf_io.serveRequests(server, handler);
       _server = server;
       started = true;
       _reconnectManagerClosed = false;
@@ -2717,6 +2743,8 @@ class WsSvrManager {
       socket.destroy();
       throw const _OutgoingConnectionCancelled();
     }
+    setTcpNoDelay(socket);
+    widenTransferBuffers(socket);
     return WebSocket.fromUpgradedSocket(socket, serverSide: false);
   }
 
@@ -2750,7 +2778,7 @@ class WsSvrManager {
       final closingServer = _serverClosing;
       if (forceServerClose && closingServer != null) {
         _ignoreFuture(
-          closingServer.close(force: true).then<void>((_) {}),
+          _closeHttpServer(closingServer, force: true),
           context: 'upgrade graceful server close',
         );
       }
@@ -2806,14 +2834,15 @@ class WsSvrManager {
       closingServer = _server;
       _server = null;
       _serverClosing = closingServer;
-      serverCloseFuture = closingServer
-          ?.close(force: forceServerClose)
-          .then<void>((_) {})
-          .whenComplete(() {
-            if (identical(_serverClosing, closingServer)) {
-              _serverClosing = null;
-            }
-          });
+      serverCloseFuture =
+          (closingServer == null
+                  ? null
+                  : _closeHttpServer(closingServer, force: forceServerClose))
+              ?.whenComplete(() {
+                if (identical(_serverClosing, closingServer)) {
+                  _serverClosing = null;
+                }
+              });
     }
     final hadActiveConnection = AuthSocketLifecycle.hasConnectionWork(
       hasSelectedSink: _sink != null,

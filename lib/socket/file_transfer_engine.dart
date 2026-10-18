@@ -176,12 +176,23 @@ Future<void> _setFileLastModified(File file, int timestamp) {
   return file.setLastModified(DateTime.fromMillisecondsSinceEpoch(timestamp));
 }
 
+/// How far a transfer may run ahead of its checksum worker. On a desktop
+/// that is eight frames: hashing then keeps pace on its own thread instead
+/// of holding up every other frame (a slow CPU's SHA-256 is the slowest step
+/// a transfer has). Phones send 1 MiB frames and keep less in memory.
+final int _checksumLeadBytes = Platform.isAndroid || Platform.isIOS
+    ? 8 * 1024 * 1024
+    : 32 * 1024 * 1024;
+
 Future<ParallelStreamingChecksum> _parallelChecksumForFilePrefix(
   File file, {
   required String algorithm,
   required int end,
 }) async {
-  final checksum = await ParallelStreamingChecksum.start(algorithm: algorithm);
+  final checksum = await ParallelStreamingChecksum.start(
+    algorithm: algorithm,
+    maxPendingBytes: _checksumLeadBytes,
+  );
   try {
     if (end > 0) {
       await for (final chunk in file.openRead(0, end)) {
@@ -200,7 +211,10 @@ Future<ParallelStreamingChecksum> _parallelChecksumForSourcePrefix(
   required String algorithm,
   required int end,
 }) async {
-  final checksum = await ParallelStreamingChecksum.start(algorithm: algorithm);
+  final checksum = await ParallelStreamingChecksum.start(
+    algorithm: algorithm,
+    maxPendingBytes: _checksumLeadBytes,
+  );
   try {
     var offset = 0;
     while (offset < end) {
