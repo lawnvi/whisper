@@ -131,6 +131,11 @@ include(flutter/generated_plugins.cmake)
 if(TARGET tray_manager_plugin)
   target_compile_options(tray_manager_plugin PRIVATE -Wno-deprecated-declarations)
 endif()
+# hotkey_manager_linux 0.2.0 leaves a pointer unset for unknown ids, which
+# clang 21 turns into an error under -Werror.
+if(TARGET hotkey_manager_linux_plugin)
+  target_compile_options(hotkey_manager_linux_plugin PRIVATE -Wno-sometimes-uninitialized)
+endif()
 
 # The video plugin is built against libmpv's headers but not linked to it.
 # Linked, the app fails to start wherever the libmpv.so.N of the build
