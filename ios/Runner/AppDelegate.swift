@@ -5,6 +5,7 @@ import Network
 import dnssd
 import CoreMotion
 import MediaPlayer
+import QuickLookThumbnailing
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -12,6 +13,7 @@ import MediaPlayer
     private let audioSharePlugin = IOSAudioSharePlugin()
     private let localNetworkPermissionPlugin = IOSLocalNetworkPermissionPlugin()
     private let motionPlugin = IOSMobileMotionPlugin()
+    private let fileManagerPlugin = IOSFileManagerPlugin()
 
     func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
         GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
@@ -20,6 +22,7 @@ import MediaPlayer
         audioSharePlugin.register(binaryMessenger: messenger)
         localNetworkPermissionPlugin.register(binaryMessenger: messenger)
         motionPlugin.register(binaryMessenger: messenger)
+        fileManagerPlugin.register(binaryMessenger: messenger)
 
         dirChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
             guard let self = self else {
@@ -116,6 +119,80 @@ import MediaPlayer
         } catch {
             result(nil)
         }
+    }
+}
+
+/// The file browser's platform pieces on iOS: thumbnails of the app's
+/// Documents (images, videos, PDFs and whatever else Quick Look can draw),
+/// generated off the main thread. There is no trash on iOS; deletions are
+/// final, which the Dart side already knows.
+final class IOSFileManagerPlugin {
+    private var channel: FlutterMethodChannel?
+    private static let queue = DispatchQueue(label: "whisper.file_manager.thumbnails", qos: .utility, attributes: .concurrent)
+
+    func register(binaryMessenger: FlutterBinaryMessenger) {
+        let channel = FlutterMethodChannel(name: "com.vireen.whisper/file_manager", binaryMessenger: binaryMessenger)
+        self.channel = channel
+        channel.setMethodCallHandler { [weak self] call, result in
+            switch call.method {
+            case "thumbnail":
+                guard let self = self,
+                      let args = call.arguments as? [String: Any],
+                      let path = args["path"] as? String, !path.isEmpty else {
+                    result(nil)
+                    return
+                }
+                let size = max(16, min(1024, (args["size"] as? NSNumber)?.intValue ?? 256))
+                let video = args["video"] as? Bool ?? false
+                self.thumbnail(path: path, size: size, video: video) { bytes in
+                    DispatchQueue.main.async {
+                        result(bytes.map { FlutterStandardTypedData(bytes: $0) })
+                    }
+                }
+            case "trash":
+                result(false)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    /// A JPEG at most [size] pixels on its longer edge, or nil.
+    private func thumbnail(path: String, size: Int, video: Bool, completion: @escaping (Data?) -> Void) {
+        let url = URL(fileURLWithPath: path)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            completion(nil)
+            return
+        }
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: size, height: size),
+            scale: 1,
+            representationTypes: .thumbnail
+        )
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+            if let image = representation?.cgImage {
+                IOSFileManagerPlugin.queue.async { completion(IOSFileManagerPlugin.jpeg(image)) }
+                return
+            }
+            guard video else {
+                completion(nil)
+                return
+            }
+            // Quick Look has no frame for some videos; take one directly.
+            IOSFileManagerPlugin.queue.async {
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: size, height: size)
+                let frame = try? generator.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil)
+                completion(frame.flatMap { IOSFileManagerPlugin.jpeg($0) })
+            }
+        }
+    }
+
+    private static func jpeg(_ image: CGImage) -> Data? {
+        UIImage(cgImage: image).jpegData(compressionQuality: 0.8)
     }
 }
 

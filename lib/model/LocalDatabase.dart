@@ -1645,6 +1645,30 @@ class LocalDatabase extends _$LocalDatabase {
     return result.read<int>('amount');
   }
 
+  /// A copy made in the file manager completed and was moved from the
+  /// downloads folder into the folder the user chose: point the transfer
+  /// and its message there.
+  Future<void> relocateCompletedIncomingTransfer(
+    String transferId,
+    String oldPath,
+    String newPath,
+  ) {
+    return transaction(() async {
+      await (update(fileTransfer)..where(
+            (item) =>
+                item.transferId.equals(transferId) &
+                item.direction.equalsValue(FileTransferDirection.incoming) &
+                item.state.equalsValue(FileTransferState.completed) &
+                item.finalPath.equals(oldPath),
+          ))
+          .write(FileTransferCompanion(finalPath: Value(newPath)));
+      await (update(message)..where(
+            (item) => item.uuid.equals(transferId) & item.path.equals(oldPath),
+          ))
+          .write(MessageCompanion(path: Value(newPath)));
+    });
+  }
+
   Future<int> updateFileTransfer(
     String transferId, {
     Value<FileTransferState> state = const Value.absent(),
@@ -2133,6 +2157,36 @@ Future<Directory> _databaseDirectory() async {
       }
     }
     return currentDirectory;
+  }
+  if (Platform.isIOS) {
+    // Documents is the Whisper folder the Files app shows (received files,
+    // other devices browsing it): the database lives out of sight, in
+    // Application Support, moved there from Documents once.
+    final support = await getApplicationSupportDirectory();
+    final current = File('${support.path}/db.sqlite');
+    if (await current.exists()) {
+      return support;
+    }
+    final documents = await userDocumentsDirectory();
+    final legacy = File('${documents.path}/db.sqlite');
+    if (await migrateLegacyMacOSDatabase(
+      legacyDatabase: legacy,
+      destinationDirectory: support,
+    )) {
+      for (final suffix in const ['', '-wal', '-shm']) {
+        try {
+          await File('${legacy.path}$suffix').delete();
+        } on FileSystemException {
+          // Already gone.
+        }
+      }
+      return support;
+    }
+    if (await legacy.exists()) {
+      return documents;
+    }
+    await support.create(recursive: true);
+    return support;
   }
   return userDocumentsDirectory();
 }

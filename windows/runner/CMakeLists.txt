@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "audio_share_plugin.cpp"
   "desktop_clipboard_image_plugin.cpp"
   "desktop_quick_send_plugin.cpp"
+  "file_manager_plugin.cpp"
   "flutter_window.cpp"
   "input_service.cpp"
   "main.cpp"

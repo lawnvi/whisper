@@ -945,6 +945,129 @@
       }
     }
   },
+  "remoteFilesTitle": "Files",
+  "remoteFilesOfDevice": "Files on {device}",
+  "@remoteFilesOfDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesThisDevice": "This device",
+  "remoteFilesWaiting": "Waiting for {device} to allow it…",
+  "@remoteFilesWaiting": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesDenied": "{device} didn't allow browsing its files",
+  "@remoteFilesDenied": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesOffline": "{device} isn't connected right now",
+  "@remoteFilesOffline": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesUnsupported": "Whisper on {device} needs updating to browse its files",
+  "@remoteFilesUnsupported": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesEmptyFolder": "This folder is empty",
+  "remoteFilesCopyTo": "Copy to {target}",
+  "@remoteFilesCopyTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesNewFolder": "New folder",
+  "remoteFilesFolderName": "Folder name",
+  "remoteFilesRename": "Rename",
+  "remoteFilesMoveToTrash": "Move to Trash",
+  "remoteFilesDelete": "Delete",
+  "remoteFilesDeleteForever": "Delete these {count} items for good? This device has no trash, so they can't be recovered.",
+  "@remoteFilesDeleteForever": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyStarted": "Copying {count} items",
+  "@remoteFilesCopyStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesFailed": "That didn't work",
+  "remoteFilesNameExists": "Something with that name is already here",
+  "remoteFilesShowHidden": "Show hidden files",
+  "remoteFilesItemCount": "{count} items",
+  "@remoteFilesItemCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesSelected": "{count} selected",
+  "@remoteFilesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCreate": "Create",
+  "remoteFilesDone": "Done",
+  "remoteFilesDropHint": "Drop here to copy to {device}",
+  "@remoteFilesDropHint": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPlaceRoot": "Home",
+  "remoteFilesPlaceStorage": "Internal storage",
+  "remoteFilesPlaceDesktop": "Desktop",
+  "remoteFilesPlaceDocuments": "Documents",
+  "remoteFilesPlaceDownloads": "Downloads",
+  "remoteFilesPlacePictures": "Pictures",
+  "remoteFilesPlaceCamera": "Camera",
+  "remoteFilesPlaceMovies": "Movies",
+  "remoteFilesPlaceMusic": "Music",
+  "remoteFilesPromptTitle": "{device} wants to browse your files",
+  "@remoteFilesPromptTitle": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPromptBodyDesktop": "If you allow it, it can see your home folder and copy, create, rename and delete files there. Deleted files go to the Trash.",
+  "remoteFilesPromptBodyPhone": "If you allow it, it can see this phone's internal storage and copy, create, rename and delete files there. Deleting asks again first.",
+  "remoteFilesDeny": "Don't allow",
+  "remoteFilesAllowOnce": "Allow this time",
+  "remoteFilesAllowAlways": "Always allow",
   "windowStreamTouchBlockedTitle": "{device} isn't responding to touch",
   "@windowStreamTouchBlockedTitle": {
     "placeholders": {
@@ -964,6 +1087,158 @@
   "windowStreamTouchBlockedFix": "Close that page",
   "windowStreamTouchBlockedLater": "Not now",
   "windowStreamTouchBlockedFixed": "Done. The phone responds again.",
+  "remoteFilesFavorites": "Favorites",
+  "remoteFilesLocations": "Locations",
+  "remoteFilesBrowse": "Browse",
+  "remoteFilesWaitingAllow": "Tap “Allow” on {device}",
+  "@remoteFilesWaitingAllow": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesWaitingDetail": "Whisper is asking there whether this device may browse its files.",
+  "remoteFilesAskAgain": "Ask Again",
+  "remoteFilesColumnName": "Name",
+  "remoteFilesColumnModified": "Date Modified",
+  "remoteFilesColumnSize": "Size",
+  "remoteFilesColumnKind": "Kind",
+  "remoteFilesKindFolder": "Folder",
+  "remoteFilesKindImage": "Image",
+  "remoteFilesKindVideo": "Movie",
+  "remoteFilesKindAudio": "Audio",
+  "remoteFilesKindDocument": "Document",
+  "remoteFilesKindArchive": "Archive",
+  "remoteFilesKindCode": "Source Code",
+  "remoteFilesKindApp": "Application",
+  "remoteFilesKindOther": "File",
+  "remoteFilesKindNamed": "{ext} {kind}",
+  "@remoteFilesKindNamed": {
+    "placeholders": {
+      "ext": {
+        "type": "String"
+      },
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesViewList": "List",
+  "remoteFilesViewIcons": "Icons",
+  "remoteFilesSearch": "Search",
+  "remoteFilesNoResults": "No results for “{query}”",
+  "@remoteFilesNoResults": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesForward": "Forward",
+  "remoteFilesOpen": "Open",
+  "remoteFilesCopy": "Copy",
+  "remoteFilesPaste": "Paste {count} Items",
+  "@remoteFilesPaste": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesRefresh": "Refresh",
+  "remoteFilesStatusSelected": "{selected} of {count} selected",
+  "@remoteFilesStatusSelected": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyProgress": "Copying {count} items · {percent}%",
+  "@remoteFilesCopyProgress": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyDone": "Copied {count} items",
+  "@remoteFilesCopyDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyPartly": "{failed} items weren’t copied",
+  "@remoteFilesCopyPartly": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesSameDevice": "Already on this device",
+  "remoteFilesBetweenOthers": "Copies go between this device and another one",
+  "remoteFilesOpenFirst": "Open {device}’s files first",
+  "@remoteFilesOpenFirst": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesUntitledFolder": "untitled folder",
+  "remoteFilesSelect": "Select",
+  "remoteFilesSelectAll": "Select All",
+  "remoteFilesCopyToMenu": "Copy To…",
+  "remoteFilesCopyHere": "Copy Here",
+  "remoteFilesChooseDestination": "Pick a folder, then tap “Copy Here”",
+  "remoteFilesToday": "Today at {time}",
+  "@remoteFilesToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesYesterday": "Yesterday at {time}",
+  "@remoteFilesYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesCopyToSubmenu": "Copy To",
+  "remoteFilesPasteInto": "Paste into “{name}”",
+  "@remoteFilesPasteInto": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPastePlain": "Paste",
+  "remoteFilesSortBy": "Sort By",
+  "remoteFilesMore": "More",
+  "remoteFilesClose": "Close Files",
+  "remoteFilesClipboardPreparing": "Fetching {count} items so other apps can paste them",
+  "@remoteFilesClipboardPreparing": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesClipboardReady": "Ready to paste in other apps",
   "windowStreamTextSize": "Text Size",
   "windowStreamOpenHereDetail": "Use apps from {device}",
   "@windowStreamOpenHereDetail": {
@@ -986,6 +1261,149 @@
   "windowStreamCloseFailed": "Couldn’t close this window",
   "windowStreamOfferIgnore": "Dismiss",
   "windowStreamSwitcherRotate": "Rotate",
+  "remoteFilesCopyStarting": "Getting ready…",
+  "remoteFilesCopyItems": "{count} items",
+  "@remoteFilesCopyItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyToDevice": "To “{folder}” on {device}",
+  "@remoteFilesCopyToDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesCopyFromDevice": "From {device} to “{folder}”",
+  "@remoteFilesCopyFromDevice": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesCopyLeft": "{time} left",
+  "@remoteFilesCopyLeft": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesSeconds": "{count} s",
+  "@remoteFilesSeconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesMinutes": "{count} min",
+  "@remoteFilesMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesHours": "{count} h",
+  "@remoteFilesHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyItemsDone": "{done} of {total}",
+  "@remoteFilesCopyItemsDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyFilesMoved": "{count} files so far",
+  "@remoteFilesCopyFilesMoved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyWaiting": "Waiting for {device} to come back…",
+  "@remoteFilesCopyWaiting": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesCopyPaused": "Paused",
+  "remoteFilesCopyFailedShort": "Copy failed",
+  "remoteFilesCopyCanceledShort": "Stopped",
+  "remoteFilesCopyDoneShort": "Copied",
+  "remoteFilesCopyResume": "Resume",
+  "remoteFilesCopyRetry": "Retry",
+  "remoteFilesCopyStop": "Stop copying",
+  "remoteFilesCopyShowAll": "Show all transfers",
+  "remoteFilesCopyMore": "{count} more copies",
+  "@remoteFilesCopyMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyAlready": "These are already being copied here",
+  "remoteFilesTransfers": "Transfers",
+  "remoteFilesTransfersEmpty": "No copies yet",
+  "remoteFilesTransfersEmptyDetail": "Files copied here list their progress and result here",
+  "remoteFilesTransfersClear": "Clear finished",
+  "remoteFilesTransfersActive": "In progress",
+  "remoteFilesTransfersRecent": "Finished",
+  "remoteFilesCopyRemove": "Remove from list",
+  "remoteFilesCopyReveal": "Show in Files",
+  "remoteFilesDeleteTitle": "Delete {count} items for good?",
+  "@remoteFilesDeleteTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesDeleteDetail": "{device} has no Trash: once deleted, they can't be recovered.",
+  "@remoteFilesDeleteDetail": {
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesAndMore": "and {count} more",
+  "@remoteFilesAndMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFilesCopyJustDone": "Already copied just now",
+  "@remoteFilesCopyJustDone": {
+    "description": "Toast when the same files are pasted into the same folder again right after a copy finished"
+  },
   "windowStreamHostLocked": "{device} is locked. Unlock it to show its windows here.",
   "@windowStreamHostLocked": {
     "description": "Window stream: the source desktop is locked; shown on the viewing device.",
@@ -1083,6 +1501,40 @@
   "windowStreamThatDevice": "that device",
   "@windowStreamThatDevice": {
     "description": "Window stream: stands in for {device} when the source's name is unknown (lower case; the sentence start is capitalised in code)."
+  },
+  "remoteFilesPlaceDrive": "{name} ({drive}:)",
+  "@remoteFilesPlaceDrive": {
+    "description": "File browser: a Windows drive with a volume label, e.g. \"Data (D:)\".",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "drive": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPlaceLocalDisk": "Local Disk ({drive}:)",
+  "@remoteFilesPlaceLocalDisk": {
+    "description": "File browser: a Windows drive without a volume label, as Explorer names it.",
+    "placeholders": {
+      "drive": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPlaceRemovableDisk": "USB Drive ({drive}:)",
+  "@remoteFilesPlaceRemovableDisk": {
+    "description": "File browser: a removable Windows drive without a volume label.",
+    "placeholders": {
+      "drive": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesPlaceAppFolder": "Whisper Folder",
+  "@remoteFilesPlaceAppFolder": {
+    "description": "File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper)."
   },
   "windowStreamDecoderMissing": "Can't show this window: FFmpeg's video decoder isn't installed on this computer",
   "@windowStreamDecoderMissing": {
@@ -1362,6 +1814,28 @@
   "windowStreamPhoneServiceOff": "Open Whisper on {device} and turn on Settings → Window Flow Service.",
   "@windowStreamPhoneServiceOff": {
     "description": "Shown above an Android phone's (empty) window list on another device when the phone's window-flow service is not running.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesNoAnswer": "{device} Didn’t Answer",
+  "@remoteFilesNoAnswer": {
+    "description": "File browser: the other device was asked to allow browsing, but nobody answered there within a minute.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteFilesNoAnswerDetail": "The question on that device timed out. Make sure someone is there, then try again.",
+  "@remoteFilesNoAnswerDetail": {
+    "description": "File browser: under remoteFilesNoAnswer."
+  },
+  "remoteFilesNotAsked": "{device} Needs to Allow Browsing",
+  "@remoteFilesNotAsked": {
+    "description": "File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.",
     "placeholders": {
       "device": {
         "type": "String"

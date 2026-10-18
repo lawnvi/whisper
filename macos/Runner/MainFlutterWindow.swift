@@ -1,4 +1,5 @@
 import Cocoa
+import QuickLookThumbnailing
 import AVFoundation
 import ApplicationServices
 import CoreGraphics
@@ -198,7 +199,38 @@ class MainFlutterWindow: NSWindow {
       name: "com.vireen.whisper/file_manager",
       binaryMessenger: controller.engine.binaryMessenger)
     channel.setMethodCallHandler { call, result in
-      guard call.method == "revealFile" else {
+      switch call.method {
+      case "trash":
+        // Remote file manager: deletions go to the Trash, never for good.
+        guard let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String, !path.isEmpty else {
+          result(false)
+          return
+        }
+        do {
+          try FileManager.default.trashItem(
+            at: URL(fileURLWithPath: path), resultingItemURL: nil)
+          result(true)
+        } catch {
+          result(false)
+        }
+        return
+      case "thumbnail":
+        guard let arguments = call.arguments as? [String: Any],
+              let path = arguments["path"] as? String, !path.isEmpty else {
+          result(nil)
+          return
+        }
+        let size = CGFloat((arguments["size"] as? NSNumber)?.doubleValue ?? 256)
+        FileThumbnails.jpeg(path: path, size: size) { data in
+          DispatchQueue.main.async {
+            result(data.map { FlutterStandardTypedData(bytes: $0) })
+          }
+        }
+        return
+      case "revealFile":
+        break
+      default:
         result(FlutterMethodNotImplemented)
         return
       }
@@ -372,6 +404,11 @@ final class DesktopClipboardImagePlugin: NSObject, FlutterPlugin {
       result(FlutterStandardTypedData(bytes: data))
     case "readFilePaths":
       result(readFilePaths())
+    case "clearFilePaths":
+      // The file manager's own earlier copy, while a newer one is on its
+      // way; Dart checks it is still its own first.
+      NSPasteboard.general.clearContents()
+      result(true)
     case "writeFilePaths":
       guard let arguments = call.arguments as? [String: Any],
             let paths = arguments["paths"] as? [String] else {
@@ -3978,5 +4015,32 @@ private final class MacSystemAudioCapture: NSObject, SCStreamDelegate, SCStreamO
       return -Int16.max
     }
     return Int16(value * Float(Int16.max))
+  }
+}
+
+/// QuickLook thumbnails for the remote file manager, as JPEG.
+enum FileThumbnails {
+  static func jpeg(path: String, size: CGFloat, completion: @escaping (Data?) -> Void) {
+    let request = QLThumbnailGenerator.Request(
+      fileAt: URL(fileURLWithPath: path),
+      size: CGSize(width: size, height: size),
+      scale: 1,
+      representationTypes: .thumbnail)
+    QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
+      guard let image = thumbnail?.cgImage else {
+        completion(nil)
+        return
+      }
+      let data = NSMutableData()
+      guard let destination = CGImageDestinationCreateWithData(
+        data, "public.jpeg" as CFString, 1, nil)
+      else {
+        completion(nil)
+        return
+      }
+      CGImageDestinationAddImage(
+        destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+      completion(CGImageDestinationFinalize(destination) ? data as Data : nil)
+    }
   }
 }

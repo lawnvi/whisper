@@ -80,6 +80,8 @@
     <string>Allow access to your files</string>
     <key>UIFileSharingEnabled</key>
     <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
 
     <!-- Permissions -->
     <key>NSCameraUsageDescription</key>

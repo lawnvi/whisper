@@ -71,6 +71,7 @@ import 'package:whisper/widget/context_menu_region.dart';
 import 'package:whisper/widget/desktop_quick_send_dialog.dart';
 import 'package:whisper/widget/device_connection_widgets.dart';
 import 'package:whisper/widget/device_sidebar_toolbar.dart';
+import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/widget/device_workspace_layout.dart';
 import 'package:whisper/widget/server_start_failure_dialog.dart';
 import 'package:whisper/widget/glass_bottom_sheet.dart';
@@ -88,6 +89,7 @@ import 'pairing_qr.dart';
 import 'settings.dart' as app_settings;
 import '../window_stream/android/phone_identity.dart';
 import '../window_stream/window_stream_coordinator.dart';
+import 'remote_files/remote_files_page.dart';
 import 'window_stream/flow_space_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
@@ -316,6 +318,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
     //   initSystemTray();
     // }
     WidgetsBinding.instance.addObserver(this);
+    // A file-manager copy's message went away: previews follow.
+    TransferPlacements.shared.addListener(_onCopiesChanged);
     _setDesktopWindow();
     _localNetworkPermissionBootstrap = _requestLocalNetworkPermission();
     unawaited(PhoneStreamIdentity.publish());
@@ -611,6 +615,7 @@ class _DeviceListScreen extends State<DeviceListScreen>
 
   @override
   void dispose() {
+    TransferPlacements.shared.removeListener(_onCopiesChanged);
     ++_clipboardWatcherGeneration;
     // 在这里执行一些清理操作，比如取消订阅、关闭流、释放资源等
     _broadcastRestartTimer?.cancel();
@@ -1646,6 +1651,8 @@ class _DeviceListScreen extends State<DeviceListScreen>
       around: discovered.around,
     );
   }
+
+  void _onCopiesChanged() => unawaited(_refreshDevice());
 
   Future<void> _refreshDevice({isFirst = false}) async {
     if (!mounted) return;
@@ -3758,6 +3765,10 @@ class _DeviceListScreen extends State<DeviceListScreen>
       return;
     }
     final paths = fileDrafts.map((draft) => draft.path).toList(growable: false);
+    if (isOwnClipboardFiles(paths)) {
+      // The file manager's copy, there for pasting in other apps.
+      return;
+    }
     if (paths.isNotEmpty) {
       for (final target in remoteClipboardTargets) {
         if (socketManager.remoteClipboardOwnsPaths(

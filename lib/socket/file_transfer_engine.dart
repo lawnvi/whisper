@@ -912,8 +912,14 @@ class FileTransferEngine {
   /// first; its files then follow each other in a single stream, so a tree
   /// of many small files costs no handshake, acknowledgement or database row
   /// per file.
-  Future<FolderSendOutcome> sendFolderTo(String peerId, String path) async {
-    if (peerId.isEmpty || path.isEmpty) {
+  Future<FolderSendOutcome> sendFolderTo(
+    String peerId,
+    String path, {
+    String? messageId,
+  }) async {
+    if (peerId.isEmpty ||
+        path.isEmpty ||
+        (messageId != null && !isCanonicalTransferId(messageId))) {
       return FolderSendOutcome.rejected;
     }
     final intentEpoch = _outgoingIntentEpochs[peerId] ?? 0;
@@ -959,7 +965,7 @@ class FileTransferEngine {
       case null:
         break;
     }
-    final transferId = const Uuid().v4();
+    final transferId = messageId ?? const Uuid().v4();
     try {
       await _folderStore.writeManifest(transferId, scan.manifest);
       await _folderStore.addSkipped(transferId, scan.skipped);

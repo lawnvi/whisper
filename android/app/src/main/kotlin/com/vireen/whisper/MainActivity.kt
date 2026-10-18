@@ -30,5 +30,6 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(WindowStreamReceiverPlugin())
         flutterEngine.plugins.add(WindowStreamPhonePlugin())
         flutterEngine.plugins.add(WindowStreamSelfStartPlugin())
+        flutterEngine.plugins.add(FileManagerPlugin())
     }
 }

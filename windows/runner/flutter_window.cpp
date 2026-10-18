@@ -5,6 +5,7 @@
 #include "audio_share_plugin.h"
 #include "desktop_clipboard_image_plugin.h"
 #include "desktop_quick_send_plugin.h"
+#include "file_manager_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "remote_input_plugin.h"
@@ -58,6 +59,9 @@ bool FlutterWindow::OnCreate() {
   DesktopQuickSendPluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin(
           "DesktopQuickSendPlugin"));
+  FileManagerPluginRegisterWithRegistrar(
+      flutter_controller_->engine()->GetRegistrarForPlugin(
+          "FileManagerPlugin"));
   ScreenshotPluginRegisterWithRegistrar(
       flutter_controller_->engine()->GetRegistrarForPlugin("ScreenshotPlugin"),
       GetHandle());

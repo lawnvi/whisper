@@ -8,6 +8,7 @@
 #include "audio_share_plugin.h"
 #include "desktop_clipboard_image_plugin.h"
 #include "desktop_quick_send_plugin.h"
+#include "file_manager_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "remote_input_plugin.h"
@@ -101,6 +102,7 @@ static void my_application_activate(GApplication* application) {
   desktop_clipboard_image_plugin_register(FL_PLUGIN_REGISTRY(view));
   screenshot_plugin_register(FL_PLUGIN_REGISTRY(view));
   desktop_quick_send_plugin_register(FL_PLUGIN_REGISTRY(view));
+  file_manager_plugin_register(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

@@ -356,6 +356,20 @@ bool shouldIgnoreClipboardSync(String content) {
   return _clipboardWriteCoordinator.suppressions.takeExact(content) != null;
 }
 
+Set<String> _ownClipboardFiles = const {};
+
+/// Files Whisper itself put on the clipboard (the file manager's copy) so
+/// another app can paste them. Not a clipboard change to sync to another
+/// device.
+void markOwnClipboardFiles(Iterable<String> paths) {
+  _ownClipboardFiles = paths.toSet();
+}
+
+/// The clipboard's files are (some of) what [markOwnClipboardFiles] put
+/// there; folders are left out of what clipboard sync reads.
+bool isOwnClipboardFiles(List<String> paths) =>
+    paths.isNotEmpty && paths.every(_ownClipboardFiles.contains);
+
 void pickFile(var callback) async {
   await FilePicker.getDirectoryPath();
   // 打开文件选择器

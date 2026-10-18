@@ -19,6 +19,7 @@ import 'package:whisper/helper/transfer_notifications.dart';
 import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/page/deviceList.dart';
 import 'package:whisper/helper/desktop_startup.dart';
+import 'package:whisper/page/remote_files/file_browse_prompt.dart';
 import 'package:whisper/audio/audio_codec.dart';
 import 'package:whisper/page/window_stream/flow_desktop_offers.dart';
 import 'package:whisper/page/window_stream/phone_touch_alert.dart';
@@ -390,9 +391,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             WindowStreamCoordinator.shared.updateStrings(strings);
           }
           final content = child ?? const SizedBox.shrink();
+          final shell = FileBrowsePromptHost(child: content);
           return isDesktop()
-              ? CastPlaybackHost(child: PhoneTouchAlertHost(child: content))
-              : content;
+              ? CastPlaybackHost(child: PhoneTouchAlertHost(child: shell))
+              : shell;
         },
         home: const DeviceListScreen(),
       ),

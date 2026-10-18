@@ -209,6 +209,19 @@ void MethodCallCallback(FlMethodChannel*,
     fl_method_call_respond(method_call, response, nullptr);
     return;
   }
+  if (std::strcmp(method, "clearFilePaths") == 0) {
+    // The file manager's own earlier copy, while a newer one is on its way;
+    // Dart checks it is still its own first.
+    GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    if (clipboard != nullptr) {
+      gtk_clipboard_clear(clipboard);
+    }
+    g_autoptr(FlValue) value = fl_value_new_bool(clipboard != nullptr);
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+    fl_method_call_respond(method_call, response, nullptr);
+    return;
+  }
   if (std::strcmp(method, "writeFilePaths") == 0) {
     const bool written = WriteFilePaths(fl_method_call_get_args(method_call));
     g_autoptr(FlValue) value = fl_value_new_bool(written);

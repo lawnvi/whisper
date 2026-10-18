@@ -40,7 +40,13 @@ import 'package:whisper/socket/peer_transfer_runtime.dart';
 import 'package:whisper/socket/quick_send_identity_gate.dart';
 import 'package:whisper/socket/socket_admission.dart';
 import 'package:whisper/socket/session_upgrade_token_registry.dart';
+import 'package:whisper/remote_files/fs_client.dart';
 import 'package:whisper/socket/no_delay_socket.dart';
+import 'package:whisper/remote_files/fs_host.dart';
+import 'package:whisper/remote_files/fs_copies.dart';
+import 'package:whisper/remote_files/fs_placement.dart';
+import 'package:whisper/remote_files/fs_platform.dart';
+import 'package:whisper/remote_files/fs_protocol.dart';
 import 'package:whisper/window_stream/remote/remote_peer_source.dart';
 import 'package:whisper/window_stream/remote/window_stream_control.dart';
 import 'package:whisper/window_stream/remote/window_stream_host.dart';
@@ -268,6 +274,7 @@ class WsSvrManager {
       .toSet();
   static final Set<String> _windowStreamControlActions =
       WindowStreamControlAction.values.map((action) => action.name).toSet();
+  static const String _fileBrowseNamespace = 'remote-files';
 
   static const String _profileRefreshRequestMessage = 'profile-refresh-request';
 
@@ -549,8 +556,11 @@ class WsSvrManager {
     sendBytesToConnection: _peerConnections.sendToAwaitedIfCurrent,
     enqueueBytesToConnection: _peerConnections.sendIfCurrent,
     markPeerUnresponsive: _removeUnresponsivePeerIfCurrent,
-    emitTransferUpdated: (snapshot) =>
-        _dispatchToAll((event) => event.onTransferUpdated(snapshot)),
+    emitTransferUpdated: (snapshot) {
+      // Copies made in the file manager go to the folder chosen there.
+      unawaited(TransferPlacements.shared.onTransferUpdated(snapshot));
+      _dispatchToAll((event) => event.onTransferUpdated(snapshot));
+    },
     notify: (message) => _dispatchToPrimary((event) => event.onNotice(message)),
     remoteProfileFor: (peerId) =>
         _remoteProfilesByPeerId[peerId] ??
@@ -1316,6 +1326,22 @@ class WsSvrManager {
         ..dialScope = _windowDialScope
         ..localPeerId = localPeerIdFor
         ..start();
+      FileBrowseHost.shared
+        ..sender = sendFileBrowseControlTo
+        ..sendFile = _sendCopiedFile
+        ..sendFolder = _sendCopiedFolder;
+      RemoteFilesClient.sender = sendFileBrowseControlTo;
+      RemoteFilesClient.localPeerId = localPeerIdFor;
+      RemoteFilesClient.sendFile = _sendCopiedFile;
+      RemoteFilesClient.sendFolder = _sendCopiedFolder;
+      TransferPlacements.shared
+        ..relocateRecord = _database.relocateCompletedIncomingTransfer
+        ..forgetRecord = _forgetCopiedTransfer
+        ..resume = retryTransfer
+        ..mediaScan = FsPlatform.mediaScan;
+      FileCopies.shared
+        ..retry = retryTransfer
+        ..cancel = cancelTransfer;
     }
 
     Future<shelf.Response> handleMediaUpgrade({
@@ -3317,6 +3343,8 @@ class WsSvrManager {
       WindowStreamHost.shared.closePeer(peerId),
     ]);
     WindowStreamViewer.shared.peerGone(peerId);
+    FileBrowseHost.shared.closePeer(peerId);
+    RemoteFilesClient.peerGone(peerId);
     if (!ownsCleanup()) {
       return;
     }
@@ -4889,6 +4917,86 @@ class WsSvrManager {
           await _ackMessage(message);
           break;
         }
+      case MessageEnum.FileBrowseControl:
+        {
+          final json =
+              jsonDecode(message.content ?? "{}") as Map<String, dynamic>;
+          WireInputPolicy.validateControlEnvelope(
+            json,
+            allowedActions: FileBrowseMessage.allActions,
+          ).requireAccepted();
+          final control = FileBrowseMessage.fromJson(json);
+          WireInputPolicy.validateControlSessionId(
+            messageId: message.uuid,
+            sessionId: control.sessionId,
+          ).requireAccepted();
+          WireInputPolicy.validatePeerPair(
+            sourcePeerId: control.clientPeerId,
+            sinkPeerId: control.hostPeerId,
+            authenticatedPeerId: session.remotePeerId,
+            localPeerId: session.localProfile.uid,
+          ).requireAccepted();
+          final weAreHost = control.hostPeerId == session.localProfile.uid;
+          _wireControlSessions
+              .validateAndRemember(
+                namespace: _fileBrowseNamespace,
+                sessionId: control.sessionId,
+                sourcePeerId: control.clientPeerId,
+                sinkPeerId: control.hostPeerId,
+                authenticatedPeerId: session.remotePeerId,
+                localPeerId: session.localProfile.uid,
+                isInitialOffer: control.isInitial,
+                isIncoming: weAreHost,
+                reverseInitialDirection: !weAreHost,
+              )
+              .requireAccepted();
+          requireCurrentBusiness();
+          final remoteDevice = _requireRemoteProfileForSession(session).device;
+          final remotePeerId = session.remotePeerId;
+          if (weAreHost) {
+            final storedRemote = await _database.fetchDevice(remoteDevice.uid);
+            requireCurrentBusiness();
+            final trusted =
+                storedRemote?.auth == true &&
+                storedRemote?.identityPublicKey.isNotEmpty == true &&
+                storedRemote?.identityPublicKey ==
+                    session.remoteIdentityPublicKey &&
+                session.isAuthenticated;
+            if (!trusted) {
+              if (control.isInitial) {
+                await sendFileBrowseControlTo(
+                  remotePeerId,
+                  control.reply(FileBrowseAction.denied),
+                );
+              }
+            } else {
+              // Asking the user takes up to a minute: never hold this
+              // peer's other messages for it.
+              unawaited(
+                FileBrowseHost.shared
+                    .handle(
+                      control,
+                      remotePeerId: remotePeerId,
+                      deviceName: remoteDevice.name,
+                    )
+                    .catchError((Object error) {
+                      logger.i('文件浏览请求失败: ${error.runtimeType}');
+                    }),
+              );
+            }
+          } else {
+            RemoteFilesClient.handle(control, remotePeerId: remotePeerId);
+          }
+          if (control.isTerminal) {
+            _wireControlSessions.forget(
+              namespace: _fileBrowseNamespace,
+              sessionId: control.sessionId,
+            );
+          }
+          requireCurrentBusiness();
+          await _ackMessage(message);
+          break;
+        }
       case MessageEnum.AudioGroupControl:
         {
           final json =
@@ -5183,6 +5291,7 @@ class WsSvrManager {
         windowStreamSourceV1: supportsWindowStreamSource(),
         windowStreamSinkV1: supportsWindowStreamSink(),
         windowStreamOfferV1: supportsWindowStreamSink(),
+        remoteFilesV1: true,
       ),
       displayTopology: topology,
     );
@@ -5550,6 +5659,68 @@ class WsSvrManager {
       return null;
     }
     return session.withMediaSendKey(action);
+  }
+
+  /// [peerId] is connected and speaks the file-browse protocol.
+  bool canBrowseFilesOf(String peerId) =>
+      _sessionsByPeerId[peerId]?.isAuthenticated == true &&
+      remoteProfileFor(peerId)?.capabilities.remoteFilesV1 == true;
+
+  /// Sends a file-browse control message (see [FileBrowseMessage]).
+  Future<bool> sendFileBrowseControlTo(
+    String peerId,
+    FileBrowseMessage control,
+  ) {
+    if (!canBrowseFilesOf(peerId) ||
+        !_validateOutgoingControlSession(
+          namespace: _fileBrowseNamespace,
+          peerId: peerId,
+          sessionId: control.sessionId,
+          sourcePeerId: control.clientPeerId,
+          sinkPeerId: control.hostPeerId,
+          isInitialOffer: control.isInitial,
+        )) {
+      return Future<bool>.value(false);
+    }
+    final message = _buildMessage(
+      MessageEnum.FileBrowseControl,
+      jsonEncode(control.toJson()),
+      "",
+      "",
+      0,
+      false,
+      uid: control.sessionId,
+      receiverOverride: peerId,
+    );
+    final sent = _sendMessageData(message, peerId: peerId);
+    if (!control.isTerminal) {
+      return sent;
+    }
+    return sent.whenComplete(
+      () => _wireControlSessions.forget(
+        namespace: _fileBrowseNamespace,
+        sessionId: control.sessionId,
+      ),
+    );
+  }
+
+  Future<bool> _sendCopiedFile(String peerId, String path, String id) {
+    TransferPlacements.shared.markQuiet(id);
+    return sendFileTo(peerId, path, messageId: id);
+  }
+
+  Future<bool> _sendCopiedFolder(String peerId, String path, String id) async {
+    TransferPlacements.shared.markQuiet(id);
+    return await sendFolderTo(peerId, path, messageId: id) ==
+        FolderSendOutcome.sent;
+  }
+
+  /// A file-manager copy completed: its chat message goes, the file stays.
+  Future<void> _forgetCopiedTransfer(String transferId) async {
+    final message = await _database.fetchMessageByUuid(transferId);
+    if (message != null) {
+      await _database.deleteMessage(message.id);
+    }
   }
 
   /// Sends a window-stream control message. The viewer starts every session
@@ -6409,8 +6580,11 @@ class WsSvrManager {
   Future<bool> sendFileTo(String peerId, String path, {String? messageId}) =>
       _transferEngine.sendFileTo(peerId, path, messageId: messageId);
 
-  Future<FolderSendOutcome> sendFolderTo(String peerId, String path) =>
-      _transferEngine.sendFolderTo(peerId, path);
+  Future<FolderSendOutcome> sendFolderTo(
+    String peerId,
+    String path, {
+    String? messageId,
+  }) => _transferEngine.sendFolderTo(peerId, path, messageId: messageId);
 
   Future<bool> sendQuickFileToDurably(
     String peerId,

@@ -3820,6 +3820,240 @@ abstract class AppLocalizations {
   /// **'来自 {device}'**
   String windowStreamOfferFrom(String device);
 
+  /// No description provided for @remoteFilesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get remoteFilesTitle;
+
+  /// No description provided for @remoteFilesOfDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 的文件'**
+  String remoteFilesOfDevice(String device);
+
+  /// No description provided for @remoteFilesThisDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机'**
+  String get remoteFilesThisDevice;
+
+  /// No description provided for @remoteFilesWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等 {device} 允许…'**
+  String remoteFilesWaiting(String device);
+
+  /// No description provided for @remoteFilesDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没有允许浏览文件'**
+  String remoteFilesDenied(String device);
+
+  /// No description provided for @remoteFilesOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 现在没有连接本机'**
+  String remoteFilesOffline(String device);
+
+  /// No description provided for @remoteFilesUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 上的 Whisper 需要更新到最新版才能浏览文件'**
+  String remoteFilesUnsupported(String device);
+
+  /// No description provided for @remoteFilesEmptyFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个文件夹是空的'**
+  String get remoteFilesEmptyFolder;
+
+  /// No description provided for @remoteFilesCopyTo.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝到 {target}'**
+  String remoteFilesCopyTo(String target);
+
+  /// No description provided for @remoteFilesNewFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建文件夹'**
+  String get remoteFilesNewFolder;
+
+  /// No description provided for @remoteFilesFolderName.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹名称'**
+  String get remoteFilesFolderName;
+
+  /// No description provided for @remoteFilesRename.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名'**
+  String get remoteFilesRename;
+
+  /// No description provided for @remoteFilesMoveToTrash.
+  ///
+  /// In zh, this message translates to:
+  /// **'移到废纸篓'**
+  String get remoteFilesMoveToTrash;
+
+  /// No description provided for @remoteFilesDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get remoteFilesDelete;
+
+  /// No description provided for @remoteFilesDeleteForever.
+  ///
+  /// In zh, this message translates to:
+  /// **'要永久删除这 {count} 项吗？这台设备没有废纸篓，删除后无法恢复。'**
+  String remoteFilesDeleteForever(int count);
+
+  /// No description provided for @remoteFilesCopyStarted.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在拷贝 {count} 项'**
+  String remoteFilesCopyStarted(int count);
+
+  /// No description provided for @remoteFilesFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作没有完成'**
+  String get remoteFilesFailed;
+
+  /// No description provided for @remoteFilesNameExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'这里已经有同名的文件或文件夹'**
+  String get remoteFilesNameExists;
+
+  /// No description provided for @remoteFilesShowHidden.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示隐藏文件'**
+  String get remoteFilesShowHidden;
+
+  /// No description provided for @remoteFilesItemCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 项'**
+  String remoteFilesItemCount(int count);
+
+  /// No description provided for @remoteFilesSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 项'**
+  String remoteFilesSelected(int count);
+
+  /// No description provided for @remoteFilesCreate.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建'**
+  String get remoteFilesCreate;
+
+  /// No description provided for @remoteFilesDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get remoteFilesDone;
+
+  /// No description provided for @remoteFilesDropHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖到这里，拷贝到 {device}'**
+  String remoteFilesDropHint(String device);
+
+  /// No description provided for @remoteFilesPlaceRoot.
+  ///
+  /// In zh, this message translates to:
+  /// **'主目录'**
+  String get remoteFilesPlaceRoot;
+
+  /// No description provided for @remoteFilesPlaceStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'内部存储'**
+  String get remoteFilesPlaceStorage;
+
+  /// No description provided for @remoteFilesPlaceDesktop.
+  ///
+  /// In zh, this message translates to:
+  /// **'桌面'**
+  String get remoteFilesPlaceDesktop;
+
+  /// No description provided for @remoteFilesPlaceDocuments.
+  ///
+  /// In zh, this message translates to:
+  /// **'文稿'**
+  String get remoteFilesPlaceDocuments;
+
+  /// No description provided for @remoteFilesPlaceDownloads.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载'**
+  String get remoteFilesPlaceDownloads;
+
+  /// No description provided for @remoteFilesPlacePictures.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片'**
+  String get remoteFilesPlacePictures;
+
+  /// No description provided for @remoteFilesPlaceCamera.
+  ///
+  /// In zh, this message translates to:
+  /// **'相机'**
+  String get remoteFilesPlaceCamera;
+
+  /// No description provided for @remoteFilesPlaceMovies.
+  ///
+  /// In zh, this message translates to:
+  /// **'影片'**
+  String get remoteFilesPlaceMovies;
+
+  /// No description provided for @remoteFilesPlaceMusic.
+  ///
+  /// In zh, this message translates to:
+  /// **'音乐'**
+  String get remoteFilesPlaceMusic;
+
+  /// No description provided for @remoteFilesPromptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 想浏览你的文件'**
+  String remoteFilesPromptTitle(String device);
+
+  /// No description provided for @remoteFilesPromptBodyDesktop.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许后，它能看到你的主目录，并在里面拷贝、新建、重命名和删除文件。删除的文件会进废纸篓。'**
+  String get remoteFilesPromptBodyDesktop;
+
+  /// No description provided for @remoteFilesPromptBodyPhone.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除前会再问一次。'**
+  String get remoteFilesPromptBodyPhone;
+
+  /// No description provided for @remoteFilesDeny.
+  ///
+  /// In zh, this message translates to:
+  /// **'拒绝'**
+  String get remoteFilesDeny;
+
+  /// No description provided for @remoteFilesAllowOnce.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许这一次'**
+  String get remoteFilesAllowOnce;
+
+  /// No description provided for @remoteFilesAllowAlways.
+  ///
+  /// In zh, this message translates to:
+  /// **'始终允许'**
+  String get remoteFilesAllowAlways;
+
   /// No description provided for @windowStreamTouchBlockedTitle.
   ///
   /// In zh, this message translates to:
@@ -3849,6 +4083,318 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'好了，手机可以操作了'**
   String get windowStreamTouchBlockedFixed;
+
+  /// No description provided for @remoteFilesFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人收藏'**
+  String get remoteFilesFavorites;
+
+  /// No description provided for @remoteFilesLocations.
+  ///
+  /// In zh, this message translates to:
+  /// **'位置'**
+  String get remoteFilesLocations;
+
+  /// No description provided for @remoteFilesBrowse.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览'**
+  String get remoteFilesBrowse;
+
+  /// No description provided for @remoteFilesWaitingAllow.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 {device} 上点“允许”'**
+  String remoteFilesWaitingAllow(String device);
+
+  /// No description provided for @remoteFilesWaitingDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 正在那台设备上询问是否让本机浏览文件。'**
+  String get remoteFilesWaitingDetail;
+
+  /// No description provided for @remoteFilesAskAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'再问一次'**
+  String get remoteFilesAskAgain;
+
+  /// No description provided for @remoteFilesColumnName.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称'**
+  String get remoteFilesColumnName;
+
+  /// No description provided for @remoteFilesColumnModified.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改日期'**
+  String get remoteFilesColumnModified;
+
+  /// No description provided for @remoteFilesColumnSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'大小'**
+  String get remoteFilesColumnSize;
+
+  /// No description provided for @remoteFilesColumnKind.
+  ///
+  /// In zh, this message translates to:
+  /// **'种类'**
+  String get remoteFilesColumnKind;
+
+  /// No description provided for @remoteFilesKindFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件夹'**
+  String get remoteFilesKindFolder;
+
+  /// No description provided for @remoteFilesKindImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'图像'**
+  String get remoteFilesKindImage;
+
+  /// No description provided for @remoteFilesKindVideo.
+  ///
+  /// In zh, this message translates to:
+  /// **'影片'**
+  String get remoteFilesKindVideo;
+
+  /// No description provided for @remoteFilesKindAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频'**
+  String get remoteFilesKindAudio;
+
+  /// No description provided for @remoteFilesKindDocument.
+  ///
+  /// In zh, this message translates to:
+  /// **'文稿'**
+  String get remoteFilesKindDocument;
+
+  /// No description provided for @remoteFilesKindArchive.
+  ///
+  /// In zh, this message translates to:
+  /// **'归档'**
+  String get remoteFilesKindArchive;
+
+  /// No description provided for @remoteFilesKindCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'源代码'**
+  String get remoteFilesKindCode;
+
+  /// No description provided for @remoteFilesKindApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用程序'**
+  String get remoteFilesKindApp;
+
+  /// No description provided for @remoteFilesKindOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get remoteFilesKindOther;
+
+  /// No description provided for @remoteFilesKindNamed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{ext} {kind}'**
+  String remoteFilesKindNamed(String ext, String kind);
+
+  /// No description provided for @remoteFilesViewList.
+  ///
+  /// In zh, this message translates to:
+  /// **'列表'**
+  String get remoteFilesViewList;
+
+  /// No description provided for @remoteFilesViewIcons.
+  ///
+  /// In zh, this message translates to:
+  /// **'图标'**
+  String get remoteFilesViewIcons;
+
+  /// No description provided for @remoteFilesSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get remoteFilesSearch;
+
+  /// No description provided for @remoteFilesNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到“{query}”'**
+  String remoteFilesNoResults(String query);
+
+  /// No description provided for @remoteFilesForward.
+  ///
+  /// In zh, this message translates to:
+  /// **'前进'**
+  String get remoteFilesForward;
+
+  /// No description provided for @remoteFilesOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开'**
+  String get remoteFilesOpen;
+
+  /// No description provided for @remoteFilesCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝'**
+  String get remoteFilesCopy;
+
+  /// No description provided for @remoteFilesPaste.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴 {count} 项'**
+  String remoteFilesPaste(int count);
+
+  /// No description provided for @remoteFilesRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新'**
+  String get remoteFilesRefresh;
+
+  /// No description provided for @remoteFilesStatusSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择 {selected} 项，共 {count} 项'**
+  String remoteFilesStatusSelected(int selected, int count);
+
+  /// No description provided for @remoteFilesCopyProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在拷贝 {count} 项 · {percent}%'**
+  String remoteFilesCopyProgress(int count, int percent);
+
+  /// No description provided for @remoteFilesCopyDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已拷贝 {count} 项'**
+  String remoteFilesCopyDone(int count);
+
+  /// No description provided for @remoteFilesCopyPartly.
+  ///
+  /// In zh, this message translates to:
+  /// **'{failed} 项没有拷贝成功'**
+  String remoteFilesCopyPartly(int failed);
+
+  /// No description provided for @remoteFilesSameDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经在这台设备上了'**
+  String get remoteFilesSameDevice;
+
+  /// No description provided for @remoteFilesBetweenOthers.
+  ///
+  /// In zh, this message translates to:
+  /// **'只能在本机和另一台设备之间拷贝'**
+  String get remoteFilesBetweenOthers;
+
+  /// No description provided for @remoteFilesOpenFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'先打开 {device} 的文件'**
+  String remoteFilesOpenFirst(String device);
+
+  /// No description provided for @remoteFilesUntitledFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命名文件夹'**
+  String get remoteFilesUntitledFolder;
+
+  /// No description provided for @remoteFilesSelect.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择'**
+  String get remoteFilesSelect;
+
+  /// No description provided for @remoteFilesSelectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get remoteFilesSelectAll;
+
+  /// No description provided for @remoteFilesCopyToMenu.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝到…'**
+  String get remoteFilesCopyToMenu;
+
+  /// No description provided for @remoteFilesCopyHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝到这里'**
+  String get remoteFilesCopyHere;
+
+  /// No description provided for @remoteFilesChooseDestination.
+  ///
+  /// In zh, this message translates to:
+  /// **'选好位置后点“拷贝到这里”'**
+  String get remoteFilesChooseDestination;
+
+  /// No description provided for @remoteFilesToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天 {time}'**
+  String remoteFilesToday(String time);
+
+  /// No description provided for @remoteFilesYesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天 {time}'**
+  String remoteFilesYesterday(String time);
+
+  /// No description provided for @remoteFilesCopyToSubmenu.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝到'**
+  String get remoteFilesCopyToSubmenu;
+
+  /// No description provided for @remoteFilesPasteInto.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴到“{name}”'**
+  String remoteFilesPasteInto(String name);
+
+  /// No description provided for @remoteFilesPastePlain.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴'**
+  String get remoteFilesPastePlain;
+
+  /// No description provided for @remoteFilesSortBy.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get remoteFilesSortBy;
+
+  /// No description provided for @remoteFilesMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get remoteFilesMore;
+
+  /// No description provided for @remoteFilesClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭文件'**
+  String get remoteFilesClose;
+
+  /// No description provided for @remoteFilesClipboardPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在取回 {count} 项，好了就能在访达等应用里粘贴'**
+  String remoteFilesClipboardPreparing(int count);
+
+  /// No description provided for @remoteFilesClipboardReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以在访达等应用里粘贴了'**
+  String get remoteFilesClipboardReady;
 
   /// No description provided for @windowStreamTextSize.
   ///
@@ -3897,6 +4443,204 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'旋转'**
   String get windowStreamSwitcherRotate;
+
+  /// No description provided for @remoteFilesCopyStarting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备…'**
+  String get remoteFilesCopyStarting;
+
+  /// No description provided for @remoteFilesCopyItems.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个项目'**
+  String remoteFilesCopyItems(int count);
+
+  /// No description provided for @remoteFilesCopyToDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'拷贝到 {device} 的“{folder}”'**
+  String remoteFilesCopyToDevice(String device, String folder);
+
+  /// No description provided for @remoteFilesCopyFromDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 {device} 拷贝到“{folder}”'**
+  String remoteFilesCopyFromDevice(String device, String folder);
+
+  /// No description provided for @remoteFilesCopyLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'剩余 {time}'**
+  String remoteFilesCopyLeft(String time);
+
+  /// No description provided for @remoteFilesSeconds.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 秒'**
+  String remoteFilesSeconds(int count);
+
+  /// No description provided for @remoteFilesMinutes.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 分钟'**
+  String remoteFilesMinutes(int count);
+
+  /// No description provided for @remoteFilesHours.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 小时'**
+  String remoteFilesHours(int count);
+
+  /// No description provided for @remoteFilesCopyItemsDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'{done}/{total} 项'**
+  String remoteFilesCopyItemsDone(int done, int total);
+
+  /// No description provided for @remoteFilesCopyFilesMoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已传 {count} 个文件'**
+  String remoteFilesCopyFilesMoved(int count);
+
+  /// No description provided for @remoteFilesCopyWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待 {device} 重新连接…'**
+  String remoteFilesCopyWaiting(String device);
+
+  /// No description provided for @remoteFilesCopyPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get remoteFilesCopyPaused;
+
+  /// No description provided for @remoteFilesCopyFailedShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有拷贝成功'**
+  String get remoteFilesCopyFailedShort;
+
+  /// No description provided for @remoteFilesCopyCanceledShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get remoteFilesCopyCanceledShort;
+
+  /// No description provided for @remoteFilesCopyDoneShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'已拷贝'**
+  String get remoteFilesCopyDoneShort;
+
+  /// No description provided for @remoteFilesCopyResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get remoteFilesCopyResume;
+
+  /// No description provided for @remoteFilesCopyRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get remoteFilesCopyRetry;
+
+  /// No description provided for @remoteFilesCopyStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止拷贝'**
+  String get remoteFilesCopyStop;
+
+  /// No description provided for @remoteFilesCopyShowAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部传输'**
+  String get remoteFilesCopyShowAll;
+
+  /// No description provided for @remoteFilesCopyMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'还有 {count} 个拷贝'**
+  String remoteFilesCopyMore(int count);
+
+  /// No description provided for @remoteFilesCopyAlready.
+  ///
+  /// In zh, this message translates to:
+  /// **'这些项目已经在拷贝到这里了'**
+  String get remoteFilesCopyAlready;
+
+  /// No description provided for @remoteFilesTransfers.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输'**
+  String get remoteFilesTransfers;
+
+  /// No description provided for @remoteFilesTransfersEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有拷贝'**
+  String get remoteFilesTransfersEmpty;
+
+  /// No description provided for @remoteFilesTransfersEmptyDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'在这里拷贝的文件，进度和结果都会列在这里'**
+  String get remoteFilesTransfersEmptyDetail;
+
+  /// No description provided for @remoteFilesTransfersClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除已结束'**
+  String get remoteFilesTransfersClear;
+
+  /// No description provided for @remoteFilesTransfersActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'进行中'**
+  String get remoteFilesTransfersActive;
+
+  /// No description provided for @remoteFilesTransfersRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已结束'**
+  String get remoteFilesTransfersRecent;
+
+  /// No description provided for @remoteFilesCopyRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'从列表中移除'**
+  String get remoteFilesCopyRemove;
+
+  /// No description provided for @remoteFilesCopyReveal.
+  ///
+  /// In zh, this message translates to:
+  /// **'在文件中显示'**
+  String get remoteFilesCopyReveal;
+
+  /// No description provided for @remoteFilesDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除 {count} 个项目？'**
+  String remoteFilesDeleteTitle(int count);
+
+  /// No description provided for @remoteFilesDeleteDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没有废纸篓，删除后无法恢复。'**
+  String remoteFilesDeleteDetail(String device);
+
+  /// No description provided for @remoteFilesAndMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'还有 {count} 项'**
+  String remoteFilesAndMore(int count);
+
+  /// Toast when the same files are pasted into the same folder again right after a copy finished
+  ///
+  /// In zh, this message translates to:
+  /// **'刚刚已经拷贝过了'**
+  String get remoteFilesCopyJustDone;
 
   /// Window stream: the source desktop is locked; shown on the viewing device.
   ///
@@ -3969,6 +4713,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'那台设备'**
   String get windowStreamThatDevice;
+
+  /// File browser: a Windows drive with a volume label, e.g. "Data (D:)".
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} ({drive}:)'**
+  String remoteFilesPlaceDrive(String name, String drive);
+
+  /// File browser: a Windows drive without a volume label, as Explorer names it.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地磁盘 ({drive}:)'**
+  String remoteFilesPlaceLocalDisk(String drive);
+
+  /// File browser: a removable Windows drive without a volume label.
+  ///
+  /// In zh, this message translates to:
+  /// **'U 盘 ({drive}:)'**
+  String remoteFilesPlaceRemovableDisk(String drive);
+
+  /// File browser: an iPhone's or iPad's root, the app's own Documents folder (Files › On My iPhone › Whisper).
+  ///
+  /// In zh, this message translates to:
+  /// **'Whisper 文件夹'**
+  String get remoteFilesPlaceAppFolder;
 
   /// Overlay message for a streamed window on Linux when no H.264 decoder can be loaded (native WSN_WINDOW_DECODE_ERROR with a = 1). Dart should set it with wsn_surface_set_visual(WSN_VISUAL_ERROR, message).
   ///
@@ -4395,6 +5163,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'在 {device} 上打开 Whisper，到“设置 → 窗口流转服务”里开启服务'**
   String windowStreamPhoneServiceOff(String device);
+
+  /// File browser: the other device was asked to allow browsing, but nobody answered there within a minute.
+  ///
+  /// In zh, this message translates to:
+  /// **'{device} 没有回应'**
+  String remoteFilesNoAnswer(String device);
+
+  /// File browser: under remoteFilesNoAnswer.
+  ///
+  /// In zh, this message translates to:
+  /// **'那台设备上的询问已经过期。请确认对方在设备旁，再试一次。'**
+  String get remoteFilesNoAnswerDetail;
+
+  /// File browser: shown after the user stopped waiting for the other device to allow browsing; a button asks again.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览 {device} 的文件需要对方允许'**
+  String remoteFilesNotAsked(String device);
 }
 
 class _AppLocalizationsDelegate

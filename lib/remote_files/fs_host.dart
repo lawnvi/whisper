@@ -1,0 +1,423 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+
+import 'files_log.dart';
+import 'fs_host_files.dart';
+import 'fs_paths.dart';
+import 'fs_placement.dart';
+import 'fs_platform.dart';
+import 'fs_protocol.dart';
+
+/// Sends a file-browse message to a peer; false when it could not.
+typedef FileBrowseSender =
+    Future<bool> Function(String peerId, FileBrowseMessage message);
+
+/// Starts an ordinary transfer of [path] to [peerId] with [transferId].
+typedef FileBrowseSendPath =
+    Future<bool> Function(String peerId, String path, String transferId);
+
+enum FileBrowseDecision {
+  deny,
+  once,
+  always,
+
+  /// Nobody answered in time, or the device that asked gave up.
+  noAnswer,
+}
+
+/// Someone asked to browse this device's files.
+class FileBrowseRequest {
+  const FileBrowseRequest({required this.peerId, required this.deviceName});
+
+  final String peerId;
+  final String deviceName;
+}
+
+/// The question "‹device› wants to browse your files", one at a time,
+/// answered by whatever UI listens (see `FileBrowsePromptHost`).
+class FileBrowseGate extends ChangeNotifier {
+  final _queue = Queue<(FileBrowseRequest, Completer<FileBrowseDecision>)>();
+
+  FileBrowseRequest? get pending => _queue.isEmpty ? null : _queue.first.$1;
+
+  /// Asked users get a minute; silence is [FileBrowseDecision.noAnswer].
+  Future<FileBrowseDecision> ask(FileBrowseRequest request) {
+    final completer = Completer<FileBrowseDecision>();
+    _queue.add((request, completer));
+    notifyListeners();
+    return completer.future.timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        _queue.removeWhere((item) => identical(item.$2, completer));
+        notifyListeners();
+        return FileBrowseDecision.noAnswer;
+      },
+    );
+  }
+
+  /// The device that asked gave up waiting: its question goes away here.
+  void withdraw(FileBrowseRequest request) {
+    final asked = _queue.where((item) => identical(item.$1, request)).toList();
+    if (asked.isEmpty) {
+      return;
+    }
+    _queue.removeWhere((item) => identical(item.$1, request));
+    for (final (_, completer) in asked) {
+      if (!completer.isCompleted) {
+        completer.complete(FileBrowseDecision.noAnswer);
+      }
+    }
+    notifyListeners();
+  }
+
+  void decide(FileBrowseDecision decision) {
+    if (_queue.isEmpty) {
+      return;
+    }
+    final (_, completer) = _queue.removeFirst();
+    if (!completer.isCompleted) {
+      completer.complete(decision);
+    }
+    notifyListeners();
+  }
+}
+
+/// Devices allowed to browse without asking ("始终允许").
+class FileBrowsePermissions {
+  static const _key = 'remote_files.always_allowed';
+
+  Future<bool> isAlways(String peerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_key)?.contains(peerId) ?? false;
+  }
+
+  Future<void> setAlways(String peerId, bool allowed) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = {...?prefs.getStringList(_key)};
+    allowed ? list.add(peerId) : list.remove(peerId);
+    await prefs.setStringList(_key, list.toList());
+  }
+}
+
+/// This device's files for other trusted devices: answers a session's
+/// requests once its user allowed it.
+class FileBrowseHost {
+  FileBrowseHost({
+    FsHostFiles? files,
+    FileBrowseGate? gate,
+    FileBrowsePermissions? permissions,
+  }) : files = files ?? FsHostFiles(),
+       gate = gate ?? FileBrowseGate(),
+       permissions = permissions ?? FileBrowsePermissions();
+
+  static final FileBrowseHost shared = FileBrowseHost();
+
+  final FsHostFiles files;
+  final FileBrowseGate gate;
+  final FileBrowsePermissions permissions;
+  FileBrowseSender? sender;
+  FileBrowseSendPath? sendFile;
+  FileBrowseSendPath? sendFolder;
+
+  final _sessions = <String, String>{};
+
+  /// Devices allowed while they stay connected: once allowed, opening the
+  /// file manager again does not ask again until they disconnect.
+  final _allowedThisConnection = <String>{};
+
+  /// Opens still waiting for an answer here, by session.
+  final _asking = <String, FileBrowseRequest>{};
+
+  int _thumbnailsRunning = 0;
+  static const _uuid = Uuid();
+
+  @visibleForTesting
+  bool isOpen(String sessionId) => _sessions.containsKey(sessionId);
+
+  Future<void> handle(
+    FileBrowseMessage message, {
+    required String remotePeerId,
+    required String deviceName,
+  }) async {
+    if (message.clientPeerId != remotePeerId || message.fromHost) {
+      return;
+    }
+    if (message.action == FileBrowseAction.open) {
+      await _open(message, remotePeerId, deviceName);
+      return;
+    }
+    if (message.action == FileBrowseAction.close) {
+      _sessions.remove(message.sessionId);
+      // Closed while still waiting for an answer here: the question goes.
+      final asking = _asking.remove(message.sessionId);
+      if (asking != null) {
+        gate.withdraw(asking);
+      }
+      return;
+    }
+    if (_sessions[message.sessionId] != remotePeerId) {
+      await _fail(message, FileBrowseError.notAllowed);
+      return;
+    }
+    try {
+      final payload = message.payload;
+      String text(String key) {
+        final value = payload[key];
+        if (value is! String) {
+          throw const FormatException('missing field');
+        }
+        return value;
+      }
+
+      switch (message.action) {
+        case FileBrowseAction.list:
+          final page = await files.list(
+            text('root'),
+            text('path'),
+            offset: (payload['offset'] as num?)?.toInt() ?? 0,
+            showHidden: payload['hidden'] == true,
+          );
+          await _ok(message, {
+            'entries': [for (final entry in page.entries) entry.toJson()],
+            'total': page.total,
+            'offset': page.offset,
+          });
+        case FileBrowseAction.thumb:
+          if (_thumbnailsRunning >= 2) {
+            await _fail(message, FileBrowseError.busy);
+            return;
+          }
+          _thumbnailsRunning++;
+          try {
+            final real = await files.resolver.resolveExisting(
+              text('root'),
+              text('path'),
+            );
+            final size = ((payload['size'] as num?)?.toInt() ?? 256).clamp(
+              64,
+              512,
+            );
+            final jpeg = await FsPlatform.thumbnail(real, size: size);
+            if (jpeg == null) {
+              await _fail(message, FileBrowseError.notFound);
+            } else {
+              await _ok(message, {'jpeg': base64Encode(jpeg)});
+            }
+          } finally {
+            _thumbnailsRunning--;
+          }
+        case FileBrowseAction.mkdir:
+          final path = await files.mkdir(
+            text('root'),
+            text('parent'),
+            text('name'),
+          );
+          await _ok(message, {'path': path});
+        case FileBrowseAction.rename:
+          final path = await files.rename(
+            text('root'),
+            text('path'),
+            text('name'),
+          );
+          await _ok(message, {'path': path});
+        case FileBrowseAction.remove:
+          await _remove(message, text('root'), text('path'));
+        case FileBrowseAction.fetch:
+          await _fetch(message, remotePeerId);
+        case FileBrowseAction.incoming:
+          // The client sends this file or folder next; once it completes,
+          // it goes into this folder instead of Downloads.
+          final transferId = text('transferId');
+          final folder = await files.resolver.resolveExisting(
+            text('root'),
+            text('folder'),
+          );
+          if (await FileSystemEntity.type(folder) !=
+              FileSystemEntityType.directory) {
+            throw const FsPathException('not a folder');
+          }
+          TransferPlacements.shared.expect(transferId, folder);
+          await _ok(message);
+        default:
+          break;
+      }
+    } on FsPathException catch (error) {
+      await _fail(
+        message,
+        error.reason == 'exists'
+            ? FileBrowseError.exists
+            : error.reason == 'not found'
+            ? FileBrowseError.notFound
+            : FileBrowseError.notAllowed,
+      );
+    } on FormatException {
+      await _fail(message, FileBrowseError.notAllowed);
+    } on FileSystemException {
+      await _fail(message, FileBrowseError.io);
+    }
+  }
+
+  Future<void> _open(
+    FileBrowseMessage message,
+    String peerId,
+    String deviceName,
+  ) async {
+    var allowed =
+        _allowedThisConnection.contains(peerId) ||
+        await permissions.isAlways(peerId);
+    if (!allowed) {
+      final request = FileBrowseRequest(peerId: peerId, deviceName: deviceName);
+      _asking[message.sessionId] = request;
+      final decision = await gate.ask(request);
+      if (!identical(_asking.remove(message.sessionId), request)) {
+        // The device that asked gave up waiting; nobody to answer.
+        return;
+      }
+      if (decision == FileBrowseDecision.always) {
+        await permissions.setAlways(peerId, true);
+      }
+      allowed =
+          decision == FileBrowseDecision.once ||
+          decision == FileBrowseDecision.always;
+      if (decision == FileBrowseDecision.once) {
+        // "始终允许" is kept by the setting; this one by the connection.
+        _allowedThisConnection.add(peerId);
+      }
+      if (!allowed) {
+        // Silence is said apart from a no: the other side offers to try
+        // again instead of saying it was refused.
+        await sender?.call(
+          peerId,
+          message.reply(FileBrowseAction.denied, {
+            if (decision == FileBrowseDecision.noAnswer) 'reason': 'noAnswer',
+          }),
+        );
+        return;
+      }
+    }
+    _sessions[message.sessionId] = peerId;
+    // Drives and volumes come and go; list what is there now.
+    await files.refreshRoots();
+    final roots = <Map<String, Object?>>[];
+    for (final root in files.resolver.roots) {
+      roots.add({
+        ...root.toJson(),
+        'shortcuts': [
+          for (final shortcut in root.shortcuts)
+            if (await Directory('${root.directory}/${shortcut.path}').exists())
+              {'kind': shortcut.kind, 'path': shortcut.path},
+        ],
+      });
+    }
+    await sender?.call(
+      peerId,
+      message.reply(FileBrowseAction.opened, {
+        'roots': roots,
+        'platform': Platform.operatingSystem,
+        'trash': FsPlatform.hasTrash,
+      }),
+    );
+  }
+
+  Future<void> _remove(
+    FileBrowseMessage message,
+    String root,
+    String path,
+  ) async {
+    final real = await files.resolver.resolveEntry(root, path);
+    if (FsPlatform.hasTrash) {
+      if (await FsPlatform.trash(real)) {
+        await _ok(message);
+      } else {
+        await _fail(message, FileBrowseError.io);
+      }
+      return;
+    }
+    // No trash (Android): only after the user confirmed on the client.
+    if (message.payload['permanent'] != true) {
+      await _fail(message, FileBrowseError.noTrash);
+      return;
+    }
+    await files.deletePermanently(root, path);
+    await _ok(message);
+  }
+
+  Future<void> _fetch(FileBrowseMessage message, String peerId) async {
+    final items = message.payload['items'];
+    if (items is! List || items.isEmpty || items.length > 500) {
+      throw const FormatException('bad items');
+    }
+    final starts = <(String, String, bool)>[];
+    final transfers = <Map<String, Object?>>[];
+    for (final item in items) {
+      if (item is! Map || item['root'] is! String || item['path'] is! String) {
+        throw const FormatException('bad item');
+      }
+      final real = await files.resolver.resolveExisting(
+        item['root'] as String,
+        item['path'] as String,
+      );
+      final folder =
+          await FileSystemEntity.type(real) == FileSystemEntityType.directory;
+      final id = _uuid.v4();
+      starts.add((real, id, folder));
+      transfers.add({
+        'id': id,
+        'name': real.split(Platform.pathSeparator).last,
+        'folder': folder,
+      });
+    }
+    // The ids reach the client before the offers do (same channel), so it
+    // knows where each one goes when it arrives.
+    await _ok(message, {'transfers': transfers});
+    FilesLog.write('host: asked for ${starts.length} item(s)');
+    for (final (real, id, folder) in starts) {
+      final send = folder ? sendFolder : sendFile;
+      final sent = await send?.call(peerId, real, id) ?? false;
+      if (!sent) {
+        // The other side gives up waiting for it after a while.
+        FilesLog.write('host: ${FilesLog.id(id)} could not be sent');
+      }
+    }
+  }
+
+  Future<void> _ok(
+    FileBrowseMessage message, [
+    Map<String, Object?> payload = const {},
+  ]) async {
+    final peerId = _sessions[message.sessionId] ?? message.clientPeerId;
+    await sender?.call(peerId, message.reply(FileBrowseAction.result, payload));
+  }
+
+  Future<void> _fail(FileBrowseMessage message, String reason) async {
+    await sender?.call(
+      message.clientPeerId,
+      message.reply(FileBrowseAction.failed, {'reason': reason}),
+    );
+  }
+
+  /// A browsing device disconnected: forget its sessions.
+  void closePeer(String peerId) {
+    _sessions.removeWhere((_, peer) => peer == peerId);
+    _allowedThisConnection.remove(peerId);
+    for (final entry in _asking.entries.toList()) {
+      if (entry.value.peerId == peerId) {
+        _asking.remove(entry.key);
+        gate.withdraw(entry.value);
+      }
+    }
+  }
+
+  /// Takes back "始终允许": [peerId] is asked again next time, and what it
+  /// has open now closes, so the change holds at once.
+  Future<void> revokeAlways(String peerId) async {
+    await permissions.setAlways(peerId, false);
+    closePeer(peerId);
+  }
+}

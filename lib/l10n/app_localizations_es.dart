@@ -2257,6 +2257,149 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get remoteFilesTitle => 'Archivos';
+
+  @override
+  String remoteFilesOfDevice(String device) {
+    return 'Archivos de $device';
+  }
+
+  @override
+  String get remoteFilesThisDevice => 'Este dispositivo';
+
+  @override
+  String remoteFilesWaiting(String device) {
+    return 'Esperando a que $device lo permita…';
+  }
+
+  @override
+  String remoteFilesDenied(String device) {
+    return '$device no permitió explorar sus archivos';
+  }
+
+  @override
+  String remoteFilesOffline(String device) {
+    return '$device no está conectado ahora';
+  }
+
+  @override
+  String remoteFilesUnsupported(String device) {
+    return 'Whisper en $device necesita actualizarse para explorar sus archivos';
+  }
+
+  @override
+  String get remoteFilesEmptyFolder => 'Esta carpeta está vacía';
+
+  @override
+  String remoteFilesCopyTo(String target) {
+    return 'Copiar a $target';
+  }
+
+  @override
+  String get remoteFilesNewFolder => 'Nueva carpeta';
+
+  @override
+  String get remoteFilesFolderName => 'Nombre de la carpeta';
+
+  @override
+  String get remoteFilesRename => 'Cambiar nombre';
+
+  @override
+  String get remoteFilesMoveToTrash => 'Mover a la papelera';
+
+  @override
+  String get remoteFilesDelete => 'Eliminar';
+
+  @override
+  String remoteFilesDeleteForever(int count) {
+    return '¿Eliminar estos $count elementos para siempre? Este dispositivo no tiene papelera y no se podrán recuperar.';
+  }
+
+  @override
+  String remoteFilesCopyStarted(int count) {
+    return 'Copiando $count elementos';
+  }
+
+  @override
+  String get remoteFilesFailed => 'No se pudo completar';
+
+  @override
+  String get remoteFilesNameExists => 'Ya hay algo con ese nombre aquí';
+
+  @override
+  String get remoteFilesShowHidden => 'Mostrar archivos ocultos';
+
+  @override
+  String remoteFilesItemCount(int count) {
+    return '$count elementos';
+  }
+
+  @override
+  String remoteFilesSelected(int count) {
+    return '$count seleccionados';
+  }
+
+  @override
+  String get remoteFilesCreate => 'Crear';
+
+  @override
+  String get remoteFilesDone => 'Listo';
+
+  @override
+  String remoteFilesDropHint(String device) {
+    return 'Suelta aquí para copiar a $device';
+  }
+
+  @override
+  String get remoteFilesPlaceRoot => 'Inicio';
+
+  @override
+  String get remoteFilesPlaceStorage => 'Almacenamiento interno';
+
+  @override
+  String get remoteFilesPlaceDesktop => 'Escritorio';
+
+  @override
+  String get remoteFilesPlaceDocuments => 'Documentos';
+
+  @override
+  String get remoteFilesPlaceDownloads => 'Descargas';
+
+  @override
+  String get remoteFilesPlacePictures => 'Imágenes';
+
+  @override
+  String get remoteFilesPlaceCamera => 'Cámara';
+
+  @override
+  String get remoteFilesPlaceMovies => 'Películas';
+
+  @override
+  String get remoteFilesPlaceMusic => 'Música';
+
+  @override
+  String remoteFilesPromptTitle(String device) {
+    return '$device quiere explorar tus archivos';
+  }
+
+  @override
+  String get remoteFilesPromptBodyDesktop =>
+      'Si lo permites, podrá ver tu carpeta de inicio y copiar, crear, renombrar y eliminar archivos allí. Lo eliminado irá a la papelera.';
+
+  @override
+  String get remoteFilesPromptBodyPhone =>
+      'Si lo permites, podrá ver el almacenamiento interno de este teléfono y copiar, crear, renombrar y eliminar archivos allí. Antes de eliminar se vuelve a preguntar.';
+
+  @override
+  String get remoteFilesDeny => 'No permitir';
+
+  @override
+  String get remoteFilesAllowOnce => 'Permitir esta vez';
+
+  @override
+  String get remoteFilesAllowAlways => 'Permitir siempre';
+
+  @override
   String windowStreamTouchBlockedTitle(String device) {
     return '$device no responde al tacto';
   }
@@ -2275,6 +2418,191 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get windowStreamTouchBlockedFixed =>
       'Listo. El teléfono vuelve a responder.';
+
+  @override
+  String get remoteFilesFavorites => 'Favoritos';
+
+  @override
+  String get remoteFilesLocations => 'Ubicaciones';
+
+  @override
+  String get remoteFilesBrowse => 'Explorar';
+
+  @override
+  String remoteFilesWaitingAllow(String device) {
+    return 'Toca «Permitir» en $device';
+  }
+
+  @override
+  String get remoteFilesWaitingDetail =>
+      'Whisper está preguntando allí si este dispositivo puede explorar sus archivos.';
+
+  @override
+  String get remoteFilesAskAgain => 'Volver a preguntar';
+
+  @override
+  String get remoteFilesColumnName => 'Nombre';
+
+  @override
+  String get remoteFilesColumnModified => 'Fecha de modificación';
+
+  @override
+  String get remoteFilesColumnSize => 'Tamaño';
+
+  @override
+  String get remoteFilesColumnKind => 'Tipo';
+
+  @override
+  String get remoteFilesKindFolder => 'Carpeta';
+
+  @override
+  String get remoteFilesKindImage => 'Imagen';
+
+  @override
+  String get remoteFilesKindVideo => 'Vídeo';
+
+  @override
+  String get remoteFilesKindAudio => 'Audio';
+
+  @override
+  String get remoteFilesKindDocument => 'Documento';
+
+  @override
+  String get remoteFilesKindArchive => 'Archivo comprimido';
+
+  @override
+  String get remoteFilesKindCode => 'Código fuente';
+
+  @override
+  String get remoteFilesKindApp => 'Aplicación';
+
+  @override
+  String get remoteFilesKindOther => 'Archivo';
+
+  @override
+  String remoteFilesKindNamed(String ext, String kind) {
+    return '$kind $ext';
+  }
+
+  @override
+  String get remoteFilesViewList => 'Lista';
+
+  @override
+  String get remoteFilesViewIcons => 'Iconos';
+
+  @override
+  String get remoteFilesSearch => 'Buscar';
+
+  @override
+  String remoteFilesNoResults(String query) {
+    return 'Sin resultados para «$query»';
+  }
+
+  @override
+  String get remoteFilesForward => 'Adelante';
+
+  @override
+  String get remoteFilesOpen => 'Abrir';
+
+  @override
+  String get remoteFilesCopy => 'Copiar';
+
+  @override
+  String remoteFilesPaste(int count) {
+    return 'Pegar $count elementos';
+  }
+
+  @override
+  String get remoteFilesRefresh => 'Actualizar';
+
+  @override
+  String remoteFilesStatusSelected(int selected, int count) {
+    return '$selected de $count seleccionados';
+  }
+
+  @override
+  String remoteFilesCopyProgress(int count, int percent) {
+    return 'Copiando $count elementos · $percent %';
+  }
+
+  @override
+  String remoteFilesCopyDone(int count) {
+    return '$count elementos copiados';
+  }
+
+  @override
+  String remoteFilesCopyPartly(int failed) {
+    return '$failed elementos no se copiaron';
+  }
+
+  @override
+  String get remoteFilesSameDevice => 'Ya está en este dispositivo';
+
+  @override
+  String get remoteFilesBetweenOthers =>
+      'Solo se copia entre este dispositivo y otro';
+
+  @override
+  String remoteFilesOpenFirst(String device) {
+    return 'Abre primero los archivos de $device';
+  }
+
+  @override
+  String get remoteFilesUntitledFolder => 'carpeta sin título';
+
+  @override
+  String get remoteFilesSelect => 'Seleccionar';
+
+  @override
+  String get remoteFilesSelectAll => 'Seleccionar todo';
+
+  @override
+  String get remoteFilesCopyToMenu => 'Copiar en…';
+
+  @override
+  String get remoteFilesCopyHere => 'Copiar aquí';
+
+  @override
+  String get remoteFilesChooseDestination =>
+      'Elige una carpeta y toca «Copiar aquí»';
+
+  @override
+  String remoteFilesToday(String time) {
+    return 'Hoy, $time';
+  }
+
+  @override
+  String remoteFilesYesterday(String time) {
+    return 'Ayer, $time';
+  }
+
+  @override
+  String get remoteFilesCopyToSubmenu => 'Copiar en';
+
+  @override
+  String remoteFilesPasteInto(String name) {
+    return 'Pegar en «$name»';
+  }
+
+  @override
+  String get remoteFilesPastePlain => 'Pegar';
+
+  @override
+  String get remoteFilesSortBy => 'Ordenar por';
+
+  @override
+  String get remoteFilesMore => 'Más';
+
+  @override
+  String get remoteFilesClose => 'Cerrar archivos';
+
+  @override
+  String remoteFilesClipboardPreparing(int count) {
+    return 'Trayendo $count elementos para pegarlos en otras apps';
+  }
+
+  @override
+  String get remoteFilesClipboardReady => 'Listo para pegar en otras apps';
 
   @override
   String get windowStreamTextSize => 'Tamaño del texto';
@@ -2303,6 +2631,134 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamSwitcherRotate => 'Girar';
+
+  @override
+  String get remoteFilesCopyStarting => 'Preparando…';
+
+  @override
+  String remoteFilesCopyItems(int count) {
+    return '$count elementos';
+  }
+
+  @override
+  String remoteFilesCopyToDevice(String device, String folder) {
+    return 'A «$folder» en $device';
+  }
+
+  @override
+  String remoteFilesCopyFromDevice(String device, String folder) {
+    return 'De $device a «$folder»';
+  }
+
+  @override
+  String remoteFilesCopyLeft(String time) {
+    return 'Quedan $time';
+  }
+
+  @override
+  String remoteFilesSeconds(int count) {
+    return '$count s';
+  }
+
+  @override
+  String remoteFilesMinutes(int count) {
+    return '$count min';
+  }
+
+  @override
+  String remoteFilesHours(int count) {
+    return '$count h';
+  }
+
+  @override
+  String remoteFilesCopyItemsDone(int done, int total) {
+    return '$done de $total';
+  }
+
+  @override
+  String remoteFilesCopyFilesMoved(int count) {
+    return '$count archivos hasta ahora';
+  }
+
+  @override
+  String remoteFilesCopyWaiting(String device) {
+    return 'Esperando a que vuelva $device…';
+  }
+
+  @override
+  String get remoteFilesCopyPaused => 'En pausa';
+
+  @override
+  String get remoteFilesCopyFailedShort => 'No se pudo copiar';
+
+  @override
+  String get remoteFilesCopyCanceledShort => 'Detenida';
+
+  @override
+  String get remoteFilesCopyDoneShort => 'Copiado';
+
+  @override
+  String get remoteFilesCopyResume => 'Reanudar';
+
+  @override
+  String get remoteFilesCopyRetry => 'Reintentar';
+
+  @override
+  String get remoteFilesCopyStop => 'Detener copia';
+
+  @override
+  String get remoteFilesCopyShowAll => 'Ver todas las transferencias';
+
+  @override
+  String remoteFilesCopyMore(int count) {
+    return '$count copias más';
+  }
+
+  @override
+  String get remoteFilesCopyAlready => 'Ya se están copiando aquí';
+
+  @override
+  String get remoteFilesTransfers => 'Transferencias';
+
+  @override
+  String get remoteFilesTransfersEmpty => 'Aún no hay copias';
+
+  @override
+  String get remoteFilesTransfersEmptyDetail =>
+      'Los archivos copiados aquí muestran aquí su progreso y resultado';
+
+  @override
+  String get remoteFilesTransfersClear => 'Borrar terminadas';
+
+  @override
+  String get remoteFilesTransfersActive => 'En curso';
+
+  @override
+  String get remoteFilesTransfersRecent => 'Terminadas';
+
+  @override
+  String get remoteFilesCopyRemove => 'Quitar de la lista';
+
+  @override
+  String get remoteFilesCopyReveal => 'Mostrar en Archivos';
+
+  @override
+  String remoteFilesDeleteTitle(int count) {
+    return '¿Eliminar $count elementos para siempre?';
+  }
+
+  @override
+  String remoteFilesDeleteDetail(String device) {
+    return '$device no tiene papelera: una vez eliminados, no se pueden recuperar.';
+  }
+
+  @override
+  String remoteFilesAndMore(int count) {
+    return 'y $count más';
+  }
+
+  @override
+  String get remoteFilesCopyJustDone => 'Ya se copió hace un momento';
 
   @override
   String windowStreamHostLocked(String device) {
@@ -2360,6 +2816,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get windowStreamThatDevice => 'ese dispositivo';
+
+  @override
+  String remoteFilesPlaceDrive(String name, String drive) {
+    return '$name ($drive:)';
+  }
+
+  @override
+  String remoteFilesPlaceLocalDisk(String drive) {
+    return 'Disco local ($drive:)';
+  }
+
+  @override
+  String remoteFilesPlaceRemovableDisk(String drive) {
+    return 'Unidad USB ($drive:)';
+  }
+
+  @override
+  String get remoteFilesPlaceAppFolder => 'Carpeta de Whisper';
 
   @override
   String get windowStreamDecoderMissing =>
@@ -2610,5 +3084,19 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String windowStreamPhoneServiceOff(String device) {
     return 'Abre Whisper en $device y activa Ajustes → Servicio de flujo de ventanas.';
+  }
+
+  @override
+  String remoteFilesNoAnswer(String device) {
+    return '$device no respondió';
+  }
+
+  @override
+  String get remoteFilesNoAnswerDetail =>
+      'La pregunta en ese dispositivo caducó. Asegúrate de que haya alguien allí e inténtalo de nuevo.';
+
+  @override
+  String remoteFilesNotAsked(String device) {
+    return '$device debe permitir explorar sus archivos';
   }
 }

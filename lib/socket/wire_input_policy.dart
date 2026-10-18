@@ -367,7 +367,8 @@ abstract final class WireInputPolicy {
       MessageEnum.AudioControl ||
       MessageEnum.RemoteInputControl ||
       MessageEnum.AudioGroupControl ||
-      MessageEnum.WindowStreamControl => true,
+      MessageEnum.WindowStreamControl ||
+      MessageEnum.FileBrowseControl => true,
       MessageEnum.File => allowFileOffer,
       _ => false,
     };

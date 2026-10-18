@@ -37,5 +37,6 @@ enum MessageEnum {
   RemoteInputControl,
   AudioGroupControl,
   WindowStreamControl,
+  FileBrowseControl,
 }
 

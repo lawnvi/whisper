@@ -9,9 +9,9 @@ void main() {
 
   setUp(() {
     tempDirectory = Directory.systemTemp.createTempSync('whisper_reveal_');
-    file =
-        File('${tempDirectory.path}${Platform.pathSeparator}report final.txt')
-          ..writeAsStringSync('content');
+    file = File(
+      '${tempDirectory.path}${Platform.pathSeparator}report final.txt',
+    )..writeAsStringSync('content');
   });
 
   tearDown(() {
@@ -91,31 +91,71 @@ void main() {
     expect(calls.single.arguments, <String>['/select,', file.path]);
   });
 
-  test('Linux prefers FileManager1 and falls back to installed managers',
-      () async {
-    final executables = <String>[];
-
+  test('Explorer exiting with 1 still counts as shown', () async {
     final revealed = await revealFileInFileManager(
       file.path,
+      platform: DesktopFileManagerPlatform.windows,
+      processRunner: (executable, arguments) async =>
+          ProcessResult(1, 1, '', ''),
+    );
+
+    expect(revealed, isTrue);
+  });
+
+  test('a received folder is selected in its parent too', () async {
+    final folder = Directory('${tempDirectory.path}/收到的 文件夹')..createSync();
+    final calls = <FileManagerCommand>[];
+
+    final revealed = await revealFileInFileManager(
+      folder.path,
       platform: DesktopFileManagerPlatform.linux,
       processRunner: (executable, arguments) async {
-        executables.add(executable);
-        if (executable == 'gdbus') {
-          expect(arguments, contains('org.freedesktop.FileManager1.ShowItems'));
-          expect(arguments.join(' '), contains(Uri.file(file.path).toString()));
-          return ProcessResult(1, 1, '', 'unavailable');
-        }
-        if (executable == 'nautilus') {
-          throw const ProcessException('nautilus', <String>[]);
-        }
-        expect(arguments, <String>['--select', file.path]);
+        calls.add(FileManagerCommand(executable, arguments));
         return ProcessResult(1, 0, '', '');
       },
     );
 
     expect(revealed, isTrue);
-    expect(executables, <String>['gdbus', 'nautilus', 'dolphin']);
+    expect(calls.single.executable, 'gdbus');
+    expect(
+      calls.single.arguments.join(' '),
+      contains(Uri.file(folder.path).toString()),
+    );
   });
+
+  test(
+    'Linux prefers FileManager1 and falls back to installed managers',
+    () async {
+      final executables = <String>[];
+
+      final revealed = await revealFileInFileManager(
+        file.path,
+        platform: DesktopFileManagerPlatform.linux,
+        processRunner: (executable, arguments) async {
+          executables.add(executable);
+          if (executable == 'gdbus') {
+            expect(
+              arguments,
+              contains('org.freedesktop.FileManager1.ShowItems'),
+            );
+            expect(
+              arguments.join(' '),
+              contains(Uri.file(file.path).toString()),
+            );
+            return ProcessResult(1, 1, '', 'unavailable');
+          }
+          if (executable == 'nautilus') {
+            throw const ProcessException('nautilus', <String>[]);
+          }
+          expect(arguments, <String>['--select', file.path]);
+          return ProcessResult(1, 0, '', '');
+        },
+      );
+
+      expect(revealed, isTrue);
+      expect(executables, <String>['gdbus', 'nautilus', 'dolphin']);
+    },
+  );
 
   test('does not launch a file manager for a missing file', () async {
     var processStarted = false;

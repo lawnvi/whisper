@@ -30,6 +30,8 @@ import 'package:whisper/model/LocalDatabase.dart';
 import 'package:whisper/model/file_transfer.dart';
 import 'package:whisper/model/message.dart';
 import 'package:whisper/page/deviceList.dart';
+import 'package:whisper/page/remote_files/remote_files_page.dart';
+import 'package:whisper/remote_files/fs_placement.dart';
 import 'package:whisper/page/settings.dart' as app_settings;
 import 'package:whisper/page/window_stream/flow_space_page.dart';
 import 'package:whisper/page/transfer_assistant.dart';
@@ -471,7 +473,9 @@ class _SendMessageScreen extends State<SendMessageScreen>
   }
 
   void _insertItems(int index, List<MessageData> page) {
-    final items = unseenHistoryMessages(messageList, page);
+    final items = unseenHistoryMessages(messageList, page)
+        .where((message) => !TransferPlacements.shared.isQuiet(message.uuid))
+        .toList();
     if (items.isEmpty) return;
     messageList.insertAll(index, items);
     key.currentState?.insertAllItems(
@@ -2773,6 +2777,10 @@ class _SendMessageScreen extends State<SendMessageScreen>
       PrivacyField.bytes: utf8.encode(messageData.content ?? '').length,
       PrivacyField.clipboard: messageData.clipboard,
     });
+    // Copies made in the file manager are not part of the conversation.
+    if (TransferPlacements.shared.isQuiet(messageData.uuid)) {
+      return;
+    }
     if (_isLocalhost && messageData.receiver.isEmpty ||
         messageData.sender == device.uid ||
         messageData.receiver == device.uid) {
@@ -2783,7 +2791,8 @@ class _SendMessageScreen extends State<SendMessageScreen>
 
   @override
   void onTransferUpdated(TransferSnapshot snapshot) {
-    if (snapshot.peerUid != device.uid) {
+    if (snapshot.peerUid != device.uid ||
+        TransferPlacements.shared.isQuiet(snapshot.transferId)) {
       return;
     }
     final now = DateTime.now().millisecondsSinceEpoch;

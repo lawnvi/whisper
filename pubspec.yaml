@@ -65,6 +65,8 @@ dependencies:
   win32: ^5.15.0
   sodium: 4.0.2+1
   super_drag_and_drop: ^0.9.1
+  super_clipboard: ^0.9.1
+  super_native_extensions: ^0.9.1
   bonsoir: ^7.1.4
   flutter_swipe_action_cell: ^3.1.5
   package_info_plus: ^9.0.1

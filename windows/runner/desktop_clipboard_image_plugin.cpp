@@ -449,6 +449,13 @@ std::vector<std::string> ReadClipboardFilePaths(HWND window) {
   return ReadClipboardFilePathsFromOpenClipboard();
 }
 
+// The file manager takes its own earlier copy off the clipboard while a
+// newer one is still on its way; Dart checks it is still its own first.
+bool ClearClipboard(HWND window) {
+  ScopedClipboard clipboard(window);
+  return clipboard.opened() && EmptyClipboard();
+}
+
 std::optional<std::string> ReadClipboardUnicodeTextFromOpenClipboard() {
   if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
     return std::nullopt;
@@ -526,6 +533,10 @@ class DesktopClipboardImagePlugin : public flutter::Plugin {
         values.emplace_back(path);
       }
       result->Success(flutter::EncodableValue(std::move(values)));
+      return;
+    }
+    if (call.method_name() == "clearFilePaths") {
+      result->Success(flutter::EncodableValue(ClearClipboard(window_)));
       return;
     }
     if (call.method_name() == "writeFilePaths") {

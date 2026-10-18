@@ -288,11 +288,12 @@ Future<bool> revealFileInFileManager(
   DesktopFileManagerPlatform? platform,
   FileManagerProcessRunner processRunner = Process.run,
 }) async {
-  final file = File(path);
-  if (!file.existsSync()) {
+  // A received folder is selected in its parent like a file.
+  if (path.isEmpty ||
+      FileSystemEntity.typeSync(path) == FileSystemEntityType.notFound) {
     return false;
   }
-  final targetPath = file.absolute.path;
+  final targetPath = File(path).absolute.path;
 
   final resolvedPlatform = platform ?? _currentDesktopFileManagerPlatform();
   if (resolvedPlatform == null) {
@@ -321,7 +322,12 @@ Future<bool> revealFileInFileManager(
   )) {
     try {
       final result = await processRunner(command.executable, command.arguments);
-      if (result.exitCode == 0) {
+      // Explorer exits with 1 even when it opened the folder and selected
+      // the item; treating that as a failure opened a second, unselected
+      // window.
+      if (result.exitCode == 0 ||
+          (resolvedPlatform == DesktopFileManagerPlatform.windows &&
+              result.exitCode == 1)) {
         return true;
       }
       _logFileOperation(

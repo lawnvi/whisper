@@ -2076,6 +2076,149 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get remoteFilesTitle => '文件';
+
+  @override
+  String remoteFilesOfDevice(String device) {
+    return '$device 的文件';
+  }
+
+  @override
+  String get remoteFilesThisDevice => '本机';
+
+  @override
+  String remoteFilesWaiting(String device) {
+    return '正在等 $device 允许…';
+  }
+
+  @override
+  String remoteFilesDenied(String device) {
+    return '$device 没有允许浏览文件';
+  }
+
+  @override
+  String remoteFilesOffline(String device) {
+    return '$device 现在没有连接本机';
+  }
+
+  @override
+  String remoteFilesUnsupported(String device) {
+    return '$device 上的 Whisper 需要更新到最新版才能浏览文件';
+  }
+
+  @override
+  String get remoteFilesEmptyFolder => '这个文件夹是空的';
+
+  @override
+  String remoteFilesCopyTo(String target) {
+    return '拷贝到 $target';
+  }
+
+  @override
+  String get remoteFilesNewFolder => '新建文件夹';
+
+  @override
+  String get remoteFilesFolderName => '文件夹名称';
+
+  @override
+  String get remoteFilesRename => '重命名';
+
+  @override
+  String get remoteFilesMoveToTrash => '移到废纸篓';
+
+  @override
+  String get remoteFilesDelete => '删除';
+
+  @override
+  String remoteFilesDeleteForever(int count) {
+    return '要永久删除这 $count 项吗？这台设备没有废纸篓，删除后无法恢复。';
+  }
+
+  @override
+  String remoteFilesCopyStarted(int count) {
+    return '正在拷贝 $count 项';
+  }
+
+  @override
+  String get remoteFilesFailed => '操作没有完成';
+
+  @override
+  String get remoteFilesNameExists => '这里已经有同名的文件或文件夹';
+
+  @override
+  String get remoteFilesShowHidden => '显示隐藏文件';
+
+  @override
+  String remoteFilesItemCount(int count) {
+    return '$count 项';
+  }
+
+  @override
+  String remoteFilesSelected(int count) {
+    return '已选 $count 项';
+  }
+
+  @override
+  String get remoteFilesCreate => '新建';
+
+  @override
+  String get remoteFilesDone => '完成';
+
+  @override
+  String remoteFilesDropHint(String device) {
+    return '拖到这里，拷贝到 $device';
+  }
+
+  @override
+  String get remoteFilesPlaceRoot => '主目录';
+
+  @override
+  String get remoteFilesPlaceStorage => '内部存储';
+
+  @override
+  String get remoteFilesPlaceDesktop => '桌面';
+
+  @override
+  String get remoteFilesPlaceDocuments => '文稿';
+
+  @override
+  String get remoteFilesPlaceDownloads => '下载';
+
+  @override
+  String get remoteFilesPlacePictures => '图片';
+
+  @override
+  String get remoteFilesPlaceCamera => '相机';
+
+  @override
+  String get remoteFilesPlaceMovies => '影片';
+
+  @override
+  String get remoteFilesPlaceMusic => '音乐';
+
+  @override
+  String remoteFilesPromptTitle(String device) {
+    return '$device 想浏览你的文件';
+  }
+
+  @override
+  String get remoteFilesPromptBodyDesktop =>
+      '允许后，它能看到你的主目录，并在里面拷贝、新建、重命名和删除文件。删除的文件会进废纸篓。';
+
+  @override
+  String get remoteFilesPromptBodyPhone =>
+      '允许后，它能看到这台手机的内部存储，并在里面拷贝、新建、重命名和删除文件。删除前会再问一次。';
+
+  @override
+  String get remoteFilesDeny => '拒绝';
+
+  @override
+  String get remoteFilesAllowOnce => '允许这一次';
+
+  @override
+  String get remoteFilesAllowAlways => '始终允许';
+
+  @override
   String windowStreamTouchBlockedTitle(String device) {
     return '$device 现在点不动了';
   }
@@ -2093,6 +2236,188 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamTouchBlockedFixed => '好了，手机可以操作了';
+
+  @override
+  String get remoteFilesFavorites => '个人收藏';
+
+  @override
+  String get remoteFilesLocations => '位置';
+
+  @override
+  String get remoteFilesBrowse => '浏览';
+
+  @override
+  String remoteFilesWaitingAllow(String device) {
+    return '请在 $device 上点“允许”';
+  }
+
+  @override
+  String get remoteFilesWaitingDetail => 'Whisper 正在那台设备上询问是否让本机浏览文件。';
+
+  @override
+  String get remoteFilesAskAgain => '再问一次';
+
+  @override
+  String get remoteFilesColumnName => '名称';
+
+  @override
+  String get remoteFilesColumnModified => '修改日期';
+
+  @override
+  String get remoteFilesColumnSize => '大小';
+
+  @override
+  String get remoteFilesColumnKind => '种类';
+
+  @override
+  String get remoteFilesKindFolder => '文件夹';
+
+  @override
+  String get remoteFilesKindImage => '图像';
+
+  @override
+  String get remoteFilesKindVideo => '影片';
+
+  @override
+  String get remoteFilesKindAudio => '音频';
+
+  @override
+  String get remoteFilesKindDocument => '文稿';
+
+  @override
+  String get remoteFilesKindArchive => '归档';
+
+  @override
+  String get remoteFilesKindCode => '源代码';
+
+  @override
+  String get remoteFilesKindApp => '应用程序';
+
+  @override
+  String get remoteFilesKindOther => '文件';
+
+  @override
+  String remoteFilesKindNamed(String ext, String kind) {
+    return '$ext $kind';
+  }
+
+  @override
+  String get remoteFilesViewList => '列表';
+
+  @override
+  String get remoteFilesViewIcons => '图标';
+
+  @override
+  String get remoteFilesSearch => '搜索';
+
+  @override
+  String remoteFilesNoResults(String query) {
+    return '没有找到“$query”';
+  }
+
+  @override
+  String get remoteFilesForward => '前进';
+
+  @override
+  String get remoteFilesOpen => '打开';
+
+  @override
+  String get remoteFilesCopy => '拷贝';
+
+  @override
+  String remoteFilesPaste(int count) {
+    return '粘贴 $count 项';
+  }
+
+  @override
+  String get remoteFilesRefresh => '刷新';
+
+  @override
+  String remoteFilesStatusSelected(int selected, int count) {
+    return '已选择 $selected 项，共 $count 项';
+  }
+
+  @override
+  String remoteFilesCopyProgress(int count, int percent) {
+    return '正在拷贝 $count 项 · $percent%';
+  }
+
+  @override
+  String remoteFilesCopyDone(int count) {
+    return '已拷贝 $count 项';
+  }
+
+  @override
+  String remoteFilesCopyPartly(int failed) {
+    return '$failed 项没有拷贝成功';
+  }
+
+  @override
+  String get remoteFilesSameDevice => '已经在这台设备上了';
+
+  @override
+  String get remoteFilesBetweenOthers => '只能在本机和另一台设备之间拷贝';
+
+  @override
+  String remoteFilesOpenFirst(String device) {
+    return '先打开 $device 的文件';
+  }
+
+  @override
+  String get remoteFilesUntitledFolder => '未命名文件夹';
+
+  @override
+  String get remoteFilesSelect => '选择';
+
+  @override
+  String get remoteFilesSelectAll => '全选';
+
+  @override
+  String get remoteFilesCopyToMenu => '拷贝到…';
+
+  @override
+  String get remoteFilesCopyHere => '拷贝到这里';
+
+  @override
+  String get remoteFilesChooseDestination => '选好位置后点“拷贝到这里”';
+
+  @override
+  String remoteFilesToday(String time) {
+    return '今天 $time';
+  }
+
+  @override
+  String remoteFilesYesterday(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get remoteFilesCopyToSubmenu => '拷贝到';
+
+  @override
+  String remoteFilesPasteInto(String name) {
+    return '粘贴到“$name”';
+  }
+
+  @override
+  String get remoteFilesPastePlain => '粘贴';
+
+  @override
+  String get remoteFilesSortBy => '排序方式';
+
+  @override
+  String get remoteFilesMore => '更多';
+
+  @override
+  String get remoteFilesClose => '关闭文件';
+
+  @override
+  String remoteFilesClipboardPreparing(int count) {
+    return '正在取回 $count 项，好了就能在访达等应用里粘贴';
+  }
+
+  @override
+  String get remoteFilesClipboardReady => '可以在访达等应用里粘贴了';
 
   @override
   String get windowStreamTextSize => '文字大小';
@@ -2121,6 +2446,133 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamSwitcherRotate => '旋转';
+
+  @override
+  String get remoteFilesCopyStarting => '正在准备…';
+
+  @override
+  String remoteFilesCopyItems(int count) {
+    return '$count 个项目';
+  }
+
+  @override
+  String remoteFilesCopyToDevice(String device, String folder) {
+    return '拷贝到 $device 的“$folder”';
+  }
+
+  @override
+  String remoteFilesCopyFromDevice(String device, String folder) {
+    return '从 $device 拷贝到“$folder”';
+  }
+
+  @override
+  String remoteFilesCopyLeft(String time) {
+    return '剩余 $time';
+  }
+
+  @override
+  String remoteFilesSeconds(int count) {
+    return '$count 秒';
+  }
+
+  @override
+  String remoteFilesMinutes(int count) {
+    return '$count 分钟';
+  }
+
+  @override
+  String remoteFilesHours(int count) {
+    return '$count 小时';
+  }
+
+  @override
+  String remoteFilesCopyItemsDone(int done, int total) {
+    return '$done/$total 项';
+  }
+
+  @override
+  String remoteFilesCopyFilesMoved(int count) {
+    return '已传 $count 个文件';
+  }
+
+  @override
+  String remoteFilesCopyWaiting(String device) {
+    return '等待 $device 重新连接…';
+  }
+
+  @override
+  String get remoteFilesCopyPaused => '已暂停';
+
+  @override
+  String get remoteFilesCopyFailedShort => '没有拷贝成功';
+
+  @override
+  String get remoteFilesCopyCanceledShort => '已停止';
+
+  @override
+  String get remoteFilesCopyDoneShort => '已拷贝';
+
+  @override
+  String get remoteFilesCopyResume => '继续';
+
+  @override
+  String get remoteFilesCopyRetry => '重试';
+
+  @override
+  String get remoteFilesCopyStop => '停止拷贝';
+
+  @override
+  String get remoteFilesCopyShowAll => '查看全部传输';
+
+  @override
+  String remoteFilesCopyMore(int count) {
+    return '还有 $count 个拷贝';
+  }
+
+  @override
+  String get remoteFilesCopyAlready => '这些项目已经在拷贝到这里了';
+
+  @override
+  String get remoteFilesTransfers => '传输';
+
+  @override
+  String get remoteFilesTransfersEmpty => '还没有拷贝';
+
+  @override
+  String get remoteFilesTransfersEmptyDetail => '在这里拷贝的文件，进度和结果都会列在这里';
+
+  @override
+  String get remoteFilesTransfersClear => '清除已结束';
+
+  @override
+  String get remoteFilesTransfersActive => '进行中';
+
+  @override
+  String get remoteFilesTransfersRecent => '已结束';
+
+  @override
+  String get remoteFilesCopyRemove => '从列表中移除';
+
+  @override
+  String get remoteFilesCopyReveal => '在文件中显示';
+
+  @override
+  String remoteFilesDeleteTitle(int count) {
+    return '永久删除 $count 个项目？';
+  }
+
+  @override
+  String remoteFilesDeleteDetail(String device) {
+    return '$device 没有废纸篓，删除后无法恢复。';
+  }
+
+  @override
+  String remoteFilesAndMore(int count) {
+    return '还有 $count 项';
+  }
+
+  @override
+  String get remoteFilesCopyJustDone => '刚刚已经拷贝过了';
 
   @override
   String windowStreamHostLocked(String device) {
@@ -2177,6 +2629,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get windowStreamThatDevice => '那台设备';
+
+  @override
+  String remoteFilesPlaceDrive(String name, String drive) {
+    return '$name ($drive:)';
+  }
+
+  @override
+  String remoteFilesPlaceLocalDisk(String drive) {
+    return '本地磁盘 ($drive:)';
+  }
+
+  @override
+  String remoteFilesPlaceRemovableDisk(String drive) {
+    return 'U 盘 ($drive:)';
+  }
+
+  @override
+  String get remoteFilesPlaceAppFolder => 'Whisper 文件夹';
 
   @override
   String get windowStreamDecoderMissing => '无法显示画面：这台电脑缺少 FFmpeg 视频解码库';
@@ -2408,5 +2878,18 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String windowStreamPhoneServiceOff(String device) {
     return '在 $device 上打开 Whisper，到“设置 → 窗口流转服务”里开启服务';
+  }
+
+  @override
+  String remoteFilesNoAnswer(String device) {
+    return '$device 没有回应';
+  }
+
+  @override
+  String get remoteFilesNoAnswerDetail => '那台设备上的询问已经过期。请确认对方在设备旁，再试一次。';
+
+  @override
+  String remoteFilesNotAsked(String device) {
+    return '浏览 $device 的文件需要对方允许';
   }
 }

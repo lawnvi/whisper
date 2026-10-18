@@ -369,6 +369,7 @@ class PeerCapabilities {
     this.windowStreamSourceV1 = false,
     this.windowStreamSinkV1 = false,
     this.windowStreamOfferV1 = false,
+    this.remoteFilesV1 = false,
   });
 
   final bool fileTransferV3;
@@ -395,6 +396,10 @@ class PeerCapabilities {
   /// Accepts windows a host sends over ("送出去", protocol 12).
   final bool windowStreamOfferV1;
 
+  /// Speaks the file-browse protocol: lets trusted peers browse its files
+  /// (after asking) and browses theirs (protocol 12).
+  final bool remoteFilesV1;
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'fileTransferV3': fileTransferV3,
@@ -414,6 +419,7 @@ class PeerCapabilities {
       'windowStreamSourceV1': windowStreamSourceV1,
       'windowStreamSinkV1': windowStreamSinkV1,
       'windowStreamOfferV1': windowStreamOfferV1,
+      'remoteFilesV1': remoteFilesV1,
     };
   }
 
@@ -423,6 +429,7 @@ class PeerCapabilities {
       json.remove('windowStreamSourceV1');
       json.remove('windowStreamSinkV1');
       json.remove('windowStreamOfferV1');
+      json.remove('remoteFilesV1');
     }
     if (protocolVersion < 11) {
       json.remove('remoteInputManualSourceV1');
@@ -456,6 +463,7 @@ class PeerCapabilities {
       windowStreamSourceV1: json['windowStreamSourceV1'] as bool? ?? false,
       windowStreamSinkV1: json['windowStreamSinkV1'] as bool? ?? false,
       windowStreamOfferV1: json['windowStreamOfferV1'] as bool? ?? false,
+      remoteFilesV1: json['remoteFilesV1'] as bool? ?? false,
     );
   }
 
@@ -488,6 +496,7 @@ class PeerCapabilities {
         'windowStreamSourceV1',
         'windowStreamSinkV1',
         'windowStreamOfferV1',
+        'remoteFilesV1',
       });
     }
     if (json.keys.any((key) => !allowed.contains(key)) ||
